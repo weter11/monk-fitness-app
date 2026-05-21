@@ -1,0 +1,63 @@
+<resources>
+    <string name="app_name">Monk Fitness</string>
+    <string name="week_label">Неделя %d</string>
+    <string name="today_workout">СЕГОДНЯШНЯЯ ТРЕНИРОВКА</string>
+    <string name="completed">завершено</string>
+    <string name="streak">Серия</string>
+    <string name="day">День</string>
+    <string name="start_workout">Начать тренировку</string>
+    <string name="complete_workout">Завершить тренировку</string>
+    <string name="description">Описание</string>
+    <string name="technique">Техника</string>
+    <string name="your_progress">Ваш прогресс</string>
+    <string name="no_progress_yet">Начните свою первую тренировку, чтобы увидеть график прогресса!</string>
+    <string name="completed_days">Всего завершено дней: %d</string>
+    <string name="settings">Настройки</string>
+    <string name="notifications">Уведомления</string>
+    <string name="set_notification_time">Установить время напоминания</string>
+    <string name="language">Язык</string>
+    <string name="timer_pause">Пауза</string>
+    <string name="timer_start">Старт</string>
+    <string name="timer_reset">Сброс</string>
+    <string name="posture_training">Тренировка осанки</string>
+    <string name="posture_desc">Исправьте осанку с помощью этих ежедневных упражнений.</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title">Добро пожаловать в Monk Fitness</string>
+    <string name="onboarding_desc">Начните структурированную 8-недельную программу, разработанную для трансформации вашей силы и мобильности. Выполняйте ежедневные тренировки, отслеживайте прогресс и сохраняйте регулярность с нашей системой серий.</string>
+    <string name="get_started">Начать</string>
+
+    <!-- Exercises -->
+    <string name="ex_pushups">Отжимания</string>
+    <string name="ex_squats">Приседания</string>
+    <string name="ex_pullups">Подтягивания</string>
+    <string name="ex_plank">Планка</string>
+    <string name="ex_dips">Отжимания на брусьях</string>
+    <string name="ex_lunges">Выпады</string>
+    <string name="ex_rows">Тяга в наклоне</string>
+    <string name="ex_leg_raises">Подъемы ног</string>
+    <string name="ex_cat_cow">Кошка-корова</string>
+    <string name="ex_bird_dog">Разноименные подъемы (Bird Dog)</string>
+    <string name="ex_stretch">Лучшая в мире растяжка</string>
+    <string name="ex_burpees">Берпи</string>
+    <string name="ex_climbers">Альпинист</string>
+    <string name="ex_kb_swing">Махи гирей</string>
+
+    <string name="ex_hang">Вис на перекладине</string>
+    <string name="ex_hang_desc">Просто висите на турнике.</string>
+    <string name="ex_hang_tech">Держите лопатки активными, не просто висите мешком.</string>
+    <string name="ex_face_pull">Face Pull (Тяга к лицу)</string>
+    <string name="ex_face_pull_desc">Тяните резину к лицу.</string>
+    <string name="ex_face_pull_tech">Сосредоточьтесь на задних дельтах и сведении лопаток.</string>
+    <string name="ex_superman">Супермен</string>
+    <string name="ex_superman_desc">Поднимайте руки и ноги лежа на животе.</string>
+    <string name="ex_superman_tech">Задержитесь в верхней точке на 2 секунды.</string>
+    <string name="ex_wall_slides">Скольжения у стены</string>
+    <string name="ex_wall_slides_desc">Скользите руками вверх и вниз по стене.</string>
+    <string name="ex_wall_slides_tech">Прижимайте спину и локти к стене.</string>
+    <string name="ex_deep_squat">Глубокий присед</string>
+    <string name="ex_deep_squat_desc">Находитесь в положении глубокого приседа.</string>
+    <string name="ex_deep_squat_tech">Пятки на полу, грудь поднята.</string>
+    <string name="ex_bird_dog_desc">Вытягивание противоположной руки и ноги на четвереньках.</string>
+    <string name="ex_bird_dog_tech">Держите спину ровно, не прогибайтесь.</string>
+</resources>
