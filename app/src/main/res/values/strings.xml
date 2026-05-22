@@ -19,6 +19,15 @@
     <string name="timer_pause">Pause</string>
     <string name="timer_start">Start</string>
     <string name="timer_reset">Reset</string>
+    <string name="warmup">Warmup</string>
+    <string name="warmup_desc">Prepare your body for the main workout.</string>
+    <string name="main_workout">Main Workout</string>
+    <string name="posture_block">Posture Block</string>
+    <string name="next">Next</string>
+    <string name="previous">Previous</string>
+    <string name="finish">Finish</string>
+    <string name="workout_complete">Workout Complete!</string>
+    <string name="workout_complete_desc">Great job! You have completed today\'s session.</string>
     <string name="posture_training">Posture Training</string>
     <string name="posture_desc">Correct your posture with these daily exercises.</string>
 
@@ -42,6 +51,11 @@
     <string name="ex_burpees">Burpees</string>
     <string name="ex_climbers">Mountain Climbers</string>
     <string name="ex_kb_swing">Kettlebell Swing</string>
+    <string name="ex_neck_circles">Neck Circles</string>
+    <string name="ex_arm_circles">Arm Circles</string>
+    <string name="ex_hip_circles">Hip Circles</string>
+    <string name="ex_leg_swings">Leg Swings</string>
+    <string name="ex_jumping_jacks">Jumping Jacks</string>
 
     <string name="ex_hang">Hang</string>
     <string name="ex_hang_desc">Just hang from a bar.</string>

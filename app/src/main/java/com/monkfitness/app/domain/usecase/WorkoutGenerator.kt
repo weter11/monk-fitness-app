@@ -99,4 +99,14 @@ class WorkoutGenerator {
             Exercise("deep_squat", R.string.ex_deep_squat, R.string.ex_deep_squat_desc, R.string.ex_deep_squat_tech, R.drawable.ic_squat, 3, 1, 60, true)
         )
     }
+
+    fun getWarmupExercises(): List<Exercise> {
+        return listOf(
+            Exercise("neck_circles", R.string.ex_neck_circles, R.string.ex_neck_circles, R.string.ex_neck_circles, R.drawable.ic_exercise_placeholder, 1, 1, 30, true),
+            Exercise("arm_circles", R.string.ex_arm_circles, R.string.ex_arm_circles, R.string.ex_arm_circles, R.drawable.ic_exercise_placeholder, 1, 1, 30, true),
+            Exercise("hip_circles", R.string.ex_hip_circles, R.string.ex_hip_circles, R.string.ex_hip_circles, R.drawable.ic_exercise_placeholder, 1, 1, 30, true),
+            Exercise("leg_swings", R.string.ex_leg_swings, R.string.ex_leg_swings, R.string.ex_leg_swings, R.drawable.ic_exercise_placeholder, 1, 1, 30, true),
+            Exercise("jumping_jacks", R.string.ex_jumping_jacks, R.string.ex_jumping_jacks, R.string.ex_jumping_jacks, R.drawable.ic_exercise_placeholder, 1, 1, 60, true)
+        )
+    }
 }

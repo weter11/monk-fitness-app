@@ -61,6 +61,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getPostureExercises() = workoutGenerator.getPostureExercises()
 
+    fun getWarmupExercises() = workoutGenerator.getWarmupExercises()
+
     fun completeWorkout(day: Int) {
         viewModelScope.launch {
             val progress = UserProgress(
