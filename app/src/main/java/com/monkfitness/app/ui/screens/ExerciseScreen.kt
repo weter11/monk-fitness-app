@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import android.util.Log
 import androidx.compose.ui.res.stringResource
@@ -36,6 +37,8 @@ fun ExerciseScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
+
     LaunchedEffect(exercise) {
         Log.d("ExerciseScreen", "Opening ExerciseScreen with exercise: ${exercise?.id ?: "null"}")
         if (exercise != null) {
@@ -69,6 +72,9 @@ fun ExerciseScreen(
 
     val timeLeft by viewModel.timeLeft.collectAsState()
     val isTimerRunning by viewModel.isTimerRunning.collectAsState()
+    val imageRes = if (exercise.imageRes != 0) exercise.imageRes else R.drawable.ic_exercise_placeholder
+    val descriptionText = exercise.descriptionRes.resolveString(context, R.string.default_exercise_description)
+    val techniqueText = exercise.techniqueRes.resolveString(context, R.string.default_exercise_technique)
 
     Scaffold(
         topBar = {
@@ -99,7 +105,7 @@ fun ExerciseScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Image(
-                    painter = painterResource(exercise.imageRes),
+                    painter = painterResource(imageRes),
                     contentDescription = null,
                     modifier = Modifier.size(160.dp),
                     contentScale = ContentScale.Fit,
@@ -107,20 +113,26 @@ fun ExerciseScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
+                text = stringResource(exercise.nameRes),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                InfoChip(
-                    label = if (exercise.isTimerBased) "Time" else "Sets",
-                    value = if (exercise.isTimerBased) "${exercise.durationSeconds}s" else "${exercise.sets}"
-                )
-                if (!exercise.isTimerBased) {
-                    InfoChip(label = "Reps", value = "${exercise.reps}")
-                }
-            }
+            Spacer(modifier = Modifier.height(24.dp))
+
+            ExerciseSection(
+                title = stringResource(R.string.description),
+                content = descriptionText
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            ExerciseSection(
+                title = stringResource(R.string.technique),
+                content = techniqueText
+            )
 
             if (exercise.isTimerBased) {
                 Spacer(modifier = Modifier.height(32.dp))
@@ -131,20 +143,6 @@ fun ExerciseScreen(
                     onReset = { viewModel.resetTimer(exercise.durationSeconds) }
                 )
             }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            ExerciseSection(
-                title = stringResource(R.string.description),
-                content = stringResource(exercise.descriptionRes)
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            ExerciseSection(
-                title = stringResource(R.string.technique),
-                content = stringResource(exercise.techniqueRes)
-            )
         }
     }
 }
@@ -233,5 +231,11 @@ fun ExerciseSection(title: String, content: String) {
                 style = MaterialTheme.typography.bodyLarge
             )
         }
+    }
+
+    private fun Int.resolveString(context: android.content.Context, fallbackRes: Int): String {
+        val fallback = context.getString(fallbackRes)
+        if (this == 0) return fallback
+        return runCatching { context.getString(this) }.getOrElse { fallback }
     }
 }

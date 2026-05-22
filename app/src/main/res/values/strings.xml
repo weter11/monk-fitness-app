@@ -7,8 +7,10 @@
     <string name="day">Day</string>
     <string name="start_workout">Start Workout</string>
     <string name="complete_workout">Complete Workout</string>
-    <string name="description">No description available</string>
-    <string name="technique">Follow proper form and control your breathing.</string>
+    <string name="description">Description</string>
+    <string name="technique">Technique Tips</string>
+    <string name="default_exercise_description">Instructions coming soon.</string>
+    <string name="default_exercise_technique">Focus on controlled movement and steady breathing.</string>
     <string name="your_progress">Your Progress</string>
     <string name="no_progress_yet">Start your first workout to see your progress chart!</string>
     <string name="completed_days">Total Completed Days: %d</string>
@@ -56,26 +58,30 @@
     <string name="ex_climbers">Mountain Climbers</string>
     <string name="ex_kb_swing">Kettlebell Swing</string>
     <string name="ex_glute_bridge">Glute Bridge</string>
-    <string name="ex_glute_bridge_desc">Lie on back with knees bent, lift hips toward ceiling.</string>
-    <string name="ex_glute_bridge_tech">Squeeze glutes at the top, keep core engaged, don\'t overarch lower back.</string>
+    <string name="ex_glute_bridge_desc">Lie on your back with knees bent, then drive through your heels to lift your hips.</string>
+    <string name="ex_glute_bridge_tech">Keep ribs down, squeeze glutes at the top, and avoid arching your lower back.</string>
 
-    <string name="ex_pushups_desc">Lower body keeping straight line from head to heels, then push back up.</string>
-    <string name="ex_pushups_tech">Elbows at 45°, core tight, full range of motion.</string>
+    <string name="ex_pushups_desc">Lower your body while keeping a straight line from head to heels.</string>
+    <string name="ex_pushups_tech">Keep elbows at 45°, engage core, and avoid sagging hips.</string>
 
-    <string name="ex_squats_desc">Lower hips as if sitting in a chair, then stand back up.</string>
-    <string name="ex_squats_tech">Weight on heels, chest up, knees tracking over toes.</string>
+    <string name="ex_squats_desc">Push your hips back and down as if sitting into a chair, then stand tall.</string>
+    <string name="ex_squats_tech">Keep chest up, knees tracking over toes, and pressure through mid-foot and heels.</string>
 
-    <string name="ex_pullups_desc">Pull your body up until chin is over the bar.</string>
-    <string name="ex_pullups_tech">Engage lats, don\'t swing, controlled descent.</string>
+    <string name="ex_pullups_desc">Pull your body upward until your chin clears the bar, then lower with control.</string>
+    <string name="ex_pullups_tech">Start from active shoulders, avoid swinging, and keep the descent slow.</string>
 
-    <string name="ex_plank_desc">Hold a straight body position supported by forearms and toes.</string>
-    <string name="ex_plank_tech">Don\'t let hips sag or peak, keep neck neutral.</string>
+    <string name="ex_plank_desc">Hold a straight body line on your forearms and toes while bracing your core.</string>
+    <string name="ex_plank_tech">Keep glutes and abs tight, neck neutral, and avoid dropping or hiking hips.</string>
 
-    <string name="ex_bird_dog_desc">From all fours, extend opposite arm and leg simultaneously.</string>
-    <string name="ex_bird_dog_tech">Keep hips stable, slow movement, control balance.</string>
+    <string name="ex_bird_dog_desc">Extend opposite arm and leg while maintaining balance.</string>
+    <string name="ex_bird_dog_tech">Keep hips stable, move slowly, and control the motion.</string>
 
-    <string name="ex_lunges_desc">Step forward and lower hips until both knees are bent at 90°.</string>
-    <string name="ex_lunges_tech">Keep torso upright, front knee should not pass toes.</string>
+    <string name="ex_lunges_desc">Step forward and lower until both knees are bent, then push back to start.</string>
+    <string name="ex_lunges_tech">Keep torso upright, front knee in line with toes, and control each rep.</string>
+    <string name="ex_dips_desc">Lower your body by bending the elbows, then press back up to full extension.</string>
+    <string name="ex_dips_tech">Keep shoulders down, elbows pointing back, and avoid shrugging at the top.</string>
+    <string name="ex_rows_desc">Pull the weight or band toward your lower ribs, then return under control.</string>
+    <string name="ex_rows_tech">Keep spine neutral, squeeze shoulder blades together, and avoid jerking.</string>
 
     <string name="ex_neck_circles">Neck Circles</string>
     <string name="ex_arm_circles">Arm Circles</string>
