@@ -7,8 +7,8 @@
     <string name="day">День</string>
     <string name="start_workout">Начать тренировку</string>
     <string name="complete_workout">Завершить тренировку</string>
-    <string name="description">Описание</string>
-    <string name="technique">Техника</string>
+    <string name="description">Находясь на четвереньках, одновременно вытяните противоположную руку и ногу.</string>
+    <string name="technique">Держите таз стабильно, двигайтесь медленно, контролируйте баланс.</string>
     <string name="your_progress">Ваш прогресс</string>
     <string name="no_progress_yet">Начните свою первую тренировку, чтобы увидеть график прогресса!</string>
     <string name="completed_days">Всего завершено дней: %d</string>
