@@ -12,9 +12,13 @@ android {
     defaultConfig {
         applicationId = "com.monkfitness.app"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 28
         versionCode = 1
         versionName = "1.0"
+
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -67,5 +71,6 @@ dependencies {
 
     implementation(libs.mp.android.chart)
 
+    testImplementation("junit:junit:4.13.2")
     debugImplementation(libs.androidx.ui.tooling)
 }

@@ -34,16 +34,16 @@ class WorkoutGenerator {
         return try {
             when (type) {
                 WorkoutType.STRENGTH_A -> listOf(
-                    createExercise("pushups", R.string.ex_pushups, phase, baseReps = 8, baseSets = 3),
-                    createExercise("squats", R.string.ex_squats, phase, baseReps = 12, baseSets = 3),
-                    createExercise("pullups", R.string.ex_pullups, phase, baseReps = 5, baseSets = 3),
-                    createExercise("plank", R.string.ex_plank, phase, baseReps = 1, baseSets = 3, isTimer = true, baseDuration = 30)
+                    createExercise("pushups", R.string.ex_pushups, phase, baseReps = 8, baseSets = 3, imageRes = R.drawable.ic_pushup),
+                    createExercise("squats", R.string.ex_squats, phase, baseReps = 12, baseSets = 3, imageRes = R.drawable.ic_squat),
+                    createExercise("pullups", R.string.ex_pullups, phase, baseReps = 5, baseSets = 3, imageRes = R.drawable.ic_pullup),
+                    createExercise("plank", R.string.ex_plank, phase, baseReps = 1, baseSets = 3, isTimer = true, baseDuration = 30, imageRes = R.drawable.ic_plank)
                 )
                 WorkoutType.STRENGTH_B -> listOf(
-                    createExercise("dips", R.string.ex_dips, phase, baseReps = 8, baseSets = 3),
-                    createExercise("lunges", R.string.ex_lunges, phase, baseReps = 10, baseSets = 3),
-                    createExercise("rows", R.string.ex_rows, phase, baseReps = 10, baseSets = 3),
-                    createExercise("leg_raises", R.string.ex_leg_raises, phase, baseReps = 12, baseSets = 3)
+                    createExercise("dips", R.string.ex_dips, phase, baseReps = 8, baseSets = 3, imageRes = R.drawable.ic_pushup),
+                    createExercise("lunges", R.string.ex_lunges, phase, baseReps = 10, baseSets = 3, imageRes = R.drawable.ic_lunges),
+                    createExercise("rows", R.string.ex_rows, phase, baseReps = 10, baseSets = 3, imageRes = R.drawable.ic_pullup),
+                    createExercise("leg_raises", R.string.ex_leg_raises, phase, baseReps = 12, baseSets = 3, imageRes = R.drawable.ic_plank)
                 )
                 WorkoutType.MOBILITY -> listOf(
                     createExercise("cat_cow", R.string.ex_cat_cow, phase, baseReps = 15, baseSets = 2),
@@ -69,7 +69,8 @@ class WorkoutGenerator {
         baseReps: Int,
         baseSets: Int,
         isTimer: Boolean = false,
-        baseDuration: Int = 0
+        baseDuration: Int = 0,
+        imageRes: Int = R.drawable.ic_exercise_placeholder
     ): Exercise {
         val sets = baseSets + (phase - 1)
         val reps = baseReps + (phase - 1) * 2
@@ -80,7 +81,7 @@ class WorkoutGenerator {
             nameRes = nameRes,
             descriptionRes = nameRes,
             techniqueRes = nameRes,
-            imageRes = R.drawable.ic_exercise_placeholder,
+            imageRes = imageRes,
             sets = sets,
             reps = if (isTimer) 1 else reps,
             durationSeconds = duration,
@@ -90,12 +91,12 @@ class WorkoutGenerator {
 
     fun getPostureExercises(): List<Exercise> {
         return listOf(
-            Exercise("hang", R.string.ex_hang, R.string.ex_hang_desc, R.string.ex_hang_tech, R.drawable.ic_exercise_placeholder, 3, 1, 60, true),
-            Exercise("face_pull", R.string.ex_face_pull, R.string.ex_face_pull_desc, R.string.ex_face_pull_tech, R.drawable.ic_exercise_placeholder, 3, 15, 0, false),
-            Exercise("bird_dog_p", R.string.ex_bird_dog, R.string.ex_bird_dog_desc, R.string.ex_bird_dog_tech, R.drawable.ic_exercise_placeholder, 3, 12, 0, false),
-            Exercise("superman", R.string.ex_superman, R.string.ex_superman_desc, R.string.ex_superman_tech, R.drawable.ic_exercise_placeholder, 3, 12, 0, false),
-            Exercise("wall_slides", R.string.ex_wall_slides, R.string.ex_wall_slides_desc, R.string.ex_wall_slides_tech, R.drawable.ic_exercise_placeholder, 3, 15, 0, false),
-            Exercise("deep_squat", R.string.ex_deep_squat, R.string.ex_deep_squat_desc, R.string.ex_deep_squat_tech, R.drawable.ic_exercise_placeholder, 3, 1, 60, true)
+            Exercise("hang", R.string.ex_hang, R.string.ex_hang_desc, R.string.ex_hang_tech, R.drawable.ic_pullup, 3, 1, 60, true),
+            Exercise("face_pull", R.string.ex_face_pull, R.string.ex_face_pull_desc, R.string.ex_face_pull_tech, R.drawable.ic_posture, 3, 15, 0, false),
+            Exercise("bird_dog_p", R.string.ex_bird_dog, R.string.ex_bird_dog_desc, R.string.ex_bird_dog_tech, R.drawable.ic_plank, 3, 12, 0, false),
+            Exercise("superman", R.string.ex_superman, R.string.ex_superman_desc, R.string.ex_superman_tech, R.drawable.ic_plank, 3, 12, 0, false),
+            Exercise("wall_slides", R.string.ex_wall_slides, R.string.ex_wall_slides_desc, R.string.ex_wall_slides_tech, R.drawable.ic_posture, 3, 15, 0, false),
+            Exercise("deep_squat", R.string.ex_deep_squat, R.string.ex_deep_squat_desc, R.string.ex_deep_squat_tech, R.drawable.ic_squat, 3, 1, 60, true)
         )
     }
 }

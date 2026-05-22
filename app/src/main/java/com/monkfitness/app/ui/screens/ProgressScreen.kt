@@ -19,7 +19,6 @@ import com.github.mikephil.charting.data.BarData
 import com.github.mikephil.charting.data.BarDataSet
 import com.github.mikephil.charting.data.BarEntry
 import com.monkfitness.app.R
-import com.monkfitness.app.ui.theme.Primary
 import com.monkfitness.app.viewmodel.MainViewModel
 
 @Composable
@@ -84,7 +83,7 @@ fun ProgressScreen(viewModel: MainViewModel) {
                     },
                     update = { chart ->
                         val dataSet = BarDataSet(entries, "Workouts per week")
-                        dataSet.color = Primary.toArgb()
+                        dataSet.color = android.graphics.Color.GREEN
                         dataSet.valueTextColor = android.graphics.Color.WHITE
                         dataSet.valueTextSize = 10f
                         chart.data = BarData(dataSet)
