@@ -10,9 +10,14 @@ import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.repository.WorkoutRepository
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import com.monkfitness.app.util.NotificationScheduler
+import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.ui.screens.WorkoutStep
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -23,6 +28,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: WorkoutRepository
     private val workoutGenerator = WorkoutGenerator()
     private val settingsManager: SettingsManager
+
+    // Workout Session State
+    private val _currentWorkoutDay = MutableStateFlow<Int?>(null)
+    val currentWorkoutDay = _currentWorkoutDay.asStateFlow()
+
+    private val _currentStep = MutableStateFlow(WorkoutStep.OVERVIEW)
+    val currentStep = _currentStep.asStateFlow()
+
+    private val _exerciseIndex = MutableStateFlow(0)
+    val exerciseIndex = _exerciseIndex.asStateFlow()
+
+    private val _completedExercises = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val completedExercises = _completedExercises.asStateFlow()
+
+    // Timer State
+    private val _timeLeft = MutableStateFlow(0)
+    val timeLeft = _timeLeft.asStateFlow()
+
+    private val _isTimerRunning = MutableStateFlow(false)
+    val isTimerRunning = _isTimerRunning.asStateFlow()
+
+    private var timerJob: Job? = null
+    private var endTimeMillis: Long = 0
 
     init {
         val db = AppDatabase.getDatabase(application)
@@ -62,6 +90,91 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getPostureExercises() = workoutGenerator.getPostureExercises()
 
     fun getWarmupExercises() = workoutGenerator.getWarmupExercises()
+
+    fun startWorkoutSession(day: Int) {
+        if (_currentWorkoutDay.value != day) {
+            _currentWorkoutDay.value = day
+            _currentStep.value = WorkoutStep.OVERVIEW
+            _exerciseIndex.value = 0
+            _completedExercises.value = emptyMap()
+            stopTimer()
+        }
+    }
+
+    fun setWorkoutStep(step: WorkoutStep) {
+        _currentStep.value = step
+        _exerciseIndex.value = 0
+        stopTimer()
+    }
+
+    fun nextExercise(currentExerciseList: List<Exercise>) {
+        if (_exerciseIndex.value < currentExerciseList.size - 1) {
+            _exerciseIndex.value++
+            stopTimer()
+        } else {
+            val nextStep = when (_currentStep.value) {
+                WorkoutStep.WARMUP -> WorkoutStep.MAIN
+                WorkoutStep.MAIN -> WorkoutStep.POSTURE
+                WorkoutStep.POSTURE -> WorkoutStep.COMPLETE
+                else -> WorkoutStep.COMPLETE
+            }
+            setWorkoutStep(nextStep)
+        }
+    }
+
+    fun previousExercise() {
+        if (_exerciseIndex.value > 0) {
+            _exerciseIndex.value--
+            stopTimer()
+        } else {
+            // Optionally handle going back to previous step, but for now just stay at index 0
+        }
+    }
+
+    fun startTimer(durationSeconds: Int) {
+        if (_isTimerRunning.value) return
+
+        endTimeMillis = System.currentTimeMillis() + (durationSeconds * 1000L)
+        _timeLeft.value = durationSeconds
+        _isTimerRunning.value = true
+
+        runTimer()
+    }
+
+    private fun runTimer() {
+        timerJob?.cancel()
+        timerJob = viewModelScope.launch {
+            while (_isTimerRunning.value) {
+                val remaining = ((endTimeMillis - System.currentTimeMillis()) / 1000).toInt().coerceAtLeast(0)
+                _timeLeft.value = remaining
+                if (remaining <= 0) {
+                    _isTimerRunning.value = false
+                    // Auto-advance logic will be handled by UI observing timeLeft and isTimerRunning
+                    break
+                }
+                delay(200L)
+            }
+        }
+    }
+
+    fun toggleTimer(durationSeconds: Int) {
+        if (_isTimerRunning.value) {
+            stopTimer()
+        } else {
+            val remaining = if (_timeLeft.value > 0) _timeLeft.value else durationSeconds
+            startTimer(remaining)
+        }
+    }
+
+    fun stopTimer() {
+        _isTimerRunning.value = false
+        timerJob?.cancel()
+    }
+
+    fun resetTimer(durationSeconds: Int) {
+        stopTimer()
+        _timeLeft.value = durationSeconds
+    }
 
     fun completeWorkout(day: Int) {
         viewModelScope.launch {

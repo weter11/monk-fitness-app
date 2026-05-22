@@ -137,17 +137,13 @@ fun MainApp(viewModel: MainViewModel) {
                 val day = backStackEntry.arguments?.getInt("day") ?: -1
                 val isPosture = backStackEntry.arguments?.getBoolean("isPosture") ?: false
 
-                val exercise = if (isPosture) {
-                    viewModel.getPostureExercises().find { it.id == exerciseId }
-                } else {
-                    viewModel.getWorkoutForDay(day).exercises.find { it.id == exerciseId }
-                } ?: if (day == -1) {
-                    // Fallback for warmup exercises or direct links
-                    viewModel.getWarmupExercises().find { it.id == exerciseId }
-                } else null
+                val exercise = viewModel.getWorkoutForDay(day).exercises.find { it.id == exerciseId }
+                    ?: viewModel.getWarmupExercises().find { it.id == exerciseId }
+                    ?: viewModel.getPostureExercises().find { it.id == exerciseId }
 
                 ExerciseScreen(
                     exercise = exercise,
+                    viewModel = viewModel,
                     onBack = { navController.popBackStack() }
                 )
             }

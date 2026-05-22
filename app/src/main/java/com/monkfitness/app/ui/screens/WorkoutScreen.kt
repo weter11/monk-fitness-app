@@ -32,7 +32,6 @@ import com.monkfitness.app.ui.components.ExerciseItem
 import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.ui.components.MonkProgressIndicator
 import com.monkfitness.app.viewmodel.MainViewModel
-import kotlinx.coroutines.delay
 
 enum class WorkoutStep {
     OVERVIEW,
@@ -50,12 +49,16 @@ fun WorkoutScreen(
     onBack: () -> Unit,
     onExerciseClick: (Exercise) -> Unit
 ) {
+    LaunchedEffect(day) {
+        viewModel.startWorkoutSession(day)
+    }
+
     val workout = remember(day) { viewModel.getWorkoutForDay(day) }
     val warmupExercises = remember { viewModel.getWarmupExercises() }
-    val postureExercises = remember { viewModel.getPostureExercises().take(3) } // 3-5 as requested
+    val postureExercises = remember { viewModel.getPostureExercises().take(3) }
 
-    var currentStep by remember { mutableStateOf(WorkoutStep.OVERVIEW) }
-    var exerciseIndex by remember { mutableIntStateOf(0) }
+    val currentStep by viewModel.currentStep.collectAsState()
+    val exerciseIndex by viewModel.exerciseIndex.collectAsState()
 
     val currentExerciseList = when (currentStep) {
         WorkoutStep.WARMUP -> warmupExercises
@@ -125,7 +128,7 @@ fun WorkoutScreen(
                     WorkoutStep.OVERVIEW -> {
                         WorkoutOverview(
                             exercises = workout.exercises,
-                            onStart = { currentStep = WorkoutStep.WARMUP },
+                            onStart = { viewModel.setWorkoutStep(WorkoutStep.WARMUP) },
                             onExerciseClick = onExerciseClick
                         )
                     }
@@ -133,19 +136,9 @@ fun WorkoutScreen(
                         currentExercise?.let { exercise ->
                             ExerciseSession(
                                 exercise = exercise,
-                                onNext = {
-                                    if (exerciseIndex < currentExerciseList.size - 1) {
-                                        exerciseIndex++
-                                    } else {
-                                        exerciseIndex = 0
-                                        currentStep = when (currentStep) {
-                                            WorkoutStep.WARMUP -> WorkoutStep.MAIN
-                                            WorkoutStep.MAIN -> WorkoutStep.POSTURE
-                                            WorkoutStep.POSTURE -> WorkoutStep.COMPLETE
-                                            else -> WorkoutStep.COMPLETE
-                                        }
-                                    }
-                                },
+                                viewModel = viewModel,
+                                onNext = { viewModel.nextExercise(currentExerciseList) },
+                                onPrevious = { viewModel.previousExercise() },
                                 onInfo = { onExerciseClick(exercise) }
                             )
                         }
@@ -198,21 +191,26 @@ fun WorkoutOverview(
 @Composable
 fun ExerciseSession(
     exercise: Exercise,
+    viewModel: MainViewModel,
     onNext: () -> Unit,
+    onPrevious: () -> Unit,
     onInfo: () -> Unit
 ) {
     val scrollState = rememberScrollState()
-    var timeLeft by remember(exercise.id) { mutableIntStateOf(exercise.durationSeconds) }
-    var isTimerRunning by remember { mutableStateOf(false) }
+    val timeLeft by viewModel.timeLeft.collectAsState()
+    val isTimerRunning by viewModel.isTimerRunning.collectAsState()
 
-    LaunchedEffect(isTimerRunning, timeLeft) {
-        if (isTimerRunning && timeLeft > 0) {
-            delay(1000)
-            timeLeft--
-            if (timeLeft == 0) {
-                isTimerRunning = false
-                onNext()
-            }
+    LaunchedEffect(exercise.id) {
+        if (exercise.isTimerBased) {
+            viewModel.resetTimer(exercise.durationSeconds)
+            viewModel.startTimer(exercise.durationSeconds)
+        }
+    }
+
+    LaunchedEffect(timeLeft, isTimerRunning) {
+        if (exercise.isTimerBased && timeLeft == 0 && isTimerRunning == false && viewModel.timeLeft.value == 0) {
+            // Check if it's actually finished (not just initialized)
+            onNext()
         }
     }
 
@@ -278,7 +276,7 @@ fun ExerciseSession(
 
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Button(
-                    onClick = { isTimerRunning = !isTimerRunning },
+                    onClick = { viewModel.toggleTimer(exercise.durationSeconds) },
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.height(56.dp).weight(1f)
                 ) {
@@ -291,10 +289,7 @@ fun ExerciseSession(
                 }
 
                 OutlinedButton(
-                    onClick = {
-                        timeLeft = exercise.durationSeconds
-                        isTimerRunning = false
-                    },
+                    onClick = { viewModel.resetTimer(exercise.durationSeconds) },
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.height(56.dp)
                 ) {
@@ -303,12 +298,25 @@ fun ExerciseSession(
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(48.dp))
 
-        MonkButton(
-            text = stringResource(R.string.next),
-            onClick = onNext
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            OutlinedButton(
+                onClick = onPrevious,
+                modifier = Modifier.height(56.dp).weight(1f),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(stringResource(R.string.previous))
+            }
+            MonkButton(
+                text = stringResource(R.string.next),
+                onClick = onNext,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
 

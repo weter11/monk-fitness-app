@@ -27,17 +27,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.viewmodel.MainViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExerciseScreen(
     exercise: Exercise?,
+    viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
     LaunchedEffect(exercise) {
         Log.d("ExerciseScreen", "Opening ExerciseScreen with exercise: ${exercise?.id ?: "null"}")
         if (exercise != null) {
             Log.d("ExerciseScreen", "Exercise details: nameRes=${exercise.nameRes}, isTimerBased=${exercise.isTimerBased}")
+            if (exercise.isTimerBased) {
+                viewModel.resetTimer(exercise.durationSeconds)
+            }
         }
     }
 
@@ -45,7 +50,7 @@ fun ExerciseScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Exercise Not Found") },
+                    title = { Text(stringResource(R.string.app_name)) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -61,16 +66,8 @@ fun ExerciseScreen(
         return
     }
 
-    var timeLeft by rememberSaveable(exercise.id) { mutableIntStateOf(exercise.durationSeconds) }
-    var isTimerRunning by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(isTimerRunning, timeLeft) {
-        if (isTimerRunning && timeLeft > 0) {
-            kotlinx.coroutines.delay(1000L)
-            timeLeft--
-            if (timeLeft == 0) isTimerRunning = false
-        }
-    }
+    val timeLeft by viewModel.timeLeft.collectAsState()
+    val isTimerRunning by viewModel.isTimerRunning.collectAsState()
 
     Scaffold(
         topBar = {
@@ -129,11 +126,8 @@ fun ExerciseScreen(
                 TimerDisplay(
                     timeLeft = timeLeft,
                     isRunning = isTimerRunning,
-                    onToggle = { isTimerRunning = !isTimerRunning },
-                    onReset = {
-                        isTimerRunning = false
-                        timeLeft = exercise.durationSeconds
-                    }
+                    onToggle = { viewModel.toggleTimer(exercise.durationSeconds) },
+                    onReset = { viewModel.resetTimer(exercise.durationSeconds) }
                 )
             }
 

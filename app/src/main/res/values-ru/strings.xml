@@ -51,6 +51,28 @@
     <string name="ex_burpees">Берпи</string>
     <string name="ex_climbers">Альпинист</string>
     <string name="ex_kb_swing">Махи гирей</string>
+    <string name="ex_glute_bridge">Ягодичный мостик</string>
+    <string name="ex_glute_bridge_desc">Лежа на спине с согнутыми ногами, поднимите таз к потолку.</string>
+    <string name="ex_glute_bridge_tech">Сжимайте ягодицы в верхней точке, напрягайте кор, не прогибайте поясницу слишком сильно.</string>
+
+    <string name="ex_pushups_desc">Опускайте тело, сохраняя прямую линию от головы до пяток, затем вытолкните себя вверх.</string>
+    <string name="ex_pushups_tech">Локти под углом 45°, кор напряжен, полная амплитуда движений.</string>
+
+    <string name="ex_squats_desc">Опускайте таз, как будто садитесь на стул, затем вернитесь в исходное положение.</string>
+    <string name="ex_squats_tech">Вес на пятках, грудь поднята, колени не выходят за носки.</string>
+
+    <string name="ex_pullups_desc">Тяните тело вверх, пока подбородок не окажется над перекладиной.</string>
+    <string name="ex_pullups_tech">Задействуйте широчайшие мышцы спины, не раскачивайтесь, контролируйте спуск.</string>
+
+    <string name="ex_plank_desc">Удерживайте прямое положение тела с опорой на предплечья и пальцы ног.</string>
+    <string name="ex_plank_tech">Не позволяйте тазу провисать или подниматься слишком высоко, держите шею в нейтральном положении.</string>
+
+    <string name="ex_bird_dog_desc">Находясь на четвереньках, одновременно вытяните противоположную руку и ногу.</string>
+    <string name="ex_bird_dog_tech">Держите таз стабильно, двигайтесь медленно, контролируйте баланс.</string>
+
+    <string name="ex_lunges_desc">Сделайте шаг вперед и опускайте таз, пока оба колена не будут согнуты под углом 90°.</string>
+    <string name="ex_lunges_tech">Держите туловище вертикально, переднее колено не должно выходить за носок.</string>
+
     <string name="ex_neck_circles">Вращения головой</string>
     <string name="ex_arm_circles">Вращения руками</string>
     <string name="ex_hip_circles">Вращения тазом</string>
@@ -72,6 +94,4 @@
     <string name="ex_deep_squat">Глубокий присед</string>
     <string name="ex_deep_squat_desc">Находитесь в положении глубокого приседа.</string>
     <string name="ex_deep_squat_tech">Пятки на полу, грудь поднята.</string>
-    <string name="ex_bird_dog_desc">Вытягивание противоположной руки и ноги на четвереньках.</string>
-    <string name="ex_bird_dog_tech">Держите спину ровно, не прогибайтесь.</string>
 </resources>

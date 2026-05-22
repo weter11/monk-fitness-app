@@ -51,6 +51,28 @@
     <string name="ex_burpees">Burpees</string>
     <string name="ex_climbers">Mountain Climbers</string>
     <string name="ex_kb_swing">Kettlebell Swing</string>
+    <string name="ex_glute_bridge">Glute Bridge</string>
+    <string name="ex_glute_bridge_desc">Lie on back with knees bent, lift hips toward ceiling.</string>
+    <string name="ex_glute_bridge_tech">Squeeze glutes at the top, keep core engaged, don\'t overarch lower back.</string>
+
+    <string name="ex_pushups_desc">Lower body keeping straight line from head to heels, then push back up.</string>
+    <string name="ex_pushups_tech">Elbows at 45°, core tight, full range of motion.</string>
+
+    <string name="ex_squats_desc">Lower hips as if sitting in a chair, then stand back up.</string>
+    <string name="ex_squats_tech">Weight on heels, chest up, knees tracking over toes.</string>
+
+    <string name="ex_pullups_desc">Pull your body up until chin is over the bar.</string>
+    <string name="ex_pullups_tech">Engage lats, don\'t swing, controlled descent.</string>
+
+    <string name="ex_plank_desc">Hold a straight body position supported by forearms and toes.</string>
+    <string name="ex_plank_tech">Don\'t let hips sag or peak, keep neck neutral.</string>
+
+    <string name="ex_bird_dog_desc">From all fours, extend opposite arm and leg simultaneously.</string>
+    <string name="ex_bird_dog_tech">Keep hips stable, slow movement, control balance.</string>
+
+    <string name="ex_lunges_desc">Step forward and lower hips until both knees are bent at 90°.</string>
+    <string name="ex_lunges_tech">Keep torso upright, front knee should not pass toes.</string>
+
     <string name="ex_neck_circles">Neck Circles</string>
     <string name="ex_arm_circles">Arm Circles</string>
     <string name="ex_hip_circles">Hip Circles</string>
@@ -72,6 +94,4 @@
     <string name="ex_deep_squat">Deep Squat Hold</string>
     <string name="ex_deep_squat_desc">Sit deep in a squat position.</string>
     <string name="ex_deep_squat_tech">Keep heels on the ground and chest up.</string>
-    <string name="ex_bird_dog_desc">Opposite arm and leg extension on all fours.</string>
-    <string name="ex_bird_dog_tech">Keep back flat, don\'t arch.</string>
 </resources>
