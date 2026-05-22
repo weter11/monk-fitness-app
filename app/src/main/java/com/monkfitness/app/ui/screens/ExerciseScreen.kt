@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import android.util.Log
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -30,19 +31,44 @@ import com.monkfitness.app.data.model.Exercise
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExerciseScreen(
-    exercise: Exercise,
+    exercise: Exercise?,
     onBack: () -> Unit
 ) {
-    var timeLeft by rememberSaveable { mutableIntStateOf(exercise.durationSeconds) }
+    LaunchedEffect(exercise) {
+        Log.d("ExerciseScreen", "Opening ExerciseScreen with exercise: ${exercise?.id ?: "null"}")
+        if (exercise != null) {
+            Log.d("ExerciseScreen", "Exercise details: nameRes=${exercise.nameRes}, isTimerBased=${exercise.isTimerBased}")
+        }
+    }
+
+    if (exercise == null) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Exercise Not Found") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                )
+            }
+        ) { padding ->
+            Box(modifier = Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No description available", style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+        return
+    }
+
+    var timeLeft by rememberSaveable(exercise.id) { mutableIntStateOf(exercise.durationSeconds) }
     var isTimerRunning by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(isTimerRunning) {
-        if (isTimerRunning) {
-            while (timeLeft > 0) {
-                kotlinx.coroutines.delay(1000L)
-                timeLeft--
-            }
-            isTimerRunning = false
+    LaunchedEffect(isTimerRunning, timeLeft) {
+        if (isTimerRunning && timeLeft > 0) {
+            kotlinx.coroutines.delay(1000L)
+            timeLeft--
+            if (timeLeft == 0) isTimerRunning = false
         }
     }
 

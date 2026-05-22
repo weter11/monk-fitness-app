@@ -141,14 +141,15 @@ fun MainApp(viewModel: MainViewModel) {
                     viewModel.getPostureExercises().find { it.id == exerciseId }
                 } else {
                     viewModel.getWorkoutForDay(day).exercises.find { it.id == exerciseId }
-                }
+                } ?: if (day == -1) {
+                    // Fallback for warmup exercises or direct links
+                    viewModel.getWarmupExercises().find { it.id == exerciseId }
+                } else null
 
-                exercise?.let {
-                    ExerciseScreen(
-                        exercise = it,
-                        onBack = { navController.popBackStack() }
-                    )
-                }
+                ExerciseScreen(
+                    exercise = exercise,
+                    onBack = { navController.popBackStack() }
+                )
             }
         }
     }
