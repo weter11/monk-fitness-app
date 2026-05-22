@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.data.model.WorkoutType
 import com.monkfitness.app.ui.components.ExerciseItem
 import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.ui.components.MonkProgressIndicator
@@ -60,6 +61,8 @@ fun WorkoutScreen(
     val currentStep by viewModel.currentStep.collectAsState()
     val exerciseIndex by viewModel.exerciseIndex.collectAsState()
 
+    val isRestDay = workout.type == WorkoutType.REST || workout.exercises.isEmpty()
+
     val currentExerciseList = when (currentStep) {
         WorkoutStep.WARMUP -> warmupExercises
         WorkoutStep.MAIN -> workout.exercises
@@ -85,7 +88,8 @@ fun WorkoutScreen(
                 title = {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            when (currentStep) {
+                            if (isRestDay) stringResource(R.string.rest_day)
+                            else when (currentStep) {
                                 WorkoutStep.OVERVIEW -> workout.type.name.replace("_", " ")
                                 WorkoutStep.WARMUP -> stringResource(R.string.warmup)
                                 WorkoutStep.MAIN -> stringResource(R.string.main_workout)
@@ -118,42 +122,93 @@ fun WorkoutScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            MonkProgressIndicator(
-                progress = progress,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
+            if (!isRestDay) {
+                MonkProgressIndicator(
+                    progress = progress,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                )
+            }
 
             Box(modifier = Modifier.weight(1f)) {
-                when (currentStep) {
-                    WorkoutStep.OVERVIEW -> {
-                        WorkoutOverview(
-                            exercises = workout.exercises,
-                            onStart = { viewModel.setWorkoutStep(WorkoutStep.WARMUP) },
-                            onExerciseClick = onExerciseClick
-                        )
-                    }
-                    WorkoutStep.WARMUP, WorkoutStep.MAIN, WorkoutStep.POSTURE -> {
-                        currentExercise?.let { exercise ->
-                            ExerciseSession(
-                                exercise = exercise,
-                                viewModel = viewModel,
-                                onNext = { viewModel.nextExercise(currentExerciseList) },
-                                onPrevious = { viewModel.previousExercise() },
-                                onInfo = { onExerciseClick(exercise) }
+                if (isRestDay) {
+                    RestDayUI(onComplete = {
+                        viewModel.completeWorkout(day)
+                        onBack()
+                    })
+                } else {
+                    when (currentStep) {
+                        WorkoutStep.OVERVIEW -> {
+                            WorkoutOverview(
+                                exercises = workout.exercises,
+                                onStart = { viewModel.setWorkoutStep(WorkoutStep.WARMUP) },
+                                onExerciseClick = onExerciseClick
                             )
                         }
-                    }
-                    WorkoutStep.COMPLETE -> {
-                        WorkoutComplete(
-                            onFinish = {
-                                viewModel.completeWorkout(day)
-                                onBack()
+                        WorkoutStep.WARMUP, WorkoutStep.MAIN, WorkoutStep.POSTURE -> {
+                            currentExercise?.let { exercise ->
+                                ExerciseSession(
+                                    exercise = exercise,
+                                    viewModel = viewModel,
+                                    onNext = { viewModel.nextExercise(currentExerciseList) },
+                                    onPrevious = { viewModel.previousExercise() },
+                                    onInfo = { onExerciseClick(exercise) }
+                                )
                             }
-                        )
+                        }
+                        WorkoutStep.COMPLETE -> {
+                            WorkoutComplete(
+                                onFinish = {
+                                    viewModel.completeWorkout(day)
+                                    onBack()
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun RestDayUI(onComplete: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_exercise_placeholder),
+            contentDescription = null,
+            modifier = Modifier.size(120.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Text(
+            text = stringResource(R.string.rest_day),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = stringResource(R.string.rest_day_message),
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.secondary
+        )
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        MonkButton(
+            text = stringResource(R.string.complete_workout),
+            onClick = onComplete
+        )
     }
 }
 
@@ -209,7 +264,6 @@ fun ExerciseSession(
 
     LaunchedEffect(timeLeft, isTimerRunning) {
         if (exercise.isTimerBased && timeLeft == 0 && isTimerRunning == false && viewModel.timeLeft.value == 0) {
-            // Check if it's actually finished (not just initialized)
             onNext()
         }
     }

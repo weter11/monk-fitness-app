@@ -10,6 +10,13 @@ import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.repository.WorkoutRepository
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import com.monkfitness.app.util.NotificationScheduler
+import android.content.Context
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.ui.screens.WorkoutStep
 import kotlinx.coroutines.Job
@@ -144,15 +151,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun runTimer() {
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
+            var lastTickSecond = -1
             while (_isTimerRunning.value) {
                 val remaining = ((endTimeMillis - System.currentTimeMillis()) / 1000).toInt().coerceAtLeast(0)
+
+                if (remaining != lastTickSecond) {
+                    lastTickSecond = remaining
+                    if (remaining in 1..3 && timerTicksEnabled.value) {
+                        playBeep(100)
+                    }
+                }
+
                 _timeLeft.value = remaining
                 if (remaining <= 0) {
                     _isTimerRunning.value = false
+                    playBeep(500)
+                    if (vibrationEnabled.value) {
+                        vibrate()
+                    }
                     // Auto-advance logic will be handled by UI observing timeLeft and isTimerRunning
                     break
                 }
-                delay(200L)
+                delay(100L)
             }
         }
     }
@@ -217,6 +237,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setOnboardingCompleted() {
         viewModelScope.launch {
             settingsManager.setOnboardingCompleted()
+        }
+    }
+
+    val timerTicksEnabled = settingsManager.timerTicksEnabledFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), true
+    )
+
+    fun setTimerTicksEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setTimerTicksEnabled(enabled)
+        }
+    }
+
+    val vibrationEnabled = settingsManager.vibrationEnabledFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), true
+    )
+
+    fun setVibrationEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setVibrationEnabled(enabled)
+        }
+    }
+
+    private val toneG = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+
+    private fun playBeep(duration: Int = 200) {
+        toneG.startTone(ToneGenerator.TONE_PROP_BEEP, duration)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        toneG.release()
+    }
+
+    private fun vibrate() {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getApplication<Application>().getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getApplication<Application>().getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(500)
         }
     }
 }

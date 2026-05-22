@@ -28,6 +28,10 @@
     <string name="finish">Завершить</string>
     <string name="workout_complete">Тренировка окончена!</string>
     <string name="workout_complete_desc">Отличная работа! Вы завершили сегодняшнюю тренировку.</string>
+    <string name="rest_day">День отдыха</string>
+    <string name="rest_day_message">Восстановление, прогулки, легкая мобильность. Дайте мышцам время на рост.</string>
+    <string name="vibration">Вибрация</string>
+    <string name="timer_ticks">Тиканье таймера</string>
     <string name="posture_training">Тренировка осанки</string>
     <string name="posture_desc">Исправьте осанку с помощью этих ежедневных упражнений.</string>
 

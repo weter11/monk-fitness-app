@@ -21,7 +21,8 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    // In a real app we'd collect notification time from viewModel
+    val timerTicksEnabled by viewModel.timerTicksEnabled.collectAsState()
+    val vibrationEnabled by viewModel.vibrationEnabled.collectAsState()
 
     Scaffold(
         topBar = {
@@ -76,6 +77,34 @@ fun SettingsScreen(
                 Button(onClick = { viewModel.setLanguage("ru") }) {
                     Text("Русский")
                 }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(text = "Feedback", style = MaterialTheme.typography.titleLarge)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = stringResource(R.string.timer_ticks))
+                Switch(
+                    checked = timerTicksEnabled,
+                    onCheckedChange = { viewModel.setTimerTicksEnabled(it) }
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = stringResource(R.string.vibration))
+                Switch(
+                    checked = vibrationEnabled,
+                    onCheckedChange = { viewModel.setVibrationEnabled(it) }
+                )
             }
         }
     }

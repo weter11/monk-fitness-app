@@ -28,6 +28,10 @@
     <string name="finish">Finish</string>
     <string name="workout_complete">Workout Complete!</string>
     <string name="workout_complete_desc">Great job! You have completed today\'s session.</string>
+    <string name="rest_day">Rest Day</string>
+    <string name="rest_day_message">Recovery, walking, light mobility. Give your muscles time to grow.</string>
+    <string name="vibration">Vibration</string>
+    <string name="timer_ticks">Timer Ticks</string>
     <string name="posture_training">Posture Training</string>
     <string name="posture_desc">Correct your posture with these daily exercises.</string>
 

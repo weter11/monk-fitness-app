@@ -40,7 +40,8 @@ fun ExerciseScreen(
         Log.d("ExerciseScreen", "Opening ExerciseScreen with exercise: ${exercise?.id ?: "null"}")
         if (exercise != null) {
             Log.d("ExerciseScreen", "Exercise details: nameRes=${exercise.nameRes}, isTimerBased=${exercise.isTimerBased}")
-            if (exercise.isTimerBased) {
+            // Only reset if timer is NOT already running (prevents interrupting active workout)
+            if (exercise.isTimerBased && !viewModel.isTimerRunning.value) {
                 viewModel.resetTimer(exercise.durationSeconds)
             }
         }
