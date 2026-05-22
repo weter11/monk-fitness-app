@@ -1,7 +1,6 @@
 package com.monkfitness.app
 
 import android.app.Application
-import androidx.lifecycle.asLiveData
 import com.monkfitness.app.data.local.SettingsManager
 import com.monkfitness.app.util.NotificationScheduler
 import kotlinx.coroutines.MainScope

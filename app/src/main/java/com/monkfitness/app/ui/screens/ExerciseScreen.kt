@@ -1,27 +1,30 @@
 package com.monkfitness.app.ui.screens
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
-import com.monkfitness.app.util.TimerManager
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,39 +32,26 @@ fun ExerciseScreen(
     exercise: Exercise,
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
-    val timerManager = remember { TimerManager(context) }
-    var timeLeft by rememberSaveable { mutableIntStateOf(exercise.durationSeconds) }
-    var isTimerRunning by rememberSaveable { mutableStateOf(false) }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            timerManager.release()
-        }
-    }
+    var timeLeft by remember { mutableStateOf(exercise.durationSeconds) }
+    var isTimerRunning by remember { mutableStateOf(false) }
 
     LaunchedEffect(isTimerRunning) {
-        if (isTimerRunning && timeLeft > 0) {
-            while (timeLeft > 0 && isTimerRunning) {
-                delay(1000)
-                if (isTimerRunning) {
-                    timeLeft--
-                }
+        if (isTimerRunning) {
+            while (timeLeft > 0) {
+                kotlinx.coroutines.delay(1000L)
+                timeLeft--
             }
-            if (timeLeft == 0) {
-                isTimerRunning = false
-                timerManager.playCompletionSound()
-            }
+            isTimerRunning = false
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(exercise.nameRes)) },
+                title = { Text(stringResource(exercise.nameRes), fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -72,56 +62,85 @@ fun ExerciseScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Card(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp),
-                shape = MaterialTheme.shapes.medium
+                    .height(240.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
             ) {
                 Image(
                     painter = painterResource(exercise.imageRes),
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    modifier = Modifier.size(160.dp),
+                    contentScale = ContentScale.Fit,
+                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary)
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                InfoChip(
+                    label = if (exercise.isTimerBased) "Time" else "Sets",
+                    value = if (exercise.isTimerBased) "${exercise.durationSeconds}s" else "${exercise.sets}"
+                )
+                if (!exercise.isTimerBased) {
+                    InfoChip(label = "Reps", value = "${exercise.reps}")
+                }
+            }
 
             if (exercise.isTimerBased) {
+                Spacer(modifier = Modifier.height(32.dp))
                 TimerDisplay(
                     timeLeft = timeLeft,
                     isRunning = isTimerRunning,
                     onToggle = { isTimerRunning = !isTimerRunning },
-                    onReset = { timeLeft = exercise.durationSeconds; isTimerRunning = false }
+                    onReset = {
+                        isTimerRunning = false
+                        timeLeft = exercise.durationSeconds
+                    }
                 )
-                Spacer(modifier = Modifier.height(24.dp))
             }
 
-            Text(
-                text = stringResource(R.string.description),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = stringResource(exercise.descriptionRes),
-                style = MaterialTheme.typography.bodyLarge
+            Spacer(modifier = Modifier.height(32.dp))
+
+            ExerciseSection(
+                title = stringResource(R.string.description),
+                content = stringResource(exercise.descriptionRes)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            Text(
-                text = stringResource(R.string.technique),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = stringResource(exercise.techniqueRes),
-                style = MaterialTheme.typography.bodyLarge
+            ExerciseSection(
+                title = stringResource(R.string.technique),
+                content = stringResource(exercise.techniqueRes)
             )
         }
+    }
+}
+
+@Composable
+fun InfoChip(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.outline
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 }
 
@@ -132,27 +151,65 @@ fun TimerDisplay(
     onToggle: () -> Unit,
     onReset: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f))
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = String.format("%02d:%02d", timeLeft / 60, timeLeft % 60),
-                style = MaterialTheme.typography.headlineLarge,
-                fontSize = 48.sp
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Button(onClick = onToggle) {
-                    Text(if (isRunning) stringResource(R.string.timer_pause) else stringResource(R.string.timer_start))
-                }
-                OutlinedButton(onClick = onReset) {
-                    Text(stringResource(R.string.timer_reset))
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = "%02d:%02d".format(timeLeft / 60, timeLeft % 60),
+            style = MaterialTheme.typography.displayLarge,
+            fontWeight = FontWeight.Bold,
+            color = if (timeLeft < 10) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            FilledIconButton(
+                onClick = onToggle,
+                modifier = Modifier.size(64.dp),
+                shape = CircleShape
+            ) {
+                if (isRunning) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_pause),
+                        contentDescription = "Pause",
+                        modifier = Modifier.size(32.dp)
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Start",
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
             }
+            OutlinedIconButton(
+                onClick = onReset,
+                modifier = Modifier.size(64.dp),
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = "Reset")
+            }
+        }
+    }
+}
+
+@Composable
+fun ExerciseSection(title: String, content: String) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.secondary
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ) {
+            Text(
+                text = content,
+                modifier = Modifier.padding(16.dp),
+                style = MaterialTheme.typography.bodyLarge
+            )
         }
     }
 }
