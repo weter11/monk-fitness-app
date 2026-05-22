@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,8 +33,8 @@ fun ExerciseScreen(
     exercise: Exercise,
     onBack: () -> Unit
 ) {
-    var timeLeft by remember { mutableStateOf(exercise.durationSeconds) }
-    var isTimerRunning by remember { mutableStateOf(false) }
+    var timeLeft by rememberSaveable { mutableIntStateOf(exercise.durationSeconds) }
+    var isTimerRunning by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(isTimerRunning) {
         if (isTimerRunning) {
