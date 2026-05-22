@@ -38,7 +38,7 @@ fun PostureScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        LazyColumn {
+        LazyColumn(modifier = Modifier.weight(1f)) {
             items(exercises, key = { it.id }) { exercise ->
                 ExerciseItem(
                     exercise = exercise,

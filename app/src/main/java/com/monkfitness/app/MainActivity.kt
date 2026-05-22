@@ -1,6 +1,7 @@
 package com.monkfitness.app
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -21,6 +23,7 @@ import androidx.navigation.compose.composable
 import androidx.compose.runtime.collectAsState
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.runtime.key
 import androidx.navigation.navArgument
 import com.monkfitness.app.ui.screens.*
 import com.monkfitness.app.ui.theme.MonkFitnessTheme
@@ -32,8 +35,23 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            val language by viewModel.settingsManager.languageFlow.collectAsState(initial = "ru")
+            val currentStep by viewModel.currentStep.collectAsState()
+
+            // Keep screen on during workout
+            LaunchedEffect(currentStep) {
+                if (currentStep != WorkoutStep.OVERVIEW && currentStep != WorkoutStep.COMPLETE) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
+
             MonkFitnessTheme {
-                MainApp(viewModel)
+                // Keying MainApp with language ensures full recomposition on language change
+                key(language) {
+                    MainApp(viewModel)
+                }
             }
         }
     }

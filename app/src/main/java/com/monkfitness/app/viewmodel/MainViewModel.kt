@@ -34,7 +34,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: WorkoutRepository
     private val workoutGenerator = WorkoutGenerator()
-    private val settingsManager: SettingsManager
 
     // Workout Session State
     private val _currentWorkoutDay = MutableStateFlow<Int?>(null)
@@ -45,6 +44,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _exerciseIndex = MutableStateFlow(0)
     val exerciseIndex = _exerciseIndex.asStateFlow()
+
+    private val _isRestTime = MutableStateFlow(false)
+    val isRestTime = _isRestTime.asStateFlow()
 
     private val _completedExercises = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val completedExercises = _completedExercises.asStateFlow()
@@ -58,6 +60,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var timerJob: Job? = null
     private var endTimeMillis: Long = 0
+
+    val settingsManager: SettingsManager
 
     init {
         val db = AppDatabase.getDatabase(application)
@@ -115,9 +119,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun nextExercise(currentExerciseList: List<Exercise>) {
-        if (_exerciseIndex.value < currentExerciseList.size - 1) {
+        if (_isRestTime.value) {
+            _isRestTime.value = false
             _exerciseIndex.value++
             stopTimer()
+            return
+        }
+
+        if (_exerciseIndex.value < currentExerciseList.size - 1) {
+            _isRestTime.value = true
+            startTimer(5)
         } else {
             val nextStep = when (_currentStep.value) {
                 WorkoutStep.WARMUP -> WorkoutStep.MAIN
@@ -130,6 +141,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun previousExercise() {
+        _isRestTime.value = false
         if (_exerciseIndex.value > 0) {
             _exerciseIndex.value--
             stopTimer()
@@ -165,7 +177,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _timeLeft.value = remaining
                 if (remaining <= 0) {
                     _isTimerRunning.value = false
-                    playBeep(500)
+                    if (!_isRestTime.value) {
+                        playBeep(500)
+                    } else {
+                        playStartSound()
+                    }
                     if (vibrationEnabled.value) {
                         vibrate()
                     }
@@ -264,6 +280,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun playBeep(duration: Int = 200) {
         toneG.startTone(ToneGenerator.TONE_PROP_BEEP, duration)
+    }
+
+    private fun playStartSound() {
+        toneG.startTone(ToneGenerator.TONE_DTMF_0, 400)
     }
 
     override fun onCleared() {

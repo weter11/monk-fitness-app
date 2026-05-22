@@ -60,6 +60,7 @@ fun WorkoutScreen(
 
     val currentStep by viewModel.currentStep.collectAsState()
     val exerciseIndex by viewModel.exerciseIndex.collectAsState()
+    val isRestTime by viewModel.isRestTime.collectAsState()
 
     val isRestDay = workout.type == WorkoutType.REST || workout.exercises.isEmpty()
 
@@ -135,6 +136,12 @@ fun WorkoutScreen(
                         viewModel.completeWorkout(day)
                         onBack()
                     })
+                } else if (isRestTime) {
+                    RestUI(
+                        viewModel = viewModel,
+                        nextExercise = currentExerciseList.getOrNull(exerciseIndex + 1),
+                        onSkip = { viewModel.nextExercise(currentExerciseList) }
+                    )
                 } else {
                     when (currentStep) {
                         WorkoutStep.OVERVIEW -> {
@@ -171,10 +178,67 @@ fun WorkoutScreen(
 }
 
 @Composable
+fun RestUI(
+    viewModel: MainViewModel,
+    nextExercise: Exercise?,
+    onSkip: () -> Unit
+) {
+    val timeLeft by viewModel.timeLeft.collectAsState()
+    val isTimerRunning by viewModel.isTimerRunning.collectAsState()
+
+    LaunchedEffect(timeLeft, isTimerRunning) {
+        if (timeLeft == 0 && isTimerRunning == false && viewModel.timeLeft.value == 0) {
+            onSkip()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "Rest",
+            style = MaterialTheme.typography.displayMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = String.format("%02d:%02d", timeLeft / 60, timeLeft % 60),
+            style = MaterialTheme.typography.displayLarge,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        if (nextExercise != null) {
+            Text(
+                text = "Next: ${stringResource(nextExercise.nameRes)}",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        MonkButton(
+            text = "Skip Rest",
+            onClick = onSkip
+        )
+    }
+}
+
+@Composable
 fun RestDayUI(onComplete: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -256,7 +320,7 @@ fun ExerciseSession(
     val isTimerRunning by viewModel.isTimerRunning.collectAsState()
 
     LaunchedEffect(exercise.id) {
-        if (exercise.isTimerBased) {
+        if (exercise.isTimerBased && !viewModel.isTimerRunning.value && viewModel.timeLeft.value == 0) {
             viewModel.resetTimer(exercise.durationSeconds)
             viewModel.startTimer(exercise.durationSeconds)
         }
