@@ -234,8 +234,8 @@ fun ExerciseSection(title: String, content: String) {
     }
 
     private fun Int.resolveString(context: android.content.Context, fallbackRes: Int): String {
+        if (this == 0) return context.getString(fallbackRes)
         val fallback = context.getString(fallbackRes)
-        if (this == 0) return fallback
         return runCatching { context.getString(this) }.getOrElse { fallback }
     }
 }
