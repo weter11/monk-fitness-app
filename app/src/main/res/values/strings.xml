@@ -7,8 +7,8 @@
     <string name="day">Day</string>
     <string name="start_workout">Start Workout</string>
     <string name="complete_workout">Complete Workout</string>
-    <string name="description">From all fours, extend opposite arm and leg simultaneously.</string>
-    <string name="technique">Keep hips stable, slow movement, control balance.</string>
+    <string name="description">No description available</string>
+    <string name="technique">Follow proper form and control your breathing.</string>
     <string name="your_progress">Your Progress</string>
     <string name="no_progress_yet">Start your first workout to see your progress chart!</string>
     <string name="completed_days">Total Completed Days: %d</string>

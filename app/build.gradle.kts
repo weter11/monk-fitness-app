@@ -11,8 +11,8 @@ android {
 
     signingConfigs {
         getByName("debug") {
-            // Explicitly use the default debug keystore configuration
-            storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
+            // Use a local debug keystore file to ensure consistency between local and CI builds
+            storeFile = file("debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
