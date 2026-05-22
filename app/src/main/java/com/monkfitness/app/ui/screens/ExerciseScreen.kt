@@ -136,15 +136,31 @@ fun ExerciseScreen(
 
             ExerciseSection(
                 title = stringResource(R.string.description),
-                content = if (exercise.descriptionRes != 0) stringResource(exercise.descriptionRes) else "Perform the exercise with controlled movements."
+                content = if (exercise.descriptionRes != 0) stringResource(exercise.descriptionRes) else stringResource(R.string.description)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            if (exercise.stepsRes != 0) {
+                Spacer(modifier = Modifier.height(24.dp))
+                ExerciseSection(
+                    title = stringResource(R.string.steps),
+                    content = stringResource(exercise.stepsRes)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             ExerciseSection(
                 title = stringResource(R.string.technique),
-                content = if (exercise.techniqueRes != 0) stringResource(exercise.techniqueRes) else "Maintain proper form and focus on muscle engagement."
+                content = if (exercise.techniqueRes != 0) stringResource(exercise.techniqueRes) else stringResource(R.string.technique)
             )
+
+            if (exercise.mistakesRes != 0) {
+                Spacer(modifier = Modifier.height(24.dp))
+                ExerciseSection(
+                    title = stringResource(R.string.mistakes),
+                    content = stringResource(exercise.mistakesRes)
+                )
+            }
 
             if (exercise.isTimerBased) {
                 Spacer(modifier = Modifier.height(32.dp))

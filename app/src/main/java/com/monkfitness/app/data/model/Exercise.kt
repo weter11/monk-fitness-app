@@ -8,6 +8,8 @@ data class Exercise(
     @StringRes val nameRes: Int,
     @StringRes val descriptionRes: Int,
     @StringRes val techniqueRes: Int,
+    @StringRes val stepsRes: Int = 0,
+    @StringRes val mistakesRes: Int = 0,
     @DrawableRes val imageRes: Int,
     val sets: Int,
     val reps: Int,
