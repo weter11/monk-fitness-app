@@ -2,6 +2,8 @@ package com.monkfitness.app.ui.screens
 
 import android.app.TimePickerDialog
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,7 +23,8 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    // In a real app we'd collect notification time from viewModel
+    val timerTicksEnabled by viewModel.timerTicksEnabled.collectAsState()
+    val vibrationEnabled by viewModel.vibrationEnabled.collectAsState()
 
     Scaffold(
         topBar = {
@@ -42,6 +45,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -76,6 +80,34 @@ fun SettingsScreen(
                 Button(onClick = { viewModel.setLanguage("ru") }) {
                     Text("Русский")
                 }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(text = "Feedback", style = MaterialTheme.typography.titleLarge)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = stringResource(R.string.timer_ticks))
+                Switch(
+                    checked = timerTicksEnabled,
+                    onCheckedChange = { viewModel.setTimerTicksEnabled(it) }
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = stringResource(R.string.vibration))
+                Switch(
+                    checked = vibrationEnabled,
+                    onCheckedChange = { viewModel.setVibrationEnabled(it) }
+                )
             }
         }
     }

@@ -9,11 +9,22 @@ android {
     namespace = "com.monkfitness.app"
     compileSdk = 34
 
+    signingConfigs {
+        getByName("debug") {
+            // Use a local debug keystore file to ensure consistency between local and CI builds
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.monkfitness.app"
         minSdk = 24
         targetSdk = 28
-        versionCode = 1
+        // Use minutes since a base date for unique version code across CI builds
+        versionCode = ((System.currentTimeMillis() - 1735689600000L) / 60000).toInt()
         versionName = "1.0"
 
         ndk {
@@ -27,6 +38,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

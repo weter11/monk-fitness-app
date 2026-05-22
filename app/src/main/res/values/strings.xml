@@ -7,8 +7,8 @@
     <string name="day">Day</string>
     <string name="start_workout">Start Workout</string>
     <string name="complete_workout">Complete Workout</string>
-    <string name="description">Description</string>
-    <string name="technique">Technique Tips</string>
+    <string name="description">No description available</string>
+    <string name="technique">Follow proper form and control your breathing.</string>
     <string name="your_progress">Your Progress</string>
     <string name="no_progress_yet">Start your first workout to see your progress chart!</string>
     <string name="completed_days">Total Completed Days: %d</string>
@@ -19,6 +19,19 @@
     <string name="timer_pause">Pause</string>
     <string name="timer_start">Start</string>
     <string name="timer_reset">Reset</string>
+    <string name="warmup">Warmup</string>
+    <string name="warmup_desc">Prepare your body for the main workout.</string>
+    <string name="main_workout">Main Workout</string>
+    <string name="posture_block">Posture Block</string>
+    <string name="next">Next</string>
+    <string name="previous">Previous</string>
+    <string name="finish">Finish</string>
+    <string name="workout_complete">Workout Complete!</string>
+    <string name="workout_complete_desc">Great job! You have completed today\'s session.</string>
+    <string name="rest_day">Rest Day</string>
+    <string name="rest_day_message">Recovery, walking, light mobility. Give your muscles time to grow.</string>
+    <string name="vibration">Vibration</string>
+    <string name="timer_ticks">Timer Ticks</string>
     <string name="posture_training">Posture Training</string>
     <string name="posture_desc">Correct your posture with these daily exercises.</string>
 
@@ -42,6 +55,33 @@
     <string name="ex_burpees">Burpees</string>
     <string name="ex_climbers">Mountain Climbers</string>
     <string name="ex_kb_swing">Kettlebell Swing</string>
+    <string name="ex_glute_bridge">Glute Bridge</string>
+    <string name="ex_glute_bridge_desc">Lie on back with knees bent, lift hips toward ceiling.</string>
+    <string name="ex_glute_bridge_tech">Squeeze glutes at the top, keep core engaged, don\'t overarch lower back.</string>
+
+    <string name="ex_pushups_desc">Lower body keeping straight line from head to heels, then push back up.</string>
+    <string name="ex_pushups_tech">Elbows at 45°, core tight, full range of motion.</string>
+
+    <string name="ex_squats_desc">Lower hips as if sitting in a chair, then stand back up.</string>
+    <string name="ex_squats_tech">Weight on heels, chest up, knees tracking over toes.</string>
+
+    <string name="ex_pullups_desc">Pull your body up until chin is over the bar.</string>
+    <string name="ex_pullups_tech">Engage lats, don\'t swing, controlled descent.</string>
+
+    <string name="ex_plank_desc">Hold a straight body position supported by forearms and toes.</string>
+    <string name="ex_plank_tech">Don\'t let hips sag or peak, keep neck neutral.</string>
+
+    <string name="ex_bird_dog_desc">From all fours, extend opposite arm and leg simultaneously.</string>
+    <string name="ex_bird_dog_tech">Keep hips stable, slow movement, control balance.</string>
+
+    <string name="ex_lunges_desc">Step forward and lower hips until both knees are bent at 90°.</string>
+    <string name="ex_lunges_tech">Keep torso upright, front knee should not pass toes.</string>
+
+    <string name="ex_neck_circles">Neck Circles</string>
+    <string name="ex_arm_circles">Arm Circles</string>
+    <string name="ex_hip_circles">Hip Circles</string>
+    <string name="ex_leg_swings">Leg Swings</string>
+    <string name="ex_jumping_jacks">Jumping Jacks</string>
 
     <string name="ex_hang">Hang</string>
     <string name="ex_hang_desc">Just hang from a bar.</string>
@@ -58,6 +98,4 @@
     <string name="ex_deep_squat">Deep Squat Hold</string>
     <string name="ex_deep_squat_desc">Sit deep in a squat position.</string>
     <string name="ex_deep_squat_tech">Keep heels on the ground and chest up.</string>
-    <string name="ex_bird_dog_desc">Opposite arm and leg extension on all fours.</string>
-    <string name="ex_bird_dog_tech">Keep back flat, don\'t arch.</string>
 </resources>

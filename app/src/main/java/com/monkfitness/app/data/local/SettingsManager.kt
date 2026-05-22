@@ -20,6 +20,8 @@ class SettingsManager(private val context: Context) {
         val NOTIFICATION_HOUR = intPreferencesKey("notification_hour")
         val NOTIFICATION_MINUTE = intPreferencesKey("notification_minute")
         val IS_ONBOARDING_COMPLETED = booleanPreferencesKey("is_onboarding_completed")
+        val TIMER_TICKS_ENABLED = booleanPreferencesKey("timer_ticks_enabled")
+        val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
     }
 
     val languageFlow: Flow<String> = context.dataStore.data.map { preferences ->
@@ -52,6 +54,26 @@ class SettingsManager(private val context: Context) {
     suspend fun setOnboardingCompleted() {
         context.dataStore.edit { preferences ->
             preferences[IS_ONBOARDING_COMPLETED] = true
+        }
+    }
+
+    val timerTicksEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[TIMER_TICKS_ENABLED] ?: true
+    }
+
+    suspend fun setTimerTicksEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[TIMER_TICKS_ENABLED] = enabled
+        }
+    }
+
+    val vibrationEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[VIBRATION_ENABLED] ?: true
+    }
+
+    suspend fun setVibrationEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[VIBRATION_ENABLED] = enabled
         }
     }
 }

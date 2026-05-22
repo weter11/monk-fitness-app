@@ -7,8 +7,8 @@
     <string name="day">День</string>
     <string name="start_workout">Начать тренировку</string>
     <string name="complete_workout">Завершить тренировку</string>
-    <string name="description">Описание</string>
-    <string name="technique">Техника</string>
+    <string name="description">Описание отсутствует</string>
+    <string name="technique">Соблюдайте технику и контролируйте дыхание.</string>
     <string name="your_progress">Ваш прогресс</string>
     <string name="no_progress_yet">Начните свою первую тренировку, чтобы увидеть график прогресса!</string>
     <string name="completed_days">Всего завершено дней: %d</string>
@@ -19,6 +19,19 @@
     <string name="timer_pause">Пауза</string>
     <string name="timer_start">Старт</string>
     <string name="timer_reset">Сброс</string>
+    <string name="warmup">Разминка</string>
+    <string name="warmup_desc">Подготовьте свое тело к основной тренировке.</string>
+    <string name="main_workout">Основная тренировка</string>
+    <string name="posture_block">Блок осанки</string>
+    <string name="next">Далее</string>
+    <string name="previous">Назад</string>
+    <string name="finish">Завершить</string>
+    <string name="workout_complete">Тренировка окончена!</string>
+    <string name="workout_complete_desc">Отличная работа! Вы завершили сегодняшнюю тренировку.</string>
+    <string name="rest_day">День отдыха</string>
+    <string name="rest_day_message">Восстановление, прогулки, легкая мобильность. Дайте мышцам время на рост.</string>
+    <string name="vibration">Вибрация</string>
+    <string name="timer_ticks">Тиканье таймера</string>
     <string name="posture_training">Тренировка осанки</string>
     <string name="posture_desc">Исправьте осанку с помощью этих ежедневных упражнений.</string>
 
@@ -42,6 +55,33 @@
     <string name="ex_burpees">Берпи</string>
     <string name="ex_climbers">Альпинист</string>
     <string name="ex_kb_swing">Махи гирей</string>
+    <string name="ex_glute_bridge">Ягодичный мостик</string>
+    <string name="ex_glute_bridge_desc">Лежа на спине с согнутыми ногами, поднимите таз к потолку.</string>
+    <string name="ex_glute_bridge_tech">Сжимайте ягодицы в верхней точке, напрягайте кор, не прогибайте поясницу слишком сильно.</string>
+
+    <string name="ex_pushups_desc">Опускайте тело, сохраняя прямую линию от головы до пяток, затем вытолкните себя вверх.</string>
+    <string name="ex_pushups_tech">Локти под углом 45°, кор напряжен, полная амплитуда движений.</string>
+
+    <string name="ex_squats_desc">Опускайте таз, как будто садитесь на стул, затем вернитесь в исходное положение.</string>
+    <string name="ex_squats_tech">Вес на пятках, грудь поднята, колени не выходят за носки.</string>
+
+    <string name="ex_pullups_desc">Тяните тело вверх, пока подбородок не окажется над перекладиной.</string>
+    <string name="ex_pullups_tech">Задействуйте широчайшие мышцы спины, не раскачивайтесь, контролируйте спуск.</string>
+
+    <string name="ex_plank_desc">Удерживайте прямое положение тела с опорой на предплечья и пальцы ног.</string>
+    <string name="ex_plank_tech">Не позволяйте тазу провисать или подниматься слишком высоко, держите шею в нейтральном положении.</string>
+
+    <string name="ex_bird_dog_desc">Находясь на четвереньках, одновременно вытяните противоположную руку и ногу.</string>
+    <string name="ex_bird_dog_tech">Держите таз стабильно, двигайтесь медленно, контролируйте баланс.</string>
+
+    <string name="ex_lunges_desc">Сделайте шаг вперед и опускайте таз, пока оба колена не будут согнуты под углом 90°.</string>
+    <string name="ex_lunges_tech">Держите туловище вертикально, переднее колено не должно выходить за носок.</string>
+
+    <string name="ex_neck_circles">Вращения головой</string>
+    <string name="ex_arm_circles">Вращения руками</string>
+    <string name="ex_hip_circles">Вращения тазом</string>
+    <string name="ex_leg_swings">Махи ногами</string>
+    <string name="ex_jumping_jacks">Прыжки (Jumping Jacks)</string>
 
     <string name="ex_hang">Вис на перекладине</string>
     <string name="ex_hang_desc">Просто висите на турнике.</string>
@@ -58,6 +98,4 @@
     <string name="ex_deep_squat">Глубокий присед</string>
     <string name="ex_deep_squat_desc">Находитесь в положении глубокого приседа.</string>
     <string name="ex_deep_squat_tech">Пятки на полу, грудь поднята.</string>
-    <string name="ex_bird_dog_desc">Вытягивание противоположной руки и ноги на четвереньках.</string>
-    <string name="ex_bird_dog_tech">Держите спину ровно, не прогибайтесь.</string>
 </resources>
