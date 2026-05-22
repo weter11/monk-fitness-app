@@ -46,36 +46,50 @@
     <string name="ex_pullups">Pullups</string>
     <string name="ex_plank">Plank</string>
     <string name="ex_dips">Dips</string>
+    <string name="ex_dips_desc">Lower your body by bending your arms until elbows are at 90 degrees, then push back up.</string>
+    <string name="ex_dips_tech">Keep elbows close to your body, shoulders down, and maintain a controlled motion.</string>
     <string name="ex_lunges">Lunges</string>
+    <string name="ex_lunges_desc">Step forward and lower hips until both knees are bent at 90°.</string>
+    <string name="ex_lunges_tech">Keep torso upright, front knee should not pass toes, engage core for balance.</string>
     <string name="ex_rows">Rows</string>
+    <string name="ex_rows_desc">Pull your weight or a resistance band towards your torso, squeezing shoulder blades.</string>
+    <string name="ex_rows_tech">Keep back straight, elbows close to ribs, avoid shrugging shoulders.</string>
     <string name="ex_leg_raises">Leg Raises</string>
+    <string name="ex_leg_raises_desc">Lie on your back and lift legs to a 90-degree angle without bending knees.</string>
+    <string name="ex_leg_raises_tech">Press lower back into the floor, move slowly, don\'t let feet touch the ground between reps.</string>
     <string name="ex_cat_cow">Cat Cow</string>
+    <string name="ex_cat_cow_desc">Flow between arching and rounding your back while on all fours.</string>
+    <string name="ex_cat_cow_tech">Coordinate movement with breath, move vertebra by vertebra, keep arms straight.</string>
     <string name="ex_bird_dog">Bird Dog</string>
+    <string name="ex_bird_dog_desc">Extend opposite arm and leg while maintaining balance on all fours.</string>
+    <string name="ex_bird_dog_tech">Keep hips stable, move slowly, control motion, avoid overarching back.</string>
     <string name="ex_stretch">World\'s Greatest Stretch</string>
+    <string name="ex_stretch_desc">A multi-step mobility flow: lunge, elbow to instep, and thoracic rotation.</string>
+    <string name="ex_stretch_tech">Deepen the lunge, reach high during rotation, keep back leg active.</string>
     <string name="ex_burpees">Burpees</string>
+    <string name="ex_burpees_desc">A full body exercise combining a squat, push-up, and jump.</string>
+    <string name="ex_burpees_tech">Maintain a fluid motion, keep core tight during push-up, land softly on feet.</string>
     <string name="ex_climbers">Mountain Climbers</string>
+    <string name="ex_climbers_desc">Rapidly bring knees towards chest from a plank position.</string>
+    <string name="ex_climbers_tech">Keep hips low, shoulders over wrists, move with a steady rhythm.</string>
     <string name="ex_kb_swing">Kettlebell Swing</string>
+    <string name="ex_kb_swing_desc">Hinge at hips and use explosive power to swing a weight to chest height.</string>
+    <string name="ex_kb_swing_tech">Power comes from hips, not arms. Keep back flat, snap hips forward.</string>
     <string name="ex_glute_bridge">Glute Bridge</string>
-    <string name="ex_glute_bridge_desc">Lie on back with knees bent, lift hips toward ceiling.</string>
+    <string name="ex_glute_bridge_desc">Lie on back with knees bent, lift hips toward ceiling by squeezing glutes.</string>
     <string name="ex_glute_bridge_tech">Squeeze glutes at the top, keep core engaged, don\'t overarch lower back.</string>
 
-    <string name="ex_pushups_desc">Lower body keeping straight line from head to heels, then push back up.</string>
-    <string name="ex_pushups_tech">Elbows at 45°, core tight, full range of motion.</string>
+    <string name="ex_pushups_desc">Lower your body while keeping a straight line from head to heels, then push back up.</string>
+    <string name="ex_pushups_tech">Keep elbows at 45°, engage core, avoid sagging hips, full range of motion.</string>
 
-    <string name="ex_squats_desc">Lower hips as if sitting in a chair, then stand back up.</string>
-    <string name="ex_squats_tech">Weight on heels, chest up, knees tracking over toes.</string>
+    <string name="ex_squats_desc">Lower hips as if sitting in a chair until thighs are parallel to floor, then stand back up.</string>
+    <string name="ex_squats_tech">Weight on heels, chest up, knees tracking over toes, maintain a neutral spine.</string>
 
-    <string name="ex_pullups_desc">Pull your body up until chin is over the bar.</string>
-    <string name="ex_pullups_tech">Engage lats, don\'t swing, controlled descent.</string>
+    <string name="ex_pullups_desc">Pull your body up until chin is over the bar starting from a dead hang.</string>
+    <string name="ex_pullups_tech">Engage lats, don\'t swing, controlled descent, pull shoulder blades down and back.</string>
 
     <string name="ex_plank_desc">Hold a straight body position supported by forearms and toes.</string>
-    <string name="ex_plank_tech">Don\'t let hips sag or peak, keep neck neutral.</string>
-
-    <string name="ex_bird_dog_desc">From all fours, extend opposite arm and leg simultaneously.</string>
-    <string name="ex_bird_dog_tech">Keep hips stable, slow movement, control balance.</string>
-
-    <string name="ex_lunges_desc">Step forward and lower hips until both knees are bent at 90°.</string>
-    <string name="ex_lunges_tech">Keep torso upright, front knee should not pass toes.</string>
+    <string name="ex_plank_tech">Don\'t let hips sag or peak, keep neck neutral, squeeze glutes and core.</string>
 
     <string name="ex_neck_circles">Neck Circles</string>
     <string name="ex_arm_circles">Arm Circles</string>

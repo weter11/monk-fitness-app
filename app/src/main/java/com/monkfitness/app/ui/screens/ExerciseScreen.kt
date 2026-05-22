@@ -87,9 +87,11 @@ fun ExerciseScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            val imageRes = if (exercise.imageRes != 0) exercise.imageRes else R.drawable.ic_exercise_placeholder
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -99,15 +101,23 @@ fun ExerciseScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Image(
-                    painter = painterResource(exercise.imageRes),
+                    painter = painterResource(imageRes),
                     contentDescription = null,
-                    modifier = Modifier.size(160.dp),
-                    contentScale = ContentScale.Fit,
-                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary)
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    contentScale = ContentScale.Fit
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = stringResource(exercise.nameRes),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -122,6 +132,20 @@ fun ExerciseScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            ExerciseSection(
+                title = stringResource(R.string.description),
+                content = if (exercise.descriptionRes != 0) stringResource(exercise.descriptionRes) else "Perform the exercise with controlled movements."
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            ExerciseSection(
+                title = stringResource(R.string.technique),
+                content = if (exercise.techniqueRes != 0) stringResource(exercise.techniqueRes) else "Maintain proper form and focus on muscle engagement."
+            )
+
             if (exercise.isTimerBased) {
                 Spacer(modifier = Modifier.height(32.dp))
                 TimerDisplay(
@@ -133,18 +157,6 @@ fun ExerciseScreen(
             }
 
             Spacer(modifier = Modifier.height(32.dp))
-
-            ExerciseSection(
-                title = stringResource(R.string.description),
-                content = stringResource(exercise.descriptionRes)
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            ExerciseSection(
-                title = stringResource(R.string.technique),
-                content = stringResource(exercise.techniqueRes)
-            )
         }
     }
 }
