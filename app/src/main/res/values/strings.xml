@@ -95,6 +95,41 @@
     <string name="subcategory_core">Core</string>
     <string name="subcategory_full_body">All Body</string>
 
+    <string name="nutrition">Nutrition</string>
+    <string name="nutrition_desc">Simple daily nutrition guidance to support steady muscle gain.</string>
+    <string name="nutrition_user_data">Your data</string>
+    <string name="nutrition_weight">Weight (kg)</string>
+    <string name="nutrition_height">Height (cm)</string>
+    <string name="nutrition_goal_gain_mass">Gain mass</string>
+    <string name="nutrition_goal_value">Goal: %1$s</string>
+    <string name="nutrition_targets">Daily targets</string>
+    <string name="nutrition_daily_calories">Daily calories</string>
+    <string name="nutrition_protein_target">Protein target</string>
+    <string name="nutrition_kcal_format">%1$d kcal</string>
+    <string name="nutrition_protein_range_format">%1$d–%2$dg</string>
+    <string name="nutrition_completion">Daily completion</string>
+    <string name="nutrition_completion_percent">%1$d%% completed</string>
+    <string name="nutrition_daily_plan">Daily plan</string>
+    <string name="nutrition_tips">Tips</string>
+    <string name="nutrition_tip_nuts">Add nuts for extra calories.</string>
+    <string name="nutrition_tip_post_workout">Eat protein after workout.</string>
+    <string name="nutrition_breakfast">Breakfast</string>
+    <string name="nutrition_lunch">Lunch</string>
+    <string name="nutrition_dinner">Dinner</string>
+    <string name="nutrition_post_workout">Post-workout</string>
+    <string name="nutrition_breakfast_option_1">Oatmeal with milk, banana, peanut butter, and whey protein.</string>
+    <string name="nutrition_breakfast_option_2">Eggs, whole-grain toast, and Greek yogurt.</string>
+    <string name="nutrition_breakfast_option_3">Cottage cheese with berries, honey, and mixed nuts.</string>
+    <string name="nutrition_lunch_option_1">Chicken breast, rice, olive oil, and avocado salad.</string>
+    <string name="nutrition_lunch_option_2">Lean beef pasta with tomato sauce and parmesan.</string>
+    <string name="nutrition_lunch_option_3">Salmon, potatoes, and roasted vegetables.</string>
+    <string name="nutrition_dinner_option_1">Turkey meatballs with quinoa and vegetables.</string>
+    <string name="nutrition_dinner_option_2">Tofu or tempeh bowl with rice and edamame.</string>
+    <string name="nutrition_dinner_option_3">Tuna wraps with cheese and yogurt sauce.</string>
+    <string name="nutrition_post_workout_option_1">Whey shake with banana and oats.</string>
+    <string name="nutrition_post_workout_option_2">Greek yogurt with granola and fruit.</string>
+    <string name="nutrition_post_workout_option_3">Chocolate milk and a cottage cheese sandwich.</string>
+
     <!-- Onboarding -->
     <string name="onboarding_title">Welcome to Monk Fitness</string>
     <string name="onboarding_desc">Embark on a structured 8-week program designed to transform your strength and mobility. Follow daily workouts, track your progress, and stay consistent with our streak system.</string>

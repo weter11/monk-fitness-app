@@ -21,6 +21,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.ExerciseSubCategory
+import com.monkfitness.app.data.model.NutritionMealType
 import com.monkfitness.app.data.model.PostureSessionProgress
 import com.monkfitness.app.data.model.applyDifficultyAdjustment
 import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
@@ -409,6 +410,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setFlexibilityTrainingType(trainingType: FlexibilityTrainingType) {
         viewModelScope.launch {
             settingsManager.setFlexibilityTrainingType(trainingType)
+        }
+    }
+
+    val nutritionWeight = settingsManager.nutritionWeightFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
+    )
+
+    fun setNutritionWeight(weight: String) {
+        viewModelScope.launch {
+            settingsManager.setNutritionWeight(weight)
+        }
+    }
+
+    val nutritionHeight = settingsManager.nutritionHeightFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
+    )
+
+    fun setNutritionHeight(height: String) {
+        viewModelScope.launch {
+            settingsManager.setNutritionHeight(height)
+        }
+    }
+
+    val completedNutritionMeals = settingsManager.completedNutritionMealsFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
+    )
+
+    fun setNutritionMealCompleted(mealType: NutritionMealType, completed: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setNutritionMealCompleted(mealType.key, completed)
         }
     }
 

@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
@@ -75,6 +76,7 @@ class MainActivity : ComponentActivity() {
 
 sealed class Screen(val route: String, val titleRes: Int, val icon: ImageVector) {
     object Home : Screen("home", R.string.home, Icons.Default.Home)
+    object Nutrition : Screen("nutrition", R.string.nutrition, Icons.Default.Favorite)
     object Progress : Screen("progress", R.string.progress, Icons.Default.Star)
     object Posture : Screen("posture", R.string.exercise_library, Icons.Default.Person)
     object Settings : Screen("settings", R.string.settings, Icons.Default.Settings)
@@ -91,11 +93,18 @@ fun MainApp(viewModel: MainViewModel) {
     Scaffold(
         bottomBar = {
             if (isOnboardingCompleted && (currentRoute == Screen.Home.route ||
+                currentRoute == Screen.Nutrition.route ||
                 currentRoute == Screen.Progress.route ||
                 currentRoute == Screen.Posture.route ||
                 currentRoute == Screen.Settings.route)) {
                 NavigationBar {
-                    val screens = listOf(Screen.Home, Screen.Progress, Screen.Posture, Screen.Settings)
+                    val screens = listOf(
+                        Screen.Home,
+                        Screen.Nutrition,
+                        Screen.Progress,
+                        Screen.Posture,
+                        Screen.Settings
+                    )
                     screens.forEach { screen ->
                         NavigationBarItem(
                             icon = { Icon(screen.icon, contentDescription = stringResource(screen.titleRes)) },
@@ -139,6 +148,9 @@ fun MainApp(viewModel: MainViewModel) {
                         navController.navigate("posture-workout/$day")
                     }
                 )
+            }
+            composable(Screen.Nutrition.route) {
+                NutritionScreen(viewModel)
             }
             composable(Screen.Progress.route) {
                 ProgressScreen(viewModel)

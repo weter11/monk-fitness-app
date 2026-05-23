@@ -95,6 +95,41 @@
     <string name="subcategory_core">Кор</string>
     <string name="subcategory_full_body">Все тело</string>
 
+    <string name="nutrition">Питание</string>
+    <string name="nutrition_desc">Простые ежедневные рекомендации по питанию для стабильного набора мышечной массы.</string>
+    <string name="nutrition_user_data">Ваши данные</string>
+    <string name="nutrition_weight">Вес (кг)</string>
+    <string name="nutrition_height">Рост (см)</string>
+    <string name="nutrition_goal_gain_mass">Набор массы</string>
+    <string name="nutrition_goal_value">Цель: %1$s</string>
+    <string name="nutrition_targets">Ежедневные цели</string>
+    <string name="nutrition_daily_calories">Калории в день</string>
+    <string name="nutrition_protein_target">Цель по белку</string>
+    <string name="nutrition_kcal_format">%1$d ккал</string>
+    <string name="nutrition_protein_range_format">%1$d–%2$d г</string>
+    <string name="nutrition_completion">Выполнение за день</string>
+    <string name="nutrition_completion_percent">%1$d%% завершено</string>
+    <string name="nutrition_daily_plan">План на день</string>
+    <string name="nutrition_tips">Советы</string>
+    <string name="nutrition_tip_nuts">Добавьте орехи для дополнительных калорий.</string>
+    <string name="nutrition_tip_post_workout">Ешьте белок после тренировки.</string>
+    <string name="nutrition_breakfast">Завтрак</string>
+    <string name="nutrition_lunch">Обед</string>
+    <string name="nutrition_dinner">Ужин</string>
+    <string name="nutrition_post_workout">После тренировки</string>
+    <string name="nutrition_breakfast_option_1">Овсянка на молоке с бананом, арахисовой пастой и сывороточным протеином.</string>
+    <string name="nutrition_breakfast_option_2">Яйца, цельнозерновой тост и греческий йогурт.</string>
+    <string name="nutrition_breakfast_option_3">Творог с ягодами, медом и смесью орехов.</string>
+    <string name="nutrition_lunch_option_1">Куриная грудка, рис, оливковое масло и салат с авокадо.</string>
+    <string name="nutrition_lunch_option_2">Паста с нежирной говядиной, томатным соусом и пармезаном.</string>
+    <string name="nutrition_lunch_option_3">Лосось, картофель и запеченные овощи.</string>
+    <string name="nutrition_dinner_option_1">Фрикадельки из индейки с киноа и овощами.</string>
+    <string name="nutrition_dinner_option_2">Боул с тофу или темпе, рисом и эдамаме.</string>
+    <string name="nutrition_dinner_option_3">Тортильи с тунцом, сыром и йогуртовым соусом.</string>
+    <string name="nutrition_post_workout_option_1">Сывороточный коктейль с бананом и овсянкой.</string>
+    <string name="nutrition_post_workout_option_2">Греческий йогурт с гранолой и фруктами.</string>
+    <string name="nutrition_post_workout_option_3">Шоколадное молоко и сэндвич с творогом.</string>
+
     <!-- Onboarding -->
     <string name="onboarding_title">Добро пожаловать в Monk Fitness</string>
     <string name="onboarding_desc">Начните структурированную 8-недельную программу, разработанную для трансформации вашей силы и мобильности. Выполняйте ежедневные тренировки, отслеживайте прогресс и сохраняйте регулярность с нашей системой серий.</string>
