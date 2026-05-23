@@ -21,11 +21,20 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.ExerciseSubCategory
+import com.monkfitness.app.data.model.NutritionDayType
+import com.monkfitness.app.data.model.NutritionIngredient
+import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.NutritionMealType
+import com.monkfitness.app.data.model.NutritionPlan
 import com.monkfitness.app.data.model.PostureSessionProgress
 import com.monkfitness.app.data.model.applyDifficultyAdjustment
+import com.monkfitness.app.data.model.calculateMuscleGainNutritionTargets
+import com.monkfitness.app.data.model.findReplacementMealTemplateId
 import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
 import com.monkfitness.app.data.model.flexibilitySpecificFocusAreas
+import com.monkfitness.app.data.model.generateNutritionPlan
+import com.monkfitness.app.data.model.nutritionExclusionIngredients
+import com.monkfitness.app.data.model.nutritionReplacementKey
 import com.monkfitness.app.ui.screens.WorkoutStep
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -34,6 +43,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -439,16 +449,98 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
     )
 
+    val nutritionPlanDays = settingsManager.nutritionPlanDaysFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), 3
+    )
+
+    val nutritionExcludedFoods = settingsManager.nutritionExcludedFoodsFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
+    )
+
+    val nutritionExclusionOptions: List<NutritionIngredient> = nutritionExclusionIngredients
+
     private val _nutritionPlanSeed = MutableStateFlow(0)
     val nutritionPlanSeed: StateFlow<Int> = _nutritionPlanSeed.asStateFlow()
 
+    private val _nutritionMealReplacements = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    val nutritionPlan: StateFlow<NutritionPlan> = combine(
+        currentProgramDay,
+        nutritionWeight,
+        nutritionHeight,
+        nutritionPlanDays,
+        nutritionExcludedFoods,
+        _nutritionPlanSeed,
+        _nutritionMealReplacements
+    ) { currentDay, weight, height, planDays, excludedFoods, planSeed, replacements ->
+        generateNutritionPlan(
+            seed = planSeed,
+            startDay = currentDay,
+            daysCount = planDays,
+            weightKg = weight.toIntOrNull(),
+            heightCm = height.toIntOrNull(),
+            excludedIngredientKeys = excludedFoods,
+            replacements = replacements,
+            workoutTypeForDay = ::getWorkoutTypeForDay
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        generateNutritionPlan(seed = 0, daysCount = 3, weightKg = null)
+    )
+
+    val currentNutritionTargets = combine(
+        nutritionWeight,
+        nutritionHeight,
+        nutritionPlan
+    ) { weight, height, plan ->
+        calculateMuscleGainNutritionTargets(
+            weightKg = weight.toIntOrNull(),
+            heightCm = height.toIntOrNull(),
+            dayType = plan.days.firstOrNull()?.dayType ?: NutritionDayType.TRAINING
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        calculateMuscleGainNutritionTargets(weightKg = null, heightCm = null)
+    )
+
     fun regenerateNutritionPlan() {
+        _nutritionMealReplacements.value = emptyMap()
         _nutritionPlanSeed.value += 1
+    }
+
+    fun setNutritionPlanDays(days: Int) {
+        viewModelScope.launch {
+            settingsManager.setNutritionPlanDays(days)
+        }
+        _nutritionMealReplacements.value = emptyMap()
+    }
+
+    fun toggleNutritionExcludedFood(foodKey: String) {
+        viewModelScope.launch {
+            val current = nutritionExcludedFoods.value
+            val next = if (foodKey in current) current - foodKey else current + foodKey
+            settingsManager.setNutritionExcludedFoods(next)
+        }
     }
 
     fun setNutritionMealCompleted(mealType: NutritionMealType, completed: Boolean) {
         viewModelScope.launch {
             settingsManager.setNutritionMealCompleted(mealType.key, completed)
+        }
+    }
+
+    fun replaceNutritionMeal(programDay: Int, mealType: NutritionMealType) {
+        val dayPlan = nutritionPlan.value.days.firstOrNull { it.programDay == programDay } ?: return
+        val meal = dayPlan.meals.firstOrNull { it.type == mealType } ?: return
+        val replacementId = findReplacementMealTemplateId(
+            meal = meal,
+            excludedIngredientKeys = nutritionExcludedFoods.value
+        ) ?: return
+
+        _nutritionMealReplacements.value = _nutritionMealReplacements.value.toMutableMap().apply {
+            this[nutritionReplacementKey(programDay, mealType)] = replacementId
         }
     }
 

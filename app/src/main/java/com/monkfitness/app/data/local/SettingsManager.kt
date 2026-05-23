@@ -34,6 +34,8 @@ class SettingsManager(private val context: Context) {
         val FLEXIBILITY_FOCUS_AREAS = stringPreferencesKey("flexibility_focus_areas")
         val NUTRITION_WEIGHT = stringPreferencesKey("nutrition_weight")
         val NUTRITION_HEIGHT = stringPreferencesKey("nutrition_height")
+        val NUTRITION_PLAN_DAYS = intPreferencesKey("nutrition_plan_days")
+        val NUTRITION_EXCLUDED_FOODS = stringSetPreferencesKey("nutrition_excluded_foods")
         val NUTRITION_TRACKING_DATE = stringPreferencesKey("nutrition_tracking_date")
         val NUTRITION_COMPLETED_MEALS = stringSetPreferencesKey("nutrition_completed_meals")
     }
@@ -139,6 +141,26 @@ class SettingsManager(private val context: Context) {
     suspend fun setNutritionHeight(height: String) {
         context.dataStore.edit { preferences ->
             preferences[NUTRITION_HEIGHT] = height
+        }
+    }
+
+    val nutritionPlanDaysFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+        (preferences[NUTRITION_PLAN_DAYS] ?: 3).coerceIn(1, 7)
+    }
+
+    suspend fun setNutritionPlanDays(days: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[NUTRITION_PLAN_DAYS] = days.coerceIn(1, 7)
+        }
+    }
+
+    val nutritionExcludedFoodsFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        preferences[NUTRITION_EXCLUDED_FOODS].orEmpty()
+    }
+
+    suspend fun setNutritionExcludedFoods(foodKeys: Set<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[NUTRITION_EXCLUDED_FOODS] = foodKeys
         }
     }
 

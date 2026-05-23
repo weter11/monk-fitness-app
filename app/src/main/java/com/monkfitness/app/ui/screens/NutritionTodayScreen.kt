@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -18,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -25,7 +27,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -35,7 +36,6 @@ import com.monkfitness.app.data.model.NutritionDayPlan
 import com.monkfitness.app.data.model.NutritionIngredientAmount
 import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.calculateNutritionCompletionPercent
-import com.monkfitness.app.data.model.generateThreeDayMuscleGainPlan
 import com.monkfitness.app.data.model.getTodayCookingInstructionResIds
 import com.monkfitness.app.viewmodel.MainViewModel
 
@@ -45,16 +45,8 @@ fun NutritionTodayScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
-    val planSeed by viewModel.nutritionPlanSeed.collectAsState()
-    val currentProgramDay by viewModel.currentProgramDay.collectAsState()
+    val plan by viewModel.nutritionPlan.collectAsState()
     val completedMeals by viewModel.completedNutritionMeals.collectAsState()
-    val plan = remember(planSeed, currentProgramDay) {
-        generateThreeDayMuscleGainPlan(
-            seed = planSeed,
-            startDay = currentProgramDay,
-            workoutTypeForDay = viewModel::getWorkoutTypeForDay
-        )
-    }
     val todayPlan = plan.days.firstOrNull()
     val completionPercent = todayPlan?.let { calculateNutritionCompletionPercent(it, completedMeals) } ?: 0
 
@@ -82,7 +74,7 @@ fun NutritionTodayScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = stringResource(R.string.nutrition_today_desc),
+                text = stringResource(R.string.nutrition_today_desc_advanced),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary
             )
@@ -90,7 +82,8 @@ fun NutritionTodayScreen(
             todayPlan?.let { day ->
                 NutritionTodaySummaryCard(
                     day = day,
-                    completionPercent = completionPercent
+                    completionPercent = completionPercent,
+                    onRegeneratePlan = viewModel::regenerateNutritionPlan
                 )
 
                 day.meals.forEach { meal ->
@@ -99,6 +92,9 @@ fun NutritionTodayScreen(
                         checked = meal.type.key in completedMeals,
                         onCheckedChange = { checked ->
                             viewModel.setNutritionMealCompleted(meal.type, checked)
+                        },
+                        onReplace = {
+                            viewModel.replaceNutritionMeal(day.programDay, meal.type)
                         }
                     )
                 }
@@ -114,7 +110,8 @@ fun NutritionTodayScreen(
 @Composable
 private fun NutritionTodaySummaryCard(
     day: NutritionDayPlan,
-    completionPercent: Int
+    completionPercent: Int,
+    onRegeneratePlan: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -160,6 +157,12 @@ private fun NutritionTodaySummaryCard(
                 progress = { completionPercent / 100f },
                 modifier = Modifier.fillMaxWidth()
             )
+            OutlinedButton(
+                onClick = onRegeneratePlan,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.nutrition_regenerate_plan))
+            }
         }
     }
 }
@@ -168,7 +171,8 @@ private fun NutritionTodaySummaryCard(
 private fun NutritionTodayMealCard(
     meal: NutritionMeal,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    onReplace: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -197,13 +201,11 @@ private fun NutritionTodayMealCard(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        if (meal.optional) {
-                            Text(
-                                text = stringResource(R.string.nutrition_optional),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        Text(
+                            text = stringResource(meal.profile.labelRes),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
                 Text(
@@ -237,6 +239,13 @@ private fun NutritionTodayMealCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.secondary
                 )
+            }
+
+            Button(
+                onClick = onReplace,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.nutrition_replace_meal))
             }
         }
     }

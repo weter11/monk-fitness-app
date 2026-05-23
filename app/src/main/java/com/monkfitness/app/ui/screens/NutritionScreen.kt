@@ -1,12 +1,18 @@
 package com.monkfitness.app.ui.screens
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -15,7 +21,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -23,12 +28,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.NutritionDayPlan
-import com.monkfitness.app.data.model.NutritionDayType
 import com.monkfitness.app.data.model.NutritionIngredientAmount
 import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.NutritionQuantityUnit
-import com.monkfitness.app.data.model.calculateMuscleGainNutritionTargets
-import com.monkfitness.app.data.model.generateThreeDayMuscleGainPlan
 import com.monkfitness.app.viewmodel.MainViewModel
 
 @Composable
@@ -39,25 +41,11 @@ fun NutritionScreen(
 ) {
     val weightInput by viewModel.nutritionWeight.collectAsState()
     val heightInput by viewModel.nutritionHeight.collectAsState()
-    val planSeed by viewModel.nutritionPlanSeed.collectAsState()
+    val planDays by viewModel.nutritionPlanDays.collectAsState()
+    val excludedFoods by viewModel.nutritionExcludedFoods.collectAsState()
+    val plan by viewModel.nutritionPlan.collectAsState()
+    val targets by viewModel.currentNutritionTargets.collectAsState()
     val currentProgramDay by viewModel.currentProgramDay.collectAsState()
-
-    val weightKg = weightInput.toIntOrNull()
-    val heightCm = heightInput.toIntOrNull()
-    val plan = remember(planSeed, currentProgramDay) {
-        generateThreeDayMuscleGainPlan(
-            seed = planSeed,
-            startDay = currentProgramDay,
-            workoutTypeForDay = viewModel::getWorkoutTypeForDay
-        )
-    }
-    val currentDayPlan = plan.days.firstOrNull()
-    val targets = calculateMuscleGainNutritionTargets(
-        weightKg = weightKg,
-        heightCm = heightCm,
-        programDay = currentProgramDay,
-        dayType = currentDayPlan?.dayType ?: NutritionDayType.TRAINING
-    )
 
     Column(
         modifier = Modifier
@@ -71,7 +59,7 @@ fun NutritionScreen(
             style = MaterialTheme.typography.headlineLarge
         )
         Text(
-            text = stringResource(R.string.nutrition_desc),
+            text = stringResource(R.string.nutrition_desc_advanced),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.secondary
         )
@@ -105,7 +93,7 @@ fun NutritionScreen(
                         value = heightInput,
                         onValueChange = { viewModel.setNutritionHeight(it.filter(Char::isDigit).take(3)) },
                         modifier = Modifier.weight(1f),
-                        label = { Text(stringResource(R.string.nutrition_height)) },
+                        label = { Text(stringResource(R.string.nutrition_height_optional)) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
@@ -147,10 +135,6 @@ fun NutritionScreen(
                     )
                 )
                 NutritionTargetRow(
-                    title = stringResource(R.string.nutrition_day_type),
-                    value = stringResource((currentDayPlan?.dayType ?: NutritionDayType.TRAINING).labelRes)
-                )
-                NutritionTargetRow(
                     title = stringResource(R.string.nutrition_protein_target),
                     value = stringResource(
                         R.string.nutrition_protein_range_format,
@@ -158,6 +142,97 @@ fun NutritionScreen(
                         targets.proteinMaxGrams
                     )
                 )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.nutrition_plan_length),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(1, 3, 7).forEach { days ->
+                        val selected = planDays == days
+                        val labelRes = when (days) {
+                            1 -> R.string.nutrition_plan_days_1
+                            3 -> R.string.nutrition_plan_days_3
+                            else -> R.string.nutrition_plan_days_7
+                        }
+                        if (selected) {
+                            Button(
+                                onClick = { viewModel.setNutritionPlanDays(days) },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(stringResource(labelRes))
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = { viewModel.setNutritionPlanDays(days) },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(stringResource(labelRes))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.nutrition_exclusions),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = stringResource(R.string.nutrition_exclusions_desc),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                viewModel.nutritionExclusionOptions.chunked(2).forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        rowItems.forEach { ingredient ->
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Checkbox(
+                                    checked = ingredient.key in excludedFoods,
+                                    onCheckedChange = { viewModel.toggleNutritionExcludedFood(ingredient.key) }
+                                )
+                                Text(
+                                    text = stringResource(ingredient.nameRes),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(top = 12.dp)
+                                )
+                            }
+                        }
+                        if (rowItems.size == 1) {
+                            androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
             }
         }
 
@@ -187,7 +262,7 @@ fun NutritionScreen(
         }
 
         Text(
-            text = stringResource(R.string.nutrition_three_day_plan),
+            text = stringResource(R.string.nutrition_plan_preview_title, plan.days.size),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
@@ -280,11 +355,18 @@ private fun NutritionMealCard(meal: NutritionMeal) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = stringResource(meal.type.labelRes),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = stringResource(meal.type.labelRes),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = stringResource(meal.profile.labelRes),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
                 if (meal.optional) {
                     Text(
                         text = stringResource(R.string.nutrition_optional),

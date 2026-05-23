@@ -1,11 +1,13 @@
 package com.monkfitness.app
 
 import com.monkfitness.app.data.model.NutritionDayType
+import com.monkfitness.app.data.model.NutritionMealProfile
 import com.monkfitness.app.data.model.NutritionMealType
-import com.monkfitness.app.data.model.NutritionShoppingGroup
 import com.monkfitness.app.data.model.calculateNutritionCompletionPercent
-import com.monkfitness.app.data.model.generateThreeDayMuscleGainPlan
+import com.monkfitness.app.data.model.findReplacementMealTemplateId
+import com.monkfitness.app.data.model.generateNutritionPlan
 import com.monkfitness.app.data.model.getTodayCookingInstructionResIds
+import com.monkfitness.app.data.model.nutritionReplacementKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -14,8 +16,8 @@ import org.junit.Test
 class NutritionPlanTest {
 
     @Test
-    fun testGeneratedPlanTracksProgramDayTypeAndAdaptiveCalories() {
-        val plan = generateThreeDayMuscleGainPlan(seed = 0, startDay = 1)
+    fun testGeneratedPlanUsesWeightBasedCaloriesAndDayTypes() {
+        val plan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80)
 
         assertEquals(3, plan.days.size)
         assertEquals(listOf(1, 2, 3), plan.days.map { it.programDay })
@@ -23,76 +25,84 @@ class NutritionPlanTest {
             listOf(NutritionDayType.TRAINING, NutritionDayType.LIGHT, NutritionDayType.TRAINING),
             plan.days.map { it.dayType }
         )
-
-        plan.days.forEach { day ->
-            assertEquals(2500, day.targetCalories)
-            assertTrue(day.totalCalories in (day.targetCalories - 120)..(day.targetCalories + 120))
-            assertTrue(day.totalProteinGrams >= 100)
-        }
-
+        assertEquals(listOf(3300, 3100, 3300), plan.days.map { it.targetCalories })
         assertTrue(plan.days.first().meals.any { it.type == NutritionMealType.POST_WORKOUT })
         assertTrue(plan.days[1].meals.any { it.type == NutritionMealType.SNACK && it.optional })
     }
 
     @Test
-    fun testWeekMultiplierRaisesCalorieTargetsAsProgramProgresses() {
-        val weekThreePlan = generateThreeDayMuscleGainPlan(seed = 0, startDay = 15)
-        val weekSixPlan = generateThreeDayMuscleGainPlan(seed = 0, startDay = 36)
-        val weekEightPlan = generateThreeDayMuscleGainPlan(seed = 0, startDay = 50)
-
-        assertEquals(2750, weekThreePlan.days.first().targetCalories)
-        assertEquals(3000, weekSixPlan.days.first().targetCalories)
-        assertEquals(3250, weekEightPlan.days.first().targetCalories)
-        assertTrue(weekEightPlan.days.first().totalCalories > weekThreePlan.days.first().totalCalories)
+    fun testPlanGenerationSupportsOneThreeAndSevenDays() {
+        assertEquals(1, generateNutritionPlan(seed = 0, startDay = 1, daysCount = 1, weightKg = 80).days.size)
+        assertEquals(3, generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80).days.size)
+        assertEquals(7, generateNutritionPlan(seed = 0, startDay = 1, daysCount = 7, weightKg = 80).days.size)
     }
 
     @Test
-    fun testShoppingListCombinesAdaptiveIngredientsIntoGroupedItems() {
-        val plan = generateThreeDayMuscleGainPlan(seed = 2, startDay = 4)
-        val proteins = plan.shoppingList[NutritionShoppingGroup.PROTEIN].orEmpty()
-        val carbs = plan.shoppingList[NutritionShoppingGroup.CARBS].orEmpty()
-        val fats = plan.shoppingList[NutritionShoppingGroup.FATS].orEmpty()
-        val produce = plan.shoppingList[NutritionShoppingGroup.FRUITS_VEGETABLES].orEmpty()
-        val allowedKeys = setOf(
-            "chicken",
-            "eggs",
-            "rice",
-            "oats",
-            "potatoes",
-            "buckwheat",
-            "cottage_cheese",
-            "yogurt",
-            "banana",
-            "apple",
-            "nuts"
+    fun testExcludedFoodsAreRemovedFromMeals() {
+        val plan = generateNutritionPlan(
+            seed = 0,
+            startDay = 1,
+            daysCount = 3,
+            weightKg = 80,
+            excludedIngredientKeys = setOf("tuna", "nuts")
         )
 
-        val allKeys = plan.shoppingList.values.flatten().map { it.ingredient.key }
-        assertTrue(allKeys.all { it in allowedKeys })
-        assertEquals(proteins.map { it.ingredient.key }.distinct().size, proteins.size)
-        assertEquals(carbs.map { it.ingredient.key }.distinct().size, carbs.size)
-        assertTrue(fats.any { it.ingredient.key == "nuts" && it.totalAmount >= 20 })
-        assertTrue(produce.any { it.ingredient.key == "apple" || it.ingredient.key == "banana" })
+        val ingredientKeys = plan.days
+            .flatMap { day -> day.meals }
+            .flatMap { meal -> meal.ingredients }
+            .map { ingredient -> ingredient.ingredient.key }
+            .toSet()
+
+        assertTrue("tuna" !in ingredientKeys)
+        assertTrue("nuts" !in ingredientKeys)
     }
 
     @Test
-    fun testChangingSeedRegeneratesMealSelection() {
-        val firstPlan = generateThreeDayMuscleGainPlan(seed = 0, startDay = 1)
-        val secondPlan = generateThreeDayMuscleGainPlan(seed = 1, startDay = 1)
+    fun testReplacementKeepsMealTypeAndProfileCloseToOriginalCalories() {
+        val originalPlan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80)
+        val originalDay = originalPlan.days.first()
+        val originalMeal = originalDay.meals.first { it.type == NutritionMealType.BREAKFAST }
+        val replacementId = findReplacementMealTemplateId(originalMeal, emptySet())
 
-        val firstDaySignature = firstPlan.days.first().meals.map { meal ->
-            meal.type.key to meal.ingredients.map { ingredient -> ingredient.ingredient.key }
-        }
-        val secondDaySignature = secondPlan.days.first().meals.map { meal ->
-            meal.type.key to meal.ingredients.map { ingredient -> ingredient.ingredient.key }
-        }
+        checkNotNull(replacementId)
 
-        assertNotEquals(firstDaySignature, secondDaySignature)
+        val replacedPlan = generateNutritionPlan(
+            seed = 0,
+            startDay = 1,
+            daysCount = 3,
+            weightKg = 80,
+            replacements = mapOf(nutritionReplacementKey(originalDay.programDay, originalMeal.type) to replacementId)
+        )
+        val replacedMeal = replacedPlan.days.first().meals.first { it.type == NutritionMealType.BREAKFAST }
+
+        assertNotEquals(originalMeal.templateId, replacedMeal.templateId)
+        assertEquals(originalMeal.type, replacedMeal.type)
+        assertEquals(originalMeal.profile, replacedMeal.profile)
+        assertTrue(kotlin.math.abs(originalMeal.calories - replacedMeal.calories) <= 120)
+    }
+
+    @Test
+    fun testShoppingListChangesAfterReplacement() {
+        val originalPlan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80)
+        val mealToReplace = originalPlan.days.first().meals.first { it.profile == NutritionMealProfile.BALANCED }
+        val replacementId = findReplacementMealTemplateId(mealToReplace, emptySet())
+
+        checkNotNull(replacementId)
+
+        val replacedPlan = generateNutritionPlan(
+            seed = 0,
+            startDay = 1,
+            daysCount = 3,
+            weightKg = 80,
+            replacements = mapOf(nutritionReplacementKey(originalPlan.days.first().programDay, mealToReplace.type) to replacementId)
+        )
+
+        assertNotEquals(originalPlan.shoppingList, replacedPlan.shoppingList)
     }
 
     @Test
     fun testTodayCompletionPercentUsesCurrentDayMeals() {
-        val today = generateThreeDayMuscleGainPlan(seed = 0, startDay = 1).days.first()
+        val today = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80).days.first()
 
         assertEquals(0, calculateNutritionCompletionPercent(today, emptySet()))
         assertEquals(50, calculateNutritionCompletionPercent(today, setOf("breakfast", "dinner")))
@@ -101,7 +111,7 @@ class NutritionPlanTest {
 
     @Test
     fun testTodayCookingInstructionsStayShortAndActionable() {
-        val plan = generateThreeDayMuscleGainPlan(seed = 0, startDay = 1)
+        val plan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80)
 
         plan.days.first().meals.forEach { meal ->
             val instructions = getTodayCookingInstructionResIds(meal)

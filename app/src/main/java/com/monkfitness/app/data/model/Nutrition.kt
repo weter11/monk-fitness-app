@@ -3,6 +3,7 @@ package com.monkfitness.app.data.model
 import androidx.annotation.StringRes
 import com.monkfitness.app.R
 import kotlin.math.absoluteValue
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 enum class NutritionMealType(
@@ -14,6 +15,12 @@ enum class NutritionMealType(
     DINNER("dinner", R.string.nutrition_dinner),
     POST_WORKOUT("post_workout", R.string.nutrition_post_workout),
     SNACK("snack", R.string.nutrition_snack)
+}
+
+enum class NutritionMealProfile(@StringRes val labelRes: Int) {
+    HIGH_CARB(R.string.nutrition_profile_high_carb),
+    HIGH_PROTEIN(R.string.nutrition_profile_high_protein),
+    BALANCED(R.string.nutrition_profile_balanced)
 }
 
 enum class NutritionDayType(@StringRes val labelRes: Int) {
@@ -63,7 +70,9 @@ data class NutritionIngredientAmount(
 )
 
 data class NutritionMeal(
+    val templateId: String,
     val type: NutritionMealType,
+    val profile: NutritionMealProfile,
     val ingredients: List<NutritionIngredientAmount>,
     val calories: Int,
     val proteinGrams: Int,
@@ -107,14 +116,18 @@ data class NutritionPlan(
 }
 
 private data class NutritionMealTemplate(
+    val id: String,
     val type: NutritionMealType,
+    val profile: NutritionMealProfile,
     val ingredients: List<NutritionIngredientAmount>,
     val calories: Int,
     val proteinGrams: Int,
     val optional: Boolean = false
 ) {
     fun toMeal(scale: Float = 1f): NutritionMeal = NutritionMeal(
+        templateId = id,
         type = type,
+        profile = profile,
         ingredients = ingredients.map { ingredientAmount ->
             ingredientAmount.copy(amount = scaleAmount(ingredientAmount.amount, ingredientAmount.ingredient.unit, scale))
         },
@@ -135,430 +148,426 @@ private val yogurt = NutritionIngredient("yogurt", R.string.nutrition_ingredient
 private val banana = NutritionIngredient("banana", R.string.nutrition_ingredient_banana, NutritionShoppingGroup.FRUITS_VEGETABLES, NutritionQuantityUnit.PIECES, NutritionPreparationStyle.FRESH)
 private val apple = NutritionIngredient("apple", R.string.nutrition_ingredient_apple, NutritionShoppingGroup.FRUITS_VEGETABLES, NutritionQuantityUnit.PIECES, NutritionPreparationStyle.FRESH)
 private val nuts = NutritionIngredient("nuts", R.string.nutrition_ingredient_nuts, NutritionShoppingGroup.FATS, NutritionQuantityUnit.GRAMS, NutritionPreparationStyle.PLAIN)
+private val tuna = NutritionIngredient("tuna", R.string.nutrition_ingredient_tuna, NutritionShoppingGroup.PROTEIN, NutritionQuantityUnit.GRAMS, NutritionPreparationStyle.PLAIN)
 
-private val trainingBreakfastTemplates = listOf(
+val nutritionExclusionIngredients: List<NutritionIngredient> = listOf(
+    chicken,
+    eggs,
+    tuna,
+    rice,
+    oats,
+    potatoes,
+    buckwheat,
+    cottageCheese,
+    yogurt,
+    banana,
+    apple,
+    nuts
+)
+
+private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
+        id = "breakfast_high_carb_1",
         type = NutritionMealType.BREAKFAST,
+        profile = NutritionMealProfile.HIGH_CARB,
         ingredients = listOf(
             NutritionIngredientAmount(oats, 90),
             NutritionIngredientAmount(yogurt, 220),
             NutritionIngredientAmount(banana, 1)
         ),
-        calories = 570,
-        proteinGrams = 23
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.BREAKFAST,
-        ingredients = listOf(
-            NutritionIngredientAmount(oats, 80),
-            NutritionIngredientAmount(cottageCheese, 200),
-            NutritionIngredientAmount(banana, 1)
-        ),
-        calories = 555,
-        proteinGrams = 31
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.BREAKFAST,
-        ingredients = listOf(
-            NutritionIngredientAmount(eggs, 3),
-            NutritionIngredientAmount(rice, 180),
-            NutritionIngredientAmount(apple, 1),
-            NutritionIngredientAmount(yogurt, 150)
-        ),
-        calories = 600,
-        proteinGrams = 29
-    )
-)
-
-private val trainingLunchTemplates = listOf(
-    NutritionMealTemplate(
-        type = NutritionMealType.LUNCH,
-        ingredients = listOf(
-            NutritionIngredientAmount(chicken, 160),
-            NutritionIngredientAmount(rice, 250),
-            NutritionIngredientAmount(apple, 1)
-        ),
-        calories = 760,
-        proteinGrams = 54
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.LUNCH,
-        ingredients = listOf(
-            NutritionIngredientAmount(chicken, 150),
-            NutritionIngredientAmount(buckwheat, 280),
-            NutritionIngredientAmount(banana, 1)
-        ),
-        calories = 735,
-        proteinGrams = 50
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.LUNCH,
-        ingredients = listOf(
-            NutritionIngredientAmount(eggs, 4),
-            NutritionIngredientAmount(potatoes, 380),
-            NutritionIngredientAmount(yogurt, 180)
-        ),
-        calories = 780,
-        proteinGrams = 37
-    )
-)
-
-private val trainingDinnerTemplates = listOf(
-    NutritionMealTemplate(
-        type = NutritionMealType.DINNER,
-        ingredients = listOf(
-            NutritionIngredientAmount(chicken, 150),
-            NutritionIngredientAmount(potatoes, 400),
-            NutritionIngredientAmount(cottageCheese, 150)
-        ),
-        calories = 810,
-        proteinGrams = 58
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.DINNER,
-        ingredients = listOf(
-            NutritionIngredientAmount(chicken, 140),
-            NutritionIngredientAmount(rice, 240),
-            NutritionIngredientAmount(nuts, 20),
-            NutritionIngredientAmount(apple, 1)
-        ),
-        calories = 790,
-        proteinGrams = 49
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.DINNER,
-        ingredients = listOf(
-            NutritionIngredientAmount(eggs, 4),
-            NutritionIngredientAmount(buckwheat, 250),
-            NutritionIngredientAmount(cottageCheese, 200)
-        ),
-        calories = 800,
-        proteinGrams = 44
-    )
-)
-
-private val trainingRecoveryTemplates = listOf(
-    NutritionMealTemplate(
-        type = NutritionMealType.POST_WORKOUT,
-        ingredients = listOf(
-            NutritionIngredientAmount(yogurt, 220),
-            NutritionIngredientAmount(banana, 1),
-            NutritionIngredientAmount(oats, 40)
-        ),
-        calories = 330,
-        proteinGrams = 15
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.POST_WORKOUT,
-        ingredients = listOf(
-            NutritionIngredientAmount(cottageCheese, 150),
-            NutritionIngredientAmount(banana, 1),
-            NutritionIngredientAmount(apple, 1)
-        ),
-        calories = 320,
-        proteinGrams = 20
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.POST_WORKOUT,
-        ingredients = listOf(
-            NutritionIngredientAmount(yogurt, 200),
-            NutritionIngredientAmount(banana, 2)
-        ),
-        calories = 310,
-        proteinGrams = 12
-    )
-)
-
-private val lightBreakfastTemplates = listOf(
-    NutritionMealTemplate(
-        type = NutritionMealType.BREAKFAST,
-        ingredients = listOf(
-            NutritionIngredientAmount(oats, 80),
-            NutritionIngredientAmount(yogurt, 200),
-            NutritionIngredientAmount(apple, 1),
-            NutritionIngredientAmount(nuts, 20)
-        ),
-        calories = 560,
-        proteinGrams = 20
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.BREAKFAST,
-        ingredients = listOf(
-            NutritionIngredientAmount(eggs, 3),
-            NutritionIngredientAmount(buckwheat, 180),
-            NutritionIngredientAmount(apple, 1)
-        ),
-        calories = 540,
+        calories = 520,
         proteinGrams = 24
     ),
     NutritionMealTemplate(
+        id = "breakfast_high_carb_2",
         type = NutritionMealType.BREAKFAST,
+        profile = NutritionMealProfile.HIGH_CARB,
         ingredients = listOf(
-            NutritionIngredientAmount(cottageCheese, 200),
-            NutritionIngredientAmount(oats, 70),
-            NutritionIngredientAmount(banana, 1)
+            NutritionIngredientAmount(rice, 200),
+            NutritionIngredientAmount(eggs, 2),
+            NutritionIngredientAmount(banana, 1),
+            NutritionIngredientAmount(yogurt, 150)
         ),
-        calories = 550,
-        proteinGrams = 28
-    )
-)
-
-private val lightLunchTemplates = listOf(
+        calories = 540,
+        proteinGrams = 27
+    ),
     NutritionMealTemplate(
-        type = NutritionMealType.LUNCH,
+        id = "breakfast_high_protein_1",
+        type = NutritionMealType.BREAKFAST,
+        profile = NutritionMealProfile.HIGH_PROTEIN,
         ingredients = listOf(
-            NutritionIngredientAmount(chicken, 140),
-            NutritionIngredientAmount(buckwheat, 240),
+            NutritionIngredientAmount(cottageCheese, 250),
+            NutritionIngredientAmount(yogurt, 180),
             NutritionIngredientAmount(apple, 1)
         ),
-        calories = 700,
+        calories = 430,
+        proteinGrams = 36
+    ),
+    NutritionMealTemplate(
+        id = "breakfast_high_protein_2",
+        type = NutritionMealType.BREAKFAST,
+        profile = NutritionMealProfile.HIGH_PROTEIN,
+        ingredients = listOf(
+            NutritionIngredientAmount(eggs, 3),
+            NutritionIngredientAmount(cottageCheese, 180),
+            NutritionIngredientAmount(apple, 1)
+        ),
+        calories = 450,
+        proteinGrams = 34
+    ),
+    NutritionMealTemplate(
+        id = "breakfast_balanced_1",
+        type = NutritionMealType.BREAKFAST,
+        profile = NutritionMealProfile.BALANCED,
+        ingredients = listOf(
+            NutritionIngredientAmount(oats, 70),
+            NutritionIngredientAmount(cottageCheese, 200),
+            NutritionIngredientAmount(banana, 1)
+        ),
+        calories = 500,
+        proteinGrams = 30
+    ),
+    NutritionMealTemplate(
+        id = "breakfast_balanced_2",
+        type = NutritionMealType.BREAKFAST,
+        profile = NutritionMealProfile.BALANCED,
+        ingredients = listOf(
+            NutritionIngredientAmount(eggs, 3),
+            NutritionIngredientAmount(buckwheat, 180),
+            NutritionIngredientAmount(yogurt, 180)
+        ),
+        calories = 510,
+        proteinGrams = 29
+    ),
+    NutritionMealTemplate(
+        id = "lunch_high_carb_1",
+        type = NutritionMealType.LUNCH,
+        profile = NutritionMealProfile.HIGH_CARB,
+        ingredients = listOf(
+            NutritionIngredientAmount(chicken, 150),
+            NutritionIngredientAmount(rice, 260),
+            NutritionIngredientAmount(apple, 1)
+        ),
+        calories = 690,
+        proteinGrams = 50
+    ),
+    NutritionMealTemplate(
+        id = "lunch_high_carb_2",
+        type = NutritionMealType.LUNCH,
+        profile = NutritionMealProfile.HIGH_CARB,
+        ingredients = listOf(
+            NutritionIngredientAmount(tuna, 140),
+            NutritionIngredientAmount(potatoes, 360),
+            NutritionIngredientAmount(banana, 1)
+        ),
+        calories = 670,
+        proteinGrams = 42
+    ),
+    NutritionMealTemplate(
+        id = "lunch_high_protein_1",
+        type = NutritionMealType.LUNCH,
+        profile = NutritionMealProfile.HIGH_PROTEIN,
+        ingredients = listOf(
+            NutritionIngredientAmount(chicken, 180),
+            NutritionIngredientAmount(buckwheat, 220),
+            NutritionIngredientAmount(yogurt, 150)
+        ),
+        calories = 650,
+        proteinGrams = 55
+    ),
+    NutritionMealTemplate(
+        id = "lunch_high_protein_2",
+        type = NutritionMealType.LUNCH,
+        profile = NutritionMealProfile.HIGH_PROTEIN,
+        ingredients = listOf(
+            NutritionIngredientAmount(chicken, 160),
+            NutritionIngredientAmount(eggs, 3),
+            NutritionIngredientAmount(potatoes, 250)
+        ),
+        calories = 660,
+        proteinGrams = 53
+    ),
+    NutritionMealTemplate(
+        id = "lunch_balanced_1",
+        type = NutritionMealType.LUNCH,
+        profile = NutritionMealProfile.BALANCED,
+        ingredients = listOf(
+            NutritionIngredientAmount(tuna, 150),
+            NutritionIngredientAmount(rice, 210),
+            NutritionIngredientAmount(apple, 1)
+        ),
+        calories = 640,
+        proteinGrams = 44
+    ),
+    NutritionMealTemplate(
+        id = "lunch_balanced_2",
+        type = NutritionMealType.LUNCH,
+        profile = NutritionMealProfile.BALANCED,
+        ingredients = listOf(
+            NutritionIngredientAmount(chicken, 150),
+            NutritionIngredientAmount(potatoes, 300),
+            NutritionIngredientAmount(nuts, 15)
+        ),
+        calories = 660,
         proteinGrams = 48
     ),
     NutritionMealTemplate(
-        type = NutritionMealType.LUNCH,
+        id = "dinner_high_carb_1",
+        type = NutritionMealType.DINNER,
+        profile = NutritionMealProfile.HIGH_CARB,
         ingredients = listOf(
-            NutritionIngredientAmount(eggs, 3),
-            NutritionIngredientAmount(rice, 220),
-            NutritionIngredientAmount(yogurt, 150)
+            NutritionIngredientAmount(chicken, 140),
+            NutritionIngredientAmount(rice, 240),
+            NutritionIngredientAmount(banana, 1)
         ),
-        calories = 690,
-        proteinGrams = 28
+        calories = 680,
+        proteinGrams = 48
     ),
     NutritionMealTemplate(
-        type = NutritionMealType.LUNCH,
-        ingredients = listOf(
-            NutritionIngredientAmount(chicken, 130),
-            NutritionIngredientAmount(potatoes, 350),
-            NutritionIngredientAmount(nuts, 15)
-        ),
-        calories = 710,
-        proteinGrams = 44
-    )
-)
-
-private val lightDinnerTemplates = listOf(
-    NutritionMealTemplate(
+        id = "dinner_high_carb_2",
         type = NutritionMealType.DINNER,
+        profile = NutritionMealProfile.HIGH_CARB,
         ingredients = listOf(
-            NutritionIngredientAmount(cottageCheese, 250),
-            NutritionIngredientAmount(potatoes, 300),
+            NutritionIngredientAmount(eggs, 3),
+            NutritionIngredientAmount(buckwheat, 240),
+            NutritionIngredientAmount(apple, 1)
+        ),
+        calories = 650,
+        proteinGrams = 32
+    ),
+    NutritionMealTemplate(
+        id = "dinner_high_protein_1",
+        type = NutritionMealType.DINNER,
+        profile = NutritionMealProfile.HIGH_PROTEIN,
+        ingredients = listOf(
+            NutritionIngredientAmount(chicken, 170),
+            NutritionIngredientAmount(cottageCheese, 180),
+            NutritionIngredientAmount(potatoes, 260)
+        ),
+        calories = 660,
+        proteinGrams = 58
+    ),
+    NutritionMealTemplate(
+        id = "dinner_high_protein_2",
+        type = NutritionMealType.DINNER,
+        profile = NutritionMealProfile.HIGH_PROTEIN,
+        ingredients = listOf(
+            NutritionIngredientAmount(tuna, 170),
+            NutritionIngredientAmount(eggs, 2),
+            NutritionIngredientAmount(potatoes, 250)
+        ),
+        calories = 630,
+        proteinGrams = 52
+    ),
+    NutritionMealTemplate(
+        id = "dinner_balanced_1",
+        type = NutritionMealType.DINNER,
+        profile = NutritionMealProfile.BALANCED,
+        ingredients = listOf(
+            NutritionIngredientAmount(chicken, 150),
+            NutritionIngredientAmount(buckwheat, 220),
+            NutritionIngredientAmount(apple, 1)
+        ),
+        calories = 640,
+        proteinGrams = 47
+    ),
+    NutritionMealTemplate(
+        id = "dinner_balanced_2",
+        type = NutritionMealType.DINNER,
+        profile = NutritionMealProfile.BALANCED,
+        ingredients = listOf(
+            NutritionIngredientAmount(cottageCheese, 220),
+            NutritionIngredientAmount(potatoes, 280),
             NutritionIngredientAmount(nuts, 20)
         ),
-        calories = 700,
-        proteinGrams = 33
+        calories = 620,
+        proteinGrams = 34
     ),
     NutritionMealTemplate(
-        type = NutritionMealType.DINNER,
-        ingredients = listOf(
-            NutritionIngredientAmount(chicken, 130),
-            NutritionIngredientAmount(rice, 200),
-            NutritionIngredientAmount(apple, 1),
-            NutritionIngredientAmount(nuts, 15)
-        ),
-        calories = 720,
-        proteinGrams = 45
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.DINNER,
-        ingredients = listOf(
-            NutritionIngredientAmount(eggs, 3),
-            NutritionIngredientAmount(buckwheat, 220),
-            NutritionIngredientAmount(yogurt, 200)
-        ),
-        calories = 700,
-        proteinGrams = 30
-    )
-)
-
-private val lightSnackTemplates = listOf(
-    NutritionMealTemplate(
-        type = NutritionMealType.SNACK,
+        id = "post_workout_high_carb_1",
+        type = NutritionMealType.POST_WORKOUT,
+        profile = NutritionMealProfile.HIGH_CARB,
         ingredients = listOf(
             NutritionIngredientAmount(yogurt, 200),
             NutritionIngredientAmount(banana, 1),
-            NutritionIngredientAmount(nuts, 20)
+            NutritionIngredientAmount(oats, 40)
+        ),
+        calories = 320,
+        proteinGrams = 16
+    ),
+    NutritionMealTemplate(
+        id = "post_workout_high_carb_2",
+        type = NutritionMealType.POST_WORKOUT,
+        profile = NutritionMealProfile.HIGH_CARB,
+        ingredients = listOf(
+            NutritionIngredientAmount(yogurt, 180),
+            NutritionIngredientAmount(banana, 1),
+            NutritionIngredientAmount(apple, 1)
+        ),
+        calories = 300,
+        proteinGrams = 12
+    ),
+    NutritionMealTemplate(
+        id = "post_workout_high_protein_1",
+        type = NutritionMealType.POST_WORKOUT,
+        profile = NutritionMealProfile.HIGH_PROTEIN,
+        ingredients = listOf(
+            NutritionIngredientAmount(cottageCheese, 180),
+            NutritionIngredientAmount(banana, 1)
+        ),
+        calories = 260,
+        proteinGrams = 22
+    ),
+    NutritionMealTemplate(
+        id = "post_workout_high_protein_2",
+        type = NutritionMealType.POST_WORKOUT,
+        profile = NutritionMealProfile.HIGH_PROTEIN,
+        ingredients = listOf(
+            NutritionIngredientAmount(yogurt, 180),
+            NutritionIngredientAmount(cottageCheese, 120),
+            NutritionIngredientAmount(apple, 1)
+        ),
+        calories = 280,
+        proteinGrams = 24
+    ),
+    NutritionMealTemplate(
+        id = "post_workout_balanced_1",
+        type = NutritionMealType.POST_WORKOUT,
+        profile = NutritionMealProfile.BALANCED,
+        ingredients = listOf(
+            NutritionIngredientAmount(yogurt, 180),
+            NutritionIngredientAmount(banana, 1),
+            NutritionIngredientAmount(nuts, 15)
+        ),
+        calories = 310,
+        proteinGrams = 14
+    ),
+    NutritionMealTemplate(
+        id = "post_workout_balanced_2",
+        type = NutritionMealType.POST_WORKOUT,
+        profile = NutritionMealProfile.BALANCED,
+        ingredients = listOf(
+            NutritionIngredientAmount(eggs, 2),
+            NutritionIngredientAmount(apple, 1),
+            NutritionIngredientAmount(yogurt, 150)
+        ),
+        calories = 300,
+        proteinGrams = 20
+    ),
+    NutritionMealTemplate(
+        id = "snack_high_carb_1",
+        type = NutritionMealType.SNACK,
+        profile = NutritionMealProfile.HIGH_CARB,
+        ingredients = listOf(
+            NutritionIngredientAmount(banana, 1),
+            NutritionIngredientAmount(yogurt, 150)
+        ),
+        calories = 220,
+        proteinGrams = 10,
+        optional = true
+    ),
+    NutritionMealTemplate(
+        id = "snack_high_carb_2",
+        type = NutritionMealType.SNACK,
+        profile = NutritionMealProfile.HIGH_CARB,
+        ingredients = listOf(
+            NutritionIngredientAmount(apple, 1),
+            NutritionIngredientAmount(oats, 35),
+            NutritionIngredientAmount(yogurt, 150)
+        ),
+        calories = 240,
+        proteinGrams = 12,
+        optional = true
+    ),
+    NutritionMealTemplate(
+        id = "snack_high_protein_1",
+        type = NutritionMealType.SNACK,
+        profile = NutritionMealProfile.HIGH_PROTEIN,
+        ingredients = listOf(
+            NutritionIngredientAmount(cottageCheese, 150),
+            NutritionIngredientAmount(apple, 1)
+        ),
+        calories = 230,
+        proteinGrams = 20,
+        optional = true
+    ),
+    NutritionMealTemplate(
+        id = "snack_high_protein_2",
+        type = NutritionMealType.SNACK,
+        profile = NutritionMealProfile.HIGH_PROTEIN,
+        ingredients = listOf(
+            NutritionIngredientAmount(eggs, 2),
+            NutritionIngredientAmount(yogurt, 150)
+        ),
+        calories = 250,
+        proteinGrams = 18,
+        optional = true
+    ),
+    NutritionMealTemplate(
+        id = "snack_balanced_1",
+        type = NutritionMealType.SNACK,
+        profile = NutritionMealProfile.BALANCED,
+        ingredients = listOf(
+            NutritionIngredientAmount(yogurt, 180),
+            NutritionIngredientAmount(banana, 1),
+            NutritionIngredientAmount(nuts, 15)
         ),
         calories = 300,
         proteinGrams = 12,
         optional = true
     ),
     NutritionMealTemplate(
+        id = "snack_balanced_2",
         type = NutritionMealType.SNACK,
+        profile = NutritionMealProfile.BALANCED,
         ingredients = listOf(
             NutritionIngredientAmount(cottageCheese, 150),
-            NutritionIngredientAmount(apple, 1),
+            NutritionIngredientAmount(banana, 1),
             NutritionIngredientAmount(nuts, 15)
         ),
-        calories = 290,
+        calories = 320,
         proteinGrams = 19,
         optional = true
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.SNACK,
-        ingredients = listOf(
-            NutritionIngredientAmount(yogurt, 180),
-            NutritionIngredientAmount(banana, 1),
-            NutritionIngredientAmount(apple, 1)
-        ),
-        calories = 280,
-        proteinGrams = 10,
-        optional = true
     )
 )
 
-private val restBreakfastTemplates = listOf(
-    NutritionMealTemplate(
-        type = NutritionMealType.BREAKFAST,
-        ingredients = listOf(
-            NutritionIngredientAmount(eggs, 4),
-            NutritionIngredientAmount(cottageCheese, 200),
-            NutritionIngredientAmount(apple, 1),
-            NutritionIngredientAmount(nuts, 30)
-        ),
-        calories = 640,
-        proteinGrams = 38
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.BREAKFAST,
-        ingredients = listOf(
-            NutritionIngredientAmount(yogurt, 250),
-            NutritionIngredientAmount(nuts, 35),
-            NutritionIngredientAmount(apple, 1),
-            NutritionIngredientAmount(banana, 1)
-        ),
-        calories = 590,
-        proteinGrams = 16
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.BREAKFAST,
-        ingredients = listOf(
-            NutritionIngredientAmount(cottageCheese, 250),
-            NutritionIngredientAmount(banana, 1),
-            NutritionIngredientAmount(nuts, 25)
-        ),
-        calories = 600,
-        proteinGrams = 31
-    )
-)
-
-private val restLunchTemplates = listOf(
-    NutritionMealTemplate(
-        type = NutritionMealType.LUNCH,
-        ingredients = listOf(
-            NutritionIngredientAmount(chicken, 150),
-            NutritionIngredientAmount(potatoes, 250),
-            NutritionIngredientAmount(nuts, 25)
-        ),
-        calories = 700,
-        proteinGrams = 52
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.LUNCH,
-        ingredients = listOf(
-            NutritionIngredientAmount(eggs, 4),
-            NutritionIngredientAmount(buckwheat, 180),
-            NutritionIngredientAmount(nuts, 25)
-        ),
-        calories = 720,
-        proteinGrams = 30
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.LUNCH,
-        ingredients = listOf(
-            NutritionIngredientAmount(chicken, 140),
-            NutritionIngredientAmount(rice, 180),
-            NutritionIngredientAmount(nuts, 30),
-            NutritionIngredientAmount(apple, 1)
-        ),
-        calories = 760,
-        proteinGrams = 49
-    )
-)
-
-private val restDinnerTemplates = listOf(
-    NutritionMealTemplate(
-        type = NutritionMealType.DINNER,
-        ingredients = listOf(
-            NutritionIngredientAmount(cottageCheese, 250),
-            NutritionIngredientAmount(eggs, 3),
-            NutritionIngredientAmount(apple, 1),
-            NutritionIngredientAmount(nuts, 25)
-        ),
-        calories = 670,
-        proteinGrams = 46
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.DINNER,
-        ingredients = listOf(
-            NutritionIngredientAmount(chicken, 140),
-            NutritionIngredientAmount(potatoes, 280),
-            NutritionIngredientAmount(nuts, 30)
-        ),
-        calories = 710,
-        proteinGrams = 48
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.DINNER,
-        ingredients = listOf(
-            NutritionIngredientAmount(cottageCheese, 220),
-            NutritionIngredientAmount(yogurt, 200),
-            NutritionIngredientAmount(nuts, 30)
-        ),
-        calories = 650,
-        proteinGrams = 36
-    )
-)
-
-private val restSnackTemplates = listOf(
-    NutritionMealTemplate(
-        type = NutritionMealType.SNACK,
-        ingredients = listOf(
-            NutritionIngredientAmount(yogurt, 200),
-            NutritionIngredientAmount(nuts, 25),
-            NutritionIngredientAmount(apple, 1)
-        ),
-        calories = 365,
-        proteinGrams = 13,
-        optional = true
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.SNACK,
-        ingredients = listOf(
-            NutritionIngredientAmount(cottageCheese, 150),
-            NutritionIngredientAmount(nuts, 20),
-            NutritionIngredientAmount(banana, 1)
-        ),
-        calories = 355,
-        proteinGrams = 20,
-        optional = true
-    ),
-    NutritionMealTemplate(
-        type = NutritionMealType.SNACK,
-        ingredients = listOf(
-            NutritionIngredientAmount(eggs, 2),
-            NutritionIngredientAmount(apple, 1),
-            NutritionIngredientAmount(nuts, 20)
-        ),
-        calories = 330,
-        proteinGrams = 16,
-        optional = true
-    )
-)
-
-fun generateThreeDayMuscleGainPlan(
+fun generateNutritionPlan(
     seed: Int,
     startDay: Int = 1,
+    daysCount: Int = 3,
+    weightKg: Int?,
+    heightCm: Int? = null,
+    excludedIngredientKeys: Set<String> = emptySet(),
+    replacements: Map<String, String> = emptyMap(),
     workoutTypeForDay: (Int) -> WorkoutType = ::defaultWorkoutTypeForDay
 ): NutritionPlan {
     val base = seed.absoluteValue
     val safeStartDay = startDay.coerceIn(1, 56)
+    val safeDaysCount = daysCount.coerceIn(1, 7)
 
-    val days = (0 until 3).map { index ->
+    val days = (0 until safeDaysCount).map { index ->
         val programDay = (safeStartDay + index).coerceAtMost(56)
         val week = ((programDay - 1) / 7) + 1
         val dayType = resolveNutritionDayType(workoutTypeForDay(programDay))
-        val targetCalories = calculateTargetCalories(programDay)
+        val targetCalories = calculateTargetCalories(weightKg = weightKg, heightCm = heightCm, dayType = dayType)
+        val slots = slotsForDayType(dayType)
         val rotation = base + index + (programDay * 3)
+
+        val meals = slots.mapIndexed { slotIndex, slot ->
+            val profile = NutritionMealProfile.entries[(rotation + slotIndex) % NutritionMealProfile.entries.size]
+            val replacementKey = nutritionReplacementKey(programDay, slot)
+            val replacementTemplateId = replacements[replacementKey]
+            selectTemplate(
+                mealType = slot,
+                mealProfile = profile,
+                rotation = rotation + slotIndex,
+                excludedIngredientKeys = excludedIngredientKeys,
+                explicitTemplateId = replacementTemplateId
+            )
+        }
+
+        val baseCalories = meals.sumOf { it.calories }.coerceAtLeast(1)
+        val scale = (targetCalories.toFloat() / baseCalories.toFloat()).coerceIn(0.85f, 1.35f)
 
         NutritionDayPlan(
             dayNumber = index + 1,
@@ -566,44 +575,39 @@ fun generateThreeDayMuscleGainPlan(
             week = week,
             dayType = dayType,
             targetCalories = targetCalories,
-            meals = buildMealsForDay(dayType = dayType, rotation = rotation, targetCalories = targetCalories)
+            meals = meals.map { it.toMeal(scale) }
         )
     }
 
     return NutritionPlan(days)
 }
 
+fun generateThreeDayMuscleGainPlan(
+    seed: Int,
+    startDay: Int = 1,
+    workoutTypeForDay: (Int) -> WorkoutType = ::defaultWorkoutTypeForDay
+): NutritionPlan = generateNutritionPlan(
+    seed = seed,
+    startDay = startDay,
+    daysCount = 3,
+    weightKg = null,
+    heightCm = null,
+    workoutTypeForDay = workoutTypeForDay
+)
+
 fun calculateMuscleGainNutritionTargets(
     weightKg: Int?,
     heightCm: Int?,
-    programDay: Int = 1,
     dayType: NutritionDayType = NutritionDayType.TRAINING
 ): NutritionTargets {
-    val safeWeight = weightKg?.takeIf { it in 35..220 }
-    val safeHeight = heightCm?.takeIf { it in 120..230 }
-    val calorieTarget = calculateTargetCalories(programDay)
-
-    val baselineProtein = when {
-        safeWeight != null -> (safeWeight * 1.7f).roundToInt()
-        safeHeight != null -> (safeHeight * 0.7f).roundToInt()
-        else -> when (dayType) {
-            NutritionDayType.TRAINING -> 145
-            NutritionDayType.LIGHT -> 130
-            NutritionDayType.REST -> 120
-        }
-    }
-
-    val proteinMin = when (dayType) {
-        NutritionDayType.TRAINING -> (baselineProtein - 10).coerceIn(120, 170)
-        NutritionDayType.LIGHT -> (baselineProtein - 10).coerceIn(110, 160)
-        NutritionDayType.REST -> (baselineProtein - 10).coerceIn(100, 150)
-    }
-    val proteinMax = (proteinMin + 25).coerceAtMost(185)
+    val normalizedWeight = normalizeNutritionWeight(weightKg, heightCm)
+    val dailyCalories = calculateTargetCalories(weightKg = weightKg, heightCm = heightCm, dayType = dayType)
+    val proteinTarget = (normalizedWeight * 2f).roundToInt().coerceIn(110, 190)
 
     return NutritionTargets(
-        dailyCalories = calorieTarget,
-        proteinMinGrams = proteinMin,
-        proteinMaxGrams = proteinMax
+        dailyCalories = dailyCalories,
+        proteinMinGrams = (proteinTarget - 10).coerceAtLeast(100),
+        proteinMaxGrams = proteinTarget + 10
     )
 }
 
@@ -630,6 +634,7 @@ fun getTodayCookingInstructionResIds(meal: NutritionMeal): List<Int> {
     val proteinStep = when {
         "chicken" in ingredientKeys -> R.string.nutrition_step_grill_chicken
         "eggs" in ingredientKeys -> R.string.nutrition_step_boil_eggs
+        "tuna" in ingredientKeys -> R.string.nutrition_step_prepare_tuna
         else -> null
     }
 
@@ -652,36 +657,69 @@ fun getTodayCookingInstructionResIds(meal: NutritionMeal): List<Int> {
     return steps.distinct().take(3)
 }
 
-private fun buildMealsForDay(
-    dayType: NutritionDayType,
+fun findReplacementMealTemplateId(
+    meal: NutritionMeal,
+    excludedIngredientKeys: Set<String>
+): String? {
+    return templatesFor(meal.type, meal.profile, excludedIngredientKeys)
+        .filter { it.id != meal.templateId }
+        .minByOrNull { candidate -> abs(candidate.calories - meal.calories) }
+        ?.id
+}
+
+fun nutritionReplacementKey(programDay: Int, mealType: NutritionMealType): String {
+    return "$programDay:${mealType.key}"
+}
+
+private fun slotsForDayType(dayType: NutritionDayType): List<NutritionMealType> = when (dayType) {
+    NutritionDayType.TRAINING -> listOf(
+        NutritionMealType.BREAKFAST,
+        NutritionMealType.LUNCH,
+        NutritionMealType.DINNER,
+        NutritionMealType.POST_WORKOUT
+    )
+    NutritionDayType.LIGHT,
+    NutritionDayType.REST -> listOf(
+        NutritionMealType.BREAKFAST,
+        NutritionMealType.LUNCH,
+        NutritionMealType.DINNER,
+        NutritionMealType.SNACK
+    )
+}
+
+private fun selectTemplate(
+    mealType: NutritionMealType,
+    mealProfile: NutritionMealProfile,
     rotation: Int,
-    targetCalories: Int
-): List<NutritionMeal> {
-    val templates = when (dayType) {
-        NutritionDayType.TRAINING -> listOf(
-            trainingBreakfastTemplates[rotation % trainingBreakfastTemplates.size],
-            trainingLunchTemplates[(rotation + 1) % trainingLunchTemplates.size],
-            trainingDinnerTemplates[(rotation + 2) % trainingDinnerTemplates.size],
-            trainingRecoveryTemplates[(rotation + 3) % trainingRecoveryTemplates.size]
-        )
-        NutritionDayType.LIGHT -> listOf(
-            lightBreakfastTemplates[rotation % lightBreakfastTemplates.size],
-            lightLunchTemplates[(rotation + 1) % lightLunchTemplates.size],
-            lightDinnerTemplates[(rotation + 2) % lightDinnerTemplates.size],
-            lightSnackTemplates[(rotation + 3) % lightSnackTemplates.size]
-        )
-        NutritionDayType.REST -> listOf(
-            restBreakfastTemplates[rotation % restBreakfastTemplates.size],
-            restLunchTemplates[(rotation + 1) % restLunchTemplates.size],
-            restDinnerTemplates[(rotation + 2) % restDinnerTemplates.size],
-            restSnackTemplates[(rotation + 3) % restSnackTemplates.size]
-        )
+    excludedIngredientKeys: Set<String>,
+    explicitTemplateId: String?
+): NutritionMealTemplate {
+    val filtered = templatesFor(mealType, mealProfile, excludedIngredientKeys)
+    val explicit = explicitTemplateId?.let { id -> filtered.firstOrNull { it.id == id } }
+    if (explicit != null) return explicit
+
+    if (filtered.isNotEmpty()) {
+        return filtered[rotation.absoluteValue % filtered.size]
     }
 
-    val baseCalories = templates.sumOf { it.calories }.coerceAtLeast(1)
-    val scale = (targetCalories.toFloat() / baseCalories.toFloat()).coerceIn(0.9f, 1.35f)
+    val fallbackSameProfile = templatesFor(mealType, mealProfile, emptySet())
+    if (fallbackSameProfile.isNotEmpty()) {
+        return fallbackSameProfile[rotation.absoluteValue % fallbackSameProfile.size]
+    }
 
-    return templates.map { it.toMeal(scale) }
+    return nutritionMealTemplates.first { it.type == mealType }
+}
+
+private fun templatesFor(
+    mealType: NutritionMealType,
+    mealProfile: NutritionMealProfile,
+    excludedIngredientKeys: Set<String>
+): List<NutritionMealTemplate> {
+    return nutritionMealTemplates.filter { template ->
+        template.type == mealType &&
+            template.profile == mealProfile &&
+            template.ingredients.none { it.ingredient.key in excludedIngredientKeys }
+    }
 }
 
 private fun resolveNutritionDayType(workoutType: WorkoutType): NutritionDayType = when (workoutType) {
@@ -695,15 +733,31 @@ private fun resolveNutritionDayType(workoutType: WorkoutType): NutritionDayType 
     WorkoutType.REST -> NutritionDayType.REST
 }
 
-private fun calculateTargetCalories(programDay: Int): Int {
-    val week = ((programDay.coerceIn(1, 56) - 1) / 7) + 1
-    val multiplier = when (week) {
-        1, 2 -> 1.0f
-        3, 4 -> 1.1f
-        5, 6 -> 1.2f
-        else -> 1.3f
+private fun calculateTargetCalories(
+    weightKg: Int?,
+    heightCm: Int?,
+    dayType: NutritionDayType
+): Int {
+    val normalizedWeight = normalizeNutritionWeight(weightKg, heightCm)
+    val baseCalories = (normalizedWeight * 35) + 300
+    val adjustment = when (dayType) {
+        NutritionDayType.TRAINING -> 200
+        NutritionDayType.LIGHT -> 0
+        NutritionDayType.REST -> -100
     }
-    return (2500 * multiplier).roundToInt()
+    return (baseCalories + adjustment).coerceAtLeast(1800)
+}
+
+private fun normalizeNutritionWeight(weightKg: Int?, heightCm: Int?): Int {
+    val safeWeight = weightKg?.takeIf { it in 35..220 }
+    if (safeWeight != null) return safeWeight
+
+    val safeHeight = heightCm?.takeIf { it in 120..230 }
+    if (safeHeight != null) {
+        return (safeHeight - 100).coerceIn(50, 120)
+    }
+
+    return 70
 }
 
 private fun defaultWorkoutTypeForDay(day: Int): WorkoutType = when ((day.coerceIn(1, 56) - 1) % 7) {

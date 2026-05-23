@@ -21,7 +21,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -30,7 +29,6 @@ import com.monkfitness.app.R
 import com.monkfitness.app.data.model.NutritionQuantityUnit
 import com.monkfitness.app.data.model.NutritionShoppingGroup
 import com.monkfitness.app.data.model.NutritionShoppingListItem
-import com.monkfitness.app.data.model.generateThreeDayMuscleGainPlan
 import com.monkfitness.app.viewmodel.MainViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,15 +37,7 @@ fun NutritionShoppingListScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
-    val planSeed by viewModel.nutritionPlanSeed.collectAsState()
-    val currentProgramDay by viewModel.currentProgramDay.collectAsState()
-    val plan = remember(planSeed, currentProgramDay) {
-        generateThreeDayMuscleGainPlan(
-            seed = planSeed,
-            startDay = currentProgramDay,
-            workoutTypeForDay = viewModel::getWorkoutTypeForDay
-        )
-    }
+    val plan by viewModel.nutritionPlan.collectAsState()
 
     Scaffold(
         topBar = {
@@ -73,7 +63,7 @@ fun NutritionShoppingListScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = stringResource(R.string.nutrition_shopping_list_desc),
+                text = stringResource(R.string.nutrition_shopping_list_desc_advanced),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary
             )
