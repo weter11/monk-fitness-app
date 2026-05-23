@@ -28,12 +28,21 @@ import com.monkfitness.app.viewmodel.MainViewModel
 fun ProgressScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
     val progressList by viewModel.allProgress.collectAsState()
+    val postureProgressList by viewModel.postureProgress.collectAsState()
 
     val entries = progressList
         .filter { it.isCompleted }
         .groupBy { ((it.day - 1) / 7) + 1 }
         .map { (week, list) -> BarEntry(week.toFloat(), list.size.toFloat()) }
         .sortedBy { it.x }
+
+    val postureEntries = postureProgressList
+        .filter { it.isCompleted }
+        .groupBy { ((it.day - 1) / 7) + 1 }
+        .map { (week, list) -> BarEntry(week.toFloat(), list.size.toFloat()) }
+        .sortedBy { it.x }
+    val secondaryColor = MaterialTheme.colorScheme.secondary.toArgb()
+    val postureCompletionRatio = postureProgressList.count { it.isCompleted }.toFloat() / 56f
 
     Column(
         modifier = Modifier
@@ -103,6 +112,83 @@ fun ProgressScreen(viewModel: MainViewModel) {
 
         Text(
             text = stringResource(R.string.completed_days, progressList.count { it.isCompleted }),
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = stringResource(R.string.additional_posture_training),
+            style = MaterialTheme.typography.headlineSmall
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        LinearProgressIndicator(
+            progress = { postureCompletionRatio },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp),
+            color = MaterialTheme.colorScheme.secondary
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            if (postureEntries.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = stringResource(R.string.no_posture_progress_yet),
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            } else {
+                AndroidView(
+                    factory = { chartContext ->
+                        BarChart(chartContext).apply {
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            description.isEnabled = false
+                            setDrawGridBackground(false)
+                            setDrawBarShadow(false)
+                            setTouchEnabled(false)
+                            xAxis.position = XAxis.XAxisPosition.BOTTOM
+                            xAxis.setDrawGridLines(false)
+                            xAxis.textColor = android.graphics.Color.WHITE
+                            xAxis.granularity = 1f
+                            axisLeft.textColor = android.graphics.Color.WHITE
+                            axisLeft.axisMinimum = 0f
+                            axisLeft.axisMaximum = 7f
+                            axisRight.isEnabled = false
+                            legend.isEnabled = false
+                        }
+                    },
+                    update = { chart ->
+                        val dataSet = BarDataSet(postureEntries, context.getString(R.string.posture_chart_label))
+                        dataSet.color = secondaryColor
+                        dataSet.valueTextColor = android.graphics.Color.WHITE
+                        dataSet.valueTextSize = 10f
+                        chart.data = BarData(dataSet)
+                        chart.invalidate()
+                    },
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = stringResource(R.string.completed_posture_sessions, postureProgressList.count { it.isCompleted }),
             style = MaterialTheme.typography.titleMedium
         )
     }

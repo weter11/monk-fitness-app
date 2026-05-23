@@ -4,7 +4,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -58,12 +57,34 @@ fun MonkButton(
     }
 }
 
+@Composable
+fun exerciseSummaryText(exercise: Exercise): String {
+    return if (exercise.isTimerBased) {
+        stringResource(R.string.seconds_format, exercise.durationSeconds)
+    } else if (exercise.minReps > 0 && exercise.maxReps > 0 && exercise.minReps != exercise.maxReps) {
+        stringResource(R.string.sets_reps_range_format, exercise.sets, exercise.minReps, exercise.maxReps)
+    } else {
+        stringResource(R.string.sets_reps_format, exercise.sets, exercise.maxReps.coerceAtLeast(exercise.reps))
+    }
+}
+
+@Composable
+fun exerciseRepTargetText(exercise: Exercise): String {
+    return when {
+        exercise.minReps > 0 && exercise.maxReps > 0 && exercise.minReps != exercise.maxReps ->
+            stringResource(R.string.reps_range_format, exercise.minReps, exercise.maxReps)
+        exercise.maxReps > 0 ->
+            exercise.maxReps.toString()
+        else ->
+            exercise.reps.toString()
+    }
+}
+
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun ExerciseItem(
     exercise: Exercise,
     isCompleted: Boolean,
-    onToggle: (Boolean) -> Unit,
     onInfo: () -> Unit,
     isCurrent: Boolean = false
 ) {
@@ -83,8 +104,7 @@ fun ExerciseItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .clickable { onToggle(!isCompleted) },
+            .padding(vertical = 8.dp),
         shape = RoundedCornerShape(16.dp),
         color = backgroundColor,
         border = borderStroke,
@@ -121,8 +141,7 @@ fun ExerciseItem(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = if (exercise.isTimerBased) stringResource(R.string.seconds_format, exercise.durationSeconds)
-                    else stringResource(R.string.sets_reps_format, exercise.sets, exercise.reps),
+                    text = exerciseSummaryText(exercise),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.secondary
                 )
@@ -143,12 +162,6 @@ fun ExerciseItem(
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
-                    )
-                } else {
-                    Checkbox(
-                        checked = isCompleted,
-                        onCheckedChange = onToggle,
-                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
                     )
                 }
             }

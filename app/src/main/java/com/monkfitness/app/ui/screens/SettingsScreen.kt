@@ -1,6 +1,7 @@
 package com.monkfitness.app.ui.screens
 
 import android.app.TimePickerDialog
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -13,6 +14,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
+import com.monkfitness.app.data.model.ExerciseSubCategory
+import com.monkfitness.app.data.model.FlexibilityTrainingType
+import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
 import com.monkfitness.app.viewmodel.MainViewModel
 import java.util.Calendar
 
@@ -25,6 +29,9 @@ fun SettingsScreen(
     val context = LocalContext.current
     val timerTicksEnabled by viewModel.timerTicksEnabled.collectAsState()
     val vibrationEnabled by viewModel.vibrationEnabled.collectAsState()
+    val additionalPostureTrainingEnabled by viewModel.additionalPostureTrainingEnabled.collectAsState()
+    val flexibilityTrainingType by viewModel.flexibilityTrainingType.collectAsState()
+    val selectedFlexibilityFocusAreas by viewModel.flexibilityFocusAreas.collectAsState()
 
     Scaffold(
         topBar = {
@@ -107,6 +114,86 @@ fun SettingsScreen(
                 Switch(
                     checked = vibrationEnabled,
                     onCheckedChange = { viewModel.setVibrationEnabled(it) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(text = stringResource(R.string.mobility_and_posture), style = MaterialTheme.typography.titleLarge)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = stringResource(R.string.enable_additional_posture_training))
+                Switch(
+                    checked = additionalPostureTrainingEnabled,
+                    onCheckedChange = { viewModel.setAdditionalPostureTrainingEnabled(it) }
+                )
+            }
+
+            FocusAreaSelector(
+                title = stringResource(R.string.flexibility_training_type_title),
+                options = FlexibilityTrainingType.entries.toList(),
+                selectedOption = flexibilityTrainingType,
+                onSelect = viewModel::setFlexibilityTrainingType
+            )
+
+            MultiSelectFocusAreaSelector(
+                title = stringResource(R.string.flexibility_focus_areas_title),
+                options = flexibilityFocusAreaOptions,
+                selectedOptions = selectedFlexibilityFocusAreas,
+                onToggle = viewModel::toggleFlexibilityFocusArea
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FocusAreaSelector(
+    title: String,
+    options: List<FlexibilityTrainingType>,
+    selectedOption: FlexibilityTrainingType,
+    onSelect: (FlexibilityTrainingType) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = title, style = MaterialTheme.typography.titleMedium)
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { option ->
+                FilterChip(
+                    selected = option == selectedOption,
+                    onClick = { onSelect(option) },
+                    label = { Text(stringResource(option.labelRes)) }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MultiSelectFocusAreaSelector(
+    title: String,
+    options: List<ExerciseSubCategory>,
+    selectedOptions: Set<ExerciseSubCategory>,
+    onToggle: (ExerciseSubCategory) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = title, style = MaterialTheme.typography.titleMedium)
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { option ->
+                FilterChip(
+                    selected = option in selectedOptions,
+                    onClick = { onToggle(option) },
+                    label = { Text(stringResource(option.labelRes)) }
                 )
             }
         }

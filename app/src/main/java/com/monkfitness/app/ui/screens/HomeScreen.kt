@@ -16,24 +16,42 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.monkfitness.app.R
+import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.viewmodel.MainViewModel
 
 @Composable
 fun HomeScreen(
     viewModel: MainViewModel,
-    onStartWorkout: (Int) -> Unit
+    onStartWorkout: (Int) -> Unit,
+    onStartPostureWorkout: (Int) -> Unit
 ) {
     val completedCount by viewModel.completedDaysCount.collectAsState()
+    val completedPostureCount by viewModel.completedPostureDaysCount.collectAsState()
     val streak by viewModel.streak.collectAsState()
+    val additionalPostureTrainingEnabled by viewModel.additionalPostureTrainingEnabled.collectAsState()
+    val flexibilityTrainingType by viewModel.flexibilityTrainingType.collectAsState()
+    val flexibilityFocusAreas by viewModel.flexibilityFocusAreas.collectAsState()
     val currentDay = viewModel.getCurrentDay()
     val workout = viewModel.getWorkoutForDay(currentDay)
 
     val targetProgress = completedCount.toFloat() / 56f
+    val postureProgress = completedPostureCount.toFloat() / 56f
     val animatedProgress by animateFloatAsState(
         targetValue = targetProgress,
         label = "HomeProgressAnimation"
     )
+    val animatedPostureProgress by animateFloatAsState(
+        targetValue = postureProgress,
+        label = "PostureProgressAnimation"
+    )
+    val fullBodyLabel = stringResource(ExerciseSubCategory.FULL_BODY.labelRes)
+    val selectedFocusAreaLabels = flexibilityFocusAreas.map { stringResource(it.labelRes) }
+    val focusAreaSummary = if (ExerciseSubCategory.FULL_BODY in flexibilityFocusAreas) {
+        fullBodyLabel
+    } else {
+        selectedFocusAreaLabels.joinToString(", ")
+    }
 
     Column(
         modifier = Modifier
@@ -112,6 +130,53 @@ fun HomeScreen(
             text = stringResource(R.string.start_workout),
             onClick = { onStartWorkout(currentDay) }
         )
+
+        if (additionalPostureTrainingEnabled) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        text = stringResource(R.string.additional_posture_training),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.flexibility_session_summary,
+                            stringResource(flexibilityTrainingType.labelRes),
+                            focusAreaSummary
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LinearProgressIndicator(
+                        progress = { animatedPostureProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(10.dp),
+                        color = MaterialTheme.colorScheme.secondary,
+                        trackColor = Color.Gray.copy(alpha = 0.3f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.optional_session_duration),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    MonkButton(
+                        text = stringResource(R.string.start_posture_mobility),
+                        onClick = { onStartPostureWorkout(currentDay) }
+                    )
+                }
+            }
+        }
     }
 }
 

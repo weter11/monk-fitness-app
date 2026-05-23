@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
 sealed class Screen(val route: String, val titleRes: Int, val icon: ImageVector) {
     object Home : Screen("home", R.string.home, Icons.Default.Home)
     object Progress : Screen("progress", R.string.progress, Icons.Default.Star)
-    object Posture : Screen("posture", R.string.posture, Icons.Default.Person)
+    object Posture : Screen("posture", R.string.exercise_library, Icons.Default.Person)
     object Settings : Screen("settings", R.string.settings, Icons.Default.Settings)
 }
 
@@ -130,9 +130,15 @@ fun MainApp(viewModel: MainViewModel) {
                 })
             }
             composable(Screen.Home.route) {
-                HomeScreen(viewModel) { day ->
-                    navController.navigate("workout/$day")
-                }
+                HomeScreen(
+                    viewModel = viewModel,
+                    onStartWorkout = { day ->
+                        navController.navigate("workout/$day")
+                    },
+                    onStartPostureWorkout = { day ->
+                        navController.navigate("posture-workout/$day")
+                    }
+                )
             }
             composable(Screen.Progress.route) {
                 ProgressScreen(viewModel)
@@ -160,6 +166,21 @@ fun MainApp(viewModel: MainViewModel) {
                 )
             }
             composable(
+                route = "posture-workout/{day}",
+                arguments = listOf(navArgument("day") { type = NavType.IntType })
+            ) { backStackEntry ->
+                val day = backStackEntry.arguments?.getInt("day") ?: 1
+                WorkoutScreen(
+                    day = day,
+                    viewModel = viewModel,
+                    isPostureMobilitySession = true,
+                    onBack = { navController.popBackStack() },
+                    onExerciseClick = { exercise ->
+                        navController.navigate("exercise/${exercise.id}?day=$day&isPosture=true")
+                    }
+                )
+            }
+            composable(
                 route = "exercise/{exerciseId}?day={day}&isPosture={isPosture}",
                 arguments = listOf(
                     navArgument("exerciseId") { type = NavType.StringType },
@@ -169,11 +190,13 @@ fun MainApp(viewModel: MainViewModel) {
             ) { backStackEntry ->
                 val exerciseId = backStackEntry.arguments?.getString("exerciseId") ?: ""
                 val day = backStackEntry.arguments?.getInt("day") ?: -1
-                val isPosture = backStackEntry.arguments?.getBoolean("isPosture") ?: false
+                val difficultyAdjustments by viewModel.exerciseDifficultyAdjustments.collectAsState()
 
-                val exercise = viewModel.getWorkoutForDay(day).exercises.find { it.id == exerciseId }
-                    ?: viewModel.getWarmupExercises().find { it.id == exerciseId }
-                    ?: viewModel.getPostureExercises().find { it.id == exerciseId }
+                val exercise = viewModel.getWorkoutForDay(day, difficultyAdjustments).exercises.find { it.id == exerciseId }
+                    ?: viewModel.getPostureMobilityWorkout(day, difficultyAdjustments).exercises.find { it.id == exerciseId }
+                    ?: viewModel.getWarmupExercises(difficultyAdjustments).find { it.id == exerciseId }
+                    ?: viewModel.getExerciseLibrary(difficultyAdjustments).find { it.id == exerciseId }
+                    ?: viewModel.getPostureExercises(difficultyAdjustments).find { it.id == exerciseId }
 
                 ExerciseScreen(
                     exercise = exercise,

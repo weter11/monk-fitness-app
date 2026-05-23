@@ -32,13 +32,13 @@ import com.monkfitness.app.data.model.WorkoutType
 import com.monkfitness.app.ui.components.ExerciseItem
 import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.ui.components.MonkProgressIndicator
+import com.monkfitness.app.ui.components.exerciseSummaryText
 import com.monkfitness.app.viewmodel.MainViewModel
 
 enum class WorkoutStep {
     OVERVIEW,
     WARMUP,
     MAIN,
-    POSTURE,
     COMPLETE
 }
 
@@ -47,38 +47,50 @@ enum class WorkoutStep {
 fun WorkoutScreen(
     day: Int,
     viewModel: MainViewModel,
+    isPostureMobilitySession: Boolean = false,
     onBack: () -> Unit,
     onExerciseClick: (Exercise) -> Unit
 ) {
-    LaunchedEffect(day) {
-        viewModel.startWorkoutSession(day)
+    LaunchedEffect(day, isPostureMobilitySession) {
+        viewModel.startWorkoutSession(
+            day = day,
+            mode = if (isPostureMobilitySession) MainViewModel.SessionMode.POSTURE_MOBILITY else MainViewModel.SessionMode.DAILY
+        )
     }
 
-    val workout = remember(day) { viewModel.getWorkoutForDay(day) }
-    val warmupExercises = remember { viewModel.getWarmupExercises() }
-    val postureExercises = remember { viewModel.getPostureExercises().take(3) }
+    val difficultyAdjustments by viewModel.exerciseDifficultyAdjustments.collectAsState()
+    val flexibilityTrainingType by viewModel.flexibilityTrainingType.collectAsState()
+    val flexibilityFocusAreas by viewModel.flexibilityFocusAreas.collectAsState()
+    val workout = remember(day, difficultyAdjustments, flexibilityTrainingType, flexibilityFocusAreas, isPostureMobilitySession) {
+        if (isPostureMobilitySession) {
+            viewModel.getPostureMobilityWorkout(day, difficultyAdjustments, flexibilityTrainingType, flexibilityFocusAreas)
+        } else {
+            viewModel.getWorkoutForDay(day, difficultyAdjustments, flexibilityTrainingType, flexibilityFocusAreas)
+        }
+    }
+    val warmupExercises = remember(difficultyAdjustments) { viewModel.getWarmupExercises(difficultyAdjustments) }
 
     val currentStep by viewModel.currentStep.collectAsState()
     val exerciseIndex by viewModel.exerciseIndex.collectAsState()
     val isRestTime by viewModel.isRestTime.collectAsState()
+    val restTargetIndex by viewModel.restTargetIndex.collectAsState()
 
     val isRestDay = workout.type == WorkoutType.REST || workout.exercises.isEmpty()
+    val sessionWarmupExercises = if (isPostureMobilitySession) emptyList() else warmupExercises
 
     val currentExerciseList = when (currentStep) {
-        WorkoutStep.WARMUP -> warmupExercises
+        WorkoutStep.WARMUP -> sessionWarmupExercises
         WorkoutStep.MAIN -> workout.exercises
-        WorkoutStep.POSTURE -> postureExercises
         else -> emptyList()
     }
 
     val currentExercise = currentExerciseList.getOrNull(exerciseIndex)
 
-    val totalSteps = warmupExercises.size + workout.exercises.size + postureExercises.size
+    val totalSteps = sessionWarmupExercises.size + workout.exercises.size
     val currentAbsoluteIndex = when (currentStep) {
         WorkoutStep.OVERVIEW -> 0
         WorkoutStep.WARMUP -> exerciseIndex
-        WorkoutStep.MAIN -> warmupExercises.size + exerciseIndex
-        WorkoutStep.POSTURE -> warmupExercises.size + workout.exercises.size + exerciseIndex
+        WorkoutStep.MAIN -> sessionWarmupExercises.size + exerciseIndex
         WorkoutStep.COMPLETE -> totalSteps
     }
     val progress = if (totalSteps > 0) currentAbsoluteIndex.toFloat() / totalSteps else 0f
@@ -94,7 +106,6 @@ fun WorkoutScreen(
                                 WorkoutStep.OVERVIEW -> stringResource(workout.type.nameRes)
                                 WorkoutStep.WARMUP -> stringResource(R.string.warmup)
                                 WorkoutStep.MAIN -> stringResource(R.string.main_workout)
-                                WorkoutStep.POSTURE -> stringResource(R.string.posture_block)
                                 WorkoutStep.COMPLETE -> stringResource(R.string.workout_complete)
                             },
                             style = MaterialTheme.typography.titleLarge,
@@ -136,13 +147,13 @@ fun WorkoutScreen(
             Box(modifier = Modifier.weight(1f)) {
                 if (isRestDay) {
                     RestDayUI(onComplete = {
-                        viewModel.completeWorkout(day)
+                        viewModel.completeCurrentSession(day)
                         onBack()
                     })
                 } else if (isRestTime) {
                     RestUI(
                         viewModel = viewModel,
-                        nextExercise = currentExerciseList.getOrNull(exerciseIndex + 1),
+                        nextExercise = currentExerciseList.getOrNull(restTargetIndex ?: (exerciseIndex + 1)),
                         onSkip = { viewModel.nextExercise(currentExerciseList) }
                     )
                 } else {
@@ -150,11 +161,15 @@ fun WorkoutScreen(
                         WorkoutStep.OVERVIEW -> {
                             WorkoutOverview(
                                 exercises = workout.exercises,
-                                onStart = { viewModel.setWorkoutStep(WorkoutStep.WARMUP) },
+                                onStart = {
+                                    viewModel.setWorkoutStep(
+                                        if (sessionWarmupExercises.isEmpty()) WorkoutStep.MAIN else WorkoutStep.WARMUP
+                                    )
+                                },
                                 onExerciseClick = onExerciseClick
                             )
                         }
-                        WorkoutStep.WARMUP, WorkoutStep.MAIN, WorkoutStep.POSTURE -> {
+                        WorkoutStep.WARMUP, WorkoutStep.MAIN -> {
                             currentExercise?.let { exercise ->
                                 ExerciseSession(
                                     exercise = exercise,
@@ -168,7 +183,7 @@ fun WorkoutScreen(
                         WorkoutStep.COMPLETE -> {
                             WorkoutComplete(
                                 onFinish = {
-                                    viewModel.completeWorkout(day)
+                                    viewModel.completeCurrentSession(day)
                                     onBack()
                                 }
                             )
@@ -295,7 +310,6 @@ fun WorkoutOverview(
                 ExerciseItem(
                     exercise = exercise,
                     isCompleted = false,
-                    onToggle = { },
                     onInfo = { onExerciseClick(exercise) },
                     isCurrent = index == 0
                 )
@@ -322,7 +336,9 @@ fun ExerciseSession(
     val timeLeft by viewModel.timeLeft.collectAsState()
     val isTimerRunning by viewModel.isTimerRunning.collectAsState()
 
-    LaunchedEffect(exercise.id) {
+    val difficultyAdjustment by viewModel.getExerciseDifficultyAdjustment(exercise.id).collectAsState(initial = 0)
+
+    LaunchedEffect(exercise.id, exercise.durationSeconds) {
         if (exercise.isTimerBased && !viewModel.isTimerRunning.value && viewModel.timeLeft.value == 0) {
             viewModel.resetTimer(exercise.durationSeconds)
             viewModel.startTimer(exercise.durationSeconds)
@@ -381,13 +397,21 @@ fun ExerciseSession(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = if (exercise.isTimerBased) stringResource(R.string.seconds_format, exercise.durationSeconds)
-            else stringResource(R.string.sets_reps_format, exercise.sets, exercise.reps),
+            text = exerciseSummaryText(exercise),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.secondary
         )
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        DifficultyAdjustmentCard(
+            adjustment = difficultyAdjustment,
+            label = stringResource(viewModel.getDifficultyLevelLabel(difficultyAdjustment)),
+            onDecrease = { viewModel.adjustExerciseDifficulty(exercise.id, -1) },
+            onIncrease = { viewModel.adjustExerciseDifficulty(exercise.id, 1) }
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
 
         if (exercise.isTimerBased) {
             Text(

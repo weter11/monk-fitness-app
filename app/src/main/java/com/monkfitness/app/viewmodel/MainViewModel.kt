@@ -9,7 +9,9 @@ import com.monkfitness.app.data.model.UserProgress
 import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.repository.WorkoutRepository
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
+import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.util.NotificationScheduler
+import com.monkfitness.app.util.withLocalizedSearchText
 import android.content.Context
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -18,19 +20,29 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.data.model.ExerciseSubCategory
+import com.monkfitness.app.data.model.PostureSessionProgress
+import com.monkfitness.app.data.model.applyDifficultyAdjustment
+import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
+import com.monkfitness.app.data.model.flexibilitySpecificFocusAreas
 import com.monkfitness.app.ui.screens.WorkoutStep
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
+
+    enum class SessionMode {
+        DAILY,
+        POSTURE_MOBILITY
+    }
 
     private val repository: WorkoutRepository
     private val workoutGenerator = WorkoutGenerator()
@@ -38,6 +50,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Workout Session State
     private val _currentWorkoutDay = MutableStateFlow<Int?>(null)
     val currentWorkoutDay = _currentWorkoutDay.asStateFlow()
+
+    private val _currentSessionMode = MutableStateFlow(SessionMode.DAILY)
+    val currentSessionMode = _currentSessionMode.asStateFlow()
 
     private val _currentStep = MutableStateFlow(WorkoutStep.OVERVIEW)
     val currentStep = _currentStep.asStateFlow()
@@ -47,6 +62,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isRestTime = MutableStateFlow(false)
     val isRestTime = _isRestTime.asStateFlow()
+
+    private val _restTargetIndex = MutableStateFlow<Int?>(null)
+    val restTargetIndex = _restTargetIndex.asStateFlow()
 
     private val _completedExercises = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val completedExercises = _completedExercises.asStateFlow()
@@ -73,7 +91,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
+    val exerciseDifficultyAdjustments = settingsManager.exerciseDifficultyAdjustmentsFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap()
+    )
+
+    val additionalPostureTrainingEnabled = settingsManager.additionalPostureTrainingEnabledFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), false
+    )
+
+    val flexibilityTrainingType = settingsManager.flexibilityTrainingTypeFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), FlexibilityTrainingType.BOTH
+    )
+
+    val flexibilityFocusAreas = settingsManager.flexibilityFocusAreasFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(ExerciseSubCategory.FULL_BODY)
+    )
+
     val completedDaysCount = repository.getCompletedDaysCount().stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), 0
+    )
+
+    val postureProgress = repository.getAllPostureProgress().stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+
+    val completedPostureDaysCount = repository.getCompletedPostureDaysCount().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 0
     )
 
@@ -94,19 +136,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun getWorkoutForDay(day: Int): Workout {
-        return workoutGenerator.generateWorkout(day)
+    fun getWorkoutForDay(
+        day: Int,
+        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
+        trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
+        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value
+    ): Workout {
+        val workout = workoutGenerator.generateWorkout(day, trainingType, focusAreas)
+        return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments)) })
     }
 
-    fun getPostureExercises() = workoutGenerator.getPostureExercises()
+    fun getPostureMobilityWorkout(
+        day: Int,
+        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
+        trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
+        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value
+    ): Workout {
+        val workout = workoutGenerator.generatePostureMobilityWorkout(day, trainingType, focusAreas)
+        return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments)) })
+    }
 
-    fun getWarmupExercises() = workoutGenerator.getWarmupExercises()
+    fun getExerciseLibrary(
+        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value
+    ) = workoutGenerator.getExerciseLibrary().map {
+        enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+    }
 
-    fun startWorkoutSession(day: Int) {
-        if (_currentWorkoutDay.value != day) {
+    fun getPostureExercises(
+        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value
+    ) = workoutGenerator.getPostureExercises().map {
+        enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+    }
+
+    fun getWarmupExercises(
+        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value
+    ) = workoutGenerator.getWarmupExercises().map {
+        enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+    }
+
+    fun getExerciseDifficultyAdjustment(exerciseId: String): Flow<Int> {
+        return settingsManager.getExerciseDifficultyAdjustmentFlow(exerciseId)
+    }
+
+    fun adjustExerciseDifficulty(exerciseId: String, delta: Int) {
+        viewModelScope.launch {
+            val current = exerciseDifficultyAdjustments.value[exerciseId] ?: 0
+            settingsManager.setExerciseDifficultyAdjustment(exerciseId, current + delta)
+        }
+    }
+
+    fun startWorkoutSession(day: Int, mode: SessionMode = SessionMode.DAILY) {
+        if (_currentWorkoutDay.value != day || _currentSessionMode.value != mode) {
             _currentWorkoutDay.value = day
+            _currentSessionMode.value = mode
             _currentStep.value = WorkoutStep.OVERVIEW
             _exerciseIndex.value = 0
+            _isRestTime.value = false
+            _restTargetIndex.value = null
             _completedExercises.value = emptyMap()
             stopTimer()
         }
@@ -115,25 +201,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setWorkoutStep(step: WorkoutStep) {
         _currentStep.value = step
         _exerciseIndex.value = 0
+        _isRestTime.value = false
+        _restTargetIndex.value = null
         stopTimer()
+
+        if (shouldStartRestFor(getExercisesForStep(step).firstOrNull())) {
+            startRestBefore(0)
+        }
     }
 
     fun nextExercise(currentExerciseList: List<Exercise>) {
         if (_isRestTime.value) {
             _isRestTime.value = false
-            _exerciseIndex.value++
+            _exerciseIndex.value = _restTargetIndex.value ?: _exerciseIndex.value
+            _restTargetIndex.value = null
             stopTimer()
+            _timeLeft.value = 0
             return
         }
 
+        currentExerciseList.getOrNull(_exerciseIndex.value)?.let { exercise ->
+            _completedExercises.value = _completedExercises.value + (exercise.id to true)
+        }
+
         if (_exerciseIndex.value < currentExerciseList.size - 1) {
-            _isRestTime.value = true
-            startTimer(5)
+            val nextIndex = _exerciseIndex.value + 1
+            if (shouldStartRestFor(currentExerciseList.getOrNull(nextIndex))) {
+                startRestBefore(nextIndex)
+            } else {
+                _exerciseIndex.value = nextIndex
+                _restTargetIndex.value = null
+                stopTimer()
+            }
         } else {
             val nextStep = when (_currentStep.value) {
                 WorkoutStep.WARMUP -> WorkoutStep.MAIN
-                WorkoutStep.MAIN -> WorkoutStep.POSTURE
-                WorkoutStep.POSTURE -> WorkoutStep.COMPLETE
+                WorkoutStep.MAIN -> WorkoutStep.COMPLETE
                 else -> WorkoutStep.COMPLETE
             }
             setWorkoutStep(nextStep)
@@ -142,6 +245,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun previousExercise() {
         _isRestTime.value = false
+        _restTargetIndex.value = null
         if (_exerciseIndex.value > 0) {
             _exerciseIndex.value--
             stopTimer()
@@ -224,6 +328,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun completePostureWorkout(day: Int) {
+        viewModelScope.launch {
+            val progress = PostureSessionProgress(
+                day = day,
+                isCompleted = true,
+                completionDate = System.currentTimeMillis(),
+                focusArea = flexibilityFocusAreas.value.joinToString(",") { it.name }
+            )
+            repository.updatePostureProgress(progress)
+        }
+    }
+
+    fun completeCurrentSession(day: Int) {
+        if (_currentSessionMode.value == SessionMode.POSTURE_MOBILITY) {
+            completePostureWorkout(day)
+        } else {
+            completeWorkout(day)
+        }
+    }
+
     fun getCurrentDay(): Int {
         val progress = allProgress.value
         val completedDays = progress.filter { it.isCompleted }.map { it.day }.toSet()
@@ -276,6 +400,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setAdditionalPostureTrainingEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setAdditionalPostureTrainingEnabled(enabled)
+        }
+    }
+
+    fun setFlexibilityTrainingType(trainingType: FlexibilityTrainingType) {
+        viewModelScope.launch {
+            settingsManager.setFlexibilityTrainingType(trainingType)
+        }
+    }
+
+    fun toggleFlexibilityFocusArea(focusArea: ExerciseSubCategory) {
+        if (focusArea !in flexibilityFocusAreaOptions) return
+
+        val current = flexibilityFocusAreas.value
+        val nextSelection = when {
+            focusArea == ExerciseSubCategory.FULL_BODY -> setOf(ExerciseSubCategory.FULL_BODY)
+            ExerciseSubCategory.FULL_BODY in current -> setOf(focusArea)
+            focusArea in current -> (current - focusArea).ifEmpty { setOf(ExerciseSubCategory.FULL_BODY) }
+            else -> (current - ExerciseSubCategory.FULL_BODY) + focusArea
+        }.filter { it == ExerciseSubCategory.FULL_BODY || it in flexibilitySpecificFocusAreas }
+            .toSet()
+
+        viewModelScope.launch {
+            settingsManager.setFlexibilityFocusAreas(nextSelection)
+        }
+    }
+
+    fun getDifficultyLevelLabel(adjustment: Int): Int {
+        return when (adjustment.coerceIn(-2, 2)) {
+            -2 -> com.monkfitness.app.R.string.difficulty_very_easy
+            -1 -> com.monkfitness.app.R.string.difficulty_easy
+            1 -> com.monkfitness.app.R.string.difficulty_hard
+            2 -> com.monkfitness.app.R.string.difficulty_very_hard
+            else -> com.monkfitness.app.R.string.difficulty_normal
+        }
+    }
+
     private val toneG = ToneGenerator(AudioManager.STREAM_ALARM, 100)
 
     private fun playBeep(duration: Int = 200) {
@@ -284,6 +447,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun playStartSound() {
         toneG.startTone(ToneGenerator.TONE_DTMF_0, 400)
+    }
+
+    private fun shouldStartRestFor(exercise: Exercise?): Boolean {
+        return exercise?.isTimerBased == true
+    }
+
+    private fun startRestBefore(targetIndex: Int) {
+        _restTargetIndex.value = targetIndex
+        _isRestTime.value = true
+        startTimer(5)
+    }
+
+    private fun getExercisesForStep(step: WorkoutStep): List<Exercise> {
+        val day = _currentWorkoutDay.value ?: return emptyList()
+        return when (step) {
+            WorkoutStep.WARMUP -> getWarmupExercises()
+            WorkoutStep.MAIN -> when (_currentSessionMode.value) {
+                SessionMode.POSTURE_MOBILITY -> getPostureMobilityWorkout(day).exercises
+                SessionMode.DAILY -> getWorkoutForDay(day).exercises
+            }
+            else -> emptyList()
+        }
     }
 
     override fun onCleared() {
@@ -306,5 +491,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             @Suppress("DEPRECATION")
             vibrator.vibrate(500)
         }
+    }
+
+    private fun applyDifficultyAdjustment(
+        exercise: Exercise,
+        difficultyAdjustments: Map<String, Int>
+    ): Exercise {
+        return exercise.applyDifficultyAdjustment(difficultyAdjustments[exercise.id] ?: 0)
+    }
+
+    private fun enrichExercise(exercise: Exercise): Exercise {
+        return exercise.withLocalizedSearchText(getApplication())
     }
 }

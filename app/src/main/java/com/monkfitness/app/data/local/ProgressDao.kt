@@ -1,6 +1,7 @@
 package com.monkfitness.app.data.local
 
 import androidx.room.*
+import com.monkfitness.app.data.model.PostureSessionProgress
 import com.monkfitness.app.data.model.UserProgress
 import kotlinx.coroutines.flow.Flow
 
@@ -20,4 +21,16 @@ interface ProgressDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun updateProgress(progress: UserProgress)
+
+    @Query("SELECT * FROM posture_session_progress ORDER BY day ASC")
+    fun getAllPostureProgress(): Flow<List<PostureSessionProgress>>
+
+    @Query("SELECT COUNT(*) FROM posture_session_progress WHERE isCompleted = 1")
+    fun getCompletedPostureDaysCount(): Flow<Int>
+
+    @Query("SELECT * FROM posture_session_progress WHERE day = :day LIMIT 1")
+    suspend fun getPostureProgressByDay(day: Int): PostureSessionProgress?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun updatePostureProgress(progress: PostureSessionProgress)
 }
