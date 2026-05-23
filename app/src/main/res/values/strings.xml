@@ -52,9 +52,15 @@
     <string name="additional_posture_training">Additional posture training</string>
     <string name="posture_focus_area">Posture focus area</string>
     <string name="stretch_focus_area">Stretch focus area</string>
+    <string name="flexibility_training_type_title">Training type</string>
+    <string name="flexibility_focus_areas_title">Focus areas</string>
+    <string name="flexibility_type_stretching">Stretching only</string>
+    <string name="flexibility_type_posture">Posture only</string>
+    <string name="flexibility_type_both">Both</string>
     <string name="start_posture_mobility">Start Posture &amp; Mobility</string>
     <string name="optional_session_duration">15–20 min optional session</string>
     <string name="posture_session_summary">Focus: %1$s</string>
+    <string name="flexibility_session_summary">%1$s • %2$s</string>
     <string name="no_posture_progress_yet">Enable and complete extra posture sessions to see separate progress here.</string>
     <string name="completed_posture_sessions">Completed posture sessions: %d</string>
     <string name="lang_en">English</string>
@@ -69,6 +75,7 @@
     <string name="posture_training">Posture Training</string>
     <string name="posture_desc">Correct your posture with these daily exercises.</string>
     <string name="exercise_library_desc">Browse a fixed curated list of exercises by training type and body area.</string>
+    <string name="search_exercises_placeholder">Search exercises</string>
     <string name="filter_button">Filter</string>
     <string name="filter_category">Category</string>
     <string name="filter_body_part">Body Part</string>
@@ -86,7 +93,7 @@
     <string name="subcategory_hips">Hips</string>
     <string name="subcategory_legs">Legs</string>
     <string name="subcategory_core">Core</string>
-    <string name="subcategory_full_body">FullBody</string>
+    <string name="subcategory_full_body">All Body</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">Welcome to Monk Fitness</string>

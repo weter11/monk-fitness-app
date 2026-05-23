@@ -9,8 +9,9 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.monkfitness.app.data.model.ExerciseSubCategory
-import com.monkfitness.app.data.model.postureFocusAreas
-import com.monkfitness.app.data.model.stretchFocusAreas
+import com.monkfitness.app.data.model.FlexibilityTrainingType
+import com.monkfitness.app.data.model.flexibilityFocusAreas
+import com.monkfitness.app.data.model.flexibilitySpecificFocusAreas
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -27,8 +28,8 @@ class SettingsManager(private val context: Context) {
         val TIMER_TICKS_ENABLED = booleanPreferencesKey("timer_ticks_enabled")
         val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
         val ADDITIONAL_POSTURE_TRAINING_ENABLED = booleanPreferencesKey("additional_posture_training_enabled")
-        val POSTURE_FOCUS_AREA = stringPreferencesKey("posture_focus_area")
-        val STRETCH_FOCUS_AREA = stringPreferencesKey("stretch_focus_area")
+        val FLEXIBILITY_TRAINING_TYPE = stringPreferencesKey("flexibility_training_type")
+        val FLEXIBILITY_FOCUS_AREAS = stringPreferencesKey("flexibility_focus_areas")
     }
 
     val languageFlow: Flow<String> = context.dataStore.data.map { preferences ->
@@ -94,23 +95,24 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    val postureFocusAreaFlow: Flow<ExerciseSubCategory> = context.dataStore.data.map { preferences ->
-        preferences[POSTURE_FOCUS_AREA].toExerciseSubCategory(postureFocusAreas, ExerciseSubCategory.SPINE)
+    val flexibilityTrainingTypeFlow: Flow<FlexibilityTrainingType> = context.dataStore.data.map { preferences ->
+        preferences[FLEXIBILITY_TRAINING_TYPE].toFlexibilityTrainingType()
     }
 
-    suspend fun setPostureFocusArea(focusArea: ExerciseSubCategory) {
+    suspend fun setFlexibilityTrainingType(trainingType: FlexibilityTrainingType) {
         context.dataStore.edit { preferences ->
-            preferences[POSTURE_FOCUS_AREA] = focusArea.name
+            preferences[FLEXIBILITY_TRAINING_TYPE] = trainingType.name
         }
     }
 
-    val stretchFocusAreaFlow: Flow<ExerciseSubCategory> = context.dataStore.data.map { preferences ->
-        preferences[STRETCH_FOCUS_AREA].toExerciseSubCategory(stretchFocusAreas, ExerciseSubCategory.SPINE)
+    val flexibilityFocusAreasFlow: Flow<Set<ExerciseSubCategory>> = context.dataStore.data.map { preferences ->
+        preferences[FLEXIBILITY_FOCUS_AREAS].toExerciseSubCategorySet()
     }
 
-    suspend fun setStretchFocusArea(focusArea: ExerciseSubCategory) {
+    suspend fun setFlexibilityFocusAreas(focusAreas: Set<ExerciseSubCategory>) {
+        val normalizedFocusAreas = normalizeFocusAreas(focusAreas)
         context.dataStore.edit { preferences ->
-            preferences[STRETCH_FOCUS_AREA] = focusArea.name
+            preferences[FLEXIBILITY_FOCUS_AREAS] = normalizedFocusAreas.joinToString(",") { it.name }
         }
     }
 
@@ -140,10 +142,29 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    private fun String?.toExerciseSubCategory(
-        allowed: List<ExerciseSubCategory>,
-        defaultValue: ExerciseSubCategory
-    ): ExerciseSubCategory {
-        return ExerciseSubCategory.entries.firstOrNull { it.name == this && it in allowed } ?: defaultValue
+    private fun String?.toFlexibilityTrainingType(): FlexibilityTrainingType {
+        return FlexibilityTrainingType.entries.firstOrNull { it.name == this } ?: FlexibilityTrainingType.BOTH
+    }
+
+    private fun String?.toExerciseSubCategorySet(): Set<ExerciseSubCategory> {
+        val parsed = this
+            ?.split(",")
+            ?.mapNotNull { raw -> ExerciseSubCategory.entries.firstOrNull { it.name == raw } }
+            ?.toSet()
+            .orEmpty()
+
+        return normalizeFocusAreas(parsed)
+    }
+
+    private fun normalizeFocusAreas(focusAreas: Set<ExerciseSubCategory>): Set<ExerciseSubCategory> {
+        val allowed = flexibilityFocusAreas.toSet()
+        val filtered = focusAreas.filter { it in allowed }.toSet()
+
+        return when {
+            filtered.isEmpty() -> setOf(ExerciseSubCategory.FULL_BODY)
+            ExerciseSubCategory.FULL_BODY in filtered -> setOf(ExerciseSubCategory.FULL_BODY)
+            filtered.none { it in flexibilitySpecificFocusAreas } -> setOf(ExerciseSubCategory.FULL_BODY)
+            else -> filtered
+        }
     }
 }

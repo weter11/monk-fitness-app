@@ -9,7 +9,9 @@ import com.monkfitness.app.data.model.UserProgress
 import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.repository.WorkoutRepository
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
+import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.util.NotificationScheduler
+import com.monkfitness.app.util.withLocalizedSearchText
 import android.content.Context
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -21,8 +23,8 @@ import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.PostureSessionProgress
 import com.monkfitness.app.data.model.applyDifficultyAdjustment
-import com.monkfitness.app.data.model.postureFocusAreas
-import com.monkfitness.app.data.model.stretchFocusAreas
+import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
+import com.monkfitness.app.data.model.flexibilitySpecificFocusAreas
 import com.monkfitness.app.ui.screens.WorkoutStep
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -97,12 +99,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), false
     )
 
-    val postureFocusArea = settingsManager.postureFocusAreaFlow.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), ExerciseSubCategory.SPINE
+    val flexibilityTrainingType = settingsManager.flexibilityTrainingTypeFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), FlexibilityTrainingType.BOTH
     )
 
-    val stretchFocusArea = settingsManager.stretchFocusAreaFlow.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), ExerciseSubCategory.SPINE
+    val flexibilityFocusAreas = settingsManager.flexibilityFocusAreasFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(ExerciseSubCategory.FULL_BODY)
     )
 
     val completedDaysCount = repository.getCompletedDaysCount().stateIn(
@@ -137,32 +139,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getWorkoutForDay(
         day: Int,
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
-        stretchFocus: ExerciseSubCategory = stretchFocusArea.value
+        trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
+        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value
     ): Workout {
-        val workout = workoutGenerator.generateWorkout(day, stretchFocus)
-        return workout.copy(exercises = workout.exercises.map { applyDifficultyAdjustment(it, difficultyAdjustments) })
+        val workout = workoutGenerator.generateWorkout(day, trainingType, focusAreas)
+        return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments)) })
     }
 
     fun getPostureMobilityWorkout(
         day: Int,
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
-        focusArea: ExerciseSubCategory = postureFocusArea.value
+        trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
+        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value
     ): Workout {
-        val workout = workoutGenerator.generatePostureMobilityWorkout(day, focusArea)
-        return workout.copy(exercises = workout.exercises.map { applyDifficultyAdjustment(it, difficultyAdjustments) })
+        val workout = workoutGenerator.generatePostureMobilityWorkout(day, trainingType, focusAreas)
+        return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments)) })
     }
 
     fun getExerciseLibrary(
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value
-    ) = workoutGenerator.getExerciseLibrary().map { applyDifficultyAdjustment(it, difficultyAdjustments) }
+    ) = workoutGenerator.getExerciseLibrary().map {
+        enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+    }
 
     fun getPostureExercises(
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value
-    ) = workoutGenerator.getPostureExercises().map { applyDifficultyAdjustment(it, difficultyAdjustments) }
+    ) = workoutGenerator.getPostureExercises().map {
+        enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+    }
 
     fun getWarmupExercises(
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value
-    ) = workoutGenerator.getWarmupExercises().map { applyDifficultyAdjustment(it, difficultyAdjustments) }
+    ) = workoutGenerator.getWarmupExercises().map {
+        enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+    }
 
     fun getExerciseDifficultyAdjustment(exerciseId: String): Flow<Int> {
         return settingsManager.getExerciseDifficultyAdjustmentFlow(exerciseId)
@@ -324,7 +334,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 day = day,
                 isCompleted = true,
                 completionDate = System.currentTimeMillis(),
-                focusArea = postureFocusArea.value.name
+                focusArea = flexibilityFocusAreas.value.joinToString(",") { it.name }
             )
             repository.updatePostureProgress(progress)
         }
@@ -396,17 +406,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setPostureFocusArea(focusArea: ExerciseSubCategory) {
-        if (focusArea !in postureFocusAreas) return
+    fun setFlexibilityTrainingType(trainingType: FlexibilityTrainingType) {
         viewModelScope.launch {
-            settingsManager.setPostureFocusArea(focusArea)
+            settingsManager.setFlexibilityTrainingType(trainingType)
         }
     }
 
-    fun setStretchFocusArea(focusArea: ExerciseSubCategory) {
-        if (focusArea !in stretchFocusAreas) return
+    fun toggleFlexibilityFocusArea(focusArea: ExerciseSubCategory) {
+        if (focusArea !in flexibilityFocusAreaOptions) return
+
+        val current = flexibilityFocusAreas.value
+        val nextSelection = when {
+            focusArea == ExerciseSubCategory.FULL_BODY -> setOf(ExerciseSubCategory.FULL_BODY)
+            ExerciseSubCategory.FULL_BODY in current -> setOf(focusArea)
+            focusArea in current -> (current - focusArea).ifEmpty { setOf(ExerciseSubCategory.FULL_BODY) }
+            else -> (current - ExerciseSubCategory.FULL_BODY) + focusArea
+        }.filter { it == ExerciseSubCategory.FULL_BODY || it in flexibilitySpecificFocusAreas }
+            .toSet()
+
         viewModelScope.launch {
-            settingsManager.setStretchFocusArea(focusArea)
+            settingsManager.setFlexibilityFocusAreas(nextSelection)
         }
     }
 
@@ -479,5 +498,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         difficultyAdjustments: Map<String, Int>
     ): Exercise {
         return exercise.applyDifficultyAdjustment(difficultyAdjustments[exercise.id] ?: 0)
+    }
+
+    private fun enrichExercise(exercise: Exercise): Exercise {
+        return exercise.withLocalizedSearchText(getApplication())
     }
 }

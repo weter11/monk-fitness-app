@@ -20,6 +20,12 @@ enum class ExerciseSubCategory(@StringRes val labelRes: Int) {
     FULL_BODY(R.string.subcategory_full_body)
 }
 
+enum class FlexibilityTrainingType(@StringRes val labelRes: Int) {
+    STRETCHING(R.string.flexibility_type_stretching),
+    POSTURE(R.string.flexibility_type_posture),
+    BOTH(R.string.flexibility_type_both)
+}
+
 val postureFocusAreas = listOf(
     ExerciseSubCategory.SHOULDERS,
     ExerciseSubCategory.SPINE,
@@ -32,6 +38,16 @@ val stretchFocusAreas = listOf(
     ExerciseSubCategory.HIPS,
     ExerciseSubCategory.LEGS
 )
+
+val flexibilityFocusAreas = listOf(
+    ExerciseSubCategory.FULL_BODY,
+    ExerciseSubCategory.SHOULDERS,
+    ExerciseSubCategory.SPINE,
+    ExerciseSubCategory.HIPS,
+    ExerciseSubCategory.LEGS
+)
+
+val flexibilitySpecificFocusAreas = flexibilityFocusAreas.filterNot { it == ExerciseSubCategory.FULL_BODY }
 
 data class Exercise(
     val id: String,
@@ -54,7 +70,11 @@ data class Exercise(
     val phase4DurationSeconds: Int = durationSeconds,
     val isTimerBased: Boolean = false,
     val category: ExerciseCategory = ExerciseCategory.MOBILITY,
-    val subCategory: ExerciseSubCategory = ExerciseSubCategory.FULL_BODY
+    val subCategory: ExerciseSubCategory = ExerciseSubCategory.FULL_BODY,
+    val nameRu: String = "",
+    val nameEn: String = "",
+    val descriptionRu: String = "",
+    val descriptionEn: String = ""
 )
 
 fun Exercise.applyDifficultyAdjustment(adjustment: Int): Exercise {

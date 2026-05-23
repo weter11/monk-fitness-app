@@ -52,9 +52,15 @@
     <string name="additional_posture_training">Дополнительная тренировка осанки</string>
     <string name="posture_focus_area">Зона фокуса для осанки</string>
     <string name="stretch_focus_area">Зона фокуса для растяжки</string>
+    <string name="flexibility_training_type_title">Тип тренировки</string>
+    <string name="flexibility_focus_areas_title">Зоны фокуса</string>
+    <string name="flexibility_type_stretching">Только растяжка</string>
+    <string name="flexibility_type_posture">Только осанка</string>
+    <string name="flexibility_type_both">Оба режима</string>
     <string name="start_posture_mobility">Начать осанку и мобильность</string>
     <string name="optional_session_duration">Необязательная сессия 15–20 минут</string>
     <string name="posture_session_summary">Фокус: %1$s</string>
+    <string name="flexibility_session_summary">%1$s • %2$s</string>
     <string name="no_posture_progress_yet">Включите и завершите дополнительные сессии осанки, чтобы увидеть отдельный прогресс.</string>
     <string name="completed_posture_sessions">Завершено сессий осанки: %d</string>
     <string name="lang_en">English</string>
@@ -69,6 +75,7 @@
     <string name="posture_training">Тренировка осанки</string>
     <string name="posture_desc">Исправьте осанку с помощью этих ежедневных упражнений.</string>
     <string name="exercise_library_desc">Просматривайте фиксированный набор упражнений по типу тренировки и зоне тела.</string>
+    <string name="search_exercises_placeholder">Поиск упражнений</string>
     <string name="filter_button">Фильтр</string>
     <string name="filter_category">Категория</string>
     <string name="filter_body_part">Часть тела</string>

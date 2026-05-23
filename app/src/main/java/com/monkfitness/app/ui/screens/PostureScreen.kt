@@ -8,15 +8,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -27,7 +23,9 @@ import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.ui.components.ExerciseItem
+import com.monkfitness.app.util.matchesQuery
 import com.monkfitness.app.viewmodel.MainViewModel
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -40,14 +38,31 @@ fun PostureScreen(
     var selectedCategory by remember { mutableStateOf<ExerciseCategory?>(null) }
     var selectedSubCategory by remember { mutableStateOf<ExerciseSubCategory?>(null) }
     var isFilterSheetVisible by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var debouncedQuery by rememberSaveable { mutableStateOf("") }
     val filterSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     LaunchedEffect(exercises.size) {
         Log.d("PostureScreen", "Exercise library loaded ${exercises.size} exercises")
     }
 
-    val availableSubCategories = remember(exercises, selectedCategory) {
-        exercises
+    LaunchedEffect(searchQuery) {
+        delay(300)
+        debouncedQuery = searchQuery
+    }
+
+    val searchFilteredExercises by remember(exercises, debouncedQuery) {
+        derivedStateOf {
+            if (debouncedQuery.isBlank()) {
+                exercises
+            } else {
+                exercises.filter { matchesQuery(it, debouncedQuery) }
+            }
+        }
+    }
+
+    val availableSubCategories = remember(searchFilteredExercises, selectedCategory) {
+        searchFilteredExercises
             .asSequence()
             .filter { selectedCategory == null || it.category == selectedCategory }
             .map { it.subCategory }
@@ -55,10 +70,23 @@ fun PostureScreen(
             .toList()
     }
 
-    val filteredExercises = remember(exercises, selectedCategory, selectedSubCategory) {
-        exercises.filter { exercise ->
-            (selectedCategory == null || exercise.category == selectedCategory) &&
-                (selectedSubCategory == null || exercise.subCategory == selectedSubCategory)
+    LaunchedEffect(searchFilteredExercises, selectedCategory, selectedSubCategory) {
+        if (selectedSubCategory != null &&
+            searchFilteredExercises.none { exercise ->
+                (selectedCategory == null || exercise.category == selectedCategory) &&
+                    exercise.subCategory == selectedSubCategory
+            }
+        ) {
+            selectedSubCategory = null
+        }
+    }
+
+    val filteredExercises by remember(searchFilteredExercises, selectedCategory, selectedSubCategory) {
+        derivedStateOf {
+            searchFilteredExercises.filter { exercise ->
+                (selectedCategory == null || exercise.category == selectedCategory) &&
+                    (selectedSubCategory == null || exercise.subCategory == selectedSubCategory)
+            }
         }
     }
 
@@ -75,6 +103,26 @@ fun PostureScreen(
             text = stringResource(R.string.exercise_library_desc),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.secondary
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text(stringResource(R.string.search_exercises_placeholder)) },
+            leadingIcon = {
+                Icon(Icons.Default.Search, contentDescription = null)
+            },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Close, contentDescription = null)
+                    }
+                }
+            },
+            singleLine = true
         )
 
         Spacer(modifier = Modifier.height(16.dp))

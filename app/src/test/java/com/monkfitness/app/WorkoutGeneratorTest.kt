@@ -4,6 +4,7 @@ import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.model.applyDifficultyAdjustment
 import com.monkfitness.app.data.model.WorkoutType
 import org.junit.Assert.assertEquals
@@ -29,7 +30,7 @@ class WorkoutGeneratorTest {
     fun testGeneratedExercisesRespectRequestedWorkoutStructure() {
         val strengthA = generator.generateWorkout(1).exercises
         val strengthB = generator.generateWorkout(3).exercises
-        val mobility = generator.generateWorkout(2, ExerciseSubCategory.HIPS).exercises
+        val mobility = generator.generateWorkout(2, focusAreas = setOf(ExerciseSubCategory.HIPS)).exercises
         val functional = generator.generateWorkout(5).exercises
 
         assertEquals(4, strengthA.size)
@@ -54,20 +55,56 @@ class WorkoutGeneratorTest {
 
     @Test
     fun testOptionalPostureMobilityWorkoutPrioritizesSelectedFocusArea() {
-        val workout = generator.generatePostureMobilityWorkout(1, ExerciseSubCategory.SHOULDERS)
+        val workout = generator.generatePostureMobilityWorkout(1, focusAreas = setOf(ExerciseSubCategory.SHOULDERS))
 
         assertEquals(WorkoutType.POSTURE_MOBILITY, workout.type)
         assertEquals(4, workout.exercises.size)
-        assertEquals(listOf(ExerciseSubCategory.SHOULDERS, ExerciseSubCategory.SHOULDERS), workout.exercises.take(2).map { it.subCategory })
+        assertEquals(
+            listOf(
+                ExerciseSubCategory.SHOULDERS,
+                ExerciseSubCategory.SHOULDERS,
+                ExerciseSubCategory.SHOULDERS
+            ),
+            workout.exercises.take(3).map { it.subCategory }
+        )
     }
 
     @Test
     fun testMobilityDaysPrioritizeSelectedStretchFocusArea() {
-        val shouldersMobility = generator.generateWorkout(2, ExerciseSubCategory.SHOULDERS).exercises
-        val legsMobility = generator.generateWorkout(2, ExerciseSubCategory.LEGS).exercises
+        val shouldersMobility = generator.generateWorkout(2, focusAreas = setOf(ExerciseSubCategory.SHOULDERS)).exercises
+        val legsMobility = generator.generateWorkout(2, focusAreas = setOf(ExerciseSubCategory.LEGS)).exercises
 
         assertEquals(listOf(ExerciseSubCategory.SHOULDERS, ExerciseSubCategory.SHOULDERS), shouldersMobility.take(2).map { it.subCategory })
         assertEquals(listOf(ExerciseSubCategory.LEGS, ExerciseSubCategory.LEGS), legsMobility.take(2).map { it.subCategory })
+    }
+
+    @Test
+    fun testFullBodyFlexibilitySelectionDistributesAcrossAreas() {
+        val workout = generator.generatePostureMobilityWorkout(
+            day = 1,
+            focusAreas = setOf(ExerciseSubCategory.FULL_BODY)
+        )
+
+        assertEquals(4, workout.exercises.size)
+        assertEquals(4, workout.exercises.map { it.subCategory }.distinct().size)
+    }
+
+    @Test
+    fun testFlexibilityTrainingTypeFiltersCategories() {
+        val postureOnly = generator.generatePostureMobilityWorkout(
+            day = 1,
+            flexibilityTrainingType = FlexibilityTrainingType.POSTURE,
+            focusAreas = setOf(ExerciseSubCategory.FULL_BODY)
+        ).exercises
+
+        val stretchingOnly = generator.generateWorkout(
+            day = 2,
+            flexibilityTrainingType = FlexibilityTrainingType.STRETCHING,
+            focusAreas = setOf(ExerciseSubCategory.FULL_BODY)
+        ).exercises
+
+        assertTrue(postureOnly.all { it.category == ExerciseCategory.POSTURE })
+        assertTrue(stretchingOnly.all { it.category == ExerciseCategory.STRETCHING || it.category == ExerciseCategory.MOBILITY })
     }
 
     @Test
@@ -168,7 +205,7 @@ class WorkoutGeneratorTest {
             ExerciseSubCategory.entries
                 .filter { it in listOf(ExerciseSubCategory.SHOULDERS, ExerciseSubCategory.SPINE, ExerciseSubCategory.HIPS) }
                 .forEach { focusArea ->
-                    addAll(generator.generatePostureMobilityWorkout(1, focusArea).exercises.map { it.id })
+                    addAll(generator.generatePostureMobilityWorkout(1, focusAreas = setOf(focusArea)).exercises.map { it.id })
                 }
             (1..56).forEach { day ->
                 addAll(generator.generateWorkout(day).exercises.map { it.id })

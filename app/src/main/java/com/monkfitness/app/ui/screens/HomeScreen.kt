@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.monkfitness.app.R
+import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.viewmodel.MainViewModel
 
@@ -29,10 +30,10 @@ fun HomeScreen(
     val completedPostureCount by viewModel.completedPostureDaysCount.collectAsState()
     val streak by viewModel.streak.collectAsState()
     val additionalPostureTrainingEnabled by viewModel.additionalPostureTrainingEnabled.collectAsState()
-    val stretchFocusArea by viewModel.stretchFocusArea.collectAsState()
-    val postureFocusArea by viewModel.postureFocusArea.collectAsState()
+    val flexibilityTrainingType by viewModel.flexibilityTrainingType.collectAsState()
+    val flexibilityFocusAreas by viewModel.flexibilityFocusAreas.collectAsState()
     val currentDay = viewModel.getCurrentDay()
-    val workout = viewModel.getWorkoutForDay(currentDay, stretchFocus = stretchFocusArea)
+    val workout = viewModel.getWorkoutForDay(currentDay)
 
     val targetProgress = completedCount.toFloat() / 56f
     val postureProgress = completedPostureCount.toFloat() / 56f
@@ -44,6 +45,11 @@ fun HomeScreen(
         targetValue = postureProgress,
         label = "PostureProgressAnimation"
     )
+    val focusAreaSummary = if (ExerciseSubCategory.FULL_BODY in flexibilityFocusAreas) {
+        stringResource(ExerciseSubCategory.FULL_BODY.labelRes)
+    } else {
+        flexibilityFocusAreas.joinToString(", ") { stringResource(it.labelRes) }
+    }
 
     Column(
         modifier = Modifier
@@ -139,8 +145,9 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = stringResource(
-                            R.string.posture_session_summary,
-                            stringResource(postureFocusArea.labelRes)
+                            R.string.flexibility_session_summary,
+                            stringResource(flexibilityTrainingType.labelRes),
+                            focusAreaSummary
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.secondary

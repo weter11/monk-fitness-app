@@ -4,9 +4,10 @@ import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
+import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.model.WorkoutType
-import com.monkfitness.app.data.model.postureFocusAreas
+import com.monkfitness.app.data.model.flexibilitySpecificFocusAreas
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
@@ -74,7 +75,8 @@ class WorkoutGenerator {
 
     fun generateWorkout(
         day: Int,
-        stretchFocusArea: ExerciseSubCategory = ExerciseSubCategory.SPINE
+        flexibilityTrainingType: FlexibilityTrainingType = FlexibilityTrainingType.BOTH,
+        focusAreas: Set<ExerciseSubCategory> = setOf(ExerciseSubCategory.FULL_BODY)
     ): Workout {
         val safeDay = if (day in 1..56) day else 1
         val week = ((safeDay - 1) / 7) + 1
@@ -84,26 +86,28 @@ class WorkoutGenerator {
         return Workout(
             id = safeDay,
             type = type,
-            exercises = getExercisesForType(type, phase, safeDay, stretchFocusArea)
+            exercises = getExercisesForType(type, phase, safeDay, flexibilityTrainingType, focusAreas)
         )
     }
 
     fun generatePostureMobilityWorkout(
         day: Int,
-        focusArea: ExerciseSubCategory = ExerciseSubCategory.SPINE
+        flexibilityTrainingType: FlexibilityTrainingType = FlexibilityTrainingType.BOTH,
+        focusAreas: Set<ExerciseSubCategory> = setOf(ExerciseSubCategory.FULL_BODY)
     ): Workout {
         val safeDay = if (day in 1..56) day else 1
         val week = ((safeDay - 1) / 7) + 1
         val phase = (((week - 1) / 2) + 1).coerceIn(1, 4)
-        val normalizedFocus = focusArea.takeIf { it in postureFocusAreas } ?: ExerciseSubCategory.SPINE
 
         return Workout(
             id = safeDay,
             type = WorkoutType.POSTURE_MOBILITY,
-            exercises = selectExercises(
-                selectionRules = postureMobilityRules(normalizedFocus, safeDay),
+            exercises = selectFlexibilityExercises(
+                count = 4,
                 phase = phase,
-                random = Random(safeDay * 1_000 + WorkoutType.POSTURE_MOBILITY.ordinal)
+                daySeed = safeDay,
+                trainingType = flexibilityTrainingType,
+                focusAreas = focusAreas
             )
         )
     }
@@ -112,7 +116,8 @@ class WorkoutGenerator {
         type: WorkoutType,
         phase: Int,
         daySeed: Int,
-        stretchFocusArea: ExerciseSubCategory
+        flexibilityTrainingType: FlexibilityTrainingType,
+        focusAreas: Set<ExerciseSubCategory>
     ): List<Exercise> {
         return try {
             val selectionRules = when (type) {
@@ -127,7 +132,13 @@ class WorkoutGenerator {
                     postureRule(preferredSubCategories = setOf(ExerciseSubCategory.SPINE, ExerciseSubCategory.SHOULDERS)),
                     subCategoryRule(ExerciseSubCategory.CORE, preferredCategories = setOf(ExerciseCategory.STRENGTH, ExerciseCategory.MOBILITY))
                 )
-                WorkoutType.MOBILITY -> mobilityRules(stretchFocusArea, daySeed)
+                WorkoutType.MOBILITY -> return selectFlexibilityExercises(
+                    count = 3,
+                    phase = phase,
+                    daySeed = daySeed,
+                    trainingType = flexibilityTrainingType,
+                    focusAreas = focusAreas
+                )
                 WorkoutType.FUNCTIONAL -> listOf(
                     subCategoryRule(
                         ExerciseSubCategory.FULL_BODY,
@@ -135,7 +146,13 @@ class WorkoutGenerator {
                         preferredCategories = setOf(ExerciseCategory.STRENGTH, ExerciseCategory.MOBILITY)
                     )
                 )
-                WorkoutType.POSTURE_MOBILITY -> postureMobilityRules(stretchFocusArea, daySeed)
+                WorkoutType.POSTURE_MOBILITY -> return selectFlexibilityExercises(
+                    count = 4,
+                    phase = phase,
+                    daySeed = daySeed,
+                    trainingType = flexibilityTrainingType,
+                    focusAreas = focusAreas
+                )
                 WorkoutType.REST -> return emptyList()
             }
 
@@ -145,56 +162,118 @@ class WorkoutGenerator {
         }
     }
 
-    private fun mobilityRules(
-        focusArea: ExerciseSubCategory,
-        daySeed: Int
-    ): List<WorkoutSelectionRule> {
-        val normalizedFocus = focusArea.takeIf { it in listOf(ExerciseSubCategory.SHOULDERS, ExerciseSubCategory.SPINE, ExerciseSubCategory.HIPS, ExerciseSubCategory.LEGS) }
-            ?: ExerciseSubCategory.SPINE
-        val maintenanceAreas = listOf(
-            ExerciseSubCategory.SHOULDERS,
-            ExerciseSubCategory.SPINE,
-            ExerciseSubCategory.HIPS,
-            ExerciseSubCategory.LEGS
-        ).filterNot { it == normalizedFocus }
-        val maintenanceArea = maintenanceAreas[daySeed % maintenanceAreas.size]
+    private fun selectFlexibilityExercises(
+        count: Int,
+        phase: Int,
+        daySeed: Int,
+        trainingType: FlexibilityTrainingType,
+        focusAreas: Set<ExerciseSubCategory>
+    ): List<Exercise> {
+        val normalizedFocusAreas = normalizeFlexibilityFocusAreas(focusAreas)
+        val prioritizedAreas = buildFlexibilityAreaSequence(count, normalizedFocusAreas, daySeed)
+        val selectedIds = mutableSetOf<String>()
 
-        return listOf(
-            subCategoryRule(
-                normalizedFocus,
-                count = 2,
-                preferredCategories = setOf(ExerciseCategory.MOBILITY, ExerciseCategory.STRETCHING, ExerciseCategory.POSTURE)
-            ),
-            subCategoryRule(
-                maintenanceArea,
-                preferredCategories = setOf(ExerciseCategory.MOBILITY, ExerciseCategory.STRETCHING, ExerciseCategory.POSTURE)
+        return prioritizedAreas.mapIndexed { index, area ->
+            val exercise = pickFlexibilityExercise(
+                desiredArea = area,
+                preferPosture = trainingType == FlexibilityTrainingType.BOTH && (daySeed + index) % 2 == 0,
+                trainingType = trainingType,
+                prioritizedFocusAreas = normalizedFocusAreas,
+                selectedIds = selectedIds,
+                random = Random(daySeed * 1_000 + index)
             )
-        )
+            selectedIds += exercise.id
+            phasedExercise(exercise, phase)
+        }
     }
 
-    private fun postureMobilityRules(
-        focusArea: ExerciseSubCategory,
-        daySeed: Int
-    ): List<WorkoutSelectionRule> {
-        val normalizedFocus = focusArea.takeIf { it in postureFocusAreas } ?: ExerciseSubCategory.SPINE
-        val secondaryAreas = postureFocusAreas.filterNot { it == normalizedFocus }
-        val secondaryArea = secondaryAreas[daySeed % secondaryAreas.size]
-        val maintenanceAreas = listOf(
-            ExerciseSubCategory.SHOULDERS,
-            ExerciseSubCategory.SPINE,
-            ExerciseSubCategory.HIPS,
-            ExerciseSubCategory.LEGS
-        ).filterNot { it == normalizedFocus || it == secondaryArea }
-        val maintenanceArea = maintenanceAreas[daySeed % maintenanceAreas.size]
+    private fun normalizeFlexibilityFocusAreas(focusAreas: Set<ExerciseSubCategory>): List<ExerciseSubCategory> {
+        val selectedAreas = focusAreas
+            .filter { it in flexibilitySpecificFocusAreas }
+            .distinct()
 
-        return listOf(
-            postureRule(count = 2, preferredSubCategories = setOf(normalizedFocus)),
-            postureRule(preferredSubCategories = setOf(secondaryArea)),
-            subCategoryRule(
-                maintenanceArea,
-                preferredCategories = setOf(ExerciseCategory.MOBILITY, ExerciseCategory.STRETCHING, ExerciseCategory.POSTURE)
-            )
-        )
+        return if (ExerciseSubCategory.FULL_BODY in focusAreas || selectedAreas.isEmpty()) {
+            flexibilitySpecificFocusAreas
+        } else {
+            selectedAreas
+        }
+    }
+
+    private fun buildFlexibilityAreaSequence(
+        count: Int,
+        focusAreas: List<ExerciseSubCategory>,
+        daySeed: Int
+    ): List<ExerciseSubCategory> {
+        if (focusAreas.size == flexibilitySpecificFocusAreas.size) {
+            return cycleAreas(flexibilitySpecificFocusAreas, count, daySeed)
+        }
+
+        val prioritizedCount = (count * 0.7).roundToInt().coerceIn(1, count)
+        val maintenanceCount = (count - prioritizedCount).coerceAtLeast(0)
+        val maintenanceAreas = flexibilitySpecificFocusAreas.filterNot { it in focusAreas }.ifEmpty { focusAreas }
+
+        return buildList {
+            addAll(cycleAreas(focusAreas, prioritizedCount, daySeed))
+            addAll(cycleAreas(maintenanceAreas, maintenanceCount, daySeed + focusAreas.size))
+        }
+    }
+
+    private fun cycleAreas(
+        areas: List<ExerciseSubCategory>,
+        count: Int,
+        daySeed: Int
+    ): List<ExerciseSubCategory> {
+        if (count <= 0 || areas.isEmpty()) return emptyList()
+
+        val startIndex = daySeed.mod(areas.size)
+        return List(count) { index -> areas[(startIndex + index) % areas.size] }
+    }
+
+    private fun pickFlexibilityExercise(
+        desiredArea: ExerciseSubCategory,
+        preferPosture: Boolean,
+        trainingType: FlexibilityTrainingType,
+        prioritizedFocusAreas: List<ExerciseSubCategory>,
+        selectedIds: Set<String>,
+        random: Random
+    ): Exercise {
+        val candidates = allExercises.filter { exercise ->
+            exercise.id !in selectedIds && exercise.matchesTrainingType(trainingType)
+        }
+
+        fun select(match: (Exercise) -> Boolean): Exercise? = candidates.filter(match).randomOrNull(random)
+
+        return select { it.subCategory == desiredArea && it.matchesPreferredGroup(trainingType, preferPosture) }
+            ?: select { it.subCategory == desiredArea }
+            ?: select { it.subCategory in prioritizedFocusAreas && it.matchesPreferredGroup(trainingType, preferPosture) }
+            ?: select { it.subCategory in prioritizedFocusAreas }
+            ?: select { it.matchesPreferredGroup(trainingType, preferPosture) }
+            ?: checkNotNull(candidates.randomOrNull(random)) { "No flexibility exercise matches selection rule" }
+    }
+
+    private fun Exercise.matchesTrainingType(trainingType: FlexibilityTrainingType): Boolean {
+        return when (trainingType) {
+            FlexibilityTrainingType.STRETCHING -> category == ExerciseCategory.STRETCHING || category == ExerciseCategory.MOBILITY
+            FlexibilityTrainingType.POSTURE -> category == ExerciseCategory.POSTURE
+            FlexibilityTrainingType.BOTH -> category == ExerciseCategory.STRETCHING ||
+                category == ExerciseCategory.MOBILITY ||
+                category == ExerciseCategory.POSTURE
+        }
+    }
+
+    private fun Exercise.matchesPreferredGroup(
+        trainingType: FlexibilityTrainingType,
+        preferPosture: Boolean
+    ): Boolean {
+        return when (trainingType) {
+            FlexibilityTrainingType.STRETCHING -> category == ExerciseCategory.STRETCHING || category == ExerciseCategory.MOBILITY
+            FlexibilityTrainingType.POSTURE -> category == ExerciseCategory.POSTURE
+            FlexibilityTrainingType.BOTH -> if (preferPosture) {
+                category == ExerciseCategory.POSTURE
+            } else {
+                category == ExerciseCategory.STRETCHING || category == ExerciseCategory.MOBILITY
+            }
+        }
     }
 
     private fun postureRule(

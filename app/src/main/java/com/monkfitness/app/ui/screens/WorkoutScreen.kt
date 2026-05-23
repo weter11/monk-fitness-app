@@ -59,13 +59,13 @@ fun WorkoutScreen(
     }
 
     val difficultyAdjustments by viewModel.exerciseDifficultyAdjustments.collectAsState()
-    val stretchFocusArea by viewModel.stretchFocusArea.collectAsState()
-    val postureFocusArea by viewModel.postureFocusArea.collectAsState()
-    val workout = remember(day, difficultyAdjustments, stretchFocusArea, postureFocusArea, isPostureMobilitySession) {
+    val flexibilityTrainingType by viewModel.flexibilityTrainingType.collectAsState()
+    val flexibilityFocusAreas by viewModel.flexibilityFocusAreas.collectAsState()
+    val workout = remember(day, difficultyAdjustments, flexibilityTrainingType, flexibilityFocusAreas, isPostureMobilitySession) {
         if (isPostureMobilitySession) {
-            viewModel.getPostureMobilityWorkout(day, difficultyAdjustments, postureFocusArea)
+            viewModel.getPostureMobilityWorkout(day, difficultyAdjustments, flexibilityTrainingType, flexibilityFocusAreas)
         } else {
-            viewModel.getWorkoutForDay(day, difficultyAdjustments, stretchFocusArea)
+            viewModel.getWorkoutForDay(day, difficultyAdjustments, flexibilityTrainingType, flexibilityFocusAreas)
         }
     }
     val warmupExercises = remember(difficultyAdjustments) { viewModel.getWarmupExercises(difficultyAdjustments) }

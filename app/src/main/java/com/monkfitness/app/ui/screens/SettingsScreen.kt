@@ -15,8 +15,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.ExerciseSubCategory
-import com.monkfitness.app.data.model.postureFocusAreas
-import com.monkfitness.app.data.model.stretchFocusAreas
+import com.monkfitness.app.data.model.FlexibilityTrainingType
+import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
 import com.monkfitness.app.viewmodel.MainViewModel
 import java.util.Calendar
 
@@ -30,8 +30,8 @@ fun SettingsScreen(
     val timerTicksEnabled by viewModel.timerTicksEnabled.collectAsState()
     val vibrationEnabled by viewModel.vibrationEnabled.collectAsState()
     val additionalPostureTrainingEnabled by viewModel.additionalPostureTrainingEnabled.collectAsState()
-    val postureFocusArea by viewModel.postureFocusArea.collectAsState()
-    val stretchFocusArea by viewModel.stretchFocusArea.collectAsState()
+    val flexibilityTrainingType by viewModel.flexibilityTrainingType.collectAsState()
+    val selectedFlexibilityFocusAreas by viewModel.flexibilityFocusAreas.collectAsState()
 
     Scaffold(
         topBar = {
@@ -134,17 +134,17 @@ fun SettingsScreen(
             }
 
             FocusAreaSelector(
-                title = stringResource(R.string.posture_focus_area),
-                options = postureFocusAreas,
-                selectedOption = postureFocusArea,
-                onSelect = viewModel::setPostureFocusArea
+                title = stringResource(R.string.flexibility_training_type_title),
+                options = FlexibilityTrainingType.entries.toList(),
+                selectedOption = flexibilityTrainingType,
+                onSelect = viewModel::setFlexibilityTrainingType
             )
 
-            FocusAreaSelector(
-                title = stringResource(R.string.stretch_focus_area),
-                options = stretchFocusAreas,
-                selectedOption = stretchFocusArea,
-                onSelect = viewModel::setStretchFocusArea
+            MultiSelectFocusAreaSelector(
+                title = stringResource(R.string.flexibility_focus_areas_title),
+                options = flexibilityFocusAreaOptions,
+                selectedOptions = selectedFlexibilityFocusAreas,
+                onToggle = viewModel::toggleFlexibilityFocusArea
             )
         }
     }
@@ -154,9 +154,9 @@ fun SettingsScreen(
 @Composable
 private fun FocusAreaSelector(
     title: String,
-    options: List<ExerciseSubCategory>,
-    selectedOption: ExerciseSubCategory,
-    onSelect: (ExerciseSubCategory) -> Unit
+    options: List<FlexibilityTrainingType>,
+    selectedOption: FlexibilityTrainingType,
+    onSelect: (FlexibilityTrainingType) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(text = title, style = MaterialTheme.typography.titleMedium)
@@ -168,6 +168,31 @@ private fun FocusAreaSelector(
                 FilterChip(
                     selected = option == selectedOption,
                     onClick = { onSelect(option) },
+                    label = { Text(stringResource(option.labelRes)) }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MultiSelectFocusAreaSelector(
+    title: String,
+    options: List<ExerciseSubCategory>,
+    selectedOptions: Set<ExerciseSubCategory>,
+    onToggle: (ExerciseSubCategory) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = title, style = MaterialTheme.typography.titleMedium)
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { option ->
+                FilterChip(
+                    selected = option in selectedOptions,
+                    onClick = { onToggle(option) },
                     label = { Text(stringResource(option.labelRes)) }
                 )
             }
