@@ -12,6 +12,7 @@ import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.util.NotificationScheduler
 import com.monkfitness.app.util.matchesQuery
+import com.monkfitness.app.util.withLocalizedSearchText
 import android.content.Context
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -52,6 +53,13 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
+
+    private data class HomeMetrics(
+        val currentDay: Int,
+        val completedCount: Int,
+        val completedPostureCount: Int,
+        val streak: Int
+    )
 
     enum class SessionMode {
         DAILY,
@@ -149,22 +157,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _streak = MutableStateFlow(0)
     val streak: StateFlow<Int> = _streak
 
-    val homeUiState = combine(
+    private val homeMetrics = combine(
         currentProgramDay,
         completedDaysCount,
         completedPostureDaysCount,
-        streak,
+        streak
+    ) { currentDay, completedCount, completedPostureCount, streakCount ->
+        HomeMetrics(
+            currentDay = currentDay,
+            completedCount = completedCount,
+            completedPostureCount = completedPostureCount,
+            streak = streakCount
+        )
+    }
+
+    val homeUiState = combine(
+        homeMetrics,
         additionalPostureTrainingEnabled,
         flexibilityTrainingType,
         flexibilityFocusAreas,
         exerciseDifficultyAdjustments
-    ) { currentDay, completedCount, completedPostureCount, streakCount, additionalPostureEnabled, trainingType, focusAreas, difficultyAdjustments ->
+    ) { metrics, additionalPostureEnabled, trainingType, focusAreas, difficultyAdjustments ->
         HomeUiState(
-            currentDay = currentDay,
-            workout = getWorkoutForDay(currentDay, difficultyAdjustments, trainingType, focusAreas),
-            completedCount = completedCount,
-            completedPostureCount = completedPostureCount,
-            streak = streakCount,
+            currentDay = metrics.currentDay,
+            workout = getWorkoutForDay(metrics.currentDay, difficultyAdjustments, trainingType, focusAreas),
+            completedCount = metrics.completedCount,
+            completedPostureCount = metrics.completedPostureCount,
+            streak = metrics.streak,
             additionalPostureTrainingEnabled = additionalPostureEnabled,
             flexibilityTrainingType = trainingType,
             flexibilityFocusAreas = focusAreas
