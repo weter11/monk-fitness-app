@@ -48,6 +48,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isRestTime = MutableStateFlow(false)
     val isRestTime = _isRestTime.asStateFlow()
 
+    private val _restTargetIndex = MutableStateFlow<Int?>(null)
+    val restTargetIndex = _restTargetIndex.asStateFlow()
+
     private val _completedExercises = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val completedExercises = _completedExercises.asStateFlow()
 
@@ -109,6 +112,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _currentWorkoutDay.value = day
             _currentStep.value = WorkoutStep.OVERVIEW
             _exerciseIndex.value = 0
+            _isRestTime.value = false
+            _restTargetIndex.value = null
             _completedExercises.value = emptyMap()
             stopTimer()
         }
@@ -117,20 +122,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setWorkoutStep(step: WorkoutStep) {
         _currentStep.value = step
         _exerciseIndex.value = 0
+        _isRestTime.value = false
+        _restTargetIndex.value = null
         stopTimer()
+
+        if (shouldStartRestFor(getExercisesForStep(step).firstOrNull())) {
+            startRestBefore(0)
+        }
     }
 
     fun nextExercise(currentExerciseList: List<Exercise>) {
         if (_isRestTime.value) {
             _isRestTime.value = false
-            _exerciseIndex.value++
+            _exerciseIndex.value = _restTargetIndex.value ?: _exerciseIndex.value
+            _restTargetIndex.value = null
             stopTimer()
+            _timeLeft.value = 0
             return
         }
 
         if (_exerciseIndex.value < currentExerciseList.size - 1) {
-            _isRestTime.value = true
-            startTimer(5)
+            val nextIndex = _exerciseIndex.value + 1
+            if (shouldStartRestFor(currentExerciseList.getOrNull(nextIndex))) {
+                startRestBefore(nextIndex)
+            } else {
+                _exerciseIndex.value = nextIndex
+                _restTargetIndex.value = null
+                stopTimer()
+            }
         } else {
             val nextStep = when (_currentStep.value) {
                 WorkoutStep.WARMUP -> WorkoutStep.MAIN
@@ -144,6 +163,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun previousExercise() {
         _isRestTime.value = false
+        _restTargetIndex.value = null
         if (_exerciseIndex.value > 0) {
             _exerciseIndex.value--
             stopTimer()
@@ -286,6 +306,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun playStartSound() {
         toneG.startTone(ToneGenerator.TONE_DTMF_0, 400)
+    }
+
+    private fun shouldStartRestFor(exercise: Exercise?): Boolean {
+        return exercise?.isTimerBased == true
+    }
+
+    private fun startRestBefore(targetIndex: Int) {
+        _restTargetIndex.value = targetIndex
+        _isRestTime.value = true
+        startTimer(5)
+    }
+
+    private fun getExercisesForStep(step: WorkoutStep): List<Exercise> {
+        return when (step) {
+            WorkoutStep.WARMUP -> getWarmupExercises()
+            WorkoutStep.MAIN -> _currentWorkoutDay.value?.let(::getWorkoutForDay)?.exercises.orEmpty()
+            WorkoutStep.POSTURE -> getPostureExercises().take(3)
+            else -> emptyList()
+        }
     }
 
     override fun onCleared() {

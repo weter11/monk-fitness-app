@@ -61,6 +61,7 @@ fun WorkoutScreen(
     val currentStep by viewModel.currentStep.collectAsState()
     val exerciseIndex by viewModel.exerciseIndex.collectAsState()
     val isRestTime by viewModel.isRestTime.collectAsState()
+    val restTargetIndex by viewModel.restTargetIndex.collectAsState()
 
     val isRestDay = workout.type == WorkoutType.REST || workout.exercises.isEmpty()
 
@@ -142,7 +143,7 @@ fun WorkoutScreen(
                 } else if (isRestTime) {
                     RestUI(
                         viewModel = viewModel,
-                        nextExercise = currentExerciseList.getOrNull(exerciseIndex + 1),
+                        nextExercise = currentExerciseList.getOrNull(restTargetIndex ?: (exerciseIndex + 1)),
                         onSkip = { viewModel.nextExercise(currentExerciseList) }
                     )
                 } else {
