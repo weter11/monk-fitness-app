@@ -30,4 +30,5 @@ jobs:
         name: app-debug
         path: app/build/outputs/apk/debug/app-debug.apk
         compression-level: 0
+        archive: false
 
