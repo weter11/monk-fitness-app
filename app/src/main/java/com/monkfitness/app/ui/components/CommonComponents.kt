@@ -4,7 +4,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -63,7 +62,6 @@ fun MonkButton(
 fun ExerciseItem(
     exercise: Exercise,
     isCompleted: Boolean,
-    onToggle: (Boolean) -> Unit,
     onInfo: () -> Unit,
     isCurrent: Boolean = false
 ) {
@@ -83,8 +81,7 @@ fun ExerciseItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .clickable { onToggle(!isCompleted) },
+            .padding(vertical = 8.dp),
         shape = RoundedCornerShape(16.dp),
         color = backgroundColor,
         border = borderStroke,
@@ -143,12 +140,6 @@ fun ExerciseItem(
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
-                    )
-                } else {
-                    Checkbox(
-                        checked = isCompleted,
-                        onCheckedChange = onToggle,
-                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
                     )
                 }
             }

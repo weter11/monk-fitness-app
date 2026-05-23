@@ -141,6 +141,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        currentExerciseList.getOrNull(_exerciseIndex.value)?.let { exercise ->
+            _completedExercises.value = _completedExercises.value + (exercise.id to true)
+        }
+
         if (_exerciseIndex.value < currentExerciseList.size - 1) {
             val nextIndex = _exerciseIndex.value + 1
             if (shouldStartRestFor(currentExerciseList.getOrNull(nextIndex))) {

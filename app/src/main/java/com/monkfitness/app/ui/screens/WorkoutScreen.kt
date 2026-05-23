@@ -296,7 +296,6 @@ fun WorkoutOverview(
                 ExerciseItem(
                     exercise = exercise,
                     isCompleted = false,
-                    onToggle = { },
                     onInfo = { onExerciseClick(exercise) },
                     isCurrent = index == 0
                 )
