@@ -9,8 +9,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,7 +35,8 @@ fun PostureScreen(
     viewModel: MainViewModel,
     onExerciseClick: (Exercise) -> Unit
 ) {
-    val exercises = remember { viewModel.getExerciseLibrary() }
+    val difficultyAdjustments by viewModel.exerciseDifficultyAdjustments.collectAsState()
+    val exercises = remember(difficultyAdjustments) { viewModel.getExerciseLibrary(difficultyAdjustments) }
     var selectedCategory by remember { mutableStateOf<ExerciseCategory?>(null) }
     var selectedSubCategory by remember { mutableStateOf<ExerciseSubCategory?>(null) }
     var isFilterSheetVisible by rememberSaveable { mutableStateOf(false) }

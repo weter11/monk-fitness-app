@@ -270,8 +270,18 @@
     <string name="time">Time</string>
     <string name="sets">Sets</string>
     <string name="reps">Reps</string>
+    <string name="easier">Easier</string>
+    <string name="harder">Harder</string>
+    <string name="difficulty_level">Difficulty level</string>
+    <string name="difficulty_very_easy">Very Easy</string>
+    <string name="difficulty_easy">Easy</string>
+    <string name="difficulty_normal">Normal</string>
+    <string name="difficulty_hard">Hard</string>
+    <string name="difficulty_very_hard">Very Hard</string>
     <string name="seconds_format">%1$ds</string>
     <string name="sets_reps_format">%1$d × %2$d</string>
+    <string name="reps_range_format">%1$d–%2$d</string>
+    <string name="sets_reps_range_format">%1$d × %2$d–%3$d</string>
     <string name="chart_label">Workouts per week</string>
     <string name="timer_format">%1$02d:%2$02d</string>
 

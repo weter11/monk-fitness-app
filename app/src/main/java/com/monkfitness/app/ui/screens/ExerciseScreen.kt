@@ -10,6 +10,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -27,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.ui.components.exerciseRepTargetText
 import com.monkfitness.app.viewmodel.MainViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,6 +75,7 @@ fun ExerciseScreen(
 
     val timeLeft by viewModel.timeLeft.collectAsState()
     val isTimerRunning by viewModel.isTimerRunning.collectAsState()
+    val difficultyAdjustment by viewModel.getExerciseDifficultyAdjustment(exercise.id).collectAsState(initial = 0)
 
     Scaffold(
         topBar = {
@@ -134,9 +138,18 @@ fun ExerciseScreen(
                     value = if (exercise.isTimerBased) stringResource(R.string.seconds_format, exercise.durationSeconds) else exercise.sets.toString()
                 )
                 if (!exercise.isTimerBased) {
-                    InfoChip(label = stringResource(R.string.reps), value = exercise.reps.toString())
+                    InfoChip(label = stringResource(R.string.reps), value = exerciseRepTargetText(exercise))
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            DifficultyAdjustmentCard(
+                adjustment = difficultyAdjustment,
+                label = stringResource(viewModel.getDifficultyLevelLabel(difficultyAdjustment)),
+                onDecrease = { viewModel.adjustExerciseDifficulty(exercise.id, -1) },
+                onIncrease = { viewModel.adjustExerciseDifficulty(exercise.id, 1) }
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -241,6 +254,61 @@ fun TimerDisplay(
                 shape = CircleShape
             ) {
                 Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.timer_reset))
+            }
+        }
+    }
+}
+
+@Composable
+fun DifficultyAdjustmentCard(
+    adjustment: Int,
+    label: String,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = stringResource(R.string.difficulty_level),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.outline
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(
+                    onClick = onDecrease,
+                    enabled = adjustment > -2,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Remove, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.easier))
+                }
+                Button(
+                    onClick = onIncrease,
+                    enabled = adjustment < 2,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.harder))
+                }
             }
         }
     }

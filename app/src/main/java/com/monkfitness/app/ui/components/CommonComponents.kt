@@ -57,6 +57,29 @@ fun MonkButton(
     }
 }
 
+@Composable
+fun exerciseSummaryText(exercise: Exercise): String {
+    return if (exercise.isTimerBased) {
+        stringResource(R.string.seconds_format, exercise.durationSeconds)
+    } else if (exercise.minReps > 0 && exercise.maxReps > 0 && exercise.minReps != exercise.maxReps) {
+        stringResource(R.string.sets_reps_range_format, exercise.sets, exercise.minReps, exercise.maxReps)
+    } else {
+        stringResource(R.string.sets_reps_format, exercise.sets, exercise.maxReps.coerceAtLeast(exercise.reps))
+    }
+}
+
+@Composable
+fun exerciseRepTargetText(exercise: Exercise): String {
+    return when {
+        exercise.minReps > 0 && exercise.maxReps > 0 && exercise.minReps != exercise.maxReps ->
+            stringResource(R.string.reps_range_format, exercise.minReps, exercise.maxReps)
+        exercise.maxReps > 0 ->
+            exercise.maxReps.toString()
+        else ->
+            exercise.reps.toString()
+    }
+}
+
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun ExerciseItem(
@@ -118,8 +141,7 @@ fun ExerciseItem(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = if (exercise.isTimerBased) stringResource(R.string.seconds_format, exercise.durationSeconds)
-                    else stringResource(R.string.sets_reps_format, exercise.sets, exercise.reps),
+                    text = exerciseSummaryText(exercise),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.secondary
                 )

@@ -4,6 +4,7 @@ import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.data.model.applyDifficultyAdjustment
 import com.monkfitness.app.data.model.WorkoutType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -86,6 +87,40 @@ class WorkoutGeneratorTest {
     }
 
     @Test
+    fun testPerExerciseScalingUsesExerciseSpecificRanges() {
+        val pushupsPhase1 = findGeneratedExercise("pushups", 1..14)
+        val squatsPhase1 = findGeneratedExercise("squats", 1..14)
+        val pushupsPhase4 = findGeneratedExercise("pushups", 43..56)
+        val squatsPhase4 = findGeneratedExercise("squats", 43..56)
+
+        assertEquals(6, pushupsPhase1.minReps)
+        assertEquals(8, pushupsPhase1.maxReps)
+        assertEquals(12, squatsPhase1.minReps)
+        assertEquals(15, squatsPhase1.maxReps)
+
+        assertEquals(10, pushupsPhase4.minReps)
+        assertEquals(15, pushupsPhase4.maxReps)
+        assertEquals(18, squatsPhase4.minReps)
+        assertEquals(25, squatsPhase4.maxReps)
+    }
+
+    @Test
+    fun testDifficultyAdjustmentAppliesToRepAndTimerExercises() {
+        val pushups = generator.getExerciseLibrary().first { it.id == "pushups" }
+        val plank = generator.getExerciseLibrary().first { it.id == "plank" }
+
+        val harderPushups = pushups.applyDifficultyAdjustment(2)
+        val easierPlank = plank.applyDifficultyAdjustment(-2)
+
+        assertEquals(pushups.minReps + 4, harderPushups.minReps)
+        assertEquals(pushups.maxReps + 4, harderPushups.maxReps)
+        assertEquals(pushups.maxReps + 4, harderPushups.reps)
+
+        assertEquals(plank.durationSeconds - 10, easierPlank.durationSeconds)
+        assertEquals(1, easierPlank.reps)
+    }
+
+    @Test
     fun testExerciseLibraryUsesFixedCuratedList() {
         val library = generator.getExerciseLibrary()
         val ids = library.map { it.id }
@@ -150,19 +185,6 @@ class WorkoutGeneratorTest {
         libraryById: Map<String, Exercise>,
         expectedPhase: Int
     ) {
-        val repRange = when (expectedPhase) {
-            1 -> 8..10
-            2 -> 10..15
-            3 -> 12..18
-            else -> 15..20
-        }
-        val durationRange = when (expectedPhase) {
-            1 -> 30..30
-            2 -> 45..45
-            3 -> 60..60
-            else -> 75..90
-        }
-
         generatedExercises.forEach { exercise ->
             val base = checkNotNull(libraryById[exercise.id])
 
@@ -171,11 +193,32 @@ class WorkoutGeneratorTest {
             if (base.isTimerBased) {
                 assertTrue(exercise.isTimerBased)
                 assertEquals(1, exercise.reps)
-                assertTrue(exercise.durationSeconds in durationRange)
+                assertEquals(interpolate(base.baseDurationSeconds, base.phase4DurationSeconds, expectedPhase), exercise.durationSeconds)
+                assertEquals(0, exercise.minReps)
+                assertEquals(0, exercise.maxReps)
             } else {
-                assertTrue(exercise.reps in repRange)
+                val expectedMin = interpolate(base.baseMinReps, base.phase4MinReps, expectedPhase)
+                val expectedMax = interpolate(base.baseMaxReps, base.phase4MaxReps, expectedPhase)
+                assertEquals(expectedMin, exercise.minReps)
+                assertEquals(expectedMax, exercise.maxReps)
+                assertEquals(expectedMax, exercise.reps)
                 assertEquals(base.durationSeconds, exercise.durationSeconds)
             }
         }
+    }
+
+    private fun interpolate(start: Int, end: Int, phase: Int): Int {
+        if (phase <= 1) return start
+        if (phase >= 4) return end
+        return kotlin.math.round(start + (end - start) * ((phase - 1) / 3.0)).toInt()
+    }
+
+    private fun findGeneratedExercise(id: String, days: IntRange): Exercise {
+        return checkNotNull(
+            days
+                .asSequence()
+                .map { generator.generateWorkout(it).exercises.firstOrNull { exercise -> exercise.id == id } }
+                .firstOrNull { it != null }
+        ) { "Exercise $id was not generated in days $days" }
     }
 }

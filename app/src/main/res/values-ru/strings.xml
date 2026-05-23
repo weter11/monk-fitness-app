@@ -270,8 +270,18 @@
     <string name="time">Время</string>
     <string name="sets">Подходы</string>
     <string name="reps">Повторы</string>
+    <string name="easier">Проще</string>
+    <string name="harder">Сложнее</string>
+    <string name="difficulty_level">Уровень сложности</string>
+    <string name="difficulty_very_easy">Очень легко</string>
+    <string name="difficulty_easy">Легко</string>
+    <string name="difficulty_normal">Нормально</string>
+    <string name="difficulty_hard">Сложно</string>
+    <string name="difficulty_very_hard">Очень сложно</string>
     <string name="seconds_format">%1$dс</string>
     <string name="sets_reps_format">%1$d × %2$d</string>
+    <string name="reps_range_format">%1$d–%2$d</string>
+    <string name="sets_reps_range_format">%1$d × %2$d–%3$d</string>
     <string name="chart_label">Тренировок в неделю</string>
     <string name="timer_format">%1$02d:%2$02d</string>
 

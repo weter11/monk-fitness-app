@@ -16,6 +16,7 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class SettingsManager(private val context: Context) {
 
     companion object {
+        private const val EXERCISE_DIFFICULTY_PREFIX = "exercise_difficulty_"
         val LANGUAGE_KEY = stringPreferencesKey("language")
         val NOTIFICATION_HOUR = intPreferencesKey("notification_hour")
         val NOTIFICATION_MINUTE = intPreferencesKey("notification_minute")
@@ -74,6 +75,32 @@ class SettingsManager(private val context: Context) {
     suspend fun setVibrationEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[VIBRATION_ENABLED] = enabled
+        }
+    }
+
+    val exerciseDifficultyAdjustmentsFlow: Flow<Map<String, Int>> = context.dataStore.data.map { preferences ->
+        preferences.asMap()
+            .mapNotNull { (key, value) ->
+                if (!key.name.startsWith(EXERCISE_DIFFICULTY_PREFIX) || value !is Int) {
+                    null
+                } else {
+                    key.name.removePrefix(EXERCISE_DIFFICULTY_PREFIX) to value.coerceIn(-2, 2)
+                }
+            }
+            .toMap()
+    }
+
+    fun getExerciseDifficultyAdjustmentFlow(exerciseId: String): Flow<Int> {
+        val key = intPreferencesKey("$EXERCISE_DIFFICULTY_PREFIX$exerciseId")
+        return context.dataStore.data.map { preferences ->
+            (preferences[key] ?: 0).coerceIn(-2, 2)
+        }
+    }
+
+    suspend fun setExerciseDifficultyAdjustment(exerciseId: String, adjustment: Int) {
+        val key = intPreferencesKey("$EXERCISE_DIFFICULTY_PREFIX$exerciseId")
+        context.dataStore.edit { preferences ->
+            preferences[key] = adjustment.coerceIn(-2, 2)
         }
     }
 }

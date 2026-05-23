@@ -32,6 +32,7 @@ import com.monkfitness.app.data.model.WorkoutType
 import com.monkfitness.app.ui.components.ExerciseItem
 import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.ui.components.MonkProgressIndicator
+import com.monkfitness.app.ui.components.exerciseSummaryText
 import com.monkfitness.app.viewmodel.MainViewModel
 
 enum class WorkoutStep {
@@ -54,9 +55,10 @@ fun WorkoutScreen(
         viewModel.startWorkoutSession(day)
     }
 
-    val workout = remember(day) { viewModel.getWorkoutForDay(day) }
-    val warmupExercises = remember { viewModel.getWarmupExercises() }
-    val postureExercises = remember { viewModel.getPostureExercises().take(3) }
+    val difficultyAdjustments by viewModel.exerciseDifficultyAdjustments.collectAsState()
+    val workout = remember(day, difficultyAdjustments) { viewModel.getWorkoutForDay(day, difficultyAdjustments) }
+    val warmupExercises = remember(difficultyAdjustments) { viewModel.getWarmupExercises(difficultyAdjustments) }
+    val postureExercises = remember(difficultyAdjustments) { viewModel.getPostureExercises(difficultyAdjustments).take(3) }
 
     val currentStep by viewModel.currentStep.collectAsState()
     val exerciseIndex by viewModel.exerciseIndex.collectAsState()
@@ -322,7 +324,9 @@ fun ExerciseSession(
     val timeLeft by viewModel.timeLeft.collectAsState()
     val isTimerRunning by viewModel.isTimerRunning.collectAsState()
 
-    LaunchedEffect(exercise.id) {
+    val difficultyAdjustment by viewModel.getExerciseDifficultyAdjustment(exercise.id).collectAsState(initial = 0)
+
+    LaunchedEffect(exercise.id, exercise.durationSeconds) {
         if (exercise.isTimerBased && !viewModel.isTimerRunning.value && viewModel.timeLeft.value == 0) {
             viewModel.resetTimer(exercise.durationSeconds)
             viewModel.startTimer(exercise.durationSeconds)
@@ -381,13 +385,21 @@ fun ExerciseSession(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = if (exercise.isTimerBased) stringResource(R.string.seconds_format, exercise.durationSeconds)
-            else stringResource(R.string.sets_reps_format, exercise.sets, exercise.reps),
+            text = exerciseSummaryText(exercise),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.secondary
         )
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        DifficultyAdjustmentCard(
+            adjustment = difficultyAdjustment,
+            label = stringResource(viewModel.getDifficultyLevelLabel(difficultyAdjustment)),
+            onDecrease = { viewModel.adjustExerciseDifficulty(exercise.id, -1) },
+            onIncrease = { viewModel.adjustExerciseDifficulty(exercise.id, 1) }
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
 
         if (exercise.isTimerBased) {
             Text(

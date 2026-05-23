@@ -30,8 +30,35 @@ data class Exercise(
     @DrawableRes val imageRes: Int,
     val sets: Int,
     val reps: Int,
+    val minReps: Int = reps,
+    val maxReps: Int = reps,
+    val baseMinReps: Int = minReps,
+    val baseMaxReps: Int = maxReps,
+    val phase4MinReps: Int = minReps,
+    val phase4MaxReps: Int = maxReps,
     val durationSeconds: Int = 0,
+    val baseDurationSeconds: Int = durationSeconds,
+    val phase4DurationSeconds: Int = durationSeconds,
     val isTimerBased: Boolean = false,
     val category: ExerciseCategory = ExerciseCategory.MOBILITY,
     val subCategory: ExerciseSubCategory = ExerciseSubCategory.FULL_BODY
 )
+
+fun Exercise.applyDifficultyAdjustment(adjustment: Int): Exercise {
+    val safeAdjustment = adjustment.coerceIn(-2, 2)
+
+    return if (isTimerBased) {
+        copy(
+            durationSeconds = (durationSeconds + safeAdjustment * 5).coerceAtLeast(5)
+        )
+    } else {
+        val offset = safeAdjustment * 2
+        val adjustedMin = (minReps + offset).coerceAtLeast(1)
+        val adjustedMax = (maxReps + offset).coerceAtLeast(adjustedMin)
+        copy(
+            minReps = adjustedMin,
+            maxReps = adjustedMax,
+            reps = adjustedMax
+        )
+    }
+}

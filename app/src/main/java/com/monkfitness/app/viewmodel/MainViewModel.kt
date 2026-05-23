@@ -18,14 +18,15 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.data.model.applyDifficultyAdjustment
 import com.monkfitness.app.ui.screens.WorkoutStep
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -76,6 +77,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
+    val exerciseDifficultyAdjustments = settingsManager.exerciseDifficultyAdjustmentsFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap()
+    )
+
     val completedDaysCount = repository.getCompletedDaysCount().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 0
     )
@@ -97,15 +102,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun getWorkoutForDay(day: Int): Workout {
-        return workoutGenerator.generateWorkout(day)
+    fun getWorkoutForDay(
+        day: Int,
+        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value
+    ): Workout {
+        val workout = workoutGenerator.generateWorkout(day)
+        return workout.copy(exercises = workout.exercises.map { applyDifficultyAdjustment(it, difficultyAdjustments) })
     }
 
-    fun getExerciseLibrary() = workoutGenerator.getExerciseLibrary()
+    fun getExerciseLibrary(
+        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value
+    ) = workoutGenerator.getExerciseLibrary().map { applyDifficultyAdjustment(it, difficultyAdjustments) }
 
-    fun getPostureExercises() = workoutGenerator.getPostureExercises()
+    fun getPostureExercises(
+        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value
+    ) = workoutGenerator.getPostureExercises().map { applyDifficultyAdjustment(it, difficultyAdjustments) }
 
-    fun getWarmupExercises() = workoutGenerator.getWarmupExercises()
+    fun getWarmupExercises(
+        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value
+    ) = workoutGenerator.getWarmupExercises().map { applyDifficultyAdjustment(it, difficultyAdjustments) }
+
+    fun getExerciseDifficultyAdjustment(exerciseId: String): Flow<Int> {
+        return settingsManager.getExerciseDifficultyAdjustmentFlow(exerciseId)
+    }
+
+    fun adjustExerciseDifficulty(exerciseId: String, delta: Int) {
+        viewModelScope.launch {
+            val current = exerciseDifficultyAdjustments.value[exerciseId] ?: 0
+            settingsManager.setExerciseDifficultyAdjustment(exerciseId, current + delta)
+        }
+    }
 
     fun startWorkoutSession(day: Int) {
         if (_currentWorkoutDay.value != day) {
@@ -302,6 +328,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun getDifficultyLevelLabel(adjustment: Int): Int {
+        return when (adjustment.coerceIn(-2, 2)) {
+            -2 -> com.monkfitness.app.R.string.difficulty_very_easy
+            -1 -> com.monkfitness.app.R.string.difficulty_easy
+            1 -> com.monkfitness.app.R.string.difficulty_hard
+            2 -> com.monkfitness.app.R.string.difficulty_very_hard
+            else -> com.monkfitness.app.R.string.difficulty_normal
+        }
+    }
+
     private val toneG = ToneGenerator(AudioManager.STREAM_ALARM, 100)
 
     private fun playBeep(duration: Int = 200) {
@@ -351,5 +387,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             @Suppress("DEPRECATION")
             vibrator.vibrate(500)
         }
+    }
+
+    private fun applyDifficultyAdjustment(
+        exercise: Exercise,
+        difficultyAdjustments: Map<String, Int>
+    ): Exercise {
+        return exercise.applyDifficultyAdjustment(difficultyAdjustments[exercise.id] ?: 0)
     }
 }

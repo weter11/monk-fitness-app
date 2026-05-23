@@ -18,47 +18,45 @@ class WorkoutGenerator {
     )
 
     private val allExercises = listOf(
-        baseExercise("pushups", R.string.ex_pushups, R.string.ex_pushups_desc, R.string.ex_pushups_tech, R.string.ex_pushups_steps, R.string.ex_pushups_mistakes, imageRes = R.drawable.push_up, sets = 3, reps = 10, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.FULL_BODY),
-        baseExercise("squats", R.string.ex_squats, R.string.ex_squats_desc, R.string.ex_squats_tech, R.string.ex_squats_steps, R.string.ex_squats_mistakes, imageRes = R.drawable.squat, sets = 3, reps = 12, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.LEGS),
-        baseExercise("pullups", R.string.ex_pullups, R.string.ex_pullups_desc, R.string.ex_pullups_tech, R.string.ex_pullups_steps, R.string.ex_pullups_mistakes, imageRes = R.drawable.pull_up, sets = 3, reps = 5, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS),
-        baseExercise("plank", R.string.ex_plank, R.string.ex_plank_desc, R.string.ex_plank_tech, R.string.ex_plank_steps, R.string.ex_plank_mistakes, imageRes = R.drawable.plank, sets = 3, reps = 1, durationSeconds = 45, isTimerBased = true, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.CORE),
-        baseExercise("dips", R.string.ex_dips, R.string.ex_dips_desc, R.string.ex_dips_tech, R.string.ex_dips_steps, R.string.ex_dips_mistakes, imageRes = R.drawable.push_up, sets = 3, reps = 8, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS),
-        baseExercise("lunges", R.string.ex_lunges, R.string.ex_lunges_desc, R.string.ex_lunges_tech, R.string.ex_lunges_steps, R.string.ex_lunges_mistakes, imageRes = R.drawable.lunges, sets = 3, reps = 10, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.LEGS),
-        baseExercise("rows", R.string.ex_rows, R.string.ex_rows_desc, R.string.ex_rows_tech, R.string.ex_rows_steps, R.string.ex_rows_mistakes, imageRes = R.drawable.pull_up, sets = 3, reps = 10, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS),
-        baseExercise("glute_bridge", R.string.ex_glute_bridge, R.string.ex_glute_bridge_desc, R.string.ex_glute_bridge_tech, R.string.ex_glute_bridge_steps, R.string.ex_glute_bridge_mistakes, imageRes = R.drawable.glute_bridge, sets = 3, reps = 15, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.HIPS),
-        baseExercise("cat_cow", R.string.ex_cat_cow, R.string.ex_cat_cow_desc, R.string.ex_cat_cow_tech, R.string.ex_cat_cow_steps, R.string.ex_cat_cow_mistakes, sets = 2, reps = 15, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SPINE),
-        baseExercise("bird_dog", R.string.ex_bird_dog, R.string.ex_bird_dog_desc, R.string.ex_bird_dog_tech, R.string.ex_bird_dog_steps, R.string.ex_bird_dog_mistakes, imageRes = R.drawable.bird_dog, sets = 3, reps = 10, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.CORE),
-        baseExercise("world_greatest_stretch", R.string.ex_stretch, R.string.ex_stretch_desc, R.string.ex_stretch_tech, R.string.ex_stretch_steps, R.string.ex_stretch_mistakes, sets = 2, reps = 5, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.FULL_BODY),
-        baseExercise("burpees", R.string.ex_burpees, R.string.ex_burpees_desc, R.string.ex_burpees_tech, R.string.ex_burpees_steps, R.string.ex_burpees_mistakes, sets = 3, reps = 10, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.FULL_BODY),
-        baseExercise("mountain_climbers", R.string.ex_climbers, R.string.ex_climbers_desc, R.string.ex_climbers_tech, R.string.ex_climbers_steps, R.string.ex_climbers_mistakes, sets = 3, reps = 20, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.CORE),
-        baseExercise("kettlebell_swing", R.string.ex_kb_swing, R.string.ex_kb_swing_desc, R.string.ex_kb_swing_tech, R.string.ex_kb_swing_steps, R.string.ex_kb_swing_mistakes, sets = 3, reps = 15, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.FULL_BODY),
-        baseExercise("face_pull", R.string.ex_face_pull, R.string.ex_face_pull_desc, R.string.ex_face_pull_tech, R.string.ex_face_pull_steps, R.string.ex_face_pull_mistakes, imageRes = R.drawable.ic_posture, sets = 3, reps = 15, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SHOULDERS),
-        baseExercise("scapular_pullups", R.string.ex_scapular_pullups, R.string.ex_scapular_pullups_desc, R.string.ex_scapular_pullups_tech, R.string.ex_scapular_pullups_steps, R.string.ex_scapular_pullups_mistakes, imageRes = R.drawable.pull_up, sets = 3, reps = 8, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SHOULDERS),
-        baseExercise("wall_slides", R.string.ex_wall_slides, R.string.ex_wall_slides_desc, R.string.ex_wall_slides_tech, R.string.ex_wall_slides_steps, R.string.ex_wall_slides_mistakes, imageRes = R.drawable.ic_posture, sets = 3, reps = 12, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SHOULDERS),
-        baseExercise("reverse_snow_angels", R.string.ex_reverse_snow_angels, R.string.ex_reverse_snow_angels_desc, R.string.ex_reverse_snow_angels_tech, R.string.ex_reverse_snow_angels_steps, R.string.ex_reverse_snow_angels_mistakes, imageRes = R.drawable.ic_posture, sets = 3, reps = 12, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SHOULDERS),
-        baseExercise("band_pull_aparts", R.string.ex_band_pull_aparts, R.string.ex_band_pull_aparts_desc, R.string.ex_band_pull_aparts_tech, R.string.ex_band_pull_aparts_steps, R.string.ex_band_pull_aparts_mistakes, imageRes = R.drawable.ic_posture, sets = 3, reps = 15, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SHOULDERS),
-        baseExercise("thoracic_rotations", R.string.ex_thoracic_rotations, R.string.ex_thoracic_rotations_desc, R.string.ex_thoracic_rotations_tech, R.string.ex_thoracic_rotations_steps, R.string.ex_thoracic_rotations_mistakes, imageRes = R.drawable.bird_dog, sets = 2, reps = 10, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SPINE),
-        baseExercise("cobra_stretch", R.string.ex_cobra_stretch, R.string.ex_cobra_stretch_desc, R.string.ex_cobra_stretch_tech, R.string.ex_cobra_stretch_steps, R.string.ex_cobra_stretch_mistakes, imageRes = R.drawable.plank, sets = 2, reps = 1, durationSeconds = 30, isTimerBased = true, category = ExerciseCategory.STRETCHING, subCategory = ExerciseSubCategory.SPINE),
-        baseExercise("child_pose", R.string.ex_child_pose, R.string.ex_child_pose_desc, R.string.ex_child_pose_tech, R.string.ex_child_pose_steps, R.string.ex_child_pose_mistakes, imageRes = R.drawable.ic_exercise_placeholder, sets = 2, reps = 1, durationSeconds = 45, isTimerBased = true, category = ExerciseCategory.STRETCHING, subCategory = ExerciseSubCategory.SPINE),
-        baseExercise("thoracic_extension", R.string.ex_thoracic_extension, R.string.ex_thoracic_extension_desc, R.string.ex_thoracic_extension_tech, R.string.ex_thoracic_extension_steps, R.string.ex_thoracic_extension_mistakes, imageRes = R.drawable.ic_exercise_placeholder, sets = 2, reps = 10, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SPINE),
-        baseExercise("hip_flexor_stretch", R.string.ex_hip_flexor_stretch, R.string.ex_hip_flexor_stretch_desc, R.string.ex_hip_flexor_stretch_tech, R.string.ex_hip_flexor_stretch_steps, R.string.ex_hip_flexor_stretch_mistakes, imageRes = R.drawable.lunges, sets = 2, reps = 1, durationSeconds = 30, isTimerBased = true, category = ExerciseCategory.STRETCHING, subCategory = ExerciseSubCategory.HIPS),
-        baseExercise("ninety_ninety_hips", R.string.ex_ninety_ninety_hips, R.string.ex_ninety_ninety_hips_desc, R.string.ex_ninety_ninety_hips_tech, R.string.ex_ninety_ninety_hips_steps, R.string.ex_ninety_ninety_hips_mistakes, imageRes = R.drawable.squat, sets = 2, reps = 8, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.HIPS),
-        baseExercise("deep_squat", R.string.ex_deep_squat, R.string.ex_deep_squat_desc, R.string.ex_deep_squat_tech, R.string.ex_deep_squat_steps, R.string.ex_deep_squat_mistakes, imageRes = R.drawable.squat, sets = 2, reps = 1, durationSeconds = 45, isTimerBased = true, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.LEGS),
-        baseExercise("hamstring_stretch", R.string.ex_hamstring_stretch, R.string.ex_hamstring_stretch_desc, R.string.ex_hamstring_stretch_tech, R.string.ex_hamstring_stretch_steps, R.string.ex_hamstring_stretch_mistakes, imageRes = R.drawable.lunges, sets = 2, reps = 1, durationSeconds = 30, isTimerBased = true, category = ExerciseCategory.STRETCHING, subCategory = ExerciseSubCategory.LEGS),
-        baseExercise("hang", R.string.ex_hang, R.string.ex_hang_desc, R.string.ex_hang_tech, imageRes = R.drawable.pull_up, sets = 3, reps = 1, durationSeconds = 60, isTimerBased = true, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SHOULDERS),
-        baseExercise("superman", R.string.ex_superman, R.string.ex_superman_desc, R.string.ex_superman_tech, R.string.ex_superman_steps, R.string.ex_superman_mistakes, imageRes = R.drawable.plank, sets = 3, reps = 12, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SPINE),
-        baseExercise("pike_pushups", R.string.ex_pike_pushups, R.string.ex_pike_pushups_desc, R.string.ex_pike_pushups_tech, R.string.ex_pike_pushups_steps, R.string.ex_pike_pushups_mistakes, imageRes = R.drawable.pike_pushup, sets = 3, reps = 8, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS),
-        baseExercise("horse_stance", R.string.ex_horse_stance, R.string.ex_horse_stance_desc, R.string.ex_horse_stance_tech, R.string.ex_horse_stance_steps, R.string.ex_horse_stance_mistakes, imageRes = R.drawable.horse_stance, sets = 3, reps = 1, durationSeconds = 60, isTimerBased = true, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.LEGS),
-        baseExercise("neck_circles", R.string.ex_neck_circles, R.string.ex_neck_circles, R.string.ex_neck_circles, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, reps = 1, durationSeconds = 30, isTimerBased = true, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SPINE),
-        baseExercise("arm_circles", R.string.ex_arm_circles, R.string.ex_arm_circles, R.string.ex_arm_circles, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, reps = 1, durationSeconds = 30, isTimerBased = true, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SHOULDERS),
-        baseExercise("hip_circles", R.string.ex_hip_circles, R.string.ex_hip_circles, R.string.ex_hip_circles, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, reps = 1, durationSeconds = 30, isTimerBased = true, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.HIPS),
-        baseExercise("leg_swings", R.string.ex_leg_swings, R.string.ex_leg_swings, R.string.ex_leg_swings, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, reps = 1, durationSeconds = 30, isTimerBased = true, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.LEGS),
-        baseExercise("jumping_jacks", R.string.ex_jumping_jacks, R.string.ex_jumping_jacks, R.string.ex_jumping_jacks, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, reps = 1, durationSeconds = 60, isTimerBased = true, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.FULL_BODY)
+        baseRepExercise("pushups", R.string.ex_pushups, R.string.ex_pushups_desc, R.string.ex_pushups_tech, R.string.ex_pushups_steps, R.string.ex_pushups_mistakes, imageRes = R.drawable.push_up, sets = 3, baseMinReps = 6, baseMaxReps = 8, phase4MinReps = 10, phase4MaxReps = 15, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.FULL_BODY),
+        baseRepExercise("squats", R.string.ex_squats, R.string.ex_squats_desc, R.string.ex_squats_tech, R.string.ex_squats_steps, R.string.ex_squats_mistakes, imageRes = R.drawable.squat, sets = 3, baseMinReps = 12, baseMaxReps = 15, phase4MinReps = 18, phase4MaxReps = 25, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.LEGS),
+        baseRepExercise("pullups", R.string.ex_pullups, R.string.ex_pullups_desc, R.string.ex_pullups_tech, R.string.ex_pullups_steps, R.string.ex_pullups_mistakes, imageRes = R.drawable.pull_up, sets = 3, baseMinReps = 3, baseMaxReps = 5, phase4MinReps = 6, phase4MaxReps = 10, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS),
+        baseTimerExercise("plank", R.string.ex_plank, R.string.ex_plank_desc, R.string.ex_plank_tech, R.string.ex_plank_steps, R.string.ex_plank_mistakes, imageRes = R.drawable.plank, sets = 3, baseDurationSeconds = 30, phase4DurationSeconds = 75, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.CORE),
+        baseRepExercise("dips", R.string.ex_dips, R.string.ex_dips_desc, R.string.ex_dips_tech, R.string.ex_dips_steps, R.string.ex_dips_mistakes, imageRes = R.drawable.push_up, sets = 3, baseMinReps = 5, baseMaxReps = 7, phase4MinReps = 8, phase4MaxReps = 12, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS),
+        baseRepExercise("lunges", R.string.ex_lunges, R.string.ex_lunges_desc, R.string.ex_lunges_tech, R.string.ex_lunges_steps, R.string.ex_lunges_mistakes, imageRes = R.drawable.lunges, sets = 3, baseMinReps = 8, baseMaxReps = 10, phase4MinReps = 14, phase4MaxReps = 20, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.LEGS),
+        baseRepExercise("rows", R.string.ex_rows, R.string.ex_rows_desc, R.string.ex_rows_tech, R.string.ex_rows_steps, R.string.ex_rows_mistakes, imageRes = R.drawable.pull_up, sets = 3, baseMinReps = 8, baseMaxReps = 10, phase4MinReps = 12, phase4MaxReps = 16, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS),
+        baseRepExercise("glute_bridge", R.string.ex_glute_bridge, R.string.ex_glute_bridge_desc, R.string.ex_glute_bridge_tech, R.string.ex_glute_bridge_steps, R.string.ex_glute_bridge_mistakes, imageRes = R.drawable.glute_bridge, sets = 3, baseMinReps = 12, baseMaxReps = 15, phase4MinReps = 18, phase4MaxReps = 25, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.HIPS),
+        baseRepExercise("cat_cow", R.string.ex_cat_cow, R.string.ex_cat_cow_desc, R.string.ex_cat_cow_tech, R.string.ex_cat_cow_steps, R.string.ex_cat_cow_mistakes, sets = 2, baseMinReps = 10, baseMaxReps = 12, phase4MinReps = 16, phase4MaxReps = 20, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SPINE),
+        baseRepExercise("bird_dog", R.string.ex_bird_dog, R.string.ex_bird_dog_desc, R.string.ex_bird_dog_tech, R.string.ex_bird_dog_steps, R.string.ex_bird_dog_mistakes, imageRes = R.drawable.bird_dog, sets = 3, baseMinReps = 6, baseMaxReps = 8, phase4MinReps = 10, phase4MaxReps = 14, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.CORE),
+        baseRepExercise("world_greatest_stretch", R.string.ex_stretch, R.string.ex_stretch_desc, R.string.ex_stretch_tech, R.string.ex_stretch_steps, R.string.ex_stretch_mistakes, sets = 2, baseMinReps = 4, baseMaxReps = 5, phase4MinReps = 6, phase4MaxReps = 10, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.FULL_BODY),
+        baseRepExercise("burpees", R.string.ex_burpees, R.string.ex_burpees_desc, R.string.ex_burpees_tech, R.string.ex_burpees_steps, R.string.ex_burpees_mistakes, sets = 3, baseMinReps = 6, baseMaxReps = 8, phase4MinReps = 10, phase4MaxReps = 15, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.FULL_BODY),
+        baseRepExercise("mountain_climbers", R.string.ex_climbers, R.string.ex_climbers_desc, R.string.ex_climbers_tech, R.string.ex_climbers_steps, R.string.ex_climbers_mistakes, sets = 3, baseMinReps = 12, baseMaxReps = 16, phase4MinReps = 18, phase4MaxReps = 28, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.CORE),
+        baseRepExercise("kettlebell_swing", R.string.ex_kb_swing, R.string.ex_kb_swing_desc, R.string.ex_kb_swing_tech, R.string.ex_kb_swing_steps, R.string.ex_kb_swing_mistakes, sets = 3, baseMinReps = 10, baseMaxReps = 12, phase4MinReps = 16, phase4MaxReps = 22, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.FULL_BODY),
+        baseRepExercise("face_pull", R.string.ex_face_pull, R.string.ex_face_pull_desc, R.string.ex_face_pull_tech, R.string.ex_face_pull_steps, R.string.ex_face_pull_mistakes, imageRes = R.drawable.ic_posture, sets = 3, baseMinReps = 12, baseMaxReps = 15, phase4MinReps = 18, phase4MaxReps = 24, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SHOULDERS),
+        baseRepExercise("scapular_pullups", R.string.ex_scapular_pullups, R.string.ex_scapular_pullups_desc, R.string.ex_scapular_pullups_tech, R.string.ex_scapular_pullups_steps, R.string.ex_scapular_pullups_mistakes, imageRes = R.drawable.pull_up, sets = 3, baseMinReps = 4, baseMaxReps = 6, phase4MinReps = 7, phase4MaxReps = 10, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SHOULDERS),
+        baseRepExercise("wall_slides", R.string.ex_wall_slides, R.string.ex_wall_slides_desc, R.string.ex_wall_slides_tech, R.string.ex_wall_slides_steps, R.string.ex_wall_slides_mistakes, imageRes = R.drawable.ic_posture, sets = 3, baseMinReps = 10, baseMaxReps = 12, phase4MinReps = 14, phase4MaxReps = 18, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SHOULDERS),
+        baseRepExercise("reverse_snow_angels", R.string.ex_reverse_snow_angels, R.string.ex_reverse_snow_angels_desc, R.string.ex_reverse_snow_angels_tech, R.string.ex_reverse_snow_angels_steps, R.string.ex_reverse_snow_angels_mistakes, imageRes = R.drawable.ic_posture, sets = 3, baseMinReps = 8, baseMaxReps = 10, phase4MinReps = 12, phase4MaxReps = 16, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SHOULDERS),
+        baseRepExercise("band_pull_aparts", R.string.ex_band_pull_aparts, R.string.ex_band_pull_aparts_desc, R.string.ex_band_pull_aparts_tech, R.string.ex_band_pull_aparts_steps, R.string.ex_band_pull_aparts_mistakes, imageRes = R.drawable.ic_posture, sets = 3, baseMinReps = 12, baseMaxReps = 15, phase4MinReps = 18, phase4MaxReps = 25, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SHOULDERS),
+        baseRepExercise("thoracic_rotations", R.string.ex_thoracic_rotations, R.string.ex_thoracic_rotations_desc, R.string.ex_thoracic_rotations_tech, R.string.ex_thoracic_rotations_steps, R.string.ex_thoracic_rotations_mistakes, imageRes = R.drawable.bird_dog, sets = 2, baseMinReps = 8, baseMaxReps = 10, phase4MinReps = 12, phase4MaxReps = 16, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SPINE),
+        baseTimerExercise("cobra_stretch", R.string.ex_cobra_stretch, R.string.ex_cobra_stretch_desc, R.string.ex_cobra_stretch_tech, R.string.ex_cobra_stretch_steps, R.string.ex_cobra_stretch_mistakes, imageRes = R.drawable.plank, sets = 2, baseDurationSeconds = 30, phase4DurationSeconds = 75, category = ExerciseCategory.STRETCHING, subCategory = ExerciseSubCategory.SPINE),
+        baseTimerExercise("child_pose", R.string.ex_child_pose, R.string.ex_child_pose_desc, R.string.ex_child_pose_tech, R.string.ex_child_pose_steps, R.string.ex_child_pose_mistakes, imageRes = R.drawable.ic_exercise_placeholder, sets = 2, baseDurationSeconds = 45, phase4DurationSeconds = 90, category = ExerciseCategory.STRETCHING, subCategory = ExerciseSubCategory.SPINE),
+        baseRepExercise("thoracic_extension", R.string.ex_thoracic_extension, R.string.ex_thoracic_extension_desc, R.string.ex_thoracic_extension_tech, R.string.ex_thoracic_extension_steps, R.string.ex_thoracic_extension_mistakes, imageRes = R.drawable.ic_exercise_placeholder, sets = 2, baseMinReps = 8, baseMaxReps = 10, phase4MinReps = 12, phase4MaxReps = 16, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SPINE),
+        baseTimerExercise("hip_flexor_stretch", R.string.ex_hip_flexor_stretch, R.string.ex_hip_flexor_stretch_desc, R.string.ex_hip_flexor_stretch_tech, R.string.ex_hip_flexor_stretch_steps, R.string.ex_hip_flexor_stretch_mistakes, imageRes = R.drawable.lunges, sets = 2, baseDurationSeconds = 30, phase4DurationSeconds = 75, category = ExerciseCategory.STRETCHING, subCategory = ExerciseSubCategory.HIPS),
+        baseRepExercise("ninety_ninety_hips", R.string.ex_ninety_ninety_hips, R.string.ex_ninety_ninety_hips_desc, R.string.ex_ninety_ninety_hips_tech, R.string.ex_ninety_ninety_hips_steps, R.string.ex_ninety_ninety_hips_mistakes, imageRes = R.drawable.squat, sets = 2, baseMinReps = 6, baseMaxReps = 8, phase4MinReps = 10, phase4MaxReps = 14, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.HIPS),
+        baseTimerExercise("deep_squat", R.string.ex_deep_squat, R.string.ex_deep_squat_desc, R.string.ex_deep_squat_tech, R.string.ex_deep_squat_steps, R.string.ex_deep_squat_mistakes, imageRes = R.drawable.squat, sets = 2, baseDurationSeconds = 45, phase4DurationSeconds = 90, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.LEGS),
+        baseTimerExercise("hamstring_stretch", R.string.ex_hamstring_stretch, R.string.ex_hamstring_stretch_desc, R.string.ex_hamstring_stretch_tech, R.string.ex_hamstring_stretch_steps, R.string.ex_hamstring_stretch_mistakes, imageRes = R.drawable.lunges, sets = 2, baseDurationSeconds = 30, phase4DurationSeconds = 75, category = ExerciseCategory.STRETCHING, subCategory = ExerciseSubCategory.LEGS),
+        baseTimerExercise("hang", R.string.ex_hang, R.string.ex_hang_desc, R.string.ex_hang_tech, imageRes = R.drawable.pull_up, sets = 3, baseDurationSeconds = 30, phase4DurationSeconds = 90, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SHOULDERS),
+        baseRepExercise("superman", R.string.ex_superman, R.string.ex_superman_desc, R.string.ex_superman_tech, R.string.ex_superman_steps, R.string.ex_superman_mistakes, imageRes = R.drawable.plank, sets = 3, baseMinReps = 10, baseMaxReps = 12, phase4MinReps = 14, phase4MaxReps = 18, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SPINE),
+        baseRepExercise("pike_pushups", R.string.ex_pike_pushups, R.string.ex_pike_pushups_desc, R.string.ex_pike_pushups_tech, R.string.ex_pike_pushups_steps, R.string.ex_pike_pushups_mistakes, imageRes = R.drawable.pike_pushup, sets = 3, baseMinReps = 4, baseMaxReps = 6, phase4MinReps = 7, phase4MaxReps = 10, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS),
+        baseTimerExercise("horse_stance", R.string.ex_horse_stance, R.string.ex_horse_stance_desc, R.string.ex_horse_stance_tech, R.string.ex_horse_stance_steps, R.string.ex_horse_stance_mistakes, imageRes = R.drawable.horse_stance, sets = 3, baseDurationSeconds = 30, phase4DurationSeconds = 90, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.LEGS),
+        baseTimerExercise("neck_circles", R.string.ex_neck_circles, R.string.ex_neck_circles, R.string.ex_neck_circles, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SPINE),
+        baseTimerExercise("arm_circles", R.string.ex_arm_circles, R.string.ex_arm_circles, R.string.ex_arm_circles, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SHOULDERS),
+        baseTimerExercise("hip_circles", R.string.ex_hip_circles, R.string.ex_hip_circles, R.string.ex_hip_circles, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.HIPS),
+        baseTimerExercise("leg_swings", R.string.ex_leg_swings, R.string.ex_leg_swings, R.string.ex_leg_swings, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.LEGS),
+        baseTimerExercise("jumping_jacks", R.string.ex_jumping_jacks, R.string.ex_jumping_jacks, R.string.ex_jumping_jacks, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 30, phase4DurationSeconds = 75, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.FULL_BODY)
     )
 
     private val exercisesById = allExercises.associateBy { it.id }
-    private val repSourceRange = valueRange(allExercises.filterNot { it.isTimerBased }.map { it.reps })
-    private val durationSourceRange = valueRange(allExercises.filter { it.isTimerBased }.map { it.durationSeconds })
 
     fun generateWorkout(day: Int): Workout {
         val safeDay = if (day in 1..56) day else 1
@@ -176,65 +174,51 @@ class WorkoutGenerator {
     }
 
     private fun phasedExercise(exercise: Exercise, phase: Int): Exercise {
-        val reps = if (exercise.isTimerBased) {
-            1
+        return if (exercise.isTimerBased) {
+            val duration = interpolatePhaseValue(
+                start = exercise.baseDurationSeconds,
+                end = exercise.phase4DurationSeconds,
+                phase = phase
+            )
+
+            exercise.copy(
+                reps = 1,
+                minReps = 0,
+                maxReps = 0,
+                durationSeconds = duration,
+                isTimerBased = true
+            )
         } else {
-            scaleValueToRange(exercise.reps, repSourceRange, phaseRepRange(phase))
-        }
-        val duration = if (exercise.isTimerBased) {
-            scaleValueToRange(exercise.durationSeconds, durationSourceRange, phaseDurationRange(phase))
-        } else {
-            exercise.durationSeconds
-        }
+            val minReps = interpolatePhaseValue(
+                start = exercise.baseMinReps,
+                end = exercise.phase4MinReps,
+                phase = phase
+            )
+            val maxReps = interpolatePhaseValue(
+                start = exercise.baseMaxReps,
+                end = exercise.phase4MaxReps,
+                phase = phase
+            ).coerceAtLeast(minReps)
 
-        return exercise.copy(
-            sets = exercise.sets,
-            reps = reps,
-            durationSeconds = duration,
-            isTimerBased = exercise.isTimerBased
-        )
-    }
-
-    private fun phaseRepRange(phase: Int): IntRange {
-        return when (phase) {
-            1 -> 8..10
-            2 -> 10..15
-            3 -> 12..18
-            else -> 15..20
+            exercise.copy(
+                minReps = minReps,
+                maxReps = maxReps,
+                reps = maxReps,
+                durationSeconds = 0,
+                isTimerBased = false
+            )
         }
     }
 
-    private fun phaseDurationRange(phase: Int): IntRange {
-        return when (phase) {
-            1 -> 30..30
-            2 -> 45..45
-            3 -> 60..60
-            else -> 75..90
-        }
+    private fun interpolatePhaseValue(start: Int, end: Int, phase: Int): Int {
+        if (phase <= 1) return start
+        if (phase >= 4) return end
+
+        val progress = (phase - 1) / 3.0
+        return (start + (end - start) * progress).roundToInt()
     }
 
-    private fun valueRange(values: List<Int>): IntRange {
-        val min = values.minOrNull() ?: 0
-        val max = values.maxOrNull() ?: min
-        return min..max
-    }
-
-    private fun scaleValueToRange(value: Int, sourceRange: IntRange, targetRange: IntRange): Int {
-        if (targetRange.first == targetRange.last) {
-            return targetRange.first
-        }
-
-        if (sourceRange.first == sourceRange.last) {
-            return targetRange.first
-        }
-
-        val ratio = (value - sourceRange.first).toDouble() / (sourceRange.last - sourceRange.first).toDouble()
-        return (targetRange.first + ratio * (targetRange.last - targetRange.first))
-            .roundToInt()
-            .coerceIn(targetRange.first, targetRange.last)
-    }
-
-    private fun baseExercise(
+    private fun baseRepExercise(
         id: String,
         nameRes: Int,
         descRes: Int,
@@ -243,9 +227,50 @@ class WorkoutGenerator {
         mistakesRes: Int = 0,
         imageRes: Int = R.drawable.ic_exercise_placeholder,
         sets: Int,
-        reps: Int,
-        durationSeconds: Int = 0,
-        isTimerBased: Boolean = false,
+        baseMinReps: Int,
+        baseMaxReps: Int,
+        phase4MinReps: Int,
+        phase4MaxReps: Int,
+        category: ExerciseCategory,
+        subCategory: ExerciseSubCategory
+    ): Exercise {
+        val currentMaxReps = baseMaxReps.coerceAtLeast(baseMinReps)
+        return Exercise(
+            id = id,
+            nameRes = nameRes,
+            descriptionRes = descRes,
+            techniqueRes = techRes,
+            stepsRes = stepsRes,
+            mistakesRes = mistakesRes,
+            imageRes = imageRes,
+            sets = sets,
+            reps = currentMaxReps,
+            minReps = baseMinReps,
+            maxReps = currentMaxReps,
+            baseMinReps = baseMinReps,
+            baseMaxReps = currentMaxReps,
+            phase4MinReps = phase4MinReps.coerceAtLeast(baseMinReps),
+            phase4MaxReps = phase4MaxReps.coerceAtLeast(phase4MinReps),
+            durationSeconds = 0,
+            baseDurationSeconds = 0,
+            phase4DurationSeconds = 0,
+            isTimerBased = false,
+            category = category,
+            subCategory = subCategory
+        )
+    }
+
+    private fun baseTimerExercise(
+        id: String,
+        nameRes: Int,
+        descRes: Int,
+        techRes: Int,
+        stepsRes: Int = 0,
+        mistakesRes: Int = 0,
+        imageRes: Int = R.drawable.ic_exercise_placeholder,
+        sets: Int,
+        baseDurationSeconds: Int,
+        phase4DurationSeconds: Int,
         category: ExerciseCategory,
         subCategory: ExerciseSubCategory
     ): Exercise {
@@ -258,9 +283,17 @@ class WorkoutGenerator {
             mistakesRes = mistakesRes,
             imageRes = imageRes,
             sets = sets,
-            reps = reps,
-            durationSeconds = durationSeconds,
-            isTimerBased = isTimerBased,
+            reps = 1,
+            minReps = 0,
+            maxReps = 0,
+            baseMinReps = 0,
+            baseMaxReps = 0,
+            phase4MinReps = 0,
+            phase4MaxReps = 0,
+            durationSeconds = baseDurationSeconds,
+            baseDurationSeconds = baseDurationSeconds,
+            phase4DurationSeconds = phase4DurationSeconds.coerceAtLeast(baseDurationSeconds),
+            isTimerBased = true,
             category = category,
             subCategory = subCategory
         )
@@ -274,24 +307,24 @@ class WorkoutGenerator {
 
     fun getPostureExercises(): List<Exercise> {
         return listOf(
-            requireExercise("hang").copy(sets = 3, reps = 1, durationSeconds = 60, isTimerBased = true),
-            requireExercise("face_pull").copy(sets = 3, reps = 15),
-            requireExercise("bird_dog").copy(sets = 3, reps = 12, durationSeconds = 0, isTimerBased = false),
-            requireExercise("superman").copy(sets = 3, reps = 12),
-            requireExercise("wall_slides").copy(sets = 3, reps = 15),
-            requireExercise("deep_squat").copy(sets = 3, reps = 1, durationSeconds = 60, isTimerBased = true),
-            requireExercise("pike_pushups").copy(sets = 3, reps = 8, durationSeconds = 0, isTimerBased = false),
-            requireExercise("horse_stance").copy(sets = 3, reps = 1, durationSeconds = 60, isTimerBased = true)
+            requireExercise("hang").copy(sets = 3, reps = 1, minReps = 0, maxReps = 0, durationSeconds = 60, isTimerBased = true),
+            requireExercise("face_pull").copy(sets = 3, reps = 15, minReps = 15, maxReps = 15, durationSeconds = 0, isTimerBased = false),
+            requireExercise("bird_dog").copy(sets = 3, reps = 12, minReps = 12, maxReps = 12, durationSeconds = 0, isTimerBased = false),
+            requireExercise("superman").copy(sets = 3, reps = 12, minReps = 12, maxReps = 12),
+            requireExercise("wall_slides").copy(sets = 3, reps = 15, minReps = 15, maxReps = 15),
+            requireExercise("deep_squat").copy(sets = 3, reps = 1, minReps = 0, maxReps = 0, durationSeconds = 60, isTimerBased = true),
+            requireExercise("pike_pushups").copy(sets = 3, reps = 8, minReps = 8, maxReps = 8, durationSeconds = 0, isTimerBased = false),
+            requireExercise("horse_stance").copy(sets = 3, reps = 1, minReps = 0, maxReps = 0, durationSeconds = 60, isTimerBased = true)
         )
     }
 
     fun getWarmupExercises(): List<Exercise> {
         return listOf(
-            requireExercise("neck_circles").copy(sets = 1, reps = 1, durationSeconds = 30, isTimerBased = true),
-            requireExercise("arm_circles").copy(sets = 1, reps = 1, durationSeconds = 30, isTimerBased = true),
-            requireExercise("hip_circles").copy(sets = 1, reps = 1, durationSeconds = 30, isTimerBased = true),
-            requireExercise("leg_swings").copy(sets = 1, reps = 1, durationSeconds = 30, isTimerBased = true),
-            requireExercise("jumping_jacks").copy(sets = 1, reps = 1, durationSeconds = 60, isTimerBased = true)
+            requireExercise("neck_circles").copy(sets = 1, reps = 1, minReps = 0, maxReps = 0, durationSeconds = 30, isTimerBased = true),
+            requireExercise("arm_circles").copy(sets = 1, reps = 1, minReps = 0, maxReps = 0, durationSeconds = 30, isTimerBased = true),
+            requireExercise("hip_circles").copy(sets = 1, reps = 1, minReps = 0, maxReps = 0, durationSeconds = 30, isTimerBased = true),
+            requireExercise("leg_swings").copy(sets = 1, reps = 1, minReps = 0, maxReps = 0, durationSeconds = 30, isTimerBased = true),
+            requireExercise("jumping_jacks").copy(sets = 1, reps = 1, minReps = 0, maxReps = 0, durationSeconds = 60, isTimerBased = true)
         )
     }
 }
