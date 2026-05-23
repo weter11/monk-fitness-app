@@ -3,8 +3,11 @@
     <string name="week_label">Неделя %d</string>
     <string name="today_workout">СЕГОДНЯШНЯЯ ТРЕНИРОВКА</string>
     <string name="completed">завершено</string>
+    <string name="progress_percent">%1$d%% завершено</string>
     <string name="streak">Серия</string>
     <string name="day">День</string>
+    <string name="day_display">День %1$d</string>
+    <string name="day_format">%1$d/56</string>
     <string name="start_workout">Начать тренировку</string>
     <string name="complete_workout">Завершить тренировку</string>
     <string name="label_description">Описание</string>
@@ -25,6 +28,9 @@
     <string name="timer_pause">Пауза</string>
     <string name="timer_start">Старт</string>
     <string name="timer_reset">Сброс</string>
+    <string name="rest">Отдых</string>
+    <string name="skip_rest">Пропустить</string>
+    <string name="next_label">Далее: %s</string>
     <string name="steps">Как выполнять</string>
     <string name="mistakes">Общие ошибки</string>
     <string name="warmup">Разминка</string>
@@ -40,6 +46,15 @@
     <string name="rest_day_message">Восстановление, прогулки, легкая мобильность. Дайте мышцам время на рост.</string>
     <string name="vibration">Вибрация</string>
     <string name="timer_ticks">Тиканье таймера</string>
+    <string name="feedback">Обратная связь</string>
+    <string name="lang_en">English</string>
+    <string name="lang_ru">Русский</string>
+    <string name="home">Главная</string>
+    <string name="progress">Прогресс</string>
+    <string name="posture">Осанка</string>
+    <string name="notification_channel_name">Ежедневное напоминание</string>
+    <string name="notification_title">Время тренировки!</string>
+    <string name="notification_text">Сохраняйте свою серию. Начните ежедневную тренировку прямо сейчас.</string>
     <string name="posture_training">Тренировка осанки</string>
     <string name="posture_desc">Исправьте осанку с помощью этих ежедневных упражнений.</string>
 
@@ -177,4 +192,18 @@
     <string name="ex_deep_squat">Глубокий присед</string>
     <string name="ex_deep_squat_desc">Находитесь в положении глубокого приседа.</string>
     <string name="ex_deep_squat_tech">Пятки на полу, грудь поднята.</string>
+
+    <string name="time">Время</string>
+    <string name="sets">Подходы</string>
+    <string name="reps">Повторы</string>
+    <string name="seconds_format">%1$dс</string>
+    <string name="sets_reps_format">%1$d × %2$d</string>
+    <string name="chart_label">Тренировок в неделю</string>
+    <string name="timer_format">%1$02d:%2$02d</string>
+
+    <string name="wt_strength_a">Силовая А</string>
+    <string name="wt_strength_b">Силовая Б</string>
+    <string name="wt_mobility">Мобильность</string>
+    <string name="wt_functional">Функциональная</string>
+    <string name="wt_rest">Отдых</string>
 </resources>

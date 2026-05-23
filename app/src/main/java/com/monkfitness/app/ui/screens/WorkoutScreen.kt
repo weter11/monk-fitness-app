@@ -91,7 +91,7 @@ fun WorkoutScreen(
                         Text(
                             if (isRestDay) stringResource(R.string.rest_day)
                             else when (currentStep) {
-                                WorkoutStep.OVERVIEW -> workout.type.name.replace("_", " ")
+                                WorkoutStep.OVERVIEW -> stringResource(workout.type.nameRes)
                                 WorkoutStep.WARMUP -> stringResource(R.string.warmup)
                                 WorkoutStep.MAIN -> stringResource(R.string.main_workout)
                                 WorkoutStep.POSTURE -> stringResource(R.string.posture_block)
@@ -101,7 +101,7 @@ fun WorkoutScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            stringResource(R.string.day) + " $day",
+                            stringResource(R.string.day_display, day),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.secondary
                         )
@@ -109,7 +109,10 @@ fun WorkoutScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.previous)
+            )
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -201,7 +204,7 @@ fun RestUI(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Rest",
+            text = stringResource(R.string.rest),
             style = MaterialTheme.typography.displayMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
@@ -210,7 +213,7 @@ fun RestUI(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = String.format("%02d:%02d", timeLeft / 60, timeLeft % 60),
+            text = stringResource(R.string.timer_format, timeLeft / 60, timeLeft % 60),
             style = MaterialTheme.typography.displayLarge,
             fontWeight = FontWeight.Bold
         )
@@ -219,7 +222,7 @@ fun RestUI(
 
         if (nextExercise != null) {
             Text(
-                text = "Next: ${stringResource(nextExercise.nameRes)}",
+                text = stringResource(R.string.next_label, stringResource(nextExercise.nameRes)),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.secondary
             )
@@ -227,7 +230,7 @@ fun RestUI(
         }
 
         MonkButton(
-            text = "Skip Rest",
+            text = stringResource(R.string.skip_rest),
             onClick = onSkip
         )
     }
@@ -358,7 +361,11 @@ fun ExerciseSession(
                 onClick = onInfo,
                 modifier = Modifier.align(Alignment.TopEnd)
             ) {
-                Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.primary)
+                Icon(
+                    Icons.Default.Info,
+                    contentDescription = stringResource(R.string.label_description),
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
         }
 
@@ -374,8 +381,8 @@ fun ExerciseSession(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = if (exercise.isTimerBased) "${exercise.durationSeconds}s"
-            else "${exercise.sets} × ${exercise.reps}",
+            text = if (exercise.isTimerBased) stringResource(R.string.seconds_format, exercise.durationSeconds)
+            else stringResource(R.string.sets_reps_format, exercise.sets, exercise.reps),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.secondary
         )
@@ -384,7 +391,7 @@ fun ExerciseSession(
 
         if (exercise.isTimerBased) {
             Text(
-                text = String.format("%02d:%02d", timeLeft / 60, timeLeft % 60),
+                text = stringResource(R.string.timer_format, timeLeft / 60, timeLeft % 60),
                 style = MaterialTheme.typography.displayLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary

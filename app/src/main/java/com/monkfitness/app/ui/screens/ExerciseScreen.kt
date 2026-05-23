@@ -54,14 +54,17 @@ fun ExerciseScreen(
                     title = { Text(stringResource(R.string.app_name)) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.previous)
+                            )
                         }
                     }
                 )
             }
         ) { padding ->
             Box(modifier = Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No description available", style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.description), style = MaterialTheme.typography.bodyLarge)
             }
         }
         return
@@ -76,7 +79,10 @@ fun ExerciseScreen(
                 title = { Text(stringResource(exercise.nameRes), fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.previous)
+                        )
                     }
                 }
             )
@@ -124,11 +130,11 @@ fun ExerciseScreen(
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 InfoChip(
-                    label = if (exercise.isTimerBased) "Time" else "Sets",
-                    value = if (exercise.isTimerBased) "${exercise.durationSeconds}s" else "${exercise.sets}"
+                    label = if (exercise.isTimerBased) stringResource(R.string.time) else stringResource(R.string.sets),
+                    value = if (exercise.isTimerBased) stringResource(R.string.seconds_format, exercise.durationSeconds) else exercise.sets.toString()
                 )
                 if (!exercise.isTimerBased) {
-                    InfoChip(label = "Reps", value = "${exercise.reps}")
+                    InfoChip(label = stringResource(R.string.reps), value = exercise.reps.toString())
                 }
             }
 
@@ -218,13 +224,13 @@ fun TimerDisplay(
                 if (isRunning) {
                     Icon(
                         painter = painterResource(R.drawable.ic_pause),
-                        contentDescription = "Pause",
+                        contentDescription = stringResource(R.string.timer_pause),
                         modifier = Modifier.size(32.dp)
                     )
                 } else {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Start",
+                        contentDescription = stringResource(R.string.timer_start),
                         modifier = Modifier.size(32.dp)
                     )
                 }
@@ -234,7 +240,7 @@ fun TimerDisplay(
                 modifier = Modifier.size(64.dp),
                 shape = CircleShape
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Reset")
+                Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.timer_reset))
             }
         }
     }

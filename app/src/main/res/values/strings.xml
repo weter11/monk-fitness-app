@@ -3,8 +3,11 @@
     <string name="week_label">Week %d</string>
     <string name="today_workout">TODAY\'S WORKOUT</string>
     <string name="completed">completed</string>
+    <string name="progress_percent">%1$d%% completed</string>
     <string name="streak">Streak</string>
     <string name="day">Day</string>
+    <string name="day_display">Day %1$d</string>
+    <string name="day_format">%1$d/56</string>
     <string name="start_workout">Start Workout</string>
     <string name="complete_workout">Complete Workout</string>
     <string name="label_description">Description</string>
@@ -25,6 +28,9 @@
     <string name="timer_pause">Pause</string>
     <string name="timer_start">Start</string>
     <string name="timer_reset">Reset</string>
+    <string name="rest">Rest</string>
+    <string name="skip_rest">Skip Rest</string>
+    <string name="next_label">Next: %s</string>
     <string name="steps">How to perform</string>
     <string name="mistakes">Common mistakes</string>
     <string name="warmup">Warmup</string>
@@ -40,6 +46,15 @@
     <string name="rest_day_message">Recovery, walking, light mobility. Give your muscles time to grow.</string>
     <string name="vibration">Vibration</string>
     <string name="timer_ticks">Timer Ticks</string>
+    <string name="feedback">Feedback</string>
+    <string name="lang_en">English</string>
+    <string name="lang_ru">Russian</string>
+    <string name="home">Home</string>
+    <string name="progress">Progress</string>
+    <string name="posture">Posture</string>
+    <string name="notification_channel_name">Daily Reminder</string>
+    <string name="notification_title">Time to Workout!</string>
+    <string name="notification_text">Keep your streak alive. Start your daily workout now.</string>
     <string name="posture_training">Posture Training</string>
     <string name="posture_desc">Correct your posture with these daily exercises.</string>
 
@@ -177,4 +192,18 @@
     <string name="ex_deep_squat">Deep Squat Hold</string>
     <string name="ex_deep_squat_desc">Sit deep in a squat position.</string>
     <string name="ex_deep_squat_tech">Keep heels on the ground and chest up.</string>
+
+    <string name="time">Time</string>
+    <string name="sets">Sets</string>
+    <string name="reps">Reps</string>
+    <string name="seconds_format">%1$ds</string>
+    <string name="sets_reps_format">%1$d × %2$d</string>
+    <string name="chart_label">Workouts per week</string>
+    <string name="timer_format">%1$02d:%2$02d</string>
+
+    <string name="wt_strength_a">Strength A</string>
+    <string name="wt_strength_b">Strength B</string>
+    <string name="wt_mobility">Mobility</string>
+    <string name="wt_functional">Functional</string>
+    <string name="wt_rest">Rest</string>
 </resources>

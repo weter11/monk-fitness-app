@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -25,6 +26,7 @@ import com.monkfitness.app.viewmodel.MainViewModel
 
 @Composable
 fun ProgressScreen(viewModel: MainViewModel) {
+    val context = LocalContext.current
     val progressList by viewModel.allProgress.collectAsState()
 
     val entries = progressList
@@ -85,7 +87,7 @@ fun ProgressScreen(viewModel: MainViewModel) {
                         }
                     },
                     update = { chart ->
-                        val dataSet = BarDataSet(entries, "Workouts per week")
+                        val dataSet = BarDataSet(entries, context.getString(R.string.chart_label))
                         dataSet.color = android.graphics.Color.GREEN
                         dataSet.valueTextColor = android.graphics.Color.WHITE
                         dataSet.valueTextSize = 10f

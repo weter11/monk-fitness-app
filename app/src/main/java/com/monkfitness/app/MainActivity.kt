@@ -12,10 +12,13 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -28,6 +31,8 @@ import androidx.navigation.navArgument
 import com.monkfitness.app.ui.screens.*
 import com.monkfitness.app.ui.theme.MonkFitnessTheme
 import com.monkfitness.app.viewmodel.MainViewModel
+import java.util.Locale
+import android.content.res.Configuration
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
@@ -47,21 +52,32 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            MonkFitnessTheme {
-                // Keying MainApp with language ensures full recomposition on language change
-                key(language) {
-                    MainApp(viewModel)
+            val context = LocalContext.current
+            val localizedContext = remember(language) {
+                val locale = Locale(language)
+                Locale.setDefault(locale)
+                val config = Configuration(context.resources.configuration)
+                config.setLocale(locale)
+                context.createConfigurationContext(config)
+            }
+
+            CompositionLocalProvider(LocalContext provides localizedContext) {
+                MonkFitnessTheme {
+                    // Keying MainApp with language ensures full recomposition on language change
+                    key(language) {
+                        MainApp(viewModel)
+                    }
                 }
             }
         }
     }
 }
 
-sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
-    object Home : Screen("home", "Home", Icons.Default.Home)
-    object Progress : Screen("progress", "Progress", Icons.Default.Star)
-    object Posture : Screen("posture", "Posture", Icons.Default.Person)
-    object Settings : Screen("settings", "Settings", Icons.Default.Settings)
+sealed class Screen(val route: String, val titleRes: Int, val icon: ImageVector) {
+    object Home : Screen("home", R.string.home, Icons.Default.Home)
+    object Progress : Screen("progress", R.string.progress, Icons.Default.Star)
+    object Posture : Screen("posture", R.string.posture, Icons.Default.Person)
+    object Settings : Screen("settings", R.string.settings, Icons.Default.Settings)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,8 +98,8 @@ fun MainApp(viewModel: MainViewModel) {
                     val screens = listOf(Screen.Home, Screen.Progress, Screen.Posture, Screen.Settings)
                     screens.forEach { screen ->
                         NavigationBarItem(
-                            icon = { Icon(screen.icon, contentDescription = screen.title) },
-                            label = { Text(screen.title) },
+                            icon = { Icon(screen.icon, contentDescription = stringResource(screen.titleRes)) },
+                            label = { Text(stringResource(screen.titleRes)) },
                             selected = currentRoute == screen.route,
                             onClick = {
                                 navController.navigate(screen.route) {

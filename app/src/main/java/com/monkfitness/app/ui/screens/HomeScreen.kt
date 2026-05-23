@@ -62,7 +62,7 @@ fun HomeScreen(
                     color = MaterialTheme.colorScheme.secondary
                 )
                 Text(
-                    text = workout.type.name.replace("_", " "),
+                    text = stringResource(workout.type.nameRes),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -79,7 +79,7 @@ fun HomeScreen(
                 )
 
                 Text(
-                    text = "${(targetProgress * 100).toInt()}% " + stringResource(R.string.completed),
+                    text = stringResource(R.string.progress_percent, (targetProgress * 100).toInt()),
                     modifier = Modifier.align(Alignment.End),
                     style = MaterialTheme.typography.labelSmall
                 )
@@ -100,7 +100,7 @@ fun HomeScreen(
             )
             InfoCard(
                 label = stringResource(R.string.day),
-                value = "$currentDay/56",
+                value = stringResource(R.string.day_format, currentDay),
                 modifier = Modifier.weight(1f),
                 icon = "📅"
             )
