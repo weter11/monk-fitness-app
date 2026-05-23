@@ -472,7 +472,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         nutritionExcludedFoods,
         _nutritionPlanSeed,
         _nutritionMealReplacements
-    ) { currentDay, weight, height, planDays, excludedFoods, planSeed, replacements ->
+    ) { values ->
+        val currentDay = values[0] as Int
+        val weight = values[1] as String
+        val height = values[2] as String
+        val planDays = values[3] as Int
+        @Suppress("UNCHECKED_CAST")
+        val excludedFoods = values[4] as Set<String>
+        val planSeed = values[5] as Int
+        @Suppress("UNCHECKED_CAST")
+        val replacements = values[6] as Map<String, String>
         generateNutritionPlan(
             seed = planSeed,
             startDay = currentDay,
