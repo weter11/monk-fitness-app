@@ -103,12 +103,12 @@ class WorkoutGenerator {
 
     fun getPostureExercises(): List<Exercise> {
         return listOf(
-            Exercise("hang", R.string.ex_hang, R.string.ex_hang_desc, R.string.ex_hang_tech, 0, 0, R.drawable.pull_up, 3, 1, 60, true, MainCategory.POSTURE, SubCategory.SHOULDERS),
-            Exercise("face_pull", R.string.ex_face_pull, R.string.ex_face_pull_desc, R.string.ex_face_pull_tech, 0, 0, R.drawable.ic_posture, 3, 15, 0, false, MainCategory.POSTURE, SubCategory.SHOULDERS),
+            Exercise("hang", R.string.ex_hang, R.string.ex_hang_desc, R.string.ex_hang_tech, R.string.ex_hang_steps, R.string.ex_hang_mistakes, R.drawable.pull_up, 3, 1, 60, true, MainCategory.POSTURE, SubCategory.SHOULDERS),
+            Exercise("face_pull", R.string.ex_face_pull, R.string.ex_face_pull_desc, R.string.ex_face_pull_tech, R.string.ex_face_pull_steps, R.string.ex_face_pull_mistakes, R.drawable.ic_posture, 3, 15, 0, false, MainCategory.POSTURE, SubCategory.SHOULDERS),
             Exercise("bird_dog_p", R.string.ex_bird_dog, R.string.ex_bird_dog_desc, R.string.ex_bird_dog_tech, R.string.ex_bird_dog_steps, R.string.ex_bird_dog_mistakes, R.drawable.bird_dog, 3, 12, 0, false, MainCategory.POSTURE, SubCategory.CORE),
             Exercise("superman", R.string.ex_superman, R.string.ex_superman_desc, R.string.ex_superman_tech, R.string.ex_superman_steps, R.string.ex_superman_mistakes, R.drawable.plank, 3, 12, 0, false, MainCategory.POSTURE, SubCategory.SPINE),
             Exercise("wall_slides", R.string.ex_wall_slides, R.string.ex_wall_slides_desc, R.string.ex_wall_slides_tech, R.string.ex_wall_slides_steps, R.string.ex_wall_slides_mistakes, R.drawable.ic_posture, 3, 15, 0, false, MainCategory.POSTURE, SubCategory.SHOULDERS),
-            Exercise("deep_squat", R.string.ex_deep_squat, R.string.ex_deep_squat_desc, R.string.ex_deep_squat_tech, 0, 0, R.drawable.squat, 3, 1, 60, true, MainCategory.POSTURE, SubCategory.HIPS),
+            Exercise("deep_squat", R.string.ex_deep_squat, R.string.ex_deep_squat_desc, R.string.ex_deep_squat_tech, R.string.ex_deep_squat_steps, R.string.ex_deep_squat_mistakes, R.drawable.squat, 3, 1, 60, true, MainCategory.POSTURE, SubCategory.HIPS),
             Exercise("pike_pushups", R.string.ex_pike_pushups, R.string.ex_pike_pushups_desc, R.string.ex_pike_pushups_tech, R.string.ex_pike_pushups_steps, R.string.ex_pike_pushups_mistakes, R.drawable.pike_pushup, 3, 8, 0, false, MainCategory.STRENGTH, SubCategory.SHOULDERS),
             Exercise("horse_stance", R.string.ex_horse_stance, R.string.ex_horse_stance_desc, R.string.ex_horse_stance_tech, R.string.ex_horse_stance_steps, R.string.ex_horse_stance_mistakes, R.drawable.horse_stance, 3, 1, 60, true, MainCategory.STRENGTH, SubCategory.LEGS)
         )
@@ -116,11 +116,11 @@ class WorkoutGenerator {
 
     fun getWarmupExercises(): List<Exercise> {
         return listOf(
-            Exercise("neck_circles", R.string.ex_neck_circles, R.string.ex_neck_circles, R.string.ex_neck_circles, 0, 0, R.drawable.ic_exercise_placeholder, 1, 1, 30, true, MainCategory.MOBILITY, SubCategory.SPINE),
-            Exercise("arm_circles", R.string.ex_arm_circles, R.string.ex_arm_circles, R.string.ex_arm_circles, 0, 0, R.drawable.ic_exercise_placeholder, 1, 1, 30, true, MainCategory.MOBILITY, SubCategory.SHOULDERS),
-            Exercise("hip_circles", R.string.ex_hip_circles, R.string.ex_hip_circles, R.string.ex_hip_circles, 0, 0, R.drawable.ic_exercise_placeholder, 1, 1, 30, true, MainCategory.MOBILITY, SubCategory.HIPS),
-            Exercise("leg_swings", R.string.ex_leg_swings, R.string.ex_leg_swings, R.string.ex_leg_swings, 0, 0, R.drawable.ic_exercise_placeholder, 1, 1, 30, true, MainCategory.MOBILITY, SubCategory.LEGS),
-            Exercise("jumping_jacks", R.string.ex_jumping_jacks, R.string.ex_jumping_jacks, R.string.ex_jumping_jacks, 0, 0, R.drawable.ic_exercise_placeholder, 1, 1, 60, true, MainCategory.MOBILITY, SubCategory.FULL_BODY)
+            Exercise("neck_circles", R.string.ex_neck_circles, R.string.ex_neck_circles_desc, R.string.ex_neck_circles_tech, R.string.ex_neck_circles_steps, R.string.ex_neck_circles_mistakes, R.drawable.ic_exercise_placeholder, 1, 1, 30, true, MainCategory.MOBILITY, SubCategory.SPINE),
+            Exercise("arm_circles", R.string.ex_arm_circles, R.string.ex_arm_circles_desc, R.string.ex_arm_circles_tech, R.string.ex_arm_circles_steps, R.string.ex_arm_circles_mistakes, R.drawable.ic_exercise_placeholder, 1, 1, 30, true, MainCategory.MOBILITY, SubCategory.SHOULDERS),
+            Exercise("hip_circles", R.string.ex_hip_circles, R.string.ex_hip_circles_desc, R.string.ex_hip_circles_tech, R.string.ex_hip_circles_steps, R.string.ex_hip_circles_mistakes, R.drawable.ic_exercise_placeholder, 1, 1, 30, true, MainCategory.MOBILITY, SubCategory.HIPS),
+            Exercise("leg_swings", R.string.ex_leg_swings, R.string.ex_leg_swings_desc, R.string.ex_leg_swings_tech, R.string.ex_leg_swings_steps, R.string.ex_leg_swings_mistakes, R.drawable.ic_exercise_placeholder, 1, 1, 30, true, MainCategory.MOBILITY, SubCategory.LEGS),
+            Exercise("jumping_jacks", R.string.ex_jumping_jacks, R.string.ex_jumping_jacks_desc, R.string.ex_jumping_jacks_tech, R.string.ex_jumping_jacks_steps, R.string.ex_jumping_jacks_mistakes, R.drawable.ic_exercise_placeholder, 1, 1, 60, true, MainCategory.MOBILITY, SubCategory.FULL_BODY)
         )
     }
 
@@ -136,18 +136,18 @@ class WorkoutGenerator {
         exercises.addAll(getPostureExercises())
 
         // Add new ones from curated list
-        exercises.add(Exercise("scapular_pullups", R.string.ex_scapular_pullups, R.string.ex_scapular_pullups_desc, R.string.ex_scapular_pullups_tech, 0, 0, R.drawable.pull_up, 3, 12, 0, false, MainCategory.POSTURE, SubCategory.SHOULDERS))
-        exercises.add(Exercise("snow_angels", R.string.ex_snow_angels, R.string.ex_snow_angels_desc, R.string.ex_snow_angels_tech, 0, 0, R.drawable.ic_posture, 3, 15, 0, false, MainCategory.POSTURE, SubCategory.SHOULDERS))
-        exercises.add(Exercise("band_pullaparts", R.string.ex_band_pullaparts, R.string.ex_band_pullaparts_desc, R.string.ex_band_pullaparts_tech, 0, 0, R.drawable.ic_posture, 3, 20, 0, false, MainCategory.POSTURE, SubCategory.SHOULDERS))
+        exercises.add(Exercise("scapular_pullups", R.string.ex_scapular_pullups, R.string.ex_scapular_pullups_desc, R.string.ex_scapular_pullups_tech, R.string.ex_scapular_pullups_steps, R.string.ex_scapular_pullups_mistakes, R.drawable.pull_up, 3, 12, 0, false, MainCategory.POSTURE, SubCategory.SHOULDERS))
+        exercises.add(Exercise("snow_angels", R.string.ex_snow_angels, R.string.ex_snow_angels_desc, R.string.ex_snow_angels_tech, R.string.ex_snow_angels_steps, R.string.ex_snow_angels_mistakes, R.drawable.ic_posture, 3, 15, 0, false, MainCategory.POSTURE, SubCategory.SHOULDERS))
+        exercises.add(Exercise("band_pullaparts", R.string.ex_band_pullaparts, R.string.ex_band_pullaparts_desc, R.string.ex_band_pullaparts_tech, R.string.ex_band_pullaparts_steps, R.string.ex_band_pullaparts_mistakes, R.drawable.ic_posture, 3, 20, 0, false, MainCategory.POSTURE, SubCategory.SHOULDERS))
 
-        exercises.add(Exercise("thoracic_rotations", R.string.ex_thoracic_rotations, R.string.ex_thoracic_rotations_desc, R.string.ex_thoracic_rotations_tech, 0, 0, R.drawable.ic_exercise_placeholder, 2, 10, 0, false, MainCategory.MOBILITY, SubCategory.SPINE))
-        exercises.add(Exercise("cobra_stretch", R.string.ex_cobra_stretch, R.string.ex_cobra_stretch_desc, R.string.ex_cobra_stretch_tech, 0, 0, R.drawable.ic_exercise_placeholder, 1, 1, 30, true, MainCategory.STRETCHING, SubCategory.SPINE))
-        exercises.add(Exercise("childs_pose", R.string.ex_childs_pose, R.string.ex_childs_pose_desc, R.string.ex_childs_pose_tech, 0, 0, R.drawable.ic_exercise_placeholder, 1, 1, 60, true, MainCategory.STRETCHING, SubCategory.SPINE))
-        exercises.add(Exercise("thoracic_extension", R.string.ex_thoracic_extension, R.string.ex_thoracic_extension_desc, R.string.ex_thoracic_extension_tech, 0, 0, R.drawable.ic_exercise_placeholder, 3, 10, 0, false, MainCategory.MOBILITY, SubCategory.SPINE))
+        exercises.add(Exercise("thoracic_rotations", R.string.ex_thoracic_rotations, R.string.ex_thoracic_rotations_desc, R.string.ex_thoracic_rotations_tech, R.string.ex_thoracic_rotations_steps, R.string.ex_thoracic_rotations_mistakes, R.drawable.ic_exercise_placeholder, 2, 10, 0, false, MainCategory.MOBILITY, SubCategory.SPINE))
+        exercises.add(Exercise("cobra_stretch", R.string.ex_cobra_stretch, R.string.ex_cobra_stretch_desc, R.string.ex_cobra_stretch_tech, R.string.ex_cobra_stretch_steps, R.string.ex_cobra_stretch_mistakes, R.drawable.ic_exercise_placeholder, 1, 1, 30, true, MainCategory.STRETCHING, SubCategory.SPINE))
+        exercises.add(Exercise("childs_pose", R.string.ex_childs_pose, R.string.ex_childs_pose_desc, R.string.ex_childs_pose_tech, R.string.ex_childs_pose_steps, R.string.ex_childs_pose_mistakes, R.drawable.ic_exercise_placeholder, 1, 1, 60, true, MainCategory.STRETCHING, SubCategory.SPINE))
+        exercises.add(Exercise("thoracic_extension", R.string.ex_thoracic_extension, R.string.ex_thoracic_extension_desc, R.string.ex_thoracic_extension_tech, R.string.ex_thoracic_extension_steps, R.string.ex_thoracic_extension_mistakes, R.drawable.ic_exercise_placeholder, 3, 10, 0, false, MainCategory.MOBILITY, SubCategory.SPINE))
 
-        exercises.add(Exercise("hip_flexor_stretch", R.string.ex_hip_flexor_stretch, R.string.ex_hip_flexor_stretch_desc, R.string.ex_hip_flexor_stretch_tech, 0, 0, R.drawable.ic_exercise_placeholder, 2, 1, 45, true, MainCategory.STRETCHING, SubCategory.HIPS))
-        exercises.add(Exercise("90_90_hips", R.string.ex_90_90_hips, R.string.ex_90_90_hips_desc, R.string.ex_90_90_hips_tech, 0, 0, R.drawable.ic_exercise_placeholder, 2, 10, 0, false, MainCategory.MOBILITY, SubCategory.HIPS))
-        exercises.add(Exercise("hamstring_stretch", R.string.ex_hamstring_stretch, R.string.ex_hamstring_stretch_desc, R.string.ex_hamstring_stretch_tech, 0, 0, R.drawable.ic_exercise_placeholder, 2, 1, 45, true, MainCategory.STRETCHING, SubCategory.LEGS))
+        exercises.add(Exercise("hip_flexor_stretch", R.string.ex_hip_flexor_stretch, R.string.ex_hip_flexor_stretch_desc, R.string.ex_hip_flexor_stretch_tech, R.string.ex_hip_flexor_stretch_steps, R.string.ex_hip_flexor_stretch_mistakes, R.drawable.ic_exercise_placeholder, 2, 1, 45, true, MainCategory.STRETCHING, SubCategory.HIPS))
+        exercises.add(Exercise("90_90_hips", R.string.ex_90_90_hips, R.string.ex_90_90_hips_desc, R.string.ex_90_90_hips_tech, R.string.ex_90_90_hips_steps, R.string.ex_90_90_hips_mistakes, R.drawable.ic_exercise_placeholder, 2, 10, 0, false, MainCategory.MOBILITY, SubCategory.HIPS))
+        exercises.add(Exercise("hamstring_stretch", R.string.ex_hamstring_stretch, R.string.ex_hamstring_stretch_desc, R.string.ex_hamstring_stretch_tech, R.string.ex_hamstring_stretch_steps, R.string.ex_hamstring_stretch_mistakes, R.drawable.ic_exercise_placeholder, 2, 1, 45, true, MainCategory.STRETCHING, SubCategory.LEGS))
 
         return exercises.distinctBy { it.id }
     }
