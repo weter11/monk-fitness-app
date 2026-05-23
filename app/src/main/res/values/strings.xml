@@ -14,10 +14,10 @@
     <string name="label_steps">How to perform</string>
     <string name="label_technique">Technique</string>
     <string name="label_mistakes">Common mistakes</string>
-    <string name="description">No description available.</string>
-    <string name="steps_default">Follow the on-screen guidance or performed standard movement patterns.</string>
-    <string name="technique">Follow proper form and control your breathing.</string>
-    <string name="mistakes_default">Focus on controlled motion and avoid using momentum.</string>
+    <string name="description">Content loading error.</string>
+    <string name="steps_default">Content loading error.</string>
+    <string name="technique">Content loading error.</string>
+    <string name="mistakes_default">Content loading error.</string>
     <string name="your_progress">Your Progress</string>
     <string name="no_progress_yet">Start your first workout to see your progress chart!</string>
     <string name="completed_days">Total Completed Days: %d</string>
@@ -57,6 +57,19 @@
     <string name="notification_text">Keep your streak alive. Start your daily workout now.</string>
     <string name="posture_training">Posture Training</string>
     <string name="posture_desc">Correct your posture with these daily exercises.</string>
+
+    <!-- Categories -->
+    <string name="cat_strength">Strength</string>
+    <string name="cat_mobility">Mobility</string>
+    <string name="cat_stretching">Stretching</string>
+    <string name="cat_posture">Posture</string>
+    <string name="subcat_shoulders">Shoulders</string>
+    <string name="subcat_spine">Spine</string>
+    <string name="subcat_hips">Hips</string>
+    <string name="subcat_legs">Legs</string>
+    <string name="subcat_core">Core</string>
+    <string name="subcat_fullbody">Full Body</string>
+    <string name="filter_all">All</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">Welcome to Monk Fitness</string>
@@ -154,18 +167,108 @@
     <string name="ex_glute_bridge_tech">Keep your core engaged to avoid overarching your lower back. Your shins should be vertical at the top of the movement. Do not let your knees cave in.</string>
     <string name="ex_glute_bridge_mistakes">Overarching the lower back, lifting the heels off the floor, and not fully extending the hips.</string>
 
-    <string name="ex_neck_circles">Neck Circles</string>
-    <string name="ex_arm_circles">Arm Circles</string>
-    <string name="ex_hip_circles">Hip Circles</string>
-    <string name="ex_leg_swings">Leg Swings</string>
-    <string name="ex_jumping_jacks">Jumping Jacks</string>
+    <!-- New Exercises -->
+    <string name="ex_scapular_pullups">Scapular Pull-ups</string>
+    <string name="ex_scapular_pullups_desc">A subtle but powerful movement to strengthen the scapular stabilizers and improve shoulder health.</string>
+    <string name="ex_scapular_pullups_steps">1. Hang from a pull-up bar with an overhand grip.\n2. Without bending your elbows, pull your shoulder blades down and together.\n3. Lift your body slightly using only your shoulders.\n4. Lower back to the starting dead-hang position with control.</string>
+    <string name="ex_scapular_pullups_tech">Keep your arms completely straight throughout the movement. Focus on the squeeze between your shoulder blades. Avoid swinging your body.</string>
+    <string name="ex_scapular_pullups_mistakes">Bending the elbows, using momentum to swing, and not reaching full extension at the bottom.</string>
 
-    <string name="ex_hang">Hang</string>
-    <string name="ex_hang_desc">Just hang from a bar.</string>
-    <string name="ex_hang_tech">Keep shoulders engaged, don\'t just dead hang.</string>
+    <string name="ex_snow_angels">Reverse Snow Angels</string>
+    <string name="ex_snow_angels_desc">Strengthens the upper back and improves shoulder posture by engaging the traps and rhomboids.</string>
+    <string name="ex_snow_angels_steps">1. Lie face down on the floor with arms at your sides, palms down.\n2. Lift your chest and arms slightly off the floor.\n3. Sweep your arms in a wide arc until they meet above your head.\n4. Reverse the movement back to the starting position.</string>
+    <string name="ex_snow_angels_tech">Keep your forehead on or near the floor to maintain a neutral neck. Keep your arms as straight as possible. Move slowly and with control.</string>
+    <string name="ex_snow_angels_mistakes">Arching the lower back excessively, lifting the head too high, and moving too fast.</string>
+
+    <string name="ex_band_pullaparts">Band Pull-Aparts</string>
+    <string name="ex_band_pullaparts_desc">Activates the rear deltoids and rhomboids for better shoulder alignment and stability.</string>
+    <string name="ex_band_pullaparts_steps">1. Stand tall holding a resistance band in front of you at shoulder height.\n2. Keep your arms straight and pull the band apart toward your chest.\n3. Squeeze your shoulder blades together at the end of the movement.\n4. Slowly return to the starting position.</string>
+    <string name="ex_band_pullaparts_tech">Keep your shoulders down and away from your ears. Ensure your core is tight and you are not arching your back. Focus on the horizontal pull.</string>
+    <string name="ex_band_pullaparts_mistakes">Shrugging the shoulders, arching the back, and bending the elbows.</string>
+
+    <string name="ex_thoracic_rotations">Thoracic Rotations</string>
+    <string name="ex_thoracic_rotations_desc">Improves rotational mobility in the mid-back (thoracic spine), reducing stiffness and improving posture.</string>
+    <string name="ex_thoracic_rotations_steps">1. Start on all fours or in a half-kneeling position.\n2. Place one hand behind your head.\n3. Rotate your elbow toward the opposite knee, then rotate it toward the ceiling.\n4. Follow the movement with your eyes and repeat.</string>
+    <string name="ex_thoracic_rotations_tech">Keep your hips still and focus the rotation on your mid-back. Breathe out as you rotate toward the ceiling. Move smoothly without forcing the range.</string>
+    <string name="ex_thoracic_rotations_mistakes">Rotating through the hips, pulling on the neck with your hand, and rushing the rotation.</string>
+
+    <string name="ex_cobra_stretch">Cobra Stretch</string>
+    <string name="ex_cobra_stretch_desc">Opens up the chest and stretches the abdominal muscles while improving spinal extension.</string>
+    <string name="ex_cobra_stretch_steps">1. Lie face down with hands placed under your shoulders.\n2. Press through your hands to lift your chest off the floor.\n3. Keep your hips on the ground and shoulders down.\n4. Look forward and hold the stretch while breathing.</string>
+    <string name="ex_cobra_stretch_tech">Keep your shoulders away from your ears. Don\'t lock your elbows if it feels uncomfortable. Focus on a gentle curve throughout the spine.</string>
+    <string name="ex_cobra_stretch_mistakes">Shrugging shoulders, lifting hips off the floor, and overextending the neck.</string>
+
+    <string name="ex_childs_pose">Child\'s Pose</string>
+    <string name="ex_childs_pose_desc">A resting pose that gently stretches the lower back, hips, and shoulders while promoting relaxation.</string>
+    <string name="ex_childs_pose_steps">1. Kneel on the floor with big toes touching and sit on your heels.\n2. Fold forward and rest your forehead on the floor.\n3. Extend your arms forward or place them alongside your body.\n4. Breathe deeply and sink your hips toward your heels.</string>
+    <string name="ex_childs_pose_tech">Breathe deeply into your back and ribcage. Relax your jaw and shoulders. If it\'s uncomfortable for the knees, widen the space between them.</string>
+    <string name="ex_childs_pose_mistakes">Holding tension in the neck, holding breath, and lifting the hips too high from the heels.</string>
+
+    <string name="ex_thoracic_extension">Thoracic Extension</string>
+    <string name="ex_thoracic_extension_desc">Counters the "slumped" posture by extending the mid-back over a foam roller or chair.</string>
+    <string name="ex_thoracic_extension_steps">1. Sit or lie down with a foam roller or the edge of a chair behind your mid-back.\n2. Support your head with your hands.\n3. Gently lean back over the roller or chair, extending your upper spine.\n4. Return to the starting position and repeat at different levels of the mid-back.</string>
+    <string name="ex_thoracic_extension_tech">Focus on bending from the mid-back, not the lower back. Keep your ribs tucked in. Avoid pulling on your neck.</string>
+    <string name="ex_thoracic_extension_mistakes">Arching the lower back, pulling the neck, and moving too quickly.</string>
+
+    <string name="ex_hip_flexor_stretch">Hip Flexor Stretch</string>
+    <string name="ex_hip_flexor_stretch_desc">Lengthens the tight muscles at the front of the hip, which can relieve lower back pain.</string>
+    <string name="ex_hip_flexor_stretch_steps">1. Kneel on one knee (half-kneeling position).\n2. Tuck your tailbone under and squeeze the glute of the back leg.\n3. Gently shift your weight forward until you feel a stretch in the front of your hip.\n4. Hold the position and breathe.</string>
+    <string name="ex_hip_flexor_stretch_tech">Squeeze the glute of the back leg to deepen the stretch safely. Keep your torso upright. Do not over-arch your lower back.</string>
+    <string name="ex_hip_flexor_stretch_mistakes">Arching the lower back, leaning too far forward without glute engagement, and holding breath.</string>
+
+    <string name="ex_90_90_hips">90/90 Hips</string>
+    <string name="ex_90_90_hips_desc">A versatile movement for improving internal and external hip rotation and overall hip mobility.</string>
+    <string name="ex_90_90_hips_steps">1. Sit on the floor with your front leg at a 90-degree angle and back leg also at 90 degrees.\n2. Keep your torso upright and square to your front leg.\n3. Lean forward slightly over the front leg to stretch the glute.\n4. Rotate your torso toward the back leg to work on internal rotation.</string>
+    <string name="ex_90_90_hips_tech">Try to keep your torso as upright as possible throughout the movement. Breathe into the tight areas of the hips. Use your hands for support if needed.</string>
+    <string name="ex_90_90_hips_mistakes">Rounding the back, rushing the movement, and ignoring sharp pain.</string>
+
+    <string name="ex_hamstring_stretch">Hamstring Stretch</string>
+    <string name="ex_hamstring_stretch_desc">Relieves tension in the back of the legs and can help improve overall mobility.</string>
+    <string name="ex_hamstring_stretch_steps">1. Stand or sit with one leg extended in front of you.\n2. Keep your back straight and hinge forward at the hips.\n3. Reach toward your toes until you feel a gentle stretch.\n4. Hold and breathe deeply.</string>
+    <string name="ex_hamstring_stretch_tech">Keep a slight bend in the knee to protect the joint. Focus on hinging at the hips rather than rounding the back. Keep your toes pointed up.</string>
+    <string name="ex_hamstring_stretch_mistakes">Rounding the back, locking the knee, and bouncing in the stretch.</string>
+
+    <string name="ex_neck_circles">Neck Circles</string>
+    <string name="ex_neck_circles_desc">Gently warms up the neck muscles and improves cervical mobility.</string>
+    <string name="ex_neck_circles_steps">1. Drop your chin to your chest.\n2. Slowly rotate your head in a full circle.\n3. Move with control and avoid any sharp pain.\n4. Switch directions after several rotations.</string>
+    <string name="ex_neck_circles_tech">Move slowly and breathe. Do not force the range of motion. Keep your shoulders relaxed.</string>
+    <string name="ex_neck_circles_mistakes">Moving too fast, shrugging shoulders, and forcing through pain.</string>
+
+    <string name="ex_arm_circles">Arm Circles</string>
+    <string name="ex_arm_circles_desc">Increases blood flow and mobility in the shoulder joints.</string>
+    <string name="ex_arm_circles_steps">1. Stand with arms extended out to the sides at shoulder height.\n2. Make small circles with your arms, gradually increasing the size.\n3. Perform circles in both forward and backward directions.\n4. Keep your core engaged and torso still.</string>
+    <string name="ex_arm_circles_tech">Keep your arms straight. Control the movement from the shoulders. Don\'t let your torso swing.</string>
+    <string name="ex_arm_circles_mistakes">Bending elbows, swinging the torso, and moving too quickly.</string>
+
+    <string name="ex_hip_circles">Hip Circles</string>
+    <string name="ex_hip_circles_desc">Warms up the hip joints and lower back muscles.</string>
+    <string name="ex_hip_circles_steps">1. Stand with feet shoulder-width apart and hands on your hips.\n2. Rotate your hips in a large circular motion.\n3. Imagine you are using your hips to draw a circle on the floor.\n4. Switch directions after several rotations.</string>
+    <string name="ex_hip_circles_tech">Keep your feet flat on the floor. Move through a full, comfortable range of motion. Breathe naturally.</string>
+    <string name="ex_hip_circles_mistakes">Moving too fast, keeping hips too stiff, and lifting feet.</string>
+
+    <string name="ex_leg_swings">Leg Swings</string>
+    <string name="ex_leg_swings_desc">A dynamic stretch for the hips, hamstrings, and glutes.</string>
+    <string name="ex_leg_swings_steps">1. Stand next to a wall or support for balance.\n2. Swing one leg forward and backward in a controlled manner.\n3. Gradually increase the height of the swing as you warm up.\n4. Switch legs and repeat.</string>
+    <string name="ex_leg_swings_tech">Keep your torso upright; don\'t lean forward or back. Control the swing with your muscles, don\'t just use momentum. Keep your core engaged.</string>
+    <string name="ex_leg_swings_mistakes">Leaning the torso, using excessive momentum, and locking the standing leg knee.</string>
+
+    <string name="ex_jumping_jacks">Jumping Jacks</string>
+    <string name="ex_jumping_jacks_desc">A classic full-body warm-up that increases heart rate and improves coordination.</string>
+    <string name="ex_jumping_jacks_steps">1. Stand with feet together and arms at your sides.\n2. Jump up, spreading your legs and swinging arms above your head.\n3. Jump again to return to the starting position.\n4. Maintain a steady rhythm.</string>
+    <string name="ex_jumping_jacks_tech">Land softly on the balls of your feet. Keep a slight bend in your knees. Move your arms in a full range of motion.</string>
+    <string name="ex_jumping_jacks_mistakes">Landing flat-footed, keeping arms stiff, and holding breath.</string>
+
+    <string name="ex_hang">Active Hang</string>
+    <string name="ex_hang_desc">A fundamental grip and shoulder health exercise that decompresses the spine.</string>
+    <string name="ex_hang_steps">1. Grab a pull-up bar with an overhand grip.\n2. Let your body hang freely with arms fully extended.\n3. Engage your shoulders by pulling them down away from your ears (active hang).\n4. Hold the position for the required time.</string>
+    <string name="ex_hang_tech">Keep your core slightly engaged to avoid excessive arching. Maintain an "active" shoulder position. Breathe steadily throughout the hold.</string>
+    <string name="ex_hang_mistakes">Dead hanging (relaxing shoulders completely), holding breath, and swinging.</string>
+
     <string name="ex_face_pull">Face Pull</string>
-    <string name="ex_face_pull_desc">Pull band towards your face.</string>
-    <string name="ex_face_pull_tech">Focus on rear delts and squeezing shoulder blades.</string>
+    <string name="ex_face_pull_desc">An excellent exercise for rear deltoid development and improving shoulder posture.</string>
+    <string name="ex_face_pull_steps">1. Attach a rope or band at eye level.\n2. Pull the handles toward your face, pulling the ends apart.\n3. Squeeze your shoulder blades together at the end of the movement.\n4. Slowly return to the starting position.</string>
+    <string name="ex_face_pull_tech">Focus on pulling with your elbows and rotating your hands back. Keep your chest up. Do not use momentum to pull the weight.</string>
+    <string name="ex_face_pull_mistakes">Using too much weight, pulling to the chest instead of the face, and shrugging shoulders.</string>
     <string name="ex_superman">Superman</string>
     <string name="ex_superman_desc">A movement designed to strengthen the lower back and improve posture by engaging the entire posterior chain.</string>
     <string name="ex_superman_steps">1. Lie face down on the floor with arms extended overhead.\n2. Simultaneously lift your arms, chest, and legs off the ground.\n3. Hold the "flying" position for 2-3 seconds.\n4. Slowly lower back down to the floor.</string>
@@ -190,8 +293,10 @@
     <string name="ex_horse_stance_tech">Tuck your pelvis slightly to avoid overarching the lower back. Distribute weight evenly across the entire foot. Focus on a steady, calm breath.</string>
     <string name="ex_horse_stance_mistakes">Letting the knees collapse inward, rounding the back, and not sinking deep enough.</string>
     <string name="ex_deep_squat">Deep Squat Hold</string>
-    <string name="ex_deep_squat_desc">Sit deep in a squat position.</string>
-    <string name="ex_deep_squat_tech">Keep heels on the ground and chest up.</string>
+    <string name="ex_deep_squat_desc">A fundamental movement for hip, knee, and ankle mobility.</string>
+    <string name="ex_deep_squat_steps">1. Stand with feet shoulder-width apart.\n2. Lower your hips as deep as possible while keeping heels on the ground.\n3. Use your elbows to gently push your knees outward.\n4. Maintain an upright chest and hold the position.</string>
+    <string name="ex_deep_squat_tech">Keep your heels flat on the floor. If they lift, widen your stance. Keep your chest up and breathe deeply into the belly.</string>
+    <string name="ex_deep_squat_mistakes">Lifting heels, rounding the back excessively, and caving knees inward.</string>
 
     <string name="time">Time</string>
     <string name="sets">Sets</string>
