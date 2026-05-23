@@ -6,8 +6,15 @@ import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.model.WorkoutType
+import kotlin.random.Random
 
 class WorkoutGenerator {
+
+    private data class WorkoutSelectionRule(
+        val count: Int,
+        val preferredMatch: (Exercise) -> Boolean,
+        val fallbackMatch: (Exercise) -> Boolean = preferredMatch
+    )
 
     private val allExercises = listOf(
         baseExercise("pushups", R.string.ex_pushups, R.string.ex_pushups_desc, R.string.ex_pushups_tech, R.string.ex_pushups_steps, R.string.ex_pushups_mistakes, imageRes = R.drawable.push_up, sets = 3, reps = 10, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.FULL_BODY),
@@ -69,60 +76,112 @@ class WorkoutGenerator {
         return Workout(
             id = safeDay,
             type = type,
-            exercises = getExercisesForType(type, phase)
+            exercises = getExercisesForType(type, phase, safeDay)
         )
     }
 
-    private fun getExercisesForType(type: WorkoutType, phase: Int): List<Exercise> {
+    private fun getExercisesForType(type: WorkoutType, phase: Int, daySeed: Int): List<Exercise> {
         return try {
-            when (type) {
+            val selectionRules = when (type) {
                 WorkoutType.STRENGTH_A -> listOf(
-                    phasedExercise("pushups", phase, baseReps = 8, baseSets = 3),
-                    phasedExercise("squats", phase, baseReps = 12, baseSets = 3),
-                    phasedExercise("pullups", phase, baseReps = 5, baseSets = 3),
-                    phasedExercise("plank", phase, baseReps = 1, baseSets = 3, isTimer = true, baseDuration = 30)
+                    subCategoryRule(ExerciseSubCategory.LEGS, preferredCategories = setOf(ExerciseCategory.STRENGTH)),
+                    subCategoryRule(ExerciseSubCategory.CORE, preferredCategories = setOf(ExerciseCategory.STRENGTH, ExerciseCategory.MOBILITY)),
+                    subCategoryRule(ExerciseSubCategory.FULL_BODY, preferredCategories = setOf(ExerciseCategory.STRENGTH))
                 )
                 WorkoutType.STRENGTH_B -> listOf(
-                    phasedExercise("dips", phase, baseReps = 8, baseSets = 3),
-                    phasedExercise("lunges", phase, baseReps = 10, baseSets = 3),
-                    phasedExercise("rows", phase, baseReps = 10, baseSets = 3),
-                    phasedExercise("glute_bridge", phase, baseReps = 15, baseSets = 3)
+                    subCategoryRule(ExerciseSubCategory.SHOULDERS, preferredCategories = setOf(ExerciseCategory.STRENGTH)),
+                    WorkoutSelectionRule(
+                        count = 1,
+                        preferredMatch = { it.category == ExerciseCategory.POSTURE },
+                        fallbackMatch = { it.category == ExerciseCategory.POSTURE || it.subCategory == ExerciseSubCategory.SPINE }
+                    ),
+                    subCategoryRule(ExerciseSubCategory.CORE, preferredCategories = setOf(ExerciseCategory.STRENGTH, ExerciseCategory.MOBILITY))
                 )
                 WorkoutType.MOBILITY -> listOf(
-                    phasedExercise("cat_cow", phase, baseReps = 15, baseSets = 2),
-                    phasedExercise("bird_dog", phase, baseReps = 10, baseSets = 3),
-                    phasedExercise("world_greatest_stretch", phase, baseReps = 5, baseSets = 2)
+                    subCategoryRule(
+                        ExerciseSubCategory.SPINE,
+                        count = 2,
+                        preferredCategories = setOf(ExerciseCategory.MOBILITY, ExerciseCategory.STRETCHING, ExerciseCategory.POSTURE)
+                    ),
+                    subCategoryRule(
+                        ExerciseSubCategory.HIPS,
+                        preferredCategories = setOf(ExerciseCategory.MOBILITY, ExerciseCategory.STRETCHING, ExerciseCategory.STRENGTH)
+                    )
                 )
                 WorkoutType.FUNCTIONAL -> listOf(
-                    phasedExercise("burpees", phase, baseReps = 10, baseSets = 3),
-                    phasedExercise("mountain_climbers", phase, baseReps = 20, baseSets = 3),
-                    phasedExercise("kettlebell_swing", phase, baseReps = 15, baseSets = 3)
+                    subCategoryRule(
+                        ExerciseSubCategory.FULL_BODY,
+                        count = 3,
+                        preferredCategories = setOf(ExerciseCategory.STRENGTH, ExerciseCategory.MOBILITY)
+                    )
                 )
-                WorkoutType.REST -> emptyList()
+                WorkoutType.REST -> return emptyList()
             }
+
+            selectExercises(selectionRules, phase, Random(daySeed * 1_000 + type.ordinal))
         } catch (_: Exception) {
             emptyList()
         }
     }
 
-    private fun phasedExercise(
-        id: String,
+    private fun subCategoryRule(
+        subCategory: ExerciseSubCategory,
+        count: Int = 1,
+        preferredCategories: Set<ExerciseCategory> = emptySet()
+    ): WorkoutSelectionRule {
+        val fallbackMatch: (Exercise) -> Boolean = { it.subCategory == subCategory }
+        val preferredMatch: (Exercise) -> Boolean = { exercise ->
+            exercise.subCategory == subCategory &&
+                (preferredCategories.isEmpty() || exercise.category in preferredCategories)
+        }
+
+        return WorkoutSelectionRule(
+            count = count,
+            preferredMatch = preferredMatch,
+            fallbackMatch = fallbackMatch
+        )
+    }
+
+    private fun selectExercises(
+        selectionRules: List<WorkoutSelectionRule>,
         phase: Int,
-        baseReps: Int,
-        baseSets: Int,
-        isTimer: Boolean = false,
-        baseDuration: Int = 0
+        random: Random
+    ): List<Exercise> {
+        val selectedIds = mutableSetOf<String>()
+
+        return buildList {
+            selectionRules.forEach { rule ->
+                repeat(rule.count) {
+                    val exercise = pickExercise(rule, selectedIds, random)
+                    selectedIds += exercise.id
+                    add(phasedExercise(exercise, phase))
+                }
+            }
+        }
+    }
+
+    private fun pickExercise(
+        rule: WorkoutSelectionRule,
+        selectedIds: Set<String>,
+        random: Random
     ): Exercise {
-        val exercise = requireExercise(id)
-        val sets = baseSets + (phase - 1)
-        val reps = baseReps + (phase - 1) * 2
-        val duration = baseDuration + (phase - 1) * 15
+        val preferredMatches = allExercises.filter { it.id !in selectedIds && rule.preferredMatch(it) }
+        val fallbackMatches = allExercises.filter { it.id !in selectedIds && rule.fallbackMatch(it) }
+
+        val candidates = preferredMatches.ifEmpty { fallbackMatches }
+        return checkNotNull(candidates.randomOrNull(random)) { "No exercise matches selection rule" }
+    }
+
+    private fun phasedExercise(exercise: Exercise, phase: Int): Exercise {
+        val sets = exercise.sets + (phase - 1)
+        val reps = if (exercise.isTimerBased) 1 else exercise.reps + (phase - 1) * 2
+        val duration = if (exercise.isTimerBased) exercise.durationSeconds + (phase - 1) * 15 else exercise.durationSeconds
 
         return exercise.copy(
             sets = sets,
-            reps = if (isTimer) 1 else reps,
+            reps = reps,
             durationSeconds = duration,
-            isTimerBased = isTimer
+            isTimerBased = exercise.isTimerBased
         )
     }
 

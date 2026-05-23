@@ -3,6 +3,7 @@ package com.monkfitness.app
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
+import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.WorkoutType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -24,17 +25,48 @@ class WorkoutGeneratorTest {
     }
 
     @Test
-    fun testPhaseLogic() {
-        val p1Exercise = generator.generateWorkout(1).exercises[0] // Pushups P1
-        val p2Exercise = generator.generateWorkout(15).exercises[0] // Pushups P2 (Week 3)
-        val p3Exercise = generator.generateWorkout(29).exercises[0] // Pushups P3 (Week 5)
-        val p4Exercise = generator.generateWorkout(43).exercises[0] // Pushups P4 (Week 7)
+    fun testGeneratedExercisesRespectRequestedWorkoutStructure() {
+        val strengthA = generator.generateWorkout(1).exercises
+        val strengthB = generator.generateWorkout(3).exercises
+        val mobility = generator.generateWorkout(2).exercises
+        val functional = generator.generateWorkout(5).exercises
 
-        // Base sets 3, increase 1 per phase
-        assertEquals(3, p1Exercise.sets)
-        assertEquals(4, p2Exercise.sets)
-        assertEquals(5, p3Exercise.sets)
-        assertEquals(6, p4Exercise.sets)
+        assertEquals(3, strengthA.size)
+        assertEquals(listOf(ExerciseSubCategory.LEGS, ExerciseSubCategory.CORE, ExerciseSubCategory.FULL_BODY), strengthA.map { it.subCategory })
+        assertEquals(3, strengthA.map { it.id }.distinct().size)
+
+        assertEquals(3, strengthB.size)
+        assertEquals(ExerciseSubCategory.SHOULDERS, strengthB[0].subCategory)
+        assertEquals(ExerciseCategory.POSTURE, strengthB[1].category)
+        assertEquals(ExerciseSubCategory.CORE, strengthB[2].subCategory)
+        assertEquals(3, strengthB.map { it.id }.distinct().size)
+
+        assertEquals(3, mobility.size)
+        assertEquals(
+            listOf(
+                ExerciseSubCategory.SPINE,
+                ExerciseSubCategory.SPINE,
+                ExerciseSubCategory.HIPS
+            ),
+            mobility.map { it.subCategory }
+        )
+        assertEquals(3, mobility.map { it.id }.distinct().size)
+
+        assertEquals(3, functional.size)
+        assertTrue(functional.all { it.subCategory == ExerciseSubCategory.FULL_BODY })
+        assertEquals(3, functional.map { it.id }.distinct().size)
+    }
+
+    @Test
+    fun testPhaseLogicUsesExerciseLibraryBaseValues() {
+        val libraryById = generator.getExerciseLibrary().associateBy { it.id }
+
+        assertPhaseProgression(generator.generateWorkout(1).exercises, libraryById, expectedPhase = 1)
+        assertPhaseProgression(generator.generateWorkout(15).exercises, libraryById, expectedPhase = 2)
+        assertPhaseProgression(generator.generateWorkout(29).exercises, libraryById, expectedPhase = 3)
+        assertPhaseProgression(generator.generateWorkout(43).exercises, libraryById, expectedPhase = 4)
+        assertPhaseProgression(generator.generateWorkout(2).exercises, libraryById, expectedPhase = 1)
+        assertPhaseProgression(generator.generateWorkout(16).exercises, libraryById, expectedPhase = 2)
     }
 
     @Test
@@ -70,10 +102,9 @@ class WorkoutGeneratorTest {
         val usedIds = buildSet {
             addAll(generator.getWarmupExercises().map { it.id })
             addAll(generator.getPostureExercises().map { it.id })
-            addAll(generator.generateWorkout(1).exercises.map { it.id })
-            addAll(generator.generateWorkout(2).exercises.map { it.id })
-            addAll(generator.generateWorkout(3).exercises.map { it.id })
-            addAll(generator.generateWorkout(5).exercises.map { it.id })
+            (1..56).forEach { day ->
+                addAll(generator.generateWorkout(day).exercises.map { it.id })
+            }
         }
 
         assertTrue(libraryIds.containsAll(usedIds))
@@ -81,12 +112,41 @@ class WorkoutGeneratorTest {
 
     @Test
     fun testExerciseMetadataIsAssigned() {
-        val pushups = generator.generateWorkout(1).exercises.first { it.id == "pushups" }
+        val pushups = generator.getExerciseLibrary().first { it.id == "pushups" }
         val catCow = generator.getExerciseLibrary().first { it.id == "cat_cow" }
 
         assertEquals(ExerciseCategory.STRENGTH, pushups.category)
         assertEquals(ExerciseSubCategory.FULL_BODY, pushups.subCategory)
         assertEquals(ExerciseCategory.MOBILITY, catCow.category)
         assertEquals(ExerciseSubCategory.SPINE, catCow.subCategory)
+    }
+
+    @Test
+    fun testWorkoutGenerationIsDeterministicForSameDay() {
+        val first = generator.generateWorkout(1).exercises.map { it.id }
+        val second = generator.generateWorkout(1).exercises.map { it.id }
+
+        assertEquals(first, second)
+    }
+
+    private fun assertPhaseProgression(
+        generatedExercises: List<Exercise>,
+        libraryById: Map<String, Exercise>,
+        expectedPhase: Int
+    ) {
+        generatedExercises.forEach { exercise ->
+            val base = checkNotNull(libraryById[exercise.id])
+
+            assertEquals(base.sets + (expectedPhase - 1), exercise.sets)
+
+            if (base.isTimerBased) {
+                assertTrue(exercise.isTimerBased)
+                assertEquals(1, exercise.reps)
+                assertEquals(base.durationSeconds + (expectedPhase - 1) * 15, exercise.durationSeconds)
+            } else {
+                assertEquals(base.reps + (expectedPhase - 1) * 2, exercise.reps)
+                assertEquals(base.durationSeconds, exercise.durationSeconds)
+            }
+        }
     }
 }
