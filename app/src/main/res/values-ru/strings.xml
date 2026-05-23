@@ -14,10 +14,10 @@
     <string name="label_steps">Как выполнять</string>
     <string name="label_technique">Техника</string>
     <string name="label_mistakes">Общие ошибки</string>
-    <string name="description">Описание отсутствует.</string>
-    <string name="steps_default">Следуйте инструкциям на экране или выполняйте стандартные схемы движений.</string>
-    <string name="technique">Соблюдайте технику и контролируйте дыхание.</string>
-    <string name="mistakes_default">Сосредоточьтесь на контролируемых движениях и избегайте использования инерции.</string>
+    <string name="description">Ошибка загрузки контента.</string>
+    <string name="steps_default">Ошибка загрузки контента.</string>
+    <string name="technique">Ошибка загрузки контента.</string>
+    <string name="mistakes_default">Ошибка загрузки контента.</string>
     <string name="your_progress">Ваш прогресс</string>
     <string name="no_progress_yet">Начните свою первую тренировку, чтобы увидеть график прогресса!</string>
     <string name="completed_days">Всего завершено дней: %d</string>

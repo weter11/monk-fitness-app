@@ -14,10 +14,10 @@
     <string name="label_steps">How to perform</string>
     <string name="label_technique">Technique</string>
     <string name="label_mistakes">Common mistakes</string>
-    <string name="description">No description available.</string>
-    <string name="steps_default">Follow the on-screen guidance or performed standard movement patterns.</string>
-    <string name="technique">Follow proper form and control your breathing.</string>
-    <string name="mistakes_default">Focus on controlled motion and avoid using momentum.</string>
+    <string name="description">Content loading error.</string>
+    <string name="steps_default">Content loading error.</string>
+    <string name="technique">Content loading error.</string>
+    <string name="mistakes_default">Content loading error.</string>
     <string name="your_progress">Your Progress</string>
     <string name="no_progress_yet">Start your first workout to see your progress chart!</string>
     <string name="completed_days">Total Completed Days: %d</string>

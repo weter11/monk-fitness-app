@@ -39,7 +39,7 @@ fun ExerciseScreen(
     LaunchedEffect(exercise) {
         Log.d("ExerciseScreen", "Opening ExerciseScreen with exercise: ${exercise?.id ?: "null"}")
         if (exercise != null) {
-            Log.d("ExerciseScreen", "Exercise details: nameRes=${exercise.nameRes}, isTimerBased=${exercise.isTimerBased}")
+            Log.d("ExerciseScreen", "Exercise details: name=${exercise.id}, nameRes=${exercise.nameRes}, descRes=${exercise.descriptionRes}, techRes=${exercise.techniqueRes}, stepsRes=${exercise.stepsRes}, mistakesRes=${exercise.mistakesRes}")
             // Only reset if timer is NOT already running (prevents interrupting active workout)
             if (exercise.isTimerBased && !viewModel.isTimerRunning.value) {
                 viewModel.resetTimer(exercise.durationSeconds)
