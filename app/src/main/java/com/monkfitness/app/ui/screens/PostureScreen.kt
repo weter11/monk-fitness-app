@@ -166,6 +166,7 @@ fun PostureScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun <T> FilterSection(
     title: String,
