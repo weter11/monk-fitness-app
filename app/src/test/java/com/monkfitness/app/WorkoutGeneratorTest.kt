@@ -61,12 +61,28 @@ class WorkoutGeneratorTest {
     fun testPhaseLogicUsesExerciseLibraryBaseValues() {
         val libraryById = generator.getExerciseLibrary().associateBy { it.id }
 
-        assertPhaseProgression(generator.generateWorkout(1).exercises, libraryById, expectedPhase = 1)
-        assertPhaseProgression(generator.generateWorkout(15).exercises, libraryById, expectedPhase = 2)
-        assertPhaseProgression(generator.generateWorkout(29).exercises, libraryById, expectedPhase = 3)
-        assertPhaseProgression(generator.generateWorkout(43).exercises, libraryById, expectedPhase = 4)
-        assertPhaseProgression(generator.generateWorkout(2).exercises, libraryById, expectedPhase = 1)
-        assertPhaseProgression(generator.generateWorkout(16).exercises, libraryById, expectedPhase = 2)
+        listOf(1, 8).forEach { day ->
+            assertPhaseProgression(generator.generateWorkout(day).exercises, libraryById, expectedPhase = 1)
+        }
+        listOf(15, 22).forEach { day ->
+            assertPhaseProgression(generator.generateWorkout(day).exercises, libraryById, expectedPhase = 2)
+        }
+        listOf(29, 36).forEach { day ->
+            assertPhaseProgression(generator.generateWorkout(day).exercises, libraryById, expectedPhase = 3)
+        }
+        listOf(43, 50).forEach { day ->
+            assertPhaseProgression(generator.generateWorkout(day).exercises, libraryById, expectedPhase = 4)
+        }
+    }
+
+    @Test
+    fun testAllGeneratedExercisesStayWithinPhaseTargets() {
+        val libraryById = generator.getExerciseLibrary().associateBy { it.id }
+
+        (1..56).forEach { day ->
+            val expectedPhase = (((((day - 1) / 7) + 1) - 1) / 2) + 1
+            assertPhaseProgression(generator.generateWorkout(day).exercises, libraryById, expectedPhase)
+        }
     }
 
     @Test
@@ -134,17 +150,30 @@ class WorkoutGeneratorTest {
         libraryById: Map<String, Exercise>,
         expectedPhase: Int
     ) {
+        val repRange = when (expectedPhase) {
+            1 -> 8..10
+            2 -> 10..15
+            3 -> 12..18
+            else -> 15..20
+        }
+        val durationRange = when (expectedPhase) {
+            1 -> 30..30
+            2 -> 45..45
+            3 -> 60..60
+            else -> 75..90
+        }
+
         generatedExercises.forEach { exercise ->
             val base = checkNotNull(libraryById[exercise.id])
 
-            assertEquals(base.sets + (expectedPhase - 1), exercise.sets)
+            assertEquals(base.sets, exercise.sets)
 
             if (base.isTimerBased) {
                 assertTrue(exercise.isTimerBased)
                 assertEquals(1, exercise.reps)
-                assertEquals(base.durationSeconds + (expectedPhase - 1) * 15, exercise.durationSeconds)
+                assertTrue(exercise.durationSeconds in durationRange)
             } else {
-                assertEquals(base.reps + (expectedPhase - 1) * 2, exercise.reps)
+                assertTrue(exercise.reps in repRange)
                 assertEquals(base.durationSeconds, exercise.durationSeconds)
             }
         }

@@ -6,6 +6,7 @@ import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.model.WorkoutType
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 class WorkoutGenerator {
@@ -56,6 +57,8 @@ class WorkoutGenerator {
     )
 
     private val exercisesById = allExercises.associateBy { it.id }
+    private val repSourceRange = valueRange(allExercises.filterNot { it.isTimerBased }.map { it.reps })
+    private val durationSourceRange = valueRange(allExercises.filter { it.isTimerBased }.map { it.durationSeconds })
 
     fun generateWorkout(day: Int): Workout {
         val safeDay = if (day in 1..56) day else 1
@@ -173,16 +176,62 @@ class WorkoutGenerator {
     }
 
     private fun phasedExercise(exercise: Exercise, phase: Int): Exercise {
-        val sets = exercise.sets + (phase - 1)
-        val reps = if (exercise.isTimerBased) 1 else exercise.reps + (phase - 1) * 2
-        val duration = if (exercise.isTimerBased) exercise.durationSeconds + (phase - 1) * 15 else exercise.durationSeconds
+        val reps = if (exercise.isTimerBased) {
+            1
+        } else {
+            scaleValueToRange(exercise.reps, repSourceRange, phaseRepRange(phase))
+        }
+        val duration = if (exercise.isTimerBased) {
+            scaleValueToRange(exercise.durationSeconds, durationSourceRange, phaseDurationRange(phase))
+        } else {
+            exercise.durationSeconds
+        }
 
         return exercise.copy(
-            sets = sets,
+            sets = exercise.sets,
             reps = reps,
             durationSeconds = duration,
             isTimerBased = exercise.isTimerBased
         )
+    }
+
+    private fun phaseRepRange(phase: Int): IntRange {
+        return when (phase) {
+            1 -> 8..10
+            2 -> 10..15
+            3 -> 12..18
+            else -> 15..20
+        }
+    }
+
+    private fun phaseDurationRange(phase: Int): IntRange {
+        return when (phase) {
+            1 -> 30..30
+            2 -> 45..45
+            3 -> 60..60
+            else -> 75..90
+        }
+    }
+
+    private fun valueRange(values: List<Int>): IntRange {
+        val min = values.minOrNull() ?: 0
+        val max = values.maxOrNull() ?: min
+        return min..max
+    }
+
+    private fun scaleValueToRange(value: Int, sourceRange: IntRange, targetRange: IntRange): Int {
+        if (targetRange.first == targetRange.last) {
+            return targetRange.first
+        }
+
+        if (sourceRange.first == sourceRange.last) {
+            return targetRange.first
+        }
+
+        val ratio = (value - sourceRange.first).toDouble() / (sourceRange.last - sourceRange.first).toDouble()
+        return (targetRange.first + ratio * (targetRange.last - targetRange.first))
+            .roundToInt()
+            .coerceIn(targetRange.first, targetRange.last)
     }
 
     private fun baseExercise(
