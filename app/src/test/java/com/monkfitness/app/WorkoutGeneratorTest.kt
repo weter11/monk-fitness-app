@@ -42,34 +42,41 @@ class WorkoutGeneratorTest {
         val library = generator.getExerciseLibrary()
         val ids = library.map { it.id }
 
-        assertEquals(20, library.size)
-        assertEquals(20, ids.distinct().size)
+        assertEquals(36, library.size)
+        assertEquals(36, ids.distinct().size)
         assertTrue(
             ids.containsAll(
                 listOf(
                     "face_pull",
-                    "scapular_pullups",
-                    "wall_slides",
-                    "reverse_snow_angels",
-                    "band_pull_aparts",
-                    "thoracic_rotations",
-                    "cat_cow",
-                    "cobra_stretch",
-                    "child_pose",
-                    "thoracic_extension",
-                    "hip_flexor_stretch",
-                    "ninety_ninety_hips",
-                    "deep_squat",
-                    "hamstring_stretch",
-                    "glute_bridge",
-                    "world_greatest_stretch",
+                    "pushups",
+                    "burpees",
+                    "hang",
+                    "horse_stance",
+                    "jumping_jacks",
+                    "neck_circles",
+                    "arm_circles",
+                    "hip_circles",
+                    "leg_swings",
                     "bird_dog",
-                    "plank",
-                    "lunges",
-                    "pushups"
+                    "world_greatest_stretch"
                 )
             )
         )
+    }
+
+    @Test
+    fun testLibraryContainsAllWorkoutAndSupplementalExercises() {
+        val libraryIds = generator.getExerciseLibrary().map { it.id }.toSet()
+        val usedIds = buildSet {
+            addAll(generator.getWarmupExercises().map { it.id })
+            addAll(generator.getPostureExercises().map { it.id })
+            addAll(generator.generateWorkout(1).exercises.map { it.id })
+            addAll(generator.generateWorkout(2).exercises.map { it.id })
+            addAll(generator.generateWorkout(3).exercises.map { it.id })
+            addAll(generator.generateWorkout(5).exercises.map { it.id })
+        }
+
+        assertTrue(libraryIds.containsAll(usedIds))
     }
 
     @Test
