@@ -11,7 +11,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -296,7 +295,7 @@ fun DifficultyAdjustmentCard(
                     enabled = adjustment > -2,
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(Icons.Default.Remove, contentDescription = null)
+                    Text(text = "−", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(stringResource(R.string.easier))
                 }
