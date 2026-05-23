@@ -45,10 +45,12 @@ fun HomeScreen(
         targetValue = postureProgress,
         label = "PostureProgressAnimation"
     )
+    val fullBodyLabel = stringResource(ExerciseSubCategory.FULL_BODY.labelRes)
+    val selectedFocusAreaLabels = flexibilityFocusAreas.map { stringResource(it.labelRes) }
     val focusAreaSummary = if (ExerciseSubCategory.FULL_BODY in flexibilityFocusAreas) {
-        stringResource(ExerciseSubCategory.FULL_BODY.labelRes)
+        fullBodyLabel
     } else {
-        flexibilityFocusAreas.joinToString(", ") { stringResource(it.labelRes) }
+        selectedFocusAreaLabels.joinToString(", ")
     }
 
     Column(

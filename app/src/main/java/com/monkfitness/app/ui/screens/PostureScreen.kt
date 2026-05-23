@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -109,7 +110,7 @@ fun PostureScreen(
 
         OutlinedTextField(
             value = searchQuery,
-            onValueChange = { searchQuery = it },
+            onValueChange = { value: String -> searchQuery = value },
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text(stringResource(R.string.search_exercises_placeholder)) },
             leadingIcon = {
