@@ -59,10 +59,13 @@
     <string name="posture_training">Posture Training</string>
     <string name="posture_desc">Correct your posture with these daily exercises.</string>
     <string name="exercise_library_desc">Browse a fixed curated list of exercises by training type and body area.</string>
+    <string name="filter_button">Filter</string>
     <string name="filter_category">Category</string>
     <string name="filter_body_part">Body Part</string>
     <string name="filter_all_categories">All categories</string>
     <string name="filter_all_body_parts">All body parts</string>
+    <string name="apply_filters">Apply</string>
+    <string name="clear_filters">Clear</string>
     <string name="no_exercises_match">No exercises match the selected filters.</string>
     <string name="category_strength">Strength</string>
     <string name="category_mobility">Mobility</string>

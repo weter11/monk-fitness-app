@@ -59,10 +59,13 @@
     <string name="posture_training">Тренировка осанки</string>
     <string name="posture_desc">Исправьте осанку с помощью этих ежедневных упражнений.</string>
     <string name="exercise_library_desc">Просматривайте фиксированный набор упражнений по типу тренировки и зоне тела.</string>
+    <string name="filter_button">Фильтр</string>
     <string name="filter_category">Категория</string>
     <string name="filter_body_part">Часть тела</string>
     <string name="filter_all_categories">Все категории</string>
     <string name="filter_all_body_parts">Все части тела</string>
+    <string name="apply_filters">Применить</string>
+    <string name="clear_filters">Сбросить</string>
     <string name="no_exercises_match">Нет упражнений для выбранных фильтров.</string>
     <string name="category_strength">Сила</string>
     <string name="category_mobility">Мобильность</string>
