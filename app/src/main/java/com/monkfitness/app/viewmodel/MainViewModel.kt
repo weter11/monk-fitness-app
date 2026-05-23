@@ -102,6 +102,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getWarmupExercises() = workoutGenerator.getWarmupExercises()
 
+    fun getAllLibraryExercises() = workoutGenerator.getAllLibraryExercises()
+
     fun startWorkoutSession(day: Int) {
         if (_currentWorkoutDay.value != day) {
             _currentWorkoutDay.value = day

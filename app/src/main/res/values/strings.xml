@@ -58,6 +58,19 @@
     <string name="posture_training">Posture Training</string>
     <string name="posture_desc">Correct your posture with these daily exercises.</string>
 
+    <!-- Categories -->
+    <string name="cat_strength">Strength</string>
+    <string name="cat_mobility">Mobility</string>
+    <string name="cat_stretching">Stretching</string>
+    <string name="cat_posture">Posture</string>
+    <string name="subcat_shoulders">Shoulders</string>
+    <string name="subcat_spine">Spine</string>
+    <string name="subcat_hips">Hips</string>
+    <string name="subcat_legs">Legs</string>
+    <string name="subcat_core">Core</string>
+    <string name="subcat_fullbody">Full Body</string>
+    <string name="filter_all">All</string>
+
     <!-- Onboarding -->
     <string name="onboarding_title">Welcome to Monk Fitness</string>
     <string name="onboarding_desc">Embark on a structured 8-week program designed to transform your strength and mobility. Follow daily workouts, track your progress, and stay consistent with our streak system.</string>
@@ -153,6 +166,47 @@
     <string name="ex_glute_bridge_steps">1. Lie on your back with knees bent and feet flat on the floor, hip-width apart.\n2. Drive through your heels to lift your hips toward the ceiling.\n3. Squeeze your glutes hard at the top of the movement.\n4. Slowly lower your hips back to the starting position.</string>
     <string name="ex_glute_bridge_tech">Keep your core engaged to avoid overarching your lower back. Your shins should be vertical at the top of the movement. Do not let your knees cave in.</string>
     <string name="ex_glute_bridge_mistakes">Overarching the lower back, lifting the heels off the floor, and not fully extending the hips.</string>
+
+    <!-- New Exercises -->
+    <string name="ex_scapular_pullups">Scapular Pull-ups</string>
+    <string name="ex_scapular_pullups_desc">A subtle but powerful movement to strengthen the scapular stabilizers.</string>
+    <string name="ex_scapular_pullups_tech">Keep arms straight; only move the shoulder blades.</string>
+
+    <string name="ex_snow_angels">Reverse Snow Angels</string>
+    <string name="ex_snow_angels_desc">Strengthens the upper back and improves shoulder posture.</string>
+    <string name="ex_snow_angels_tech">Keep your forehead on the floor and chest slightly lifted.</string>
+
+    <string name="ex_band_pullaparts">Band Pull-Aparts</string>
+    <string name="ex_band_pullaparts_desc">Activates the rear deltoids and rhomboids for better shoulder alignment.</string>
+    <string name="ex_band_pullaparts_tech">Pull the band apart until it touches your chest.</string>
+
+    <string name="ex_thoracic_rotations">Thoracic Rotations</string>
+    <string name="ex_thoracic_rotations_desc">Improves rotational mobility in the mid-back (thoracic spine).</string>
+    <string name="ex_thoracic_rotations_tech">Follow your hand with your eyes to ensure full rotation.</string>
+
+    <string name="ex_cobra_stretch">Cobra Stretch</string>
+    <string name="ex_cobra_stretch_desc">Opens up the chest and stretches the abdominal muscles.</string>
+    <string name="ex_cobra_stretch_tech">Keep your shoulders away from your ears.</string>
+
+    <string name="ex_childs_pose">Child\'s Pose</string>
+    <string name="ex_childs_pose_desc">A resting pose that gently stretches the lower back and hips.</string>
+    <string name="ex_childs_pose_tech">Breathe deeply into your back.</string>
+
+    <string name="ex_thoracic_extension">Thoracic Extension</string>
+    <string name="ex_thoracic_extension_desc">Counters the "slumped" posture by extending the mid-back.</string>
+    <string name="ex_thoracic_extension_tech">Focus on bending from the mid-back, not the lower back.</string>
+
+    <string name="ex_hip_flexor_stretch">Hip Flexor Stretch</string>
+    <string name="ex_hip_flexor_stretch_desc">Lengthens the tight muscles at the front of the hip.</string>
+    <string name="ex_hip_flexor_stretch_tech">Squeeze the glute of the back leg to deepen the stretch.</string>
+
+    <string name="ex_90_90_hips">90/90 Hips</string>
+    <string name="ex_90_90_hips_desc">A versatile movement for internal and external hip rotation.</string>
+    <string name="ex_90_90_hips_tech">Try to keep your torso upright throughout the movement.</string>
+
+    <string name="ex_hamstring_stretch">Hamstring Stretch</string>
+    <string name="ex_hamstring_stretch_desc">Relieves tension in the back of the legs.</string>
+    <string name="ex_hamstring_stretch_tech">Keep a slight bend in the knee to protect the joint.</string>
 
     <string name="ex_neck_circles">Neck Circles</string>
     <string name="ex_arm_circles">Arm Circles</string>
