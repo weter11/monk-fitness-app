@@ -35,6 +35,14 @@ enum class NutritionQuantityUnit(@StringRes val labelRes: Int) {
     PIECES(R.string.nutrition_quantity_pieces)
 }
 
+enum class NutritionPreparationStyle(@StringRes val labelRes: Int) {
+    COOKED(R.string.nutrition_preparation_cooked),
+    GRILLED(R.string.nutrition_preparation_grilled),
+    BOILED(R.string.nutrition_preparation_boiled),
+    FRESH(R.string.nutrition_preparation_fresh),
+    PLAIN(R.string.nutrition_preparation_plain)
+}
+
 data class NutritionTargets(
     val dailyCalories: Int,
     val proteinMinGrams: Int,
@@ -45,7 +53,8 @@ data class NutritionIngredient(
     val key: String,
     @StringRes val nameRes: Int,
     val group: NutritionShoppingGroup,
-    val unit: NutritionQuantityUnit
+    val unit: NutritionQuantityUnit,
+    val preparationStyle: NutritionPreparationStyle
 )
 
 data class NutritionIngredientAmount(
@@ -115,17 +124,17 @@ private data class NutritionMealTemplate(
     )
 }
 
-private val chicken = NutritionIngredient("chicken", R.string.nutrition_ingredient_chicken_breast, NutritionShoppingGroup.PROTEIN, NutritionQuantityUnit.GRAMS)
-private val eggs = NutritionIngredient("eggs", R.string.nutrition_ingredient_eggs, NutritionShoppingGroup.PROTEIN, NutritionQuantityUnit.PIECES)
-private val rice = NutritionIngredient("rice", R.string.nutrition_ingredient_rice, NutritionShoppingGroup.CARBS, NutritionQuantityUnit.GRAMS)
-private val oats = NutritionIngredient("oats", R.string.nutrition_ingredient_oats, NutritionShoppingGroup.CARBS, NutritionQuantityUnit.GRAMS)
-private val potatoes = NutritionIngredient("potatoes", R.string.nutrition_ingredient_potatoes, NutritionShoppingGroup.CARBS, NutritionQuantityUnit.GRAMS)
-private val buckwheat = NutritionIngredient("buckwheat", R.string.nutrition_ingredient_buckwheat, NutritionShoppingGroup.CARBS, NutritionQuantityUnit.GRAMS)
-private val cottageCheese = NutritionIngredient("cottage_cheese", R.string.nutrition_ingredient_cottage_cheese, NutritionShoppingGroup.PROTEIN, NutritionQuantityUnit.GRAMS)
-private val yogurt = NutritionIngredient("yogurt", R.string.nutrition_ingredient_yogurt, NutritionShoppingGroup.PROTEIN, NutritionQuantityUnit.GRAMS)
-private val banana = NutritionIngredient("banana", R.string.nutrition_ingredient_banana, NutritionShoppingGroup.FRUITS_VEGETABLES, NutritionQuantityUnit.PIECES)
-private val apple = NutritionIngredient("apple", R.string.nutrition_ingredient_apple, NutritionShoppingGroup.FRUITS_VEGETABLES, NutritionQuantityUnit.PIECES)
-private val nuts = NutritionIngredient("nuts", R.string.nutrition_ingredient_nuts, NutritionShoppingGroup.FATS, NutritionQuantityUnit.GRAMS)
+private val chicken = NutritionIngredient("chicken", R.string.nutrition_ingredient_chicken_breast, NutritionShoppingGroup.PROTEIN, NutritionQuantityUnit.GRAMS, NutritionPreparationStyle.GRILLED)
+private val eggs = NutritionIngredient("eggs", R.string.nutrition_ingredient_eggs, NutritionShoppingGroup.PROTEIN, NutritionQuantityUnit.PIECES, NutritionPreparationStyle.BOILED)
+private val rice = NutritionIngredient("rice", R.string.nutrition_ingredient_rice, NutritionShoppingGroup.CARBS, NutritionQuantityUnit.GRAMS, NutritionPreparationStyle.COOKED)
+private val oats = NutritionIngredient("oats", R.string.nutrition_ingredient_oats, NutritionShoppingGroup.CARBS, NutritionQuantityUnit.GRAMS, NutritionPreparationStyle.COOKED)
+private val potatoes = NutritionIngredient("potatoes", R.string.nutrition_ingredient_potatoes, NutritionShoppingGroup.CARBS, NutritionQuantityUnit.GRAMS, NutritionPreparationStyle.BOILED)
+private val buckwheat = NutritionIngredient("buckwheat", R.string.nutrition_ingredient_buckwheat, NutritionShoppingGroup.CARBS, NutritionQuantityUnit.GRAMS, NutritionPreparationStyle.COOKED)
+private val cottageCheese = NutritionIngredient("cottage_cheese", R.string.nutrition_ingredient_cottage_cheese, NutritionShoppingGroup.PROTEIN, NutritionQuantityUnit.GRAMS, NutritionPreparationStyle.PLAIN)
+private val yogurt = NutritionIngredient("yogurt", R.string.nutrition_ingredient_yogurt, NutritionShoppingGroup.PROTEIN, NutritionQuantityUnit.GRAMS, NutritionPreparationStyle.PLAIN)
+private val banana = NutritionIngredient("banana", R.string.nutrition_ingredient_banana, NutritionShoppingGroup.FRUITS_VEGETABLES, NutritionQuantityUnit.PIECES, NutritionPreparationStyle.FRESH)
+private val apple = NutritionIngredient("apple", R.string.nutrition_ingredient_apple, NutritionShoppingGroup.FRUITS_VEGETABLES, NutritionQuantityUnit.PIECES, NutritionPreparationStyle.FRESH)
+private val nuts = NutritionIngredient("nuts", R.string.nutrition_ingredient_nuts, NutritionShoppingGroup.FATS, NutritionQuantityUnit.GRAMS, NutritionPreparationStyle.PLAIN)
 
 private val trainingBreakfastTemplates = listOf(
     NutritionMealTemplate(
@@ -596,6 +605,51 @@ fun calculateMuscleGainNutritionTargets(
         proteinMinGrams = proteinMin,
         proteinMaxGrams = proteinMax
     )
+}
+
+fun calculateNutritionCompletionPercent(
+    dayPlan: NutritionDayPlan,
+    completedMealKeys: Set<String>
+): Int {
+    if (dayPlan.meals.isEmpty()) return 0
+    val completedCount = dayPlan.meals.count { it.type.key in completedMealKeys }
+    return ((completedCount * 100f) / dayPlan.meals.size).roundToInt()
+}
+
+fun getTodayCookingInstructionResIds(meal: NutritionMeal): List<Int> {
+    val ingredientKeys = meal.ingredients.map { it.ingredient.key }.toSet()
+    val steps = mutableListOf<Int>()
+
+    val carbStep = when {
+        "oats" in ingredientKeys -> R.string.nutrition_step_cook_oats
+        "rice" in ingredientKeys -> R.string.nutrition_step_cook_rice
+        "buckwheat" in ingredientKeys -> R.string.nutrition_step_cook_buckwheat
+        "potatoes" in ingredientKeys -> R.string.nutrition_step_boil_potatoes
+        else -> null
+    }
+    val proteinStep = when {
+        "chicken" in ingredientKeys -> R.string.nutrition_step_grill_chicken
+        "eggs" in ingredientKeys -> R.string.nutrition_step_boil_eggs
+        else -> null
+    }
+
+    if (carbStep != null) {
+        steps += carbStep
+    }
+    if (proteinStep != null) {
+        steps += proteinStep
+    }
+    if (steps.isEmpty() && ingredientKeys.any { it == "yogurt" || it == "cottage_cheese" }) {
+        steps += R.string.nutrition_step_prepare_dairy_base
+    }
+
+    steps += when {
+        ingredientKeys.any { it == "yogurt" || it == "cottage_cheese" || it == "banana" || it == "apple" || it == "nuts" } ->
+            R.string.nutrition_step_finish_with_toppings
+        else -> R.string.nutrition_step_finish_simple
+    }
+
+    return steps.distinct().take(3)
 }
 
 private fun buildMealsForDay(

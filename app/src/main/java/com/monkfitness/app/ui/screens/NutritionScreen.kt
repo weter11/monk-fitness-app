@@ -34,6 +34,7 @@ import com.monkfitness.app.viewmodel.MainViewModel
 @Composable
 fun NutritionScreen(
     viewModel: MainViewModel,
+    onOpenTodayPlan: () -> Unit,
     onOpenShoppingList: () -> Unit
 ) {
     val weightInput by viewModel.nutritionWeight.collectAsState()
@@ -158,6 +159,13 @@ fun NutritionScreen(
                     )
                 )
             }
+        }
+
+        Button(
+            onClick = onOpenTodayPlan,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.nutrition_open_today_plan))
         }
 
         Row(

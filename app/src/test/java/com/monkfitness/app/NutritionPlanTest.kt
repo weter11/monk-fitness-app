@@ -3,7 +3,9 @@ package com.monkfitness.app
 import com.monkfitness.app.data.model.NutritionDayType
 import com.monkfitness.app.data.model.NutritionMealType
 import com.monkfitness.app.data.model.NutritionShoppingGroup
+import com.monkfitness.app.data.model.calculateNutritionCompletionPercent
 import com.monkfitness.app.data.model.generateThreeDayMuscleGainPlan
+import com.monkfitness.app.data.model.getTodayCookingInstructionResIds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -86,5 +88,24 @@ class NutritionPlanTest {
         }
 
         assertNotEquals(firstDaySignature, secondDaySignature)
+    }
+
+    @Test
+    fun testTodayCompletionPercentUsesCurrentDayMeals() {
+        val today = generateThreeDayMuscleGainPlan(seed = 0, startDay = 1).days.first()
+
+        assertEquals(0, calculateNutritionCompletionPercent(today, emptySet()))
+        assertEquals(50, calculateNutritionCompletionPercent(today, setOf("breakfast", "dinner")))
+        assertEquals(100, calculateNutritionCompletionPercent(today, today.meals.map { it.type.key }.toSet()))
+    }
+
+    @Test
+    fun testTodayCookingInstructionsStayShortAndActionable() {
+        val plan = generateThreeDayMuscleGainPlan(seed = 0, startDay = 1)
+
+        plan.days.first().meals.forEach { meal ->
+            val instructions = getTodayCookingInstructionResIds(meal)
+            assertTrue(instructions.size in 2..3)
+        }
     }
 }

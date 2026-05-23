@@ -152,6 +152,9 @@ fun MainApp(viewModel: MainViewModel) {
             composable(Screen.Nutrition.route) {
                 NutritionScreen(
                     viewModel = viewModel,
+                    onOpenTodayPlan = {
+                        navController.navigate("nutrition-today")
+                    },
                     onOpenShoppingList = {
                         navController.navigate("nutrition-shopping-list")
                     }
@@ -170,6 +173,12 @@ fun MainApp(viewModel: MainViewModel) {
             }
             composable("nutrition-shopping-list") {
                 NutritionShoppingListScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable("nutrition-today") {
+                NutritionTodayScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() }
                 )
