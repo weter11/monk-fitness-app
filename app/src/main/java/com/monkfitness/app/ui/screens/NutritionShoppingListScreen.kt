@@ -40,7 +40,14 @@ fun NutritionShoppingListScreen(
     onBack: () -> Unit
 ) {
     val planSeed by viewModel.nutritionPlanSeed.collectAsState()
-    val plan = remember(planSeed) { generateThreeDayMuscleGainPlan(planSeed) }
+    val currentProgramDay by viewModel.currentProgramDay.collectAsState()
+    val plan = remember(planSeed, currentProgramDay) {
+        generateThreeDayMuscleGainPlan(
+            seed = planSeed,
+            startDay = currentProgramDay,
+            workoutTypeForDay = viewModel::getWorkoutTypeForDay
+        )
+    }
 
     Scaffold(
         topBar = {

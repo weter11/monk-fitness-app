@@ -96,14 +96,16 @@
     <string name="subcategory_full_body">All Body</string>
 
     <string name="nutrition">Nutrition</string>
-    <string name="nutrition_desc">Simple daily nutrition guidance to support steady muscle gain.</string>
+    <string name="nutrition_desc">Adaptive 3-day meal planning that follows your workout schedule and program progress.</string>
     <string name="nutrition_user_data">Your data</string>
     <string name="nutrition_weight">Weight (kg)</string>
     <string name="nutrition_height">Height (cm)</string>
     <string name="nutrition_goal_gain_mass">Gain mass</string>
     <string name="nutrition_goal_value">Goal: %1$s</string>
-    <string name="nutrition_targets">Daily targets</string>
+    <string name="nutrition_targets">Adaptive targets</string>
     <string name="nutrition_daily_calories">Daily calories</string>
+    <string name="nutrition_current_program_day">Current program day</string>
+    <string name="nutrition_day_type">Day type</string>
     <string name="nutrition_protein_target">Protein target</string>
     <string name="nutrition_kcal_format">%1$d kcal</string>
     <string name="nutrition_protein_range_format">%1$d–%2$dg</string>
@@ -131,6 +133,11 @@
     <string name="nutrition_lunch">Lunch</string>
     <string name="nutrition_dinner">Dinner</string>
     <string name="nutrition_post_workout">Post-workout</string>
+    <string name="nutrition_snack">Snack</string>
+    <string name="nutrition_training_day">Training</string>
+    <string name="nutrition_light_day">Light</string>
+    <string name="nutrition_rest_day">Rest</string>
+    <string name="nutrition_program_day_week">Program day %1$d • Week %2$d</string>
     <string name="nutrition_breakfast_option_1">Oatmeal with milk, banana, peanut butter, and whey protein.</string>
     <string name="nutrition_breakfast_option_2">Eggs, whole-grain toast, and Greek yogurt.</string>
     <string name="nutrition_breakfast_option_3">Cottage cheese with berries, honey, and mixed nuts.</string>
@@ -146,13 +153,16 @@
     <string name="nutrition_ingredient_oats">Oats</string>
     <string name="nutrition_ingredient_milk">Milk</string>
     <string name="nutrition_ingredient_banana">Banana</string>
+    <string name="nutrition_ingredient_apple">Apple</string>
     <string name="nutrition_ingredient_peanut_butter">Peanut butter</string>
     <string name="nutrition_ingredient_whey_protein">Whey protein</string>
     <string name="nutrition_ingredient_greek_yogurt">Greek yogurt</string>
+    <string name="nutrition_ingredient_yogurt">Yogurt</string>
     <string name="nutrition_ingredient_eggs">Eggs</string>
     <string name="nutrition_ingredient_whole_grain_bread">Whole-grain bread</string>
     <string name="nutrition_ingredient_chicken_breast">Chicken breast</string>
     <string name="nutrition_ingredient_rice">Rice</string>
+    <string name="nutrition_ingredient_buckwheat">Buckwheat</string>
     <string name="nutrition_ingredient_olive_oil">Olive oil</string>
     <string name="nutrition_ingredient_tomatoes">Tomatoes</string>
     <string name="nutrition_ingredient_cucumber">Cucumber</string>
@@ -162,6 +172,7 @@
     <string name="nutrition_ingredient_potatoes">Potatoes</string>
     <string name="nutrition_ingredient_spinach">Spinach</string>
     <string name="nutrition_ingredient_cottage_cheese">Cottage cheese</string>
+    <string name="nutrition_ingredient_nuts">Nuts</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">Welcome to Monk Fitness</string>

@@ -96,14 +96,16 @@
     <string name="subcategory_full_body">Все тело</string>
 
     <string name="nutrition">Питание</string>
-    <string name="nutrition_desc">Простые ежедневные рекомендации по питанию для стабильного набора мышечной массы.</string>
+    <string name="nutrition_desc">Адаптивный план питания на 3 дня, который учитывает график тренировок и прогресс программы.</string>
     <string name="nutrition_user_data">Ваши данные</string>
     <string name="nutrition_weight">Вес (кг)</string>
     <string name="nutrition_height">Рост (см)</string>
     <string name="nutrition_goal_gain_mass">Набор массы</string>
     <string name="nutrition_goal_value">Цель: %1$s</string>
-    <string name="nutrition_targets">Ежедневные цели</string>
+    <string name="nutrition_targets">Адаптивные цели</string>
     <string name="nutrition_daily_calories">Калории в день</string>
+    <string name="nutrition_current_program_day">Текущий день программы</string>
+    <string name="nutrition_day_type">Тип дня</string>
     <string name="nutrition_protein_target">Цель по белку</string>
     <string name="nutrition_kcal_format">%1$d ккал</string>
     <string name="nutrition_protein_range_format">%1$d–%2$d г</string>
@@ -131,6 +133,11 @@
     <string name="nutrition_lunch">Обед</string>
     <string name="nutrition_dinner">Ужин</string>
     <string name="nutrition_post_workout">После тренировки</string>
+    <string name="nutrition_snack">Перекус</string>
+    <string name="nutrition_training_day">Тренировочный</string>
+    <string name="nutrition_light_day">Легкий</string>
+    <string name="nutrition_rest_day">Отдых</string>
+    <string name="nutrition_program_day_week">День программы %1$d • Неделя %2$d</string>
     <string name="nutrition_breakfast_option_1">Овсянка на молоке с бананом, арахисовой пастой и сывороточным протеином.</string>
     <string name="nutrition_breakfast_option_2">Яйца, цельнозерновой тост и греческий йогурт.</string>
     <string name="nutrition_breakfast_option_3">Творог с ягодами, медом и смесью орехов.</string>
@@ -146,13 +153,16 @@
     <string name="nutrition_ingredient_oats">Овсянка</string>
     <string name="nutrition_ingredient_milk">Молоко</string>
     <string name="nutrition_ingredient_banana">Банан</string>
+    <string name="nutrition_ingredient_apple">Яблоко</string>
     <string name="nutrition_ingredient_peanut_butter">Арахисовая паста</string>
     <string name="nutrition_ingredient_whey_protein">Сывороточный протеин</string>
     <string name="nutrition_ingredient_greek_yogurt">Греческий йогурт</string>
+    <string name="nutrition_ingredient_yogurt">Йогурт</string>
     <string name="nutrition_ingredient_eggs">Яйца</string>
     <string name="nutrition_ingredient_whole_grain_bread">Цельнозерновой хлеб</string>
     <string name="nutrition_ingredient_chicken_breast">Куриная грудка</string>
     <string name="nutrition_ingredient_rice">Рис</string>
+    <string name="nutrition_ingredient_buckwheat">Гречка</string>
     <string name="nutrition_ingredient_olive_oil">Оливковое масло</string>
     <string name="nutrition_ingredient_tomatoes">Помидоры</string>
     <string name="nutrition_ingredient_cucumber">Огурец</string>
@@ -162,6 +172,7 @@
     <string name="nutrition_ingredient_potatoes">Картофель</string>
     <string name="nutrition_ingredient_spinach">Шпинат</string>
     <string name="nutrition_ingredient_cottage_cheese">Творог</string>
+    <string name="nutrition_ingredient_nuts">Орехи</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">Добро пожаловать в Monk Fitness</string>

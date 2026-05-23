@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -91,6 +92,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val allProgress = repository.getAllProgress().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
+
+    val currentProgramDay = allProgress
+        .map { progress -> calculateCurrentDay(progress) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
 
     val exerciseDifficultyAdjustments = settingsManager.exerciseDifficultyAdjustmentsFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap()
@@ -350,13 +355,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun getCurrentDay(): Int {
-        val progress = allProgress.value
-        val completedDays = progress.filter { it.isCompleted }.map { it.day }.toSet()
-        for (i in 1..56) {
-            if (i !in completedDays) return i
-        }
-        return 56
+        return calculateCurrentDay(allProgress.value)
     }
+
+    fun getWorkoutTypeForDay(day: Int) = workoutGenerator.getWorkoutType(day)
 
     fun setNotificationTime(hour: Int, minute: Int) {
         viewModelScope.launch {
@@ -475,6 +477,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             2 -> com.monkfitness.app.R.string.difficulty_very_hard
             else -> com.monkfitness.app.R.string.difficulty_normal
         }
+    }
+
+    private fun calculateCurrentDay(progress: List<UserProgress>): Int {
+        val completedDays = progress.filter { it.isCompleted }.map { it.day }.toSet()
+        for (i in 1..56) {
+            if (i !in completedDays) return i
+        }
+        return 56
     }
 
     private val toneG = ToneGenerator(AudioManager.STREAM_ALARM, 100)

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.NutritionDayPlan
+import com.monkfitness.app.data.model.NutritionDayType
 import com.monkfitness.app.data.model.NutritionIngredientAmount
 import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.NutritionQuantityUnit
@@ -38,11 +39,24 @@ fun NutritionScreen(
     val weightInput by viewModel.nutritionWeight.collectAsState()
     val heightInput by viewModel.nutritionHeight.collectAsState()
     val planSeed by viewModel.nutritionPlanSeed.collectAsState()
+    val currentProgramDay by viewModel.currentProgramDay.collectAsState()
 
     val weightKg = weightInput.toIntOrNull()
     val heightCm = heightInput.toIntOrNull()
-    val targets = calculateMuscleGainNutritionTargets(weightKg, heightCm)
-    val plan = remember(planSeed) { generateThreeDayMuscleGainPlan(planSeed) }
+    val plan = remember(planSeed, currentProgramDay) {
+        generateThreeDayMuscleGainPlan(
+            seed = planSeed,
+            startDay = currentProgramDay,
+            workoutTypeForDay = viewModel::getWorkoutTypeForDay
+        )
+    }
+    val currentDayPlan = plan.days.firstOrNull()
+    val targets = calculateMuscleGainNutritionTargets(
+        weightKg = weightKg,
+        heightCm = heightCm,
+        programDay = currentProgramDay,
+        dayType = currentDayPlan?.dayType ?: NutritionDayType.TRAINING
+    )
 
     Column(
         modifier = Modifier
@@ -124,6 +138,18 @@ fun NutritionScreen(
                     value = stringResource(R.string.nutrition_kcal_format, targets.dailyCalories)
                 )
                 NutritionTargetRow(
+                    title = stringResource(R.string.nutrition_current_program_day),
+                    value = stringResource(
+                        R.string.nutrition_program_day_week,
+                        currentProgramDay,
+                        ((currentProgramDay - 1) / 7) + 1
+                    )
+                )
+                NutritionTargetRow(
+                    title = stringResource(R.string.nutrition_day_type),
+                    value = stringResource((currentDayPlan?.dayType ?: NutritionDayType.TRAINING).labelRes)
+                )
+                NutritionTargetRow(
                     title = stringResource(R.string.nutrition_protein_target),
                     value = stringResource(
                         R.string.nutrition_protein_range_format,
@@ -193,10 +219,26 @@ private fun NutritionDayCard(day: NutritionDayPlan) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = stringResource(R.string.day_display, day.dayNumber),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = stringResource(day.dayType.labelRes),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             Text(
-                text = stringResource(R.string.day_display, day.dayNumber),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
+                text = stringResource(R.string.nutrition_program_day_week, day.programDay, day.week),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
             )
             Text(
                 text = stringResource(
