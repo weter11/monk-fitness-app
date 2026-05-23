@@ -6,6 +6,7 @@ import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.model.WorkoutType
+import com.monkfitness.app.data.model.postureFocusAreas
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
@@ -58,13 +59,9 @@ class WorkoutGenerator {
 
     private val exercisesById = allExercises.associateBy { it.id }
 
-    fun generateWorkout(day: Int): Workout {
+    fun getWorkoutType(day: Int): WorkoutType {
         val safeDay = if (day in 1..56) day else 1
-        val week = ((safeDay - 1) / 7) + 1
-        val dayOfWeek = (safeDay - 1) % 7
-        val phase = (((week - 1) / 2) + 1).coerceIn(1, 4)
-
-        val type = when (dayOfWeek) {
+        return when ((safeDay - 1) % 7) {
             0 -> WorkoutType.STRENGTH_A
             1 -> WorkoutType.MOBILITY
             2 -> WorkoutType.STRENGTH_B
@@ -73,42 +70,64 @@ class WorkoutGenerator {
             5 -> WorkoutType.MOBILITY
             else -> WorkoutType.REST
         }
+    }
+
+    fun generateWorkout(
+        day: Int,
+        stretchFocusArea: ExerciseSubCategory = ExerciseSubCategory.SPINE
+    ): Workout {
+        val safeDay = if (day in 1..56) day else 1
+        val week = ((safeDay - 1) / 7) + 1
+        val phase = (((week - 1) / 2) + 1).coerceIn(1, 4)
+        val type = getWorkoutType(safeDay)
 
         return Workout(
             id = safeDay,
             type = type,
-            exercises = getExercisesForType(type, phase, safeDay)
+            exercises = getExercisesForType(type, phase, safeDay, stretchFocusArea)
         )
     }
 
-    private fun getExercisesForType(type: WorkoutType, phase: Int, daySeed: Int): List<Exercise> {
+    fun generatePostureMobilityWorkout(
+        day: Int,
+        focusArea: ExerciseSubCategory = ExerciseSubCategory.SPINE
+    ): Workout {
+        val safeDay = if (day in 1..56) day else 1
+        val week = ((safeDay - 1) / 7) + 1
+        val phase = (((week - 1) / 2) + 1).coerceIn(1, 4)
+        val normalizedFocus = focusArea.takeIf { it in postureFocusAreas } ?: ExerciseSubCategory.SPINE
+
+        return Workout(
+            id = safeDay,
+            type = WorkoutType.POSTURE_MOBILITY,
+            exercises = selectExercises(
+                selectionRules = postureMobilityRules(normalizedFocus, safeDay),
+                phase = phase,
+                random = Random(safeDay * 1_000 + WorkoutType.POSTURE_MOBILITY.ordinal)
+            )
+        )
+    }
+
+    private fun getExercisesForType(
+        type: WorkoutType,
+        phase: Int,
+        daySeed: Int,
+        stretchFocusArea: ExerciseSubCategory
+    ): List<Exercise> {
         return try {
             val selectionRules = when (type) {
                 WorkoutType.STRENGTH_A -> listOf(
                     subCategoryRule(ExerciseSubCategory.LEGS, preferredCategories = setOf(ExerciseCategory.STRENGTH)),
                     subCategoryRule(ExerciseSubCategory.CORE, preferredCategories = setOf(ExerciseCategory.STRENGTH, ExerciseCategory.MOBILITY)),
-                    subCategoryRule(ExerciseSubCategory.FULL_BODY, preferredCategories = setOf(ExerciseCategory.STRENGTH))
+                    subCategoryRule(ExerciseSubCategory.FULL_BODY, preferredCategories = setOf(ExerciseCategory.STRENGTH)),
+                    postureRule(preferredSubCategories = setOf(ExerciseSubCategory.SPINE, ExerciseSubCategory.SHOULDERS))
                 )
                 WorkoutType.STRENGTH_B -> listOf(
                     subCategoryRule(ExerciseSubCategory.SHOULDERS, preferredCategories = setOf(ExerciseCategory.STRENGTH)),
-                    WorkoutSelectionRule(
-                        count = 1,
-                        preferredMatch = { it.category == ExerciseCategory.POSTURE },
-                        fallbackMatch = { it.category == ExerciseCategory.POSTURE || it.subCategory == ExerciseSubCategory.SPINE }
-                    ),
+                    postureRule(preferredSubCategories = setOf(ExerciseSubCategory.SPINE, ExerciseSubCategory.SHOULDERS)),
                     subCategoryRule(ExerciseSubCategory.CORE, preferredCategories = setOf(ExerciseCategory.STRENGTH, ExerciseCategory.MOBILITY))
                 )
-                WorkoutType.MOBILITY -> listOf(
-                    subCategoryRule(
-                        ExerciseSubCategory.SPINE,
-                        count = 2,
-                        preferredCategories = setOf(ExerciseCategory.MOBILITY, ExerciseCategory.STRETCHING, ExerciseCategory.POSTURE)
-                    ),
-                    subCategoryRule(
-                        ExerciseSubCategory.HIPS,
-                        preferredCategories = setOf(ExerciseCategory.MOBILITY, ExerciseCategory.STRETCHING, ExerciseCategory.STRENGTH)
-                    )
-                )
+                WorkoutType.MOBILITY -> mobilityRules(stretchFocusArea, daySeed)
                 WorkoutType.FUNCTIONAL -> listOf(
                     subCategoryRule(
                         ExerciseSubCategory.FULL_BODY,
@@ -116,6 +135,7 @@ class WorkoutGenerator {
                         preferredCategories = setOf(ExerciseCategory.STRENGTH, ExerciseCategory.MOBILITY)
                     )
                 )
+                WorkoutType.POSTURE_MOBILITY -> postureMobilityRules(stretchFocusArea, daySeed)
                 WorkoutType.REST -> return emptyList()
             }
 
@@ -123,6 +143,70 @@ class WorkoutGenerator {
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    private fun mobilityRules(
+        focusArea: ExerciseSubCategory,
+        daySeed: Int
+    ): List<WorkoutSelectionRule> {
+        val normalizedFocus = focusArea.takeIf { it in listOf(ExerciseSubCategory.SHOULDERS, ExerciseSubCategory.SPINE, ExerciseSubCategory.HIPS, ExerciseSubCategory.LEGS) }
+            ?: ExerciseSubCategory.SPINE
+        val maintenanceAreas = listOf(
+            ExerciseSubCategory.SHOULDERS,
+            ExerciseSubCategory.SPINE,
+            ExerciseSubCategory.HIPS,
+            ExerciseSubCategory.LEGS
+        ).filterNot { it == normalizedFocus }
+        val maintenanceArea = maintenanceAreas[daySeed % maintenanceAreas.size]
+
+        return listOf(
+            subCategoryRule(
+                normalizedFocus,
+                count = 2,
+                preferredCategories = setOf(ExerciseCategory.MOBILITY, ExerciseCategory.STRETCHING, ExerciseCategory.POSTURE)
+            ),
+            subCategoryRule(
+                maintenanceArea,
+                preferredCategories = setOf(ExerciseCategory.MOBILITY, ExerciseCategory.STRETCHING, ExerciseCategory.POSTURE)
+            )
+        )
+    }
+
+    private fun postureMobilityRules(
+        focusArea: ExerciseSubCategory,
+        daySeed: Int
+    ): List<WorkoutSelectionRule> {
+        val normalizedFocus = focusArea.takeIf { it in postureFocusAreas } ?: ExerciseSubCategory.SPINE
+        val secondaryAreas = postureFocusAreas.filterNot { it == normalizedFocus }
+        val secondaryArea = secondaryAreas[daySeed % secondaryAreas.size]
+        val maintenanceAreas = listOf(
+            ExerciseSubCategory.SHOULDERS,
+            ExerciseSubCategory.SPINE,
+            ExerciseSubCategory.HIPS,
+            ExerciseSubCategory.LEGS
+        ).filterNot { it == normalizedFocus || it == secondaryArea }
+        val maintenanceArea = maintenanceAreas[daySeed % maintenanceAreas.size]
+
+        return listOf(
+            postureRule(count = 2, preferredSubCategories = setOf(normalizedFocus)),
+            postureRule(preferredSubCategories = setOf(secondaryArea)),
+            subCategoryRule(
+                maintenanceArea,
+                preferredCategories = setOf(ExerciseCategory.MOBILITY, ExerciseCategory.STRETCHING, ExerciseCategory.POSTURE)
+            )
+        )
+    }
+
+    private fun postureRule(
+        count: Int = 1,
+        preferredSubCategories: Set<ExerciseSubCategory>
+    ): WorkoutSelectionRule {
+        return categoryRule(
+            count = count,
+            preferredCategories = setOf(ExerciseCategory.POSTURE, ExerciseCategory.MOBILITY),
+            preferredSubCategories = preferredSubCategories,
+            fallbackSubCategories = preferredSubCategories + ExerciseSubCategory.SPINE
+        )
     }
 
     private fun subCategoryRule(
@@ -134,6 +218,26 @@ class WorkoutGenerator {
         val preferredMatch: (Exercise) -> Boolean = { exercise ->
             exercise.subCategory == subCategory &&
                 (preferredCategories.isEmpty() || exercise.category in preferredCategories)
+        }
+
+        return WorkoutSelectionRule(
+            count = count,
+            preferredMatch = preferredMatch,
+            fallbackMatch = fallbackMatch
+        )
+    }
+
+    private fun categoryRule(
+        count: Int = 1,
+        preferredCategories: Set<ExerciseCategory>,
+        preferredSubCategories: Set<ExerciseSubCategory>,
+        fallbackSubCategories: Set<ExerciseSubCategory> = preferredSubCategories
+    ): WorkoutSelectionRule {
+        val preferredMatch: (Exercise) -> Boolean = { exercise ->
+            exercise.category in preferredCategories && exercise.subCategory in preferredSubCategories
+        }
+        val fallbackMatch: (Exercise) -> Boolean = { exercise ->
+            exercise.subCategory in fallbackSubCategories
         }
 
         return WorkoutSelectionRule(
@@ -175,31 +279,16 @@ class WorkoutGenerator {
 
     private fun phasedExercise(exercise: Exercise, phase: Int): Exercise {
         return if (exercise.isTimerBased) {
-            val duration = interpolatePhaseValue(
-                start = exercise.baseDurationSeconds,
-                end = exercise.phase4DurationSeconds,
-                phase = phase
-            )
-
             exercise.copy(
                 reps = 1,
                 minReps = 0,
                 maxReps = 0,
-                durationSeconds = duration,
+                durationSeconds = interpolatePhaseValue(exercise.baseDurationSeconds, exercise.phase4DurationSeconds, phase),
                 isTimerBased = true
             )
         } else {
-            val minReps = interpolatePhaseValue(
-                start = exercise.baseMinReps,
-                end = exercise.phase4MinReps,
-                phase = phase
-            )
-            val maxReps = interpolatePhaseValue(
-                start = exercise.baseMaxReps,
-                end = exercise.phase4MaxReps,
-                phase = phase
-            ).coerceAtLeast(minReps)
-
+            val minReps = interpolatePhaseValue(exercise.baseMinReps, exercise.phase4MinReps, phase)
+            val maxReps = interpolatePhaseValue(exercise.baseMaxReps, exercise.phase4MaxReps, phase).coerceAtLeast(minReps)
             exercise.copy(
                 minReps = minReps,
                 maxReps = maxReps,

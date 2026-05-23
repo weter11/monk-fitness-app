@@ -22,17 +22,27 @@ import com.monkfitness.app.viewmodel.MainViewModel
 @Composable
 fun HomeScreen(
     viewModel: MainViewModel,
-    onStartWorkout: (Int) -> Unit
+    onStartWorkout: (Int) -> Unit,
+    onStartPostureWorkout: (Int) -> Unit
 ) {
     val completedCount by viewModel.completedDaysCount.collectAsState()
+    val completedPostureCount by viewModel.completedPostureDaysCount.collectAsState()
     val streak by viewModel.streak.collectAsState()
+    val additionalPostureTrainingEnabled by viewModel.additionalPostureTrainingEnabled.collectAsState()
+    val stretchFocusArea by viewModel.stretchFocusArea.collectAsState()
+    val postureFocusArea by viewModel.postureFocusArea.collectAsState()
     val currentDay = viewModel.getCurrentDay()
-    val workout = viewModel.getWorkoutForDay(currentDay)
+    val workout = viewModel.getWorkoutForDay(currentDay, stretchFocus = stretchFocusArea)
 
     val targetProgress = completedCount.toFloat() / 56f
+    val postureProgress = completedPostureCount.toFloat() / 56f
     val animatedProgress by animateFloatAsState(
         targetValue = targetProgress,
         label = "HomeProgressAnimation"
+    )
+    val animatedPostureProgress by animateFloatAsState(
+        targetValue = postureProgress,
+        label = "PostureProgressAnimation"
     )
 
     Column(
@@ -112,6 +122,52 @@ fun HomeScreen(
             text = stringResource(R.string.start_workout),
             onClick = { onStartWorkout(currentDay) }
         )
+
+        if (additionalPostureTrainingEnabled) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        text = stringResource(R.string.additional_posture_training),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.posture_session_summary,
+                            stringResource(postureFocusArea.labelRes)
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LinearProgressIndicator(
+                        progress = { animatedPostureProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(10.dp),
+                        color = MaterialTheme.colorScheme.secondary,
+                        trackColor = Color.Gray.copy(alpha = 0.3f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.optional_session_duration),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    MonkButton(
+                        text = stringResource(R.string.start_posture_mobility),
+                        onClick = { onStartPostureWorkout(currentDay) }
+                    )
+                }
+            }
+        }
     }
 }
 

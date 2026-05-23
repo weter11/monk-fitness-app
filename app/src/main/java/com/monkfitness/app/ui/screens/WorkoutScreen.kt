@@ -39,7 +39,6 @@ enum class WorkoutStep {
     OVERVIEW,
     WARMUP,
     MAIN,
-    POSTURE,
     COMPLETE
 }
 
@@ -48,17 +47,28 @@ enum class WorkoutStep {
 fun WorkoutScreen(
     day: Int,
     viewModel: MainViewModel,
+    isPostureMobilitySession: Boolean = false,
     onBack: () -> Unit,
     onExerciseClick: (Exercise) -> Unit
 ) {
-    LaunchedEffect(day) {
-        viewModel.startWorkoutSession(day)
+    LaunchedEffect(day, isPostureMobilitySession) {
+        viewModel.startWorkoutSession(
+            day = day,
+            mode = if (isPostureMobilitySession) MainViewModel.SessionMode.POSTURE_MOBILITY else MainViewModel.SessionMode.DAILY
+        )
     }
 
     val difficultyAdjustments by viewModel.exerciseDifficultyAdjustments.collectAsState()
-    val workout = remember(day, difficultyAdjustments) { viewModel.getWorkoutForDay(day, difficultyAdjustments) }
+    val stretchFocusArea by viewModel.stretchFocusArea.collectAsState()
+    val postureFocusArea by viewModel.postureFocusArea.collectAsState()
+    val workout = remember(day, difficultyAdjustments, stretchFocusArea, postureFocusArea, isPostureMobilitySession) {
+        if (isPostureMobilitySession) {
+            viewModel.getPostureMobilityWorkout(day, difficultyAdjustments, postureFocusArea)
+        } else {
+            viewModel.getWorkoutForDay(day, difficultyAdjustments, stretchFocusArea)
+        }
+    }
     val warmupExercises = remember(difficultyAdjustments) { viewModel.getWarmupExercises(difficultyAdjustments) }
-    val postureExercises = remember(difficultyAdjustments) { viewModel.getPostureExercises(difficultyAdjustments).take(3) }
 
     val currentStep by viewModel.currentStep.collectAsState()
     val exerciseIndex by viewModel.exerciseIndex.collectAsState()
@@ -66,22 +76,21 @@ fun WorkoutScreen(
     val restTargetIndex by viewModel.restTargetIndex.collectAsState()
 
     val isRestDay = workout.type == WorkoutType.REST || workout.exercises.isEmpty()
+    val sessionWarmupExercises = if (isPostureMobilitySession) emptyList() else warmupExercises
 
     val currentExerciseList = when (currentStep) {
-        WorkoutStep.WARMUP -> warmupExercises
+        WorkoutStep.WARMUP -> sessionWarmupExercises
         WorkoutStep.MAIN -> workout.exercises
-        WorkoutStep.POSTURE -> postureExercises
         else -> emptyList()
     }
 
     val currentExercise = currentExerciseList.getOrNull(exerciseIndex)
 
-    val totalSteps = warmupExercises.size + workout.exercises.size + postureExercises.size
+    val totalSteps = sessionWarmupExercises.size + workout.exercises.size
     val currentAbsoluteIndex = when (currentStep) {
         WorkoutStep.OVERVIEW -> 0
         WorkoutStep.WARMUP -> exerciseIndex
-        WorkoutStep.MAIN -> warmupExercises.size + exerciseIndex
-        WorkoutStep.POSTURE -> warmupExercises.size + workout.exercises.size + exerciseIndex
+        WorkoutStep.MAIN -> sessionWarmupExercises.size + exerciseIndex
         WorkoutStep.COMPLETE -> totalSteps
     }
     val progress = if (totalSteps > 0) currentAbsoluteIndex.toFloat() / totalSteps else 0f
@@ -97,7 +106,6 @@ fun WorkoutScreen(
                                 WorkoutStep.OVERVIEW -> stringResource(workout.type.nameRes)
                                 WorkoutStep.WARMUP -> stringResource(R.string.warmup)
                                 WorkoutStep.MAIN -> stringResource(R.string.main_workout)
-                                WorkoutStep.POSTURE -> stringResource(R.string.posture_block)
                                 WorkoutStep.COMPLETE -> stringResource(R.string.workout_complete)
                             },
                             style = MaterialTheme.typography.titleLarge,
@@ -139,7 +147,7 @@ fun WorkoutScreen(
             Box(modifier = Modifier.weight(1f)) {
                 if (isRestDay) {
                     RestDayUI(onComplete = {
-                        viewModel.completeWorkout(day)
+                        viewModel.completeCurrentSession(day)
                         onBack()
                     })
                 } else if (isRestTime) {
@@ -153,11 +161,15 @@ fun WorkoutScreen(
                         WorkoutStep.OVERVIEW -> {
                             WorkoutOverview(
                                 exercises = workout.exercises,
-                                onStart = { viewModel.setWorkoutStep(WorkoutStep.WARMUP) },
+                                onStart = {
+                                    viewModel.setWorkoutStep(
+                                        if (sessionWarmupExercises.isEmpty()) WorkoutStep.MAIN else WorkoutStep.WARMUP
+                                    )
+                                },
                                 onExerciseClick = onExerciseClick
                             )
                         }
-                        WorkoutStep.WARMUP, WorkoutStep.MAIN, WorkoutStep.POSTURE -> {
+                        WorkoutStep.WARMUP, WorkoutStep.MAIN -> {
                             currentExercise?.let { exercise ->
                                 ExerciseSession(
                                     exercise = exercise,
@@ -171,7 +183,7 @@ fun WorkoutScreen(
                         WorkoutStep.COMPLETE -> {
                             WorkoutComplete(
                                 onFinish = {
-                                    viewModel.completeWorkout(day)
+                                    viewModel.completeCurrentSession(day)
                                     onBack()
                                 }
                             )

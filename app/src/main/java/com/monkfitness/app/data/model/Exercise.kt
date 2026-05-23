@@ -20,6 +20,19 @@ enum class ExerciseSubCategory(@StringRes val labelRes: Int) {
     FULL_BODY(R.string.subcategory_full_body)
 }
 
+val postureFocusAreas = listOf(
+    ExerciseSubCategory.SHOULDERS,
+    ExerciseSubCategory.SPINE,
+    ExerciseSubCategory.HIPS
+)
+
+val stretchFocusAreas = listOf(
+    ExerciseSubCategory.SHOULDERS,
+    ExerciseSubCategory.SPINE,
+    ExerciseSubCategory.HIPS,
+    ExerciseSubCategory.LEGS
+)
+
 data class Exercise(
     val id: String,
     @StringRes val nameRes: Int,

@@ -29,33 +29,45 @@ class WorkoutGeneratorTest {
     fun testGeneratedExercisesRespectRequestedWorkoutStructure() {
         val strengthA = generator.generateWorkout(1).exercises
         val strengthB = generator.generateWorkout(3).exercises
-        val mobility = generator.generateWorkout(2).exercises
+        val mobility = generator.generateWorkout(2, ExerciseSubCategory.HIPS).exercises
         val functional = generator.generateWorkout(5).exercises
 
-        assertEquals(3, strengthA.size)
-        assertEquals(listOf(ExerciseSubCategory.LEGS, ExerciseSubCategory.CORE, ExerciseSubCategory.FULL_BODY), strengthA.map { it.subCategory })
-        assertEquals(3, strengthA.map { it.id }.distinct().size)
+        assertEquals(4, strengthA.size)
+        assertEquals(listOf(ExerciseSubCategory.LEGS, ExerciseSubCategory.CORE, ExerciseSubCategory.FULL_BODY), strengthA.take(3).map { it.subCategory })
+        assertTrue(strengthA.last().category == ExerciseCategory.POSTURE || strengthA.last().subCategory == ExerciseSubCategory.SPINE)
+        assertEquals(4, strengthA.map { it.id }.distinct().size)
 
         assertEquals(3, strengthB.size)
         assertEquals(ExerciseSubCategory.SHOULDERS, strengthB[0].subCategory)
-        assertEquals(ExerciseCategory.POSTURE, strengthB[1].category)
+        assertTrue(strengthB[1].category == ExerciseCategory.POSTURE || strengthB[1].subCategory == ExerciseSubCategory.SPINE)
         assertEquals(ExerciseSubCategory.CORE, strengthB[2].subCategory)
         assertEquals(3, strengthB.map { it.id }.distinct().size)
 
         assertEquals(3, mobility.size)
-        assertEquals(
-            listOf(
-                ExerciseSubCategory.SPINE,
-                ExerciseSubCategory.SPINE,
-                ExerciseSubCategory.HIPS
-            ),
-            mobility.map { it.subCategory }
-        )
+        assertEquals(listOf(ExerciseSubCategory.HIPS, ExerciseSubCategory.HIPS), mobility.take(2).map { it.subCategory })
         assertEquals(3, mobility.map { it.id }.distinct().size)
 
         assertEquals(3, functional.size)
         assertTrue(functional.all { it.subCategory == ExerciseSubCategory.FULL_BODY })
         assertEquals(3, functional.map { it.id }.distinct().size)
+    }
+
+    @Test
+    fun testOptionalPostureMobilityWorkoutPrioritizesSelectedFocusArea() {
+        val workout = generator.generatePostureMobilityWorkout(1, ExerciseSubCategory.SHOULDERS)
+
+        assertEquals(WorkoutType.POSTURE_MOBILITY, workout.type)
+        assertEquals(4, workout.exercises.size)
+        assertEquals(listOf(ExerciseSubCategory.SHOULDERS, ExerciseSubCategory.SHOULDERS), workout.exercises.take(2).map { it.subCategory })
+    }
+
+    @Test
+    fun testMobilityDaysPrioritizeSelectedStretchFocusArea() {
+        val shouldersMobility = generator.generateWorkout(2, ExerciseSubCategory.SHOULDERS).exercises
+        val legsMobility = generator.generateWorkout(2, ExerciseSubCategory.LEGS).exercises
+
+        assertEquals(listOf(ExerciseSubCategory.SHOULDERS, ExerciseSubCategory.SHOULDERS), shouldersMobility.take(2).map { it.subCategory })
+        assertEquals(listOf(ExerciseSubCategory.LEGS, ExerciseSubCategory.LEGS), legsMobility.take(2).map { it.subCategory })
     }
 
     @Test
@@ -153,6 +165,11 @@ class WorkoutGeneratorTest {
         val usedIds = buildSet {
             addAll(generator.getWarmupExercises().map { it.id })
             addAll(generator.getPostureExercises().map { it.id })
+            ExerciseSubCategory.entries
+                .filter { it in listOf(ExerciseSubCategory.SHOULDERS, ExerciseSubCategory.SPINE, ExerciseSubCategory.HIPS) }
+                .forEach { focusArea ->
+                    addAll(generator.generatePostureMobilityWorkout(1, focusArea).exercises.map { it.id })
+                }
             (1..56).forEach { day ->
                 addAll(generator.generateWorkout(day).exercises.map { it.id })
             }

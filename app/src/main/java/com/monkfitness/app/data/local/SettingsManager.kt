@@ -8,6 +8,9 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.monkfitness.app.data.model.ExerciseSubCategory
+import com.monkfitness.app.data.model.postureFocusAreas
+import com.monkfitness.app.data.model.stretchFocusAreas
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -23,6 +26,9 @@ class SettingsManager(private val context: Context) {
         val IS_ONBOARDING_COMPLETED = booleanPreferencesKey("is_onboarding_completed")
         val TIMER_TICKS_ENABLED = booleanPreferencesKey("timer_ticks_enabled")
         val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
+        val ADDITIONAL_POSTURE_TRAINING_ENABLED = booleanPreferencesKey("additional_posture_training_enabled")
+        val POSTURE_FOCUS_AREA = stringPreferencesKey("posture_focus_area")
+        val STRETCH_FOCUS_AREA = stringPreferencesKey("stretch_focus_area")
     }
 
     val languageFlow: Flow<String> = context.dataStore.data.map { preferences ->
@@ -78,6 +84,36 @@ class SettingsManager(private val context: Context) {
         }
     }
 
+    val additionalPostureTrainingEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[ADDITIONAL_POSTURE_TRAINING_ENABLED] ?: false
+    }
+
+    suspend fun setAdditionalPostureTrainingEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[ADDITIONAL_POSTURE_TRAINING_ENABLED] = enabled
+        }
+    }
+
+    val postureFocusAreaFlow: Flow<ExerciseSubCategory> = context.dataStore.data.map { preferences ->
+        preferences[POSTURE_FOCUS_AREA].toExerciseSubCategory(postureFocusAreas, ExerciseSubCategory.SPINE)
+    }
+
+    suspend fun setPostureFocusArea(focusArea: ExerciseSubCategory) {
+        context.dataStore.edit { preferences ->
+            preferences[POSTURE_FOCUS_AREA] = focusArea.name
+        }
+    }
+
+    val stretchFocusAreaFlow: Flow<ExerciseSubCategory> = context.dataStore.data.map { preferences ->
+        preferences[STRETCH_FOCUS_AREA].toExerciseSubCategory(stretchFocusAreas, ExerciseSubCategory.SPINE)
+    }
+
+    suspend fun setStretchFocusArea(focusArea: ExerciseSubCategory) {
+        context.dataStore.edit { preferences ->
+            preferences[STRETCH_FOCUS_AREA] = focusArea.name
+        }
+    }
+
     val exerciseDifficultyAdjustmentsFlow: Flow<Map<String, Int>> = context.dataStore.data.map { preferences ->
         preferences.asMap()
             .mapNotNull { (key, value) ->
@@ -102,5 +138,12 @@ class SettingsManager(private val context: Context) {
         context.dataStore.edit { preferences ->
             preferences[key] = adjustment.coerceIn(-2, 2)
         }
+    }
+
+    private fun String?.toExerciseSubCategory(
+        allowed: List<ExerciseSubCategory>,
+        defaultValue: ExerciseSubCategory
+    ): ExerciseSubCategory {
+        return ExerciseSubCategory.entries.firstOrNull { it.name == this && it in allowed } ?: defaultValue
     }
 }

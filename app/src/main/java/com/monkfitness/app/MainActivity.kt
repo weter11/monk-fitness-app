@@ -130,9 +130,15 @@ fun MainApp(viewModel: MainViewModel) {
                 })
             }
             composable(Screen.Home.route) {
-                HomeScreen(viewModel) { day ->
-                    navController.navigate("workout/$day")
-                }
+                HomeScreen(
+                    viewModel = viewModel,
+                    onStartWorkout = { day ->
+                        navController.navigate("workout/$day")
+                    },
+                    onStartPostureWorkout = { day ->
+                        navController.navigate("posture-workout/$day")
+                    }
+                )
             }
             composable(Screen.Progress.route) {
                 ProgressScreen(viewModel)
@@ -160,6 +166,21 @@ fun MainApp(viewModel: MainViewModel) {
                 )
             }
             composable(
+                route = "posture-workout/{day}",
+                arguments = listOf(navArgument("day") { type = NavType.IntType })
+            ) { backStackEntry ->
+                val day = backStackEntry.arguments?.getInt("day") ?: 1
+                WorkoutScreen(
+                    day = day,
+                    viewModel = viewModel,
+                    isPostureMobilitySession = true,
+                    onBack = { navController.popBackStack() },
+                    onExerciseClick = { exercise ->
+                        navController.navigate("exercise/${exercise.id}?day=$day&isPosture=true")
+                    }
+                )
+            }
+            composable(
                 route = "exercise/{exerciseId}?day={day}&isPosture={isPosture}",
                 arguments = listOf(
                     navArgument("exerciseId") { type = NavType.StringType },
@@ -172,7 +193,11 @@ fun MainApp(viewModel: MainViewModel) {
                 val isPosture = backStackEntry.arguments?.getBoolean("isPosture") ?: false
                 val difficultyAdjustments by viewModel.exerciseDifficultyAdjustments.collectAsState()
 
-                val exercise = viewModel.getWorkoutForDay(day, difficultyAdjustments).exercises.find { it.id == exerciseId }
+                val stretchFocusArea by viewModel.stretchFocusArea.collectAsState()
+                val postureFocusArea by viewModel.postureFocusArea.collectAsState()
+
+                val exercise = viewModel.getWorkoutForDay(day, difficultyAdjustments, stretchFocusArea).exercises.find { it.id == exerciseId }
+                    ?: viewModel.getPostureMobilityWorkout(day, difficultyAdjustments, postureFocusArea).exercises.find { it.id == exerciseId }
                     ?: viewModel.getWarmupExercises(difficultyAdjustments).find { it.id == exerciseId }
                     ?: viewModel.getExerciseLibrary(difficultyAdjustments).find { it.id == exerciseId }
                     ?: viewModel.getPostureExercises(difficultyAdjustments).find { it.id == exerciseId }
