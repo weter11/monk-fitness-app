@@ -150,7 +150,12 @@ fun MainApp(viewModel: MainViewModel) {
                 )
             }
             composable(Screen.Nutrition.route) {
-                NutritionScreen(viewModel)
+                NutritionScreen(
+                    viewModel = viewModel,
+                    onOpenShoppingList = {
+                        navController.navigate("nutrition-shopping-list")
+                    }
+                )
             }
             composable(Screen.Progress.route) {
                 ProgressScreen(viewModel)
@@ -162,6 +167,12 @@ fun MainApp(viewModel: MainViewModel) {
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(viewModel, onBack = { navController.popBackStack() })
+            }
+            composable("nutrition-shopping-list") {
+                NutritionShoppingListScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
             }
             composable(
                 route = "workout/{day}",

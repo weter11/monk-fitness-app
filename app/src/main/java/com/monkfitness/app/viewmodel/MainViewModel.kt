@@ -437,6 +437,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
     )
 
+    private val _nutritionPlanSeed = MutableStateFlow(0)
+    val nutritionPlanSeed: StateFlow<Int> = _nutritionPlanSeed.asStateFlow()
+
+    fun regenerateNutritionPlan() {
+        _nutritionPlanSeed.value += 1
+    }
+
     fun setNutritionMealCompleted(mealType: NutritionMealType, completed: Boolean) {
         viewModelScope.launch {
             settingsManager.setNutritionMealCompleted(mealType.key, completed)

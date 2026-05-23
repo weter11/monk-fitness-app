@@ -107,6 +107,20 @@
     <string name="nutrition_protein_target">Protein target</string>
     <string name="nutrition_kcal_format">%1$d kcal</string>
     <string name="nutrition_protein_range_format">%1$d–%2$dg</string>
+    <string name="nutrition_three_day_plan">3-day meal plan</string>
+    <string name="nutrition_regenerate_plan">Regenerate plan</string>
+    <string name="nutrition_open_shopping_list">Shopping list</string>
+    <string name="nutrition_shopping_list">Shopping List</string>
+    <string name="nutrition_shopping_list_desc">Combined ingredients for all 3 days, grouped by what to buy.</string>
+    <string name="nutrition_meal_summary">%1$d kcal • %2$dg protein</string>
+    <string name="nutrition_optional">Optional</string>
+    <string name="nutrition_group_protein">Protein</string>
+    <string name="nutrition_group_carbs">Carbs</string>
+    <string name="nutrition_group_fats">Fats</string>
+    <string name="nutrition_group_fruits_vegetables">Fruits/Vegetables</string>
+    <string name="nutrition_quantity_grams">%1$d g</string>
+    <string name="nutrition_quantity_milliliters">%1$d ml</string>
+    <string name="nutrition_quantity_pieces">%1$d pcs</string>
     <string name="nutrition_completion">Daily completion</string>
     <string name="nutrition_completion_percent">%1$d%% completed</string>
     <string name="nutrition_daily_plan">Daily plan</string>
@@ -129,6 +143,25 @@
     <string name="nutrition_post_workout_option_1">Whey shake with banana and oats.</string>
     <string name="nutrition_post_workout_option_2">Greek yogurt with granola and fruit.</string>
     <string name="nutrition_post_workout_option_3">Chocolate milk and a cottage cheese sandwich.</string>
+    <string name="nutrition_ingredient_oats">Oats</string>
+    <string name="nutrition_ingredient_milk">Milk</string>
+    <string name="nutrition_ingredient_banana">Banana</string>
+    <string name="nutrition_ingredient_peanut_butter">Peanut butter</string>
+    <string name="nutrition_ingredient_whey_protein">Whey protein</string>
+    <string name="nutrition_ingredient_greek_yogurt">Greek yogurt</string>
+    <string name="nutrition_ingredient_eggs">Eggs</string>
+    <string name="nutrition_ingredient_whole_grain_bread">Whole-grain bread</string>
+    <string name="nutrition_ingredient_chicken_breast">Chicken breast</string>
+    <string name="nutrition_ingredient_rice">Rice</string>
+    <string name="nutrition_ingredient_olive_oil">Olive oil</string>
+    <string name="nutrition_ingredient_tomatoes">Tomatoes</string>
+    <string name="nutrition_ingredient_cucumber">Cucumber</string>
+    <string name="nutrition_ingredient_avocado">Avocado</string>
+    <string name="nutrition_ingredient_carrots">Carrots</string>
+    <string name="nutrition_ingredient_tuna">Tuna</string>
+    <string name="nutrition_ingredient_potatoes">Potatoes</string>
+    <string name="nutrition_ingredient_spinach">Spinach</string>
+    <string name="nutrition_ingredient_cottage_cheese">Cottage cheese</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">Welcome to Monk Fitness</string>

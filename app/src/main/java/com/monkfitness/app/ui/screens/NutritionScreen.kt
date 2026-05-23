@@ -1,46 +1,54 @@
 package com.monkfitness.app.ui.screens
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
-import com.monkfitness.app.data.model.NutritionMealPlan
+import com.monkfitness.app.data.model.NutritionDayPlan
+import com.monkfitness.app.data.model.NutritionIngredientAmount
+import com.monkfitness.app.data.model.NutritionMeal
+import com.monkfitness.app.data.model.NutritionQuantityUnit
 import com.monkfitness.app.data.model.calculateMuscleGainNutritionTargets
-import com.monkfitness.app.data.model.muscleGainMealPlan
-import com.monkfitness.app.ui.components.MonkProgressIndicator
+import com.monkfitness.app.data.model.generateThreeDayMuscleGainPlan
 import com.monkfitness.app.viewmodel.MainViewModel
 
 @Composable
-fun NutritionScreen(viewModel: MainViewModel) {
+fun NutritionScreen(
+    viewModel: MainViewModel,
+    onOpenShoppingList: () -> Unit
+) {
     val weightInput by viewModel.nutritionWeight.collectAsState()
     val heightInput by viewModel.nutritionHeight.collectAsState()
-    val completedMeals by viewModel.completedNutritionMeals.collectAsState()
+    val planSeed by viewModel.nutritionPlanSeed.collectAsState()
 
     val weightKg = weightInput.toIntOrNull()
     val heightCm = heightInput.toIntOrNull()
     val targets = calculateMuscleGainNutritionTargets(weightKg, heightCm)
-    val meals = muscleGainMealPlan()
-    val completion = completedMeals.size / meals.size.toFloat()
+    val plan = remember(planSeed) { generateThreeDayMuscleGainPlan(planSeed) }
 
     Column(
         modifier = Modifier
@@ -132,70 +140,32 @@ fun NutritionScreen(viewModel: MainViewModel) {
             }
         }
 
-        Card(
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            Button(
+                onClick = { viewModel.regenerateNutritionPlan() },
+                modifier = Modifier.weight(1f)
             ) {
-                Text(
-                    text = stringResource(R.string.nutrition_completion),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                MonkProgressIndicator(progress = completion, modifier = Modifier.fillMaxWidth())
-                Text(
-                    text = stringResource(
-                        R.string.nutrition_completion_percent,
-                        (completion * 100).toInt()
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Text(stringResource(R.string.nutrition_regenerate_plan))
+            }
+            OutlinedButton(
+                onClick = onOpenShoppingList,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(stringResource(R.string.nutrition_open_shopping_list))
             }
         }
 
         Text(
-            text = stringResource(R.string.nutrition_daily_plan),
+            text = stringResource(R.string.nutrition_three_day_plan),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
 
-        meals.forEach { meal ->
-            NutritionMealCard(
-                meal = meal,
-                checked = meal.type.key in completedMeals,
-                onCheckedChange = { isChecked ->
-                    viewModel.setNutritionMealCompleted(meal.type, isChecked)
-                }
-            )
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.nutrition_tips),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "• ${stringResource(R.string.nutrition_tip_nuts)}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = "• ${stringResource(R.string.nutrition_tip_post_workout)}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
+        plan.days.forEach { day ->
+            NutritionDayCard(day = day)
         }
     }
 }
@@ -207,8 +177,7 @@ private fun NutritionTargetRow(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(text = title, style = MaterialTheme.typography.bodyLarge)
         Text(
@@ -221,49 +190,93 @@ private fun NutritionTargetRow(
 }
 
 @Composable
-private fun NutritionMealCard(
-    meal: NutritionMealPlan,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
+private fun NutritionDayCard(day: NutritionDayPlan) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.Top
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Checkbox(
-                checked = checked,
-                onCheckedChange = onCheckedChange
+            Text(
+                text = stringResource(R.string.day_display, day.dayNumber),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
             )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+            Text(
+                text = stringResource(
+                    R.string.nutrition_meal_summary,
+                    day.totalCalories,
+                    day.totalProteinGrams
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            day.meals.forEach { meal ->
+                NutritionMealCard(meal = meal)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NutritionMealCard(meal: NutritionMeal) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
                     text = stringResource(meal.type.labelRes),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                meal.options.forEach { optionRes ->
+                if (meal.optional) {
                     Text(
-                        text = "• ${stringResource(optionRes)}",
-                        style = MaterialTheme.typography.bodyMedium
+                        text = stringResource(R.string.nutrition_optional),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
-            if (checked) {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+
+            meal.ingredients.forEach { ingredient ->
+                Text(
+                    text = "• ${ingredientText(ingredient)}",
+                    style = MaterialTheme.typography.bodyMedium
                 )
             }
+
+            Text(
+                text = stringResource(
+                    R.string.nutrition_meal_summary,
+                    meal.calories,
+                    meal.proteinGrams
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
         }
     }
+}
+
+@Composable
+private fun ingredientText(ingredientAmount: NutritionIngredientAmount): String {
+    val quantity = when (ingredientAmount.ingredient.unit) {
+        NutritionQuantityUnit.GRAMS -> stringResource(R.string.nutrition_quantity_grams, ingredientAmount.amount)
+        NutritionQuantityUnit.MILLILITERS -> stringResource(R.string.nutrition_quantity_milliliters, ingredientAmount.amount)
+        NutritionQuantityUnit.PIECES -> stringResource(R.string.nutrition_quantity_pieces, ingredientAmount.amount)
+    }
+
+    return "${stringResource(ingredientAmount.ingredient.nameRes)} — $quantity"
 }
