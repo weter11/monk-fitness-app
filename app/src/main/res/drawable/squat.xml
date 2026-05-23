@@ -1,0 +1,39 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Head -->
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M100,40 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+    <!-- Torso (leaning forward) -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:pathData="M100,50 L100,100" />
+    <!-- Thighs (horizontal-ish) -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:pathData="M100,100 L140,105" />
+    <!-- Lower legs -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:pathData="M140,105 L135,150" />
+    <!-- Arms (reaching forward for balance) -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:pathData="M100,60 L150,60" />
+    <!-- Floor line -->
+    <path
+        android:strokeColor="#757575"
+        android:strokeWidth="2"
+        android:pathData="M60,155 L160,155" />
+</vector>

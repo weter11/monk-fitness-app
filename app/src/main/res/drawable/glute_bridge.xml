@@ -1,0 +1,33 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Back on floor -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:pathData="M140,140 L170,145" />
+    <!-- Hips lifted -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="12"
+        android:strokeLineCap="round"
+        android:pathData="M70,140 L100,100 L140,140" />
+    <!-- Lower legs -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:pathData="M70,140 L65,150" />
+    <!-- Head -->
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M175,135 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0" />
+    <!-- Floor line -->
+    <path
+        android:strokeColor="#757575"
+        android:strokeWidth="2"
+        android:pathData="M40,155 L185,155" />
+</vector>

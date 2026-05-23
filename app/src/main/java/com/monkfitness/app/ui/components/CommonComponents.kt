@@ -22,6 +22,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
 
 @Composable
@@ -120,8 +121,8 @@ fun ExerciseItem(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = if (exercise.isTimerBased) "${exercise.durationSeconds}s"
-                    else "${exercise.sets} × ${exercise.reps}",
+                    text = if (exercise.isTimerBased) stringResource(R.string.seconds_format, exercise.durationSeconds)
+                    else stringResource(R.string.sets_reps_format, exercise.sets, exercise.reps),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.secondary
                 )
@@ -130,7 +131,7 @@ fun ExerciseItem(
             IconButton(onClick = onInfo) {
                 Icon(
                     Icons.Default.Info,
-                    contentDescription = "Info",
+                    contentDescription = stringResource(R.string.label_description),
                     tint = MaterialTheme.colorScheme.outline
                 )
             }

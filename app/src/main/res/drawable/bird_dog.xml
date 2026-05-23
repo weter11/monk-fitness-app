@@ -1,0 +1,45 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Torso -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:pathData="M70,110 L130,110" />
+    <!-- Supported Arm -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:pathData="M130,110 L130,150" />
+    <!-- Supported Leg -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:pathData="M70,110 L70,150" />
+    <!-- Extended Arm -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:pathData="M130,110 L170,110" />
+    <!-- Extended Leg -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:pathData="M70,110 L30,110" />
+    <!-- Head -->
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M140,100 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0" />
+    <!-- Floor line -->
+    <path
+        android:strokeColor="#757575"
+        android:strokeWidth="2"
+        android:pathData="M20,155 L180,155" />
+</vector>

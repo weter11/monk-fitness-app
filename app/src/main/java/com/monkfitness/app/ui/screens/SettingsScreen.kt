@@ -34,7 +34,7 @@ fun SettingsScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.previous)
                         )
                     }
                 }
@@ -75,16 +75,16 @@ fun SettingsScreen(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { viewModel.setLanguage("en") }) {
-                    Text("English")
+                    Text(stringResource(R.string.lang_en))
                 }
                 Button(onClick = { viewModel.setLanguage("ru") }) {
-                    Text("Русский")
+                    Text(stringResource(R.string.lang_ru))
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Text(text = "Feedback", style = MaterialTheme.typography.titleLarge)
+            Text(text = stringResource(R.string.feedback), style = MaterialTheme.typography.titleLarge)
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

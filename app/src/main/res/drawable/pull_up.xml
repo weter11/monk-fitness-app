@@ -1,0 +1,33 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Bar -->
+    <path
+        android:strokeColor="#757575"
+        android:strokeWidth="6"
+        android:pathData="M40,30 L160,30" />
+    <!-- Arms -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:pathData="M70,30 L85,60 M130,30 L115,60" />
+    <!-- Body -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="12"
+        android:strokeLineCap="round"
+        android:pathData="M100,60 L100,120" />
+    <!-- Head (over the bar) -->
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M100,45 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0" />
+    <!-- Legs -->
+    <path
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:pathData="M100,120 L90,160 M100,120 L110,160" />
+</vector>

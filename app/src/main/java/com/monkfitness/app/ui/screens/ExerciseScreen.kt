@@ -54,14 +54,17 @@ fun ExerciseScreen(
                     title = { Text(stringResource(R.string.app_name)) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.previous)
+                            )
                         }
                     }
                 )
             }
         ) { padding ->
             Box(modifier = Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No description available", style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.description), style = MaterialTheme.typography.bodyLarge)
             }
         }
         return
@@ -76,7 +79,10 @@ fun ExerciseScreen(
                 title = { Text(stringResource(exercise.nameRes), fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.previous)
+                        )
                     }
                 }
             )
@@ -87,9 +93,11 @@ fun ExerciseScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            val imageRes = if (exercise.imageRes != 0) exercise.imageRes else R.drawable.ic_exercise_placeholder
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -99,28 +107,66 @@ fun ExerciseScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Image(
-                    painter = painterResource(exercise.imageRes),
+                    painter = painterResource(imageRes),
                     contentDescription = null,
-                    modifier = Modifier.size(160.dp),
-                    contentScale = ContentScale.Fit,
-                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary)
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    contentScale = ContentScale.Fit
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = stringResource(exercise.nameRes),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 InfoChip(
-                    label = if (exercise.isTimerBased) "Time" else "Sets",
-                    value = if (exercise.isTimerBased) "${exercise.durationSeconds}s" else "${exercise.sets}"
+                    label = if (exercise.isTimerBased) stringResource(R.string.time) else stringResource(R.string.sets),
+                    value = if (exercise.isTimerBased) stringResource(R.string.seconds_format, exercise.durationSeconds) else exercise.sets.toString()
                 )
                 if (!exercise.isTimerBased) {
-                    InfoChip(label = "Reps", value = "${exercise.reps}")
+                    InfoChip(label = stringResource(R.string.reps), value = exercise.reps.toString())
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            ExerciseSection(
+                title = stringResource(R.string.label_description),
+                content = if (exercise.descriptionRes != 0 && exercise.descriptionRes != R.string.description)
+                    stringResource(exercise.descriptionRes) else stringResource(R.string.description)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            ExerciseSection(
+                title = stringResource(R.string.label_steps),
+                content = if (exercise.stepsRes != 0) stringResource(exercise.stepsRes) else stringResource(R.string.steps_default)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            ExerciseSection(
+                title = stringResource(R.string.label_technique),
+                content = if (exercise.techniqueRes != 0 && exercise.techniqueRes != R.string.technique)
+                    stringResource(exercise.techniqueRes) else stringResource(R.string.technique)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            ExerciseSection(
+                title = stringResource(R.string.label_mistakes),
+                content = if (exercise.mistakesRes != 0) stringResource(exercise.mistakesRes) else stringResource(R.string.mistakes_default)
+            )
 
             if (exercise.isTimerBased) {
                 Spacer(modifier = Modifier.height(32.dp))
@@ -133,18 +179,6 @@ fun ExerciseScreen(
             }
 
             Spacer(modifier = Modifier.height(32.dp))
-
-            ExerciseSection(
-                title = stringResource(R.string.description),
-                content = stringResource(exercise.descriptionRes)
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            ExerciseSection(
-                title = stringResource(R.string.technique),
-                content = stringResource(exercise.techniqueRes)
-            )
         }
     }
 }
@@ -190,13 +224,13 @@ fun TimerDisplay(
                 if (isRunning) {
                     Icon(
                         painter = painterResource(R.drawable.ic_pause),
-                        contentDescription = "Pause",
+                        contentDescription = stringResource(R.string.timer_pause),
                         modifier = Modifier.size(32.dp)
                     )
                 } else {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Start",
+                        contentDescription = stringResource(R.string.timer_start),
                         modifier = Modifier.size(32.dp)
                     )
                 }
@@ -206,7 +240,7 @@ fun TimerDisplay(
                 modifier = Modifier.size(64.dp),
                 shape = CircleShape
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Reset")
+                Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.timer_reset))
             }
         }
     }
