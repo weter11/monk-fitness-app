@@ -98,6 +98,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return workoutGenerator.generateWorkout(day)
     }
 
+    fun getExerciseLibrary() = workoutGenerator.getExerciseLibrary()
+
     fun getPostureExercises() = workoutGenerator.getPostureExercises()
 
     fun getWarmupExercises() = workoutGenerator.getWarmupExercises()

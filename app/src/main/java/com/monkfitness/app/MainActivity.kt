@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
 sealed class Screen(val route: String, val titleRes: Int, val icon: ImageVector) {
     object Home : Screen("home", R.string.home, Icons.Default.Home)
     object Progress : Screen("progress", R.string.progress, Icons.Default.Star)
-    object Posture : Screen("posture", R.string.posture, Icons.Default.Person)
+    object Posture : Screen("posture", R.string.exercise_library, Icons.Default.Person)
     object Settings : Screen("settings", R.string.settings, Icons.Default.Settings)
 }
 
@@ -173,6 +173,7 @@ fun MainApp(viewModel: MainViewModel) {
 
                 val exercise = viewModel.getWorkoutForDay(day).exercises.find { it.id == exerciseId }
                     ?: viewModel.getWarmupExercises().find { it.id == exerciseId }
+                    ?: viewModel.getExerciseLibrary().find { it.id == exerciseId }
                     ?: viewModel.getPostureExercises().find { it.id == exerciseId }
 
                 ExerciseScreen(

@@ -1,8 +1,11 @@
 package com.monkfitness.app
 
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
+import com.monkfitness.app.data.model.ExerciseCategory
+import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.WorkoutType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WorkoutGeneratorTest {
@@ -32,5 +35,51 @@ class WorkoutGeneratorTest {
         assertEquals(4, p2Exercise.sets)
         assertEquals(5, p3Exercise.sets)
         assertEquals(6, p4Exercise.sets)
+    }
+
+    @Test
+    fun testExerciseLibraryUsesFixedCuratedList() {
+        val library = generator.getExerciseLibrary()
+        val ids = library.map { it.id }
+
+        assertEquals(20, library.size)
+        assertEquals(20, ids.distinct().size)
+        assertTrue(
+            ids.containsAll(
+                listOf(
+                    "face_pull",
+                    "scapular_pullups",
+                    "wall_slides",
+                    "reverse_snow_angels",
+                    "band_pull_aparts",
+                    "thoracic_rotations",
+                    "cat_cow",
+                    "cobra_stretch",
+                    "child_pose",
+                    "thoracic_extension",
+                    "hip_flexor_stretch",
+                    "ninety_ninety_hips",
+                    "deep_squat",
+                    "hamstring_stretch",
+                    "glute_bridge",
+                    "world_greatest_stretch",
+                    "bird_dog",
+                    "plank",
+                    "lunges",
+                    "pushups"
+                )
+            )
+        )
+    }
+
+    @Test
+    fun testExerciseMetadataIsAssigned() {
+        val pushups = generator.generateWorkout(1).exercises.first { it.id == "pushups" }
+        val catCow = generator.getExerciseLibrary().first { it.id == "cat_cow" }
+
+        assertEquals(ExerciseCategory.STRENGTH, pushups.category)
+        assertEquals(ExerciseSubCategory.FULL_BODY, pushups.subCategory)
+        assertEquals(ExerciseCategory.MOBILITY, catCow.category)
+        assertEquals(ExerciseSubCategory.SPINE, catCow.subCategory)
     }
 }
