@@ -202,7 +202,7 @@ private fun NutritionTodayMealCard(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = stringResource(meal.profile.labelRes),
+                            text = stringResource(meal.mealType.labelRes),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary
                         )

@@ -1,7 +1,7 @@
 package com.monkfitness.app
 
 import com.monkfitness.app.data.model.NutritionDayType
-import com.monkfitness.app.data.model.NutritionMealProfile
+import com.monkfitness.app.data.model.MealType
 import com.monkfitness.app.data.model.NutritionMealType
 import com.monkfitness.app.data.model.calculateNutritionCompletionPercent
 import com.monkfitness.app.data.model.findReplacementMealTemplateId
@@ -77,14 +77,14 @@ class NutritionPlanTest {
 
         assertNotEquals(originalMeal.templateId, replacedMeal.templateId)
         assertEquals(originalMeal.type, replacedMeal.type)
-        assertEquals(originalMeal.profile, replacedMeal.profile)
-        assertTrue(kotlin.math.abs(originalMeal.calories - replacedMeal.calories) <= 120)
+        assertEquals(originalMeal.mealType, replacedMeal.mealType)
+        assertTrue(kotlin.math.abs(originalMeal.calories - replacedMeal.calories) <= 100)
     }
 
     @Test
     fun testShoppingListChangesAfterReplacement() {
         val originalPlan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80)
-        val mealToReplace = originalPlan.days.first().meals.first { it.profile == NutritionMealProfile.BALANCED }
+        val mealToReplace = originalPlan.days.first().meals.first { it.mealType == MealType.BALANCED }
         val replacementId = findReplacementMealTemplateId(mealToReplace, emptySet())
 
         checkNotNull(replacementId)

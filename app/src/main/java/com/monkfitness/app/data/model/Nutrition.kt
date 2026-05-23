@@ -17,7 +17,7 @@ enum class NutritionMealType(
     SNACK("snack", R.string.nutrition_snack)
 }
 
-enum class NutritionMealProfile(@StringRes val labelRes: Int) {
+enum class MealType(@StringRes val labelRes: Int) {
     HIGH_CARB(R.string.nutrition_profile_high_carb),
     HIGH_PROTEIN(R.string.nutrition_profile_high_protein),
     BALANCED(R.string.nutrition_profile_balanced)
@@ -72,7 +72,7 @@ data class NutritionIngredientAmount(
 data class NutritionMeal(
     val templateId: String,
     val type: NutritionMealType,
-    val profile: NutritionMealProfile,
+    val mealType: MealType,
     val ingredients: List<NutritionIngredientAmount>,
     val calories: Int,
     val proteinGrams: Int,
@@ -118,7 +118,7 @@ data class NutritionPlan(
 private data class NutritionMealTemplate(
     val id: String,
     val type: NutritionMealType,
-    val profile: NutritionMealProfile,
+    val mealType: MealType,
     val ingredients: List<NutritionIngredientAmount>,
     val calories: Int,
     val proteinGrams: Int,
@@ -127,7 +127,7 @@ private data class NutritionMealTemplate(
     fun toMeal(scale: Float = 1f): NutritionMeal = NutritionMeal(
         templateId = id,
         type = type,
-        profile = profile,
+        mealType = mealType,
         ingredients = ingredients.map { ingredientAmount ->
             ingredientAmount.copy(amount = scaleAmount(ingredientAmount.amount, ingredientAmount.ingredient.unit, scale))
         },
@@ -169,7 +169,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "breakfast_high_carb_1",
         type = NutritionMealType.BREAKFAST,
-        profile = NutritionMealProfile.HIGH_CARB,
+        mealType = MealType.HIGH_CARB,
         ingredients = listOf(
             NutritionIngredientAmount(oats, 90),
             NutritionIngredientAmount(yogurt, 220),
@@ -181,7 +181,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "breakfast_high_carb_2",
         type = NutritionMealType.BREAKFAST,
-        profile = NutritionMealProfile.HIGH_CARB,
+        mealType = MealType.HIGH_CARB,
         ingredients = listOf(
             NutritionIngredientAmount(rice, 200),
             NutritionIngredientAmount(eggs, 2),
@@ -194,7 +194,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "breakfast_high_protein_1",
         type = NutritionMealType.BREAKFAST,
-        profile = NutritionMealProfile.HIGH_PROTEIN,
+        mealType = MealType.HIGH_PROTEIN,
         ingredients = listOf(
             NutritionIngredientAmount(cottageCheese, 250),
             NutritionIngredientAmount(yogurt, 180),
@@ -206,7 +206,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "breakfast_high_protein_2",
         type = NutritionMealType.BREAKFAST,
-        profile = NutritionMealProfile.HIGH_PROTEIN,
+        mealType = MealType.HIGH_PROTEIN,
         ingredients = listOf(
             NutritionIngredientAmount(eggs, 3),
             NutritionIngredientAmount(cottageCheese, 180),
@@ -218,7 +218,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "breakfast_balanced_1",
         type = NutritionMealType.BREAKFAST,
-        profile = NutritionMealProfile.BALANCED,
+        mealType = MealType.BALANCED,
         ingredients = listOf(
             NutritionIngredientAmount(oats, 70),
             NutritionIngredientAmount(cottageCheese, 200),
@@ -230,7 +230,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "breakfast_balanced_2",
         type = NutritionMealType.BREAKFAST,
-        profile = NutritionMealProfile.BALANCED,
+        mealType = MealType.BALANCED,
         ingredients = listOf(
             NutritionIngredientAmount(eggs, 3),
             NutritionIngredientAmount(buckwheat, 180),
@@ -242,7 +242,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "lunch_high_carb_1",
         type = NutritionMealType.LUNCH,
-        profile = NutritionMealProfile.HIGH_CARB,
+        mealType = MealType.HIGH_CARB,
         ingredients = listOf(
             NutritionIngredientAmount(chicken, 150),
             NutritionIngredientAmount(rice, 260),
@@ -254,7 +254,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "lunch_high_carb_2",
         type = NutritionMealType.LUNCH,
-        profile = NutritionMealProfile.HIGH_CARB,
+        mealType = MealType.HIGH_CARB,
         ingredients = listOf(
             NutritionIngredientAmount(tuna, 140),
             NutritionIngredientAmount(potatoes, 360),
@@ -266,7 +266,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "lunch_high_protein_1",
         type = NutritionMealType.LUNCH,
-        profile = NutritionMealProfile.HIGH_PROTEIN,
+        mealType = MealType.HIGH_PROTEIN,
         ingredients = listOf(
             NutritionIngredientAmount(chicken, 180),
             NutritionIngredientAmount(buckwheat, 220),
@@ -278,7 +278,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "lunch_high_protein_2",
         type = NutritionMealType.LUNCH,
-        profile = NutritionMealProfile.HIGH_PROTEIN,
+        mealType = MealType.HIGH_PROTEIN,
         ingredients = listOf(
             NutritionIngredientAmount(chicken, 160),
             NutritionIngredientAmount(eggs, 3),
@@ -290,7 +290,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "lunch_balanced_1",
         type = NutritionMealType.LUNCH,
-        profile = NutritionMealProfile.BALANCED,
+        mealType = MealType.BALANCED,
         ingredients = listOf(
             NutritionIngredientAmount(tuna, 150),
             NutritionIngredientAmount(rice, 210),
@@ -302,7 +302,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "lunch_balanced_2",
         type = NutritionMealType.LUNCH,
-        profile = NutritionMealProfile.BALANCED,
+        mealType = MealType.BALANCED,
         ingredients = listOf(
             NutritionIngredientAmount(chicken, 150),
             NutritionIngredientAmount(potatoes, 300),
@@ -314,7 +314,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "dinner_high_carb_1",
         type = NutritionMealType.DINNER,
-        profile = NutritionMealProfile.HIGH_CARB,
+        mealType = MealType.HIGH_CARB,
         ingredients = listOf(
             NutritionIngredientAmount(chicken, 140),
             NutritionIngredientAmount(rice, 240),
@@ -326,7 +326,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "dinner_high_carb_2",
         type = NutritionMealType.DINNER,
-        profile = NutritionMealProfile.HIGH_CARB,
+        mealType = MealType.HIGH_CARB,
         ingredients = listOf(
             NutritionIngredientAmount(eggs, 3),
             NutritionIngredientAmount(buckwheat, 240),
@@ -338,7 +338,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "dinner_high_protein_1",
         type = NutritionMealType.DINNER,
-        profile = NutritionMealProfile.HIGH_PROTEIN,
+        mealType = MealType.HIGH_PROTEIN,
         ingredients = listOf(
             NutritionIngredientAmount(chicken, 170),
             NutritionIngredientAmount(cottageCheese, 180),
@@ -350,7 +350,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "dinner_high_protein_2",
         type = NutritionMealType.DINNER,
-        profile = NutritionMealProfile.HIGH_PROTEIN,
+        mealType = MealType.HIGH_PROTEIN,
         ingredients = listOf(
             NutritionIngredientAmount(tuna, 170),
             NutritionIngredientAmount(eggs, 2),
@@ -362,7 +362,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "dinner_balanced_1",
         type = NutritionMealType.DINNER,
-        profile = NutritionMealProfile.BALANCED,
+        mealType = MealType.BALANCED,
         ingredients = listOf(
             NutritionIngredientAmount(chicken, 150),
             NutritionIngredientAmount(buckwheat, 220),
@@ -374,7 +374,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "dinner_balanced_2",
         type = NutritionMealType.DINNER,
-        profile = NutritionMealProfile.BALANCED,
+        mealType = MealType.BALANCED,
         ingredients = listOf(
             NutritionIngredientAmount(cottageCheese, 220),
             NutritionIngredientAmount(potatoes, 280),
@@ -386,7 +386,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "post_workout_high_carb_1",
         type = NutritionMealType.POST_WORKOUT,
-        profile = NutritionMealProfile.HIGH_CARB,
+        mealType = MealType.HIGH_CARB,
         ingredients = listOf(
             NutritionIngredientAmount(yogurt, 200),
             NutritionIngredientAmount(banana, 1),
@@ -398,7 +398,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "post_workout_high_carb_2",
         type = NutritionMealType.POST_WORKOUT,
-        profile = NutritionMealProfile.HIGH_CARB,
+        mealType = MealType.HIGH_CARB,
         ingredients = listOf(
             NutritionIngredientAmount(yogurt, 180),
             NutritionIngredientAmount(banana, 1),
@@ -410,7 +410,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "post_workout_high_protein_1",
         type = NutritionMealType.POST_WORKOUT,
-        profile = NutritionMealProfile.HIGH_PROTEIN,
+        mealType = MealType.HIGH_PROTEIN,
         ingredients = listOf(
             NutritionIngredientAmount(cottageCheese, 180),
             NutritionIngredientAmount(banana, 1)
@@ -421,7 +421,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "post_workout_high_protein_2",
         type = NutritionMealType.POST_WORKOUT,
-        profile = NutritionMealProfile.HIGH_PROTEIN,
+        mealType = MealType.HIGH_PROTEIN,
         ingredients = listOf(
             NutritionIngredientAmount(yogurt, 180),
             NutritionIngredientAmount(cottageCheese, 120),
@@ -433,7 +433,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "post_workout_balanced_1",
         type = NutritionMealType.POST_WORKOUT,
-        profile = NutritionMealProfile.BALANCED,
+        mealType = MealType.BALANCED,
         ingredients = listOf(
             NutritionIngredientAmount(yogurt, 180),
             NutritionIngredientAmount(banana, 1),
@@ -445,7 +445,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "post_workout_balanced_2",
         type = NutritionMealType.POST_WORKOUT,
-        profile = NutritionMealProfile.BALANCED,
+        mealType = MealType.BALANCED,
         ingredients = listOf(
             NutritionIngredientAmount(eggs, 2),
             NutritionIngredientAmount(apple, 1),
@@ -457,7 +457,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "snack_high_carb_1",
         type = NutritionMealType.SNACK,
-        profile = NutritionMealProfile.HIGH_CARB,
+        mealType = MealType.HIGH_CARB,
         ingredients = listOf(
             NutritionIngredientAmount(banana, 1),
             NutritionIngredientAmount(yogurt, 150)
@@ -469,7 +469,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "snack_high_carb_2",
         type = NutritionMealType.SNACK,
-        profile = NutritionMealProfile.HIGH_CARB,
+        mealType = MealType.HIGH_CARB,
         ingredients = listOf(
             NutritionIngredientAmount(apple, 1),
             NutritionIngredientAmount(oats, 35),
@@ -482,7 +482,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "snack_high_protein_1",
         type = NutritionMealType.SNACK,
-        profile = NutritionMealProfile.HIGH_PROTEIN,
+        mealType = MealType.HIGH_PROTEIN,
         ingredients = listOf(
             NutritionIngredientAmount(cottageCheese, 150),
             NutritionIngredientAmount(apple, 1)
@@ -494,7 +494,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "snack_high_protein_2",
         type = NutritionMealType.SNACK,
-        profile = NutritionMealProfile.HIGH_PROTEIN,
+        mealType = MealType.HIGH_PROTEIN,
         ingredients = listOf(
             NutritionIngredientAmount(eggs, 2),
             NutritionIngredientAmount(yogurt, 150)
@@ -506,7 +506,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "snack_balanced_1",
         type = NutritionMealType.SNACK,
-        profile = NutritionMealProfile.BALANCED,
+        mealType = MealType.BALANCED,
         ingredients = listOf(
             NutritionIngredientAmount(yogurt, 180),
             NutritionIngredientAmount(banana, 1),
@@ -519,7 +519,7 @@ private val nutritionMealTemplates = listOf(
     NutritionMealTemplate(
         id = "snack_balanced_2",
         type = NutritionMealType.SNACK,
-        profile = NutritionMealProfile.BALANCED,
+        mealType = MealType.BALANCED,
         ingredients = listOf(
             NutritionIngredientAmount(cottageCheese, 150),
             NutritionIngredientAmount(banana, 1),
@@ -530,6 +530,9 @@ private val nutritionMealTemplates = listOf(
         optional = true
     )
 )
+
+private val mealsPool: Map<MealType, List<NutritionMealTemplate>> =
+    nutritionMealTemplates.groupBy { it.mealType }
 
 fun generateNutritionPlan(
     seed: Int,
@@ -554,12 +557,12 @@ fun generateNutritionPlan(
         val rotation = base + index + (programDay * 3)
 
         val meals = slots.mapIndexed { slotIndex, slot ->
-            val profile = NutritionMealProfile.entries[(rotation + slotIndex) % NutritionMealProfile.entries.size]
+            val mealType = MealType.entries[(rotation + slotIndex) % MealType.entries.size]
             val replacementKey = nutritionReplacementKey(programDay, slot)
             val replacementTemplateId = replacements[replacementKey]
             selectTemplate(
                 mealType = slot,
-                mealProfile = profile,
+                replacementType = mealType,
                 rotation = rotation + slotIndex,
                 excludedIngredientKeys = excludedIngredientKeys,
                 explicitTemplateId = replacementTemplateId
@@ -657,14 +660,35 @@ fun getTodayCookingInstructionResIds(meal: NutritionMeal): List<Int> {
     return steps.distinct().take(3)
 }
 
+fun replaceMeal(
+    meal: NutritionMeal,
+    excludedIngredientKeys: Set<String>
+): NutritionMeal? {
+    val currentTemplate = nutritionMealTemplates.firstOrNull { it.id == meal.templateId } ?: return null
+    val calorieScale = meal.calories.toFloat() / currentTemplate.calories.toFloat()
+
+    return mealsPool[meal.mealType]
+        .orEmpty()
+        .asSequence()
+        .filter { candidate ->
+            candidate.type == meal.type &&
+                candidate.id != meal.templateId &&
+                candidate.ingredients.none { it.ingredient.key in excludedIngredientKeys }
+        }
+        .map { candidate ->
+            candidate to abs((candidate.calories * calorieScale).roundToInt() - meal.calories)
+        }
+        .filter { (_, calorieDifference) -> calorieDifference <= 100 }
+        .minByOrNull { (_, calorieDifference) -> calorieDifference }
+        ?.first
+        ?.toMeal(calorieScale)
+}
+
 fun findReplacementMealTemplateId(
     meal: NutritionMeal,
     excludedIngredientKeys: Set<String>
 ): String? {
-    return templatesFor(meal.type, meal.profile, excludedIngredientKeys)
-        .filter { it.id != meal.templateId }
-        .minByOrNull { candidate -> abs(candidate.calories - meal.calories) }
-        ?.id
+    return replaceMeal(meal, excludedIngredientKeys)?.templateId
 }
 
 fun nutritionReplacementKey(programDay: Int, mealType: NutritionMealType): String {
@@ -689,12 +713,12 @@ private fun slotsForDayType(dayType: NutritionDayType): List<NutritionMealType> 
 
 private fun selectTemplate(
     mealType: NutritionMealType,
-    mealProfile: NutritionMealProfile,
+    replacementType: MealType,
     rotation: Int,
     excludedIngredientKeys: Set<String>,
     explicitTemplateId: String?
 ): NutritionMealTemplate {
-    val filtered = templatesFor(mealType, mealProfile, excludedIngredientKeys)
+    val filtered = templatesFor(mealType, replacementType, excludedIngredientKeys)
     val explicit = explicitTemplateId?.let { id -> filtered.firstOrNull { it.id == id } }
     if (explicit != null) return explicit
 
@@ -702,9 +726,9 @@ private fun selectTemplate(
         return filtered[rotation.absoluteValue % filtered.size]
     }
 
-    val fallbackSameProfile = templatesFor(mealType, mealProfile, emptySet())
-    if (fallbackSameProfile.isNotEmpty()) {
-        return fallbackSameProfile[rotation.absoluteValue % fallbackSameProfile.size]
+    val fallbackSameType = templatesFor(mealType, replacementType, emptySet())
+    if (fallbackSameType.isNotEmpty()) {
+        return fallbackSameType[rotation.absoluteValue % fallbackSameType.size]
     }
 
     return nutritionMealTemplates.first { it.type == mealType }
@@ -712,12 +736,11 @@ private fun selectTemplate(
 
 private fun templatesFor(
     mealType: NutritionMealType,
-    mealProfile: NutritionMealProfile,
+    replacementType: MealType,
     excludedIngredientKeys: Set<String>
 ): List<NutritionMealTemplate> {
-    return nutritionMealTemplates.filter { template ->
+    return mealsPool[replacementType].orEmpty().filter { template ->
         template.type == mealType &&
-            template.profile == mealProfile &&
             template.ingredients.none { it.ingredient.key in excludedIngredientKeys }
     }
 }
