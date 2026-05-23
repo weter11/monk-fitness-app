@@ -6,8 +6,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,17 +28,14 @@ fun HomeScreen(
     onStartWorkout: (Int) -> Unit,
     onStartPostureWorkout: (Int) -> Unit
 ) {
-    val completedCount by viewModel.completedDaysCount.collectAsState()
-    val completedPostureCount by viewModel.completedPostureDaysCount.collectAsState()
-    val streak by viewModel.streak.collectAsState()
-    val additionalPostureTrainingEnabled by viewModel.additionalPostureTrainingEnabled.collectAsState()
-    val flexibilityTrainingType by viewModel.flexibilityTrainingType.collectAsState()
-    val flexibilityFocusAreas by viewModel.flexibilityFocusAreas.collectAsState()
-    val currentDay = viewModel.getCurrentDay()
-    val workout = viewModel.getWorkoutForDay(currentDay)
-
-    val targetProgress = completedCount.toFloat() / 56f
-    val postureProgress = completedPostureCount.toFloat() / 56f
+    val uiState by viewModel.homeUiState.collectAsState()
+    val progressValues by remember(uiState.completedCount, uiState.completedPostureCount) {
+        derivedStateOf {
+            (uiState.completedCount.toFloat() / 56f) to (uiState.completedPostureCount.toFloat() / 56f)
+        }
+    }
+    val targetProgress = progressValues.first
+    val postureProgress = progressValues.second
     val animatedProgress by animateFloatAsState(
         targetValue = targetProgress,
         label = "HomeProgressAnimation"
@@ -46,8 +45,8 @@ fun HomeScreen(
         label = "PostureProgressAnimation"
     )
     val fullBodyLabel = stringResource(ExerciseSubCategory.FULL_BODY.labelRes)
-    val selectedFocusAreaLabels = flexibilityFocusAreas.map { stringResource(it.labelRes) }
-    val focusAreaSummary = if (ExerciseSubCategory.FULL_BODY in flexibilityFocusAreas) {
+    val selectedFocusAreaLabels = uiState.flexibilityFocusAreas.map { stringResource(it.labelRes) }
+    val focusAreaSummary = if (ExerciseSubCategory.FULL_BODY in uiState.flexibilityFocusAreas) {
         fullBodyLabel
     } else {
         selectedFocusAreaLabels.joinToString(", ")
@@ -61,7 +60,7 @@ fun HomeScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = stringResource(R.string.week_label, ((currentDay - 1) / 7) + 1),
+            text = stringResource(R.string.week_label, ((uiState.currentDay - 1) / 7) + 1),
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary
         )
@@ -80,7 +79,7 @@ fun HomeScreen(
                     color = MaterialTheme.colorScheme.secondary
                 )
                 Text(
-                    text = stringResource(workout.type.nameRes),
+                    text = stringResource(uiState.workout.type.nameRes),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -112,13 +111,13 @@ fun HomeScreen(
         ) {
             InfoCard(
                 label = stringResource(R.string.streak),
-                value = "$streak",
+                value = "${uiState.streak}",
                 modifier = Modifier.weight(1f),
                 icon = "🔥"
             )
             InfoCard(
                 label = stringResource(R.string.day),
-                value = stringResource(R.string.day_format, currentDay),
+                value = stringResource(R.string.day_format, uiState.currentDay),
                 modifier = Modifier.weight(1f),
                 icon = "📅"
             )
@@ -128,10 +127,10 @@ fun HomeScreen(
 
         MonkButton(
             text = stringResource(R.string.start_workout),
-            onClick = { onStartWorkout(currentDay) }
+            onClick = { onStartWorkout(uiState.currentDay) }
         )
 
-        if (additionalPostureTrainingEnabled) {
+        if (uiState.additionalPostureTrainingEnabled) {
             Spacer(modifier = Modifier.height(24.dp))
 
             Card(
@@ -148,7 +147,7 @@ fun HomeScreen(
                     Text(
                         text = stringResource(
                             R.string.flexibility_session_summary,
-                            stringResource(flexibilityTrainingType.labelRes),
+                            stringResource(uiState.flexibilityTrainingType.labelRes),
                             focusAreaSummary
                         ),
                         style = MaterialTheme.typography.bodyMedium,
@@ -172,7 +171,7 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     MonkButton(
                         text = stringResource(R.string.start_posture_mobility),
-                        onClick = { onStartPostureWorkout(currentDay) }
+                        onClick = { onStartPostureWorkout(uiState.currentDay) }
                     )
                 }
             }

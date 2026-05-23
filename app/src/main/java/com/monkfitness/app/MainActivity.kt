@@ -223,12 +223,16 @@ fun MainApp(viewModel: MainViewModel) {
                 val exerciseId = backStackEntry.arguments?.getString("exerciseId") ?: ""
                 val day = backStackEntry.arguments?.getInt("day") ?: -1
                 val difficultyAdjustments by viewModel.exerciseDifficultyAdjustments.collectAsState()
+                val flexibilityTrainingType by viewModel.flexibilityTrainingType.collectAsState()
+                val flexibilityFocusAreas by viewModel.flexibilityFocusAreas.collectAsState()
 
-                val exercise = viewModel.getWorkoutForDay(day, difficultyAdjustments).exercises.find { it.id == exerciseId }
-                    ?: viewModel.getPostureMobilityWorkout(day, difficultyAdjustments).exercises.find { it.id == exerciseId }
-                    ?: viewModel.getWarmupExercises(difficultyAdjustments).find { it.id == exerciseId }
-                    ?: viewModel.getExerciseLibrary(difficultyAdjustments).find { it.id == exerciseId }
-                    ?: viewModel.getPostureExercises(difficultyAdjustments).find { it.id == exerciseId }
+                val exercise = viewModel.findExerciseById(
+                    exerciseId = exerciseId,
+                    day = day,
+                    difficultyAdjustments = difficultyAdjustments,
+                    trainingType = flexibilityTrainingType,
+                    focusAreas = flexibilityFocusAreas
+                )
 
                 ExerciseScreen(
                     exercise = exercise,

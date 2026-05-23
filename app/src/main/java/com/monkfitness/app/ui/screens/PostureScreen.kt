@@ -1,6 +1,5 @@
 package com.monkfitness.app.ui.screens
 
-import android.util.Log
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.*
@@ -24,9 +23,7 @@ import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.ui.components.ExerciseItem
-import com.monkfitness.app.util.matchesQuery
 import com.monkfitness.app.viewmodel.MainViewModel
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -34,62 +31,10 @@ fun PostureScreen(
     viewModel: MainViewModel,
     onExerciseClick: (Exercise) -> Unit
 ) {
-    val difficultyAdjustments by viewModel.exerciseDifficultyAdjustments.collectAsState()
-    val exercises = remember(difficultyAdjustments) { viewModel.getExerciseLibrary(difficultyAdjustments) }
-    var selectedCategory by remember { mutableStateOf<ExerciseCategory?>(null) }
-    var selectedSubCategory by remember { mutableStateOf<ExerciseSubCategory?>(null) }
+    val uiState by viewModel.postureUiState.collectAsState()
+    val searchQuery by viewModel.postureSearchQuery.collectAsState()
     var isFilterSheetVisible by rememberSaveable { mutableStateOf(false) }
-    var searchQuery by rememberSaveable { mutableStateOf("") }
-    var debouncedQuery by rememberSaveable { mutableStateOf("") }
     val filterSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    LaunchedEffect(exercises.size) {
-        Log.d("PostureScreen", "Exercise library loaded ${exercises.size} exercises")
-    }
-
-    LaunchedEffect(searchQuery) {
-        delay(300)
-        debouncedQuery = searchQuery
-    }
-
-    val searchFilteredExercises by remember(exercises, debouncedQuery) {
-        derivedStateOf {
-            if (debouncedQuery.isBlank()) {
-                exercises
-            } else {
-                exercises.filter { matchesQuery(it, debouncedQuery) }
-            }
-        }
-    }
-
-    val availableSubCategories = remember(searchFilteredExercises, selectedCategory) {
-        searchFilteredExercises
-            .asSequence()
-            .filter { selectedCategory == null || it.category == selectedCategory }
-            .map { it.subCategory }
-            .distinct()
-            .toList()
-    }
-
-    LaunchedEffect(searchFilteredExercises, selectedCategory, selectedSubCategory) {
-        if (selectedSubCategory != null &&
-            searchFilteredExercises.none { exercise ->
-                (selectedCategory == null || exercise.category == selectedCategory) &&
-                    exercise.subCategory == selectedSubCategory
-            }
-        ) {
-            selectedSubCategory = null
-        }
-    }
-
-    val filteredExercises by remember(searchFilteredExercises, selectedCategory, selectedSubCategory) {
-        derivedStateOf {
-            searchFilteredExercises.filter { exercise ->
-                (selectedCategory == null || exercise.category == selectedCategory) &&
-                    (selectedSubCategory == null || exercise.subCategory == selectedSubCategory)
-            }
-        }
-    }
 
     Column(
         modifier = Modifier
@@ -108,22 +53,9 @@ fun PostureScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { value: String -> searchQuery = value },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.search_exercises_placeholder)) },
-            leadingIcon = {
-                Icon(Icons.Default.Search, contentDescription = null)
-            },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { searchQuery = "" }) {
-                        Icon(Icons.Default.Close, contentDescription = null)
-                    }
-                }
-            },
-            singleLine = true
+        PostureSearchField(
+            query = searchQuery,
+            onQueryChange = viewModel::setPostureSearchQuery
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -137,7 +69,7 @@ fun PostureScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        if (filteredExercises.isEmpty()) {
+        if (uiState.filteredExercises.isEmpty()) {
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 Text(
                     text = stringResource(R.string.no_exercises_match),
@@ -146,15 +78,11 @@ fun PostureScreen(
                 )
             }
         } else {
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                items(filteredExercises, key = { it.id }) { exercise ->
-                    ExerciseItem(
-                        exercise = exercise,
-                        isCompleted = false,
-                        onInfo = { onExerciseClick(exercise) }
-                    )
-                }
-            }
+            PostureExerciseList(
+                exercises = uiState.filteredExercises,
+                onExerciseClick = onExerciseClick,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 
@@ -173,16 +101,9 @@ fun PostureScreen(
                 FilterSection(
                     title = stringResource(R.string.filter_category),
                     allLabel = stringResource(R.string.filter_all_categories),
-                    selectedOption = selectedCategory,
+                    selectedOption = uiState.selectedCategory,
                     options = ExerciseCategory.entries.map { it.labelRes to it },
-                    onSelect = { category ->
-                        selectedCategory = category
-                        if (selectedSubCategory != null && category != null &&
-                            exercises.none { it.category == category && it.subCategory == selectedSubCategory }
-                        ) {
-                            selectedSubCategory = null
-                        }
-                    }
+                    onSelect = viewModel::setPostureSelectedCategory
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -190,18 +111,15 @@ fun PostureScreen(
                 FilterSection(
                     title = stringResource(R.string.filter_body_part),
                     allLabel = stringResource(R.string.filter_all_body_parts),
-                    selectedOption = selectedSubCategory,
-                    options = availableSubCategories.map { it.labelRes to it },
-                    onSelect = { selectedSubCategory = it }
+                    selectedOption = uiState.selectedSubCategory,
+                    options = uiState.availableSubCategories.map { it.labelRes to it },
+                    onSelect = viewModel::setPostureSelectedSubCategory
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 OutlinedButton(
-                    onClick = {
-                        selectedCategory = null
-                        selectedSubCategory = null
-                    },
+                    onClick = viewModel::clearPostureFilters,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
@@ -213,6 +131,47 @@ fun PostureScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun PostureSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = Modifier.fillMaxWidth(),
+        placeholder = { Text(stringResource(R.string.search_exercises_placeholder)) },
+        leadingIcon = {
+            Icon(Icons.Default.Search, contentDescription = null)
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(Icons.Default.Close, contentDescription = null)
+                }
+            }
+        },
+        singleLine = true
+    )
+}
+
+@Composable
+private fun PostureExerciseList(
+    exercises: List<Exercise>,
+    onExerciseClick: (Exercise) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(modifier = modifier) {
+        items(exercises, key = { it.id }) { exercise ->
+            ExerciseItem(
+                exercise = exercise,
+                isCompleted = false,
+                onInfo = { onExerciseClick(exercise) }
+            )
         }
     }
 }

@@ -2,6 +2,7 @@ package com.monkfitness.app.data.model
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Immutable
 import com.monkfitness.app.R
 
 enum class ExerciseCategory(@StringRes val labelRes: Int) {
@@ -49,6 +50,7 @@ val flexibilityFocusAreas = listOf(
 
 val flexibilitySpecificFocusAreas = flexibilityFocusAreas.filterNot { it == ExerciseSubCategory.FULL_BODY }
 
+@Immutable
 data class Exercise(
     val id: String,
     @StringRes val nameRes: Int,
