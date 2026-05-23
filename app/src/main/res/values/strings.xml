@@ -7,8 +7,14 @@
     <string name="day">Day</string>
     <string name="start_workout">Start Workout</string>
     <string name="complete_workout">Complete Workout</string>
-    <string name="description">No description available</string>
+    <string name="label_description">Description</string>
+    <string name="label_steps">How to perform</string>
+    <string name="label_technique">Technique</string>
+    <string name="label_mistakes">Common mistakes</string>
+    <string name="description">No description available.</string>
+    <string name="steps_default">Follow the on-screen guidance or performed standard movement patterns.</string>
     <string name="technique">Follow proper form and control your breathing.</string>
+    <string name="mistakes_default">Focus on controlled motion and avoid using momentum.</string>
     <string name="your_progress">Your Progress</string>
     <string name="no_progress_yet">Start your first workout to see your progress chart!</string>
     <string name="completed_days">Total Completed Days: %d</string>
@@ -152,7 +158,7 @@
     <string name="ex_superman_mistakes">Looking up too high, jerky movements, and holding breath.</string>
 
     <string name="ex_wall_slides">Wall Slides</string>
-    <string name="ex_wall_slides_desc">An excelente drill for improving shoulder mobility and upper back posture.</string>
+    <string name="ex_wall_slides_desc">An excellent drill for improving shoulder mobility and upper back posture.</string>
     <string name="ex_wall_slides_steps">1. Stand with your back against a wall, feet slightly forward.\n2. Place your arms against the wall in a "W" shape (elbows and wrists touching the wall).\n3. Slowly slide your arms up into a "Y" shape without losing contact with the wall.\n4. Slide back down to the starting position.</string>
     <string name="ex_wall_slides_tech">Keep your lower back pressed into the wall. If your wrists or elbows lift off, only go as high as you can maintain contact. Quality over quantity.</string>
     <string name="ex_wall_slides_mistakes">Arching the lower back, allowing elbows/wrists to lift off the wall, and shrugging shoulders.</string>
