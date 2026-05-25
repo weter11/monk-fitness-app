@@ -1,13 +1,10 @@
 package com.monkfitness.app.ui.screens
 
 import androidx.compose.animation.*
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -18,10 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -29,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.WorkoutType
+import com.monkfitness.app.ui.components.ExerciseImage
 import com.monkfitness.app.ui.components.ExerciseItem
 import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.ui.components.MonkProgressIndicator
@@ -362,18 +356,14 @@ fun ExerciseSession(
     ) {
         Box(
             modifier = Modifier
-                .size(200.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .fillMaxWidth()
+                .height(200.dp),
             contentAlignment = Alignment.Center
         ) {
-            val imageRes = exercise.imageRes ?: R.drawable.ic_exercise_placeholder
-            Image(
-                painter = painterResource(imageRes),
-                contentDescription = null,
-                modifier = Modifier.size(140.dp),
-                contentScale = ContentScale.Fit,
-                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary)
+            ExerciseImage(
+                imageRes = exercise.imageRes,
+                modifier = Modifier.fillMaxSize(),
+                imagePadding = 16.dp
             )
             IconButton(
                 onClick = onInfo,

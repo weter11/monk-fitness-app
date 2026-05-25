@@ -15,11 +15,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
@@ -53,6 +53,32 @@ fun MonkButton(
             style = MaterialTheme.typography.titleMedium,
             color = if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f),
             fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+fun ExerciseImage(
+    imageRes: Int?,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Fit,
+    imagePadding: Dp = 16.dp
+) {
+    val resolvedImageRes = imageRes ?: R.drawable.ic_exercise_placeholder
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(resolvedImageRes),
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(imagePadding),
+            contentScale = contentScale
         )
     }
 }
@@ -105,65 +131,66 @@ fun ExerciseItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         color = backgroundColor,
         border = borderStroke,
-        shadowElevation = 4.dp
+        shadowElevation = 6.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .padding(12.dp)
                 .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
+            ExerciseImage(
+                imageRes = exercise.imageRes,
                 modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .height(180.dp),
+                imagePadding = 12.dp
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
             ) {
-                val imageRes = exercise.imageRes ?: R.drawable.ic_exercise_placeholder
-                Image(
-                    painter = painterResource(imageRes),
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp),
-                    contentScale = ContentScale.Fit,
-                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(exercise.nameRes),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = exerciseSummaryText(exercise),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-            }
-
-            IconButton(onClick = onInfo) {
-                Icon(
-                    Icons.Default.Info,
-                    contentDescription = stringResource(R.string.label_description),
-                    tint = MaterialTheme.colorScheme.outline
-                )
-            }
-
-            Box(contentAlignment = Alignment.Center) {
-                if (isCompleted) {
-                    Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(exercise.nameRes),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = exerciseSummaryText(exercise),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+
+                IconButton(onClick = onInfo) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = stringResource(R.string.label_description),
+                        tint = MaterialTheme.colorScheme.outline
+                    )
+                }
+
+                Box(
+                    modifier = Modifier.padding(top = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isCompleted) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
         }
