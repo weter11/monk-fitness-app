@@ -22,7 +22,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.unit.dp
+import com.monkfitness.app.data.model.ExerciseConfig
 import com.monkfitness.app.data.model.ExerciseAnimationProfile
+import com.monkfitness.app.data.model.exerciseAnimationConfig
 import kotlin.math.acos
 import kotlin.math.abs
 import kotlin.math.cos
@@ -35,8 +37,9 @@ fun ExerciseAnimatedVisual(
     profile: ExerciseAnimationProfile,
     modifier: Modifier = Modifier
 ) {
-    if (profile == ExerciseAnimationProfile.PUSH_UP) {
-        PushUpCharacterAnimation(modifier = modifier)
+    val config = exerciseAnimationConfig(profile)
+    if (config != null) {
+        WorkoutAnimator(config = config, modifier = modifier)
         return
     }
 
@@ -83,26 +86,27 @@ fun ExerciseAnimatedVisual(
 }
 
 @Composable
-private fun PushUpCharacterAnimation(
+fun WorkoutAnimator(
+    config: ExerciseConfig,
     modifier: Modifier = Modifier
 ) {
-    val transition = rememberInfiniteTransition(label = "push-up-character")
-    val drive by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
+    val transition = rememberInfiniteTransition(label = "workout-animator")
+    val pelvisY by transition.animateFloat(
+        initialValue = config.pelvisStartY,
+        targetValue = config.pelvisEndY,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = config.durationMs, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "push-up-drive"
+        label = "workout-animator-pelvis-y"
     )
     val primary = MaterialTheme.colorScheme.primary
     val outline = MaterialTheme.colorScheme.outlineVariant
     val secondary = MaterialTheme.colorScheme.secondary
 
     Canvas(modifier = modifier.fillMaxSize()) {
-        val skeleton = buildPushUpSkeleton(size = size, drive = drive)
-        drawPushUpScene(
+        val skeleton = buildWorkoutSkeleton(size = size, pelvisY = pelvisY, config = config)
+        drawWorkoutAnimatorScene(
             skeleton = skeleton,
             fill = primary,
             outline = outline,
@@ -112,9 +116,9 @@ private fun PushUpCharacterAnimation(
 }
 
 /**
- * Full 22-point rig used by the procedural push-up animation.
+ * Full 22-point rig used by the procedural workout animator.
  */
-private data class PushUpSkeleton(
+private data class WorkoutSkeleton(
     val head: Offset,
     val neck: Offset,
     val midSpine: Offset,
@@ -197,26 +201,32 @@ private fun solveTwoBoneIk(
     return root + jointDirection.scaled(upperLength)
 }
 
-private fun buildPushUpSkeleton(
+private fun buildWorkoutSkeleton(
     size: Size,
-    drive: Float
-): PushUpSkeleton {
+    pelvisY: Float,
+    config: ExerciseConfig
+): WorkoutSkeleton {
     val width = size.width
     val height = size.height
-    val floorY = height * 0.82f
-    val pelvisY = lerpValue(height * 0.51f, height * 0.63f, drive)
+    val minDimension = size.minDimension
+    val drive = inverseLerp(config.pelvisStartY, config.pelvisEndY, pelvisY).coerceIn(0f, 1f)
+    val floorY = height * config.feetOffset.y
 
-    // The hands and toes are static anchors; the pelvis vertical travel drives the rest of the rig.
-    val leftHand = Offset(width * 0.27f, floorY)
-    val rightHand = Offset(width * 0.38f, floorY)
-    val leftToe = Offset(width * 0.80f, floorY)
-    val rightToe = Offset(width * 0.89f, floorY)
+    val leftHand = Offset(width * config.leftHandOffset.x, height * config.leftHandOffset.y)
+    val rightHand = Offset(width * config.rightHandOffset.x, height * config.rightHandOffset.y)
+    val footSpread = width * 0.045f
+    val feetCenter = Offset(width * config.feetOffset.x, floorY)
+    val leftToe = feetCenter - Offset(footSpread, 0f)
+    val rightToe = feetCenter + Offset(footSpread, 0f)
 
     val leftWrist = leftHand + Offset(width * 0.018f, -height * 0.014f)
     val rightWrist = rightHand + Offset(width * 0.018f, -height * 0.014f)
 
-    val pelvis = Offset(width * 0.61f, pelvisY)
-    val neck = Offset(width * 0.44f, pelvisY - height * (0.095f - 0.02f * drive))
+    val torsoDirection = Offset(-cos(config.torsoAngle), -sin(config.torsoAngle))
+    val pelvisX = lerpValue((leftHand.x + rightHand.x) * 0.5f, feetCenter.x, 0.5f)
+    val pelvis = Offset(pelvisX, height * pelvisY)
+    val torsoLength = minDimension * 0.24f
+    val neck = pelvis + torsoDirection.scaled(torsoLength)
     val spineDirection = (pelvis - neck).safeNormalized(fallback = Offset(1f, 0f))
     val spineNormal = perpendicular(spineDirection)
 
@@ -234,25 +244,25 @@ private fun buildPushUpSkeleton(
             Offset(0f, height * (0.012f + 0.018f * drive))
 
     val headDirection =
-        ((neck - pelvis) + Offset(-width * 0.03f, -height * 0.04f))
+        ((neck - pelvis) + Offset(torsoDirection.x * width * 0.03f, -height * 0.04f))
             .safeNormalized(fallback = Offset(-1f, -0.25f))
     val head = neck + headDirection.scaled(height * 0.09f)
 
-    val upperArm = height * 0.155f
-    val lowerArm = height * 0.155f
+    val upperArm = minDimension * config.armLength * 0.5f
+    val lowerArm = minDimension * config.armLength * 0.5f
     val leftElbow = solveTwoBoneIk(
         root = leftShoulder,
         target = leftWrist,
         upperLength = upperArm,
         lowerLength = lowerArm,
-        hint = leftShoulder + Offset(-width * 0.06f, -height * (0.05f + 0.06f * drive))
+        hint = midpoint(leftShoulder, leftWrist) + spineNormal.scaled(minDimension * 0.08f) - torsoDirection.scaled(minDimension * 0.05f)
     )
     val rightElbow = solveTwoBoneIk(
         root = rightShoulder,
         target = rightWrist,
         upperLength = upperArm,
         lowerLength = lowerArm,
-        hint = rightShoulder + Offset(-width * 0.03f, -height * (0.07f + 0.05f * drive))
+        hint = midpoint(rightShoulder, rightWrist) - spineNormal.scaled(minDimension * 0.08f) - torsoDirection.scaled(minDimension * 0.05f)
     )
 
     val footLength = width * 0.08f
@@ -263,24 +273,24 @@ private fun buildPushUpSkeleton(
     val leftAnkle = midpoint(leftHeel, leftToe) + Offset(width * 0.004f, -height * 0.032f)
     val rightAnkle = midpoint(rightHeel, rightToe) + Offset(width * 0.004f, -height * 0.032f)
 
-    val upperLeg = height * 0.175f
-    val lowerLeg = height * 0.18f
+    val upperLeg = minDimension * config.legLength * 0.5f
+    val lowerLeg = minDimension * config.legLength * 0.5f
     val leftKnee = solveTwoBoneIk(
         root = leftHip,
         target = leftAnkle,
         upperLength = upperLeg,
         lowerLength = lowerLeg,
-        hint = leftHip + Offset(-width * 0.02f, -height * (0.10f + 0.03f * drive))
+        hint = midpoint(leftHip, leftAnkle) + spineNormal.scaled(minDimension * 0.03f) - torsoDirection.scaled(minDimension * 0.08f)
     )
     val rightKnee = solveTwoBoneIk(
         root = rightHip,
         target = rightAnkle,
         upperLength = upperLeg,
         lowerLength = lowerLeg,
-        hint = rightHip + Offset(width * 0.01f, -height * (0.10f + 0.03f * drive))
+        hint = midpoint(rightHip, rightAnkle) - spineNormal.scaled(minDimension * 0.03f) - torsoDirection.scaled(minDimension * 0.08f)
     )
 
-    return PushUpSkeleton(
+    return WorkoutSkeleton(
         head = head,
         neck = neck,
         midSpine = midSpine,
@@ -306,13 +316,13 @@ private fun buildPushUpSkeleton(
     )
 }
 
-private fun DrawScope.drawPushUpScene(
-    skeleton: PushUpSkeleton,
+private fun DrawScope.drawWorkoutAnimatorScene(
+    skeleton: WorkoutSkeleton,
     fill: Color,
     outline: Color,
     shadow: Color
 ) {
-    check(skeleton.orderedPoints.size == 22) { "Push-up rig must contain 22 points." }
+    check(skeleton.orderedPoints.size == 22) { "Workout rig must contain 22 points." }
     val strokeWidth = size.minDimension * 0.01f
     val farFill = fill.copy(alpha = 0.78f)
 
@@ -703,7 +713,7 @@ private fun DrawScope.drawGround(
 }
 
 private fun DrawScope.drawSoftShadow(
-    skeleton: PushUpSkeleton,
+    skeleton: WorkoutSkeleton,
     color: Color
 ) {
     val shadowCenter = midpoint(skeleton.neck, skeleton.pelvis) + Offset(size.width * 0.03f, size.height * 0.18f)
@@ -716,7 +726,7 @@ private fun DrawScope.drawSoftShadow(
 }
 
 private fun buildTorsoPath(
-    skeleton: PushUpSkeleton,
+    skeleton: WorkoutSkeleton,
     scale: Float
 ): Path {
     val spineDirection = (skeleton.pelvis - skeleton.neck).safeNormalized(fallback = Offset(1f, 0f))
@@ -931,6 +941,11 @@ private fun Offset.safeNormalized(fallback: Offset): Offset {
 private fun Offset.scaled(scale: Float): Offset = Offset(x * scale, y * scale)
 
 private fun distance(a: Offset, b: Offset): Float = (b - a).magnitude()
+
+private fun inverseLerp(start: Float, end: Float, value: Float): Float {
+    val span = end - start
+    return if (abs(span) < 0.0001f) 0f else (value - start) / span
+}
 
 private fun lerpValue(start: Float, end: Float, t: Float): Float = start + (end - start) * t
 

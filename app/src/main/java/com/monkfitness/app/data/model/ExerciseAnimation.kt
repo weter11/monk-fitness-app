@@ -1,5 +1,19 @@
 package com.monkfitness.app.data.model
 
+import androidx.compose.ui.geometry.Offset
+
+data class ExerciseConfig(
+    val leftHandOffset: Offset,
+    val rightHandOffset: Offset,
+    val feetOffset: Offset,
+    val torsoAngle: Float,
+    val armLength: Float,
+    val legLength: Float,
+    val pelvisStartY: Float,
+    val pelvisEndY: Float,
+    val durationMs: Int
+)
+
 enum class ExerciseAnimationProfile {
     PUSH_UP,
     LOWER_BODY,
@@ -78,6 +92,22 @@ fun exerciseAnimationProfile(exerciseId: String): ExerciseAnimationProfile? = wh
     "neck_circles" -> ExerciseAnimationProfile.NECK_MOBILITY
 
     "jumping_jacks" -> ExerciseAnimationProfile.JUMPING_JACK
+
+    else -> null
+}
+
+fun exerciseAnimationConfig(profile: ExerciseAnimationProfile): ExerciseConfig? = when (profile) {
+    ExerciseAnimationProfile.PUSH_UP -> ExerciseConfig(
+        leftHandOffset = Offset(0.27f, 0.82f),
+        rightHandOffset = Offset(0.38f, 0.82f),
+        feetOffset = Offset(0.845f, 0.82f),
+        torsoAngle = 0.48f,
+        armLength = 0.31f,
+        legLength = 0.355f,
+        pelvisStartY = 0.51f,
+        pelvisEndY = 0.63f,
+        durationMs = 1800
+    )
 
     else -> null
 }
