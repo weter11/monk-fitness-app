@@ -2,9 +2,9 @@ package com.monkfitness.app.ui.components
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -15,14 +15,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.animateLottieCompositionAsState
+import com.airbnb.lottie.compose.rememberLottieComposition
 
 @Composable
 fun MonkButton(
@@ -53,6 +59,88 @@ fun MonkButton(
             style = MaterialTheme.typography.titleMedium,
             color = if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f),
             fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun ExerciseVisualContent(
+    exercise: Exercise,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Fit,
+    imagePadding: Dp = 16.dp
+) {
+    if (exercise.lottieRes != null) {
+        val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(exercise.lottieRes))
+        val progress by animateLottieCompositionAsState(
+            composition = composition,
+            isPlaying = composition != null,
+            iterations = LottieConstants.IterateForever
+        )
+
+        if (composition != null) {
+            LottieAnimation(
+                composition = composition,
+                progress = { progress },
+                modifier = modifier.padding(imagePadding)
+            )
+        } else {
+            androidx.compose.foundation.Image(
+                painter = painterResource(exercise.imageRes ?: R.drawable.ic_exercise_placeholder),
+                contentDescription = null,
+                modifier = modifier.padding(imagePadding),
+                contentScale = contentScale
+            )
+        }
+    } else {
+        androidx.compose.foundation.Image(
+            painter = painterResource(exercise.imageRes ?: R.drawable.ic_exercise_placeholder),
+            contentDescription = null,
+            modifier = modifier.padding(imagePadding),
+            contentScale = contentScale
+        )
+    }
+}
+
+@Composable
+fun ExerciseThumbnail(
+    exercise: Exercise,
+    modifier: Modifier = Modifier,
+    size: Dp = 64.dp
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        ExerciseVisualContent(
+            exercise = exercise,
+            modifier = Modifier.fillMaxSize(),
+            imagePadding = 8.dp
+        )
+    }
+}
+
+@Composable
+fun ExerciseHeroMedia(
+    exercise: Exercise,
+    modifier: Modifier = Modifier,
+    height: Dp = 180.dp
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        ExerciseVisualContent(
+            exercise = exercise,
+            modifier = Modifier.fillMaxSize(),
+            imagePadding = 16.dp
         )
     }
 }
@@ -98,48 +186,39 @@ fun ExerciseItem(
     )
 
     val borderStroke = if (isCurrent && !isCompleted) {
-        androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
     } else null
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         color = backgroundColor,
         border = borderStroke,
-        shadowElevation = 4.dp
+        shadowElevation = 6.dp
     ) {
         Row(
             modifier = Modifier
                 .padding(12.dp)
                 .fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
+            ExerciseThumbnail(exercise = exercise)
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
             ) {
-                Image(
-                    painter = painterResource(exercise.imageRes),
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp),
-                    contentScale = ContentScale.Fit,
-                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(exercise.nameRes),
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = exerciseSummaryText(exercise),
                     style = MaterialTheme.typography.bodyMedium,
@@ -147,22 +226,30 @@ fun ExerciseItem(
                 )
             }
 
-            IconButton(onClick = onInfo) {
-                Icon(
-                    Icons.Default.Info,
-                    contentDescription = stringResource(R.string.label_description),
-                    tint = MaterialTheme.colorScheme.outline
-                )
-            }
-
-            Box(contentAlignment = Alignment.Center) {
-                if (isCompleted) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                IconButton(onClick = onInfo) {
                     Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
+                        Icons.Default.Info,
+                        contentDescription = stringResource(R.string.label_description),
+                        tint = MaterialTheme.colorScheme.outline
                     )
+                }
+
+                Box(
+                    modifier = Modifier.size(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isCompleted) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
         }
