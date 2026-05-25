@@ -1,5 +1,6 @@
 package com.monkfitness.app
 
+import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
@@ -224,6 +225,28 @@ class WorkoutGeneratorTest {
         assertEquals(ExerciseSubCategory.FULL_BODY, pushups.subCategory)
         assertEquals(ExerciseCategory.MOBILITY, catCow.category)
         assertEquals(ExerciseSubCategory.SPINE, catCow.subCategory)
+    }
+
+    @Test
+    fun testBodyweightFallbackKeepsPostureWorkoutNonEmptyWithoutEquipment() {
+        val workout = generator.generatePostureMobilityWorkout(
+            day = 1,
+            flexibilityTrainingType = FlexibilityTrainingType.POSTURE,
+            focusAreas = setOf(ExerciseSubCategory.SHOULDERS),
+            availableEquipment = setOf(Equipment.NONE)
+        )
+
+        assertEquals(4, workout.exercises.size)
+        assertTrue(workout.exercises.all { it.equipment == Equipment.NONE })
+    }
+
+    @Test
+    fun testExerciseLibraryCanBeFilteredByAvailableEquipment() {
+        val bodyweightOnly = generator.getExerciseLibrary(availableEquipment = setOf(Equipment.NONE))
+
+        assertTrue(bodyweightOnly.isNotEmpty())
+        assertTrue(bodyweightOnly.all { it.equipment == Equipment.NONE })
+        assertTrue(bodyweightOnly.size < generator.getExerciseLibrary().size)
     }
 
     @Test

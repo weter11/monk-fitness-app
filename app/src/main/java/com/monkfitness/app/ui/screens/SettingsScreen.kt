@@ -14,8 +14,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
+import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
+import com.monkfitness.app.data.model.NutritionIngredient
 import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
 import com.monkfitness.app.viewmodel.MainViewModel
 import java.util.Calendar
@@ -32,6 +34,7 @@ fun SettingsScreen(
     val additionalPostureTrainingEnabled by viewModel.additionalPostureTrainingEnabled.collectAsState()
     val flexibilityTrainingType by viewModel.flexibilityTrainingType.collectAsState()
     val selectedFlexibilityFocusAreas by viewModel.flexibilityFocusAreas.collectAsState()
+    val userPreferences by viewModel.userPreferences.collectAsState()
 
     Scaffold(
         topBar = {
@@ -146,6 +149,30 @@ fun SettingsScreen(
                 selectedOptions = selectedFlexibilityFocusAreas,
                 onToggle = viewModel::toggleFlexibilityFocusArea
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(text = stringResource(R.string.personalization), style = MaterialTheme.typography.titleLarge)
+            Text(
+                text = stringResource(R.string.equipment_selection_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
+
+            MultiSelectEquipmentSelector(
+                title = stringResource(R.string.equipment_selection),
+                options = Equipment.entries.filterNot { it == Equipment.NONE },
+                selectedOptions = userPreferences.availableEquipment,
+                onToggle = viewModel::toggleAvailableEquipment
+            )
+
+            FoodExclusionsSelector(
+                title = stringResource(R.string.nutrition_exclusions),
+                description = stringResource(R.string.nutrition_exclusions_desc),
+                excludedFoods = userPreferences.excludedFoods,
+                onToggle = viewModel::toggleNutritionExcludedFood,
+                options = viewModel.nutritionExclusionOptions
+            )
         }
     }
 }
@@ -195,6 +222,75 @@ private fun MultiSelectFocusAreaSelector(
                     onClick = { onToggle(option) },
                     label = { Text(stringResource(option.labelRes)) }
                 )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MultiSelectEquipmentSelector(
+    title: String,
+    options: List<Equipment>,
+    selectedOptions: Set<Equipment>,
+    onToggle: (Equipment) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = title, style = MaterialTheme.typography.titleMedium)
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { option ->
+                FilterChip(
+                    selected = option in selectedOptions,
+                    onClick = { onToggle(option) },
+                    label = { Text(stringResource(option.labelRes)) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FoodExclusionsSelector(
+    title: String,
+    description: String,
+    excludedFoods: Set<String>,
+    onToggle: (String) -> Unit,
+    options: List<NutritionIngredient>
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(text = title, style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary
+        )
+        options.chunked(2).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowItems.forEach { ingredient ->
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Checkbox(
+                            checked = ingredient.key in excludedFoods,
+                            onCheckedChange = { onToggle(ingredient.key) }
+                        )
+                        Text(
+                            text = stringResource(ingredient.nameRes),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                    }
+                }
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
         }
     }

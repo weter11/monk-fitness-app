@@ -9,11 +9,14 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
+import com.monkfitness.app.data.model.UserPreferences
 import com.monkfitness.app.data.model.flexibilityFocusAreas
 import com.monkfitness.app.data.model.flexibilitySpecificFocusAreas
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 
@@ -32,6 +35,7 @@ class SettingsManager(private val context: Context) {
         val ADDITIONAL_POSTURE_TRAINING_ENABLED = booleanPreferencesKey("additional_posture_training_enabled")
         val FLEXIBILITY_TRAINING_TYPE = stringPreferencesKey("flexibility_training_type")
         val FLEXIBILITY_FOCUS_AREAS = stringPreferencesKey("flexibility_focus_areas")
+        val AVAILABLE_EQUIPMENT = stringSetPreferencesKey("available_equipment")
         val NUTRITION_WEIGHT = stringPreferencesKey("nutrition_weight")
         val NUTRITION_HEIGHT = stringPreferencesKey("nutrition_height")
         val NUTRITION_PLAN_DAYS = intPreferencesKey("nutrition_plan_days")
@@ -124,6 +128,17 @@ class SettingsManager(private val context: Context) {
         }
     }
 
+    val availableEquipmentFlow: Flow<Set<Equipment>> = context.dataStore.data.map { preferences ->
+        preferences[AVAILABLE_EQUIPMENT].toEquipmentSet()
+    }
+
+    suspend fun setAvailableEquipment(equipment: Set<Equipment>) {
+        val normalizedEquipment = normalizeAvailableEquipment(equipment)
+        context.dataStore.edit { preferences ->
+            preferences[AVAILABLE_EQUIPMENT] = normalizedEquipment.map { it.name }.toSet()
+        }
+    }
+
     val nutritionWeightFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[NUTRITION_WEIGHT] ?: ""
     }
@@ -162,6 +177,16 @@ class SettingsManager(private val context: Context) {
         context.dataStore.edit { preferences ->
             preferences[NUTRITION_EXCLUDED_FOODS] = foodKeys
         }
+    }
+
+    val userPreferencesFlow: Flow<UserPreferences> = combine(
+        nutritionExcludedFoodsFlow,
+        availableEquipmentFlow
+    ) { excludedFoods, availableEquipment ->
+        UserPreferences(
+            excludedFoods = excludedFoods,
+            availableEquipment = availableEquipment
+        )
     }
 
     val completedNutritionMealsFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
@@ -231,6 +256,15 @@ class SettingsManager(private val context: Context) {
         return normalizeFocusAreas(parsed)
     }
 
+    private fun Set<String>?.toEquipmentSet(): Set<Equipment> {
+        val parsed = this
+            .orEmpty()
+            .mapNotNull { raw -> Equipment.entries.firstOrNull { it.name == raw } }
+            .toSet()
+
+        return normalizeAvailableEquipment(parsed)
+    }
+
     private fun normalizeFocusAreas(focusAreas: Set<ExerciseSubCategory>): Set<ExerciseSubCategory> {
         val allowed = flexibilityFocusAreas.toSet()
         val filtered = focusAreas.filter { it in allowed }.toSet()
@@ -241,6 +275,12 @@ class SettingsManager(private val context: Context) {
             filtered.none { it in flexibilitySpecificFocusAreas } -> setOf(ExerciseSubCategory.FULL_BODY)
             else -> filtered
         }
+    }
+
+    private fun normalizeAvailableEquipment(equipment: Set<Equipment>): Set<Equipment> {
+        return equipment
+            .filter { it != Equipment.NONE }
+            .toSet() + Equipment.NONE
     }
 
     private fun currentNutritionTrackingDate(): String = LocalDate.now().toString()

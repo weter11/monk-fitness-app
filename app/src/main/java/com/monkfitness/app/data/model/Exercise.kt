@@ -27,6 +27,13 @@ enum class FlexibilityTrainingType(@StringRes val labelRes: Int) {
     BOTH(R.string.flexibility_type_both)
 }
 
+enum class Equipment(@StringRes val labelRes: Int) {
+    NONE(R.string.equipment_none),
+    BAR(R.string.equipment_bar),
+    BANDS(R.string.equipment_bands),
+    BACKPACK(R.string.equipment_backpack)
+}
+
 val postureFocusAreas = listOf(
     ExerciseSubCategory.SHOULDERS,
     ExerciseSubCategory.SPINE,
@@ -73,6 +80,7 @@ data class Exercise(
     val isTimerBased: Boolean = false,
     val category: ExerciseCategory = ExerciseCategory.MOBILITY,
     val subCategory: ExerciseSubCategory = ExerciseSubCategory.FULL_BODY,
+    val equipment: Equipment = Equipment.NONE,
     val nameRu: String = "",
     val nameEn: String = "",
     val descriptionRu: String = "",

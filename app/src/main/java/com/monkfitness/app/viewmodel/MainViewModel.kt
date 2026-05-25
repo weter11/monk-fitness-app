@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.monkfitness.app.data.local.AppDatabase
 import com.monkfitness.app.data.local.SettingsManager
+import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.data.model.UserProgress
 import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.repository.WorkoutRepository
@@ -29,6 +30,7 @@ import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.NutritionMealType
 import com.monkfitness.app.data.model.NutritionPlan
 import com.monkfitness.app.data.model.PostureSessionProgress
+import com.monkfitness.app.data.model.UserPreferences
 import com.monkfitness.app.data.model.applyDifficultyAdjustment
 import com.monkfitness.app.data.model.calculateMuscleGainNutritionTargets
 import com.monkfitness.app.data.model.findReplacementMealTemplateId
@@ -126,6 +128,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), false
     )
 
+    val availableEquipment = settingsManager.availableEquipmentFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(Equipment.NONE)
+    )
+
+    val userPreferences = settingsManager.userPreferencesFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), UserPreferences()
+    )
+
     val flexibilityTrainingType = settingsManager.flexibilityTrainingTypeFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), FlexibilityTrainingType.BOTH
     )
@@ -176,11 +186,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         additionalPostureTrainingEnabled,
         flexibilityTrainingType,
         flexibilityFocusAreas,
-        exerciseDifficultyAdjustments
-    ) { metrics, additionalPostureEnabled, trainingType, focusAreas, difficultyAdjustments ->
+        exerciseDifficultyAdjustments,
+        availableEquipment
+    ) { values ->
+        val metrics = values[0] as HomeMetrics
+        val additionalPostureEnabled = values[1] as Boolean
+        val trainingType = values[2] as FlexibilityTrainingType
+        @Suppress("UNCHECKED_CAST")
+        val focusAreas = values[3] as Set<ExerciseSubCategory>
+        @Suppress("UNCHECKED_CAST")
+        val difficultyAdjustments = values[4] as Map<String, Int>
+        @Suppress("UNCHECKED_CAST")
+        val availableEquipment = values[5] as Set<Equipment>
         HomeUiState(
             currentDay = metrics.currentDay,
-            workout = getWorkoutForDay(metrics.currentDay, difficultyAdjustments, trainingType, focusAreas),
+            workout = getWorkoutForDay(metrics.currentDay, difficultyAdjustments, trainingType, focusAreas, availableEquipment),
             completedCount = metrics.completedCount,
             completedPostureCount = metrics.completedPostureCount,
             streak = metrics.streak,
@@ -208,8 +228,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         currentSessionMode,
         exerciseDifficultyAdjustments,
         flexibilityTrainingType,
-        flexibilityFocusAreas
-    ) { day, sessionMode, difficultyAdjustments, trainingType, focusAreas ->
+        flexibilityFocusAreas,
+        availableEquipment
+    ) { values ->
+        val day = values[0] as Int?
+        val sessionMode = values[1] as SessionMode
+        @Suppress("UNCHECKED_CAST")
+        val difficultyAdjustments = values[2] as Map<String, Int>
+        val trainingType = values[3] as FlexibilityTrainingType
+        @Suppress("UNCHECKED_CAST")
+        val focusAreas = values[4] as Set<ExerciseSubCategory>
+        @Suppress("UNCHECKED_CAST")
+        val availableEquipment = values[5] as Set<Equipment>
         if (day == null) {
             WorkoutSessionUiState(
                 day = null,
@@ -221,9 +251,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             WorkoutSessionUiState(
                 day = day,
                 workout = if (sessionMode == SessionMode.POSTURE_MOBILITY) {
-                    getPostureMobilityWorkout(day, difficultyAdjustments, trainingType, focusAreas)
+                    getPostureMobilityWorkout(day, difficultyAdjustments, trainingType, focusAreas, availableEquipment)
                 } else {
-                    getWorkoutForDay(day, difficultyAdjustments, trainingType, focusAreas)
+                    getWorkoutForDay(day, difficultyAdjustments, trainingType, focusAreas, availableEquipment)
                 },
                 warmupExercises = if (sessionMode == SessionMode.POSTURE_MOBILITY) {
                     emptyList()
@@ -248,9 +278,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         exerciseDifficultyAdjustments,
         debouncedPostureSearchQuery,
         _postureSelectedCategory,
-        _postureSelectedSubCategory
-    ) { difficultyAdjustments, debouncedQuery, selectedCategory, selectedSubCategory ->
-        val exercises = getExerciseLibrary(difficultyAdjustments)
+        _postureSelectedSubCategory,
+        availableEquipment
+    ) { difficultyAdjustments, debouncedQuery, selectedCategory, selectedSubCategory, availableEquipment ->
+        val exercises = getExerciseLibrary(difficultyAdjustments, availableEquipment)
         val searchFilteredExercises = if (debouncedQuery.isBlank()) {
             exercises
         } else {
@@ -302,9 +333,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         day: Int,
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
         trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
-        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value
+        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value,
+        availableEquipment: Set<Equipment> = this.availableEquipment.value
     ): Workout {
-        val workout = workoutGenerator.generateWorkout(day, trainingType, focusAreas)
+        val workout = workoutGenerator.generateWorkout(day, trainingType, focusAreas, availableEquipment)
         return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments)) })
     }
 
@@ -312,15 +344,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         day: Int,
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
         trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
-        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value
+        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value,
+        availableEquipment: Set<Equipment> = this.availableEquipment.value
     ): Workout {
-        val workout = workoutGenerator.generatePostureMobilityWorkout(day, trainingType, focusAreas)
+        val workout = workoutGenerator.generatePostureMobilityWorkout(day, trainingType, focusAreas, availableEquipment)
         return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments)) })
     }
 
     fun getExerciseLibrary(
-        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value
-    ) = workoutGenerator.getExerciseLibrary().map {
+        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
+        availableEquipment: Set<Equipment> = this.availableEquipment.value
+    ) = workoutGenerator.getExerciseLibrary(availableEquipment).map {
         enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
     }
 
@@ -341,15 +375,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         day: Int,
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
         trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
-        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value
+        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value,
+        availableEquipment: Set<Equipment> = this.availableEquipment.value
     ): Exercise? {
         if (exerciseId.isBlank()) return null
         val resolvedDay = day.takeIf { it in 1..56 } ?: currentProgramDay.value
 
-        return getWorkoutForDay(resolvedDay, difficultyAdjustments, trainingType, focusAreas).exercises.find { it.id == exerciseId }
-            ?: getPostureMobilityWorkout(resolvedDay, difficultyAdjustments, trainingType, focusAreas).exercises.find { it.id == exerciseId }
+        return getWorkoutForDay(resolvedDay, difficultyAdjustments, trainingType, focusAreas, availableEquipment).exercises.find { it.id == exerciseId }
+            ?: getPostureMobilityWorkout(resolvedDay, difficultyAdjustments, trainingType, focusAreas, availableEquipment).exercises.find { it.id == exerciseId }
             ?: getWarmupExercises(difficultyAdjustments).find { it.id == exerciseId }
-            ?: getExerciseLibrary(difficultyAdjustments).find { it.id == exerciseId }
+            ?: getExerciseLibrary(difficultyAdjustments, availableEquipment).find { it.id == exerciseId }
             ?: getPostureExercises(difficultyAdjustments).find { it.id == exerciseId }
     }
 
@@ -585,6 +620,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setFlexibilityTrainingType(trainingType: FlexibilityTrainingType) {
         viewModelScope.launch {
             settingsManager.setFlexibilityTrainingType(trainingType)
+        }
+    }
+
+    fun toggleAvailableEquipment(equipment: Equipment) {
+        if (equipment == Equipment.NONE) return
+
+        val current = availableEquipment.value - Equipment.NONE
+        val next = if (equipment in current) current - equipment else current + equipment
+
+        viewModelScope.launch {
+            settingsManager.setAvailableEquipment(next)
         }
     }
 

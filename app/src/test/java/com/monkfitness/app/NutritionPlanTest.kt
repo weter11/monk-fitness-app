@@ -58,6 +58,27 @@ class NutritionPlanTest {
     }
 
     @Test
+    fun testExcludedFoodsAreNotReintroducedByFallbackSelection() {
+        val plan = generateNutritionPlan(
+            seed = 0,
+            startDay = 1,
+            daysCount = 3,
+            weightKg = 80,
+            excludedIngredientKeys = setOf("chicken", "eggs", "tuna")
+        )
+
+        val ingredientKeys = plan.days
+            .flatMap { day -> day.meals }
+            .flatMap { meal -> meal.ingredients }
+            .map { ingredient -> ingredient.ingredient.key }
+            .toSet()
+
+        assertTrue("chicken" !in ingredientKeys)
+        assertTrue("eggs" !in ingredientKeys)
+        assertTrue("tuna" !in ingredientKeys)
+    }
+
+    @Test
     fun testReplacementKeepsMealTypeAndProfileCloseToOriginalCalories() {
         val originalPlan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80)
         val originalDay = originalPlan.days.first()

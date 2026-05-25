@@ -556,7 +556,7 @@ fun generateNutritionPlan(
         val slots = slotsForDayType(dayType)
         val rotation = base + index + (programDay * 3)
 
-        val meals = slots.mapIndexed { slotIndex, slot ->
+        val meals = slots.mapIndexedNotNull { slotIndex, slot ->
             val mealType = MealType.entries[(rotation + slotIndex) % MealType.entries.size]
             val replacementKey = nutritionReplacementKey(programDay, slot)
             val replacementTemplateId = replacements[replacementKey]
@@ -717,7 +717,7 @@ private fun selectTemplate(
     rotation: Int,
     excludedIngredientKeys: Set<String>,
     explicitTemplateId: String?
-): NutritionMealTemplate {
+): NutritionMealTemplate? {
     val filtered = templatesFor(mealType, replacementType, excludedIngredientKeys)
     val explicit = explicitTemplateId?.let { id -> filtered.firstOrNull { it.id == id } }
     if (explicit != null) return explicit
@@ -726,12 +726,17 @@ private fun selectTemplate(
         return filtered[rotation.absoluteValue % filtered.size]
     }
 
-    val fallbackSameType = templatesFor(mealType, replacementType, emptySet())
-    if (fallbackSameType.isNotEmpty()) {
-        return fallbackSameType[rotation.absoluteValue % fallbackSameType.size]
+    val fallbackSameSlot = MealType.entries
+        .asSequence()
+        .flatMap { mealProfile -> templatesFor(mealType, mealProfile, excludedIngredientKeys).asSequence() }
+        .distinctBy { it.id }
+        .toList()
+
+    if (fallbackSameSlot.isNotEmpty()) {
+        return fallbackSameSlot[rotation.absoluteValue % fallbackSameSlot.size]
     }
 
-    return nutritionMealTemplates.first { it.type == mealType }
+    return null
 }
 
 private fun templatesFor(
