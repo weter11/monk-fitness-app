@@ -123,8 +123,9 @@ fun ExerciseItem(
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
+                val imageRes = exercise.imageRes ?: R.drawable.ic_exercise_placeholder
                 Image(
-                    painter = painterResource(exercise.imageRes),
+                    painter = painterResource(imageRes),
                     contentDescription = null,
                     modifier = Modifier.size(48.dp),
                     contentScale = ContentScale.Fit,

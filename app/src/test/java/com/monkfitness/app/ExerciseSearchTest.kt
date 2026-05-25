@@ -14,7 +14,7 @@ class ExerciseSearchTest {
         nameRes = 0,
         descriptionRes = 0,
         techniqueRes = 0,
-        imageRes = 0,
+        imageRes = null,
         sets = 2,
         reps = 10,
         nameRu = "Кошка-корова",

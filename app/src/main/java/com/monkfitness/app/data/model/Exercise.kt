@@ -65,7 +65,7 @@ data class Exercise(
     @StringRes val techniqueRes: Int,
     @StringRes val stepsRes: Int = 0,
     @StringRes val mistakesRes: Int = 0,
-    @DrawableRes val imageRes: Int,
+    @DrawableRes val imageRes: Int?,
     val sets: Int,
     val reps: Int,
     val minReps: Int = reps,

@@ -175,11 +175,25 @@ class WorkoutGeneratorTest {
         val library = generator.getExerciseLibrary()
         val ids = library.map { it.id }
 
-        assertEquals(36, library.size)
-        assertEquals(36, ids.distinct().size)
+        assertEquals(49, library.size)
+        assertEquals(49, ids.distinct().size)
         assertTrue(
             ids.containsAll(
                 listOf(
+                    "decline_pushups",
+                    "diamond_pushups",
+                    "step_ups",
+                    "wall_sit",
+                    "shoulder_cars",
+                    "hip_cars",
+                    "ankle_mobility",
+                    "chin_tucks",
+                    "y_t_raises",
+                    "scapular_retraction_hold",
+                    "calf_stretch",
+                    "lat_stretch",
+                    "piriformis_stretch",
+                    "hip_flexor_stretch",
                     "face_pull",
                     "pushups",
                     "burpees",
@@ -220,11 +234,44 @@ class WorkoutGeneratorTest {
     fun testExerciseMetadataIsAssigned() {
         val pushups = generator.getExerciseLibrary().first { it.id == "pushups" }
         val catCow = generator.getExerciseLibrary().first { it.id == "cat_cow" }
+        val chinTucks = generator.getExerciseLibrary().first { it.id == "chin_tucks" }
+        val calfStretch = generator.getExerciseLibrary().first { it.id == "calf_stretch" }
 
         assertEquals(ExerciseCategory.STRENGTH, pushups.category)
         assertEquals(ExerciseSubCategory.FULL_BODY, pushups.subCategory)
         assertEquals(ExerciseCategory.MOBILITY, catCow.category)
         assertEquals(ExerciseSubCategory.SPINE, catCow.subCategory)
+        assertEquals(ExerciseCategory.POSTURE, chinTucks.category)
+        assertEquals(ExerciseSubCategory.SPINE, chinTucks.subCategory)
+        assertEquals(ExerciseCategory.STRETCHING, calfStretch.category)
+        assertEquals(ExerciseSubCategory.LEGS, calfStretch.subCategory)
+    }
+
+    @Test
+    fun testRequestedExercisesIncludeFullInstructionResources() {
+        val requestedExercises = listOf(
+            "decline_pushups",
+            "diamond_pushups",
+            "step_ups",
+            "wall_sit",
+            "shoulder_cars",
+            "hip_cars",
+            "ankle_mobility",
+            "chin_tucks",
+            "y_t_raises",
+            "scapular_retraction_hold",
+            "calf_stretch",
+            "lat_stretch",
+            "piriformis_stretch",
+            "hip_flexor_stretch"
+        ).map { id -> generator.getExerciseLibrary().first { it.id == id } }
+
+        requestedExercises.forEach { exercise ->
+            assertTrue(exercise.descriptionRes != 0)
+            assertTrue(exercise.stepsRes != 0)
+            assertTrue(exercise.techniqueRes != 0)
+            assertTrue(exercise.mistakesRes != 0)
+        }
     }
 
     @Test

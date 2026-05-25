@@ -99,7 +99,7 @@ fun ExerciseScreen(
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            val imageRes = if (exercise.imageRes != 0) exercise.imageRes else R.drawable.ic_exercise_placeholder
+            val imageRes = exercise.imageRes ?: R.drawable.ic_exercise_placeholder
 
             Box(
                 modifier = Modifier
