@@ -93,7 +93,9 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("pushups", "decline_pushups", "diamond_pushups", "dips", "pike_pushups"),
         animation = animation(
-            durationMs = 1800,
+            1800,
+            true,
+            emptySet(),
             frame(0f, pronePose(
                 head = xy(0.26f, 0.43f),
                 neck = xy(0.34f, 0.50f),
@@ -166,9 +168,9 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("pullups", "rows", "scapular_pullups", "hang"),
         animation = animation(
-            durationMs = 1900,
-            showGround = false,
-            overlays = setOf(SkeletonOverlay.PULL_BAR),
+            1900,
+            false,
+            setOf(SkeletonOverlay.PULL_BAR),
             frame(0f, uprightPose(
                 head = xy(0.50f, 0.29f),
                 neck = xy(0.50f, 0.38f),
@@ -393,7 +395,9 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("face_pull", "wall_slides", "reverse_snow_angels", "band_pull_aparts", "shoulder_cars", "y_t_raises", "scapular_retraction_hold", "lat_stretch", "arm_circles"),
         animation = animation(
-            overlays = setOf(SkeletonOverlay.HAND_CONNECTION),
+            1600,
+            true,
+            setOf(SkeletonOverlay.HAND_CONNECTION),
             frame(0f, uprightPose(
                 head = xy(0.50f, 0.20f),
                 neck = xy(0.50f, 0.29f),
@@ -500,7 +504,9 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("chin_tucks", "neck_circles"),
         animation = animation(
-            overlays = setOf(SkeletonOverlay.HEAD_ORBIT),
+            1600,
+            true,
+            setOf(SkeletonOverlay.HEAD_ORBIT),
             frame(0f, uprightPose(
                 head = xy(0.47f, 0.20f),
                 neck = xy(0.50f, 0.29f),
