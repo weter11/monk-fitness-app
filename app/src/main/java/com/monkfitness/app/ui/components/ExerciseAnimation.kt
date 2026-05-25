@@ -8,438 +8,321 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.lerp
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.unit.dp
-import com.monkfitness.app.data.model.ExerciseAnimationProfile
-import kotlin.math.abs
+import com.monkfitness.app.ui.components.animation.Joint
+import com.monkfitness.app.ui.components.animation.SkeletonAnimation
+import com.monkfitness.app.ui.components.animation.SkeletonOverlay
+import com.monkfitness.app.ui.components.animation.SkeletonPose
+import com.monkfitness.app.ui.components.animation.poseAt
+import kotlin.math.max
+import kotlin.math.sqrt
 
 @Composable
 fun ExerciseAnimatedVisual(
-    profile: ExerciseAnimationProfile,
+    animation: SkeletonAnimation,
     modifier: Modifier = Modifier
 ) {
-    val transition = rememberInfiniteTransition(label = "exercise-visual")
-    val phase by transition.animateFloat(
+    val transition = rememberInfiniteTransition(label = "exercise-skeleton")
+    val progress by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = animation.durationMs, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "exercise-visual-phase"
+        label = "exercise-skeleton-progress"
     )
-    val strokeWidth = with(LocalDensity.current) { 6.dp.toPx() }
+    val strokeWidth = with(LocalDensity.current) { 2.dp.toPx() }
     val primary = MaterialTheme.colorScheme.primary
     val secondary = MaterialTheme.colorScheme.secondary
-    val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    val outline = MaterialTheme.colorScheme.outlineVariant
 
     Canvas(modifier = modifier.fillMaxSize()) {
-        val swing = phase * 2f - 1f
-        val lift = abs(swing)
+        val pose = animation.poseAt(progress).toCanvas(size)
+        val torsoCenter = midpoint(pose[Joint.STERNUM], pose[Joint.PELVIS])
+        val footSpan = distance(pose[Joint.L_TOE], pose[Joint.R_TOE]).coerceAtLeast(size.minDimension * 0.14f)
 
         drawCircle(
             color = secondary.copy(alpha = 0.08f),
-            radius = size.minDimension * (0.24f + 0.04f * lift),
-            center = center
+            radius = size.minDimension * 0.24f,
+            center = torsoCenter
         )
-
-        when (profile) {
-            ExerciseAnimationProfile.PUSH_UP -> drawPushUp(primary, outline, strokeWidth, swing)
-            ExerciseAnimationProfile.LOWER_BODY -> drawLowerBody(primary, outline, strokeWidth, lift)
-            ExerciseAnimationProfile.SUSPENSION_PULL -> drawSuspensionPull(primary, secondary, outline, strokeWidth, lift)
-            ExerciseAnimationProfile.PLANK_FLOW -> drawPlankFlow(primary, outline, strokeWidth, lift)
-            ExerciseAnimationProfile.GLUTE_BRIDGE -> drawGluteBridge(primary, outline, strokeWidth, lift)
-            ExerciseAnimationProfile.QUADRUPED_FLOW -> drawQuadrupedFlow(primary, outline, strokeWidth, lift)
-            ExerciseAnimationProfile.FLOOR_STRETCH -> drawFloorStretch(primary, outline, strokeWidth, swing)
-            ExerciseAnimationProfile.FULL_BODY_FLOW -> drawFullBodyFlow(primary, outline, strokeWidth, swing, lift)
-            ExerciseAnimationProfile.UPPER_BODY_POSTURE -> drawUpperBodyPosture(primary, secondary, outline, strokeWidth, lift)
-            ExerciseAnimationProfile.HIP_MOBILITY -> drawHipMobility(primary, outline, strokeWidth, swing)
-            ExerciseAnimationProfile.HORSE_STANCE -> drawHorseStance(primary, outline, strokeWidth, lift)
-            ExerciseAnimationProfile.NECK_MOBILITY -> drawNeckMobility(primary, secondary, outline, strokeWidth, swing)
-            ExerciseAnimationProfile.JUMPING_JACK -> drawJumpingJack(primary, outline, strokeWidth, lift)
+        drawShadow(pose = pose, color = secondary.copy(alpha = 0.14f), footSpan = footSpan)
+        if (animation.showGround) {
+            drawGround(pose = pose, color = outline.copy(alpha = 0.4f), strokeWidth = strokeWidth)
         }
+        drawOverlays(animation.overlays, pose, outline, strokeWidth)
+        drawSkeleton(pose = pose, fill = primary, outline = outline, strokeWidth = strokeWidth)
     }
 }
 
-private fun DrawScope.drawPushUp(
-    color: Color,
-    accent: Color,
-    strokeWidth: Float,
-    swing: Float
-) {
-    drawGround(accent, strokeWidth)
-    drawStickFigure(
-        color = color,
-        strokeWidth = strokeWidth,
-        head = point(0.25f, 0.45f + 0.03f * swing),
-        shoulder = point(0.38f, 0.56f + 0.04f * swing),
-        hip = point(0.57f, 0.57f - 0.02f * swing),
-        leftHand = point(0.24f, 0.79f),
-        rightHand = point(0.38f, 0.79f),
-        leftFoot = point(0.75f, 0.78f),
-        rightFoot = point(0.86f, 0.78f),
-        leftElbow = point(0.28f, 0.66f + 0.04f * swing),
-        rightElbow = point(0.36f, 0.68f + 0.04f * swing)
-    )
-}
-
-private fun DrawScope.drawLowerBody(
-    color: Color,
-    accent: Color,
-    strokeWidth: Float,
-    lift: Float
-) {
-    drawGround(accent, strokeWidth)
-    drawStickFigure(
-        color = color,
-        strokeWidth = strokeWidth,
-        head = point(0.5f, 0.23f + 0.01f * lift),
-        shoulder = point(0.5f, 0.38f + 0.02f * lift),
-        hip = point(0.5f, 0.56f + 0.05f * lift),
-        leftHand = point(0.37f, 0.48f),
-        rightHand = point(0.63f, 0.48f),
-        leftFoot = point(0.38f, 0.9f),
-        rightFoot = point(0.64f, 0.9f),
-        leftKnee = point(0.42f, 0.73f - 0.05f * lift),
-        rightKnee = point(0.6f, 0.73f - 0.05f * lift)
-    )
-}
-
-private fun DrawScope.drawSuspensionPull(
-    color: Color,
-    secondary: Color,
-    accent: Color,
-    strokeWidth: Float,
-    lift: Float
-) {
-    val leftHand = point(0.38f, 0.12f)
-    val rightHand = point(0.62f, 0.12f)
-
-    drawLine(
-        color = secondary.copy(alpha = 0.55f),
-        start = point(0.24f, 0.12f),
-        end = point(0.76f, 0.12f),
-        strokeWidth = strokeWidth,
-        cap = StrokeCap.Round
-    )
-    drawLine(color = accent, start = leftHand, end = point(0.38f, 0.24f), strokeWidth = strokeWidth / 2f)
-    drawLine(color = accent, start = rightHand, end = point(0.62f, 0.24f), strokeWidth = strokeWidth / 2f)
-
-    drawStickFigure(
-        color = color,
-        strokeWidth = strokeWidth,
-        head = point(0.5f, 0.28f + 0.05f * lift),
-        shoulder = point(0.5f, 0.42f + 0.05f * lift),
-        hip = point(0.5f, 0.61f + 0.05f * lift),
-        leftHand = leftHand,
-        rightHand = rightHand,
-        leftFoot = point(0.44f, 0.84f - 0.05f * lift),
-        rightFoot = point(0.56f, 0.84f - 0.05f * lift)
-    )
-}
-
-private fun DrawScope.drawPlankFlow(
-    color: Color,
-    accent: Color,
-    strokeWidth: Float,
-    lift: Float
-) {
-    drawGround(accent, strokeWidth)
-    drawStickFigure(
-        color = color,
-        strokeWidth = strokeWidth,
-        head = point(0.28f, 0.49f),
-        shoulder = point(0.4f, 0.57f),
-        hip = point(0.58f, 0.57f - 0.02f * lift),
-        leftHand = point(0.24f, 0.79f),
-        rightHand = point(0.39f, 0.79f),
-        leftFoot = point(0.83f, 0.79f),
-        rightFoot = point(0.87f, 0.74f - 0.12f * lift),
-        leftKnee = point(0.69f, 0.72f),
-        rightKnee = point(0.74f, 0.68f - 0.1f * lift),
-        leftElbow = point(0.29f, 0.69f),
-        rightElbow = point(0.38f, 0.69f)
-    )
-}
-
-private fun DrawScope.drawGluteBridge(
-    color: Color,
-    accent: Color,
-    strokeWidth: Float,
-    lift: Float
-) {
-    drawGround(accent, strokeWidth)
-    drawStickFigure(
-        color = color,
-        strokeWidth = strokeWidth,
-        head = point(0.24f, 0.67f),
-        shoulder = point(0.35f, 0.66f),
-        hip = point(0.56f, 0.61f - 0.08f * lift),
-        leftHand = point(0.24f, 0.8f),
-        rightHand = point(0.36f, 0.8f),
-        leftFoot = point(0.68f, 0.82f),
-        rightFoot = point(0.8f, 0.82f),
-        leftKnee = point(0.67f, 0.68f),
-        rightKnee = point(0.78f, 0.68f)
-    )
-}
-
-private fun DrawScope.drawQuadrupedFlow(
-    color: Color,
-    accent: Color,
-    strokeWidth: Float,
-    lift: Float
-) {
-    drawGround(accent, strokeWidth)
-    drawStickFigure(
-        color = color,
-        strokeWidth = strokeWidth,
-        head = point(0.28f, 0.42f + 0.01f * lift),
-        shoulder = point(0.4f, 0.5f),
-        hip = point(0.57f, 0.58f - 0.03f * lift),
-        leftHand = point(0.26f, 0.62f - 0.1f * lift),
-        rightHand = point(0.47f, 0.74f),
-        leftFoot = point(0.61f, 0.86f),
-        rightFoot = point(0.82f, 0.73f - 0.05f * lift),
-        leftKnee = point(0.59f, 0.74f),
-        rightKnee = point(0.74f, 0.74f),
-        rightElbow = point(0.44f, 0.66f)
-    )
-}
-
-private fun DrawScope.drawFloorStretch(
-    color: Color,
-    accent: Color,
-    strokeWidth: Float,
-    swing: Float
-) {
-    drawGround(accent, strokeWidth)
-    drawStickFigure(
-        color = color,
-        strokeWidth = strokeWidth,
-        head = point(0.3f, 0.46f - 0.05f * swing),
-        shoulder = point(0.4f, 0.57f - 0.04f * swing),
-        hip = point(0.56f, 0.67f + 0.03f * swing),
-        leftHand = point(0.22f, 0.75f),
-        rightHand = point(0.4f, 0.73f),
-        leftFoot = point(0.67f, 0.87f),
-        rightFoot = point(0.79f, 0.85f),
-        leftKnee = point(0.67f, 0.74f),
-        rightKnee = point(0.78f, 0.74f)
-    )
-}
-
-private fun DrawScope.drawFullBodyFlow(
-    color: Color,
-    accent: Color,
-    strokeWidth: Float,
-    swing: Float,
-    lift: Float
-) {
-    drawGround(accent, strokeWidth)
-    drawStickFigure(
-        color = color,
-        strokeWidth = strokeWidth,
-        head = point(0.52f, 0.24f + 0.03f * lift),
-        shoulder = point(0.52f, 0.38f + 0.04f * lift),
-        hip = point(0.52f, 0.56f + 0.06f * lift),
-        leftHand = point(0.34f, 0.48f - 0.08f * swing),
-        rightHand = point(0.7f, 0.48f - 0.08f * swing),
-        leftFoot = point(0.38f, 0.9f),
-        rightFoot = point(0.66f, 0.9f),
-        leftKnee = point(0.43f, 0.73f - 0.04f * lift),
-        rightKnee = point(0.62f, 0.73f - 0.04f * lift)
-    )
-}
-
-private fun DrawScope.drawUpperBodyPosture(
-    color: Color,
-    secondary: Color,
-    accent: Color,
-    strokeWidth: Float,
-    lift: Float
-) {
-    val leftHand = point(0.32f - 0.05f * lift, 0.54f - 0.18f * lift)
-    val rightHand = point(0.68f + 0.05f * lift, 0.54f - 0.18f * lift)
-
-    drawGround(accent, strokeWidth)
-    drawLine(
-        color = secondary.copy(alpha = 0.45f),
-        start = leftHand,
-        end = rightHand,
-        strokeWidth = strokeWidth / 2f,
-        cap = StrokeCap.Round
-    )
-    drawStickFigure(
-        color = color,
-        strokeWidth = strokeWidth,
-        head = point(0.5f, 0.22f),
-        shoulder = point(0.5f, 0.38f),
-        hip = point(0.5f, 0.56f),
-        leftHand = leftHand,
-        rightHand = rightHand,
-        leftFoot = point(0.44f, 0.9f),
-        rightFoot = point(0.56f, 0.9f)
-    )
-}
-
-private fun DrawScope.drawHipMobility(
-    color: Color,
-    accent: Color,
-    strokeWidth: Float,
-    swing: Float
-) {
-    drawGround(accent, strokeWidth)
-    drawStickFigure(
-        color = color,
-        strokeWidth = strokeWidth,
-        head = point(0.48f, 0.22f),
-        shoulder = point(0.48f, 0.38f),
-        hip = point(0.48f, 0.56f),
-        leftHand = point(0.36f, 0.46f),
-        rightHand = point(0.6f, 0.46f),
-        leftFoot = point(0.4f, 0.9f),
-        rightFoot = point(0.73f, 0.81f - 0.12f * swing),
-        leftKnee = point(0.42f, 0.73f),
-        rightKnee = point(0.61f, 0.68f - 0.09f * swing)
-    )
-}
-
-private fun DrawScope.drawHorseStance(
-    color: Color,
-    accent: Color,
-    strokeWidth: Float,
-    lift: Float
-) {
-    drawGround(accent, strokeWidth)
-    drawStickFigure(
-        color = color,
-        strokeWidth = strokeWidth,
-        head = point(0.5f, 0.23f),
-        shoulder = point(0.5f, 0.38f),
-        hip = point(0.5f, 0.58f + 0.02f * lift),
-        leftHand = point(0.34f, 0.5f),
-        rightHand = point(0.66f, 0.5f),
-        leftFoot = point(0.22f, 0.9f),
-        rightFoot = point(0.78f, 0.9f),
-        leftKnee = point(0.34f, 0.75f),
-        rightKnee = point(0.66f, 0.75f)
-    )
-}
-
-private fun DrawScope.drawNeckMobility(
-    color: Color,
-    secondary: Color,
-    accent: Color,
-    strokeWidth: Float,
-    swing: Float
-) {
-    val head = point(0.5f + 0.03f * swing, 0.22f)
-
-    drawGround(accent, strokeWidth)
-    drawCircle(
-        color = secondary.copy(alpha = 0.2f),
-        center = point(0.5f, 0.22f),
-        radius = size.minDimension * 0.12f,
-        style = Stroke(width = strokeWidth / 2f)
-    )
-    drawStickFigure(
-        color = color,
-        strokeWidth = strokeWidth,
-        head = head,
-        shoulder = point(0.5f, 0.38f),
-        hip = point(0.5f, 0.56f),
-        leftHand = point(0.4f, 0.46f),
-        rightHand = point(0.6f, 0.46f),
-        leftFoot = point(0.44f, 0.9f),
-        rightFoot = point(0.56f, 0.9f)
-    )
-}
-
-private fun DrawScope.drawJumpingJack(
-    color: Color,
-    accent: Color,
-    strokeWidth: Float,
-    lift: Float
-) {
-    drawGround(accent, strokeWidth)
-    drawStickFigure(
-        color = color,
-        strokeWidth = strokeWidth,
-        head = point(0.5f, 0.22f),
-        shoulder = point(0.5f, 0.38f),
-        hip = point(0.5f, 0.56f),
-        leftHand = point(0.3f - 0.08f * lift, 0.56f - 0.28f * lift),
-        rightHand = point(0.7f + 0.08f * lift, 0.56f - 0.28f * lift),
-        leftFoot = point(0.42f - 0.14f * lift, 0.9f),
-        rightFoot = point(0.58f + 0.14f * lift, 0.9f)
-    )
-}
-
-private fun DrawScope.drawStickFigure(
-    color: Color,
-    strokeWidth: Float,
-    head: Offset,
-    shoulder: Offset,
-    hip: Offset,
-    leftHand: Offset,
-    rightHand: Offset,
-    leftFoot: Offset,
-    rightFoot: Offset,
-    leftElbow: Offset = lerp(shoulder, leftHand, 0.5f),
-    rightElbow: Offset = lerp(shoulder, rightHand, 0.5f),
-    leftKnee: Offset = lerp(hip, leftFoot, 0.5f),
-    rightKnee: Offset = lerp(hip, rightFoot, 0.5f)
-) {
-    val headRadius = size.minDimension * 0.07f
-
-    drawCircle(color = color, radius = headRadius, center = head)
-    drawLine(
-        color = color,
-        start = Offset(head.x, head.y + headRadius),
-        end = shoulder,
-        strokeWidth = strokeWidth,
-        cap = StrokeCap.Round
-    )
-    drawLine(color = color, start = shoulder, end = hip, strokeWidth = strokeWidth, cap = StrokeCap.Round)
-    drawJointChain(color, shoulder, leftElbow, leftHand, strokeWidth)
-    drawJointChain(color, shoulder, rightElbow, rightHand, strokeWidth)
-    drawJointChain(color, hip, leftKnee, leftFoot, strokeWidth)
-    drawJointChain(color, hip, rightKnee, rightFoot, strokeWidth)
-}
-
-private fun DrawScope.drawJointChain(
-    color: Color,
-    start: Offset,
-    middle: Offset,
-    end: Offset,
+private fun DrawScope.drawSkeleton(
+    pose: Map<Joint, Offset>,
+    fill: Color,
+    outline: Color,
     strokeWidth: Float
 ) {
-    drawLine(color = color, start = start, end = middle, strokeWidth = strokeWidth, cap = StrokeCap.Round)
-    drawLine(color = color, start = middle, end = end, strokeWidth = strokeWidth, cap = StrokeCap.Round)
+    val scale = size.minDimension
+    val torso = buildOrganicLimbPath(
+        points = listOf(
+            pose[Joint.NECK],
+            pose[Joint.STERNUM],
+            pose[Joint.SPINE_MID],
+            pose[Joint.SPINE_LOW],
+            pose[Joint.PELVIS]
+        ),
+        radii = listOf(scale * 0.04f, scale * 0.055f, scale * 0.06f, scale * 0.055f, scale * 0.05f)
+    )
+    val leftArm = buildOrganicLimbPath(
+        points = listOf(pose[Joint.L_SHOULDER], pose[Joint.L_ELBOW], pose[Joint.L_WRIST], pose[Joint.L_HAND]),
+        radii = listOf(scale * 0.034f, scale * 0.028f, scale * 0.02f, scale * 0.014f)
+    )
+    val rightArm = buildOrganicLimbPath(
+        points = listOf(pose[Joint.R_SHOULDER], pose[Joint.R_ELBOW], pose[Joint.R_WRIST], pose[Joint.R_HAND]),
+        radii = listOf(scale * 0.032f, scale * 0.027f, scale * 0.02f, scale * 0.014f)
+    )
+    val leftLeg = buildOrganicLimbPath(
+        points = listOf(pose[Joint.L_HIP], pose[Joint.L_KNEE], pose[Joint.L_ANKLE], pose[Joint.L_TOE]),
+        radii = listOf(scale * 0.04f, scale * 0.03f, scale * 0.02f, scale * 0.012f)
+    )
+    val rightLeg = buildOrganicLimbPath(
+        points = listOf(pose[Joint.R_HIP], pose[Joint.R_KNEE], pose[Joint.R_ANKLE], pose[Joint.R_TOE]),
+        radii = listOf(scale * 0.038f, scale * 0.03f, scale * 0.02f, scale * 0.012f)
+    )
+    val shoulderBridge = buildOrganicLimbPath(
+        points = listOf(pose[Joint.L_SHOULDER], pose[Joint.STERNUM], pose[Joint.R_SHOULDER]),
+        radii = listOf(scale * 0.022f, scale * 0.03f, scale * 0.022f)
+    )
+    val hipBridge = buildOrganicLimbPath(
+        points = listOf(pose[Joint.L_HIP], pose[Joint.PELVIS], pose[Joint.R_HIP]),
+        radii = listOf(scale * 0.022f, scale * 0.03f, scale * 0.022f)
+    )
+    val head = buildHeadPath(top = pose[Joint.HEAD], bottom = pose[Joint.NECK], width = scale * 0.11f)
+
+    drawPath(rightLeg, fill.copy(alpha = 0.84f))
+    drawPath(rightArm, fill.copy(alpha = 0.84f))
+    drawPath(torso, fill)
+    drawPath(shoulderBridge, fill)
+    drawPath(hipBridge, fill)
+    drawPath(leftLeg, fill)
+    drawPath(leftArm, fill)
+    drawPath(head, fill)
+
+    val outlineColor = outline.copy(alpha = 0.58f)
+    listOf(rightLeg, rightArm, torso, shoulderBridge, hipBridge, leftLeg, leftArm, head).forEach { path ->
+        drawPath(path, outlineColor, style = Stroke(width = strokeWidth))
+    }
+}
+
+private fun DrawScope.drawOverlays(
+    overlays: Set<SkeletonOverlay>,
+    pose: Map<Joint, Offset>,
+    color: Color,
+    strokeWidth: Float
+) {
+    if (SkeletonOverlay.PULL_BAR in overlays) {
+        val barY = minOf(pose[Joint.L_HAND].y, pose[Joint.R_HAND].y)
+        drawLine(
+            color = color.copy(alpha = 0.6f),
+            start = Offset(size.width * 0.24f, barY),
+            end = Offset(size.width * 0.76f, barY),
+            strokeWidth = strokeWidth * 2f,
+            cap = StrokeCap.Round
+        )
+    }
+    if (SkeletonOverlay.HAND_CONNECTION in overlays) {
+        drawLine(
+            color = color.copy(alpha = 0.45f),
+            start = pose[Joint.L_HAND],
+            end = pose[Joint.R_HAND],
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+    }
+    if (SkeletonOverlay.HEAD_ORBIT in overlays) {
+        val center = midpoint(pose[Joint.HEAD], pose[Joint.NECK])
+        drawCircle(
+            color = color.copy(alpha = 0.25f),
+            radius = distance(center, pose[Joint.HEAD]) + size.minDimension * 0.04f,
+            center = center,
+            style = Stroke(width = strokeWidth)
+        )
+    }
+}
+
+private fun DrawScope.drawShadow(
+    pose: Map<Joint, Offset>,
+    color: Color,
+    footSpan: Float
+) {
+    val center = midpoint(pose[Joint.PELVIS], midpoint(pose[Joint.L_TOE], pose[Joint.R_TOE])) + Offset(0f, size.height * 0.12f)
+    drawPath(
+        path = buildEllipsePath(
+            center = center,
+            radiusX = footSpan * 0.55f,
+            radiusY = size.minDimension * 0.05f
+        ),
+        color = color
+    )
 }
 
 private fun DrawScope.drawGround(
+    pose: Map<Joint, Offset>,
     color: Color,
     strokeWidth: Float
 ) {
+    val groundY = max(pose[Joint.L_TOE].y, pose[Joint.R_TOE].y) + size.height * 0.02f
     drawLine(
         color = color,
-        start = point(0.12f, 0.92f),
-        end = point(0.88f, 0.92f),
-        strokeWidth = strokeWidth / 2f,
+        start = Offset(size.width * 0.12f, groundY),
+        end = Offset(size.width * 0.88f, groundY),
+        strokeWidth = strokeWidth,
         cap = StrokeCap.Round
     )
 }
 
-private fun DrawScope.point(x: Float, y: Float): Offset = Offset(size.width * x, size.height * y)
+private fun SkeletonPose.toCanvas(size: Size): Map<Joint, Offset> =
+    Joint.entries.associateWith { joint ->
+        val point = this[joint]
+        Offset(point.x * size.width, point.y * size.height)
+    }
+
+private fun buildHeadPath(
+    top: Offset,
+    bottom: Offset,
+    width: Float
+): Path {
+    val center = midpoint(top, bottom)
+    return buildEllipsePath(center = center, radiusX = width * 0.5f, radiusY = distance(top, bottom) * 0.65f)
+}
+
+private fun buildEllipsePath(
+    center: Offset,
+    radiusX: Float,
+    radiusY: Float
+): Path {
+    val control = 0.5522848f
+    return Path().apply {
+        moveTo(center.x, center.y - radiusY)
+        cubicTo(
+            center.x + radiusX * control,
+            center.y - radiusY,
+            center.x + radiusX,
+            center.y - radiusY * control,
+            center.x + radiusX,
+            center.y
+        )
+        cubicTo(
+            center.x + radiusX,
+            center.y + radiusY * control,
+            center.x + radiusX * control,
+            center.y + radiusY,
+            center.x,
+            center.y + radiusY
+        )
+        cubicTo(
+            center.x - radiusX * control,
+            center.y + radiusY,
+            center.x - radiusX,
+            center.y + radiusY * control,
+            center.x - radiusX,
+            center.y
+        )
+        cubicTo(
+            center.x - radiusX,
+            center.y - radiusY * control,
+            center.x - radiusX * control,
+            center.y - radiusY,
+            center.x,
+            center.y - radiusY
+        )
+        close()
+    }
+}
+
+private fun buildOrganicLimbPath(
+    points: List<Offset>,
+    radii: List<Float>
+): Path {
+    require(points.size == radii.size && points.size >= 2)
+
+    val tangents = points.indices.map { index ->
+        when (index) {
+            0 -> (points[1] - points[0]).safeNormalized(Offset(1f, 0f))
+            points.lastIndex -> (points[index] - points[index - 1]).safeNormalized(Offset(1f, 0f))
+            else -> (points[index + 1] - points[index - 1]).safeNormalized(Offset(1f, 0f))
+        }
+    }
+    val leftEdge = points.indices.map { index -> points[index] + perpendicular(tangents[index]).scaled(radii[index]) }
+    val rightEdge = points.indices.map { index -> points[index] - perpendicular(tangents[index]).scaled(radii[index]) }
+
+    return Path().apply {
+        moveTo(leftEdge.first().x, leftEdge.first().y)
+        for (index in 0 until points.lastIndex) {
+            val handleLength = distance(points[index], points[index + 1]) * 0.35f
+            cubicTo(
+                (leftEdge[index] + tangents[index].scaled(handleLength)).x,
+                (leftEdge[index] + tangents[index].scaled(handleLength)).y,
+                (leftEdge[index + 1] - tangents[index + 1].scaled(handleLength)).x,
+                (leftEdge[index + 1] - tangents[index + 1].scaled(handleLength)).y,
+                leftEdge[index + 1].x,
+                leftEdge[index + 1].y
+            )
+        }
+        cubicTo(
+            (leftEdge.last() + tangents.last().scaled(radii.last() * 0.8f)).x,
+            (leftEdge.last() + tangents.last().scaled(radii.last() * 0.8f)).y,
+            (rightEdge.last() + tangents.last().scaled(radii.last() * 0.8f)).x,
+            (rightEdge.last() + tangents.last().scaled(radii.last() * 0.8f)).y,
+            rightEdge.last().x,
+            rightEdge.last().y
+        )
+        for (index in points.lastIndex downTo 1) {
+            val handleLength = distance(points[index], points[index - 1]) * 0.35f
+            cubicTo(
+                (rightEdge[index] - tangents[index].scaled(handleLength)).x,
+                (rightEdge[index] - tangents[index].scaled(handleLength)).y,
+                (rightEdge[index - 1] + tangents[index - 1].scaled(handleLength)).x,
+                (rightEdge[index - 1] + tangents[index - 1].scaled(handleLength)).y,
+                rightEdge[index - 1].x,
+                rightEdge[index - 1].y
+            )
+        }
+        cubicTo(
+            (rightEdge.first() - tangents.first().scaled(radii.first() * 0.8f)).x,
+            (rightEdge.first() - tangents.first().scaled(radii.first() * 0.8f)).y,
+            (leftEdge.first() - tangents.first().scaled(radii.first() * 0.8f)).x,
+            (leftEdge.first() - tangents.first().scaled(radii.first() * 0.8f)).y,
+            leftEdge.first().x,
+            leftEdge.first().y
+        )
+        close()
+    }
+}
+
+private fun midpoint(a: Offset, b: Offset): Offset = Offset((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f)
+
+private fun distance(a: Offset, b: Offset): Float = (b - a).magnitude()
+
+private fun perpendicular(vector: Offset): Offset = Offset(-vector.y, vector.x)
+
+private fun Offset.magnitude(): Float = sqrt((x * x) + (y * y))
+
+private fun Offset.safeNormalized(fallback: Offset): Offset {
+    val length = magnitude()
+    return if (length < 0.0001f) fallback else Offset(x / length, y / length)
+}
+
+private fun Offset.scaled(scale: Float): Offset = Offset(x * scale, y * scale)

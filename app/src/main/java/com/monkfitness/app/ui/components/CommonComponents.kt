@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
-import com.monkfitness.app.data.model.animationProfile
+import com.monkfitness.app.data.model.skeletonAnimation
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.LottieConstants
@@ -71,11 +71,11 @@ private fun ExerciseVisualContent(
     contentScale: ContentScale = ContentScale.Fit,
     imagePadding: Dp = 16.dp
 ) {
-    val animationProfile = exercise.animationProfile
+    val skeletonAnimation = exercise.skeletonAnimation
 
-    if (animationProfile != null) {
+    if (skeletonAnimation != null) {
         ExerciseAnimatedVisual(
-            profile = animationProfile,
+            animation = skeletonAnimation,
             modifier = modifier.padding(imagePadding)
         )
     } else if (exercise.lottieRes != null) {
