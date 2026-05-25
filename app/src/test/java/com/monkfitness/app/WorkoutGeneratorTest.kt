@@ -249,6 +249,21 @@ class WorkoutGeneratorTest {
     }
 
     @Test
+    fun testMatchingExercisesUseSpecificLottieAnimations() {
+        val libraryById = generator.getExerciseLibrary().associateBy { it.id }
+
+        assertEquals(R.raw.military_push_ups, libraryById.getValue("pushups").lottieRes)
+        assertEquals(R.raw.military_push_ups, libraryById.getValue("decline_pushups").lottieRes)
+        assertEquals(R.raw.military_push_ups, libraryById.getValue("diamond_pushups").lottieRes)
+        assertEquals(R.raw.military_push_ups, libraryById.getValue("pike_pushups").lottieRes)
+        assertEquals(R.raw.pull_ups, libraryById.getValue("pullups").lottieRes)
+        assertEquals(R.raw.pull_ups, libraryById.getValue("scapular_pullups").lottieRes)
+        assertEquals(R.raw.squat, libraryById.getValue("squats").lottieRes)
+        assertEquals(R.raw.squat, libraryById.getValue("deep_squat").lottieRes)
+        assertEquals(R.raw.squat, libraryById.getValue("horse_stance").lottieRes)
+    }
+
+    @Test
     fun testRequestedExercisesIncludeFullInstructionResources() {
         val requestedExercises = listOf(
             "decline_pushups",
