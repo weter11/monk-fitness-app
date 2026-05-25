@@ -47,6 +47,7 @@
     <string name="vibration">Vibration</string>
     <string name="timer_ticks">Timer Ticks</string>
     <string name="feedback">Feedback</string>
+    <string name="personalization">Personalization</string>
     <string name="mobility_and_posture">Mobility &amp; Posture</string>
     <string name="enable_additional_posture_training">Enable additional posture training</string>
     <string name="additional_posture_training">Additional posture training</string>
@@ -57,6 +58,12 @@
     <string name="flexibility_type_stretching">Stretching only</string>
     <string name="flexibility_type_posture">Posture only</string>
     <string name="flexibility_type_both">Both</string>
+    <string name="equipment_selection">Available equipment</string>
+    <string name="equipment_selection_desc">Select the equipment you have. Bodyweight exercises stay available automatically.</string>
+    <string name="equipment_none">Bodyweight only</string>
+    <string name="equipment_bar">Bar</string>
+    <string name="equipment_bands">Bands</string>
+    <string name="equipment_backpack">Backpack</string>
     <string name="start_posture_mobility">Start Posture &amp; Mobility</string>
     <string name="optional_session_duration">15–20 min optional session</string>
     <string name="posture_session_summary">Focus: %1$s</string>
@@ -151,7 +158,7 @@
     <string name="nutrition_plan_days_3">3 days</string>
     <string name="nutrition_plan_days_7">7 days</string>
     <string name="nutrition_exclusions">Excluded foods</string>
-    <string name="nutrition_exclusions_desc">Meals and replacements will avoid the foods you exclude when alternatives are available.</string>
+    <string name="nutrition_exclusions_desc">Meals and replacements will exclude the foods you select.</string>
     <string name="nutrition_plan_preview_title">%1$d-day plan preview</string>
     <string name="nutrition_today_foods">Foods</string>
     <string name="nutrition_today_instructions">How to prepare</string>

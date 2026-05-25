@@ -47,6 +47,7 @@
     <string name="vibration">Вибрация</string>
     <string name="timer_ticks">Тиканье таймера</string>
     <string name="feedback">Обратная связь</string>
+    <string name="personalization">Персонализация</string>
     <string name="mobility_and_posture">Мобильность и осанка</string>
     <string name="enable_additional_posture_training">Включить дополнительную тренировку осанки</string>
     <string name="additional_posture_training">Дополнительная тренировка осанки</string>
@@ -57,6 +58,12 @@
     <string name="flexibility_type_stretching">Только растяжка</string>
     <string name="flexibility_type_posture">Только осанка</string>
     <string name="flexibility_type_both">Оба режима</string>
+    <string name="equipment_selection">Доступное оборудование</string>
+    <string name="equipment_selection_desc">Выберите оборудование, которое у вас есть. Упражнения с весом тела остаются доступными всегда.</string>
+    <string name="equipment_none">Без оборудования</string>
+    <string name="equipment_bar">Турник</string>
+    <string name="equipment_bands">Резинки</string>
+    <string name="equipment_backpack">Рюкзак</string>
     <string name="start_posture_mobility">Начать осанку и мобильность</string>
     <string name="optional_session_duration">Необязательная сессия 15–20 минут</string>
     <string name="posture_session_summary">Фокус: %1$s</string>
@@ -151,7 +158,7 @@
     <string name="nutrition_plan_days_3">3 дня</string>
     <string name="nutrition_plan_days_7">7 дней</string>
     <string name="nutrition_exclusions">Исключенные продукты</string>
-    <string name="nutrition_exclusions_desc">План и замены будут избегать выбранных продуктов, если есть доступные альтернативы.</string>
+    <string name="nutrition_exclusions_desc">План и замены будут исключать выбранные продукты.</string>
     <string name="nutrition_plan_preview_title">Предпросмотр плана на %1$d дн.</string>
     <string name="nutrition_today_foods">Что есть</string>
     <string name="nutrition_today_instructions">Как приготовить</string>
