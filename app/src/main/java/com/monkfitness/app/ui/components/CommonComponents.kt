@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.data.model.animationProfile
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.LottieConstants
@@ -70,7 +71,14 @@ private fun ExerciseVisualContent(
     contentScale: ContentScale = ContentScale.Fit,
     imagePadding: Dp = 16.dp
 ) {
-    if (exercise.lottieRes != null) {
+    val animationProfile = exercise.animationProfile
+
+    if (animationProfile != null) {
+        ExerciseAnimatedVisual(
+            profile = animationProfile,
+            modifier = modifier.padding(imagePadding)
+        )
+    } else if (exercise.lottieRes != null) {
         val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(exercise.lottieRes))
         val progress by animateLottieCompositionAsState(
             composition = composition,
