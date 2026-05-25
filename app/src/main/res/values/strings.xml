@@ -75,6 +75,7 @@
     <string name="home">Home</string>
     <string name="progress">Progress</string>
     <string name="posture">Posture</string>
+    <string name="exercises_tab">Exercises</string>
     <string name="exercise_library">Exercise Library</string>
     <string name="notification_channel_name">Daily Reminder</string>
     <string name="notification_title">Time to Workout!</string>

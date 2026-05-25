@@ -75,6 +75,7 @@
     <string name="home">Главная</string>
     <string name="progress">Прогресс</string>
     <string name="posture">Осанка</string>
+    <string name="exercises_tab">Упражнения</string>
     <string name="exercise_library">Библиотека упражнений</string>
     <string name="notification_channel_name">Ежедневное напоминание</string>
     <string name="notification_title">Время тренировки!</string>

@@ -48,7 +48,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -148,9 +147,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val postureSearchQuery = _postureSearchQuery.asStateFlow()
     private val _postureSelectedCategory = MutableStateFlow<ExerciseCategory?>(null)
     private val _postureSelectedSubCategory = MutableStateFlow<ExerciseSubCategory?>(null)
-    private val debouncedPostureSearchQuery = _postureSearchQuery
-        .debounce(300)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     val completedDaysCount = repository.getCompletedDaysCount().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 0
@@ -276,7 +272,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val postureUiState = combine(
         exerciseDifficultyAdjustments,
-        debouncedPostureSearchQuery,
+        postureSearchQuery,
         _postureSelectedCategory,
         _postureSelectedSubCategory,
         availableEquipment
