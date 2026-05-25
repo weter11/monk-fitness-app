@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -78,7 +79,7 @@ sealed class Screen(val route: String, val titleRes: Int, val icon: ImageVector)
     object Home : Screen("home", R.string.home, Icons.Default.Home)
     object Nutrition : Screen("nutrition", R.string.nutrition, Icons.Default.Favorite)
     object Progress : Screen("progress", R.string.progress, Icons.Default.Star)
-    object Posture : Screen("posture", R.string.exercise_library, Icons.Default.Person)
+    object Posture : Screen("posture", R.string.exercises_tab, Icons.Default.Person)
     object Settings : Screen("settings", R.string.settings, Icons.Default.Settings)
 }
 
@@ -108,7 +109,15 @@ fun MainApp(viewModel: MainViewModel) {
                     screens.forEach { screen ->
                         NavigationBarItem(
                             icon = { Icon(screen.icon, contentDescription = stringResource(screen.titleRes)) },
-                            label = { Text(stringResource(screen.titleRes)) },
+                            label = {
+                                Text(
+                                    text = stringResource(screen.titleRes),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
                             selected = currentRoute == screen.route,
                             onClick = {
                                 navController.navigate(screen.route) {
