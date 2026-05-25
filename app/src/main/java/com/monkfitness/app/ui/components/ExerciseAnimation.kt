@@ -65,6 +65,7 @@ fun ExerciseAnimatedVisual(
             center = center
         )
         when (profile) {
+            ExerciseAnimationProfile.PUSH_UP -> Unit
             ExerciseAnimationProfile.LOWER_BODY -> drawLowerBody(primary, outline, strokeWidth, lift)
             ExerciseAnimationProfile.SUSPENSION_PULL -> drawSuspensionPull(primary, secondary, outline, strokeWidth, lift)
             ExerciseAnimationProfile.PLANK_FLOW -> drawPlankFlow(primary, outline, strokeWidth, lift)
