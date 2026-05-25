@@ -188,7 +188,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         flexibilityFocusAreas,
         exerciseDifficultyAdjustments,
         availableEquipment
-    ) { metrics, additionalPostureEnabled, trainingType, focusAreas, difficultyAdjustments, availableEquipment ->
+    ) { values ->
+        val metrics = values[0] as HomeMetrics
+        val additionalPostureEnabled = values[1] as Boolean
+        val trainingType = values[2] as FlexibilityTrainingType
+        @Suppress("UNCHECKED_CAST")
+        val focusAreas = values[3] as Set<ExerciseSubCategory>
+        @Suppress("UNCHECKED_CAST")
+        val difficultyAdjustments = values[4] as Map<String, Int>
+        @Suppress("UNCHECKED_CAST")
+        val availableEquipment = values[5] as Set<Equipment>
         HomeUiState(
             currentDay = metrics.currentDay,
             workout = getWorkoutForDay(metrics.currentDay, difficultyAdjustments, trainingType, focusAreas, availableEquipment),
@@ -221,7 +230,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         flexibilityTrainingType,
         flexibilityFocusAreas,
         availableEquipment
-    ) { day, sessionMode, difficultyAdjustments, trainingType, focusAreas, availableEquipment ->
+    ) { values ->
+        val day = values[0] as Int?
+        val sessionMode = values[1] as SessionMode
+        @Suppress("UNCHECKED_CAST")
+        val difficultyAdjustments = values[2] as Map<String, Int>
+        val trainingType = values[3] as FlexibilityTrainingType
+        @Suppress("UNCHECKED_CAST")
+        val focusAreas = values[4] as Set<ExerciseSubCategory>
+        @Suppress("UNCHECKED_CAST")
+        val availableEquipment = values[5] as Set<Equipment>
         if (day == null) {
             WorkoutSessionUiState(
                 day = null,
