@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.WorkoutType
-import com.monkfitness.app.ui.components.ExerciseImage
+import com.monkfitness.app.ui.components.ExerciseHeroMedia
 import com.monkfitness.app.ui.components.ExerciseItem
 import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.ui.components.MonkProgressIndicator
@@ -362,10 +362,10 @@ fun ExerciseSession(
                 .height(200.dp),
             contentAlignment = Alignment.Center
         ) {
-            ExerciseImage(
-                imageRes = exercise.imageRes,
+            ExerciseHeroMedia(
+                exercise = exercise,
                 modifier = Modifier.fillMaxSize(),
-                imagePadding = 16.dp
+                height = 200.dp
             )
             IconButton(
                 onClick = onInfo,

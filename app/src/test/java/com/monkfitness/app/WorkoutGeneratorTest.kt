@@ -315,6 +315,14 @@ class WorkoutGeneratorTest {
     }
 
     @Test
+    fun testWarmupExercisesExposeLottieWhenConfigured() {
+        val animatedWarmups = generator.getWarmupExercises().filter { it.lottieRes != null }
+
+        assertTrue(animatedWarmups.isNotEmpty())
+        assertTrue(animatedWarmups.all { it.imageRes != null })
+    }
+
+    @Test
     fun testWorkoutGenerationIsDeterministicForSameDay() {
         val first = generator.generateWorkout(1).exercises.map { it.id }
         val second = generator.generateWorkout(1).exercises.map { it.id }

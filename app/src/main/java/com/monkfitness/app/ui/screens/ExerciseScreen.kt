@@ -16,13 +16,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import android.util.Log
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
-import com.monkfitness.app.ui.components.ExerciseImage
+import com.monkfitness.app.ui.components.ExerciseHeroMedia
 import com.monkfitness.app.ui.components.exerciseRepTargetText
 import com.monkfitness.app.viewmodel.MainViewModel
 
@@ -94,12 +93,10 @@ fun ExerciseScreen(
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            ExerciseImage(
-                imageRes = exercise.imageRes,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp),
-                imagePadding = 16.dp
+            ExerciseHeroMedia(
+                exercise = exercise,
+                modifier = Modifier.fillMaxWidth(),
+                height = 180.dp
             )
 
             Spacer(modifier = Modifier.height(24.dp))

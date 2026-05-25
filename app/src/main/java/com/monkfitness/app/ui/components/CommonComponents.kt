@@ -2,9 +2,9 @@ package com.monkfitness.app.ui.components
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -24,6 +24,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.animateLottieCompositionAsState
+import com.airbnb.lottie.compose.rememberLottieComposition
 
 @Composable
 fun MonkButton(
@@ -59,27 +64,83 @@ fun MonkButton(
 }
 
 @Composable
-fun ExerciseImage(
-    imageRes: Int?,
+private fun ExerciseVisualContent(
+    exercise: Exercise,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Fit,
     imagePadding: Dp = 16.dp
 ) {
-    val resolvedImageRes = imageRes ?: R.drawable.ic_exercise_placeholder
+    if (exercise.lottieRes != null) {
+        val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(exercise.lottieRes))
+        val progress by animateLottieCompositionAsState(
+            composition = composition,
+            isPlaying = composition != null,
+            iterations = LottieConstants.IterateForever
+        )
 
+        if (composition != null) {
+            LottieAnimation(
+                composition = composition,
+                progress = { progress },
+                modifier = modifier.padding(imagePadding)
+            )
+        } else {
+            androidx.compose.foundation.Image(
+                painter = painterResource(exercise.imageRes ?: R.drawable.ic_exercise_placeholder),
+                contentDescription = null,
+                modifier = modifier.padding(imagePadding),
+                contentScale = contentScale
+            )
+        }
+    } else {
+        androidx.compose.foundation.Image(
+            painter = painterResource(exercise.imageRes ?: R.drawable.ic_exercise_placeholder),
+            contentDescription = null,
+            modifier = modifier.padding(imagePadding),
+            contentScale = contentScale
+        )
+    }
+}
+
+@Composable
+fun ExerciseThumbnail(
+    exercise: Exercise,
+    modifier: Modifier = Modifier,
+    size: Dp = 64.dp
+) {
     Box(
         modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        ExerciseVisualContent(
+            exercise = exercise,
+            modifier = Modifier.fillMaxSize(),
+            imagePadding = 8.dp
+        )
+    }
+}
+
+@Composable
+fun ExerciseHeroMedia(
+    exercise: Exercise,
+    modifier: Modifier = Modifier,
+    height: Dp = 180.dp
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
             .clip(RoundedCornerShape(20.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
-        Image(
-            painter = painterResource(resolvedImageRes),
-            contentDescription = null,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(imagePadding),
-            contentScale = contentScale
+        ExerciseVisualContent(
+            exercise = exercise,
+            modifier = Modifier.fillMaxSize(),
+            imagePadding = 16.dp
         )
     }
 }
@@ -125,7 +186,7 @@ fun ExerciseItem(
     )
 
     val borderStroke = if (isCurrent && !isCompleted) {
-        androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
     } else null
 
     Surface(
@@ -137,41 +198,38 @@ fun ExerciseItem(
         border = borderStroke,
         shadowElevation = 6.dp
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .padding(12.dp)
                 .fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            ExerciseImage(
-                imageRes = exercise.imageRes,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp),
-                imagePadding = 12.dp
-            )
+            ExerciseThumbnail(exercise = exercise)
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(exercise.nameRes),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = exerciseSummaryText(exercise),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                }
+                Text(
+                    text = stringResource(exercise.nameRes),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = exerciseSummaryText(exercise),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
 
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 IconButton(onClick = onInfo) {
                     Icon(
                         Icons.Default.Info,
@@ -181,7 +239,7 @@ fun ExerciseItem(
                 }
 
                 Box(
-                    modifier = Modifier.padding(top = 12.dp),
+                    modifier = Modifier.size(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     if (isCompleted) {
