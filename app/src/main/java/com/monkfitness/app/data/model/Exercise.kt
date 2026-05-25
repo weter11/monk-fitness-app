@@ -80,7 +80,7 @@ data class Exercise(
     val isTimerBased: Boolean = false,
     val category: ExerciseCategory = ExerciseCategory.MOBILITY,
     val subCategory: ExerciseSubCategory = ExerciseSubCategory.FULL_BODY,
-    val equipment: Equipment = Equipment.NONE,
+    val requiredEquipment: Set<Equipment> = emptySet(),
     val nameRu: String = "",
     val nameEn: String = "",
     val descriptionRu: String = "",

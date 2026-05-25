@@ -9,6 +9,7 @@ import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.model.applyDifficultyAdjustment
 import com.monkfitness.app.data.model.WorkoutType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -284,7 +285,7 @@ class WorkoutGeneratorTest {
         )
 
         assertEquals(4, workout.exercises.size)
-        assertTrue(workout.exercises.all { it.equipment == Equipment.NONE })
+        assertTrue(workout.exercises.all { it.requiredEquipment.isEmpty() })
     }
 
     @Test
@@ -292,8 +293,25 @@ class WorkoutGeneratorTest {
         val bodyweightOnly = generator.getExerciseLibrary(availableEquipment = setOf(Equipment.NONE))
 
         assertTrue(bodyweightOnly.isNotEmpty())
-        assertTrue(bodyweightOnly.all { it.equipment == Equipment.NONE })
+        assertTrue(bodyweightOnly.all { it.requiredEquipment.isEmpty() })
         assertTrue(bodyweightOnly.size < generator.getExerciseLibrary().size)
+    }
+
+    @Test
+    fun testExerciseAvailabilityRequiresAllSelectedEquipment() {
+        val exercise = Exercise(
+            id = "combo",
+            nameRes = R.string.ex_pushups,
+            descriptionRes = R.string.ex_pushups_desc,
+            techniqueRes = R.string.ex_pushups_tech,
+            imageRes = null,
+            sets = 3,
+            reps = 8,
+            requiredEquipment = setOf(Equipment.BAR, Equipment.BANDS)
+        )
+
+        assertFalse(generator.run { exercise.isAccessibleWith(setOf(Equipment.NONE, Equipment.BAR)) })
+        assertTrue(generator.run { exercise.isAccessibleWith(setOf(Equipment.NONE, Equipment.BAR, Equipment.BANDS)) })
     }
 
     @Test
