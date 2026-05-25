@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
@@ -14,6 +15,7 @@ import com.monkfitness.app.data.model.flexibilityFocusAreas
 import com.monkfitness.app.data.model.flexibilitySpecificFocusAreas
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -30,6 +32,12 @@ class SettingsManager(private val context: Context) {
         val ADDITIONAL_POSTURE_TRAINING_ENABLED = booleanPreferencesKey("additional_posture_training_enabled")
         val FLEXIBILITY_TRAINING_TYPE = stringPreferencesKey("flexibility_training_type")
         val FLEXIBILITY_FOCUS_AREAS = stringPreferencesKey("flexibility_focus_areas")
+        val NUTRITION_WEIGHT = stringPreferencesKey("nutrition_weight")
+        val NUTRITION_HEIGHT = stringPreferencesKey("nutrition_height")
+        val NUTRITION_PLAN_DAYS = intPreferencesKey("nutrition_plan_days")
+        val NUTRITION_EXCLUDED_FOODS = stringSetPreferencesKey("nutrition_excluded_foods")
+        val NUTRITION_TRACKING_DATE = stringPreferencesKey("nutrition_tracking_date")
+        val NUTRITION_COMPLETED_MEALS = stringSetPreferencesKey("nutrition_completed_meals")
     }
 
     val languageFlow: Flow<String> = context.dataStore.data.map { preferences ->
@@ -116,6 +124,73 @@ class SettingsManager(private val context: Context) {
         }
     }
 
+    val nutritionWeightFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[NUTRITION_WEIGHT] ?: ""
+    }
+
+    suspend fun setNutritionWeight(weight: String) {
+        context.dataStore.edit { preferences ->
+            preferences[NUTRITION_WEIGHT] = weight
+        }
+    }
+
+    val nutritionHeightFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[NUTRITION_HEIGHT] ?: ""
+    }
+
+    suspend fun setNutritionHeight(height: String) {
+        context.dataStore.edit { preferences ->
+            preferences[NUTRITION_HEIGHT] = height
+        }
+    }
+
+    val nutritionPlanDaysFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+        (preferences[NUTRITION_PLAN_DAYS] ?: 3).coerceIn(1, 7)
+    }
+
+    suspend fun setNutritionPlanDays(days: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[NUTRITION_PLAN_DAYS] = days.coerceIn(1, 7)
+        }
+    }
+
+    val nutritionExcludedFoodsFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        preferences[NUTRITION_EXCLUDED_FOODS].orEmpty()
+    }
+
+    suspend fun setNutritionExcludedFoods(foodKeys: Set<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[NUTRITION_EXCLUDED_FOODS] = foodKeys
+        }
+    }
+
+    val completedNutritionMealsFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        val storedDate = preferences[NUTRITION_TRACKING_DATE]
+        val completedMeals = preferences[NUTRITION_COMPLETED_MEALS].orEmpty()
+        if (storedDate == currentNutritionTrackingDate()) completedMeals else emptySet()
+    }
+
+    suspend fun setNutritionMealCompleted(mealKey: String, completed: Boolean) {
+        context.dataStore.edit { preferences ->
+            val today = currentNutritionTrackingDate()
+            val currentCompletedMeals =
+                if (preferences[NUTRITION_TRACKING_DATE] == today) {
+                    preferences[NUTRITION_COMPLETED_MEALS].orEmpty().toMutableSet()
+                } else {
+                    mutableSetOf()
+                }
+
+            if (completed) {
+                currentCompletedMeals += mealKey
+            } else {
+                currentCompletedMeals -= mealKey
+            }
+
+            preferences[NUTRITION_TRACKING_DATE] = today
+            preferences[NUTRITION_COMPLETED_MEALS] = currentCompletedMeals
+        }
+    }
+
     val exerciseDifficultyAdjustmentsFlow: Flow<Map<String, Int>> = context.dataStore.data.map { preferences ->
         preferences.asMap()
             .mapNotNull { (key, value) ->
@@ -167,4 +242,6 @@ class SettingsManager(private val context: Context) {
             else -> filtered
         }
     }
+
+    private fun currentNutritionTrackingDate(): String = LocalDate.now().toString()
 }

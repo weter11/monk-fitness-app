@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
@@ -75,6 +76,7 @@ class MainActivity : ComponentActivity() {
 
 sealed class Screen(val route: String, val titleRes: Int, val icon: ImageVector) {
     object Home : Screen("home", R.string.home, Icons.Default.Home)
+    object Nutrition : Screen("nutrition", R.string.nutrition, Icons.Default.Favorite)
     object Progress : Screen("progress", R.string.progress, Icons.Default.Star)
     object Posture : Screen("posture", R.string.exercise_library, Icons.Default.Person)
     object Settings : Screen("settings", R.string.settings, Icons.Default.Settings)
@@ -91,11 +93,18 @@ fun MainApp(viewModel: MainViewModel) {
     Scaffold(
         bottomBar = {
             if (isOnboardingCompleted && (currentRoute == Screen.Home.route ||
+                currentRoute == Screen.Nutrition.route ||
                 currentRoute == Screen.Progress.route ||
                 currentRoute == Screen.Posture.route ||
                 currentRoute == Screen.Settings.route)) {
                 NavigationBar {
-                    val screens = listOf(Screen.Home, Screen.Progress, Screen.Posture, Screen.Settings)
+                    val screens = listOf(
+                        Screen.Home,
+                        Screen.Nutrition,
+                        Screen.Progress,
+                        Screen.Posture,
+                        Screen.Settings
+                    )
                     screens.forEach { screen ->
                         NavigationBarItem(
                             icon = { Icon(screen.icon, contentDescription = stringResource(screen.titleRes)) },
@@ -140,6 +149,17 @@ fun MainApp(viewModel: MainViewModel) {
                     }
                 )
             }
+            composable(Screen.Nutrition.route) {
+                NutritionScreen(
+                    viewModel = viewModel,
+                    onOpenTodayPlan = {
+                        navController.navigate("nutrition-today")
+                    },
+                    onOpenShoppingList = {
+                        navController.navigate("nutrition-shopping-list")
+                    }
+                )
+            }
             composable(Screen.Progress.route) {
                 ProgressScreen(viewModel)
             }
@@ -150,6 +170,18 @@ fun MainApp(viewModel: MainViewModel) {
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(viewModel, onBack = { navController.popBackStack() })
+            }
+            composable("nutrition-shopping-list") {
+                NutritionShoppingListScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable("nutrition-today") {
+                NutritionTodayScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
             }
             composable(
                 route = "workout/{day}",
@@ -191,12 +223,16 @@ fun MainApp(viewModel: MainViewModel) {
                 val exerciseId = backStackEntry.arguments?.getString("exerciseId") ?: ""
                 val day = backStackEntry.arguments?.getInt("day") ?: -1
                 val difficultyAdjustments by viewModel.exerciseDifficultyAdjustments.collectAsState()
+                val flexibilityTrainingType by viewModel.flexibilityTrainingType.collectAsState()
+                val flexibilityFocusAreas by viewModel.flexibilityFocusAreas.collectAsState()
 
-                val exercise = viewModel.getWorkoutForDay(day, difficultyAdjustments).exercises.find { it.id == exerciseId }
-                    ?: viewModel.getPostureMobilityWorkout(day, difficultyAdjustments).exercises.find { it.id == exerciseId }
-                    ?: viewModel.getWarmupExercises(difficultyAdjustments).find { it.id == exerciseId }
-                    ?: viewModel.getExerciseLibrary(difficultyAdjustments).find { it.id == exerciseId }
-                    ?: viewModel.getPostureExercises(difficultyAdjustments).find { it.id == exerciseId }
+                val exercise = viewModel.findExerciseById(
+                    exerciseId = exerciseId,
+                    day = day,
+                    difficultyAdjustments = difficultyAdjustments,
+                    trainingType = flexibilityTrainingType,
+                    focusAreas = flexibilityFocusAreas
+                )
 
                 ExerciseScreen(
                     exercise = exercise,

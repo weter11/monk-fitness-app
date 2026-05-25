@@ -1,7 +1,9 @@
 package com.monkfitness.app.data.model
 
+import androidx.compose.runtime.Immutable
 import com.monkfitness.app.R
 
+@Immutable
 data class Workout(
     val id: Int,
     val type: WorkoutType,

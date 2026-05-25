@@ -11,6 +11,7 @@ import com.monkfitness.app.data.repository.WorkoutRepository
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.util.NotificationScheduler
+import com.monkfitness.app.util.matchesQuery
 import com.monkfitness.app.util.withLocalizedSearchText
 import android.content.Context
 import android.media.AudioManager
@@ -20,11 +21,22 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
+import com.monkfitness.app.data.model.NutritionDayType
+import com.monkfitness.app.data.model.NutritionIngredient
+import com.monkfitness.app.data.model.NutritionMeal
+import com.monkfitness.app.data.model.NutritionMealType
+import com.monkfitness.app.data.model.NutritionPlan
 import com.monkfitness.app.data.model.PostureSessionProgress
 import com.monkfitness.app.data.model.applyDifficultyAdjustment
+import com.monkfitness.app.data.model.calculateMuscleGainNutritionTargets
+import com.monkfitness.app.data.model.findReplacementMealTemplateId
 import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
 import com.monkfitness.app.data.model.flexibilitySpecificFocusAreas
+import com.monkfitness.app.data.model.generateNutritionPlan
+import com.monkfitness.app.data.model.nutritionExclusionIngredients
+import com.monkfitness.app.data.model.nutritionReplacementKey
 import com.monkfitness.app.ui.screens.WorkoutStep
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -33,11 +45,21 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
+
+    private data class HomeMetrics(
+        val currentDay: Int,
+        val completedCount: Int,
+        val completedPostureCount: Int,
+        val streak: Int
+    )
 
     enum class SessionMode {
         DAILY,
@@ -46,6 +68,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: WorkoutRepository
     private val workoutGenerator = WorkoutGenerator()
+    private val emptyWorkout = Workout(id = -1, type = com.monkfitness.app.data.model.WorkoutType.REST, exercises = emptyList())
 
     // Workout Session State
     private val _currentWorkoutDay = MutableStateFlow<Int?>(null)
@@ -91,6 +114,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
+    val currentProgramDay = allProgress
+        .map { progress -> calculateCurrentDay(progress) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
+
     val exerciseDifficultyAdjustments = settingsManager.exerciseDifficultyAdjustmentsFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap()
     )
@@ -107,6 +134,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(ExerciseSubCategory.FULL_BODY)
     )
 
+    private val _postureSearchQuery = MutableStateFlow("")
+    val postureSearchQuery = _postureSearchQuery.asStateFlow()
+    private val _postureSelectedCategory = MutableStateFlow<ExerciseCategory?>(null)
+    private val _postureSelectedSubCategory = MutableStateFlow<ExerciseSubCategory?>(null)
+    private val debouncedPostureSearchQuery = _postureSearchQuery
+        .debounce(300)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
     val completedDaysCount = repository.getCompletedDaysCount().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 0
     )
@@ -121,6 +156,133 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _streak = MutableStateFlow(0)
     val streak: StateFlow<Int> = _streak
+
+    private val homeMetrics = combine(
+        currentProgramDay,
+        completedDaysCount,
+        completedPostureDaysCount,
+        streak
+    ) { currentDay, completedCount, completedPostureCount, streakCount ->
+        HomeMetrics(
+            currentDay = currentDay,
+            completedCount = completedCount,
+            completedPostureCount = completedPostureCount,
+            streak = streakCount
+        )
+    }
+
+    val homeUiState = combine(
+        homeMetrics,
+        additionalPostureTrainingEnabled,
+        flexibilityTrainingType,
+        flexibilityFocusAreas,
+        exerciseDifficultyAdjustments
+    ) { metrics, additionalPostureEnabled, trainingType, focusAreas, difficultyAdjustments ->
+        HomeUiState(
+            currentDay = metrics.currentDay,
+            workout = getWorkoutForDay(metrics.currentDay, difficultyAdjustments, trainingType, focusAreas),
+            completedCount = metrics.completedCount,
+            completedPostureCount = metrics.completedPostureCount,
+            streak = metrics.streak,
+            additionalPostureTrainingEnabled = additionalPostureEnabled,
+            flexibilityTrainingType = trainingType,
+            flexibilityFocusAreas = focusAreas
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        HomeUiState(
+            currentDay = 1,
+            workout = emptyWorkout,
+            completedCount = 0,
+            completedPostureCount = 0,
+            streak = 0,
+            additionalPostureTrainingEnabled = false,
+            flexibilityTrainingType = FlexibilityTrainingType.BOTH,
+            flexibilityFocusAreas = setOf(ExerciseSubCategory.FULL_BODY)
+        )
+    )
+
+    val workoutSessionUiState = combine(
+        currentWorkoutDay,
+        currentSessionMode,
+        exerciseDifficultyAdjustments,
+        flexibilityTrainingType,
+        flexibilityFocusAreas
+    ) { day, sessionMode, difficultyAdjustments, trainingType, focusAreas ->
+        if (day == null) {
+            WorkoutSessionUiState(
+                day = null,
+                workout = emptyWorkout,
+                warmupExercises = emptyList(),
+                isPostureMobilitySession = sessionMode == SessionMode.POSTURE_MOBILITY
+            )
+        } else {
+            WorkoutSessionUiState(
+                day = day,
+                workout = if (sessionMode == SessionMode.POSTURE_MOBILITY) {
+                    getPostureMobilityWorkout(day, difficultyAdjustments, trainingType, focusAreas)
+                } else {
+                    getWorkoutForDay(day, difficultyAdjustments, trainingType, focusAreas)
+                },
+                warmupExercises = if (sessionMode == SessionMode.POSTURE_MOBILITY) {
+                    emptyList()
+                } else {
+                    getWarmupExercises(difficultyAdjustments)
+                },
+                isPostureMobilitySession = sessionMode == SessionMode.POSTURE_MOBILITY
+            )
+        }
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        WorkoutSessionUiState(
+            day = null,
+            workout = emptyWorkout,
+            warmupExercises = emptyList(),
+            isPostureMobilitySession = false
+        )
+    )
+
+    val postureUiState = combine(
+        exerciseDifficultyAdjustments,
+        debouncedPostureSearchQuery,
+        _postureSelectedCategory,
+        _postureSelectedSubCategory
+    ) { difficultyAdjustments, debouncedQuery, selectedCategory, selectedSubCategory ->
+        val exercises = getExerciseLibrary(difficultyAdjustments)
+        val searchFilteredExercises = if (debouncedQuery.isBlank()) {
+            exercises
+        } else {
+            exercises.filter { matchesQuery(it, debouncedQuery) }
+        }
+        val availableSubCategories = searchFilteredExercises
+            .asSequence()
+            .filter { selectedCategory == null || it.category == selectedCategory }
+            .map { it.subCategory }
+            .distinct()
+            .toList()
+        val safeSelectedSubCategory = selectedSubCategory?.takeIf { it in availableSubCategories }
+        val filteredExercises = searchFilteredExercises.filter { exercise ->
+            (selectedCategory == null || exercise.category == selectedCategory) &&
+                (safeSelectedSubCategory == null || exercise.subCategory == safeSelectedSubCategory)
+        }
+        PostureUiState(
+            selectedCategory = selectedCategory,
+            selectedSubCategory = safeSelectedSubCategory,
+            availableSubCategories = availableSubCategories,
+            filteredExercises = filteredExercises
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        PostureUiState(
+            selectedCategory = null,
+            selectedSubCategory = null,
+            availableSubCategories = emptyList(),
+            filteredExercises = emptyList()
+        )
+    )
 
     init {
         viewModelScope.launch {
@@ -172,6 +334,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value
     ) = workoutGenerator.getWarmupExercises().map {
         enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+    }
+
+    fun findExerciseById(
+        exerciseId: String,
+        day: Int,
+        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
+        trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
+        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value
+    ): Exercise? {
+        if (exerciseId.isBlank()) return null
+        val resolvedDay = day.takeIf { it in 1..56 } ?: currentProgramDay.value
+
+        return getWorkoutForDay(resolvedDay, difficultyAdjustments, trainingType, focusAreas).exercises.find { it.id == exerciseId }
+            ?: getPostureMobilityWorkout(resolvedDay, difficultyAdjustments, trainingType, focusAreas).exercises.find { it.id == exerciseId }
+            ?: getWarmupExercises(difficultyAdjustments).find { it.id == exerciseId }
+            ?: getExerciseLibrary(difficultyAdjustments).find { it.id == exerciseId }
+            ?: getPostureExercises(difficultyAdjustments).find { it.id == exerciseId }
     }
 
     fun getExerciseDifficultyAdjustment(exerciseId: String): Flow<Int> {
@@ -349,13 +528,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun getCurrentDay(): Int {
-        val progress = allProgress.value
-        val completedDays = progress.filter { it.isCompleted }.map { it.day }.toSet()
-        for (i in 1..56) {
-            if (i !in completedDays) return i
-        }
-        return 56
+        return calculateCurrentDay(allProgress.value)
     }
+
+    fun getWorkoutTypeForDay(day: Int) = workoutGenerator.getWorkoutType(day)
 
     fun setNotificationTime(hour: Int, minute: Int) {
         viewModelScope.launch {
@@ -412,6 +588,134 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    val nutritionWeight = settingsManager.nutritionWeightFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
+    )
+
+    fun setNutritionWeight(weight: String) {
+        viewModelScope.launch {
+            settingsManager.setNutritionWeight(weight)
+        }
+    }
+
+    val nutritionHeight = settingsManager.nutritionHeightFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
+    )
+
+    fun setNutritionHeight(height: String) {
+        viewModelScope.launch {
+            settingsManager.setNutritionHeight(height)
+        }
+    }
+
+    val completedNutritionMeals = settingsManager.completedNutritionMealsFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
+    )
+
+    val nutritionPlanDays = settingsManager.nutritionPlanDaysFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), 3
+    )
+
+    val nutritionExcludedFoods = settingsManager.nutritionExcludedFoodsFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
+    )
+
+    val nutritionExclusionOptions: List<NutritionIngredient> = nutritionExclusionIngredients
+
+    private val _nutritionPlanSeed = MutableStateFlow(0)
+    val nutritionPlanSeed: StateFlow<Int> = _nutritionPlanSeed.asStateFlow()
+
+    private val _nutritionMealReplacements = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    val nutritionPlan: StateFlow<NutritionPlan> = combine(
+        currentProgramDay,
+        nutritionWeight,
+        nutritionHeight,
+        nutritionPlanDays,
+        nutritionExcludedFoods,
+        _nutritionPlanSeed,
+        _nutritionMealReplacements
+    ) { values ->
+        val currentDay = values[0] as Int
+        val weight = values[1] as String
+        val height = values[2] as String
+        val planDays = values[3] as Int
+        @Suppress("UNCHECKED_CAST")
+        val excludedFoods = values[4] as Set<String>
+        val planSeed = values[5] as Int
+        @Suppress("UNCHECKED_CAST")
+        val replacements = values[6] as Map<String, String>
+        generateNutritionPlan(
+            seed = planSeed,
+            startDay = currentDay,
+            daysCount = planDays,
+            weightKg = weight.toIntOrNull(),
+            heightCm = height.toIntOrNull(),
+            excludedIngredientKeys = excludedFoods,
+            replacements = replacements,
+            workoutTypeForDay = ::getWorkoutTypeForDay
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        generateNutritionPlan(seed = 0, daysCount = 3, weightKg = null)
+    )
+
+    val currentNutritionTargets = combine(
+        nutritionWeight,
+        nutritionHeight,
+        nutritionPlan
+    ) { weight, height, plan ->
+        calculateMuscleGainNutritionTargets(
+            weightKg = weight.toIntOrNull(),
+            heightCm = height.toIntOrNull(),
+            dayType = plan.days.firstOrNull()?.dayType ?: NutritionDayType.TRAINING
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        calculateMuscleGainNutritionTargets(weightKg = null, heightCm = null)
+    )
+
+    fun regenerateNutritionPlan() {
+        _nutritionMealReplacements.value = emptyMap()
+        _nutritionPlanSeed.value += 1
+    }
+
+    fun setNutritionPlanDays(days: Int) {
+        viewModelScope.launch {
+            settingsManager.setNutritionPlanDays(days)
+        }
+        _nutritionMealReplacements.value = emptyMap()
+    }
+
+    fun toggleNutritionExcludedFood(foodKey: String) {
+        viewModelScope.launch {
+            val current = nutritionExcludedFoods.value
+            val next = if (foodKey in current) current - foodKey else current + foodKey
+            settingsManager.setNutritionExcludedFoods(next)
+        }
+    }
+
+    fun setNutritionMealCompleted(mealType: NutritionMealType, completed: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setNutritionMealCompleted(mealType.key, completed)
+        }
+    }
+
+    fun replaceNutritionMeal(programDay: Int, mealType: NutritionMealType) {
+        val dayPlan = nutritionPlan.value.days.firstOrNull { it.programDay == programDay } ?: return
+        val meal = dayPlan.meals.firstOrNull { it.type == mealType } ?: return
+        val replacementId = findReplacementMealTemplateId(
+            meal = meal,
+            excludedIngredientKeys = nutritionExcludedFoods.value
+        ) ?: return
+
+        _nutritionMealReplacements.value = _nutritionMealReplacements.value.toMutableMap().apply {
+            this[nutritionReplacementKey(programDay, mealType)] = replacementId
+        }
+    }
+
     fun toggleFlexibilityFocusArea(focusArea: ExerciseSubCategory) {
         if (focusArea !in flexibilityFocusAreaOptions) return
 
@@ -429,6 +733,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setPostureSearchQuery(query: String) {
+        _postureSearchQuery.value = query
+    }
+
+    fun setPostureSelectedCategory(category: ExerciseCategory?) {
+        _postureSelectedCategory.value = category
+        _postureSelectedSubCategory.value = null
+    }
+
+    fun setPostureSelectedSubCategory(subCategory: ExerciseSubCategory?) {
+        _postureSelectedSubCategory.value = subCategory
+    }
+
+    fun clearPostureFilters() {
+        _postureSelectedCategory.value = null
+        _postureSelectedSubCategory.value = null
+    }
+
     fun getDifficultyLevelLabel(adjustment: Int): Int {
         return when (adjustment.coerceIn(-2, 2)) {
             -2 -> com.monkfitness.app.R.string.difficulty_very_easy
@@ -437,6 +759,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             2 -> com.monkfitness.app.R.string.difficulty_very_hard
             else -> com.monkfitness.app.R.string.difficulty_normal
         }
+    }
+
+    private fun calculateCurrentDay(progress: List<UserProgress>): Int {
+        val completedDays = progress.filter { it.isCompleted }.map { it.day }.toSet()
+        for (i in 1..56) {
+            if (i !in completedDays) return i
+        }
+        return 56
     }
 
     private val toneG = ToneGenerator(AudioManager.STREAM_ALARM, 100)
@@ -460,13 +790,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun getExercisesForStep(step: WorkoutStep): List<Exercise> {
-        val day = _currentWorkoutDay.value ?: return emptyList()
+        val sessionState = workoutSessionUiState.value
         return when (step) {
-            WorkoutStep.WARMUP -> getWarmupExercises()
-            WorkoutStep.MAIN -> when (_currentSessionMode.value) {
-                SessionMode.POSTURE_MOBILITY -> getPostureMobilityWorkout(day).exercises
-                SessionMode.DAILY -> getWorkoutForDay(day).exercises
-            }
+            WorkoutStep.WARMUP -> sessionState.warmupExercises
+            WorkoutStep.MAIN -> sessionState.workout.exercises
             else -> emptyList()
         }
     }
