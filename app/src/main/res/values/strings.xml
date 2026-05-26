@@ -26,6 +26,14 @@
     <string name="workout_frequency_subtitle">Distinct training days recorded each week</string>
     <string name="workout_frequency_dataset">Training days</string>
     <string name="personal_records_highlights">Personal record highlights</string>
+    <string name="body_weight_title">Body Weight</string>
+    <string name="body_weight_latest_subtitle">%1$s kg · %2$s</string>
+    <string name="body_weight_not_logged_yet">Not logged yet</string>
+    <string name="body_weight_input_label">Weight (kg)</string>
+    <string name="body_weight_chart_placeholder">Log at least two entries to see your weight trend.</string>
+    <string name="body_weight_chart_dataset">Body weight</string>
+    <string name="body_weight_validation_error">Enter a body weight between 30 and 300 kg.</string>
+    <string name="log">Log</string>
     <string name="no_volume_history_yet">Complete workout sets to unlock volume history.</string>
     <string name="no_workout_frequency_yet">Finish workouts on different days to see your weekly frequency.</string>
     <string name="no_personal_records_yet">Personal records will appear here after you log sets.</string>

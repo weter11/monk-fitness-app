@@ -26,6 +26,14 @@
     <string name="workout_frequency_subtitle">Количество разных тренировочных дней по неделям</string>
     <string name="workout_frequency_dataset">Дни тренировок</string>
     <string name="personal_records_highlights">Подборка личных рекордов</string>
+    <string name="body_weight_title">Вес тела</string>
+    <string name="body_weight_latest_subtitle">%1$s кг · %2$s</string>
+    <string name="body_weight_not_logged_yet">Пока не записано</string>
+    <string name="body_weight_input_label">Вес (кг)</string>
+    <string name="body_weight_chart_placeholder">Запишите как минимум два значения, чтобы увидеть динамику веса.</string>
+    <string name="body_weight_chart_dataset">Вес тела</string>
+    <string name="body_weight_validation_error">Введите вес тела от 30 до 300 кг.</string>
+    <string name="log">Записать</string>
     <string name="no_volume_history_yet">Завершите подходы, чтобы увидеть историю объема.</string>
     <string name="no_workout_frequency_yet">Потренируйтесь в разные дни, чтобы увидеть недельную частоту.</string>
     <string name="no_personal_records_yet">Личные рекорды появятся здесь после записи подходов.</string>

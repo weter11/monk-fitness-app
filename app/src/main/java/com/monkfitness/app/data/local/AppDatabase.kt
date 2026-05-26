@@ -6,11 +6,16 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.monkfitness.app.data.model.BodyWeightEntry
 import com.monkfitness.app.data.model.PostureSessionProgress
 import com.monkfitness.app.data.model.SetLog
 import com.monkfitness.app.data.model.UserProgress
 
-@Database(entities = [UserProgress::class, PostureSessionProgress::class, SetLog::class], version = 3, exportSchema = false)
+@Database(
+    entities = [UserProgress::class, PostureSessionProgress::class, SetLog::class, BodyWeightEntry::class],
+    version = 4,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun progressDao(): ProgressDao
 
@@ -51,6 +56,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `body_weight_log` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `weightKg` REAL NOT NULL,
+                        `date` TEXT NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS `index_body_weight_log_date`
+                    ON `body_weight_log` (`date`)
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -58,7 +83,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "monk_fitness_db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                 INSTANCE = instance
                 instance
