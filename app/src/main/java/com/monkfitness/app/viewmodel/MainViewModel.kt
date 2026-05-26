@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.monkfitness.app.data.local.AppDatabase
 import com.monkfitness.app.data.local.SettingsManager
+import com.monkfitness.app.data.model.BodyWeightEntry
 import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.data.model.SetLog
 import com.monkfitness.app.data.model.UserProgress
@@ -23,6 +24,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
@@ -45,9 +47,11 @@ import com.monkfitness.app.ui.screens.WorkoutStep
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -167,6 +171,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
+    val bodyWeightHistory = repository.getBodyWeightEntriesSince(
+        LocalDate.now().minusDays(89).toString()
+    ).stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+
+    val latestBodyWeight = bodyWeightHistory
+        .map { history -> history.lastOrNull() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     val postureProgress = repository.getAllPostureProgress().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
@@ -177,6 +191,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _streak = MutableStateFlow(0)
     val streak: StateFlow<Int> = _streak
+    private val _bodyWeightErrorEvents = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val bodyWeightErrorEvents = _bodyWeightErrorEvents.asSharedFlow()
 
     private val homeMetrics = combine(
         currentProgramDay,
@@ -409,6 +425,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getExerciseVolumeHistory(exerciseId: String): Flow<List<VolumeHistoryPoint>> {
         return repository.getExerciseVolumeHistory(exerciseId)
+    }
+
+    fun logBodyWeight(kg: Float) {
+        if (!kg.isFinite() || kg !in 30f..300f) {
+            _bodyWeightErrorEvents.tryEmit(getApplication<Application>().getString(R.string.body_weight_validation_error))
+            return
+        }
+
+        viewModelScope.launch {
+            repository.insertBodyWeightEntry(
+                BodyWeightEntry(
+                    weightKg = kg,
+                    date = currentSessionDate()
+                )
+            )
+        }
     }
 
     fun adjustExerciseDifficulty(exerciseId: String, delta: Int) {

@@ -1,6 +1,7 @@
 package com.monkfitness.app.data.local
 
 import androidx.room.*
+import com.monkfitness.app.data.model.BodyWeightEntry
 import com.monkfitness.app.data.model.PostureSessionProgress
 import com.monkfitness.app.data.model.SetLog
 import com.monkfitness.app.data.model.UserProgress
@@ -27,6 +28,27 @@ interface ProgressDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSetLog(setLog: SetLog)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEntry(entry: BodyWeightEntry)
+
+    @Query(
+        """
+        SELECT * FROM body_weight_log
+        WHERE date >= :cutoff
+        ORDER BY date ASC
+        """
+    )
+    fun getEntriesSince(cutoff: String): Flow<List<BodyWeightEntry>>
+
+    @Query(
+        """
+        SELECT * FROM body_weight_log
+        ORDER BY date DESC
+        LIMIT 1
+        """
+    )
+    suspend fun getLatestEntry(): BodyWeightEntry?
 
     @Query(
         """

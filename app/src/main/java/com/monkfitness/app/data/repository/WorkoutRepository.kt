@@ -1,6 +1,7 @@
 package com.monkfitness.app.data.repository
 
 import com.monkfitness.app.data.local.ProgressDao
+import com.monkfitness.app.data.model.BodyWeightEntry
 import com.monkfitness.app.data.model.PostureSessionProgress
 import com.monkfitness.app.data.model.SetLog
 import com.monkfitness.app.data.model.UserProgress
@@ -24,6 +25,9 @@ class WorkoutRepository(private val progressDao: ProgressDao) {
         .catch { emit(emptyList()) }
 
     fun getWorkoutFrequencyByWeek(): Flow<List<WorkoutFrequencyPoint>> = progressDao.getWorkoutFrequencyByWeek()
+        .catch { emit(emptyList()) }
+
+    fun getBodyWeightEntriesSince(cutoff: String): Flow<List<BodyWeightEntry>> = progressDao.getEntriesSince(cutoff)
         .catch { emit(emptyList()) }
 
     fun getAllPostureProgress(): Flow<List<PostureSessionProgress>> = progressDao.getAllPostureProgress()
@@ -50,6 +54,12 @@ class WorkoutRepository(private val progressDao: ProgressDao) {
         // Log error
     }
 
+    suspend fun insertBodyWeightEntry(entry: BodyWeightEntry) = try {
+        progressDao.insertEntry(entry)
+    } catch (e: Exception) {
+        // Log error
+    }
+
     suspend fun deleteLatestSetLogForExerciseOnDate(exerciseId: String, sessionDate: String) = try {
         progressDao.deleteLatestSetLogForExerciseOnDate(exerciseId, sessionDate)
     } catch (e: Exception) {
@@ -58,6 +68,12 @@ class WorkoutRepository(private val progressDao: ProgressDao) {
 
     suspend fun getPostureProgressByDay(day: Int): PostureSessionProgress? = try {
         progressDao.getPostureProgressByDay(day)
+    } catch (e: Exception) {
+        null
+    }
+
+    suspend fun getLatestBodyWeightEntry(): BodyWeightEntry? = try {
+        progressDao.getLatestEntry()
     } catch (e: Exception) {
         null
     }
