@@ -25,11 +25,6 @@ import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.skeletonAnimation
-import com.airbnb.lottie.compose.LottieAnimation
-import com.airbnb.lottie.compose.LottieCompositionSpec
-import com.airbnb.lottie.compose.LottieConstants
-import com.airbnb.lottie.compose.animateLottieCompositionAsState
-import com.airbnb.lottie.compose.rememberLottieComposition
 
 @Composable
 fun MonkButton(
@@ -78,28 +73,6 @@ private fun ExerciseVisualContent(
             animation = skeletonAnimation,
             modifier = modifier.padding(imagePadding)
         )
-    } else if (exercise.lottieRes != null) {
-        val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(exercise.lottieRes))
-        val progress by animateLottieCompositionAsState(
-            composition = composition,
-            isPlaying = composition != null,
-            iterations = LottieConstants.IterateForever
-        )
-
-        if (composition != null) {
-            LottieAnimation(
-                composition = composition,
-                progress = { progress },
-                modifier = modifier.padding(imagePadding)
-            )
-        } else {
-            androidx.compose.foundation.Image(
-                painter = painterResource(exercise.imageRes ?: R.drawable.ic_exercise_placeholder),
-                contentDescription = null,
-                modifier = modifier.padding(imagePadding),
-                contentScale = contentScale
-            )
-        }
     } else {
         androidx.compose.foundation.Image(
             painter = painterResource(exercise.imageRes ?: R.drawable.ic_exercise_placeholder),

@@ -163,7 +163,8 @@ fun SettingsScreen(
                 title = stringResource(R.string.equipment_selection),
                 options = Equipment.entries.filterNot { it == Equipment.NONE },
                 selectedOptions = userPreferences.availableEquipment,
-                onToggle = viewModel::toggleAvailableEquipment
+                onToggle = viewModel::toggleAvailableEquipment,
+                onClear = viewModel::clearAvailableEquipment
             )
 
             FoodExclusionsSelector(
@@ -233,7 +234,8 @@ private fun MultiSelectEquipmentSelector(
     title: String,
     options: List<Equipment>,
     selectedOptions: Set<Equipment>,
-    onToggle: (Equipment) -> Unit
+    onToggle: (Equipment) -> Unit,
+    onClear: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(text = title, style = MaterialTheme.typography.titleMedium)
@@ -241,6 +243,11 @@ private fun MultiSelectEquipmentSelector(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            FilterChip(
+                selected = selectedOptions.isEmpty(),
+                onClick = onClear,
+                label = { Text(stringResource(R.string.equipment_all_available)) }
+            )
             options.forEach { option ->
                 FilterChip(
                     selected = option in selectedOptions,

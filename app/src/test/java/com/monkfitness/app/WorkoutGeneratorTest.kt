@@ -7,6 +7,7 @@ import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.model.applyDifficultyAdjustment
+import com.monkfitness.app.data.model.hasAnimatedVariant
 import com.monkfitness.app.data.model.WorkoutType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -298,6 +299,14 @@ class WorkoutGeneratorTest {
     }
 
     @Test
+    fun testExerciseLibraryShowsAllExercisesWhenEquipmentFilterIsCleared() {
+        assertEquals(
+            generator.getExerciseLibrary().map { it.id }.toSet(),
+            generator.getExerciseLibrary(availableEquipment = emptySet()).map { it.id }.toSet()
+        )
+    }
+
+    @Test
     fun testExerciseAvailabilityRequiresAllSelectedEquipment() {
         val exercise = Exercise(
             id = "combo",
@@ -315,8 +324,8 @@ class WorkoutGeneratorTest {
     }
 
     @Test
-    fun testWarmupExercisesExposeLottieWhenConfigured() {
-        val animatedWarmups = generator.getWarmupExercises().filter { it.lottieRes != null }
+    fun testWarmupExercisesExposeAnimatedVariants() {
+        val animatedWarmups = generator.getWarmupExercises().filter { it.hasAnimatedVariant() }
 
         assertTrue(animatedWarmups.isNotEmpty())
         assertTrue(animatedWarmups.all { it.imageRes != null })

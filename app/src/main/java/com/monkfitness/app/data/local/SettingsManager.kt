@@ -305,9 +305,11 @@ class SettingsManager(private val context: Context) {
     }
 
     private fun normalizeAvailableEquipment(equipment: Set<Equipment>): Set<Equipment> {
-        return equipment
-            .filter { it != Equipment.NONE }
-            .toSet() + Equipment.NONE
+        return when {
+            equipment.isEmpty() -> emptySet()
+            equipment == setOf(Equipment.NONE) -> setOf(Equipment.NONE)
+            else -> equipment.filter { it != Equipment.NONE }.toSet()
+        }
     }
 
     private fun currentNutritionTrackingDate(): String = LocalDate.now().toString()

@@ -80,6 +80,7 @@
     <string name="flexibility_type_both">Both</string>
     <string name="equipment_selection">Available equipment</string>
     <string name="equipment_selection_desc">Select the equipment you have. Bodyweight exercises stay available automatically.</string>
+    <string name="equipment_all_available">All equipment available</string>
     <string name="equipment_none">Bodyweight only</string>
     <string name="equipment_bar">Bar</string>
     <string name="equipment_bands">Bands</string>
