@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,6 +39,7 @@ fun PostureScreen(
     viewModel: MainViewModel,
     onExerciseClick: (Exercise) -> Unit
 ) {
+    val localContext = LocalContext.current
     val uiState by viewModel.postureUiState.collectAsState()
     val searchQuery by viewModel.postureSearchQuery.collectAsState()
     var isFilterSheetVisible by rememberSaveable { mutableStateOf(false) }
@@ -109,12 +111,14 @@ fun PostureScreen(
             onDismissRequest = { isFilterSheetVisible = false },
             sheetState = filterSheetState
         ) {
-            PostureFiltersSheet(
-                uiState = uiState,
-                onCategorySelected = viewModel::setPostureSelectedCategory,
-                onSubCategorySelected = viewModel::setPostureSelectedSubCategory,
-                onClearFilters = viewModel::clearPostureFilters
-            )
+            CompositionLocalProvider(LocalContext provides localContext) {
+                PostureFiltersSheet(
+                    uiState = uiState,
+                    onCategorySelected = viewModel::setPostureSelectedCategory,
+                    onSubCategorySelected = viewModel::setPostureSelectedSubCategory,
+                    onClearFilters = viewModel::clearPostureFilters
+                )
+            }
         }
     }
 }
