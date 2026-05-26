@@ -151,6 +151,20 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
                 leftLegBend = 0.04f,
                 rightLegBend = 0.04f
             )),
+            frame(0.5f, uprightPose(
+                head = xy(0.50f, 0.31f),
+                neck = xy(0.50f, 0.40f),
+                sternum = xy(0.50f, 0.50f),
+                spineMid = xy(0.50f, 0.57f),
+                spineLow = xy(0.50f, 0.65f),
+                pelvis = xy(0.50f, 0.72f),
+                leftHand = xy(0.37f, 0.67f),
+                rightHand = xy(0.63f, 0.67f),
+                leftToe = xy(0.26f, 0.92f),
+                rightToe = xy(0.74f, 0.92f),
+                leftLegBend = 0.18f,
+                rightLegBend = 0.18f
+            )),
             frame(1f, uprightPose(
                 head = xy(0.50f, 0.23f),
                 neck = xy(0.50f, 0.32f),
@@ -230,6 +244,22 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
                 rightArmBend = 0.03f,
                 leftLegBend = 0.04f,
                 rightLegBend = 0.04f
+            )),
+            frame(0.5f, pronePose(
+                head = xy(0.29f, 0.47f),
+                neck = xy(0.37f, 0.53f),
+                sternum = xy(0.44f, 0.56f),
+                spineMid = xy(0.53f, 0.57f),
+                spineLow = xy(0.61f, 0.57f),
+                pelvis = xy(0.66f, 0.57f),
+                leftHand = xy(0.24f, 0.81f),
+                rightHand = xy(0.40f, 0.81f),
+                leftToe = xy(0.83f, 0.82f),
+                rightToe = xy(0.76f, 0.66f),
+                leftArmBend = 0.03f,
+                rightArmBend = 0.03f,
+                leftLegBend = 0.04f,
+                rightLegBend = 0.10f
             )),
             frame(1f, pronePose(
                 head = xy(0.30f, 0.48f),
@@ -390,6 +420,22 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
                 rightArmBend = 0.06f,
                 leftLegBend = 0.05f,
                 rightLegBend = 0.05f
+            )),
+            frame(0.5f, uprightPose(
+                head = xy(0.48f, 0.36f),
+                neck = xy(0.49f, 0.43f),
+                sternum = xy(0.50f, 0.50f),
+                spineMid = xy(0.51f, 0.57f),
+                spineLow = xy(0.52f, 0.64f),
+                pelvis = xy(0.52f, 0.72f),
+                leftHand = xy(0.36f, 0.78f),
+                rightHand = xy(0.64f, 0.78f),
+                leftToe = xy(0.36f, 0.92f),
+                rightToe = xy(0.68f, 0.92f),
+                leftArmBend = 0.05f,
+                rightArmBend = 0.05f,
+                leftLegBend = 0.10f,
+                rightLegBend = 0.10f
             )),
             frame(1f, uprightPose(
                 head = xy(0.52f, 0.24f),
