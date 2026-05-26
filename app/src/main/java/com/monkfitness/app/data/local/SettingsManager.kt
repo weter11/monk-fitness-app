@@ -26,6 +26,7 @@ class SettingsManager(private val context: Context) {
 
     companion object {
         private const val EXERCISE_DIFFICULTY_PREFIX = "exercise_difficulty_"
+        private const val EXERCISE_PERSONAL_RECORD_PREFIX = "exercise_personal_record_"
         val LANGUAGE_KEY = stringPreferencesKey("language")
         val NOTIFICATION_HOUR = intPreferencesKey("notification_hour")
         val NOTIFICATION_MINUTE = intPreferencesKey("notification_minute")
@@ -228,6 +229,18 @@ class SettingsManager(private val context: Context) {
             .toMap()
     }
 
+    val exercisePersonalRecordsFlow: Flow<Map<String, Int>> = context.dataStore.data.map { preferences ->
+        preferences.asMap()
+            .mapNotNull { (key, value) ->
+                if (!key.name.startsWith(EXERCISE_PERSONAL_RECORD_PREFIX) || value !is Int) {
+                    null
+                } else {
+                    key.name.removePrefix(EXERCISE_PERSONAL_RECORD_PREFIX) to value.coerceAtLeast(0)
+                }
+            }
+            .toMap()
+    }
+
     fun getExerciseDifficultyAdjustmentFlow(exerciseId: String): Flow<Int> {
         val key = intPreferencesKey("$EXERCISE_DIFFICULTY_PREFIX$exerciseId")
         return context.dataStore.data.map { preferences ->
@@ -239,6 +252,20 @@ class SettingsManager(private val context: Context) {
         val key = intPreferencesKey("$EXERCISE_DIFFICULTY_PREFIX$exerciseId")
         context.dataStore.edit { preferences ->
             preferences[key] = adjustment.coerceIn(-2, 2)
+        }
+    }
+
+    fun getExercisePersonalRecordFlow(exerciseId: String): Flow<Int> {
+        val key = intPreferencesKey("$EXERCISE_PERSONAL_RECORD_PREFIX$exerciseId")
+        return context.dataStore.data.map { preferences ->
+            (preferences[key] ?: 0).coerceAtLeast(0)
+        }
+    }
+
+    suspend fun setExercisePersonalRecord(exerciseId: String, recordValue: Int) {
+        val key = intPreferencesKey("$EXERCISE_PERSONAL_RECORD_PREFIX$exerciseId")
+        context.dataStore.edit { preferences ->
+            preferences[key] = recordValue.coerceAtLeast(0)
         }
     }
 

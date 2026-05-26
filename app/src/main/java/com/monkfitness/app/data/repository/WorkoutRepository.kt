@@ -2,10 +2,12 @@ package com.monkfitness.app.data.repository
 
 import com.monkfitness.app.data.local.ProgressDao
 import com.monkfitness.app.data.model.PostureSessionProgress
+import com.monkfitness.app.data.model.SetLog
 import com.monkfitness.app.data.model.UserProgress
+import com.monkfitness.app.data.model.VolumeHistoryPoint
+import com.monkfitness.app.data.model.WorkoutFrequencyPoint
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.flowOf
 
 class WorkoutRepository(private val progressDao: ProgressDao) {
 
@@ -14,6 +16,15 @@ class WorkoutRepository(private val progressDao: ProgressDao) {
 
     fun getCompletedDaysCount(): Flow<Int> = progressDao.getCompletedDaysCount()
         .catch { emit(0) }
+
+    fun getDailyVolumeHistory(): Flow<List<VolumeHistoryPoint>> = progressDao.getDailyVolumeHistory()
+        .catch { emit(emptyList()) }
+
+    fun getExerciseVolumeHistory(exerciseId: String): Flow<List<VolumeHistoryPoint>> = progressDao.getExerciseVolumeHistory(exerciseId)
+        .catch { emit(emptyList()) }
+
+    fun getWorkoutFrequencyByWeek(): Flow<List<WorkoutFrequencyPoint>> = progressDao.getWorkoutFrequencyByWeek()
+        .catch { emit(emptyList()) }
 
     fun getAllPostureProgress(): Flow<List<PostureSessionProgress>> = progressDao.getAllPostureProgress()
         .catch { emit(emptyList()) }
@@ -29,6 +40,18 @@ class WorkoutRepository(private val progressDao: ProgressDao) {
 
     suspend fun updateProgress(progress: UserProgress) = try {
         progressDao.updateProgress(progress)
+    } catch (e: Exception) {
+        // Log error
+    }
+
+    suspend fun insertSetLog(setLog: SetLog) = try {
+        progressDao.insertSetLog(setLog)
+    } catch (e: Exception) {
+        // Log error
+    }
+
+    suspend fun deleteLatestSetLogForExerciseOnDate(exerciseId: String, sessionDate: String) = try {
+        progressDao.deleteLatestSetLogForExerciseOnDate(exerciseId, sessionDate)
     } catch (e: Exception) {
         // Log error
     }
