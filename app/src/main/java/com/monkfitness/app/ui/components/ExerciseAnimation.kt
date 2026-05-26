@@ -51,8 +51,8 @@ fun ExerciseAnimatedVisual(
 
     Canvas(modifier = modifier.fillMaxSize()) {
         val pose = animation.poseAt(progress).toCanvas(size)
-        val torsoCenter = midpoint(pose[Joint.STERNUM], pose[Joint.PELVIS])
-        val footSpan = distance(pose[Joint.L_TOE], pose[Joint.R_TOE]).coerceAtLeast(size.minDimension * 0.14f)
+        val torsoCenter = midpoint(pose.getValue(Joint.STERNUM), pose.getValue(Joint.PELVIS))
+        val footSpan = distance(pose.getValue(Joint.L_TOE), pose.getValue(Joint.R_TOE)).coerceAtLeast(size.minDimension * 0.14f)
 
         drawCircle(
             color = secondary.copy(alpha = 0.08f),
@@ -77,39 +77,39 @@ private fun DrawScope.drawSkeleton(
     val scale = size.minDimension
     val torso = buildOrganicLimbPath(
         points = listOf(
-            pose[Joint.NECK],
-            pose[Joint.STERNUM],
-            pose[Joint.SPINE_MID],
-            pose[Joint.SPINE_LOW],
-            pose[Joint.PELVIS]
+            pose.getValue(Joint.NECK),
+            pose.getValue(Joint.STERNUM),
+            pose.getValue(Joint.SPINE_MID),
+            pose.getValue(Joint.SPINE_LOW),
+            pose.getValue(Joint.PELVIS)
         ),
         radii = listOf(scale * 0.04f, scale * 0.055f, scale * 0.06f, scale * 0.055f, scale * 0.05f)
     )
     val leftArm = buildOrganicLimbPath(
-        points = listOf(pose[Joint.L_SHOULDER], pose[Joint.L_ELBOW], pose[Joint.L_WRIST], pose[Joint.L_HAND]),
+        points = listOf(pose.getValue(Joint.L_SHOULDER), pose.getValue(Joint.L_ELBOW), pose.getValue(Joint.L_WRIST), pose.getValue(Joint.L_HAND)),
         radii = listOf(scale * 0.034f, scale * 0.028f, scale * 0.02f, scale * 0.014f)
     )
     val rightArm = buildOrganicLimbPath(
-        points = listOf(pose[Joint.R_SHOULDER], pose[Joint.R_ELBOW], pose[Joint.R_WRIST], pose[Joint.R_HAND]),
+        points = listOf(pose.getValue(Joint.R_SHOULDER), pose.getValue(Joint.R_ELBOW), pose.getValue(Joint.R_WRIST), pose.getValue(Joint.R_HAND)),
         radii = listOf(scale * 0.032f, scale * 0.027f, scale * 0.02f, scale * 0.014f)
     )
     val leftLeg = buildOrganicLimbPath(
-        points = listOf(pose[Joint.L_HIP], pose[Joint.L_KNEE], pose[Joint.L_ANKLE], pose[Joint.L_TOE]),
+        points = listOf(pose.getValue(Joint.L_HIP), pose.getValue(Joint.L_KNEE), pose.getValue(Joint.L_ANKLE), pose.getValue(Joint.L_TOE)),
         radii = listOf(scale * 0.04f, scale * 0.03f, scale * 0.02f, scale * 0.012f)
     )
     val rightLeg = buildOrganicLimbPath(
-        points = listOf(pose[Joint.R_HIP], pose[Joint.R_KNEE], pose[Joint.R_ANKLE], pose[Joint.R_TOE]),
+        points = listOf(pose.getValue(Joint.R_HIP), pose.getValue(Joint.R_KNEE), pose.getValue(Joint.R_ANKLE), pose.getValue(Joint.R_TOE)),
         radii = listOf(scale * 0.038f, scale * 0.03f, scale * 0.02f, scale * 0.012f)
     )
     val shoulderBridge = buildOrganicLimbPath(
-        points = listOf(pose[Joint.L_SHOULDER], pose[Joint.STERNUM], pose[Joint.R_SHOULDER]),
+        points = listOf(pose.getValue(Joint.L_SHOULDER), pose.getValue(Joint.STERNUM), pose.getValue(Joint.R_SHOULDER)),
         radii = listOf(scale * 0.022f, scale * 0.03f, scale * 0.022f)
     )
     val hipBridge = buildOrganicLimbPath(
-        points = listOf(pose[Joint.L_HIP], pose[Joint.PELVIS], pose[Joint.R_HIP]),
+        points = listOf(pose.getValue(Joint.L_HIP), pose.getValue(Joint.PELVIS), pose.getValue(Joint.R_HIP)),
         radii = listOf(scale * 0.022f, scale * 0.03f, scale * 0.022f)
     )
-    val head = buildHeadPath(top = pose[Joint.HEAD], bottom = pose[Joint.NECK], width = scale * 0.11f)
+    val head = buildHeadPath(top = pose.getValue(Joint.HEAD), bottom = pose.getValue(Joint.NECK), width = scale * 0.11f)
 
     drawPath(rightLeg, fill.copy(alpha = 0.84f))
     drawPath(rightArm, fill.copy(alpha = 0.84f))
@@ -133,7 +133,7 @@ private fun DrawScope.drawOverlays(
     strokeWidth: Float
 ) {
     if (SkeletonOverlay.PULL_BAR in overlays) {
-        val barY = minOf(pose[Joint.L_HAND].y, pose[Joint.R_HAND].y)
+        val barY = minOf(pose.getValue(Joint.L_HAND).y, pose.getValue(Joint.R_HAND).y)
         drawLine(
             color = color.copy(alpha = 0.6f),
             start = Offset(size.width * 0.24f, barY),
@@ -145,17 +145,17 @@ private fun DrawScope.drawOverlays(
     if (SkeletonOverlay.HAND_CONNECTION in overlays) {
         drawLine(
             color = color.copy(alpha = 0.45f),
-            start = pose[Joint.L_HAND],
-            end = pose[Joint.R_HAND],
+            start = pose.getValue(Joint.L_HAND),
+            end = pose.getValue(Joint.R_HAND),
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round
         )
     }
     if (SkeletonOverlay.HEAD_ORBIT in overlays) {
-        val center = midpoint(pose[Joint.HEAD], pose[Joint.NECK])
+        val center = midpoint(pose.getValue(Joint.HEAD), pose.getValue(Joint.NECK))
         drawCircle(
             color = color.copy(alpha = 0.25f),
-            radius = distance(center, pose[Joint.HEAD]) + size.minDimension * 0.04f,
+            radius = distance(center, pose.getValue(Joint.HEAD)) + size.minDimension * 0.04f,
             center = center,
             style = Stroke(width = strokeWidth)
         )
@@ -167,7 +167,7 @@ private fun DrawScope.drawShadow(
     color: Color,
     footSpan: Float
 ) {
-    val center = midpoint(pose[Joint.PELVIS], midpoint(pose[Joint.L_TOE], pose[Joint.R_TOE])) + Offset(0f, size.height * 0.12f)
+    val center = midpoint(pose.getValue(Joint.PELVIS), midpoint(pose.getValue(Joint.L_TOE), pose.getValue(Joint.R_TOE))) + Offset(0f, size.height * 0.12f)
     drawPath(
         path = buildEllipsePath(
             center = center,
@@ -183,7 +183,7 @@ private fun DrawScope.drawGround(
     color: Color,
     strokeWidth: Float
 ) {
-    val groundY = max(pose[Joint.L_TOE].y, pose[Joint.R_TOE].y) + size.height * 0.02f
+    val groundY = max(pose.getValue(Joint.L_TOE).y, pose.getValue(Joint.R_TOE).y) + size.height * 0.02f
     drawLine(
         color = color,
         start = Offset(size.width * 0.12f, groundY),
