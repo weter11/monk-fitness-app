@@ -470,6 +470,9 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("horse_stance"),
         animation = animation(
+            1600,
+            true,
+            emptySet(),
             frame(0f, uprightPose(
                 head = xy(0.50f, 0.21f),
                 neck = xy(0.50f, 0.30f),
@@ -549,6 +552,9 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("jumping_jacks"),
         animation = animation(
+            1600,
+            true,
+            emptySet(),
             frame(0f, uprightPose(
                 head = xy(0.50f, 0.20f),
                 neck = xy(0.50f, 0.29f),
