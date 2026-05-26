@@ -93,7 +93,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("pushups", "decline_pushups", "diamond_pushups", "dips", "pike_pushups"),
         animation = animation(
-            1800,
+            2000,
             true,
             emptySet(),
             frame(0f, pronePose(
@@ -134,7 +134,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("squats", "lunges", "step_ups", "wall_sit", "deep_squat", "ankle_mobility", "hamstring_stretch", "calf_stretch"),
         animation = animation(
-            1600,
+            1800,
             true,
             emptySet(),
             frame(0f, uprightPose(
@@ -171,7 +171,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("pullups", "rows", "scapular_pullups", "hang"),
         animation = animation(
-            1900,
+            2200,
             false,
             setOf(SkeletonOverlay.PULL_BAR),
             frame(0f, uprightPose(
@@ -212,7 +212,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("plank", "mountain_climbers"),
         animation = animation(
-            1600,
+            1400,
             true,
             emptySet(),
             frame(0f, pronePose(
@@ -253,7 +253,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("glute_bridge"),
         animation = animation(
-            1600,
+            1800,
             true,
             emptySet(),
             frame(0f, supinePose(
@@ -290,7 +290,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("cat_cow", "bird_dog", "thoracic_rotations", "thoracic_extension"),
         animation = animation(
-            1600,
+            2400,
             true,
             emptySet(),
             frame(0f, quadrupedPose(
@@ -331,7 +331,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("cobra_stretch", "child_pose", "superman"),
         animation = animation(
-            1600,
+            1800,
             true,
             emptySet(),
             frame(0f, pronePose(
@@ -372,7 +372,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("world_greatest_stretch", "burpees", "kettlebell_swing"),
         animation = animation(
-            1600,
+            2000,
             true,
             emptySet(),
             frame(0f, uprightPose(
@@ -413,7 +413,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("face_pull", "wall_slides", "reverse_snow_angels", "band_pull_aparts", "shoulder_cars", "y_t_raises", "scapular_retraction_hold", "lat_stretch", "arm_circles"),
         animation = animation(
-            1600,
+            1400,
             true,
             setOf(SkeletonOverlay.HAND_CONNECTION),
             frame(0f, uprightPose(
