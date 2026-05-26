@@ -39,6 +39,14 @@
     <string name="posture_block">Блок осанки</string>
     <string name="next">Далее</string>
     <string name="previous">Назад</string>
+    <string name="complete_set">Отметить подход</string>
+    <string name="finish_exercise">Завершить упражнение</string>
+    <string name="undo_set">Отменить подход</string>
+    <string name="current_set_format">Подход %1$d из %2$d</string>
+    <string name="logged_sets_format">Отмечено подходов: %1$d/%2$d</string>
+    <string name="personal_record_reps">Личный рекорд: %1$d повторений</string>
+    <string name="personal_record_seconds">Личный рекорд: %1$d сек</string>
+    <string name="personal_record_target">Темп личного рекорда</string>
     <string name="finish">Завершить</string>
     <string name="workout_complete">Тренировка окончена!</string>
     <string name="workout_complete_desc">Отличная работа! Вы завершили сегодняшнюю тренировку.</string>

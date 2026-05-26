@@ -39,6 +39,14 @@
     <string name="posture_block">Posture Block</string>
     <string name="next">Next</string>
     <string name="previous">Previous</string>
+    <string name="complete_set">Complete Set</string>
+    <string name="finish_exercise">Finish Exercise</string>
+    <string name="undo_set">Undo Set</string>
+    <string name="current_set_format">Set %1$d of %2$d</string>
+    <string name="logged_sets_format">%1$d/%2$d sets logged</string>
+    <string name="personal_record_reps">Personal record: %1$d reps</string>
+    <string name="personal_record_seconds">Personal record: %1$d sec</string>
+    <string name="personal_record_target">Personal record pace</string>
     <string name="finish">Finish</string>
     <string name="workout_complete">Workout Complete!</string>
     <string name="workout_complete_desc">Great job! You have completed today\'s session.</string>

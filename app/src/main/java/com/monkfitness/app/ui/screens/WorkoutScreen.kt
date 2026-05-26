@@ -60,6 +60,7 @@ fun WorkoutScreen(
     val exerciseIndex by viewModel.exerciseIndex.collectAsState()
     val isRestTime by viewModel.isRestTime.collectAsState()
     val restTargetIndex by viewModel.restTargetIndex.collectAsState()
+    val completedExercises by viewModel.completedExercises.collectAsState()
 
     val sessionWarmupExercises = uiState.warmupExercises
     val isRestDay = uiState.workout.type == WorkoutType.REST || uiState.workout.exercises.isEmpty()
@@ -75,19 +76,21 @@ fun WorkoutScreen(
     val currentExercise by remember(currentExerciseList, exerciseIndex) {
         derivedStateOf { currentExerciseList.getOrNull(exerciseIndex) }
     }
-    val progress by remember(currentStep, exerciseIndex, sessionWarmupExercises, uiState.workout.exercises) {
+    val progress by remember(currentStep, completedExercises, sessionWarmupExercises, uiState.workout.exercises) {
         derivedStateOf {
-            val totalSteps = sessionWarmupExercises.size + uiState.workout.exercises.size
-            if (totalSteps <= 0) {
+            val sessionExercises = sessionWarmupExercises + uiState.workout.exercises
+            val totalSets = sessionExercises.sumOf { it.sets.coerceAtLeast(1) }
+            if (totalSets <= 0) {
                 0f
             } else {
-                val currentAbsoluteIndex = when (currentStep) {
-                    WorkoutStep.OVERVIEW -> 0
-                    WorkoutStep.WARMUP -> exerciseIndex
-                    WorkoutStep.MAIN -> sessionWarmupExercises.size + exerciseIndex
-                    WorkoutStep.COMPLETE -> totalSteps
+                val completedSets = sessionExercises.sumOf { exercise ->
+                    (completedExercises[exercise.id] ?: 0).coerceAtMost(exercise.sets.coerceAtLeast(1))
                 }
-                currentAbsoluteIndex.toFloat() / totalSteps
+                when (currentStep) {
+                    WorkoutStep.OVERVIEW -> 0f
+                    WorkoutStep.COMPLETE -> 1f
+                    else -> completedSets.toFloat() / totalSets
+                }
             }
         }
     }
@@ -332,8 +335,15 @@ fun ExerciseSession(
     val scrollState = rememberScrollState()
     val timeLeft by viewModel.timeLeft.collectAsState()
     val isTimerRunning by viewModel.isTimerRunning.collectAsState()
+    val completedExercises by viewModel.completedExercises.collectAsState()
 
     val difficultyAdjustment by viewModel.getExerciseDifficultyAdjustment(exercise.id).collectAsState(initial = 0)
+    val personalRecord by viewModel.getExercisePersonalRecord(exercise.id).collectAsState(initial = 0)
+    val totalSets = remember(exercise.sets) { exercise.sets.coerceAtLeast(1) }
+    val completedSetCount = (completedExercises[exercise.id] ?: 0).coerceAtMost(totalSets)
+    val currentSetNumber = (completedSetCount + 1).coerceAtMost(totalSets)
+    val recordTarget = if (exercise.isTimerBased) exercise.durationSeconds else exercise.maxReps.coerceAtLeast(exercise.reps)
+    val isNewRecordTarget = recordTarget > personalRecord
 
     LaunchedEffect(exercise.id, exercise.durationSeconds) {
         if (exercise.isTimerBased && !viewModel.isTimerRunning.value && viewModel.timeLeft.value == 0) {
@@ -396,6 +406,51 @@ fun ExerciseSession(
             color = MaterialTheme.colorScheme.secondary
         )
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.current_set_format, currentSetNumber, totalSets),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                LinearProgressIndicator(
+                    progress = { completedSetCount.toFloat() / totalSets },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = stringResource(R.string.logged_sets_format, completedSetCount, totalSets),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Text(
+                    text = if (exercise.isTimerBased) {
+                        stringResource(R.string.personal_record_seconds, personalRecord)
+                    } else {
+                        stringResource(R.string.personal_record_reps, personalRecord)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                if (isNewRecordTarget) {
+                    SuggestionChip(
+                        onClick = {},
+                        enabled = false,
+                        label = { Text(stringResource(R.string.personal_record_target)) }
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
 
         DifficultyAdjustmentCard(
@@ -452,10 +507,10 @@ fun ExerciseSession(
                 modifier = Modifier.height(56.dp).weight(1f),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text(stringResource(R.string.previous))
+                Text(stringResource(if (completedSetCount > 0) R.string.undo_set else R.string.previous))
             }
             MonkButton(
-                text = stringResource(R.string.next),
+                text = stringResource(if (completedSetCount + 1 >= totalSets) R.string.finish_exercise else R.string.complete_set),
                 onClick = onNext,
                 modifier = Modifier.weight(1f)
             )

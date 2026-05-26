@@ -90,7 +90,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _restTargetIndex = MutableStateFlow<Int?>(null)
     val restTargetIndex = _restTargetIndex.asStateFlow()
 
-    private val _completedExercises = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    private val _completedExercises = MutableStateFlow<Map<String, Int>>(emptyMap())
     val completedExercises = _completedExercises.asStateFlow()
 
     // Timer State
@@ -133,6 +133,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val userPreferences = settingsManager.userPreferencesFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), UserPreferences()
+    )
+
+    val exercisePersonalRecords = settingsManager.exercisePersonalRecordsFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap()
     )
 
     val flexibilityTrainingType = settingsManager.flexibilityTrainingTypeFlow.stateIn(
@@ -388,6 +392,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return settingsManager.getExerciseDifficultyAdjustmentFlow(exerciseId)
     }
 
+    fun getExercisePersonalRecord(exerciseId: String): Flow<Int> {
+        return settingsManager.getExercisePersonalRecordFlow(exerciseId)
+    }
+
     fun adjustExerciseDifficulty(exerciseId: String, delta: Int) {
         viewModelScope.launch {
             val current = exerciseDifficultyAdjustments.value[exerciseId] ?: 0
@@ -431,7 +439,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         currentExerciseList.getOrNull(_exerciseIndex.value)?.let { exercise ->
-            _completedExercises.value = _completedExercises.value + (exercise.id to true)
+            val totalSets = exercise.sets.coerceAtLeast(1)
+            val completedSets = ((_completedExercises.value[exercise.id] ?: 0) + 1).coerceAtMost(totalSets)
+            _completedExercises.value = _completedExercises.value + (exercise.id to completedSets)
+            updateExercisePersonalRecord(exercise)
+
+            if (completedSets < totalSets) {
+                _isRestTime.value = false
+                _restTargetIndex.value = null
+                if (exercise.isTimerBased) {
+                    resetTimer(exercise.durationSeconds)
+                } else {
+                    stopTimer()
+                    _timeLeft.value = 0
+                }
+                return
+            }
         }
 
         if (_exerciseIndex.value < currentExerciseList.size - 1) {
@@ -456,9 +479,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun previousExercise() {
         _isRestTime.value = false
         _restTargetIndex.value = null
+
+        val currentExercise = getExercisesForStep(_currentStep.value).getOrNull(_exerciseIndex.value)
+        if (currentExercise != null) {
+            val completedSets = _completedExercises.value[currentExercise.id] ?: 0
+            if (completedSets > 0) {
+                val updatedSets = completedSets - 1
+                _completedExercises.value = _completedExercises.value.toMutableMap().apply {
+                    if (updatedSets > 0) {
+                        put(currentExercise.id, updatedSets)
+                    } else {
+                        remove(currentExercise.id)
+                    }
+                }
+                if (currentExercise.isTimerBased) {
+                    resetTimer(currentExercise.durationSeconds)
+                } else {
+                    stopTimer()
+                    _timeLeft.value = 0
+                }
+                return
+            }
+        }
+
         if (_exerciseIndex.value > 0) {
             _exerciseIndex.value--
             stopTimer()
+            _timeLeft.value = 0
         } else {
             // Optionally handle going back to previous step, but for now just stay at index 0
         }
@@ -819,6 +866,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun playStartSound() {
         toneG.startTone(ToneGenerator.TONE_DTMF_0, 400)
+    }
+
+    private fun updateExercisePersonalRecord(exercise: Exercise) {
+        val recordValue = if (exercise.isTimerBased) {
+            exercise.durationSeconds
+        } else {
+            exercise.maxReps.coerceAtLeast(exercise.reps)
+        }
+
+        if (recordValue <= 0) return
+
+        viewModelScope.launch {
+            val currentRecord = exercisePersonalRecords.value[exercise.id] ?: 0
+            if (recordValue > currentRecord) {
+                settingsManager.setExercisePersonalRecord(exercise.id, recordValue)
+            }
+        }
     }
 
     private fun shouldStartRestFor(exercise: Exercise?): Boolean {
