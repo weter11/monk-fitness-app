@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.monkfitness.app.data.local.AppDatabase
 import com.monkfitness.app.data.local.SettingsManager
 import com.monkfitness.app.data.model.Equipment
+import com.monkfitness.app.data.model.SetLog
 import com.monkfitness.app.data.model.UserProgress
+import com.monkfitness.app.data.model.VolumeHistoryPoint
 import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.repository.WorkoutRepository
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
@@ -51,6 +53,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import java.util.Calendar
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -154,6 +157,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val completedDaysCount = repository.getCompletedDaysCount().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 0
+    )
+
+    val volumeHistory = repository.getDailyVolumeHistory().stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+
+    val workoutFrequencyHistory = repository.getWorkoutFrequencyByWeek().stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
     val postureProgress = repository.getAllPostureProgress().stateIn(
@@ -396,6 +407,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return settingsManager.getExercisePersonalRecordFlow(exerciseId)
     }
 
+    fun getExerciseVolumeHistory(exerciseId: String): Flow<List<VolumeHistoryPoint>> {
+        return repository.getExerciseVolumeHistory(exerciseId)
+    }
+
     fun adjustExerciseDifficulty(exerciseId: String, delta: Int) {
         viewModelScope.launch {
             val current = exerciseDifficultyAdjustments.value[exerciseId] ?: 0
@@ -442,6 +457,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val totalSets = exercise.sets.coerceAtLeast(1)
             val completedSets = ((_completedExercises.value[exercise.id] ?: 0) + 1).coerceAtMost(totalSets)
             _completedExercises.value = _completedExercises.value + (exercise.id to completedSets)
+            persistCompletedSet(exercise)
             updateExercisePersonalRecord(exercise)
 
             if (completedSets < totalSets) {
@@ -492,6 +508,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         remove(currentExercise.id)
                     }
                 }
+                rollbackCompletedSet(currentExercise.id)
                 if (currentExercise.isTimerBased) {
                     resetTimer(currentExercise.durationSeconds)
                 } else {
@@ -884,6 +901,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    private fun persistCompletedSet(exercise: Exercise) {
+        val now = System.currentTimeMillis()
+        val setLog = SetLog(
+            exerciseId = exercise.id,
+            repsCompleted = if (exercise.isTimerBased) 0 else exercise.maxReps.coerceAtLeast(exercise.reps).coerceAtLeast(0),
+            durationSeconds = if (exercise.isTimerBased) exercise.durationSeconds.coerceAtLeast(0) else 0,
+            timestamp = now,
+            sessionDate = currentSessionDate()
+        )
+
+        viewModelScope.launch {
+            repository.insertSetLog(setLog)
+        }
+    }
+
+    private fun rollbackCompletedSet(exerciseId: String) {
+        viewModelScope.launch {
+            repository.deleteLatestSetLogForExerciseOnDate(exerciseId, currentSessionDate())
+        }
+    }
+
+    private fun currentSessionDate(): String = LocalDate.now().toString()
 
     private fun shouldStartRestFor(exercise: Exercise?): Boolean {
         return exercise?.isTimerBased == true

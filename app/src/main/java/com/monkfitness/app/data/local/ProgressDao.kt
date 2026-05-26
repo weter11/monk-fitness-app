@@ -2,7 +2,10 @@ package com.monkfitness.app.data.local
 
 import androidx.room.*
 import com.monkfitness.app.data.model.PostureSessionProgress
+import com.monkfitness.app.data.model.SetLog
 import com.monkfitness.app.data.model.UserProgress
+import com.monkfitness.app.data.model.VolumeHistoryPoint
+import com.monkfitness.app.data.model.WorkoutFrequencyPoint
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -21,6 +24,54 @@ interface ProgressDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun updateProgress(progress: UserProgress)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSetLog(setLog: SetLog)
+
+    @Query(
+        """
+        DELETE FROM set_log
+        WHERE id = (
+            SELECT id FROM set_log
+            WHERE exerciseId = :exerciseId AND sessionDate = :sessionDate
+            ORDER BY timestamp DESC
+            LIMIT 1
+        )
+        """
+    )
+    suspend fun deleteLatestSetLogForExerciseOnDate(exerciseId: String, sessionDate: String)
+
+    @Query(
+        """
+        SELECT sessionDate, COALESCE(SUM(repsCompleted), 0) AS totalReps
+        FROM set_log
+        GROUP BY sessionDate
+        ORDER BY sessionDate ASC
+        """
+    )
+    fun getDailyVolumeHistory(): Flow<List<VolumeHistoryPoint>>
+
+    @Query(
+        """
+        SELECT sessionDate, COALESCE(SUM(repsCompleted), 0) AS totalReps
+        FROM set_log
+        WHERE exerciseId = :exerciseId
+        GROUP BY sessionDate
+        ORDER BY sessionDate ASC
+        """
+    )
+    fun getExerciseVolumeHistory(exerciseId: String): Flow<List<VolumeHistoryPoint>>
+
+    @Query(
+        """
+        SELECT strftime('%Y-W%W', sessionDate) AS weekLabel,
+               COUNT(DISTINCT sessionDate) AS sessionCount
+        FROM set_log
+        GROUP BY strftime('%Y-W%W', sessionDate)
+        ORDER BY MIN(sessionDate) ASC
+        """
+    )
+    fun getWorkoutFrequencyByWeek(): Flow<List<WorkoutFrequencyPoint>>
 
     @Query("SELECT * FROM posture_session_progress ORDER BY day ASC")
     fun getAllPostureProgress(): Flow<List<PostureSessionProgress>>

@@ -7,9 +7,10 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.monkfitness.app.data.model.PostureSessionProgress
+import com.monkfitness.app.data.model.SetLog
 import com.monkfitness.app.data.model.UserProgress
 
-@Database(entities = [UserProgress::class, PostureSessionProgress::class], version = 2, exportSchema = false)
+@Database(entities = [UserProgress::class, PostureSessionProgress::class, SetLog::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun progressDao(): ProgressDao
 
@@ -33,6 +34,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `set_log` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `exerciseId` TEXT NOT NULL,
+                        `repsCompleted` INTEGER NOT NULL,
+                        `durationSeconds` INTEGER NOT NULL,
+                        `timestamp` INTEGER NOT NULL,
+                        `sessionDate` TEXT NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -40,7 +58,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "monk_fitness_db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                 INSTANCE = instance
                 instance
