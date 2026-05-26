@@ -91,7 +91,7 @@ internal fun allExerciseSkeletonAnimations(): Set<SkeletonAnimation> = exerciseS
 
 private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMap {
     register(
-        ids = setOf("pushups", "decline_pushups", "diamond_pushups", "dips", "pike_pushups"),
+        ids = setOf("dips", "pike_pushups"),
         animation = animation(
             2000,
             true,
@@ -127,6 +127,177 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
                 rightArmBend = 0.03f,
                 leftLegBend = 0.03f,
                 rightLegBend = 0.03f
+            ))
+        )
+    )
+
+    register(
+        ids = setOf("pushups"),
+        animation = animation(
+            1900,
+            true,
+            emptySet(),
+            frame(0f, pronePose(
+                head = xy(0.24f, 0.40f),
+                neck = xy(0.32f, 0.48f),
+                sternum = xy(0.39f, 0.52f),
+                spineMid = xy(0.48f, 0.54f),
+                spineLow = xy(0.56f, 0.55f),
+                pelvis = xy(0.62f, 0.56f),
+                leftHand = xy(0.22f, 0.79f),
+                rightHand = xy(0.40f, 0.79f),
+                leftToe = xy(0.82f, 0.81f),
+                rightToe = xy(0.90f, 0.81f),
+                leftArmBend = 0.05f,
+                rightArmBend = 0.04f,
+                leftLegBend = 0.01f,
+                rightLegBend = 0.01f
+            )),
+            frame(0.5f, pronePose(
+                head = xy(0.24f, 0.50f),
+                neck = xy(0.32f, 0.58f),
+                sternum = xy(0.39f, 0.62f),
+                spineMid = xy(0.48f, 0.64f),
+                spineLow = xy(0.56f, 0.65f),
+                pelvis = xy(0.62f, 0.66f),
+                leftHand = xy(0.22f, 0.79f),
+                rightHand = xy(0.40f, 0.79f),
+                leftToe = xy(0.82f, 0.81f),
+                rightToe = xy(0.90f, 0.81f),
+                leftArmBend = 0.09f,
+                rightArmBend = 0.08f,
+                leftLegBend = 0.01f,
+                rightLegBend = 0.01f
+            )),
+            frame(1f, pronePose(
+                head = xy(0.24f, 0.60f),
+                neck = xy(0.32f, 0.68f),
+                sternum = xy(0.39f, 0.72f),
+                spineMid = xy(0.48f, 0.74f),
+                spineLow = xy(0.56f, 0.75f),
+                pelvis = xy(0.62f, 0.76f),
+                leftHand = xy(0.22f, 0.79f),
+                rightHand = xy(0.40f, 0.79f),
+                leftToe = xy(0.82f, 0.81f),
+                rightToe = xy(0.90f, 0.81f),
+                leftArmBend = 0.16f,
+                rightArmBend = 0.14f,
+                leftLegBend = 0.01f,
+                rightLegBend = 0.01f
+            ))
+        )
+    )
+
+    register(
+        ids = setOf("decline_pushups"),
+        animation = animation(
+            1900,
+            true,
+            emptySet(),
+            frame(0f, pronePose(
+                head = xy(0.23f, 0.72f),
+                neck = xy(0.31f, 0.65f),
+                sternum = xy(0.38f, 0.58f),
+                spineMid = xy(0.47f, 0.52f),
+                spineLow = xy(0.55f, 0.48f),
+                pelvis = xy(0.60f, 0.44f),
+                leftHand = xy(0.20f, 0.79f),
+                rightHand = xy(0.38f, 0.79f),
+                leftToe = xy(0.78f, 0.60f),
+                rightToe = xy(0.86f, 0.60f),
+                leftArmBend = 0.06f,
+                rightArmBend = 0.04f,
+                leftLegBend = 0.02f,
+                rightLegBend = 0.02f
+            )),
+            frame(0.5f, pronePose(
+                head = xy(0.23f, 0.81f),
+                neck = xy(0.31f, 0.74f),
+                sternum = xy(0.38f, 0.67f),
+                spineMid = xy(0.47f, 0.61f),
+                spineLow = xy(0.55f, 0.57f),
+                pelvis = xy(0.60f, 0.53f),
+                leftHand = xy(0.20f, 0.79f),
+                rightHand = xy(0.38f, 0.79f),
+                leftToe = xy(0.78f, 0.60f),
+                rightToe = xy(0.86f, 0.60f),
+                leftArmBend = 0.10f,
+                rightArmBend = 0.09f,
+                leftLegBend = 0.02f,
+                rightLegBend = 0.02f
+            )),
+            frame(1f, pronePose(
+                head = xy(0.23f, 0.84f),
+                neck = xy(0.31f, 0.82f),
+                sternum = xy(0.38f, 0.75f),
+                spineMid = xy(0.47f, 0.69f),
+                spineLow = xy(0.55f, 0.65f),
+                pelvis = xy(0.60f, 0.61f),
+                leftHand = xy(0.20f, 0.79f),
+                rightHand = xy(0.38f, 0.79f),
+                leftToe = xy(0.78f, 0.60f),
+                rightToe = xy(0.86f, 0.60f),
+                leftArmBend = 0.17f,
+                rightArmBend = 0.15f,
+                leftLegBend = 0.02f,
+                rightLegBend = 0.02f
+            ))
+        )
+    )
+
+    register(
+        ids = setOf("diamond_pushups"),
+        animation = animation(
+            1900,
+            true,
+            emptySet(),
+            frame(0f, pronePose(
+                head = xy(0.24f, 0.40f),
+                neck = xy(0.32f, 0.48f),
+                sternum = xy(0.39f, 0.52f),
+                spineMid = xy(0.48f, 0.54f),
+                spineLow = xy(0.56f, 0.55f),
+                pelvis = xy(0.62f, 0.56f),
+                leftHand = xy(0.31f, 0.79f),
+                rightHand = xy(0.44f, 0.79f),
+                leftToe = xy(0.82f, 0.81f),
+                rightToe = xy(0.90f, 0.81f),
+                leftArmBend = 0.05f,
+                rightArmBend = 0.04f,
+                leftLegBend = 0.01f,
+                rightLegBend = 0.01f
+            )),
+            frame(0.5f, pronePose(
+                head = xy(0.24f, 0.50f),
+                neck = xy(0.32f, 0.58f),
+                sternum = xy(0.39f, 0.62f),
+                spineMid = xy(0.48f, 0.64f),
+                spineLow = xy(0.56f, 0.65f),
+                pelvis = xy(0.62f, 0.66f),
+                leftHand = xy(0.31f, 0.79f),
+                rightHand = xy(0.44f, 0.79f),
+                leftToe = xy(0.82f, 0.81f),
+                rightToe = xy(0.90f, 0.81f),
+                leftArmBend = 0.11f,
+                rightArmBend = 0.10f,
+                leftLegBend = 0.01f,
+                rightLegBend = 0.01f
+            )),
+            frame(1f, pronePose(
+                head = xy(0.24f, 0.60f),
+                neck = xy(0.32f, 0.68f),
+                sternum = xy(0.39f, 0.72f),
+                spineMid = xy(0.48f, 0.74f),
+                spineLow = xy(0.56f, 0.75f),
+                pelvis = xy(0.62f, 0.76f),
+                leftHand = xy(0.31f, 0.79f),
+                rightHand = xy(0.44f, 0.79f),
+                leftToe = xy(0.82f, 0.81f),
+                rightToe = xy(0.90f, 0.81f),
+                leftArmBend = 0.19f,
+                rightArmBend = 0.17f,
+                leftLegBend = 0.01f,
+                rightLegBend = 0.01f
             ))
         )
     )
