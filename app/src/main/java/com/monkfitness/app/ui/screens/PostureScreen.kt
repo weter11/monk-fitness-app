@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,6 +42,12 @@ fun PostureScreen(
     val searchQuery by viewModel.postureSearchQuery.collectAsState()
     var isFilterSheetVisible by rememberSaveable { mutableStateOf(false) }
     val filterSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val listState = rememberLazyListState()
+    val activeFilterCount by remember(uiState.selectedCategory, uiState.selectedSubCategory) {
+        derivedStateOf {
+            listOf(uiState.selectedCategory, uiState.selectedSubCategory).count { it != null }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -67,10 +74,6 @@ fun PostureScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        val activeFilterCount = remember(uiState.selectedCategory, uiState.selectedSubCategory) {
-            listOf(uiState.selectedCategory, uiState.selectedSubCategory).count { it != null }
-        }
-
         ExerciseLibrarySearchBar(
             query = searchQuery,
             onQueryChange = viewModel::setPostureSearchQuery,
@@ -95,6 +98,7 @@ fun PostureScreen(
             PostureExerciseList(
                 exercises = uiState.filteredExercises,
                 onExerciseClick = onExerciseClick,
+                listState = listState,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -161,9 +165,11 @@ private fun ExerciseLibrarySearchBar(
 private fun PostureExerciseList(
     exercises: List<Exercise>,
     onExerciseClick: (Exercise) -> Unit,
+    listState: androidx.compose.foundation.lazy.LazyListState,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
+        state = listState,
         modifier = modifier,
         contentPadding = PaddingValues(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)

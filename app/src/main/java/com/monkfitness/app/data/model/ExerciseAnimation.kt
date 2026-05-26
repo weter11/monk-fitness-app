@@ -6,4 +6,4 @@ import com.monkfitness.app.ui.components.animation.exerciseSkeletonAnimation
 val Exercise.skeletonAnimation: SkeletonAnimation?
     get() = exerciseSkeletonAnimation(id)
 
-fun Exercise.hasAnimatedVariant(): Boolean = skeletonAnimation != null || lottieRes != null
+fun Exercise.hasAnimatedVariant(): Boolean = skeletonAnimation != null

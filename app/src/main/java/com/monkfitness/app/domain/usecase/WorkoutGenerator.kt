@@ -26,7 +26,7 @@ class WorkoutGenerator {
         baseRepExercise("diamond_pushups", R.string.ex_diamond_pushups, R.string.ex_diamond_pushups_desc, R.string.ex_diamond_pushups_tech, R.string.ex_diamond_pushups_steps, R.string.ex_diamond_pushups_mistakes, imageRes = R.drawable.push_up, sets = 3, baseMinReps = 5, baseMaxReps = 7, phase4MinReps = 8, phase4MaxReps = 12, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS),
         baseRepExercise("squats", R.string.ex_squats, R.string.ex_squats_desc, R.string.ex_squats_tech, R.string.ex_squats_steps, R.string.ex_squats_mistakes, imageRes = R.drawable.squat, sets = 3, baseMinReps = 12, baseMaxReps = 15, phase4MinReps = 18, phase4MaxReps = 25, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.LEGS),
         baseRepExercise("pullups", R.string.ex_pullups, R.string.ex_pullups_desc, R.string.ex_pullups_tech, R.string.ex_pullups_steps, R.string.ex_pullups_mistakes, imageRes = R.drawable.pull_up, sets = 3, baseMinReps = 3, baseMaxReps = 5, phase4MinReps = 6, phase4MaxReps = 10, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS, requiredEquipment = setOf(Equipment.BAR)),
-        baseTimerExercise("plank", R.string.ex_plank, R.string.ex_plank_desc, R.string.ex_plank_tech, R.string.ex_plank_steps, R.string.ex_plank_mistakes, imageRes = R.drawable.plank, lottieRes = R.raw.exercise_pulse, sets = 3, baseDurationSeconds = 30, phase4DurationSeconds = 75, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.CORE),
+        baseTimerExercise("plank", R.string.ex_plank, R.string.ex_plank_desc, R.string.ex_plank_tech, R.string.ex_plank_steps, R.string.ex_plank_mistakes, imageRes = R.drawable.plank, sets = 3, baseDurationSeconds = 30, phase4DurationSeconds = 75, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.CORE),
         baseRepExercise("dips", R.string.ex_dips, R.string.ex_dips_desc, R.string.ex_dips_tech, R.string.ex_dips_steps, R.string.ex_dips_mistakes, imageRes = R.drawable.push_up, sets = 3, baseMinReps = 5, baseMaxReps = 7, phase4MinReps = 8, phase4MaxReps = 12, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS, requiredEquipment = setOf(Equipment.BAR)),
         baseRepExercise("lunges", R.string.ex_lunges, R.string.ex_lunges_desc, R.string.ex_lunges_tech, R.string.ex_lunges_steps, R.string.ex_lunges_mistakes, imageRes = R.drawable.lunges, sets = 3, baseMinReps = 8, baseMaxReps = 10, phase4MinReps = 14, phase4MaxReps = 20, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.LEGS),
         baseRepExercise("step_ups", R.string.ex_step_ups, R.string.ex_step_ups_desc, R.string.ex_step_ups_tech, R.string.ex_step_ups_steps, R.string.ex_step_ups_mistakes, imageRes = R.drawable.lunges, sets = 3, baseMinReps = 8, baseMaxReps = 10, phase4MinReps = 14, phase4MaxReps = 20, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.LEGS),
@@ -65,11 +65,11 @@ class WorkoutGenerator {
         baseTimerExercise("calf_stretch", R.string.ex_calf_stretch, R.string.ex_calf_stretch_desc, R.string.ex_calf_stretch_tech, R.string.ex_calf_stretch_steps, R.string.ex_calf_stretch_mistakes, sets = 2, baseDurationSeconds = 30, phase4DurationSeconds = 60, category = ExerciseCategory.STRETCHING, subCategory = ExerciseSubCategory.LEGS),
         baseTimerExercise("lat_stretch", R.string.ex_lat_stretch, R.string.ex_lat_stretch_desc, R.string.ex_lat_stretch_tech, R.string.ex_lat_stretch_steps, R.string.ex_lat_stretch_mistakes, sets = 2, baseDurationSeconds = 30, phase4DurationSeconds = 60, category = ExerciseCategory.STRETCHING, subCategory = ExerciseSubCategory.SHOULDERS),
         baseTimerExercise("piriformis_stretch", R.string.ex_piriformis_stretch, R.string.ex_piriformis_stretch_desc, R.string.ex_piriformis_stretch_tech, R.string.ex_piriformis_stretch_steps, R.string.ex_piriformis_stretch_mistakes, sets = 2, baseDurationSeconds = 30, phase4DurationSeconds = 60, category = ExerciseCategory.STRETCHING, subCategory = ExerciseSubCategory.HIPS),
-        baseTimerExercise("neck_circles", R.string.ex_neck_circles, R.string.ex_neck_circles, R.string.ex_neck_circles, imageRes = R.drawable.ic_exercise_placeholder, lottieRes = R.raw.exercise_pulse, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SPINE),
-        baseTimerExercise("arm_circles", R.string.ex_arm_circles, R.string.ex_arm_circles, R.string.ex_arm_circles, imageRes = R.drawable.ic_exercise_placeholder, lottieRes = R.raw.exercise_pulse, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SHOULDERS),
-        baseTimerExercise("hip_circles", R.string.ex_hip_circles, R.string.ex_hip_circles, R.string.ex_hip_circles, imageRes = R.drawable.ic_exercise_placeholder, lottieRes = R.raw.exercise_pulse, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.HIPS),
-        baseTimerExercise("leg_swings", R.string.ex_leg_swings, R.string.ex_leg_swings, R.string.ex_leg_swings, imageRes = R.drawable.ic_exercise_placeholder, lottieRes = R.raw.exercise_pulse, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.LEGS),
-        baseTimerExercise("jumping_jacks", R.string.ex_jumping_jacks, R.string.ex_jumping_jacks, R.string.ex_jumping_jacks, imageRes = R.drawable.ic_exercise_placeholder, lottieRes = R.raw.exercise_pulse, sets = 1, baseDurationSeconds = 30, phase4DurationSeconds = 75, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.FULL_BODY)
+        baseTimerExercise("neck_circles", R.string.ex_neck_circles, R.string.ex_neck_circles, R.string.ex_neck_circles, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SPINE),
+        baseTimerExercise("arm_circles", R.string.ex_arm_circles, R.string.ex_arm_circles, R.string.ex_arm_circles, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SHOULDERS),
+        baseTimerExercise("hip_circles", R.string.ex_hip_circles, R.string.ex_hip_circles, R.string.ex_hip_circles, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.HIPS),
+        baseTimerExercise("leg_swings", R.string.ex_leg_swings, R.string.ex_leg_swings, R.string.ex_leg_swings, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.LEGS),
+        baseTimerExercise("jumping_jacks", R.string.ex_jumping_jacks, R.string.ex_jumping_jacks, R.string.ex_jumping_jacks, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 30, phase4DurationSeconds = 75, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.FULL_BODY)
     )
 
     private val exercisesById = allExercises.associateBy { it.id }
@@ -91,7 +91,7 @@ class WorkoutGenerator {
         day: Int,
         flexibilityTrainingType: FlexibilityTrainingType = FlexibilityTrainingType.BOTH,
         focusAreas: Set<ExerciseSubCategory> = setOf(ExerciseSubCategory.FULL_BODY),
-        availableEquipment: Set<Equipment> = Equipment.entries.toSet()
+        availableEquipment: Set<Equipment> = emptySet()
     ): Workout {
         val safeDay = if (day in 1..56) day else 1
         val week = ((safeDay - 1) / 7) + 1
@@ -109,7 +109,7 @@ class WorkoutGenerator {
         day: Int,
         flexibilityTrainingType: FlexibilityTrainingType = FlexibilityTrainingType.BOTH,
         focusAreas: Set<ExerciseSubCategory> = setOf(ExerciseSubCategory.FULL_BODY),
-        availableEquipment: Set<Equipment> = Equipment.entries.toSet()
+        availableEquipment: Set<Equipment> = emptySet()
     ): Workout {
         val safeDay = if (day in 1..56) day else 1
         val week = ((safeDay - 1) / 7) + 1
@@ -431,7 +431,6 @@ class WorkoutGenerator {
         stepsRes: Int = 0,
         mistakesRes: Int = 0,
         imageRes: Int? = null,
-        lottieRes: Int? = null,
         sets: Int,
         baseMinReps: Int,
         baseMaxReps: Int,
@@ -450,7 +449,6 @@ class WorkoutGenerator {
             stepsRes = stepsRes,
             mistakesRes = mistakesRes,
             imageRes = imageRes,
-            lottieRes = lottieRes,
             sets = sets,
             reps = currentMaxReps,
             minReps = baseMinReps,
@@ -477,7 +475,6 @@ class WorkoutGenerator {
         stepsRes: Int = 0,
         mistakesRes: Int = 0,
         imageRes: Int? = null,
-        lottieRes: Int? = null,
         sets: Int,
         baseDurationSeconds: Int,
         phase4DurationSeconds: Int,
@@ -493,7 +490,6 @@ class WorkoutGenerator {
             stepsRes = stepsRes,
             mistakesRes = mistakesRes,
             imageRes = imageRes,
-            lottieRes = lottieRes,
             sets = sets,
             reps = 1,
             minReps = 0,
@@ -517,7 +513,7 @@ class WorkoutGenerator {
     }
 
     fun getExerciseLibrary(
-        availableEquipment: Set<Equipment> = Equipment.entries.toSet()
+        availableEquipment: Set<Equipment> = emptySet()
     ): List<Exercise> {
         val normalizedEquipment = normalizeAvailableEquipment(availableEquipment)
         return allExercises.filter { it.isAccessibleWith(normalizedEquipment) }
@@ -647,9 +643,11 @@ class WorkoutGenerator {
     }
 
     private fun normalizeAvailableEquipment(availableEquipment: Set<Equipment>): Set<Equipment> {
-        return availableEquipment
-            .filter { it != Equipment.NONE }
-            .toSet() + Equipment.NONE
+        return when {
+            availableEquipment.isEmpty() -> emptySet()
+            availableEquipment == setOf(Equipment.NONE) -> setOf(Equipment.NONE)
+            else -> availableEquipment.filter { it != Equipment.NONE }.toSet()
+        }
     }
 
     private fun normalizeRequiredEquipment(requiredEquipment: Set<Equipment>): Set<Equipment> {
@@ -663,8 +661,12 @@ class WorkoutGenerator {
     }
 
     internal fun Exercise.isAccessibleWith(availableEquipment: Set<Equipment>): Boolean {
-        val normalizedAvailableEquipment = normalizeAvailableEquipment(availableEquipment) - Equipment.NONE
-        return normalizeRequiredEquipment(requiredEquipment).all { it in normalizedAvailableEquipment }
+        val normalizedAvailableEquipment = normalizeAvailableEquipment(availableEquipment)
+        return when {
+            normalizedAvailableEquipment.isEmpty() -> true
+            normalizedAvailableEquipment == setOf(Equipment.NONE) -> normalizeRequiredEquipment(requiredEquipment).isEmpty()
+            else -> normalizeRequiredEquipment(requiredEquipment).all { it in normalizedAvailableEquipment }
+        }
     }
 
     fun getPostureExercises(): List<Exercise> {

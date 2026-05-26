@@ -131,7 +131,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     val availableEquipment = settingsManager.availableEquipmentFlow.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(Equipment.NONE)
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
     )
 
     val userPreferences = settingsManager.userPreferencesFlow.stateIn(
@@ -686,11 +686,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleAvailableEquipment(equipment: Equipment) {
         if (equipment == Equipment.NONE) return
 
-        val current = availableEquipment.value - Equipment.NONE
+        val current = availableEquipment.value
         val next = if (equipment in current) current - equipment else current + equipment
 
         viewModelScope.launch {
             settingsManager.setAvailableEquipment(next)
+        }
+    }
+
+    fun clearAvailableEquipment() {
+        viewModelScope.launch {
+            settingsManager.setAvailableEquipment(emptySet())
         }
     }
 

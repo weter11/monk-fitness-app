@@ -80,6 +80,7 @@
     <string name="flexibility_type_both">Оба режима</string>
     <string name="equipment_selection">Доступное оборудование</string>
     <string name="equipment_selection_desc">Выберите оборудование, которое у вас есть. Упражнения с весом тела остаются доступными всегда.</string>
+    <string name="equipment_all_available">Все оборудование доступно</string>
     <string name="equipment_none">Без оборудования</string>
     <string name="equipment_bar">Турник</string>
     <string name="equipment_bands">Резинки</string>

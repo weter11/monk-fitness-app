@@ -1,7 +1,6 @@
 package com.monkfitness.app.data.model
 
 import androidx.annotation.DrawableRes
-import androidx.annotation.RawRes
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import com.monkfitness.app.R
@@ -67,7 +66,6 @@ data class Exercise(
     @StringRes val stepsRes: Int = 0,
     @StringRes val mistakesRes: Int = 0,
     @DrawableRes val imageRes: Int?,
-    @RawRes val lottieRes: Int? = null,
     val sets: Int,
     val reps: Int,
     val minReps: Int = reps,
