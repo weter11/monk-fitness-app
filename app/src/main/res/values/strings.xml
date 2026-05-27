@@ -557,7 +557,7 @@
     <string name="nutrition_generate_from_products">Generate from available products</string>
     <string name="nutrition_generate">Generate</string>
     <string name="nutrition_available_products_hint">Select ingredients you have and the cycle length.</string>
-    <string name="nutrition_today_desc_cycle">Today&apos;s meals always come from your active meal cycle. Future cycles stay pending until the current cycle ends.</string>
+    <string name="nutrition_today_desc_cycle">Today\'s meals always come from your active meal cycle. Future cycles stay pending until the current cycle ends.</string>
     <string name="nutrition_shopping_list_desc_cycle">Shopping list for the active meal cycle.</string>
     <string name="nutrition_not_enough_protein_sources">Not enough protein sources</string>
     <string name="nutrition_not_enough_carbs">Add more carbs</string>
