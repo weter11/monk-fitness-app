@@ -91,9 +91,9 @@ internal fun allExerciseSkeletonAnimations(): Set<SkeletonAnimation> = exerciseS
 
 private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMap {
     register(
-        ids = setOf("pushups", "decline_pushups", "diamond_pushups", "dips", "pike_pushups"),
+        ids = setOf("dips", "pike_pushups"),
         animation = animation(
-            1800,
+            2000,
             true,
             emptySet(),
             frame(0f, pronePose(
@@ -132,9 +132,132 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     )
 
     register(
+        ids = setOf("pushups"),
+        animation = animation(
+            1900,
+            true,
+            emptySet(),
+            frame(0f, pronePose(
+                head = xy(0.26f, 0.36f),
+                neck = xy(0.33f, 0.43f),
+                sternum = xy(0.39f, 0.47f),
+                spineMid = xy(0.48f, 0.49f),
+                spineLow = xy(0.56f, 0.50f),
+                pelvis = xy(0.62f, 0.51f),
+                leftHand = xy(0.20f, 0.74f),
+                rightHand = xy(0.42f, 0.74f),
+                leftToe = xy(0.80f, 0.77f),
+                rightToe = xy(0.88f, 0.77f),
+                leftArmBend = 0.04f,
+                rightArmBend = 0.03f,
+                leftLegBend = 0.02f,
+                rightLegBend = 0.02f
+            )),
+            frame(1f, pronePose(
+                head = xy(0.26f, 0.51f),
+                neck = xy(0.33f, 0.58f),
+                sternum = xy(0.39f, 0.62f),
+                spineMid = xy(0.48f, 0.64f),
+                spineLow = xy(0.56f, 0.65f),
+                pelvis = xy(0.62f, 0.66f),
+                leftHand = xy(0.20f, 0.74f),
+                rightHand = xy(0.42f, 0.74f),
+                leftToe = xy(0.80f, 0.77f),
+                rightToe = xy(0.88f, 0.77f),
+                leftArmBend = 0.18f,
+                rightArmBend = 0.16f,
+                leftLegBend = 0.02f,
+                rightLegBend = 0.02f
+            ))
+        )
+    )
+
+    register(
+        ids = setOf("decline_pushups"),
+        animation = animation(
+            1900,
+            true,
+            emptySet(),
+            frame(0f, pronePose(
+                head = xy(0.26f, 0.55f),
+                neck = xy(0.33f, 0.50f),
+                sternum = xy(0.39f, 0.46f),
+                spineMid = xy(0.48f, 0.43f),
+                spineLow = xy(0.56f, 0.40f),
+                pelvis = xy(0.62f, 0.38f),
+                leftHand = xy(0.20f, 0.74f),
+                rightHand = xy(0.42f, 0.74f),
+                leftToe = xy(0.80f, 0.52f),
+                rightToe = xy(0.88f, 0.52f),
+                leftArmBend = 0.04f,
+                rightArmBend = 0.03f,
+                leftLegBend = 0.02f,
+                rightLegBend = 0.02f
+            )),
+            frame(1f, pronePose(
+                head = xy(0.26f, 0.69f),
+                neck = xy(0.33f, 0.64f),
+                sternum = xy(0.39f, 0.60f),
+                spineMid = xy(0.48f, 0.57f),
+                spineLow = xy(0.56f, 0.54f),
+                pelvis = xy(0.62f, 0.52f),
+                leftHand = xy(0.20f, 0.74f),
+                rightHand = xy(0.42f, 0.74f),
+                leftToe = xy(0.80f, 0.52f),
+                rightToe = xy(0.88f, 0.52f),
+                leftArmBend = 0.17f,
+                rightArmBend = 0.15f,
+                leftLegBend = 0.02f,
+                rightLegBend = 0.02f
+            ))
+        )
+    )
+
+    register(
+        ids = setOf("diamond_pushups"),
+        animation = animation(
+            1900,
+            true,
+            emptySet(),
+            frame(0f, pronePose(
+                head = xy(0.26f, 0.36f),
+                neck = xy(0.33f, 0.43f),
+                sternum = xy(0.39f, 0.47f),
+                spineMid = xy(0.48f, 0.49f),
+                spineLow = xy(0.56f, 0.50f),
+                pelvis = xy(0.62f, 0.51f),
+                leftHand = xy(0.30f, 0.74f),
+                rightHand = xy(0.44f, 0.74f),
+                leftToe = xy(0.80f, 0.77f),
+                rightToe = xy(0.88f, 0.77f),
+                leftArmBend = 0.04f,
+                rightArmBend = 0.03f,
+                leftLegBend = 0.02f,
+                rightLegBend = 0.02f
+            )),
+            frame(1f, pronePose(
+                head = xy(0.26f, 0.51f),
+                neck = xy(0.33f, 0.58f),
+                sternum = xy(0.39f, 0.62f),
+                spineMid = xy(0.48f, 0.64f),
+                spineLow = xy(0.56f, 0.65f),
+                pelvis = xy(0.62f, 0.66f),
+                leftHand = xy(0.30f, 0.74f),
+                rightHand = xy(0.44f, 0.74f),
+                leftToe = xy(0.80f, 0.77f),
+                rightToe = xy(0.88f, 0.77f),
+                leftArmBend = 0.22f,
+                rightArmBend = 0.20f,
+                leftLegBend = 0.02f,
+                rightLegBend = 0.02f
+            ))
+        )
+    )
+
+    register(
         ids = setOf("squats", "lunges", "step_ups", "wall_sit", "deep_squat", "ankle_mobility", "hamstring_stretch", "calf_stretch"),
         animation = animation(
-            1600,
+            1800,
             true,
             emptySet(),
             frame(0f, uprightPose(
@@ -150,6 +273,20 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
                 rightToe = xy(0.63f, 0.92f),
                 leftLegBend = 0.04f,
                 rightLegBend = 0.04f
+            )),
+            frame(0.5f, uprightPose(
+                head = xy(0.50f, 0.31f),
+                neck = xy(0.50f, 0.40f),
+                sternum = xy(0.50f, 0.50f),
+                spineMid = xy(0.50f, 0.57f),
+                spineLow = xy(0.50f, 0.65f),
+                pelvis = xy(0.50f, 0.72f),
+                leftHand = xy(0.37f, 0.67f),
+                rightHand = xy(0.63f, 0.67f),
+                leftToe = xy(0.26f, 0.92f),
+                rightToe = xy(0.74f, 0.92f),
+                leftLegBend = 0.18f,
+                rightLegBend = 0.18f
             )),
             frame(1f, uprightPose(
                 head = xy(0.50f, 0.23f),
@@ -171,7 +308,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("pullups", "rows", "scapular_pullups", "hang"),
         animation = animation(
-            1900,
+            2200,
             false,
             setOf(SkeletonOverlay.PULL_BAR),
             frame(0f, uprightPose(
@@ -212,7 +349,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("plank", "mountain_climbers"),
         animation = animation(
-            1600,
+            1400,
             true,
             emptySet(),
             frame(0f, pronePose(
@@ -230,6 +367,22 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
                 rightArmBend = 0.03f,
                 leftLegBend = 0.04f,
                 rightLegBend = 0.04f
+            )),
+            frame(0.5f, pronePose(
+                head = xy(0.29f, 0.47f),
+                neck = xy(0.37f, 0.53f),
+                sternum = xy(0.44f, 0.56f),
+                spineMid = xy(0.53f, 0.57f),
+                spineLow = xy(0.61f, 0.57f),
+                pelvis = xy(0.66f, 0.57f),
+                leftHand = xy(0.24f, 0.81f),
+                rightHand = xy(0.40f, 0.81f),
+                leftToe = xy(0.83f, 0.82f),
+                rightToe = xy(0.76f, 0.66f),
+                leftArmBend = 0.03f,
+                rightArmBend = 0.03f,
+                leftLegBend = 0.04f,
+                rightLegBend = 0.10f
             )),
             frame(1f, pronePose(
                 head = xy(0.30f, 0.48f),
@@ -270,6 +423,20 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
                 leftLegBend = 0.12f,
                 rightLegBend = 0.12f
             )),
+            frame(0.5f, supinePose(
+                head = xy(0.22f, 0.63f),
+                neck = xy(0.30f, 0.62f),
+                sternum = xy(0.37f, 0.56f),
+                spineMid = xy(0.45f, 0.52f),
+                spineLow = xy(0.52f, 0.48f),
+                pelvis = xy(0.57f, 0.44f),
+                leftHand = xy(0.22f, 0.82f),
+                rightHand = xy(0.36f, 0.82f),
+                leftToe = xy(0.69f, 0.84f),
+                rightToe = xy(0.81f, 0.84f),
+                leftLegBend = 0.06f,
+                rightLegBend = 0.06f
+            )),
             frame(1f, supinePose(
                 head = xy(0.22f, 0.63f),
                 neck = xy(0.30f, 0.62f),
@@ -290,7 +457,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("cat_cow", "bird_dog", "thoracic_rotations", "thoracic_extension"),
         animation = animation(
-            1600,
+            1800,
             true,
             emptySet(),
             frame(0f, quadrupedPose(
@@ -331,7 +498,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("cobra_stretch", "child_pose", "superman"),
         animation = animation(
-            1600,
+            2400,
             true,
             emptySet(),
             frame(0f, pronePose(
@@ -390,6 +557,22 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
                 rightArmBend = 0.06f,
                 leftLegBend = 0.05f,
                 rightLegBend = 0.05f
+            )),
+            frame(0.5f, uprightPose(
+                head = xy(0.48f, 0.36f),
+                neck = xy(0.49f, 0.43f),
+                sternum = xy(0.50f, 0.50f),
+                spineMid = xy(0.51f, 0.57f),
+                spineLow = xy(0.52f, 0.64f),
+                pelvis = xy(0.52f, 0.72f),
+                leftHand = xy(0.36f, 0.78f),
+                rightHand = xy(0.64f, 0.78f),
+                leftToe = xy(0.36f, 0.92f),
+                rightToe = xy(0.68f, 0.92f),
+                leftArmBend = 0.05f,
+                rightArmBend = 0.05f,
+                leftLegBend = 0.10f,
+                rightLegBend = 0.10f
             )),
             frame(1f, uprightPose(
                 head = xy(0.52f, 0.24f),
@@ -454,7 +637,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("hip_flexor_stretch", "hip_cars", "ninety_ninety_hips", "piriformis_stretch", "hip_circles", "leg_swings"),
         animation = animation(
-            1600,
+            1800,
             true,
             emptySet(),
             frame(0f, uprightPose(
@@ -491,7 +674,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("horse_stance"),
         animation = animation(
-            1600,
+            2000,
             true,
             emptySet(),
             frame(0f, uprightPose(
@@ -573,7 +756,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     register(
         ids = setOf("jumping_jacks"),
         animation = animation(
-            1600,
+            1400,
             true,
             emptySet(),
             frame(0f, uprightPose(

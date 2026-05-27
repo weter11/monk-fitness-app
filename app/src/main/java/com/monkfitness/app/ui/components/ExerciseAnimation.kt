@@ -75,6 +75,7 @@ private fun DrawScope.drawSkeleton(
     strokeWidth: Float
 ) {
     val scale = size.minDimension
+    val torsoCenter = midpoint(pose.getValue(Joint.STERNUM), pose.getValue(Joint.PELVIS))
     val torso = buildOrganicLimbPath(
         points = listOf(
             pose.getValue(Joint.NECK),
@@ -111,8 +112,9 @@ private fun DrawScope.drawSkeleton(
     )
     val head = buildHeadPath(top = pose.getValue(Joint.HEAD), bottom = pose.getValue(Joint.NECK), width = scale * 0.11f)
 
-    drawPath(rightLeg, fill.copy(alpha = 0.84f))
-    drawPath(rightArm, fill.copy(alpha = 0.84f))
+    drawCircle(color = fill.copy(alpha = 0.07f), radius = scale * 0.17f, center = torsoCenter)
+    drawPath(rightLeg, fill.copy(alpha = 0.70f))
+    drawPath(rightArm, fill.copy(alpha = 0.70f))
     drawPath(torso, fill)
     drawPath(shoulderBridge, fill)
     drawPath(hipBridge, fill)
