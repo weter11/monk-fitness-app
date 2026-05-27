@@ -76,7 +76,8 @@ data class NutritionMeal(
     val ingredients: List<NutritionIngredientAmount>,
     val calories: Int,
     val proteinGrams: Int,
-    val optional: Boolean = false
+    val optional: Boolean = false,
+    val cycleId: Long = 0
 )
 
 data class NutritionDayPlan(
@@ -93,11 +94,13 @@ data class NutritionDayPlan(
 
 data class NutritionShoppingListItem(
     val ingredient: NutritionIngredient,
-    val totalAmount: Int
+    val totalAmount: Int,
+    val cycleId: Long = 0
 )
 
 data class NutritionPlan(
-    val days: List<NutritionDayPlan>
+    val days: List<NutritionDayPlan>,
+    val cycleId: Long = 0
 ) {
     val shoppingList: Map<NutritionShoppingGroup, List<NutritionShoppingListItem>>
         get() = days
@@ -108,7 +111,8 @@ data class NutritionPlan(
             .map { items ->
                 NutritionShoppingListItem(
                     ingredient = items.first().ingredient,
-                    totalAmount = items.sumOf { it.amount }
+                    totalAmount = items.sumOf { it.amount },
+                    cycleId = cycleId
                 )
             }
             .groupBy { it.ingredient.group }
@@ -124,7 +128,7 @@ private data class NutritionMealTemplate(
     val proteinGrams: Int,
     val optional: Boolean = false
 ) {
-    fun toMeal(scale: Float = 1f): NutritionMeal = NutritionMeal(
+    fun toMeal(scale: Float = 1f, cycleId: Long = 0): NutritionMeal = NutritionMeal(
         templateId = id,
         type = type,
         mealType = mealType,
@@ -133,7 +137,8 @@ private data class NutritionMealTemplate(
         },
         calories = (calories * scale).roundToInt(),
         proteinGrams = (proteinGrams * scale).roundToInt(),
-        optional = optional
+        optional = optional,
+        cycleId = cycleId
     )
 }
 
@@ -534,6 +539,16 @@ private val nutritionMealTemplates = listOf(
 private val mealsPool: Map<MealType, List<NutritionMealTemplate>> =
     nutritionMealTemplates.groupBy { it.mealType }
 
+
+val nutritionIngredientsByKey: Map<String, NutritionIngredient> =
+    nutritionExclusionIngredients.associateBy { it.key }
+
+enum class NutritionGenerationIssue(@StringRes val messageRes: Int) {
+    NOT_ENOUGH_PROTEIN(R.string.nutrition_not_enough_protein_sources),
+    NOT_ENOUGH_CARBS(R.string.nutrition_not_enough_carbs),
+    NOT_ENOUGH_FRUITS_OR_VEGETABLES(R.string.nutrition_add_more_fruits_vegetables)
+}
+
 fun generateNutritionPlan(
     seed: Int,
     startDay: Int = 1,
@@ -542,6 +557,8 @@ fun generateNutritionPlan(
     heightCm: Int? = null,
     excludedIngredientKeys: Set<String> = emptySet(),
     replacements: Map<String, String> = emptyMap(),
+    preferredIngredientKeys: Set<String> = emptySet(),
+    cycleId: Long = 0,
     workoutTypeForDay: (Int) -> WorkoutType = ::defaultWorkoutTypeForDay
 ): NutritionPlan {
     val base = seed.absoluteValue
@@ -565,6 +582,7 @@ fun generateNutritionPlan(
                 replacementType = mealType,
                 rotation = rotation + slotIndex,
                 excludedIngredientKeys = excludedIngredientKeys,
+                preferredIngredientKeys = preferredIngredientKeys,
                 explicitTemplateId = replacementTemplateId
             )
         }
@@ -578,11 +596,11 @@ fun generateNutritionPlan(
             week = week,
             dayType = dayType,
             targetCalories = targetCalories,
-            meals = meals.map { it.toMeal(scale) }
+            meals = meals.map { it.toMeal(scale, cycleId) }
         )
     }
 
-    return NutritionPlan(days)
+    return NutritionPlan(days = days, cycleId = cycleId)
 }
 
 fun generateThreeDayMuscleGainPlan(
@@ -681,7 +699,7 @@ fun replaceMeal(
         .filter { (_, calorieDifference) -> calorieDifference <= 100 }
         .minByOrNull { (_, calorieDifference) -> calorieDifference }
         ?.first
-        ?.toMeal(calorieScale)
+        ?.toMeal(calorieScale, meal.cycleId)
 }
 
 fun findReplacementMealTemplateId(
@@ -716,9 +734,11 @@ private fun selectTemplate(
     replacementType: MealType,
     rotation: Int,
     excludedIngredientKeys: Set<String>,
+    preferredIngredientKeys: Set<String>,
     explicitTemplateId: String?
 ): NutritionMealTemplate? {
     val filtered = templatesFor(mealType, replacementType, excludedIngredientKeys)
+        .sortedWith(compareByDescending<NutritionMealTemplate> { preferenceScore(it, preferredIngredientKeys) }.thenBy { it.id })
     val explicit = explicitTemplateId?.let { id -> filtered.firstOrNull { it.id == id } }
     if (explicit != null) return explicit
 
@@ -730,6 +750,7 @@ private fun selectTemplate(
         .asSequence()
         .flatMap { mealProfile -> templatesFor(mealType, mealProfile, excludedIngredientKeys).asSequence() }
         .distinctBy { it.id }
+        .sortedWith(compareByDescending<NutritionMealTemplate> { preferenceScore(it, preferredIngredientKeys) }.thenBy { it.id })
         .toList()
 
     if (fallbackSameSlot.isNotEmpty()) {
@@ -807,5 +828,101 @@ private fun scaleAmount(amount: Int, unit: NutritionQuantityUnit, scale: Float):
             val rounded = (scaled / 5f).roundToInt() * 5
             rounded.coerceAtLeast(5)
         }
+    }
+}
+
+
+fun validateAvailableProductSelection(selectedIngredientKeys: Set<String>): NutritionGenerationIssue? {
+    if (selectedIngredientKeys.isEmpty()) return null
+    val selectedIngredients = selectedIngredientKeys.mapNotNull { nutritionIngredientsByKey[it] }
+    if (selectedIngredients.none { it.group == NutritionShoppingGroup.PROTEIN }) {
+        return NutritionGenerationIssue.NOT_ENOUGH_PROTEIN
+    }
+    if (selectedIngredients.none { it.group == NutritionShoppingGroup.CARBS }) {
+        return NutritionGenerationIssue.NOT_ENOUGH_CARBS
+    }
+    if (selectedIngredients.none { it.group == NutritionShoppingGroup.FRUITS_VEGETABLES }) {
+        return NutritionGenerationIssue.NOT_ENOUGH_FRUITS_OR_VEGETABLES
+    }
+    return null
+}
+
+fun NutritionPlan.toMealEntities(cycleId: Long): List<MealEntity> {
+    return days.flatMap { day ->
+        day.meals.map { meal ->
+            MealEntity(
+                cycleId = cycleId,
+                dayNumber = day.dayNumber,
+                programDay = day.programDay,
+                week = day.week,
+                dayType = day.dayType.name,
+                mealTypeKey = meal.type.key,
+                mealProfile = meal.mealType.name,
+                templateId = meal.templateId,
+                ingredientData = encodeIngredients(meal.ingredients),
+                calories = meal.calories,
+                proteinGrams = meal.proteinGrams,
+                optional = meal.optional
+            )
+        }
+    }
+}
+
+fun NutritionPlan.toShoppingItemEntities(cycleId: Long): List<ShoppingItemEntity> {
+    return shoppingList.values.flatten().map { item ->
+        ShoppingItemEntity(
+            cycleId = cycleId,
+            ingredientKey = item.ingredient.key,
+            totalAmount = item.totalAmount
+        )
+    }
+}
+
+fun mealEntitiesToNutritionPlan(cycleId: Long, meals: List<MealEntity>): NutritionPlan {
+    val days = meals.groupBy { it.dayNumber }
+        .toSortedMap()
+        .map { (_, items) ->
+            val first = items.first()
+            NutritionDayPlan(
+                dayNumber = first.dayNumber,
+                programDay = first.programDay,
+                week = first.week,
+                dayType = NutritionDayType.valueOf(first.dayType),
+                targetCalories = items.sumOf { it.calories },
+                meals = items.sortedBy { it.mealTypeKey }.map { meal ->
+                    NutritionMeal(
+                        templateId = meal.templateId,
+                        type = NutritionMealType.entries.first { it.key == meal.mealTypeKey },
+                        mealType = MealType.valueOf(meal.mealProfile),
+                        ingredients = decodeIngredients(meal.ingredientData),
+                        calories = meal.calories,
+                        proteinGrams = meal.proteinGrams,
+                        optional = meal.optional,
+                        cycleId = cycleId
+                    )
+                }
+            )
+        }
+    return NutritionPlan(days = days, cycleId = cycleId)
+}
+
+private fun preferenceScore(template: NutritionMealTemplate, preferredIngredientKeys: Set<String>): Int {
+    if (preferredIngredientKeys.isEmpty()) return 0
+    val ingredientKeys = template.ingredients.map { it.ingredient.key }
+    val matches = ingredientKeys.count { it in preferredIngredientKeys }
+    return (matches * 10) - (ingredientKeys.size - matches)
+}
+
+private fun encodeIngredients(ingredients: List<NutritionIngredientAmount>): String {
+    return ingredients.joinToString("|") { "${it.ingredient.key}:${it.amount}" }
+}
+
+private fun decodeIngredients(encoded: String): List<NutritionIngredientAmount> {
+    if (encoded.isBlank()) return emptyList()
+    return encoded.split("|").mapNotNull { token ->
+        val parts = token.split(":")
+        if (parts.size != 2) return@mapNotNull null
+        val ingredient = nutritionIngredientsByKey[parts[0]] ?: return@mapNotNull null
+        NutritionIngredientAmount(ingredient = ingredient, amount = parts[1].toIntOrNull() ?: return@mapNotNull null)
     }
 }

@@ -4,16 +4,52 @@ import com.monkfitness.app.data.model.NutritionDayType
 import com.monkfitness.app.data.model.MealType
 import com.monkfitness.app.data.model.NutritionMealType
 import com.monkfitness.app.data.model.calculateNutritionCompletionPercent
+import com.monkfitness.app.data.model.NutritionGenerationIssue
 import com.monkfitness.app.data.model.findReplacementMealTemplateId
 import com.monkfitness.app.data.model.generateNutritionPlan
 import com.monkfitness.app.data.model.getTodayCookingInstructionResIds
 import com.monkfitness.app.data.model.nutritionReplacementKey
+import com.monkfitness.app.data.model.validateAvailableProductSelection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NutritionPlanTest {
+
+    @Test
+    fun testAvailableProductsValidationRequiresCoreFoodGroups() {
+        assertEquals(
+            NutritionGenerationIssue.NOT_ENOUGH_PROTEIN,
+            validateAvailableProductSelection(setOf("rice", "banana"))
+        )
+        assertEquals(
+            NutritionGenerationIssue.NOT_ENOUGH_CARBS,
+            validateAvailableProductSelection(setOf("chicken", "banana"))
+        )
+        assertEquals(
+            NutritionGenerationIssue.NOT_ENOUGH_FRUITS_OR_VEGETABLES,
+            validateAvailableProductSelection(setOf("chicken", "rice"))
+        )
+    }
+
+    @Test
+    fun testPreferredIngredientsBiasMealGenerationWhenPossible() {
+        val plan = generateNutritionPlan(
+            seed = 0,
+            startDay = 1,
+            daysCount = 1,
+            weightKg = 80,
+            preferredIngredientKeys = setOf("eggs", "rice", "banana")
+        )
+
+        val ingredientKeys = plan.days.first().meals
+            .flatMap { it.ingredients }
+            .map { it.ingredient.key }
+            .toSet()
+
+        assertTrue(ingredientKeys.any { it in setOf("eggs", "rice", "banana") })
+    }
 
     @Test
     fun testGeneratedPlanUsesWeightBasedCaloriesAndDayTypes() {

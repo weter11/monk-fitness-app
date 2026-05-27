@@ -5,6 +5,7 @@ import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
+import com.monkfitness.app.data.model.ProgramDayState
 import com.monkfitness.app.data.model.Workout
 
 @Immutable
@@ -16,7 +17,8 @@ data class HomeUiState(
     val streak: Int,
     val additionalPostureTrainingEnabled: Boolean,
     val flexibilityTrainingType: FlexibilityTrainingType,
-    val flexibilityFocusAreas: Set<ExerciseSubCategory>
+    val flexibilityFocusAreas: Set<ExerciseSubCategory>,
+    val todayProgramDayState: ProgramDayState
 )
 
 @Immutable

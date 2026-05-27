@@ -2,7 +2,6 @@ package com.monkfitness.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,11 +12,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -35,8 +32,6 @@ import com.monkfitness.app.R
 import com.monkfitness.app.data.model.NutritionDayPlan
 import com.monkfitness.app.data.model.NutritionIngredientAmount
 import com.monkfitness.app.data.model.NutritionMeal
-import com.monkfitness.app.data.model.calculateNutritionCompletionPercent
-import com.monkfitness.app.data.model.getTodayCookingInstructionResIds
 import com.monkfitness.app.viewmodel.MainViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,10 +40,9 @@ fun NutritionTodayScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
-    val plan by viewModel.nutritionPlan.collectAsState()
-    val completedMeals by viewModel.completedNutritionMeals.collectAsState()
-    val todayPlan = plan.days.firstOrNull()
-    val completionPercent = todayPlan?.let { calculateNutritionCompletionPercent(it, completedMeals) } ?: 0
+    val todayPlan by viewModel.todayNutritionPlan.collectAsState()
+    val activeCycle by viewModel.activeMealCycle.collectAsState()
+    val pendingCycle by viewModel.pendingMealCycle.collectAsState()
 
     Scaffold(
         topBar = {
@@ -56,10 +50,7 @@ fun NutritionTodayScreen(
                 title = { Text(stringResource(R.string.nutrition_today_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.previous)
-                        )
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.previous))
                     }
                 }
             )
@@ -74,7 +65,7 @@ fun NutritionTodayScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = stringResource(R.string.nutrition_today_desc_advanced),
+                text = stringResource(R.string.nutrition_today_desc_cycle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary
             )
@@ -82,20 +73,15 @@ fun NutritionTodayScreen(
             todayPlan?.let { day ->
                 NutritionTodaySummaryCard(
                     day = day,
-                    completionPercent = completionPercent,
-                    onRegeneratePlan = viewModel::regenerateNutritionPlan
+                    cycleSummary = activeCycle?.let { stringResource(R.string.nutrition_active_cycle_summary, it.durationDays, it.startDate) }.orEmpty(),
+                    pendingSummary = pendingCycle?.let { stringResource(R.string.nutrition_pending_cycle_summary, it.durationDays, it.startDate) },
+                    onGenerateNextCycle = viewModel::generateNextNutritionCycle
                 )
 
                 day.meals.forEach { meal ->
                     NutritionTodayMealCard(
                         meal = meal,
-                        checked = meal.type.key in completedMeals,
-                        onCheckedChange = { checked ->
-                            viewModel.setNutritionMealCompleted(meal.type, checked)
-                        },
-                        onReplace = {
-                            viewModel.replaceNutritionMeal(day.programDay, meal.type)
-                        }
+                        onReplace = { viewModel.replaceNutritionMeal(day.programDay, meal.type) }
                     )
                 }
             } ?: Text(
@@ -110,58 +96,22 @@ fun NutritionTodayScreen(
 @Composable
 private fun NutritionTodaySummaryCard(
     day: NutritionDayPlan,
-    completionPercent: Int,
-    onRegeneratePlan: () -> Unit
+    cycleSummary: String,
+    pendingSummary: String?,
+    onGenerateNextCycle: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.nutrition_today_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = stringResource(R.string.nutrition_program_day_week, day.programDay, day.week),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = stringResource(day.dayType.labelRes),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = stringResource(R.string.nutrition_kcal_format, day.totalCalories),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(text = stringResource(R.string.nutrition_today_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(text = cycleSummary, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
+            if (pendingSummary != null) {
+                Text(text = pendingSummary, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
-            Text(
-                text = stringResource(R.string.nutrition_completion_percent, completionPercent),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            LinearProgressIndicator(
-                progress = { completionPercent / 100f },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedButton(
-                onClick = onRegeneratePlan,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.nutrition_regenerate_plan))
+            Text(text = stringResource(R.string.nutrition_program_day_week, day.programDay, day.week), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
+            Text(text = stringResource(day.dayType.labelRes), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text(text = stringResource(R.string.nutrition_meal_summary, day.totalCalories, day.totalProteinGrams), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            OutlinedButton(onClick = onGenerateNextCycle, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.nutrition_generate_next_cycle))
             }
         }
     }
@@ -170,81 +120,21 @@ private fun NutritionTodaySummaryCard(
 @Composable
 private fun NutritionTodayMealCard(
     meal: NutritionMeal,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
     onReplace: () -> Unit
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceVariant
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Checkbox(
-                        checked = checked,
-                        onCheckedChange = onCheckedChange
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = stringResource(meal.type.labelRes),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = stringResource(meal.mealType.labelRes),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-                Text(
-                    text = stringResource(R.string.nutrition_kcal_format, meal.calories),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            Text(
-                text = stringResource(R.string.nutrition_today_foods),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
-            )
+    Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(text = stringResource(meal.type.labelRes), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(text = stringResource(meal.mealType.labelRes), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text(text = stringResource(R.string.nutrition_today_foods), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             meal.ingredients.forEach { ingredient ->
-                Text(
-                    text = "• ${todayIngredientText(ingredient)}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text(text = "• ${todayIngredientText(ingredient)}", style = MaterialTheme.typography.bodyMedium)
             }
-
-            Text(
-                text = stringResource(R.string.nutrition_today_instructions),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
-            )
-            getTodayCookingInstructionResIds(meal).forEachIndexed { index, stepRes ->
-                Text(
-                    text = "${index + 1}. ${stringResource(stepRes)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary
-                )
+            Text(text = stringResource(R.string.nutrition_today_instructions), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            com.monkfitness.app.data.model.getTodayCookingInstructionResIds(meal).forEachIndexed { index, stepRes ->
+                Text(text = "${index + 1}. ${stringResource(stepRes)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
             }
-
-            Button(
-                onClick = onReplace,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Button(onClick = onReplace, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.nutrition_replace_meal))
             }
         }

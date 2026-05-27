@@ -1,22 +1,6 @@
 package com.monkfitness.app.viewmodel
 
 import android.app.Application
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
-import com.monkfitness.app.data.local.AppDatabase
-import com.monkfitness.app.data.local.SettingsManager
-import com.monkfitness.app.data.model.BodyWeightEntry
-import com.monkfitness.app.data.model.Equipment
-import com.monkfitness.app.data.model.SetLog
-import com.monkfitness.app.data.model.UserProgress
-import com.monkfitness.app.data.model.VolumeHistoryPoint
-import com.monkfitness.app.data.model.Workout
-import com.monkfitness.app.data.repository.WorkoutRepository
-import com.monkfitness.app.domain.usecase.WorkoutGenerator
-import com.monkfitness.app.data.model.FlexibilityTrainingType
-import com.monkfitness.app.util.NotificationScheduler
-import com.monkfitness.app.util.matchesQuery
-import com.monkfitness.app.util.withLocalizedSearchText
 import android.content.Context
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -24,26 +8,50 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.monkfitness.app.R
+import com.monkfitness.app.data.local.AppDatabase
+import com.monkfitness.app.data.local.SettingsManager
+import com.monkfitness.app.data.model.BodyWeightEntry
+import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
+import com.monkfitness.app.data.model.FlexibilityTrainingType
+import com.monkfitness.app.data.model.MealCycle
 import com.monkfitness.app.data.model.NutritionDayType
 import com.monkfitness.app.data.model.NutritionIngredient
 import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.NutritionMealType
 import com.monkfitness.app.data.model.NutritionPlan
 import com.monkfitness.app.data.model.PostureSessionProgress
+import com.monkfitness.app.data.model.ProgramDayState
+import com.monkfitness.app.data.model.ProgramStatistics
+import com.monkfitness.app.data.model.SetLog
 import com.monkfitness.app.data.model.UserPreferences
+import com.monkfitness.app.data.model.UserProgress
+import com.monkfitness.app.data.model.VolumeHistoryPoint
+import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.model.applyDifficultyAdjustment
 import com.monkfitness.app.data.model.calculateMuscleGainNutritionTargets
-import com.monkfitness.app.data.model.findReplacementMealTemplateId
+import com.monkfitness.app.data.model.mealEntitiesToNutritionPlan
+import com.monkfitness.app.data.model.nutritionExclusionIngredients
+import com.monkfitness.app.data.model.toMealEntities
+import com.monkfitness.app.data.model.toShoppingItemEntities
+import com.monkfitness.app.data.model.validateAvailableProductSelection
+import com.monkfitness.app.data.repository.WorkoutRepository
+import com.monkfitness.app.domain.usecase.TOTAL_PROGRAM_DAYS
+import com.monkfitness.app.domain.usecase.WorkoutGenerator
+import com.monkfitness.app.domain.usecase.calculateProgramDay
+import com.monkfitness.app.domain.usecase.synchronizeProgramStates
+import com.monkfitness.app.ui.screens.WorkoutStep
+import com.monkfitness.app.util.NotificationScheduler
+import com.monkfitness.app.util.matchesQuery
+import com.monkfitness.app.util.withLocalizedSearchText
 import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
 import com.monkfitness.app.data.model.flexibilitySpecificFocusAreas
 import com.monkfitness.app.data.model.generateNutritionPlan
-import com.monkfitness.app.data.model.nutritionExclusionIngredients
-import com.monkfitness.app.data.model.nutritionReplacementKey
-import com.monkfitness.app.ui.screens.WorkoutStep
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -54,11 +62,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import java.util.Calendar
+import kotlin.math.roundToInt
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -118,13 +129,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         settingsManager = SettingsManager(application)
     }
 
+    private val _currentDate = MutableStateFlow(LocalDate.now())
+    val currentDate = _currentDate.asStateFlow()
+    private val _nutritionMessageEvents = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    val nutritionMessageEvents = _nutritionMessageEvents.asSharedFlow()
+
     val allProgress = repository.getAllProgress().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
-    val currentProgramDay = allProgress
-        .map { progress -> calculateCurrentDay(progress) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
+    val programStartDate = settingsManager.programStartDateFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), LocalDate.now().toString()
+    )
+
+    val programSummaryDismissed = settingsManager.programSummaryDismissedFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), false
+    )
+
+    val nutritionWarningDismissedFor = settingsManager.nutritionWarningDismissedForFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), null
+    )
+
+    val currentProgramDay = combine(programStartDate, currentDate) { startDate, today ->
+        calculateProgramDay(parseDate(startDate, today), today)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
+
+    val programDayStates = repository.getProgramDayStates().stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+
+    val programCompletedDaysCount = programDayStates
+        .map { states -> states.count { it.isCompleted } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val todayProgramDayState = combine(programDayStates, currentProgramDay) { states, day ->
+        states.firstOrNull { it.programDay == day }
+            ?: ProgramDayState(
+                programDay = day,
+                isWorkoutDay = getWorkoutTypeForDay(day) != com.monkfitness.app.data.model.WorkoutType.REST,
+                isCompleted = false,
+                isMissed = false,
+                completedAt = null
+            )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        ProgramDayState(
+            programDay = 1,
+            isWorkoutDay = true,
+            isCompleted = false,
+            isMissed = false,
+            completedAt = null
+        )
+    )
 
     val exerciseDifficultyAdjustments = settingsManager.exerciseDifficultyAdjustmentsFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap()
@@ -163,6 +220,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), 0
     )
 
+    val programStatistics = combine(
+        repository.getProgramStatistics(),
+        exercisePersonalRecords
+    ) { snapshot, personalRecords ->
+        val denominator = (snapshot.totalWorkoutsCompleted + snapshot.totalMissed).coerceAtLeast(1)
+        ProgramStatistics(
+            totalWorkoutsCompleted = snapshot.totalWorkoutsCompleted,
+            totalMissed = snapshot.totalMissed,
+            totalSets = snapshot.totalSets,
+            totalReps = snapshot.totalReps,
+            totalTimerSeconds = snapshot.totalTimerSeconds,
+            totalExercisesCompleted = snapshot.totalExercisesCompleted,
+            totalPersonalRecords = personalRecords.values.count { it > 0 },
+            completionPercentage = ((snapshot.totalWorkoutsCompleted * 100f) / denominator).roundToInt()
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        ProgramStatistics(0, 0, 0, 0, 0, 0, 0, 0)
+    )
+
     val volumeHistory = repository.getDailyVolumeHistory().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
@@ -196,7 +274,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val homeMetrics = combine(
         currentProgramDay,
-        completedDaysCount,
+        programCompletedDaysCount,
         completedPostureDaysCount,
         streak
     ) { currentDay, completedCount, completedPostureCount, streakCount ->
@@ -214,7 +292,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         flexibilityTrainingType,
         flexibilityFocusAreas,
         exerciseDifficultyAdjustments,
-        availableEquipment
+        availableEquipment,
+        todayProgramDayState
     ) { values ->
         val metrics = values[0] as HomeMetrics
         val additionalPostureEnabled = values[1] as Boolean
@@ -225,6 +304,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val difficultyAdjustments = values[4] as Map<String, Int>
         @Suppress("UNCHECKED_CAST")
         val availableEquipment = values[5] as Set<Equipment>
+        val todayState = values[6] as ProgramDayState
         HomeUiState(
             currentDay = metrics.currentDay,
             workout = getWorkoutForDay(metrics.currentDay, difficultyAdjustments, trainingType, focusAreas, availableEquipment),
@@ -233,7 +313,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             streak = metrics.streak,
             additionalPostureTrainingEnabled = additionalPostureEnabled,
             flexibilityTrainingType = trainingType,
-            flexibilityFocusAreas = focusAreas
+            flexibilityFocusAreas = focusAreas,
+            todayProgramDayState = todayState
         )
     }.stateIn(
         viewModelScope,
@@ -246,7 +327,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             streak = 0,
             additionalPostureTrainingEnabled = false,
             flexibilityTrainingType = FlexibilityTrainingType.BOTH,
-            flexibilityFocusAreas = setOf(ExerciseSubCategory.FULL_BODY)
+            flexibilityFocusAreas = setOf(ExerciseSubCategory.FULL_BODY),
+            todayProgramDayState = ProgramDayState(1, true, false, false, null)
         )
     )
 
@@ -267,6 +349,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val focusAreas = values[4] as Set<ExerciseSubCategory>
         @Suppress("UNCHECKED_CAST")
         val availableEquipment = values[5] as Set<Equipment>
+        val todayState = values[6] as ProgramDayState
         if (day == null) {
             WorkoutSessionUiState(
                 day = null,
@@ -343,6 +426,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     init {
+        viewModelScope.launch {
+            settingsManager.ensureProgramStartDate()
+            refreshCalendarState()
+        }
+        viewModelScope.launch {
+            while (isActive) {
+                val today = LocalDate.now()
+                if (_currentDate.value != today) {
+                    _currentDate.value = today
+                }
+                refreshCalendarState()
+                delay(60_000)
+            }
+        }
         viewModelScope.launch {
             allProgress.collect {
                 updateStreak()
@@ -624,13 +721,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun completeWorkout(day: Int) {
         viewModelScope.launch {
+            val completedAt = System.currentTimeMillis()
             val progress = UserProgress(
                 day = day,
                 isCompleted = true,
-                completionDate = System.currentTimeMillis(),
+                completionDate = completedAt,
                 workoutType = workoutGenerator.generateWorkout(day).type.name
             )
             repository.updateProgress(progress)
+            repository.upsertProgramDayState(
+                ProgramDayState(
+                    programDay = day,
+                    isWorkoutDay = true,
+                    isCompleted = true,
+                    isMissed = false,
+                    completedAt = completedAt
+                )
+            )
+        }
+    }
+
+    fun completeRecoveryDay(day: Int) {
+        viewModelScope.launch {
+            repository.upsertProgramDayState(
+                ProgramDayState(
+                    programDay = day,
+                    isWorkoutDay = false,
+                    isCompleted = true,
+                    isMissed = false,
+                    completedAt = System.currentTimeMillis()
+                )
+            )
         }
     }
 
@@ -649,13 +770,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun completeCurrentSession(day: Int) {
         if (_currentSessionMode.value == SessionMode.POSTURE_MOBILITY) {
             completePostureWorkout(day)
+        } else if (getWorkoutTypeForDay(day) == com.monkfitness.app.data.model.WorkoutType.REST) {
+            completeRecoveryDay(day)
         } else {
             completeWorkout(day)
         }
     }
 
     fun getCurrentDay(): Int {
-        return calculateCurrentDay(allProgress.value)
+        return currentProgramDay.value
     }
 
     fun getWorkoutTypeForDay(day: Int) = workoutGenerator.getWorkoutType(day)
@@ -752,11 +875,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    val completedNutritionMeals = settingsManager.completedNutritionMealsFlow.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
-    )
-
-    val nutritionPlanDays = settingsManager.nutritionPlanDaysFlow.stateIn(
+    val nutritionCycleLength = settingsManager.nutritionCycleLengthFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 3
     )
 
@@ -764,56 +883,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
     )
 
+    val nutritionAvailableProducts = settingsManager.nutritionAvailableProductsFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
+    )
+
     val nutritionExclusionOptions: List<NutritionIngredient> = nutritionExclusionIngredients
 
-    private val _nutritionPlanSeed = MutableStateFlow(0)
-    val nutritionPlanSeed: StateFlow<Int> = _nutritionPlanSeed.asStateFlow()
+    val mealCycles = repository.getMealCycles().stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
 
-    private val _nutritionMealReplacements = MutableStateFlow<Map<String, String>>(emptyMap())
+    val activeMealCycle = combine(mealCycles, currentDate) { cycles, today ->
+        cycles
+            .filter { !it.isCompleted && !parseDate(it.startDate, today).isAfter(today) }
+            .maxByOrNull { it.startDate }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val nutritionPlan: StateFlow<NutritionPlan> = combine(
-        currentProgramDay,
-        nutritionWeight,
-        nutritionHeight,
-        nutritionPlanDays,
-        nutritionExcludedFoods,
-        _nutritionPlanSeed,
-        _nutritionMealReplacements
-    ) { values ->
-        val currentDay = values[0] as Int
-        val weight = values[1] as String
-        val height = values[2] as String
-        val planDays = values[3] as Int
-        @Suppress("UNCHECKED_CAST")
-        val excludedFoods = values[4] as Set<String>
-        val planSeed = values[5] as Int
-        @Suppress("UNCHECKED_CAST")
-        val replacements = values[6] as Map<String, String>
-        generateNutritionPlan(
-            seed = planSeed,
-            startDay = currentDay,
-            daysCount = planDays,
-            weightKg = weight.toIntOrNull(),
-            heightCm = height.toIntOrNull(),
-            excludedIngredientKeys = excludedFoods,
-            replacements = replacements,
-            workoutTypeForDay = ::getWorkoutTypeForDay
-        )
+    val pendingMealCycle = combine(mealCycles, currentDate) { cycles, today ->
+        cycles
+            .filter { !it.isCompleted && parseDate(it.startDate, today).isAfter(today) }
+            .minByOrNull { it.startDate }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val nutritionPlan = activeMealCycle.flatMapLatest { cycle ->
+        if (cycle == null || nutritionCycleLength.value == 0) {
+            flowOf(NutritionPlan(emptyList()))
+        } else {
+            repository.getMealsForCycle(cycle.id).map { meals ->
+                if (meals.isEmpty()) NutritionPlan(emptyList(), cycle.id)
+                else mealEntitiesToNutritionPlan(cycle.id, meals)
+            }
+        }
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        generateNutritionPlan(seed = 0, daysCount = 3, weightKg = null)
+        NutritionPlan(emptyList())
     )
+
+    val todayNutritionPlan = combine(nutritionPlan, currentProgramDay) { plan, day ->
+        plan.days.firstOrNull { it.programDay == day }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val currentNutritionTargets = combine(
         nutritionWeight,
         nutritionHeight,
-        nutritionPlan
-    ) { weight, height, plan ->
+        todayNutritionPlan
+    ) { weight, height, dayPlan ->
         calculateMuscleGainNutritionTargets(
             weightKg = weight.toIntOrNull(),
             heightCm = height.toIntOrNull(),
-            dayType = plan.days.firstOrNull()?.dayType ?: NutritionDayType.TRAINING
+            dayType = dayPlan?.dayType ?: NutritionDayType.TRAINING
         )
     }.stateIn(
         viewModelScope,
@@ -821,16 +940,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         calculateMuscleGainNutritionTargets(weightKg = null, heightCm = null)
     )
 
-    fun regenerateNutritionPlan() {
-        _nutritionMealReplacements.value = emptyMap()
-        _nutritionPlanSeed.value += 1
-    }
-
-    fun setNutritionPlanDays(days: Int) {
-        viewModelScope.launch {
-            settingsManager.setNutritionPlanDays(days)
+    val shouldShowNutritionExpirationWarning = combine(
+        activeMealCycle,
+        pendingMealCycle,
+        nutritionWarningDismissedFor,
+        currentDate,
+        nutritionCycleLength
+    ) { activeCycle, pendingCycle, dismissedFor, today, cycleLength ->
+        if (cycleLength == 0 || activeCycle == null || pendingCycle != null) {
+            false
+        } else {
+            val warningKey = activeCycle.startDate
+            val tomorrowIsEnd = mealCycleEndDate(activeCycle) == today.plusDays(1)
+            tomorrowIsEnd && dismissedFor != warningKey
         }
-        _nutritionMealReplacements.value = emptyMap()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val showProgramSummary = combine(
+        currentProgramDay,
+        todayProgramDayState,
+        programSummaryDismissed
+    ) { day, state, dismissed ->
+        day == TOTAL_PROGRAM_DAYS && state.isCompleted && !dismissed
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun setNutritionCycleLength(days: Int) {
+        viewModelScope.launch {
+            settingsManager.setNutritionCycleLength(days)
+            syncNutritionCycles()
+        }
     }
 
     fun toggleNutritionExcludedFood(foodKey: String) {
@@ -838,25 +976,74 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val current = nutritionExcludedFoods.value
             val next = if (foodKey in current) current - foodKey else current + foodKey
             settingsManager.setNutritionExcludedFoods(next)
+            syncNutritionCycles()
         }
     }
 
-    fun setNutritionMealCompleted(mealType: NutritionMealType, completed: Boolean) {
+    fun dismissProgramSummary() {
         viewModelScope.launch {
-            settingsManager.setNutritionMealCompleted(mealType.key, completed)
+            settingsManager.setProgramSummaryDismissed(true)
+        }
+    }
+
+    fun dismissNutritionExpirationWarning() {
+        viewModelScope.launch {
+            settingsManager.dismissNutritionWarningFor(activeMealCycle.value?.startDate)
+        }
+    }
+
+    fun generateNextNutritionCycle() {
+        viewModelScope.launch {
+            createOrQueueMealCycle(
+                durationDays = nutritionCycleLength.value.coerceAtLeast(1),
+                preferredIngredientKeys = nutritionAvailableProducts.value,
+                autoGenerated = false
+            )
+        }
+    }
+
+    fun generateNutritionFromAvailableProducts(selectedIngredientKeys: Set<String>, durationDays: Int) {
+        viewModelScope.launch {
+            val issue = validateAvailableProductSelection(selectedIngredientKeys)
+            if (issue != null) {
+                _nutritionMessageEvents.tryEmit(issue.messageRes)
+                return@launch
+            }
+            settingsManager.setNutritionAvailableProducts(selectedIngredientKeys)
+            createOrQueueMealCycle(
+                durationDays = durationDays,
+                preferredIngredientKeys = selectedIngredientKeys,
+                autoGenerated = false
+            )
         }
     }
 
     fun replaceNutritionMeal(programDay: Int, mealType: NutritionMealType) {
-        val dayPlan = nutritionPlan.value.days.firstOrNull { it.programDay == programDay } ?: return
-        val meal = dayPlan.meals.firstOrNull { it.type == mealType } ?: return
-        val replacementId = findReplacementMealTemplateId(
-            meal = meal,
-            excludedIngredientKeys = nutritionExcludedFoods.value
-        ) ?: return
+        viewModelScope.launch {
+            val cycle = activeMealCycle.value ?: return@launch
+            val currentPlan = nutritionPlan.value
+            val dayPlan = currentPlan.days.firstOrNull { it.programDay == programDay } ?: return@launch
+            val meal = dayPlan.meals.firstOrNull { it.type == mealType } ?: return@launch
+            val replacement = com.monkfitness.app.data.model.replaceMeal(
+                meal = meal,
+                excludedIngredientKeys = nutritionExcludedFoods.value
+            ) ?: return@launch
 
-        _nutritionMealReplacements.value = _nutritionMealReplacements.value.toMutableMap().apply {
-            this[nutritionReplacementKey(programDay, mealType)] = replacementId
+            val updatedPlan = NutritionPlan(
+                days = currentPlan.days.map { day ->
+                    if (day.programDay != programDay) {
+                        day
+                    } else {
+                        day.copy(
+                            meals = day.meals.map { existing ->
+                                if (existing.type == mealType) replacement.copy(cycleId = cycle.id) else existing
+                            }
+                        )
+                    }
+                },
+                cycleId = cycle.id
+            )
+            repository.replaceCycleMeals(cycle.id, updatedPlan.toMealEntities(cycle.id), updatedPlan.toShoppingItemEntities(cycle.id))
         }
     }
 
@@ -905,12 +1092,105 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun calculateCurrentDay(progress: List<UserProgress>): Int {
-        val completedDays = progress.filter { it.isCompleted }.map { it.day }.toSet()
-        for (i in 1..56) {
-            if (i !in completedDays) return i
+    private suspend fun refreshCalendarState() {
+        syncProgramDayStates()
+        syncNutritionCycles()
+    }
+
+    private suspend fun syncProgramDayStates() {
+        val legacyProgress = allProgress.value.associateBy { it.day }
+        val synchronizedStates = synchronizeProgramStates(
+            existing = repository.getProgramDayStatesSnapshot(),
+            currentProgramDay = currentProgramDay.value,
+            workoutTypeForDay = ::getWorkoutTypeForDay
+        ).map { state ->
+            val legacy = legacyProgress[state.programDay]
+            if (legacy != null && state.isWorkoutDay) {
+                state.copy(isCompleted = true, isMissed = false, completedAt = legacy.completionDate)
+            } else {
+                state
+            }
         }
-        return 56
+        repository.upsertProgramDayStates(synchronizedStates)
+    }
+
+    private suspend fun syncNutritionCycles() {
+        if (nutritionCycleLength.value == 0) return
+
+        val today = currentDate.value
+        val cycles = repository.getMealCyclesSnapshot()
+        val expiredCycles = cycles.filter { !it.isCompleted && mealCycleEndDate(it).isBefore(today) }
+        expiredCycles.forEach { expired ->
+            repository.insertMealCycle(expired.copy(isCompleted = true))
+        }
+
+        val refreshedCycles = repository.getMealCyclesSnapshot()
+        val active = refreshedCycles
+            .filter { !it.isCompleted && !parseDate(it.startDate, today).isAfter(today) }
+            .maxByOrNull { it.startDate }
+        val pending = refreshedCycles
+            .filter { !it.isCompleted && parseDate(it.startDate, today).isAfter(today) }
+            .minByOrNull { it.startDate }
+
+        if (active == null) {
+            val sourceCycle = expiredCycles.maxByOrNull { it.startDate }
+            if (pending == null) {
+                createOrQueueMealCycle(
+                    durationDays = sourceCycle?.durationDays ?: nutritionCycleLength.value.coerceAtLeast(1),
+                    preferredIngredientKeys = nutritionAvailableProducts.value,
+                    autoGenerated = sourceCycle != null
+                )
+            }
+        }
+    }
+
+    private suspend fun createOrQueueMealCycle(
+        durationDays: Int,
+        preferredIngredientKeys: Set<String>,
+        autoGenerated: Boolean
+    ) {
+        val safeDuration = durationDays.coerceIn(1, 7)
+        val today = currentDate.value
+        val active = activeMealCycle.value
+        val pending = pendingMealCycle.value
+        val cycleStartDate = active?.let { mealCycleEndDate(it).plusDays(1) } ?: today
+        val baseCycle = pending?.copy(
+            startDate = cycleStartDate.toString(),
+            durationDays = safeDuration,
+            createdAt = System.currentTimeMillis(),
+            isCompleted = false,
+            autoGenerated = autoGenerated
+        ) ?: MealCycle(
+            startDate = cycleStartDate.toString(),
+            durationDays = safeDuration,
+            createdAt = System.currentTimeMillis(),
+            isCompleted = false,
+            autoGenerated = autoGenerated
+        )
+        val storedCycleId = repository.insertMealCycle(baseCycle)
+        val cycleId = if (storedCycleId == 0L) baseCycle.id else storedCycleId
+        val validPreferredKeys = if (validateAvailableProductSelection(preferredIngredientKeys) == null) preferredIngredientKeys else emptySet()
+        val plan = generateNutritionPlan(
+            seed = cycleStartDate.toEpochDay().toInt(),
+            startDay = calculateProgramDay(parseDate(programStartDate.value, cycleStartDate), cycleStartDate),
+            daysCount = safeDuration,
+            weightKg = nutritionWeight.value.toIntOrNull(),
+            heightCm = nutritionHeight.value.toIntOrNull(),
+            excludedIngredientKeys = nutritionExcludedFoods.value,
+            preferredIngredientKeys = validPreferredKeys,
+            cycleId = cycleId,
+            workoutTypeForDay = ::getWorkoutTypeForDay
+        )
+        repository.replaceCycleMeals(cycleId, plan.toMealEntities(cycleId), plan.toShoppingItemEntities(cycleId))
+        settingsManager.dismissNutritionWarningFor(null)
+    }
+
+    private fun mealCycleEndDate(cycle: MealCycle): LocalDate {
+        return parseDate(cycle.startDate, currentDate.value).plusDays(cycle.durationDays.toLong() - 1)
+    }
+
+    private fun parseDate(raw: String, fallback: LocalDate): LocalDate {
+        return runCatching { LocalDate.parse(raw) }.getOrDefault(fallback)
     }
 
     private val toneG = ToneGenerator(AudioManager.STREAM_ALARM, 100)
