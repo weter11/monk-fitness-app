@@ -1,15 +1,28 @@
 package com.monkfitness.app.ui.screens
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,6 +42,8 @@ fun HomeScreen(
     onStartPostureWorkout: (Int) -> Unit
 ) {
     val uiState by viewModel.homeUiState.collectAsState()
+    val showProgramSummary by viewModel.showProgramSummary.collectAsState()
+    val programStatistics by viewModel.programStatistics.collectAsState()
     val progressValues by remember(uiState.completedCount, uiState.completedPostureCount) {
         derivedStateOf {
             (uiState.completedCount.toFloat() / 56f) to (uiState.completedPostureCount.toFloat() / 56f)
@@ -36,20 +51,42 @@ fun HomeScreen(
     }
     val targetProgress = progressValues.first
     val postureProgress = progressValues.second
-    val animatedProgress by animateFloatAsState(
-        targetValue = targetProgress,
-        label = "HomeProgressAnimation"
-    )
-    val animatedPostureProgress by animateFloatAsState(
-        targetValue = postureProgress,
-        label = "PostureProgressAnimation"
-    )
+    val animatedProgress by animateFloatAsState(targetValue = targetProgress, label = "HomeProgressAnimation")
+    val animatedPostureProgress by animateFloatAsState(targetValue = postureProgress, label = "PostureProgressAnimation")
     val fullBodyLabel = stringResource(ExerciseSubCategory.FULL_BODY.labelRes)
     val selectedFocusAreaLabels = uiState.flexibilityFocusAreas.map { stringResource(it.labelRes) }
     val focusAreaSummary = if (ExerciseSubCategory.FULL_BODY in uiState.flexibilityFocusAreas) {
         fullBodyLabel
     } else {
         selectedFocusAreaLabels.joinToString(", ")
+    }
+    val todayStatus = when {
+        uiState.todayProgramDayState.isMissed -> stringResource(R.string.program_status_missed)
+        uiState.todayProgramDayState.isCompleted -> stringResource(R.string.program_status_completed)
+        uiState.todayProgramDayState.isWorkoutDay -> stringResource(R.string.program_status_workout_day)
+        else -> stringResource(R.string.program_status_recovery_day)
+    }
+
+    if (showProgramSummary) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissProgramSummary,
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissProgramSummary) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = { Text(stringResource(R.string.program_completed_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.program_completion_percent, programStatistics.completionPercentage))
+                    Text(stringResource(R.string.program_completed_sessions, programStatistics.totalWorkoutsCompleted))
+                    Text(stringResource(R.string.program_missed_sessions, programStatistics.totalMissed))
+                    Text(stringResource(R.string.program_total_sets, programStatistics.totalSets))
+                    Text(stringResource(R.string.program_total_exercises, programStatistics.totalExercisesCompleted))
+                    Text(stringResource(R.string.program_prs_achieved, programStatistics.totalPersonalRecords))
+                }
+            }
+        )
     }
 
     Column(
@@ -82,6 +119,12 @@ fun HomeScreen(
                     text = stringResource(uiState.workout.type.nameRes),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = todayStatus,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))

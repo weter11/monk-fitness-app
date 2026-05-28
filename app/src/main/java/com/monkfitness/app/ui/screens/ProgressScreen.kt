@@ -76,6 +76,7 @@ fun ProgressScreen(viewModel: MainViewModel) {
     val personalRecords by viewModel.exercisePersonalRecords.collectAsState()
     val currentProgramDay by viewModel.currentProgramDay.collectAsState()
     val streak by viewModel.streak.collectAsState()
+    val programStatistics by viewModel.programStatistics.collectAsState()
 
     val legacyEntries = progressList
         .filter { it.isCompleted }
@@ -145,13 +146,13 @@ fun ProgressScreen(viewModel: MainViewModel) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 DashboardStatCard(
-                    title = stringResource(R.string.completed_days_short),
-                    value = progressList.count { it.isCompleted }.toString(),
+                    title = stringResource(R.string.program_completed_sessions_label),
+                    value = programStatistics.totalWorkoutsCompleted.toString(),
                     modifier = Modifier.weight(1f)
                 )
                 DashboardStatCard(
-                    title = stringResource(R.string.total_volume_short),
-                    value = totalVolume.toString(),
+                    title = stringResource(R.string.program_missed_sessions_label),
+                    value = programStatistics.totalMissed.toString(),
                     modifier = Modifier.weight(1f)
                 )
                 DashboardStatCard(
@@ -159,6 +160,29 @@ fun ProgressScreen(viewModel: MainViewModel) {
                     value = streak.toString(),
                     modifier = Modifier.weight(1f)
                 )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.program_statistics_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(stringResource(R.string.program_completion_percent, programStatistics.completionPercentage))
+                    Text(stringResource(R.string.program_total_sets, programStatistics.totalSets))
+                    Text(stringResource(R.string.program_total_reps, programStatistics.totalReps))
+                    Text(stringResource(R.string.program_total_timer_seconds, programStatistics.totalTimerSeconds))
+                    Text(stringResource(R.string.program_prs_achieved, programStatistics.totalPersonalRecords))
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))

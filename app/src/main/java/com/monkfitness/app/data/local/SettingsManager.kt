@@ -40,9 +40,12 @@ class SettingsManager(private val context: Context) {
         val NUTRITION_WEIGHT = stringPreferencesKey("nutrition_weight")
         val NUTRITION_HEIGHT = stringPreferencesKey("nutrition_height")
         val NUTRITION_PLAN_DAYS = intPreferencesKey("nutrition_plan_days")
+        val NUTRITION_CYCLE_LENGTH = intPreferencesKey("nutrition_cycle_length")
         val NUTRITION_EXCLUDED_FOODS = stringSetPreferencesKey("nutrition_excluded_foods")
-        val NUTRITION_TRACKING_DATE = stringPreferencesKey("nutrition_tracking_date")
-        val NUTRITION_COMPLETED_MEALS = stringSetPreferencesKey("nutrition_completed_meals")
+        val NUTRITION_AVAILABLE_PRODUCTS = stringSetPreferencesKey("nutrition_available_products")
+        val PROGRAM_START_DATE = stringPreferencesKey("program_start_date")
+        val PROGRAM_SUMMARY_DISMISSED = booleanPreferencesKey("program_summary_dismissed")
+        val NUTRITION_WARNING_DISMISSED_FOR = stringPreferencesKey("nutrition_warning_dismissed_for")
     }
 
     val languageFlow: Flow<String> = context.dataStore.data.map { preferences ->
@@ -160,13 +163,18 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    val nutritionPlanDaysFlow: Flow<Int> = context.dataStore.data.map { preferences ->
-        (preferences[NUTRITION_PLAN_DAYS] ?: 3).coerceIn(1, 7)
+    val nutritionCycleLengthFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+        val explicit = preferences[NUTRITION_CYCLE_LENGTH]
+        if (explicit != null) {
+            explicit.toNutritionCycleLength()
+        } else {
+            (preferences[NUTRITION_PLAN_DAYS] ?: 3).legacyNutritionPlanDaysToCycleLength()
+        }
     }
 
-    suspend fun setNutritionPlanDays(days: Int) {
+    suspend fun setNutritionCycleLength(days: Int) {
         context.dataStore.edit { preferences ->
-            preferences[NUTRITION_PLAN_DAYS] = days.coerceIn(1, 7)
+            preferences[NUTRITION_CYCLE_LENGTH] = days.toNutritionCycleLength()
         }
     }
 
@@ -180,6 +188,16 @@ class SettingsManager(private val context: Context) {
         }
     }
 
+    val nutritionAvailableProductsFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        preferences[NUTRITION_AVAILABLE_PRODUCTS].orEmpty()
+    }
+
+    suspend fun setNutritionAvailableProducts(productKeys: Set<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[NUTRITION_AVAILABLE_PRODUCTS] = productKeys
+        }
+    }
+
     val userPreferencesFlow: Flow<UserPreferences> = combine(
         nutritionExcludedFoodsFlow,
         availableEquipmentFlow
@@ -190,30 +208,46 @@ class SettingsManager(private val context: Context) {
         )
     }
 
-    val completedNutritionMealsFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
-        val storedDate = preferences[NUTRITION_TRACKING_DATE]
-        val completedMeals = preferences[NUTRITION_COMPLETED_MEALS].orEmpty()
-        if (storedDate == currentNutritionTrackingDate()) completedMeals else emptySet()
+    val programStartDateFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[PROGRAM_START_DATE] ?: LocalDate.now().toString()
     }
 
-    suspend fun setNutritionMealCompleted(mealKey: String, completed: Boolean) {
+    suspend fun ensureProgramStartDate() {
         context.dataStore.edit { preferences ->
-            val today = currentNutritionTrackingDate()
-            val currentCompletedMeals =
-                if (preferences[NUTRITION_TRACKING_DATE] == today) {
-                    preferences[NUTRITION_COMPLETED_MEALS].orEmpty().toMutableSet()
-                } else {
-                    mutableSetOf()
-                }
-
-            if (completed) {
-                currentCompletedMeals += mealKey
-            } else {
-                currentCompletedMeals -= mealKey
+            if (preferences[PROGRAM_START_DATE] == null) {
+                preferences[PROGRAM_START_DATE] = LocalDate.now().toString()
             }
+        }
+    }
 
-            preferences[NUTRITION_TRACKING_DATE] = today
-            preferences[NUTRITION_COMPLETED_MEALS] = currentCompletedMeals
+    suspend fun resetProgramStartDate(date: String = LocalDate.now().toString()) {
+        context.dataStore.edit { preferences ->
+            preferences[PROGRAM_START_DATE] = date
+            preferences[PROGRAM_SUMMARY_DISMISSED] = false
+        }
+    }
+
+    val programSummaryDismissedFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PROGRAM_SUMMARY_DISMISSED] ?: false
+    }
+
+    suspend fun setProgramSummaryDismissed(dismissed: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PROGRAM_SUMMARY_DISMISSED] = dismissed
+        }
+    }
+
+    val nutritionWarningDismissedForFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[NUTRITION_WARNING_DISMISSED_FOR]
+    }
+
+    suspend fun dismissNutritionWarningFor(key: String?) {
+        context.dataStore.edit { preferences ->
+            if (key == null) {
+                preferences.remove(NUTRITION_WARNING_DISMISSED_FOR)
+            } else {
+                preferences[NUTRITION_WARNING_DISMISSED_FOR] = key
+            }
         }
     }
 
@@ -312,5 +346,22 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    private fun currentNutritionTrackingDate(): String = LocalDate.now().toString()
+    private fun Int.legacyNutritionPlanDaysToCycleLength(): Int {
+        return when {
+            this <= 0 -> 0
+            this == 1 -> 1
+            this >= 7 -> 7
+            else -> 3
+        }
+    }
+
+    private fun Int.toNutritionCycleLength(): Int {
+        return when (this) {
+            0, 1, 3, 7 -> this
+            in Int.MIN_VALUE..0 -> 0
+            2 -> 3
+            in 4..6 -> 7
+            else -> 7
+        }
+    }
 }

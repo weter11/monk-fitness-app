@@ -289,7 +289,7 @@ fun RestDayUI(onComplete: () -> Unit) {
         Spacer(modifier = Modifier.height(48.dp))
 
         MonkButton(
-            text = stringResource(R.string.complete_workout),
+            text = stringResource(R.string.recovery_completed),
             onClick = onComplete
         )
     }

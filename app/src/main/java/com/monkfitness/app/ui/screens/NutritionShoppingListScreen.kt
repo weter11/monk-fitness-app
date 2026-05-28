@@ -37,6 +37,7 @@ fun NutritionShoppingListScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
+    val cycleLength by viewModel.nutritionCycleLength.collectAsState()
     val plan by viewModel.nutritionPlan.collectAsState()
 
     Scaffold(
@@ -45,10 +46,7 @@ fun NutritionShoppingListScreen(
                 title = { Text(stringResource(R.string.nutrition_shopping_list)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.previous)
-                        )
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.previous))
                     }
                 }
             )
@@ -62,16 +60,23 @@ fun NutritionShoppingListScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = stringResource(R.string.nutrition_shopping_list_desc_advanced),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary
-            )
-
-            NutritionShoppingGroup.entries.forEach { group ->
-                val items = plan.shoppingList[group].orEmpty()
-                if (items.isNotEmpty()) {
-                    NutritionShoppingGroupCard(group = group, items = items)
+            if (cycleLength == 0) {
+                Text(
+                    text = stringResource(R.string.nutrition_disabled_message),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.nutrition_shopping_list_desc_cycle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                NutritionShoppingGroup.entries.forEach { group ->
+                    val items = plan.shoppingList[group].orEmpty()
+                    if (items.isNotEmpty()) {
+                        NutritionShoppingGroupCard(group = group, items = items)
+                    }
                 }
             }
         }
@@ -79,29 +84,12 @@ fun NutritionShoppingListScreen(
 }
 
 @Composable
-private fun NutritionShoppingGroupCard(
-    group: NutritionShoppingGroup,
-    items: List<NutritionShoppingListItem>
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = stringResource(group.titleRes),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
+private fun NutritionShoppingGroupCard(group: NutritionShoppingGroup, items: List<NutritionShoppingListItem>) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(text = stringResource(group.titleRes), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             items.forEach { item ->
-                Text(
-                    text = "• ${stringResource(item.ingredient.nameRes)} — ${quantityText(item)}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text(text = "• ${stringResource(item.ingredient.nameRes)} — ${quantityText(item)}", style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
