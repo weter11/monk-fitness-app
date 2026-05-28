@@ -349,7 +349,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val focusAreas = values[4] as Set<ExerciseSubCategory>
         @Suppress("UNCHECKED_CAST")
         val availableEquipment = values[5] as Set<Equipment>
-        val todayState = values[6] as ProgramDayState
         if (day == null) {
             WorkoutSessionUiState(
                 day = null,
