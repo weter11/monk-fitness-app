@@ -109,6 +109,8 @@
     <string name="notification_channel_name">Daily Reminder</string>
     <string name="notification_title">Time to Workout!</string>
     <string name="notification_text">Keep your streak alive. Start your daily workout now.</string>
+    <string name="notification_nutrition_title">Time to Eat!</string>
+    <string name="notification_nutrition_text">Stay on track with your nutrition plan.</string>
     <string name="posture_training">Posture Training</string>
     <string name="posture_desc">Correct your posture with these daily exercises.</string>
     <string name="exercise_library_desc">Browse a fixed curated list of exercises by training type and body area.</string>

@@ -109,6 +109,8 @@
     <string name="notification_channel_name">Ежедневное напоминание</string>
     <string name="notification_title">Время тренировки!</string>
     <string name="notification_text">Сохраняйте свою серию. Начните ежедневную тренировку прямо сейчас.</string>
+    <string name="notification_nutrition_title">Время поесть!</string>
+    <string name="notification_nutrition_text">Придерживайтесь вашего плана питания.</string>
     <string name="posture_training">Тренировка осанки</string>
     <string name="posture_desc">Исправьте осанку с помощью этих ежедневных упражнений.</string>
     <string name="exercise_library_desc">Просматривайте фиксированный набор упражнений по типу тренировки и зоне тела.</string>
