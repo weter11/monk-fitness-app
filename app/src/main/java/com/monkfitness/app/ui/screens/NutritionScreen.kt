@@ -178,8 +178,7 @@ fun NutritionScreen(
                                     Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Checkbox(
                                             checked = ingredient.key in excludedFoods,
-                                            onCheckedChange = null,
-                                            enabled = false
+                                            onCheckedChange = null
                                         )
                                         Text(
                                             text = stringResource(ingredient.nameRes),
