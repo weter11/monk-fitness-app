@@ -89,6 +89,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val workoutGenerator = WorkoutGenerator()
     private val emptyWorkout = Workout(id = -1, type = com.monkfitness.app.data.model.WorkoutType.REST, exercises = emptyList())
 
+    companion object {
+        const val ROUTE_HOME = "home"
+        const val ROUTE_NUTRITION = "nutrition"
+    }
+
+    // Notification Deep-link State
+    private val _notificationDestination = MutableStateFlow<String?>(null)
+    val notificationDestination = _notificationDestination.asStateFlow()
+
+    fun handleNotificationIntent(intent: android.content.Intent?) {
+        if (intent == null) return
+        val type = intent.getStringExtra(NotificationScheduler.EXTRA_NOTIFICATION_TYPE)
+        if (type != null) {
+            val destination = when (type) {
+                NotificationScheduler.TYPE_NUTRITION -> ROUTE_NUTRITION
+                NotificationScheduler.TYPE_WORKOUT -> ROUTE_HOME
+                else -> ROUTE_HOME
+            }
+            _notificationDestination.value = destination
+        }
+    }
+
+    fun clearNotificationDestination() {
+        _notificationDestination.value = null
+    }
+
     // Workout Session State
     private val _currentWorkoutDay = MutableStateFlow<Int?>(null)
     val currentWorkoutDay = _currentWorkoutDay.asStateFlow()

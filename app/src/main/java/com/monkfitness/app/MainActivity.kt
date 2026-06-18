@@ -1,6 +1,7 @@
 package com.monkfitness.app
 
 import android.os.Bundle
+import android.content.Intent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -41,6 +42,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        viewModel.handleNotificationIntent(intent)
         setContent {
             val language by viewModel.settingsManager.languageFlow.collectAsState(initial = "ru")
             val currentStep by viewModel.currentStep.collectAsState()
@@ -73,6 +75,12 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        viewModel.handleNotificationIntent(intent)
+    }
 }
 
 sealed class Screen(val route: String, val titleRes: Int, val icon: ImageVector) {
@@ -90,6 +98,22 @@ fun MainApp(viewModel: MainViewModel) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    val notificationDestination by viewModel.notificationDestination.collectAsState()
+
+    LaunchedEffect(notificationDestination, isOnboardingCompleted) {
+        val dest = notificationDestination
+        if (dest != null && isOnboardingCompleted) {
+            viewModel.clearNotificationDestination()
+            navController.navigate(dest) {
+                popUpTo(navController.graph.startDestinationId) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
 
     Scaffold(
         bottomBar = {
