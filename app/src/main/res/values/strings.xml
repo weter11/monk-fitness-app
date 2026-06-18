@@ -189,6 +189,9 @@
     <string name="nutrition_plan_days_7">7 days</string>
     <string name="nutrition_exclusions">Excluded foods</string>
     <string name="nutrition_exclusions_desc">Meals and replacements will exclude the foods you select.</string>
+    <string name="show_excluded_products_nutrition">Show excluded products in Nutrition screen</string>
+    <string name="diet_restrictions_summary">Diet restrictions: %1$s</string>
+    <string name="diet_restrictions_none">None</string>
     <string name="nutrition_plan_preview_title">%1$d-day plan preview</string>
     <string name="nutrition_today_foods">Foods</string>
     <string name="nutrition_today_instructions">How to prepare</string>

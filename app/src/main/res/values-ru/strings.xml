@@ -189,6 +189,9 @@
     <string name="nutrition_plan_days_7">7 дней</string>
     <string name="nutrition_exclusions">Исключенные продукты</string>
     <string name="nutrition_exclusions_desc">План и замены будут исключать выбранные продукты.</string>
+    <string name="show_excluded_products_nutrition">Показывать исключенные продукты на экране питания</string>
+    <string name="diet_restrictions_summary">Ограничения в диете: %1$s</string>
+    <string name="diet_restrictions_none">Нет</string>
     <string name="nutrition_plan_preview_title">Предпросмотр плана на %1$d дн.</string>
     <string name="nutrition_today_foods">Что есть</string>
     <string name="nutrition_today_instructions">Как приготовить</string>
