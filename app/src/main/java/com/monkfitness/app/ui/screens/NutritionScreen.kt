@@ -45,12 +45,18 @@ import com.monkfitness.app.data.model.NutritionQuantityUnit
 import com.monkfitness.app.viewmodel.MainViewModel
 import kotlinx.coroutines.flow.collectLatest
 import java.time.LocalDate
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 
 @Composable
 fun NutritionScreen(
     viewModel: MainViewModel,
     onOpenTodayPlan: () -> Unit,
-    onOpenShoppingList: () -> Unit
+    onOpenShoppingList: () -> Unit,
+    onNavigateToSettings: () -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -59,6 +65,7 @@ fun NutritionScreen(
     val cycleLength by viewModel.nutritionCycleLength.collectAsState()
     val excludedFoods by viewModel.nutritionExcludedFoods.collectAsState()
     val availableProducts by viewModel.nutritionAvailableProducts.collectAsState()
+    val showExcludedProductsInNutrition by viewModel.showExcludedProductsInNutrition.collectAsState()
     val plan by viewModel.nutritionPlan.collectAsState()
     val targets by viewModel.currentNutritionTargets.collectAsState()
     val currentProgramDay by viewModel.currentProgramDay.collectAsState()
@@ -156,30 +163,70 @@ fun NutritionScreen(
                 }
             }
 
-            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(text = stringResource(R.string.nutrition_exclusions), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(
-                        text = stringResource(R.string.nutrition_exclusions_desc),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    viewModel.nutritionExclusionOptions.chunked(2).forEach { rowItems ->
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            rowItems.forEach { ingredient ->
-                                Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Checkbox(
-                                        checked = ingredient.key in excludedFoods,
-                                        onCheckedChange = { viewModel.toggleNutritionExcludedFood(ingredient.key) }
-                                    )
-                                    Text(
-                                        text = stringResource(ingredient.nameRes),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier.padding(top = 12.dp)
-                                    )
+            if (showExcludedProductsInNutrition) {
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(text = stringResource(R.string.nutrition_exclusions), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = stringResource(R.string.nutrition_exclusions_desc),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                        viewModel.nutritionExclusionOptions.chunked(2).forEach { rowItems ->
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                rowItems.forEach { ingredient ->
+                                    Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Checkbox(
+                                            checked = ingredient.key in excludedFoods,
+                                            onCheckedChange = null,
+                                            enabled = false
+                                        )
+                                        Text(
+                                            text = stringResource(ingredient.nameRes),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            modifier = Modifier.padding(top = 12.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
+                    }
+                }
+            } else {
+                val formattedRestrictions = if (excludedFoods.isEmpty()) {
+                    stringResource(R.string.diet_restrictions_none)
+                } else {
+                    excludedFoods.mapNotNull { key ->
+                        viewModel.nutritionExclusionOptions.find { it.key == key }?.let {
+                            stringResource(it.nameRes)
+                        }
+                    }.joinToString(", ")
+                }
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToSettings() },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.diet_restrictions_summary, formattedRestrictions),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = stringResource(R.string.settings),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
