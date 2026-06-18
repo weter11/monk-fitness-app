@@ -46,6 +46,7 @@ class SettingsManager(private val context: Context) {
         val PROGRAM_START_DATE = stringPreferencesKey("program_start_date")
         val PROGRAM_SUMMARY_DISMISSED = booleanPreferencesKey("program_summary_dismissed")
         val NUTRITION_WARNING_DISMISSED_FOR = stringPreferencesKey("nutrition_warning_dismissed_for")
+        val SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION = booleanPreferencesKey("show_excluded_products_in_nutrition")
     }
 
     val languageFlow: Flow<String> = context.dataStore.data.map { preferences ->
@@ -248,6 +249,16 @@ class SettingsManager(private val context: Context) {
             } else {
                 preferences[NUTRITION_WARNING_DISMISSED_FOR] = key
             }
+        }
+    }
+
+    val showExcludedProductsInNutritionFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION] ?: false
+    }
+
+    suspend fun setShowExcludedProductsInNutrition(show: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION] = show
         }
     }
 
