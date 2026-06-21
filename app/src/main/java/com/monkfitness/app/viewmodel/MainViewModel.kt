@@ -912,6 +912,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
     )
 
+    val showExcludedProductsInNutrition = settingsManager.showExcludedProductsInNutritionFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), false
+    )
+
     val nutritionExclusionOptions: List<NutritionIngredient> = nutritionExclusionIngredients
 
     val mealCycles = repository.getMealCycles().stateIn(
@@ -1002,6 +1006,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val next = if (foodKey in current) current - foodKey else current + foodKey
             settingsManager.setNutritionExcludedFoods(next)
             syncNutritionCycles()
+        }
+    }
+
+    fun setShowExcludedProductsInNutrition(show: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setShowExcludedProductsInNutrition(show)
         }
     }
 

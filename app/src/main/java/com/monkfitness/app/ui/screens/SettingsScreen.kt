@@ -55,6 +55,7 @@ fun SettingsScreen(
     val selectedFlexibilityFocusAreas by viewModel.flexibilityFocusAreas.collectAsState()
     val userPreferences by viewModel.userPreferences.collectAsState()
     val nutritionCycleLength by viewModel.nutritionCycleLength.collectAsState()
+    val showExcludedProductsInNutrition by viewModel.showExcludedProductsInNutrition.collectAsState()
 
     Scaffold(
         topBar = {
@@ -131,6 +132,12 @@ fun SettingsScreen(
             NutritionCycleSelector(
                 selectedDays = nutritionCycleLength,
                 onSelect = viewModel::setNutritionCycleLength
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            SettingSwitchRow(
+                title = stringResource(R.string.show_excluded_products_nutrition),
+                checked = showExcludedProductsInNutrition,
+                onCheckedChange = viewModel::setShowExcludedProductsInNutrition
             )
 
             Spacer(modifier = Modifier.height(24.dp))

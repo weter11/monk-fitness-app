@@ -190,6 +190,15 @@ fun MainApp(viewModel: MainViewModel) {
                     },
                     onOpenShoppingList = {
                         navController.navigate("nutrition-shopping-list")
+                    },
+                    onNavigateToSettings = {
+                        navController.navigate(Screen.Settings.route) {
+                            popUpTo(navController.graph.startDestinationId) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     }
                 )
             }
