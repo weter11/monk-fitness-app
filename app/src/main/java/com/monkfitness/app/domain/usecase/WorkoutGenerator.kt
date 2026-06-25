@@ -20,6 +20,9 @@ class WorkoutGenerator {
         val fallbackMatch: (Exercise) -> Boolean = preferredMatch
     )
 
+    private val hyperlordosisHighPriority = listOf("dead_bug", "glute_bridge", "pelvic_tilt", "hip_flexor_stretch", "couch_stretch")
+    private val hyperlordosisMediumPriority = listOf("bird_dog", "side_plank", "child_pose", "thoracic_rotations")
+
     private val allExercises = listOf(
         baseRepExercise("pushups", R.string.ex_pushups, R.string.ex_pushups_desc, R.string.ex_pushups_tech, R.string.ex_pushups_steps, R.string.ex_pushups_mistakes, imageRes = R.drawable.push_up, sets = 3, baseMinReps = 6, baseMaxReps = 8, phase4MinReps = 10, phase4MaxReps = 15, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.FULL_BODY),
         baseRepExercise("decline_pushups", R.string.ex_decline_pushups, R.string.ex_decline_pushups_desc, R.string.ex_decline_pushups_tech, R.string.ex_decline_pushups_steps, R.string.ex_decline_pushups_mistakes, imageRes = R.drawable.push_up, sets = 3, baseMinReps = 5, baseMaxReps = 7, phase4MinReps = 8, phase4MaxReps = 12, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS),
@@ -32,6 +35,10 @@ class WorkoutGenerator {
         baseRepExercise("step_ups", R.string.ex_step_ups, R.string.ex_step_ups_desc, R.string.ex_step_ups_tech, R.string.ex_step_ups_steps, R.string.ex_step_ups_mistakes, imageRes = R.drawable.lunges, sets = 3, baseMinReps = 8, baseMaxReps = 10, phase4MinReps = 14, phase4MaxReps = 20, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.LEGS),
         baseRepExercise("rows", R.string.ex_rows, R.string.ex_rows_desc, R.string.ex_rows_tech, R.string.ex_rows_steps, R.string.ex_rows_mistakes, imageRes = R.drawable.pull_up, sets = 3, baseMinReps = 8, baseMaxReps = 10, phase4MinReps = 12, phase4MaxReps = 16, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS, requiredEquipment = setOf(Equipment.BAR)),
         baseRepExercise("glute_bridge", R.string.ex_glute_bridge, R.string.ex_glute_bridge_desc, R.string.ex_glute_bridge_tech, R.string.ex_glute_bridge_steps, R.string.ex_glute_bridge_mistakes, imageRes = R.drawable.glute_bridge, sets = 3, baseMinReps = 12, baseMaxReps = 15, phase4MinReps = 18, phase4MaxReps = 25, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.HIPS),
+        baseRepExercise("dead_bug", R.string.ex_dead_bug, R.string.ex_dead_bug_desc, R.string.ex_dead_bug_tech, R.string.ex_dead_bug_steps, R.string.ex_dead_bug_mistakes, imageRes = R.drawable.plank, sets = 3, baseMinReps = 10, baseMaxReps = 12, phase4MinReps = 14, phase4MaxReps = 20, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.CORE),
+        baseTimerExercise("side_plank", R.string.ex_side_plank, R.string.ex_side_plank_desc, R.string.ex_side_plank_tech, R.string.ex_side_plank_steps, R.string.ex_side_plank_mistakes, imageRes = R.drawable.plank, sets = 2, baseDurationSeconds = 30, phase4DurationSeconds = 60, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.CORE),
+        baseRepExercise("pelvic_tilt", R.string.ex_pelvic_tilt, R.string.ex_pelvic_tilt_desc, R.string.ex_pelvic_tilt_tech, R.string.ex_pelvic_tilt_steps, R.string.ex_pelvic_tilt_mistakes, imageRes = R.drawable.glute_bridge, sets = 3, baseMinReps = 12, baseMaxReps = 15, phase4MinReps = 18, phase4MaxReps = 25, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.HYPERLORDOSIS),
+        baseTimerExercise("couch_stretch", R.string.ex_couch_stretch, R.string.ex_couch_stretch_desc, R.string.ex_couch_stretch_tech, R.string.ex_couch_stretch_steps, R.string.ex_couch_stretch_mistakes, imageRes = R.drawable.lunges, sets = 2, baseDurationSeconds = 45, phase4DurationSeconds = 90, category = ExerciseCategory.STRETCHING, subCategory = ExerciseSubCategory.HYPERLORDOSIS),
         baseRepExercise("cat_cow", R.string.ex_cat_cow, R.string.ex_cat_cow_desc, R.string.ex_cat_cow_tech, R.string.ex_cat_cow_steps, R.string.ex_cat_cow_mistakes, sets = 2, baseMinReps = 10, baseMaxReps = 12, phase4MinReps = 16, phase4MaxReps = 20, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SPINE),
         baseRepExercise("bird_dog", R.string.ex_bird_dog, R.string.ex_bird_dog_desc, R.string.ex_bird_dog_tech, R.string.ex_bird_dog_steps, R.string.ex_bird_dog_mistakes, imageRes = R.drawable.bird_dog, sets = 3, baseMinReps = 6, baseMaxReps = 8, phase4MinReps = 10, phase4MaxReps = 14, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.CORE),
         baseRepExercise("world_greatest_stretch", R.string.ex_stretch, R.string.ex_stretch_desc, R.string.ex_stretch_tech, R.string.ex_stretch_steps, R.string.ex_stretch_mistakes, sets = 2, baseMinReps = 4, baseMaxReps = 5, phase4MinReps = 6, phase4MaxReps = 10, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.FULL_BODY),
@@ -141,6 +148,7 @@ class WorkoutGenerator {
         focusAreas: Set<ExerciseSubCategory>,
         availableEquipment: Set<Equipment>
     ): List<Exercise> {
+        val isHyperlordosisActive = ExerciseSubCategory.HYPERLORDOSIS in focusAreas
         return try {
             val selectionRules = when (type) {
                 WorkoutType.STRENGTH_A -> listOf(
@@ -188,8 +196,22 @@ class WorkoutGenerator {
                 WorkoutType.REST -> return emptyList()
             }
 
+            val rawExercises = selectExercises(selectionRules, phase, Random(daySeed * 1_000 + type.ordinal))
+            val adaptedExercises = if (isHyperlordosisActive) {
+                rawExercises.map { exercise ->
+                    if (exercise.id == "superman") {
+                        val birdDog = requireExercise("bird_dog")
+                        phasedExercise(birdDog, phase)
+                    } else {
+                        exercise
+                    }
+                }
+            } else {
+                rawExercises
+            }
+
             filterExercisesForAvailableEquipment(
-                exercises = selectExercises(selectionRules, phase, Random(daySeed * 1_000 + type.ordinal)),
+                exercises = adaptedExercises,
                 availableEquipment = availableEquipment,
                 phase = phase,
                 random = Random(daySeed * 10_000 + type.ordinal)
@@ -279,6 +301,14 @@ class WorkoutGenerator {
         }
 
         fun select(match: (Exercise) -> Boolean): Exercise? = candidates.filter(match).randomOrNull(random)
+
+        if (ExerciseSubCategory.HYPERLORDOSIS in prioritizedFocusAreas) {
+            val highPriority = select { it.id in hyperlordosisHighPriority && it.matchesTrainingType(trainingType) }
+            if (highPriority != null) return highPriority
+
+            val mediumPriority = select { it.id in hyperlordosisMediumPriority && it.matchesTrainingType(trainingType) }
+            if (mediumPriority != null) return mediumPriority
+        }
 
         return select { it.subCategory == desiredArea && it.matchesPreferredGroup(trainingType, preferPosture) }
             ?: select { it.subCategory == desiredArea }
@@ -669,8 +699,9 @@ class WorkoutGenerator {
         }
     }
 
-    fun getPostureExercises(): List<Exercise> {
-        return listOf(
+    fun getPostureExercises(focusAreas: Set<ExerciseSubCategory> = emptySet()): List<Exercise> {
+        val isHyperlordosisActive = ExerciseSubCategory.HYPERLORDOSIS in focusAreas
+        val basePostureList = listOf(
             requireExercise("hang").copy(sets = 3, reps = 1, minReps = 0, maxReps = 0, durationSeconds = 60, isTimerBased = true),
             requireExercise("face_pull").copy(sets = 3, reps = 15, minReps = 15, maxReps = 15, durationSeconds = 0, isTimerBased = false),
             requireExercise("bird_dog").copy(sets = 3, reps = 12, minReps = 12, maxReps = 12, durationSeconds = 0, isTimerBased = false),
@@ -680,6 +711,21 @@ class WorkoutGenerator {
             requireExercise("pike_pushups").copy(sets = 3, reps = 8, minReps = 8, maxReps = 8, durationSeconds = 0, isTimerBased = false),
             requireExercise("horse_stance").copy(sets = 3, reps = 1, minReps = 0, maxReps = 0, durationSeconds = 60, isTimerBased = true)
         )
+
+        return if (isHyperlordosisActive) {
+            basePostureList.map { exercise ->
+                if (exercise.id == "superman") {
+                    exercise.copy(sets = (exercise.sets / 2).coerceAtLeast(1))
+                } else {
+                    exercise
+                }
+            } + listOf(
+                requireExercise("pelvic_tilt").copy(sets = 3, reps = 15, minReps = 15, maxReps = 15),
+                requireExercise("dead_bug").copy(sets = 3, reps = 12, minReps = 12, maxReps = 12)
+            )
+        } else {
+            basePostureList
+        }
     }
 
     fun getWarmupExercises(): List<Exercise> {

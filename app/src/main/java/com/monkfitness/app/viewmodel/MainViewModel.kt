@@ -508,8 +508,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun getPostureExercises(
-        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value
-    ) = workoutGenerator.getPostureExercises().map {
+        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
+        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value
+    ) = workoutGenerator.getPostureExercises(focusAreas).map {
         enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
     }
 
@@ -534,7 +535,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             ?: getPostureMobilityWorkout(resolvedDay, difficultyAdjustments, trainingType, focusAreas, availableEquipment).exercises.find { it.id == exerciseId }
             ?: getWarmupExercises(difficultyAdjustments).find { it.id == exerciseId }
             ?: getExerciseLibrary(difficultyAdjustments, availableEquipment).find { it.id == exerciseId }
-            ?: getPostureExercises(difficultyAdjustments).find { it.id == exerciseId }
+            ?: getPostureExercises(difficultyAdjustments, focusAreas).find { it.id == exerciseId }
     }
 
     fun getExerciseDifficultyAdjustment(exerciseId: String): Flow<Int> {

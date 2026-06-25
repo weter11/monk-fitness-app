@@ -133,6 +133,10 @@
     <string name="subcategory_legs">Legs</string>
     <string name="subcategory_core">Core</string>
     <string name="subcategory_full_body">All Body</string>
+    <string name="subcategory_hyperlordosis">Hyperlordosis</string>
+
+    <string name="hyperlordosis_focus_title">Hyperlordosis Focus Active</string>
+    <string name="hyperlordosis_focus_desc">This mode adds exercises that help improve pelvic control, hip mobility, glute activation and core stability.</string>
 
     <string name="nutrition">Nutrition</string>
     <string name="nutrition_desc">Adaptive 3-day meal planning that follows your workout schedule and program progress.</string>
@@ -306,6 +310,30 @@
     <string name="ex_leg_raises_steps">1. Lie flat on your back with legs straight and hands by your sides or under your glutes.\n2. Lift your legs toward the ceiling until they are at a 90-degree angle.\n3. Slowly lower your legs back down without letting them touch the floor.\n4. Keep your lower back pressed firmly into the ground.</string>
     <string name="ex_leg_raises_tech">Exhale as you lift and inhale as you lower. If your back arches, don\'t lower your legs as far. Focus on the tension in your lower abs.</string>
     <string name="ex_leg_raises_mistakes">Arching the lower back, lifting legs with momentum, and bending the knees.</string>
+
+    <string name="ex_dead_bug">Dead Bug</string>
+    <string name="ex_dead_bug_desc">A core stability exercise that teaches you to keep your spine neutral while moving your limbs.</string>
+    <string name="ex_dead_bug_steps">1. Lie on your back with arms extended toward the ceiling and legs in a tabletop position (knees bent at 90 degrees).\n2. Slowly lower your right arm behind your head and your left leg toward the floor, keeping your lower back pressed into the mat.\n3. Return to the starting position and repeat with the opposite limbs.</string>
+    <string name="ex_dead_bug_tech">Focus on maintaining a flat back against the floor throughout the entire movement. Move slowly and with control.</string>
+    <string name="ex_dead_bug_mistakes">Letting the lower back arch away from the floor, moving too quickly, and holding your breath.</string>
+
+    <string name="ex_side_plank">Side Plank</string>
+    <string name="ex_side_plank_desc">A lateral core exercise that strengthens the obliques and improves spinal stability.</string>
+    <string name="ex_side_plank_steps">1. Lie on your side with your legs straight and prop yourself up on your forearm.\n2. Lift your hips off the ground until your body forms a straight line from head to heels.\n3. Hold this position while breathing deeply.</string>
+    <string name="ex_side_plank_tech">Keep your elbow directly under your shoulder. Engage your glutes and core to maintain a straight line.</string>
+    <string name="ex_side_plank_mistakes">Sagging hips, rotating the torso forward or backward, and shrugging the shoulder.</string>
+
+    <string name="ex_pelvic_tilt">Posterior Pelvic Tilt</string>
+    <string name="ex_pelvic_tilt_desc">A fundamental movement for pelvic control, helping to neutralize an excessive anterior tilt.</string>
+    <string name="ex_pelvic_tilt_steps">1. Lie on your back with knees bent and feet flat on the floor.\n2. Exhale and use your abdominal muscles to flatten your lower back against the floor by tilting your pelvis backward.\n3. Hold the tension for a second, then relax to the neutral position.</string>
+    <string name="ex_pelvic_tilt_tech">Imagine pulling your belly button toward your spine. The movement is subtle; avoid lifting your hips off the floor.</string>
+    <string name="ex_pelvic_tilt_mistakes">Using your legs to push, lifting the glutes, and holding your breath.</string>
+
+    <string name="ex_couch_stretch">Couch Stretch</string>
+    <string name="ex_couch_stretch_desc">An intensive stretch for the hip flexors and quads, crucial for releasing tension that contributes to hyperlordosis.</string>
+    <string name="ex_couch_stretch_steps">1. Start on all fours with your back toward a wall or couch.\n2. Place one knee into the corner where the floor meets the wall, with your shin vertical against the wall.\n3. Step the other foot forward into a lunge position.\n4. Carefully bring your torso upright, squeezing the glute of the stretching leg.</string>
+    <string name="ex_couch_stretch_tech">Keep your core tight and glute squeezed to protect your lower back. Only go as upright as you can without arching your back.</string>
+    <string name="ex_couch_stretch_mistakes">Arching the lower back to get upright, not squeezing the glute, and leaning forward.</string>
 
     <string name="ex_cat_cow">Cat Cow</string>
     <string name="ex_cat_cow_desc">A gentle flow that improves spinal mobility and coordinates movement with breath.</string>
