@@ -18,7 +18,8 @@ enum class ExerciseSubCategory(@StringRes val labelRes: Int) {
     HIPS(R.string.subcategory_hips),
     LEGS(R.string.subcategory_legs),
     CORE(R.string.subcategory_core),
-    FULL_BODY(R.string.subcategory_full_body)
+    FULL_BODY(R.string.subcategory_full_body),
+    HYPERLORDOSIS(R.string.subcategory_hyperlordosis)
 }
 
 enum class FlexibilityTrainingType(@StringRes val labelRes: Int) {
@@ -37,14 +38,18 @@ enum class Equipment(@StringRes val labelRes: Int) {
 val postureFocusAreas = listOf(
     ExerciseSubCategory.SHOULDERS,
     ExerciseSubCategory.SPINE,
-    ExerciseSubCategory.HIPS
+    ExerciseSubCategory.HIPS,
+    ExerciseSubCategory.CORE,
+    ExerciseSubCategory.HYPERLORDOSIS
 )
 
 val stretchFocusAreas = listOf(
     ExerciseSubCategory.SHOULDERS,
     ExerciseSubCategory.SPINE,
     ExerciseSubCategory.HIPS,
-    ExerciseSubCategory.LEGS
+    ExerciseSubCategory.LEGS,
+    ExerciseSubCategory.CORE,
+    ExerciseSubCategory.HYPERLORDOSIS
 )
 
 val flexibilityFocusAreas = listOf(
@@ -52,7 +57,9 @@ val flexibilityFocusAreas = listOf(
     ExerciseSubCategory.SHOULDERS,
     ExerciseSubCategory.SPINE,
     ExerciseSubCategory.HIPS,
-    ExerciseSubCategory.LEGS
+    ExerciseSubCategory.LEGS,
+    ExerciseSubCategory.CORE,
+    ExerciseSubCategory.HYPERLORDOSIS
 )
 
 val flexibilitySpecificFocusAreas = flexibilityFocusAreas.filterNot { it == ExerciseSubCategory.FULL_BODY }
