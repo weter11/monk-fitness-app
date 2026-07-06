@@ -109,6 +109,9 @@ fun SettingsScreen(
                 androidx.compose.material3.Button(onClick = { viewModel.setLanguage("ru") }) {
                     Text(stringResource(R.string.lang_ru))
                 }
+                androidx.compose.material3.Button(onClick = { viewModel.setLanguage("uk") }) {
+                    Text(stringResource(R.string.lang_uk))
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
