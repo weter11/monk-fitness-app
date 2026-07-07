@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -97,9 +99,10 @@ fun PostureScreen(
                 )
             }
         } else {
-            PostureExerciseList(
-                exercises = uiState.filteredExercises,
+            PostureFamilyList(
+                uiState = uiState,
                 onExerciseClick = onExerciseClick,
+                onToggleFamily = viewModel::toggleFamilyExpanded,
                 listState = listState,
                 modifier = Modifier.weight(1f)
             )
@@ -166,9 +169,10 @@ private fun ExerciseLibrarySearchBar(
 }
 
 @Composable
-private fun PostureExerciseList(
-    exercises: List<Exercise>,
+private fun PostureFamilyList(
+    uiState: com.monkfitness.app.viewmodel.PostureUiState,
     onExerciseClick: (Exercise) -> Unit,
+    onToggleFamily: (String) -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
     modifier: Modifier = Modifier
 ) {
@@ -178,10 +182,69 @@ private fun PostureExerciseList(
         contentPadding = PaddingValues(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(exercises, key = { it.id }) { exercise ->
-            CompactExerciseLibraryItem(
-                exercise = exercise,
-                onClick = { onExerciseClick(exercise) }
+        uiState.families.forEach { family ->
+            item(key = "family_${family.id}") {
+                val isExpanded = family.id in uiState.expandedFamilyIds
+                PostureFamilyHeader(
+                    family = family,
+                    isExpanded = isExpanded,
+                    onClick = { onToggleFamily(family.id) }
+                )
+            }
+
+            if (family.id in uiState.expandedFamilyIds) {
+                val variants = uiState.exercisesByFamily[family.id] ?: emptyList()
+                items(variants, key = { it.id }) { exercise ->
+                    CompactExerciseLibraryItem(
+                        exercise = exercise,
+                        onClick = { onExerciseClick(exercise) },
+                        modifier = Modifier.padding(start = 16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PostureFamilyHeader(
+    family: com.monkfitness.app.data.model.ExerciseFamily,
+    isExpanded: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(family.nameRes),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
+                )
+                Text(
+                    text = stringResource(family.descriptionRes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(
+                imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -190,10 +253,11 @@ private fun PostureExerciseList(
 @Composable
 private fun CompactExerciseLibraryItem(
     exercise: Exercise,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp

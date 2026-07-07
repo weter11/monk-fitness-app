@@ -22,7 +22,7 @@ class ExerciseAnimationProfileTest {
 
         val missingAnimatedVariants = allExercises
             .filterNot { it.hasAnimatedVariant() }
-            .map { it.id }
+            .map { "${it.id} (anim: ${it.animationId})" }
 
         assertTrue(
             "Missing animated variants for: $missingAnimatedVariants",

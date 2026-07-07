@@ -37,10 +37,11 @@ import kotlin.math.sqrt
 @Composable
 fun ExerciseAnimatedVisual(
     exerciseId: String,
+    animationId: String,
     animation: SkeletonAnimation,
     modifier: Modifier = Modifier
 ) {
-    val poseConfig = PoseRegistry.getPoseConfig(exerciseId)
+    val poseConfig = PoseRegistry.getPoseConfig(animationId)
 
     if (poseConfig != null) {
         val controller = rememberAnimationController(

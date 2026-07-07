@@ -11,6 +11,8 @@ class ExerciseSearchTest {
 
     private val exercise = Exercise(
         id = "cat_cow",
+        familyId = "cat_cow",
+        animationId = "cat_cow",
         nameRes = 0,
         descriptionRes = 0,
         techniqueRes = 0,
