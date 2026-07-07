@@ -30,4 +30,16 @@ object PoseRegistry {
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? = registry[animationId]
+
+    fun getDedicatedAnimationIds(): Set<String> {
+        // A dedicated animation is one where the PoseBuilder class is used ONLY by that animationId
+        val builderToIds = mutableMapOf<Class<out PoseBuilder>, MutableSet<String>>()
+        registry.forEach { (id, config) ->
+            builderToIds.getOrPut(config.builder.javaClass) { mutableSetOf() }.add(id)
+        }
+        return builderToIds.values
+            .filter { it.size == 1 }
+            .flatten()
+            .toSet()
+    }
 }

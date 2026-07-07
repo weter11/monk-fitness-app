@@ -7,9 +7,11 @@ import com.monkfitness.app.data.model.ExerciseFamily
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
+import com.monkfitness.app.data.model.LibraryStats
 import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.model.WorkoutType
 import com.monkfitness.app.data.model.flexibilitySpecificFocusAreas
+import com.monkfitness.app.poses.PoseRegistry
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
@@ -895,6 +897,18 @@ class WorkoutGenerator {
             requireExercise("hip_circles").copy(sets = 1, reps = 1, minReps = 0, maxReps = 0, durationSeconds = 30, isTimerBased = true),
             requireExercise("leg_swings").copy(sets = 1, reps = 1, minReps = 0, maxReps = 0, durationSeconds = 30, isTimerBased = true),
             requireExercise("jumping_jacks").copy(sets = 1, reps = 1, minReps = 0, maxReps = 0, durationSeconds = 60, isTimerBased = true)
+        )
+    }
+
+    fun getLibraryStats(): LibraryStats {
+        val dedicatedAnimationIds = PoseRegistry.getDedicatedAnimationIds()
+        return LibraryStats(
+            totalExercises = allExercises.size,
+            totalFamilies = families.size,
+            totalCategories = allExercises.map { it.category }.distinct().size,
+            totalBodyRegions = allExercises.map { it.subCategory }.distinct().size,
+            totalLanguages = 3, // EN, RU, UK
+            animatedExercisesCount = allExercises.count { it.animationId in dedicatedAnimationIds }
         )
     }
 }

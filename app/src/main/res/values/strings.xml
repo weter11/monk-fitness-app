@@ -665,5 +665,15 @@
     <string name="nutrition_not_enough_protein_sources">Not enough protein sources</string>
     <string name="nutrition_not_enough_carbs">Add more carbs</string>
     <string name="nutrition_add_more_fruits_vegetables">Add more vegetables/fruits</string>
+    <string name="library_statistics">Library Statistics</string>
+    <string name="stats_total_exercises">Total exercises</string>
+    <string name="stats_total_families">Total exercise families</string>
+    <string name="stats_main_categories">Main categories</string>
+    <string name="stats_body_regions">Body-region categories</string>
+    <string name="stats_languages">Supported languages</string>
+    <string name="stats_animation_coverage">Animation coverage</string>
+    <string name="stats_animated_label">Animated:</string>
+    <string name="stats_animated_format">%1$d / %2$d</string>
+
     <string name="ok">OK</string>
 </resources>

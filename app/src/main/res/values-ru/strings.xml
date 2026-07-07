@@ -665,5 +665,15 @@
     <string name="nutrition_not_enough_protein_sources">Недостаточно источников белка</string>
     <string name="nutrition_not_enough_carbs">Добавьте больше углеводов</string>
     <string name="nutrition_add_more_fruits_vegetables">Добавьте больше овощей или фруктов</string>
+    <string name="library_statistics">Статистика библиотеки</string>
+    <string name="stats_total_exercises">Всего упражнений</string>
+    <string name="stats_total_families">Семейств упражнений</string>
+    <string name="stats_main_categories">Основных категорий</string>
+    <string name="stats_body_regions">Регионов тела</string>
+    <string name="stats_languages">Поддерживаемых языков</string>
+    <string name="stats_animation_coverage">Покрытие анимациями</string>
+    <string name="stats_animated_label">Анимировано:</string>
+    <string name="stats_animated_format">%1$d / %2$d</string>
+
     <string name="ok">ОК</string>
 </resources>

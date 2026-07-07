@@ -31,11 +31,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
+import com.monkfitness.app.data.model.LibraryStats
 import com.monkfitness.app.data.model.NutritionIngredient
 import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
 import com.monkfitness.app.viewmodel.MainViewModel
@@ -56,6 +58,7 @@ fun SettingsScreen(
     val userPreferences by viewModel.userPreferences.collectAsState()
     val nutritionCycleLength by viewModel.nutritionCycleLength.collectAsState()
     val showExcludedProductsInNutrition by viewModel.showExcludedProductsInNutrition.collectAsState()
+    val libraryStats by viewModel.libraryStats.collectAsState()
 
     Scaffold(
         topBar = {
@@ -190,7 +193,63 @@ fun SettingsScreen(
                 onToggle = viewModel::toggleNutritionExcludedFood,
                 options = viewModel.nutritionExclusionOptions
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            LibraryStatisticsSection(stats = libraryStats)
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+}
+
+@Composable
+private fun LibraryStatisticsSection(stats: LibraryStats) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = stringResource(R.string.library_statistics),
+            style = MaterialTheme.typography.titleLarge
+        )
+
+        StatRow(label = stringResource(R.string.stats_total_exercises), value = stats.totalExercises.toString())
+        StatRow(label = stringResource(R.string.stats_total_families), value = stats.totalFamilies.toString())
+        StatRow(label = stringResource(R.string.stats_main_categories), value = stats.totalCategories.toString())
+        StatRow(label = stringResource(R.string.stats_body_regions), value = stats.totalBodyRegions.toString())
+        StatRow(label = stringResource(R.string.stats_languages), value = stats.totalLanguages.toString())
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = stringResource(R.string.stats_animation_coverage),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        StatRow(
+            label = stringResource(R.string.stats_animated_label),
+            value = stringResource(R.string.stats_animated_format, stats.animatedExercisesCount, stats.totalExercises)
+        )
+    }
+}
+
+@Composable
+private fun StatRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyLarge.copy(
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        )
     }
 }
 

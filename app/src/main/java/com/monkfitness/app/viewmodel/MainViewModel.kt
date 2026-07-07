@@ -16,6 +16,7 @@ import com.monkfitness.app.data.local.SettingsManager
 import com.monkfitness.app.data.model.BodyWeightEntry
 import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.data.model.LibraryStats
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
@@ -292,6 +293,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val completedPostureDaysCount = repository.getCompletedPostureDaysCount().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 0
+    )
+
+    val libraryStats = flowOf(workoutGenerator.getLibraryStats()).stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000),
+        LibraryStats(0, 0, 0, 0, 0, 0)
     )
 
     private val _streak = MutableStateFlow(0)

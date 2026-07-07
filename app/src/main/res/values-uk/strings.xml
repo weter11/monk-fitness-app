@@ -665,5 +665,15 @@
     <string name="nutrition_not_enough_protein_sources">Недостатньо джерел білка</string>
     <string name="nutrition_not_enough_carbs">Додайте більше вуглеводів</string>
     <string name="nutrition_add_more_fruits_vegetables">Додайте більше овочів або фруктів</string>
+    <string name="library_statistics">Статистика бібліотеки</string>
+    <string name="stats_total_exercises">Всього вправ</string>
+    <string name="stats_total_families">Сімейств вправ</string>
+    <string name="stats_main_categories">Основних категорій</string>
+    <string name="stats_body_regions">Регіонів тіла</string>
+    <string name="stats_languages">Мов підтримки</string>
+    <string name="stats_animation_coverage">Покриття анімаціями</string>
+    <string name="stats_animated_label">Анімовано:</string>
+    <string name="stats_animated_format">%1$d / %2$d</string>
+
     <string name="ok">ОК</string>
 </resources>
