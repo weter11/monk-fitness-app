@@ -25,9 +25,23 @@ data class Vector3(val x: Float, val y: Float, val z: Float) {
 }
 
 object SkeletonMath {
+    /**
+     * Standard Ease-In-Out Quintic
+     */
     fun easeIO(x: Float): Float {
         val cx = x.coerceIn(0f, 1f)
         return cx * cx * cx * (cx * (cx * 6 - 15) + 10)
+    }
+
+    /**
+     * Reference Implementation Ease-In-Out (Quadric)
+     */
+    fun easeInOut(x: Float): Float {
+        return if (x < 0.5f) {
+            2f * x * x
+        } else {
+            1f - (-2f * x + 2f).pow(2) / 2f
+        }
     }
 
     fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
@@ -48,10 +62,21 @@ object SkeletonMath {
     // Hard-locked 2-bone IK solver
     data class IKResult(val joint: Vector3, val end: Vector3)
 
+    /**
+     * Analytical IK with strict Biological Clamps (30° - 95%)
+     */
     fun solveIK(root: Vector3, target: Vector3, L1: Float, L2: Float, pole: Vector3): IKResult {
         val d = target - root
         val dMag = d.mag()
-        val dist = dMag.coerceIn(abs(L1 - L2) + 1f, L1 + L2 - 0.5f)
+
+        // MAX LIMIT: 95% extension
+        val maxDist = (L1 + L2) * 0.95f
+
+        // MIN LIMIT: 30 degree bend minimum
+        val minCos = cos(30f * PI.toFloat() / 180f)
+        val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
+
+        val dist = dMag.coerceIn(minDist, maxDist)
         val dir = d.normalize()
         val end = root + (dir * dist)
 

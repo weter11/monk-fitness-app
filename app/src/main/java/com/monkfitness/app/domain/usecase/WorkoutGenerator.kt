@@ -97,6 +97,7 @@ class WorkoutGenerator {
 
         // Pelvic Control
         baseRepExercise("dead_bug", "pelvic_control", "dead_bug_standard", R.string.ex_dead_bug, R.string.ex_dead_bug_desc, R.string.ex_dead_bug_tech, R.string.ex_dead_bug_steps, R.string.ex_dead_bug_mistakes, imageRes = R.drawable.plank, sets = 3, baseMinReps = 10, baseMaxReps = 12, phase4MinReps = 14, phase4MaxReps = 20, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.CORE),
+        baseRepExercise("leg_raises", "pelvic_control", "leg_raise_standard", R.string.ex_leg_raises, R.string.ex_leg_raises_desc, R.string.ex_leg_raises_tech, R.string.ex_leg_raises_steps, R.string.ex_leg_raises_mistakes, imageRes = R.drawable.plank, sets = 3, baseMinReps = 10, baseMaxReps = 15, phase4MinReps = 15, phase4MaxReps = 25, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.CORE),
         baseRepExercise("pelvic_tilt", "pelvic_control", "pelvic_tilt_standard", R.string.ex_pelvic_tilt, R.string.ex_pelvic_tilt_desc, R.string.ex_pelvic_tilt_tech, R.string.ex_pelvic_tilt_steps, R.string.ex_pelvic_tilt_mistakes, imageRes = R.drawable.glute_bridge, sets = 3, baseMinReps = 12, baseMaxReps = 15, phase4MinReps = 18, phase4MaxReps = 25, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.HYPERLORDOSIS),
 
         // Hip Flexor
@@ -105,6 +106,7 @@ class WorkoutGenerator {
 
         // Spinal Articulation
         baseRepExercise("cat_cow", "cat_cow", "cat_cow_reps", R.string.ex_cat_cow, R.string.ex_cat_cow_desc, R.string.ex_cat_cow_tech, R.string.ex_cat_cow_steps, R.string.ex_cat_cow_mistakes, sets = 2, baseMinReps = 10, baseMaxReps = 12, phase4MinReps = 16, phase4MaxReps = 20, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SPINE),
+        baseTimerExercise("cobra_stretch", "cobra", "cobra_stretch_hold", R.string.ex_cobra_stretch, R.string.ex_cobra_stretch_desc, R.string.ex_cobra_stretch_tech, R.string.ex_cobra_stretch_steps, R.string.ex_cobra_stretch_mistakes, imageRes = R.drawable.ic_exercise_placeholder, sets = 2, baseDurationSeconds = 30, phase4DurationSeconds = 60, category = ExerciseCategory.STRETCHING, subCategory = ExerciseSubCategory.SPINE),
 
         // Bird Dog
         baseRepExercise("bird_dog", "birddog", "birddog_hold", R.string.ex_bird_dog, R.string.ex_bird_dog_desc, R.string.ex_bird_dog_tech, R.string.ex_bird_dog_steps, R.string.ex_bird_dog_mistakes, imageRes = R.drawable.bird_dog, sets = 3, baseMinReps = 6, baseMaxReps = 8, phase4MinReps = 10, phase4MaxReps = 14, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.CORE),

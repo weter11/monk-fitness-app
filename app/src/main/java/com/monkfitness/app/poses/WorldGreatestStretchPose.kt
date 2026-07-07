@@ -1,7 +1,7 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.animation.SkeletonMath.easeIO
+import com.monkfitness.app.animation.SkeletonMath.easeInOut
 import com.monkfitness.app.animation.SkeletonMath.lerp
 import com.monkfitness.app.animation.SkeletonMath.rotAround
 import com.monkfitness.app.animation.SkeletonMath.solveIK
@@ -14,7 +14,6 @@ import com.monkfitness.app.animation.SkeletonEngine.ARMLEN
 import com.monkfitness.app.animation.SkeletonEngine.HIPW
 import com.monkfitness.app.animation.SkeletonEngine.SHW
 import com.monkfitness.app.animation.SkeletonEngine.NECK
-import com.monkfitness.app.animation.SkeletonEngine.HEADR
 
 class WorldGreatestStretchPose : PoseBuilder {
     override fun evaluate(progress: Float, side: Side): SkeletonPose {
@@ -22,67 +21,82 @@ class WorldGreatestStretchPose : PoseBuilder {
         val u = progress // 0 = threaded under, 1 = open to sky
 
         // Root & anchors (runner's lunge, back toe on ground)
-        val pelvis = Vector3(-18f, 64f + 5f * u, 0f)
+        val pelvis = Vector3(-18f, 35f + 20f * u, 0f)
+
+        // Hip mapping: L is front/active, R is back/planted in the p5 code
+        // We maintain: hipF (active/front), hipB (planted/back)
         val hipF = pelvis + Vector3(0f, 0f, HIPW * s)
         val hipB = pelvis + Vector3(0f, 0f, -HIPW * s)
-        val frontAnkle = Vector3(125f, 9f, 24f * s)
-        val frontToe = Vector3(158f, 0f, 27f * s)
-        val backAnkle = Vector3(-162f, 18f, -26f * s)
-        val backToe = Vector3(-186f, 0f, -28f * s)
+
+        val frontAnkle = Vector3(140f, 9f, 24f * s)
+        val frontToe = Vector3(175f, 0f, 27f * s)
+        val backAnkle = Vector3(-170f, 18f, -26f * s)
+        val backToe = Vector3(-195f, 0f, -28f * s)
 
         // Legs — locked-length IK, anatomical knee poles
         val legF = solveIK(hipF, frontAnkle, THIGH, SHIN, Vector3(1f, 0.35f, 0.15f * s))
         val legB = solveIK(hipB, backAnkle, THIGH, SHIN, Vector3(0.12f, -1f, -0.08f * s))
 
         // Spine (FK, exact TORSO length) — rises slightly as arm opens
-        val lean = Vector3(0.92f - 0.20f * u, 0.40f + 0.34f * u, 0.10f * u * s).normalize()
+        val lean = Vector3(0.85f - 0.20f * u, 0.45f + 0.34f * u, 0.10f * u * s).normalize()
         val chest = pelvis + (lean * TORSO)
 
         // Thoracic twist: shoulder girdle rotates about the spine axis
-        val tw = lerp(0.50f, -1.32f, u) * s
-        val shVec = rotAround(Vector3(0f, 0f, 1f), lean, tw)
+        val tw = lerp(0.50f, -1.35f, u) * s
+        val shVec = rotAround(Vector3(0f, 0f, 1f), lean, tw).normalize()
         val shoulderA = chest + (shVec * (SHW * s)) // active side
         val shoulderP = chest + (shVec * (-SHW * s)) // planted side
 
+        // Tapered Torso Box
+        val chestNorm = lean.cross(shVec).normalize()
+        val chestThick = 22f
+        val hipThick = 12f
+        val offC = chestNorm * chestThick
+        val offH = chestNorm * hipThick
+
+        val tBox = TorsoBox(
+            hLf = hipF + offH, hLb = hipF - offH,
+            hRf = hipB + offH, hRb = hipB - offH,
+            sLf = shoulderA + offC, sLb = shoulderA - offC,
+            sRf = shoulderP + offC, sRb = shoulderP - offC
+        )
+
         // Head follows the twist, gaze rises with the opening arm
-        val headDir = (lean * (0.9f - 0.45f * u) + Vector3(0f, 0.35f + 0.62f * u, 0.18f * u * s)).normalize()
-        val neckEnd = chest + (headDir * NECK)
-        val headPos = chest + (headDir * (NECK + HEADR))
+        val neckBase = lerp(shoulderA, shoulderP, 0.5f)
+        val headDir = (lean * 0.8f + Vector3(0f, 0.4f + 0.6f * u, 0.2f * u * s)).normalize()
+        val neckEnd = neckBase + (headDir * NECK)
+        val headPos = neckEnd + (headDir * 18f)
 
         // Planted support arm (hand fixed on ground, elbow bows outward)
-        val plantHand = Vector3(80f, 2f, -18f * s)
+        val plantHand = Vector3(70f, 0f, -20f * s)
         val armP = solveIK(shoulderP, plantHand, UPARM, FOREARM, Vector3(-0.25f, 0.15f, -0.9f * s))
 
         // Active arm trajectory
-        val D0 = Vector3(0.32f, -0.86f, -0.40f * s) // thread-the-needle
-        val Dm = Vector3(0.30f, -0.05f, 0.88f * s) // opening laterally
-        val D2 = Vector3(-0.08f, 0.98f, 0.20f * s) // reaching to the sky
-        val P0 = Vector3(0.10f, 0.45f, 0.85f * s) // elbow poles
-        val Pm = Vector3(0.10f, 0.70f, 0.55f * s)
-        val P2 = Vector3(0.40f, 0.15f, 0.75f * s)
+        val D0 = Vector3(0.32f, -0.86f, -0.40f * s)
+        val Dm = Vector3(0.30f, -0.05f, 0.88f * s)
+        val D2 = Vector3(-0.08f, 0.98f, 0.20f * s)
 
         var dir: Vector3
-        var pole: Vector3
         var r: Float
 
         if (u < 0.5f) {
-            val k = easeIO(u * 2f)
+            val k = easeInOut(u * 2f)
             dir = lerp(D0, Dm, k).normalize()
-            pole = lerp(P0, Pm, k)
             r = lerp(0.72f, 0.92f, k) * ARMLEN
         } else {
-            val k = easeIO(u * 2f - 1f)
+            val k = easeInOut(u * 2f - 1f)
             dir = lerp(Dm, D2, k).normalize()
-            pole = lerp(Pm, P2, k)
             r = lerp(0.92f, 0.985f, k) * ARMLEN
         }
 
         val handTargetRaw = shoulderA + (dir * r)
-        val handTarget = if (handTargetRaw.y < 6f) handTargetRaw.copy(y = 6f) else handTargetRaw // never punch through the floor
-        val armA = solveIK(shoulderA, handTarget, UPARM, FOREARM, pole)
+        val handTarget = if (handTargetRaw.y < 6f) handTargetRaw.copy(y = 6f) else handTargetRaw
+
+        val poleA = lerp(Vector3(0f, 0f, 1f * s), Vector3(-1f, 0f, 1f * s), u)
+        val armA = solveIK(shoulderA, handTarget, UPARM, FOREARM, poleA)
 
         return SkeletonPose(
-            mapOf(
+            joints = mapOf(
                 Joint.PELVIS to pelvis,
                 Joint.HIP_F to hipF,
                 Joint.HIP_B to hipB,
@@ -101,7 +115,8 @@ class WorldGreatestStretchPose : PoseBuilder {
                 Joint.HAND_P to armP.end,
                 Joint.NECK_END to neckEnd,
                 Joint.HEAD_POS to headPos
-            )
+            ),
+            torsoBox = tBox
         )
     }
 }
