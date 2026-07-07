@@ -56,6 +56,17 @@ fun SkeletonRenderer(
         // Sort by depth (back to front)
         items.sortByDescending { it.depth }
 
+        // Add highlight if requested
+        highlightedJoint?.let { jointId ->
+            val pt = pose.getJoint(jointId)
+            val p = camera.project(pt, width, height)
+            drawCircle(
+                color = Color.White.copy(alpha = 0.5f),
+                radius = 12f * p.scale * camera.zoom,
+                center = Offset(p.x, p.y)
+            )
+        }
+
         for (item in items) {
             val color = getSegShade(item.depth, item.colorMultiplier)
             when (item) {
@@ -98,8 +109,9 @@ private sealed class DrawableItem(val depth: Float, val colorMultiplier: Float) 
 }
 
 private fun getSegShade(depth: Float, mult: Float): Color {
-    // map depth from 170..-170 to 0..1 (near = light)
-    val t = ((depth + 170f) / 340f).coerceIn(0f, 1f)
+    // map depth from 170 (far) .. -170 (near) to 0..1
+    // near (-170) should be 1.0 (light), far (170) should be 0.0 (dark)
+    val t = ((170f - depth) / 340f).coerceIn(0f, 1f)
     val nearColor = Color(0xFFF6DBB2)
     val farColor = Color(0xFF4A3E48)
 

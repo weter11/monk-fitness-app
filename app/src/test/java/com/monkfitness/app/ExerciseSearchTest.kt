@@ -21,8 +21,10 @@ class ExerciseSearchTest {
         reps = 10,
         nameRu = "Кошка-корова",
         nameEn = "Cat Cow",
+        nameUk = "Кішка-корова",
         descriptionRu = "Мягкая мобилизация позвоночника",
-        descriptionEn = "Gentle spinal mobility flow"
+        descriptionEn = "Gentle spinal mobility flow",
+        descriptionUk = "М’яка мобілізація хребта"
     )
 
     @Test
@@ -31,10 +33,12 @@ class ExerciseSearchTest {
     }
 
     @Test
-    fun testMatchesQuerySupportsRussianAndEnglish() {
+    fun testMatchesQuerySupportsRussianEnglishAndUkrainian() {
         assertTrue(matchesQuery(exercise, "кошка"))
         assertTrue(matchesQuery(exercise, "spinal"))
         assertTrue(matchesQuery(exercise, "cow"))
+        assertTrue(matchesQuery(exercise, "кішка"))
+        assertTrue(matchesQuery(exercise, "хребта"))
         assertFalse(matchesQuery(exercise, "burpee"))
     }
 }

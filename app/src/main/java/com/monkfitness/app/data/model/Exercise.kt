@@ -99,8 +99,10 @@ data class Exercise(
     val requiredEquipment: Set<Equipment> = emptySet(),
     val nameRu: String = "",
     val nameEn: String = "",
+    val nameUk: String = "",
     val descriptionRu: String = "",
-    val descriptionEn: String = ""
+    val descriptionEn: String = "",
+    val descriptionUk: String = ""
 )
 
 fun Exercise.applyDifficultyAdjustment(adjustment: Int): Exercise {
