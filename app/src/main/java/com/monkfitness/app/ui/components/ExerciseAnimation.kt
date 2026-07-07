@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -21,6 +22,10 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import com.monkfitness.app.animation.Camera
+import com.monkfitness.app.animation.SkeletonRenderer
+import com.monkfitness.app.animation.rememberAnimationController
+import com.monkfitness.app.poses.PoseRegistry
 import com.monkfitness.app.ui.components.animation.Joint
 import com.monkfitness.app.ui.components.animation.SkeletonAnimation
 import com.monkfitness.app.ui.components.animation.SkeletonOverlay
@@ -31,9 +36,28 @@ import kotlin.math.sqrt
 
 @Composable
 fun ExerciseAnimatedVisual(
+    exerciseId: String,
     animation: SkeletonAnimation,
     modifier: Modifier = Modifier
 ) {
+    val poseConfig = PoseRegistry.getPoseConfig(exerciseId)
+
+    if (poseConfig != null) {
+        val controller = rememberAnimationController(
+            mode = poseConfig.mode,
+            alternating = poseConfig.alternating
+        )
+        val camera = remember { Camera() }
+        val pose = poseConfig.builder.evaluate(controller.progress, controller.side)
+
+        SkeletonRenderer(
+            pose = pose,
+            camera = camera,
+            modifier = modifier.fillMaxSize()
+        )
+        return
+    }
+
     val transition = rememberInfiniteTransition(label = "exercise-skeleton")
     val progress by transition.animateFloat(
         initialValue = 0f,

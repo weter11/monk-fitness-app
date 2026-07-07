@@ -70,6 +70,7 @@ private fun ExerciseVisualContent(
 
     if (skeletonAnimation != null) {
         ExerciseAnimatedVisual(
+            exerciseId = exercise.id,
             animation = skeletonAnimation,
             modifier = modifier.padding(imagePadding)
         )
