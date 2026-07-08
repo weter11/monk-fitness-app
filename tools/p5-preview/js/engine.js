@@ -82,7 +82,9 @@
       return a + (b - a) * t;
     },
 
-    // Standard Ease-In-Out Quintic
+    // Standard Ease-In-Out Quintic. Exposed as part of the ported easing
+    // toolkit (see SkeletonMath.kt) for pose authors to reuse; not used by
+    // the bundled push-up example, which uses `easeInOut` instead.
     easeIO(x) {
       const cx = Math.min(1, Math.max(0, x));
       return cx * cx * cx * (cx * (cx * 6 - 15) + 10);
@@ -93,6 +95,8 @@
       return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
     },
 
+    // Standard smoothstep, exposed for pose authors who need a simple 0..1
+    // blend curve (e.g. hold/breathing-style animations in AnimationController.kt).
     smoothstep(x) {
       const t = Math.min(1, Math.max(0, x));
       return t * t * (3 - 2 * t);

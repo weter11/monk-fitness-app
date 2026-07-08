@@ -273,8 +273,12 @@ function drawGround(pose) {
 
   noStroke();
   fill(5, 8, 12, 150);
-  const shadowJoints = [Joint.TOE_F, Joint.TOE_B, Joint.HEEL_F, Joint.HEEL_B, Joint.HAND_P];
-  for (const id of shadowJoints) {
+  // Ground-contact points that cast a shadow. Mirrors SkeletonRenderer.kt's
+  // `shadowPoints` list exactly: both feet (heel + toe) plus only the
+  // passive/back hand (HAND_P) — the active/front hand (HAND_A) is close
+  // enough to the body's own cast shadow that it's intentionally omitted.
+  const groundContactJoints = [Joint.TOE_F, Joint.TOE_B, Joint.HEEL_F, Joint.HEEL_B, Joint.HAND_P];
+  for (const id of groundContactJoints) {
     const pt = pose[id];
     if (!pt) continue;
     const p = camera.project(new Vector3(pt.x, 0, pt.z), width, height);
