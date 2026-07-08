@@ -38,6 +38,15 @@ Then visit `http://localhost:8000`.
   ground exactly like `SkeletonRenderer.kt`.
 - `index.html` — loads p5.js from a CDN and wires up the scripts above.
 
+## Testing in the p5.js web editor
+
+If you just want to try the push-up animation in
+[editor.p5js.org](https://editor.p5js.org/) without cloning the repo, copy
+the contents of `push-up.js` into the editor's `sketch.js` file and press
+"Play" — it's a single, self-contained file (engine + pose + sketch merged)
+with no other dependencies beyond p5.js itself, which the editor already
+provides.
+
 ## Controls
 
 - **Drag** — orbit the camera (yaw/pitch)
