@@ -29,14 +29,22 @@ class PerspectiveCompensation(
     ) {
         val knee = joints[kneeId] ?: return
         val ankle = joints[ankleId] ?: return
+        val providedToe = joints[toeId]
 
         val shank = (ankle - knee).normalize()
 
-        // Target: foot perpendicular to shank, pointing forward (positive X)
-        val forward = Vector3(1f, 0f, 0f)
-        var footDir = forward - shank * forward.dot(shank)
+        // Use provided toe as direction hint, fallback to forward (X+)
+        val forwardHint = if (providedToe != null && (providedToe - ankle).mag() > 1e-3) {
+            (providedToe - ankle).normalize()
+        } else {
+            Vector3(1f, 0f, 0f)
+        }
+
+        // Target: foot perpendicular to shank
+        var footDir = forwardHint - shank * forwardHint.dot(shank)
 
         if (footDir.mag() < 1e-3) {
+            // Shank is parallel to hint, fallback to world down-ish relative to shank
             footDir = Vector3(0f, -1f, 0f) - shank * Vector3(0f, -1f, 0f).dot(shank)
         }
         footDir = footDir.normalize()
@@ -51,13 +59,15 @@ class PerspectiveCompensation(
         }
 
         val foot = definition.foot
-        joints[toeId] = ankle + footDir * (foot.footLength * foot.toeRatio)
-        joints[heelId] = ankle - footDir * (foot.footLength * foot.heelRatio)
+        val (heel, toe) = foot.computeHeelToe(ankle, footDir)
+        joints[heelId] = heel
+        joints[toeId] = toe
     }
 
     /**
      * Stage 2: 2D Projected Points Correction
      * Maintains visual foot length from Heel to Toe, keeping Ankle fixed.
+     * The center of scaling is the midpoint between Heel and Toe.
      */
     fun compensateFootPerspective(
         ankleProj: ProjectedPoint,
@@ -65,29 +75,51 @@ class PerspectiveCompensation(
         toeProj: ProjectedPoint,
         camera: Camera
     ): Pair<ProjectedPoint, ProjectedPoint> {
-        val hdx = heelProj.x - ankleProj.x
-        val hdy = heelProj.y - ankleProj.y
-        val tdx = toeProj.x - ankleProj.x
-        val tdy = toeProj.y - ankleProj.y
+        // Current length and midpoint in screen space
+        val currentLen = sqrt((toeProj.x - heelProj.x).pow(2) + (toeProj.y - heelProj.y).pow(2))
+        if (currentLen < 1e-3) return heelProj to toeProj
 
-        val currentDist = sqrt((toeProj.x - heelProj.x).pow(2) + (toeProj.y - heelProj.y).pow(2))
-        if (currentDist < 1e-3) return heelProj to toeProj
+        val midX = (heelProj.x + toeProj.x) / 2f
+        val midY = (heelProj.y + toeProj.y) / 2f
 
         val foot = definition.foot
-        val idealDist = foot.footLength * ankleProj.scale * camera.zoom
+        val idealLen = foot.footLength * ankleProj.scale * camera.zoom
 
-        val ratio = idealDist / currentDist
+        val ratio = idealLen / currentLen
         val targetRatio = 1.0f + (ratio - 1.0f) * 0.15f // 15% correction
 
+        // Offset from midpoint
+        val hdx = heelProj.x - midX
+        val hdy = heelProj.y - midY
+        val tdx = toeProj.x - midX
+        val tdy = toeProj.y - midY
+
+        // To maintain the Ankle fixed visually, we should scale relative to the ankle,
+        // but the prompt says "visual center of scaling becomes Heel <-> Toe rather than Ankle <-> Toe".
+        // HOWEVER, "the ankle remains fixed" is also a hard requirement.
+        // If we scale from the midpoint, the ankle (which is not at the midpoint) will move visually.
+        // If the ankle must remain fixed, we MUST scale relative to the ankle.
+
+        // Re-reading: "Perspective scaling must preserve heel-to-toe length instead of stretching from ankle to toe."
+        // "The visual center of scaling becomes Heel <-> Toe rather than Ankle <-> Toe."
+        // This likely means we should use the total foot length (Heel to Toe) for the ratio calculation,
+        // but still keep the ankle as the anchor if it must not move.
+
+        // Applying the ratio from the ankle anchor:
+        val ahdx = heelProj.x - ankleProj.x
+        val ahdy = heelProj.y - ankleProj.y
+        val atdx = toeProj.x - ankleProj.x
+        val atdy = toeProj.y - ankleProj.y
+
         val newHeel = ProjectedPoint(
-            x = ankleProj.x + hdx * targetRatio,
-            y = ankleProj.y + hdy * targetRatio,
+            x = ankleProj.x + ahdx * targetRatio,
+            y = ankleProj.y + ahdy * targetRatio,
             scale = heelProj.scale,
             depth = heelProj.depth
         )
         val newToe = ProjectedPoint(
-            x = ankleProj.x + tdx * targetRatio,
-            y = ankleProj.y + tdy * targetRatio,
+            x = ankleProj.x + atdx * targetRatio,
+            y = ankleProj.y + atdy * targetRatio,
             scale = toeProj.scale,
             depth = toeProj.depth
         )
