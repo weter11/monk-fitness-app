@@ -29,7 +29,7 @@ function draw() {
   const time = millis() / 1000;
   const phase = (time / cycleDuration) % 1;
   const t = phase < 0.5 ? phase * 2 : (1 - phase) * 2;
-  const eased = smoothstep(constrain(t, 0, 1));
+  const eased = smoothstep(t);
   const pose = buildPushUpPose(eased);
 
   push();
