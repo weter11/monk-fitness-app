@@ -41,7 +41,7 @@ class CatCowPose : PoseBuilder {
         val headPitch = lerp(-0.5f, 0.5f, progress)
         val headDir = Vector3(-cos(headPitch), sin(headPitch), 0f).normalize()
         val neckEnd = chest + headDir * definition.neckLength
-        val headPos = chest + headDir * (definition.neckLength + definition.headRadius)
+        val headPos = chest + headDir * (definition.neckLength + 18f)
 
         return SkeletonPose(
             mapOf(

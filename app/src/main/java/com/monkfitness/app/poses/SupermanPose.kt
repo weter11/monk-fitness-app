@@ -42,7 +42,7 @@ class SupermanPose : PoseBuilder {
 
         val headDir = Vector3(-1f, 0.3f, 0f).normalize()
         val neckEnd = chest + headDir * definition.neckLength
-        val headPos = chest + headDir * (definition.neckLength + definition.headRadius)
+        val headPos = chest + headDir * (definition.neckLength + 18f)
 
         return SkeletonPose(
             mapOf(

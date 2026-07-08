@@ -42,23 +42,11 @@ class WorldGreatestStretchPose : PoseBuilder {
         val shoulderA = chest + (shVec * (definition.shoulderWidth * s)) // active side
         val shoulderP = chest + (shVec * (-definition.shoulderWidth * s)) // planted side
 
-        // Tapered Torso Box
-        val chestNorm = lean.cross(shVec).normalize()
-        val offC = chestNorm * definition.torsoChestDepth
-        val offH = chestNorm * definition.torsoHipDepth
-
-        val tBox = TorsoBox(
-            hLf = hipF + offH, hLb = hipF - offH,
-            hRf = hipB + offH, hRb = hipB - offH,
-            sLf = shoulderA + offC, sLb = shoulderA - offC,
-            sRf = shoulderP + offC, sRb = shoulderP - offC
-        )
-
         // Head follows the twist, gaze rises with the opening arm
         val neckBase = lerp(shoulderA, shoulderP, 0.5f)
         val headDir = (lean * 0.8f + Vector3(0f, 0.4f + 0.6f * u, 0.2f * u * s)).normalize()
         val neckEnd = neckBase + (headDir * definition.neckLength)
-        val headPos = neckEnd + (headDir * definition.headRadius)
+        val headPos = neckEnd + (headDir * 18f)
 
         // Planted support arm (hand fixed on ground, elbow bows outward)
         val plantHand = Vector3(70f, 0f, -20f * s)
@@ -109,8 +97,7 @@ class WorldGreatestStretchPose : PoseBuilder {
                 Joint.HAND_P to armP.end,
                 Joint.NECK_END to neckEnd,
                 Joint.HEAD_POS to headPos
-            ),
-            torsoBox = tBox
+            )
         )
     }
 }

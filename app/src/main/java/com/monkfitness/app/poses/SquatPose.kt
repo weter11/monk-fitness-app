@@ -40,7 +40,7 @@ class SquatPose : PoseBuilder {
 
         val headDir = Vector3(0.2f, 0.9f, 0f).normalize()
         val neckEnd = chest + headDir * definition.neckLength
-        val headPos = chest + headDir * (definition.neckLength + definition.headRadius)
+        val headPos = chest + headDir * (definition.neckLength + 18f)
 
         return SkeletonPose(
             mapOf(

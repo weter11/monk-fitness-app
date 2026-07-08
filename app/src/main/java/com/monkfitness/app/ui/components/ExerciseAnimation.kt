@@ -27,6 +27,7 @@ import com.monkfitness.app.animation.PoseContext
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonEngine
 import com.monkfitness.app.animation.SkeletonRenderer
+import com.monkfitness.app.animation.SkeletonStyle
 import com.monkfitness.app.animation.rememberAnimationController
 import com.monkfitness.app.poses.PoseRegistry
 import com.monkfitness.app.ui.components.animation.Joint
@@ -53,7 +54,8 @@ fun ExerciseAnimatedVisual(
         )
         val camera = remember { Camera() }
         val definition = SkeletonDefinition.DEFAULT_ADULT
-        val engine = remember(definition) { SkeletonEngine(definition) }
+        val style = SkeletonStyle.DEFAULT
+        val engine = remember(definition, style) { SkeletonEngine(definition, style) }
         val poseContext = PoseContext(
             progress = controller.progress,
             side = controller.side,
