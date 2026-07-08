@@ -65,8 +65,17 @@ val flexibilityFocusAreas = listOf(
 val flexibilitySpecificFocusAreas = flexibilityFocusAreas.filterNot { it == ExerciseSubCategory.FULL_BODY }
 
 @Immutable
+data class ExerciseFamily(
+    val id: String,
+    @StringRes val nameRes: Int,
+    @StringRes val descriptionRes: Int
+)
+
+@Immutable
 data class Exercise(
     val id: String,
+    val familyId: String,
+    val animationId: String,
     @StringRes val nameRes: Int,
     @StringRes val descriptionRes: Int,
     @StringRes val techniqueRes: Int,
@@ -90,8 +99,10 @@ data class Exercise(
     val requiredEquipment: Set<Equipment> = emptySet(),
     val nameRu: String = "",
     val nameEn: String = "",
+    val nameUk: String = "",
     val descriptionRu: String = "",
-    val descriptionEn: String = ""
+    val descriptionEn: String = "",
+    val descriptionUk: String = ""
 )
 
 fun Exercise.applyDifficultyAdjustment(adjustment: Int): Exercise {

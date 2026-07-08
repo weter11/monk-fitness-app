@@ -136,6 +136,64 @@
     <string name="subcategory_full_body">All Body</string>
     <string name="subcategory_hyperlordosis">Hyperlordosis</string>
 
+    <!-- Exercise Families -->
+    <string name="family_pushups">Push-ups</string>
+    <string name="family_pushups_desc">Horizontal pushing exercises for chest, shoulders, and triceps.</string>
+    <string name="family_squats">Squats</string>
+    <string name="family_squats_desc">Lower body movements focusing on knee and hip extension.</string>
+    <string name="family_birddog">Bird Dog</string>
+    <string name="family_birddog_desc">Core stability and cross-body coordination.</string>
+    <string name="family_hip_flexor">Hip Flexor Mobility</string>
+    <string name="family_hip_flexor_desc">Stretching and mobilization of the anterior hip muscles.</string>
+    <string name="family_thoracic">Thoracic Mobility</string>
+    <string name="family_thoracic_desc">Improving rotation and extension of the upper spine.</string>
+    <string name="family_hamstring">Hamstring Mobility</string>
+    <string name="family_hamstring_desc">Stretching the posterior thigh muscles.</string>
+    <string name="family_cobra">Cobra Stretch</string>
+    <string name="family_cobra_desc">Abdominal stretching and spinal extension.</string>
+    <string name="family_plank">Plank</string>
+    <string name="family_plank_desc">Isometric core stability and trunk control.</string>
+    <string name="family_pullups">Vertical Pulling</string>
+    <string name="family_pullups_desc">Building back and grip strength through hanging movements.</string>
+    <string name="family_lunges">Lunges &amp; Step-ups</string>
+    <string name="family_lunges_desc">Unilateral lower body strength and balance.</string>
+    <string name="family_rows">Horizontal Pulling</string>
+    <string name="family_rows_desc">Upper back and scapular retraction strength.</string>
+    <string name="family_glute_bridge">Glute Bridges</string>
+    <string name="family_glute_bridge_desc">Isolation and strengthening of the gluteal muscles.</string>
+    <string name="family_pelvic_control">Pelvic &amp; Core Control</string>
+    <string name="family_pelvic_control_desc">Fundamental drills for pelvic positioning and deep core engagement.</string>
+    <string name="family_cat_cow">Spinal Articulation</string>
+    <string name="family_cat_cow_desc">Gentle movement to improve overall spinal health.</string>
+    <string name="family_burpees">Full Body Conditioning</string>
+    <string name="family_burpees_desc">Dynamic movements for cardiovascular and muscular endurance.</string>
+    <string name="family_face_pull">Posterior Shoulder</string>
+    <string name="family_face_pull_desc">Targeting the rear deltoids and scapular stabilizers.</string>
+    <string name="family_reverse_snow_angels">Scapular Mobility</string>
+    <string name="family_reverse_snow_angels_desc">Improving movement and control of the shoulder blades.</string>
+    <string name="family_shoulder_mobility">Shoulder CARs</string>
+    <string name="family_shoulder_mobility_desc">Controlled Articular Rotations for shoulder health.</string>
+    <string name="family_hip_mobility">Hip Mobility</string>
+    <string name="family_hip_mobility_desc">Improving range of motion and control of the hip joints.</string>
+    <string name="family_ankle_mobility">Ankle Mobility</string>
+    <string name="family_ankle_mobility_desc">Improving dorsiflexion and ankle joint health.</string>
+    <string name="family_dips">Triceps Dips</string>
+    <string name="family_dips_desc">Pressing movements focusing on triceps and lower chest.</string>
+    <string name="family_pike_pushups">Vertical Pressing</string>
+    <string name="family_pike_pushups_desc">Bodyweight overhead pressing for shoulder strength.</string>
+    <string name="family_wall_sit">Isometric Leg Strength</string>
+    <string name="family_wall_sit_desc">Building endurance in the quadriceps through static holds.</string>
+    <string name="family_neck_mobility">Cervical Mobility</string>
+    <string name="family_neck_mobility_desc">Strengthening and stretching the neck and upper cervical spine.</string>
+    <string name="family_jumping_jacks">Aerobic Warmup</string>
+    <string name="family_jumping_jacks_desc">Full body coordination and heart rate elevation.</string>
+    <string name="family_horse_stance">Hip Stability</string>
+    <string name="family_horse_stance_desc">Deep wide-stance hold for structural integrity and strength.</string>
+    <string name="family_superman">Spinal Extension</string>
+    <string name="family_superman_desc">Strengthening the posterior chain and spinal erectors.</string>
+    <string name="family_child_pose">Restorative Stretching</string>
+    <string name="family_child_pose_desc">Gentle recovery poses for the back and hips.</string>
+
     <string name="hyperlordosis_focus_title">Hyperlordosis Focus Active</string>
     <string name="hyperlordosis_focus_desc">This mode adds exercises that help improve pelvic control, hip mobility, glute activation and core stability.</string>
 
@@ -264,25 +322,33 @@
     <string name="get_started">Get Started</string>
 
     <!-- Exercises -->
-    <string name="ex_pushups">Pushups</string>
+    <string name="ex_pushups">Standard Push-up</string>
+    <string name="ex_pushups_wide">Wide Push-up</string>
+    <string name="ex_pushups_military">Military Push-up</string>
+    <string name="ex_pushups_knee">Knee Push-up</string>
     <string name="ex_pushups_desc">A fundamental upper body exercise that strengthens the chest, shoulders, and triceps while engaging the core.</string>
     <string name="ex_pushups_steps">1. Start in a high plank position with hands slightly wider than shoulders.\n2. Lower your body until your chest nearly touches the floor.\n3. Keep your body in a straight line from head to heels.\n4. Push yourself back up to the starting position.</string>
     <string name="ex_pushups_tech">Keep elbows at a 45-degree angle to your torso. Engage your glutes and core to maintain a rigid body line. Focus on a full range of motion.</string>
     <string name="ex_pushups_mistakes">Sagging hips, flared elbows (90 degrees), looking up instead of keeping neck neutral, and restricted range of motion.</string>
 
-    <string name="ex_squats">Squats</string>
+    <string name="ex_squats">Bodyweight Air Squat</string>
+    <string name="ex_squats_sumo">Sumo Squat</string>
+    <string name="ex_squats_jump">Jump Squat</string>
     <string name="ex_squats_desc">A powerful compound exercise that targets the quadriceps, hamstrings, and glutes.</string>
     <string name="ex_squats_steps">1. Stand with feet shoulder-width apart, toes slightly pointed out.\n2. Inhale and lower your hips by bending knees as if sitting in a chair.\n3. Go down until thighs are parallel to the floor or lower.\n4. Exhale and drive through your heels to return to a standing position.</string>
     <string name="ex_squats_tech">Keep your chest up and back flat. Your knees should track in line with your toes. Distribute weight evenly on your heels and mid-foot.</string>
     <string name="ex_squats_mistakes">Knees caving inward, heels lifting off the floor, rounding the lower back, and not going deep enough.</string>
 
-    <string name="ex_pullups">Pullups</string>
+    <string name="ex_pullups">Standard Overhand Pullup</string>
+    <string name="ex_pullups_chin">Underhand Chin-up</string>
+    <string name="ex_pullups_neutral">Neutral Grip Pullup</string>
+    <string name="ex_pullups_wide">Wide Grip Pullup</string>
     <string name="ex_pullups_desc">The ultimate bodyweight back exercise, focusing on the latissimus dorsi, biceps, and grip strength.</string>
     <string name="ex_pullups_steps">1. Grab the bar with an overhand grip, slightly wider than shoulder-width.\n2. Start from a dead hang with arms fully extended.\n3. Pull your body up by driving elbows down until your chin is over the bar.\n4. Lower yourself back down with control to the starting position.</string>
     <string name="ex_pullups_tech">Engage your shoulder blades by pulling them down and back before you start the pull. Avoid using momentum or swinging your legs (kipping).</string>
     <string name="ex_pullups_mistakes">Using momentum/swinging, not reaching full extension at the bottom, and shrugging shoulders toward ears.</string>
 
-    <string name="ex_plank">Plank</string>
+    <string name="ex_plank">Static Forearm Plank</string>
     <string name="ex_plank_desc">A core stability exercise that builds isometric strength throughout the entire trunk.</string>
     <string name="ex_plank_steps">1. Place forearms on the floor, elbows directly under shoulders.\n2. Extend legs behind you, resting weight on toes.\n3. Form a straight line from head to heels.\n4. Hold the position while breathing deeply and maintaining tension.</string>
     <string name="ex_plank_tech">Squeeze your glutes and quadriceps to stabilize the pelvis. Push away from the floor through your forearms to engage the serratus anterior.</string>
@@ -294,13 +360,15 @@
     <string name="ex_dips_tech">Keep your shoulders down and away from your ears. Ensure elbows don\'t flare out too much. Control the descent to protect the shoulder joint.</string>
     <string name="ex_dips_mistakes">Flaring elbows, excessive swinging, and dipping too deep (below 90 degrees) which can strain shoulders.</string>
 
-    <string name="ex_lunges">Lunges</string>
+    <string name="ex_lunges">Alternating Forward Lunges</string>
+    <string name="ex_lunges_reverse">Alternating Reverse Lunges</string>
+    <string name="ex_lunges_side">Alternating Side Lunges</string>
     <string name="ex_lunges_desc">A functional lower body movement that improves balance, coordination, and leg strength.</string>
     <string name="ex_lunges_steps">1. Stand tall and take a large step forward with one leg.\n2. Lower your hips until both knees are bent at approximately 90 degrees.\n3. Your back knee should hover just above the floor.\n4. Push off the front foot to return to the starting position.</string>
     <string name="ex_lunges_tech">Keep your torso upright and core engaged. Ensure the front knee stays aligned with the foot and doesn\'t collapse inward.</string>
     <string name="ex_lunges_mistakes">Leaning too far forward, front knee passing the toes, and losing balance due to a narrow stance.</string>
 
-    <string name="ex_rows">Rows</string>
+    <string name="ex_rows">Inverted Bodyweight Row</string>
     <string name="ex_rows_desc">A pull exercise that builds thickness in the upper and middle back.</string>
     <string name="ex_rows_steps">1. Hinge at the hips with a flat back, holding a weight or resistance band.\n2. Pull the weight toward your lower ribs, squeezing shoulder blades together.\n3. Hold for a second at the top of the movement.\n4. Slowly lower the weight back to the starting position.</string>
     <string name="ex_rows_tech">Keep your spine neutral throughout. Focus on pulling with your elbows rather than your hands. Do not use your lower back to swing the weight.</string>
@@ -312,13 +380,13 @@
     <string name="ex_leg_raises_tech">Exhale as you lift and inhale as you lower. If your back arches, don\'t lower your legs as far. Focus on the tension in your lower abs.</string>
     <string name="ex_leg_raises_mistakes">Arching the lower back, lifting legs with momentum, and bending the knees.</string>
 
-    <string name="ex_dead_bug">Dead Bug</string>
+    <string name="ex_dead_bug">Supine Dead Bug</string>
     <string name="ex_dead_bug_desc">A core stability exercise that teaches you to keep your spine neutral while moving your limbs.</string>
     <string name="ex_dead_bug_steps">1. Lie on your back with arms extended toward the ceiling and legs in a tabletop position (knees bent at 90 degrees).\n2. Slowly lower your right arm behind your head and your left leg toward the floor, keeping your lower back pressed into the mat.\n3. Return to the starting position and repeat with the opposite limbs.</string>
     <string name="ex_dead_bug_tech">Focus on maintaining a flat back against the floor throughout the entire movement. Move slowly and with control.</string>
     <string name="ex_dead_bug_mistakes">Letting the lower back arch away from the floor, moving too quickly, and holding your breath.</string>
 
-    <string name="ex_side_plank">Side Plank</string>
+    <string name="ex_side_plank">Isometric Side Plank</string>
     <string name="ex_side_plank_desc">A lateral core exercise that strengthens the obliques and improves spinal stability.</string>
     <string name="ex_side_plank_steps">1. Lie on your side with your legs straight and prop yourself up on your forearm.\n2. Lift your hips off the ground until your body forms a straight line from head to heels.\n3. Hold this position while breathing deeply.</string>
     <string name="ex_side_plank_tech">Keep your elbow directly under your shoulder. Engage your glutes and core to maintain a straight line.</string>
@@ -330,49 +398,50 @@
     <string name="ex_pelvic_tilt_tech">Imagine pulling your belly button toward your spine. The movement is subtle; avoid lifting your hips off the floor.</string>
     <string name="ex_pelvic_tilt_mistakes">Using your legs to push, lifting the glutes, and holding your breath.</string>
 
-    <string name="ex_couch_stretch">Couch Stretch</string>
+    <string name="ex_couch_stretch">Couch Hip Flexor Stretch</string>
     <string name="ex_couch_stretch_desc">An intensive stretch for the hip flexors and quads, crucial for releasing tension that contributes to hyperlordosis.</string>
     <string name="ex_couch_stretch_steps">1. Start on all fours with your back toward a wall or couch.\n2. Place one knee into the corner where the floor meets the wall, with your shin vertical against the wall.\n3. Step the other foot forward into a lunge position.\n4. Carefully bring your torso upright, squeezing the glute of the stretching leg.</string>
     <string name="ex_couch_stretch_tech">Keep your core tight and glute squeezed to protect your lower back. Only go as upright as you can without arching your back.</string>
     <string name="ex_couch_stretch_mistakes">Arching the lower back to get upright, not squeezing the glute, and leaning forward.</string>
 
-    <string name="ex_cat_cow">Cat Cow</string>
+    <string name="ex_cat_cow">Quadruped Cat-Cow</string>
     <string name="ex_cat_cow_desc">A gentle flow that improves spinal mobility and coordinates movement with breath.</string>
     <string name="ex_cat_cow_steps">1. Start on all fours with wrists under shoulders and knees under hips.\n2. Inhale: Drop your belly, lift your chest and tailbone (Cow).\n3. Exhale: Round your back, tuck your chin and tailbone (Cat).\n4. Repeat the flow smoothly with your breath.</string>
     <string name="ex_cat_cow_tech">Move slowly and feel each vertebra. Keep your arms straight throughout the entire movement. Focus on the transition between the two poses.</string>
     <string name="ex_cat_cow_mistakes">Moving too fast, bending the elbows, and forcing the range of motion.</string>
 
-    <string name="ex_bird_dog">Bird Dog</string>
+    <string name="ex_bird_dog">Static Bird Dog Hold</string>
+    <string name="ex_bird_dog_reps">Alternating Bird Dog Reps</string>
     <string name="ex_bird_dog_desc">A core exercise that emphasizes stability, balance, and coordination between the upper and lower body.</string>
-    <string name="ex_bird_dog_steps">1. Start on all fours in a neutral spine position.\n2. Simultaneously extend your right arm forward and left leg backward.\n3. Hold for 2 seconds while maintaining a flat back.\n4. Return to the starting position and switch sides.</string>
+    <string name="ex_bird_dog_steps">1. Start on all fours in a neutral spine position.\n2. Simultaneously extend your right arm forward and left leg backward.\n3. Hold while maintaining a flat back.\n4. Return to the starting position and switch sides.</string>
     <string name="ex_bird_dog_tech">Keep your hips and shoulders square to the floor. Imagine a glass of water on your back that you shouldn\'t spill. Do not lift your leg higher than hip level.</string>
     <string name="ex_bird_dog_mistakes">Arching the back, lifting the leg too high, and rotating the hips.</string>
 
-    <string name="ex_stretch">World\'s Greatest Stretch</string>
+    <string name="ex_stretch">Dynamic World\'s Greatest Stretch</string>
     <string name="ex_stretch_desc">A comprehensive mobility drill that opens up the hips, thoracic spine, and hamstrings.</string>
     <string name="ex_stretch_steps">1. Step forward into a deep lunge.\n2. Place the inside elbow to the instep of the front foot.\n3. Rotate the same-side arm toward the ceiling, following with your eyes.\n4. Return and step back, then switch sides.</string>
     <string name="ex_stretch_tech">Take your time in each position. Breathe deeply. Keep the back leg straight and active to maximize the hip flexor stretch.</string>
     <string name="ex_stretch_mistakes">Rushing through the movements and not reaching for full rotation.</string>
 
-    <string name="ex_burpees">Burpees</string>
+    <string name="ex_burpees">Standard Burpees</string>
     <string name="ex_burpees_desc">A high-intensity, full-body exercise for conditioning and explosive power.</string>
     <string name="ex_burpees_steps">1. From a standing position, drop into a squat and place hands on the floor.\n2. Kick your feet back into a plank and perform a push-up.\n3. Jump your feet back toward your hands.\n4. Explode upward into a jump with hands overhead.</string>
     <string name="ex_burpees_tech">Maintain a steady pace. Keep your core tight during the plank and push-up phases. Land softly on your feet after the jump.</string>
     <string name="ex_burpees_mistakes">Sagging hips during the push-up, landing flat-footed, and skipping the full range of motion.</string>
 
-    <string name="ex_climbers">Mountain Climbers</string>
+    <string name="ex_climbers">Standard Mountain Climbers</string>
     <string name="ex_climbers_desc">A dynamic plank variation that challenges core stability while providing a cardiovascular stimulus.</string>
     <string name="ex_climbers_steps">1. Start in a high plank position.\n2. Drive one knee toward your chest, then quickly switch legs.\n3. Continue the "running" motion while keeping your hips stable.\n4. Maintain a flat back throughout the exercise.</string>
     <string name="ex_climbers_tech">Keep your shoulders directly over your wrists. Minimize hip bounce. Focus on the "crunch" as the knee comes toward the chest.</string>
     <string name="ex_climbers_mistakes">Bouncing the hips, weight shifting too far back, and not bringing knees far enough forward.</string>
 
-    <string name="ex_kb_swing">Kettlebell Swing</string>
+    <string name="ex_kb_swing">Backpack Kettlebell Swing</string>
     <string name="ex_kb_swing_desc">An explosive hip-hinge movement that builds power in the posterior chain.</string>
     <string name="ex_kb_swing_steps">1. Stand with feet wider than shoulders, kettlebell on the floor in front of you.\n2. Hinge at hips to grab the bell, then hike it between your legs.\n3. Explosively snap your hips forward to swing the bell to chest height.\n4. Let the bell fall back between your legs and repeat.</string>
     <string name="ex_kb_swing_tech">Power comes from the hips, not the arms. Arms should act only as "ropes." Keep your back flat and your core braced at the top.</string>
     <string name="ex_kb_swing_mistakes">Using arms to lift the weight, squatting instead of hinging, and rounding the back.</string>
 
-    <string name="ex_glute_bridge">Glute Bridge</string>
+    <string name="ex_glute_bridge">Supine Glute Bridge</string>
     <string name="ex_glute_bridge_desc">A focused exercise for isolating the glutes and strengthening the posterior chain.</string>
     <string name="ex_glute_bridge_steps">1. Lie on your back with knees bent and feet flat on the floor, hip-width apart.\n2. Drive through your heels to lift your hips toward the ceiling.\n3. Squeeze your glutes hard at the top of the movement.\n4. Slowly lower your hips back to the starting position.</string>
     <string name="ex_glute_bridge_tech">Keep your core engaged to avoid overarching your lower back. Your shins should be vertical at the top of the movement. Do not let your knees cave in.</string>
@@ -387,17 +456,17 @@
     <string name="ex_hang">Hang</string>
     <string name="ex_hang_desc">Just hang from a bar.</string>
     <string name="ex_hang_tech">Keep shoulders engaged, don\'t just dead hang.</string>
-    <string name="ex_face_pull">Face Pull</string>
+    <string name="ex_face_pull">Banded Face Pull</string>
     <string name="ex_face_pull_desc">Pull band towards your face.</string>
     <string name="ex_face_pull_tech">Focus on rear delts and squeezing shoulder blades.</string>
     <string name="ex_face_pull_steps">1. Anchor a band at face height and grab it with both hands.\n2. Step back until the band is under tension with arms extended.\n3. Pull the band toward your nose while driving elbows wide.\n4. Pause briefly, then return with control.</string>
     <string name="ex_face_pull_mistakes">Shrugging the shoulders, letting elbows drop, and using momentum instead of controlled upper-back movement.</string>
-    <string name="ex_scapular_pullups">Scapular Pull-ups</string>
+    <string name="ex_scapular_pullups">Dead Hang Scapular Pull-up</string>
     <string name="ex_scapular_pullups_desc">A hanging drill that teaches shoulder blade control and improves upper-body posture.</string>
     <string name="ex_scapular_pullups_steps">1. Hang from a bar with straight arms and a firm grip.\n2. Without bending the elbows, pull the shoulders down and slightly back.\n3. Lift the body a few centimeters by moving only the shoulder blades.\n4. Relax back into the hang and repeat smoothly.</string>
     <string name="ex_scapular_pullups_tech">Keep the ribs down and neck long. The movement should stay small and controlled, driven by the scapulae rather than the arms.</string>
     <string name="ex_scapular_pullups_mistakes">Bending the elbows, swinging the body, and shrugging toward the ears at the top.</string>
-    <string name="ex_reverse_snow_angels">Reverse Snow Angels</string>
+    <string name="ex_reverse_snow_angels">Prone Reverse Snow Angels</string>
     <string name="ex_reverse_snow_angels_desc">A prone posture drill that opens the chest and strengthens the upper back.</string>
     <string name="ex_reverse_snow_angels_steps">1. Lie face down with arms by your sides and palms facing the floor.\n2. Lift the hands slightly and sweep the arms overhead in a wide arc.\n3. Keep the chest lightly lifted and squeeze the shoulder blades together.\n4. Return the arms to the starting position with control.</string>
     <string name="ex_reverse_snow_angels_tech">Move slowly and keep the shoulders away from the ears. Reach long through the fingertips instead of jerking the arms upward.</string>
@@ -407,7 +476,7 @@
     <string name="ex_band_pull_aparts_steps">1. Hold a light resistance band at shoulder height with straight arms.\n2. Pull the band apart by moving the hands out to the sides.\n3. Finish when the band reaches the chest and the shoulder blades squeeze together.\n4. Return to the start under control and repeat.</string>
     <string name="ex_band_pull_aparts_tech">Keep the ribs stacked over the pelvis and avoid arching the back. Think about moving from the upper back, not the wrists.</string>
     <string name="ex_band_pull_aparts_mistakes">Bent wrists, shrugged shoulders, and letting the lower back overextend to finish the rep.</string>
-    <string name="ex_superman">Superman</string>
+    <string name="ex_superman">Prone Superman Extension</string>
     <string name="ex_superman_desc">A movement designed to strengthen the lower back and improve posture by engaging the entire posterior chain.</string>
     <string name="ex_superman_steps">1. Lie face down on the floor with arms extended overhead.\n2. Simultaneously lift your arms, chest, and legs off the ground.\n3. Hold the "flying" position for 2-3 seconds.\n4. Slowly lower back down to the floor.</string>
     <string name="ex_superman_tech">Keep your neck neutral by looking at the floor. Focus on the squeeze in your lower back and glutes. Move with control rather than using momentum.</string>
@@ -418,12 +487,12 @@
     <string name="ex_wall_slides_steps">1. Stand with your back against a wall, feet slightly forward.\n2. Place your arms against the wall in a "W" shape (elbows and wrists touching the wall).\n3. Slowly slide your arms up into a "Y" shape without losing contact with the wall.\n4. Slide back down to the starting position.</string>
     <string name="ex_wall_slides_tech">Keep your lower back pressed into the wall. If your wrists or elbows lift off, only go as high as you can maintain contact. Quality over quantity.</string>
     <string name="ex_wall_slides_mistakes">Arching the lower back, allowing elbows/wrists to lift off the wall, and shrugging shoulders.</string>
-    <string name="ex_thoracic_rotations">Thoracic Rotations</string>
+    <string name="ex_thoracic_rotations">Quadruped Thoracic Rotations</string>
     <string name="ex_thoracic_rotations_desc">A controlled rotation drill for improving mobility through the upper spine.</string>
     <string name="ex_thoracic_rotations_steps">1. Start on all fours and place one hand lightly behind your head.\n2. Rotate the elbow down toward the supporting arm.\n3. Open the chest by rotating the elbow up toward the ceiling.\n4. Repeat on one side, then switch sides.</string>
     <string name="ex_thoracic_rotations_tech">Keep the hips stable and let the movement come from the upper back. Follow the elbow with your eyes to encourage a full rotation.</string>
     <string name="ex_thoracic_rotations_mistakes">Twisting through the lower back, moving too fast, and collapsing the supporting shoulder.</string>
-    <string name="ex_cobra_stretch">Cobra Stretch</string>
+    <string name="ex_cobra_stretch">Prone Cobra Stretch</string>
     <string name="ex_cobra_stretch_desc">A front-body stretch that opens the abdominals and encourages spinal extension.</string>
     <string name="ex_cobra_stretch_steps">1. Lie face down with hands under the shoulders.\n2. Press the floor away and lift the chest comfortably.\n3. Keep the hips heavy and shoulders down.\n4. Hold the position while breathing slowly, then lower back down.</string>
     <string name="ex_cobra_stretch_tech">Lift only as high as you can without pinching the lower back. Lengthen through the crown of the head and keep the elbows soft if needed.</string>
@@ -438,7 +507,7 @@
     <string name="ex_thoracic_extension_steps">1. Sit or kneel tall with hands supporting the back of the head.\n2. Lift the chest and gently extend over the upper back.\n3. Pause briefly without flaring the ribs excessively.\n4. Return to neutral and repeat with control.</string>
     <string name="ex_thoracic_extension_tech">Keep the lower back quiet and focus on opening through the sternum. Think about length before extension.</string>
     <string name="ex_thoracic_extension_mistakes">Turning it into a lower-back bend, pulling the head forward, and rushing the movement.</string>
-    <string name="ex_hip_flexor_stretch">Hip Flexor Stretch</string>
+    <string name="ex_hip_flexor_stretch">Half-Kneeling Hip Flexor Stretch</string>
     <string name="ex_hip_flexor_stretch_desc">A half-kneeling stretch that opens the front of the hip and thigh. Use a small pelvic tuck to feel the stretch where it should be.</string>
     <string name="ex_hip_flexor_stretch_steps">1. Set up in a half-kneeling lunge with the back knee on the floor.\n2. Brace your core and gently tuck the pelvis under.\n3. Squeeze the glute on the back-leg side.\n4. Shift forward a few centimeters until the front of the hip opens up.\n5. Hold, breathe slowly, then switch sides.</string>
     <string name="ex_hip_flexor_stretch_tech">Stay tall instead of leaning forward. Keep the ribs stacked over the pelvis. A small glute squeeze works better than a big lunge.</string>
@@ -470,12 +539,12 @@
     <string name="ex_hamstring_stretch_steps">1. Extend one leg in front with the heel on the floor or a low surface.\n2. Keep the back flat and hinge forward from the hips.\n3. Stop when you feel a stretch along the back of the thigh.\n4. Hold, then switch sides.</string>
     <string name="ex_hamstring_stretch_tech">Lead with the chest instead of rounding the back. A small bend in the knee is fine if it helps keep the spine long.</string>
     <string name="ex_hamstring_stretch_mistakes">Rounding the spine, locking the knee aggressively, and bouncing into the stretch.</string>
-    <string name="ex_decline_pushups">Decline Push-ups</string>
+    <string name="ex_decline_pushups">Feet-Elevated Decline Push-up</string>
     <string name="ex_decline_pushups_desc">An elevated push-up variation that shifts more load to the upper chest and shoulders. Keep the body rigid from start to finish.</string>
     <string name="ex_decline_pushups_steps">1. Place your feet on a bench or step and your hands on the floor.\n2. Set a straight line from shoulders to heels.\n3. Lower your chest between the hands with control.\n4. Press the floor away until the arms straighten.\n5. Reset your brace before the next rep.</string>
     <string name="ex_decline_pushups_tech">Keep the glutes and abs tight. Let the elbows track back, not straight out. Lower the chest, not the forehead.</string>
     <string name="ex_decline_pushups_mistakes">Sagging through the lower back. Flaring the elbows hard. Cutting the range short.</string>
-    <string name="ex_diamond_pushups">Diamond Push-ups</string>
+    <string name="ex_diamond_pushups">Close-Grip Diamond Push-up</string>
     <string name="ex_diamond_pushups_desc">A close-grip push-up that challenges the triceps, chest, and core. Use a smaller range only if you need it to keep form clean.</string>
     <string name="ex_diamond_pushups_steps">1. Start in a plank with the hands close together under the chest.\n2. Turn the elbows back and brace the midline.\n3. Lower slowly until the chest comes close to the hands.\n4. Press back up without letting the hips drop.\n5. Keep every rep smooth and controlled.</string>
     <string name="ex_diamond_pushups_tech">Screw the hands into the floor. Keep the shoulders away from the ears. If needed, widen the hands slightly while keeping a close grip.</string>
@@ -596,5 +665,15 @@
     <string name="nutrition_not_enough_protein_sources">Not enough protein sources</string>
     <string name="nutrition_not_enough_carbs">Add more carbs</string>
     <string name="nutrition_add_more_fruits_vegetables">Add more vegetables/fruits</string>
+    <string name="library_statistics">Library Statistics</string>
+    <string name="stats_total_exercises">Total exercises</string>
+    <string name="stats_total_families">Total exercise families</string>
+    <string name="stats_main_categories">Main categories</string>
+    <string name="stats_body_regions">Body-region categories</string>
+    <string name="stats_languages">Supported languages</string>
+    <string name="stats_animation_coverage">Animation coverage</string>
+    <string name="stats_animated_label">Animated:</string>
+    <string name="stats_animated_format">%1$d / %2$d</string>
+
     <string name="ok">OK</string>
 </resources>

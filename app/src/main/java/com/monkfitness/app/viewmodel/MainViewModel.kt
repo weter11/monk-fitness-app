@@ -16,6 +16,7 @@ import com.monkfitness.app.data.local.SettingsManager
 import com.monkfitness.app.data.model.BodyWeightEntry
 import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.data.model.LibraryStats
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
@@ -241,6 +242,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val postureSearchQuery = _postureSearchQuery.asStateFlow()
     private val _postureSelectedCategory = MutableStateFlow<ExerciseCategory?>(null)
     private val _postureSelectedSubCategory = MutableStateFlow<ExerciseSubCategory?>(null)
+    private val _expandedFamilyIds = MutableStateFlow<Set<String>>(emptySet())
 
     val completedDaysCount = repository.getCompletedDaysCount().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 0
@@ -291,6 +293,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val completedPostureDaysCount = repository.getCompletedPostureDaysCount().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 0
+    )
+
+    val libraryStats = flowOf(workoutGenerator.getLibraryStats()).stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000),
+        LibraryStats(0, 0, 0, 0, 0, 0)
     )
 
     private val _streak = MutableStateFlow(0)
@@ -414,8 +421,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         postureSearchQuery,
         _postureSelectedCategory,
         _postureSelectedSubCategory,
+        _expandedFamilyIds,
         availableEquipment
-    ) { difficultyAdjustments, debouncedQuery, selectedCategory, selectedSubCategory, availableEquipment ->
+    ) { params ->
+        val difficultyAdjustments = params[0] as Map<String, Int>
+        val debouncedQuery = params[1] as String
+        val selectedCategory = params[2] as ExerciseCategory?
+        val selectedSubCategory = params[3] as ExerciseSubCategory?
+        val expandedFamilyIds = params[4] as Set<String>
+        val availableEquipment = params[5] as Set<Equipment>
+
         val exercises = getExerciseLibrary(difficultyAdjustments, availableEquipment)
         val searchFilteredExercises = if (debouncedQuery.isBlank()) {
             exercises
@@ -433,11 +448,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             (selectedCategory == null || exercise.category == selectedCategory) &&
                 (safeSelectedSubCategory == null || exercise.subCategory == safeSelectedSubCategory)
         }
+
+        val familiesInLibrary = workoutGenerator.families.filter { family ->
+            filteredExercises.any { it.familyId == family.id }
+        }
+        val exercisesByFamily = filteredExercises.groupBy { it.familyId }
+
         PostureUiState(
             selectedCategory = selectedCategory,
             selectedSubCategory = safeSelectedSubCategory,
             availableSubCategories = availableSubCategories,
-            filteredExercises = filteredExercises
+            filteredExercises = filteredExercises,
+            families = familiesInLibrary,
+            exercisesByFamily = exercisesByFamily,
+            expandedFamilyIds = expandedFamilyIds
         )
     }.stateIn(
         viewModelScope,
@@ -446,7 +470,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             selectedCategory = null,
             selectedSubCategory = null,
             availableSubCategories = emptyList(),
-            filteredExercises = emptyList()
+            filteredExercises = emptyList(),
+            families = emptyList(),
+            exercisesByFamily = emptyMap(),
+            expandedFamilyIds = emptySet()
         )
     )
 
@@ -1102,6 +1129,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setPostureSearchQuery(query: String) {
         _postureSearchQuery.value = query
+        if (query.isNotBlank()) {
+            _expandedFamilyIds.value = workoutGenerator.families.map { it.id }.toSet()
+        } else {
+            _expandedFamilyIds.value = emptySet()
+        }
     }
 
     fun setPostureSelectedCategory(category: ExerciseCategory?) {
@@ -1116,6 +1148,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearPostureFilters() {
         _postureSelectedCategory.value = null
         _postureSelectedSubCategory.value = null
+        _expandedFamilyIds.value = emptySet()
+    }
+
+    fun toggleFamilyExpanded(familyId: String) {
+        val current = _expandedFamilyIds.value
+        _expandedFamilyIds.value = if (familyId in current) current - familyId else current + familyId
     }
 
     fun getDifficultyLevelLabel(adjustment: Int): Int {

@@ -3,6 +3,7 @@ package com.monkfitness.app.viewmodel
 import androidx.compose.runtime.Immutable
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.ExerciseCategory
+import com.monkfitness.app.data.model.ExerciseFamily
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.model.ProgramDayState
@@ -34,5 +35,8 @@ data class PostureUiState(
     val selectedCategory: ExerciseCategory?,
     val selectedSubCategory: ExerciseSubCategory?,
     val availableSubCategories: List<ExerciseSubCategory>,
-    val filteredExercises: List<Exercise>
+    val filteredExercises: List<Exercise>,
+    val families: List<ExerciseFamily>,
+    val exercisesByFamily: Map<String, List<Exercise>>,
+    val expandedFamilyIds: Set<String>
 )

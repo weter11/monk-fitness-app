@@ -20,8 +20,10 @@ fun matchesQuery(exercise: Exercise, query: String): Boolean {
 
     return normalize(exercise.nameRu).contains(q) ||
         normalize(exercise.nameEn).contains(q) ||
+        normalize(exercise.nameUk).contains(q) ||
         normalize(exercise.descriptionRu).contains(q) ||
-        normalize(exercise.descriptionEn).contains(q)
+        normalize(exercise.descriptionEn).contains(q) ||
+        normalize(exercise.descriptionUk).contains(q)
 }
 
 fun Exercise.withLocalizedSearchText(context: Context): Exercise {
@@ -30,8 +32,10 @@ fun Exercise.withLocalizedSearchText(context: Context): Exercise {
     return copy(
         nameRu = context.localizedString(nameRes, "ru"),
         nameEn = context.localizedString(nameRes, "en"),
+        nameUk = context.localizedString(nameRes, "uk"),
         descriptionRu = context.localizedString(descriptionId, "ru"),
-        descriptionEn = context.localizedString(descriptionId, "en")
+        descriptionEn = context.localizedString(descriptionId, "en"),
+        descriptionUk = context.localizedString(descriptionId, "uk")
     )
 }
 
