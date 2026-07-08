@@ -1,31 +1,20 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.animation.SkeletonEngine.THIGH
-import com.monkfitness.app.animation.SkeletonEngine.SHIN
-import com.monkfitness.app.animation.SkeletonEngine.TORSO
-import com.monkfitness.app.animation.SkeletonEngine.UPARM
-import com.monkfitness.app.animation.SkeletonEngine.FOREARM
-import com.monkfitness.app.animation.SkeletonEngine.HIPW
-import com.monkfitness.app.animation.SkeletonEngine.SHW
-import com.monkfitness.app.animation.SkeletonEngine.NECK
-import com.monkfitness.app.animation.SkeletonEngine.HEADR
 import com.monkfitness.app.animation.SkeletonMath.solveIK
 import com.monkfitness.app.animation.SkeletonMath.lerp
 
 class BirdDogPose : PoseBuilder {
-    override fun evaluate(progress: Float, side: Side): SkeletonPose {
+    override fun evaluate(progress: Float, side: Side, definition: SkeletonDefinition): SkeletonPose {
         // Quadruped base
         val pelvis = Vector3(50f, 45f, 0f)
-        val chest = pelvis + Vector3(-TORSO, 0f, 0f)
+        val chest = pelvis + Vector3(-definition.torsoLength, 0f, 0f)
 
-        val hipF = pelvis + Vector3(0f, 0f, HIPW)
-        val hipB = pelvis + Vector3(0f, 0f, -HIPW)
+        val hipF = pelvis + Vector3(0f, 0f, definition.hipWidth)
+        val hipB = pelvis + Vector3(0f, 0f, -definition.hipWidth)
 
-        val shoulderA = chest + Vector3(0f, 0f, SHW) // Right
-        val shoulderP = chest + Vector3(0f, 0f, -SHW) // Left
-
-        val s = if (side == Side.RIGHT) 1f else -1f
+        val shoulderA = chest + Vector3(0f, 0f, definition.shoulderWidth) // Right
+        val shoulderP = chest + Vector3(0f, 0f, -definition.shoulderWidth) // Left
 
         // Target positions for "neutral" quadruped
         val baseHandR = shoulderA + Vector3(0f, -45f, 0f)
@@ -33,17 +22,20 @@ class BirdDogPose : PoseBuilder {
         val baseKneeR = hipF + Vector3(0f, -45f, 0f)
         val baseKneeL = hipB + Vector3(0f, -45f, 0f)
 
+        val totalArmLen = definition.upperArmLength + definition.forearmLength
+        val totalLegLen = definition.thighLength + definition.shinLength
+
         // Extended positions
         val extHand = if (side == Side.RIGHT) {
-            shoulderP + Vector3(-UPARM - FOREARM, 10f, 0f) // Left arm extends
+            shoulderP + Vector3(-totalArmLen, 10f, 0f) // Left arm extends
         } else {
-            shoulderA + Vector3(-UPARM - FOREARM, 10f, 0f) // Right arm extends
+            shoulderA + Vector3(-totalArmLen, 10f, 0f) // Right arm extends
         }
 
         val extKnee = if (side == Side.RIGHT) {
-            hipF + Vector3(THIGH + SHIN, 10f, 0f) // Right leg extends
+            hipF + Vector3(totalLegLen, 10f, 0f) // Right leg extends
         } else {
-            hipB + Vector3(THIGH + SHIN, 10f, 0f) // Left leg extends
+            hipB + Vector3(totalLegLen, 10f, 0f) // Left leg extends
         }
 
         // Lerp based on progress
@@ -57,15 +49,15 @@ class BirdDogPose : PoseBuilder {
         val toeF = kneeR + Vector3(10f, -10f, 0f)
         val toeB = kneeL + Vector3(10f, -10f, 0f)
 
-        val armA = solveIK(shoulderA, handR, UPARM, FOREARM, Vector3(0f, 0f, 1f))
-        val armP = solveIK(shoulderP, handL, UPARM, FOREARM, Vector3(0f, 0f, -1f))
+        val armA = solveIK(shoulderA, handR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f))
+        val armP = solveIK(shoulderP, handL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f))
 
-        val legF = solveIK(hipF, toeF, THIGH, SHIN, Vector3(-1f, 0f, 1f))
-        val legB = solveIK(hipB, toeB, THIGH, SHIN, Vector3(-1f, 0f, -1f))
+        val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f))
+        val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f))
 
         val headDir = Vector3(-1f, 0.1f, 0f).normalize()
-        val neckEnd = chest + headDir * NECK
-        val headPos = chest + headDir * (NECK + HEADR)
+        val neckEnd = chest + headDir * definition.neckLength
+        val headPos = chest + headDir * (definition.neckLength + definition.headRadius)
 
         return SkeletonPose(
             mapOf(

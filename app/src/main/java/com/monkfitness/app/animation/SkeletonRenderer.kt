@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.lerp
 fun SkeletonRenderer(
     pose: SkeletonPose,
     camera: Camera,
+    engine: SkeletonEngine,
     modifier: Modifier = Modifier,
     showGround: Boolean = true,
     highlightedJoint: Joint? = null
@@ -28,7 +29,7 @@ fun SkeletonRenderer(
         val items = mutableListOf<DrawableItem>()
 
         // Add bones
-        for (bone in SkeletonEngine.bones) {
+        for (bone in engine.bones) {
             val p1 = camera.project(pose.getJoint(bone.parentJoint), width, height)
             val p2 = camera.project(pose.getJoint(bone.childJoint), width, height)
             val isForeground = bone.colorMultiplier >= 1.0f
@@ -43,7 +44,7 @@ fun SkeletonRenderer(
         val headPos = camera.project(pose.getJoint(Joint.HEAD_POS), width, height)
         items.add(
             DrawableItem.HeadItem(
-                headPos, SkeletonEngine.HEADR, 1.0f, headPos.depth, false
+                headPos, engine.definition.headRadius, 1.0f, headPos.depth, false
             )
         )
 
