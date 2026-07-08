@@ -9,10 +9,12 @@ data class SkeletonDefinition(
     val thighLength: Float,
     val shinLength: Float,
     val footLength: Float,
+    val foot: FootDefinition = FootDefinition(footLength),
 
     // Arms
     val upperArmLength: Float,
     val forearmLength: Float,
+    val hand: HandDefinition = HandDefinition(),
 
     // Widths
     val shoulderWidth: Float,
