@@ -28,5 +28,11 @@ enum class Joint {
     KNUCKLES_P,
     FINGERTIPS_P,
     NECK_END,
-    HEAD_POS
+    HEAD_POS,
+
+    // Orientation Hints
+    HAND_DIR_A,
+    HAND_DIR_P,
+    FOOT_DIR_F,
+    FOOT_DIR_B
 }

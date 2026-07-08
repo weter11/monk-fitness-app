@@ -13,16 +13,16 @@ class PerspectiveCompensation(
         val joints = pose.joints.toMutableMap()
 
         // Correct Fore (Left) Foot
-        adjustFootOrientation(joints, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
+        adjustFootOrientation(joints, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F, pose.getHint(Joint.FOOT_DIR_F))
         // Correct Back (Right) Foot
-        adjustFootOrientation(joints, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
+        adjustFootOrientation(joints, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B, pose.getHint(Joint.FOOT_DIR_B))
 
         // Correct Active (Left) Hand
-        adjustHandOrientation(joints, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A)
+        adjustHandOrientation(joints, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A, pose.getHint(Joint.HAND_DIR_A))
         // Correct Passive (Right) Hand
-        adjustHandOrientation(joints, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
+        adjustHandOrientation(joints, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P, pose.getHint(Joint.HAND_DIR_P))
 
-        return SkeletonPose(joints)
+        return SkeletonPose(joints, pose.hints)
     }
 
     private fun adjustHandOrientation(
@@ -32,7 +32,8 @@ class PerspectiveCompensation(
         wristId: Joint,
         palmId: Joint,
         knucklesId: Joint,
-        fingertipsId: Joint
+        fingertipsId: Joint,
+        hintDir: Vector3?
     ) {
         val elbow = joints[elbowId] ?: return
         val hand = joints[handId] ?: return
@@ -42,8 +43,8 @@ class PerspectiveCompensation(
         val wrist = hand
         joints[wristId] = wrist
 
-        // Direction is forearm direction
-        val dir = (wrist - elbow).normalize()
+        // Direction is forearm direction by default, or hint if provided
+        val dir = hintDir?.normalize() ?: (wrist - elbow).normalize()
 
         val handDef = definition.hand
         val handJoints = handDef.computeHandJoints(wrist, dir)
@@ -58,37 +59,44 @@ class PerspectiveCompensation(
         kneeId: Joint,
         ankleId: Joint,
         heelId: Joint,
-        toeId: Joint
+        toeId: Joint,
+        hintDir: Vector3?
     ) {
         val knee = joints[kneeId] ?: return
         val ankle = joints[ankleId] ?: return
-        val providedToe = joints[toeId]
 
-        val shank = (ankle - knee).normalize()
+        var footDir: Vector3
 
-        // Use provided toe as direction hint, fallback to forward (X+)
-        val forwardHint = if (providedToe != null && (providedToe - ankle).mag() > 1e-3) {
-            (providedToe - ankle).normalize()
+        if (hintDir != null) {
+            footDir = hintDir.normalize()
         } else {
-            Vector3(1f, 0f, 0f)
-        }
+            val providedToe = joints[toeId]
+            val shank = (ankle - knee).normalize()
 
-        // Target: foot perpendicular to shank
-        var footDir = forwardHint - shank * forwardHint.dot(shank)
+            // Use provided toe as direction hint, fallback to forward (X+)
+            val forwardHint = if (providedToe != null && (providedToe - ankle).mag() > 1e-3) {
+                (providedToe - ankle).normalize()
+            } else {
+                Vector3(1f, 0f, 0f)
+            }
 
-        if (footDir.mag() < 1e-3) {
-            // Shank is parallel to hint, fallback to world down-ish relative to shank
-            footDir = Vector3(0f, -1f, 0f) - shank * Vector3(0f, -1f, 0f).dot(shank)
-        }
-        footDir = footDir.normalize()
+            // Target: foot perpendicular to shank
+            footDir = forwardHint - shank * forwardHint.dot(shank)
 
-        // Clamp foot pitch
-        val pitch = atan2(footDir.y, sqrt(footDir.x * footDir.x + footDir.z * footDir.z))
-        val clampedPitch = pitch.coerceIn(definition.foot.minPitch, definition.foot.maxPitch)
+            if (footDir.mag() < 1e-3) {
+                // Shank is parallel to hint, fallback to world down-ish relative to shank
+                footDir = Vector3(0f, -1f, 0f) - shank * Vector3(0f, -1f, 0f).dot(shank)
+            }
+            footDir = footDir.normalize()
 
-        if (abs(pitch - clampedPitch) > 1e-3) {
-            val horizontalDir = Vector3(footDir.x, 0f, footDir.z).normalize()
-            footDir = horizontalDir * cos(clampedPitch) + Vector3(0f, 1f, 0f) * sin(clampedPitch)
+            // Clamp foot pitch
+            val pitch = atan2(footDir.y, sqrt(footDir.x * footDir.x + footDir.z * footDir.z))
+            val clampedPitch = pitch.coerceIn(definition.foot.minPitch, definition.foot.maxPitch)
+
+            if (abs(pitch - clampedPitch) > 1e-3) {
+                val horizontalDir = Vector3(footDir.x, 0f, footDir.z).normalize()
+                footDir = horizontalDir * cos(clampedPitch) + Vector3(0f, 1f, 0f) * sin(clampedPitch)
+            }
         }
 
         val foot = definition.foot
