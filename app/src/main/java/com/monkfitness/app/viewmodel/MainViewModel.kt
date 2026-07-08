@@ -556,13 +556,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         availableEquipment: Set<Equipment> = this.availableEquipment.value
     ): Exercise? {
         if (exerciseId.isBlank()) return null
-        val resolvedDay = day.takeIf { it in 1..56 } ?: currentProgramDay.value
-
-        return getWorkoutForDay(resolvedDay, difficultyAdjustments, trainingType, focusAreas, availableEquipment).exercises.find { it.id == exerciseId }
-            ?: getPostureMobilityWorkout(resolvedDay, difficultyAdjustments, trainingType, focusAreas, availableEquipment).exercises.find { it.id == exerciseId }
-            ?: getWarmupExercises(difficultyAdjustments).find { it.id == exerciseId }
-            ?: getExerciseLibrary(difficultyAdjustments, availableEquipment).find { it.id == exerciseId }
+        // All exercises come from the catalog (allExercises), so we only need to look them up
+        // from getExerciseLibrary, getPostureExercises, and getWarmupExercises.
+        // No inline exercises with unique IDs are created during workout generation.
+        return getExerciseLibrary(difficultyAdjustments, availableEquipment).find { it.id == exerciseId }
             ?: getPostureExercises(difficultyAdjustments, focusAreas).find { it.id == exerciseId }
+            ?: getWarmupExercises(difficultyAdjustments).find { it.id == exerciseId }
     }
 
     fun getExerciseDifficultyAdjustment(exerciseId: String): Flow<Int> {

@@ -78,27 +78,55 @@ fun ProgressScreen(viewModel: MainViewModel) {
     val streak by viewModel.streak.collectAsState()
     val programStatistics by viewModel.programStatistics.collectAsState()
 
-    val legacyEntries = progressList
-        .filter { it.isCompleted }
-        .groupBy { ((it.day - 1) / 7) + 1 }
-        .map { (week, list) -> BarEntry(week.toFloat(), list.size.toFloat()) }
-        .sortedBy { it.x }
+    val legacyEntries = remember(progressList) {
+        progressList
+            .filter { it.isCompleted }
+            .groupBy { ((it.day - 1) / 7) + 1 }
+            .map { (week, list) -> BarEntry(week.toFloat(), list.size.toFloat()) }
+            .sortedBy { it.x }
+    }
 
-    val postureEntries = postureProgressList
-        .filter { it.isCompleted }
-        .groupBy { ((it.day - 1) / 7) + 1 }
-        .map { (week, list) -> BarEntry(week.toFloat(), list.size.toFloat()) }
-        .sortedBy { it.x }
+    val postureEntries = remember(postureProgressList) {
+        postureProgressList
+            .filter { it.isCompleted }
+            .groupBy { ((it.day - 1) / 7) + 1 }
+            .map { (week, list) -> BarEntry(week.toFloat(), list.size.toFloat()) }
+            .sortedBy { it.x }
+    }
 
     val volumeEntries = remember(volumeHistory) { volumeHistory.takeLast(7) }
     val frequencyEntries = remember(workoutFrequencyHistory) { workoutFrequencyHistory.takeLast(8) }
-    val totalVolume = volumeHistory.sumOf { it.totalReps }
-    val averageVolume = if (volumeHistory.isNotEmpty()) totalVolume / volumeHistory.size else 0
-    val latestVolume = volumeHistory.lastOrNull()?.totalReps ?: 0
+
+    val volumeChartEntries = remember(volumeEntries) {
+        volumeEntries.mapIndexed { index, point -> BarEntry(index.toFloat(), point.totalReps.toFloat()) }
+    }
+    val volumeChartLabels = remember(volumeEntries) {
+        volumeEntries.map { formatSessionDateLabel(it.sessionDate) }
+    }
+    val frequencyChartEntries = remember(frequencyEntries) {
+        frequencyEntries.mapIndexed { index, point -> BarEntry(index.toFloat(), point.sessionCount.toFloat()) }
+    }
+    val frequencyChartLabels = remember(frequencyEntries) {
+        frequencyEntries.map { formatWeekLabel(it.weekLabel) }
+    }
+
+    val volumeStats = remember(volumeHistory) {
+        val total = volumeHistory.sumOf { it.totalReps }
+        val average = if (volumeHistory.isNotEmpty()) total / volumeHistory.size else 0
+        val latest = volumeHistory.lastOrNull()?.totalReps ?: 0
+        Triple(total, average, latest)
+    }
+    val totalVolume = volumeStats.first
+    val averageVolume = volumeStats.second
+    val latestVolume = volumeStats.third
+
     val secondaryColor = MaterialTheme.colorScheme.secondary.toArgb()
-    val postureCompletionRatio = postureProgressList.count { it.isCompleted }.toFloat() / 56f
+    val postureCompletionRatio = remember(postureProgressList) {
+        postureProgressList.count { it.isCompleted }.toFloat() / 56f
+    }
     val topPersonalRecords = remember(personalRecords, currentProgramDay) {
         personalRecords.entries
+            .asSequence()
             .sortedByDescending { it.value }
             .mapNotNull { entry ->
                 val exercise = viewModel.findExerciseById(
@@ -109,6 +137,7 @@ fun ProgressScreen(viewModel: MainViewModel) {
                 exercise?.let { it to entry.value }
             }
             .take(3)
+            .toList()
     }
     LaunchedEffect(viewModel) {
         viewModel.bodyWeightErrorEvents.collectLatest { message ->
@@ -191,8 +220,8 @@ fun ProgressScreen(viewModel: MainViewModel) {
                 title = stringResource(R.string.daily_volume_title),
                 subtitle = stringResource(R.string.daily_volume_subtitle, averageVolume, latestVolume),
                 emptyText = stringResource(R.string.no_volume_history_yet),
-                entries = volumeEntries.mapIndexed { index, point -> BarEntry(index.toFloat(), point.totalReps.toFloat()) },
-                labels = volumeEntries.map { formatSessionDateLabel(it.sessionDate) },
+                entries = volumeChartEntries,
+                labels = volumeChartLabels,
                 dataSetLabel = stringResource(R.string.daily_volume_dataset),
                 color = MaterialTheme.colorScheme.primary.toArgb()
             )
@@ -203,8 +232,8 @@ fun ProgressScreen(viewModel: MainViewModel) {
                 title = stringResource(R.string.workout_frequency_title),
                 subtitle = stringResource(R.string.workout_frequency_subtitle),
                 emptyText = stringResource(R.string.no_workout_frequency_yet),
-                entries = frequencyEntries.mapIndexed { index, point -> BarEntry(index.toFloat(), point.sessionCount.toFloat()) },
-                labels = frequencyEntries.map { formatWeekLabel(it.weekLabel) },
+                entries = frequencyChartEntries,
+                labels = frequencyChartLabels,
                 dataSetLabel = stringResource(R.string.workout_frequency_dataset),
                 color = MaterialTheme.colorScheme.tertiary.toArgb(),
                 maxVisibleValue = 7f
