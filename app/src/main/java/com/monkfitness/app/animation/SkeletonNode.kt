@@ -1,22 +1,38 @@
 package com.monkfitness.app.animation
 
 /**
+ * Mutable axis-angle rotation to avoid allocations.
+ */
+class JointRotation(
+    var axis: Vector3 = Vector3(0f, 0f, 1f),
+    var angle: Float = 0f // radians
+) {
+    fun set(axis: Vector3, angle: Float) {
+        this.axis = axis
+        this.angle = angle
+    }
+
+    fun copyFrom(other: JointRotation) {
+        this.axis = other.axis
+        this.angle = other.angle
+    }
+}
+
+/**
  * Lightweight node for hierarchical transforms (Forward Kinematics).
- * Uses mutable world properties to avoid per-frame allocations.
+ * Optimized for zero-allocation per frame updates.
  */
 class SkeletonNode(
     val joint: Joint,
     var parent: SkeletonNode? = null,
     var localPosition: Vector3 = Vector3(0f, 0f, 0f),
-    var localRotationAxis: Vector3 = Vector3(0f, 0f, 1f),
-    var localRotationAngle: Float = 0f, // radians
+    val localRotation: JointRotation = JointRotation(),
     val children: MutableList<SkeletonNode> = mutableListOf()
 ) {
     var worldPosition: Vector3 = Vector3(0f, 0f, 0f)
         private set
 
-    var worldRotationAngle: Float = 0f
-        private set
+    val worldRotation: JointRotation = JointRotation()
 
     fun addChild(node: SkeletonNode): SkeletonNode {
         node.parent = this
@@ -27,18 +43,21 @@ class SkeletonNode(
     /**
      * Compute world transform inheriting from parent.
      */
-    fun updateWorldTransforms(parentWorldPos: Vector3, parentWorldRotationAngle: Float) {
-        // Biomechanical engine uses cumulative Z-rotation
-        val rotatedPos = if (parentWorldRotationAngle != 0f) {
-            SkeletonMath.rotAround(localPosition, Vector3(0f, 0f, 1f), parentWorldRotationAngle)
+    fun updateWorldTransforms(parentWorldPos: Vector3, parentWorldRotation: JointRotation) {
+        // Position propagation: Rotate local offset by parent's world rotation
+        val rotatedPos = if (parentWorldRotation.angle != 0f) {
+            SkeletonMath.rotAround(localPosition, parentWorldRotation.axis, parentWorldRotation.angle)
         } else {
             localPosition
         }
         worldPosition = parentWorldPos + rotatedPos
-        worldRotationAngle = parentWorldRotationAngle + localRotationAngle
+
+        // Rotation propagation (cumulative)
+        worldRotation.axis = parentWorldRotation.axis
+        worldRotation.angle = parentWorldRotation.angle + localRotation.angle
 
         for (child in children) {
-            child.updateWorldTransforms(worldPosition, worldRotationAngle)
+            child.updateWorldTransforms(worldPosition, worldRotation)
         }
     }
 
