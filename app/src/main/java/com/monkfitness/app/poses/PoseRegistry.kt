@@ -2,6 +2,7 @@ package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.PoseBuilder
 import com.monkfitness.app.animation.AnimationMode
+import com.monkfitness.app.animation.AnimationRegistry
 
 data class PoseConfig(
     val builder: PoseBuilder,
@@ -10,33 +11,42 @@ data class PoseConfig(
 )
 
 object PoseRegistry {
-    private val registry = mapOf(
-        "world_greatest_stretch" to PoseConfig(WorldGreatestStretchPose(), AnimationMode.HOLD),
-        "pushup_standard" to PoseConfig(PushUpPose(), AnimationMode.LOOP),
-        "pushup_wide" to PoseConfig(PushUpPose(), AnimationMode.LOOP),
-        "pushup_military" to PoseConfig(PushUpPose(), AnimationMode.LOOP),
-        "pushup_knee" to PoseConfig(PushUpPose(), AnimationMode.LOOP),
-        "pushup_diamond" to PoseConfig(PushUpPose(), AnimationMode.LOOP),
-        "pushup_decline" to PoseConfig(PushUpPose(), AnimationMode.LOOP),
-        "pike_pushup_standard" to PoseConfig(PushUpPose(), AnimationMode.LOOP),
-        "squat_standard" to PoseConfig(SquatPose(), AnimationMode.LOOP),
-        "squat_sumo" to PoseConfig(SquatPose(), AnimationMode.LOOP),
-        "squat_jump" to PoseConfig(SquatPose(), AnimationMode.LOOP),
-        "deep_squat_hold" to PoseConfig(SquatPose(), AnimationMode.LOOP),
-        "birddog_hold" to PoseConfig(BirdDogPose(), AnimationMode.LOOP, alternating = true),
-        "birddog_reps" to PoseConfig(BirdDogPose(), AnimationMode.LOOP, alternating = true),
-        "cat_cow_reps" to PoseConfig(CatCowPose(), AnimationMode.LOOP),
-        "superman_prone" to PoseConfig(SupermanPose(), AnimationMode.LOOP)
+    private val configRegistry = mapOf(
+        "world_greatest_stretch" to (AnimationMode.HOLD to false),
+        "pushup_standard" to (AnimationMode.LOOP to false),
+        "pushup_wide" to (AnimationMode.LOOP to false),
+        "pushup_military" to (AnimationMode.LOOP to false),
+        "pushup_knee" to (AnimationMode.LOOP to false),
+        "pushup_diamond" to (AnimationMode.LOOP to false),
+        "pushup_decline" to (AnimationMode.LOOP to false),
+        "pike_pushup_standard" to (AnimationMode.LOOP to false),
+        "squat_standard" to (AnimationMode.LOOP to false),
+        "squat_sumo" to (AnimationMode.LOOP to false),
+        "squat_jump" to (AnimationMode.LOOP to false),
+        "deep_squat_hold" to (AnimationMode.LOOP to false),
+        "birddog_hold" to (AnimationMode.LOOP to true),
+        "birddog_reps" to (AnimationMode.LOOP to true),
+        "cat_cow_reps" to (AnimationMode.LOOP to false),
+        "superman_prone" to (AnimationMode.LOOP to false)
     )
 
-    fun getPoseConfig(animationId: String): PoseConfig? = registry[animationId]
+    fun getPoseConfig(animationId: String): PoseConfig? {
+        val (mode, alternating) = configRegistry[animationId] ?: return null
+        val builder = AnimationRegistry.get(animationId) ?: return null
+        return PoseConfig(builder, mode, alternating)
+    }
 
     fun getDedicatedAnimationIds(): Set<String> {
-        // A dedicated animation is one where the PoseBuilder class is used ONLY by that animationId
+        val animationIds = configRegistry.keys
         val builderToIds = mutableMapOf<Class<out PoseBuilder>, MutableSet<String>>()
-        registry.forEach { (id, config) ->
-            builderToIds.getOrPut(config.builder.javaClass) { mutableSetOf() }.add(id)
+
+        animationIds.forEach { id ->
+            val builder = AnimationRegistry.get(id)
+            if (builder != null) {
+                builderToIds.getOrPut(builder.javaClass) { mutableSetOf() }.add(id)
+            }
         }
+
         return builderToIds.values
             .filter { it.size == 1 }
             .flatten()

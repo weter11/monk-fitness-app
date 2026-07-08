@@ -23,7 +23,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.animation.Camera
+import com.monkfitness.app.animation.PoseContext
+import com.monkfitness.app.animation.SkeletonDefinition
+import com.monkfitness.app.animation.SkeletonEngine
 import com.monkfitness.app.animation.SkeletonRenderer
+import com.monkfitness.app.animation.SkeletonStyle
 import com.monkfitness.app.animation.rememberAnimationController
 import com.monkfitness.app.poses.PoseRegistry
 import com.monkfitness.app.ui.components.animation.Joint
@@ -49,11 +53,20 @@ fun ExerciseAnimatedVisual(
             alternating = poseConfig.alternating
         )
         val camera = remember { Camera() }
-        val pose = poseConfig.builder.evaluate(controller.progress, controller.side)
+        val definition = SkeletonDefinition.DEFAULT_ADULT
+        val style = SkeletonStyle.DEFAULT
+        val engine = remember(definition, style) { SkeletonEngine(definition, style) }
+        val poseContext = PoseContext(
+            progress = controller.progress,
+            side = controller.side,
+            definition = definition
+        )
+        val pose = poseConfig.builder.build(poseContext)
 
         SkeletonRenderer(
             pose = pose,
             camera = camera,
+            engine = engine,
             modifier = modifier.fillMaxSize()
         )
         return

@@ -1,48 +1,42 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.animation.SkeletonEngine.THIGH
-import com.monkfitness.app.animation.SkeletonEngine.SHIN
-import com.monkfitness.app.animation.SkeletonEngine.TORSO
-import com.monkfitness.app.animation.SkeletonEngine.UPARM
-import com.monkfitness.app.animation.SkeletonEngine.FOREARM
-import com.monkfitness.app.animation.SkeletonEngine.HIPW
-import com.monkfitness.app.animation.SkeletonEngine.SHW
-import com.monkfitness.app.animation.SkeletonEngine.NECK
-import com.monkfitness.app.animation.SkeletonEngine.HEADR
 import com.monkfitness.app.animation.SkeletonMath.solveIK
 import com.monkfitness.app.animation.SkeletonMath.lerp
 
 class PushUpPose : PoseBuilder {
-    override fun evaluate(progress: Float, side: Side): SkeletonPose {
+    override fun build(context: PoseContext): SkeletonPose {
+        val progress = context.progress
+        val definition = context.definition
+
         // progress 0 (up) to 1 (down)
-        val s = 1f // Pushups are symmetric
 
         val height = lerp(60f, 25f, progress)
         val pelvis = Vector3(60f, height, 0f)
-        val chest = pelvis + Vector3(-TORSO, 0f, 0f)
+        val chest = pelvis + Vector3(-definition.torsoLength, 0f, 0f)
 
-        val hipF = pelvis + Vector3(0f, 0f, HIPW)
-        val hipB = pelvis + Vector3(0f, 0f, -HIPW)
+        val hipF = pelvis + Vector3(0f, 0f, definition.hipWidth)
+        val hipB = pelvis + Vector3(0f, 0f, -definition.hipWidth)
 
-        val toeF = Vector3(60f + THIGH + SHIN, 0f, HIPW)
-        val toeB = Vector3(60f + THIGH + SHIN, 0f, -HIPW)
+        val totalLegLen = definition.thighLength + definition.shinLength
+        val toeF = Vector3(60f + totalLegLen, 0f, definition.hipWidth)
+        val toeB = Vector3(60f + totalLegLen, 0f, -definition.hipWidth)
 
-        val legF = solveIK(hipF, toeF, THIGH, SHIN, Vector3(0f, 1f, 0f))
-        val legB = solveIK(hipB, toeB, THIGH, SHIN, Vector3(0f, 1f, 0f))
+        val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f), IKConstraint.LegConstraint)
+        val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f), IKConstraint.LegConstraint)
 
-        val shoulderA = chest + Vector3(0f, 0f, SHW)
-        val shoulderP = chest + Vector3(0f, 0f, -SHW)
+        val shoulderA = chest + Vector3(0f, 0f, definition.shoulderWidth)
+        val shoulderP = chest + Vector3(0f, 0f, -definition.shoulderWidth)
 
-        val handA = chest + Vector3(0f, -height, SHW * 1.5f)
-        val handP = chest + Vector3(0f, -height, -SHW * 1.5f)
+        val handA = chest + Vector3(0f, -height, definition.shoulderWidth * 1.5f)
+        val handP = chest + Vector3(0f, -height, -definition.shoulderWidth * 1.5f)
 
-        val armA = solveIK(shoulderA, handA, UPARM, FOREARM, Vector3(1f, 0f, 1f))
-        val armP = solveIK(shoulderP, handP, UPARM, FOREARM, Vector3(1f, 0f, -1f))
+        val armA = solveIK(shoulderA, handA, definition.upperArmLength, definition.forearmLength, Vector3(1f, 0f, 1f), IKConstraint.ArmConstraint)
+        val armP = solveIK(shoulderP, handP, definition.upperArmLength, definition.forearmLength, Vector3(1f, 0f, -1f), IKConstraint.ArmConstraint)
 
         val headDir = Vector3(-1f, 0.2f, 0f).normalize()
-        val neckEnd = chest + headDir * NECK
-        val headPos = chest + headDir * (NECK + HEADR)
+        val neckEnd = chest + headDir * definition.neckLength
+        val headPos = chest + headDir * (definition.neckLength + 18f)
 
         return SkeletonPose(
             mapOf(

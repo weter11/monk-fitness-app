@@ -13,22 +13,25 @@ import androidx.compose.ui.graphics.lerp
 fun SkeletonRenderer(
     pose: SkeletonPose,
     camera: Camera,
+    engine: SkeletonEngine,
     modifier: Modifier = Modifier,
     showGround: Boolean = true,
     highlightedJoint: Joint? = null
 ) {
+    val style = engine.style
+
     Canvas(modifier = modifier) {
         val width = size.width
         val height = size.height
 
         if (showGround) {
-            drawGround(pose, camera, width, height)
+            drawGround(pose, camera, style, width, height)
         }
 
         val items = mutableListOf<DrawableItem>()
 
         // Add bones
-        for (bone in SkeletonEngine.bones) {
+        for (bone in engine.bones) {
             val p1 = camera.project(pose.getJoint(bone.parentJoint), width, height)
             val p2 = camera.project(pose.getJoint(bone.childJoint), width, height)
             val isForeground = bone.colorMultiplier >= 1.0f
@@ -43,7 +46,7 @@ fun SkeletonRenderer(
         val headPos = camera.project(pose.getJoint(Joint.HEAD_POS), width, height)
         items.add(
             DrawableItem.HeadItem(
-                headPos, SkeletonEngine.HEADR, 1.0f, headPos.depth, false
+                headPos, style.headRadius, 1.0f, headPos.depth, false
             )
         )
 
@@ -51,33 +54,45 @@ fun SkeletonRenderer(
         val handA = camera.project(pose.getJoint(Joint.HAND_A), width, height)
         items.add(
             DrawableItem.HeadItem(
-                handA, 9f, 1.05f, handA.depth, true
+                handA, style.jointRadius, 1.05f, handA.depth, true
             )
         )
 
-        // Add torso box faces
-        pose.torsoBox?.let { tb ->
-            val pHLf = camera.project(tb.hLf, width, height)
-            val pHLb = camera.project(tb.hLb, width, height)
-            val pHRf = camera.project(tb.hRf, width, height)
-            val pHRb = camera.project(tb.hRb, width, height)
-            val pSLf = camera.project(tb.sLf, width, height)
-            val pSLb = camera.project(tb.sLb, width, height)
-            val pSRf = camera.project(tb.sRf, width, height)
-            val pSRb = camera.project(tb.sRb, width, height)
+        // Calculate torso box faces on-the-fly
+        val hipF = pose.getJoint(Joint.HIP_F)
+        val hipB = pose.getJoint(Joint.HIP_B)
+        val shoulderA = pose.getJoint(Joint.SHOULDER_A)
+        val shoulderP = pose.getJoint(Joint.SHOULDER_P)
+        val pelvis = pose.getJoint(Joint.PELVIS)
+        val chest = pose.getJoint(Joint.CHEST)
 
-            fun addFace(pts: List<ProjectedPoint>) {
-                val avgDepth = pts.map { it.depth }.average().toFloat()
-                items.add(DrawableItem.FaceItem(pts, avgDepth))
-            }
+        val lean = (chest - pelvis).normalize()
+        val shVec = (shoulderA - shoulderP).normalize()
+        val chestNorm = lean.cross(shVec).normalize()
 
-            addFace(listOf(pSLf, pSRf, pHRf, pHLf)) // front
-            addFace(listOf(pSRb, pSLb, pHLb, pHRb)) // back
-            addFace(listOf(pSLb, pSLf, pHLf, pHLb)) // left
-            addFace(listOf(pSRf, pSRb, pHRb, pHRf)) // right
-            addFace(listOf(pSLb, pSRb, pSRf, pSLf)) // top
-            addFace(listOf(pHLf, pHRf, pHRb, pHLb)) // bottom
+        val offC = chestNorm * style.torsoChestDepth
+        val offH = chestNorm * style.torsoHipDepth
+
+        val pHLf = camera.project(hipF + offH, width, height)
+        val pHLb = camera.project(hipF - offH, width, height)
+        val pHRf = camera.project(hipB + offH, width, height)
+        val pHRb = camera.project(hipB - offH, width, height)
+        val pSLf = camera.project(shoulderA + offC, width, height)
+        val pSLb = camera.project(shoulderA - offC, width, height)
+        val pSRf = camera.project(shoulderP + offC, width, height)
+        val pSRb = camera.project(shoulderP - offC, width, height)
+
+        fun addFace(pts: List<ProjectedPoint>) {
+            val avgDepth = pts.map { it.depth }.average().toFloat()
+            items.add(DrawableItem.FaceItem(pts, avgDepth))
         }
+
+        addFace(listOf(pSLf, pSRf, pHRf, pHLf)) // front
+        addFace(listOf(pSRb, pSLb, pHLb, pHRb)) // back
+        addFace(listOf(pSLb, pSLf, pHLf, pHLb)) // left
+        addFace(listOf(pSRf, pSRb, pHRb, pHRf)) // right
+        addFace(listOf(pSLb, pSRb, pSRf, pSLf)) // top
+        addFace(listOf(pHLf, pHRf, pHRb, pHLb)) // bottom
 
         // Sort by depth (back to front)
         items.sortByDescending { it.depth }
@@ -96,7 +111,7 @@ fun SkeletonRenderer(
         for (item in items) {
             when (item) {
                 is DrawableItem.BoneItem -> {
-                    val color = getZColor(item.depth, item.isForeground)
+                    val color = getZColor(item.depth, item.isForeground, style)
                     val sc = (item.p1.scale + item.p2.scale) / 2f
                     val thick = item.thickness * sc * camera.zoom
 
@@ -116,7 +131,7 @@ fun SkeletonRenderer(
                     )
                 }
                 is DrawableItem.HeadItem -> {
-                    val color = getZColor(item.depth, item.isForeground)
+                    val color = getZColor(item.depth, item.isForeground, style)
                     val rad = item.radius * item.p.scale * camera.zoom
 
                     // Outline
@@ -133,7 +148,7 @@ fun SkeletonRenderer(
                     )
                 }
                 is DrawableItem.FaceItem -> {
-                    val color = getZColor(item.depth, false)
+                    val color = getZColor(item.depth, false, style)
                     val strokeC = Color(
                         red = color.red * 0.6f,
                         green = color.green * 0.6f,
@@ -154,7 +169,7 @@ fun SkeletonRenderer(
                         close()
                     }
                     drawPath(path, fillC)
-                    drawPath(path, strokeC, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
+                    drawPath(path, strokeC, style = androidx.compose.ui.graphics.drawscope.Stroke(width = style.outlineWidth))
                 }
             }
         }
@@ -185,15 +200,15 @@ private sealed class DrawableItem(val depth: Float, val colorMultiplier: Float) 
     ) : DrawableItem(depth, 1.0f)
 }
 
-private fun getZColor(depth: Float, isForeground: Boolean): Color {
+private fun getZColor(depth: Float, isForeground: Boolean, style: SkeletonStyle): Color {
     // map depth from 170..-170 to 0..1
     val t = ((170f - depth) / 340f).coerceIn(0f, 1f)
-    val farColor = Color(0xFF192337)
-    val nearColor = Color(0xFFB4C8DC)
+    val farColor = style.farColor
+    val nearColor = style.secondaryColor
 
     val baseC = lerp(farColor, nearColor, t)
     return if (isForeground) {
-        lerp(baseC, Color(0xFF64F0DC), 0.3f)
+        lerp(baseC, style.primaryColor, 0.3f)
     } else {
         baseC
     }
@@ -217,6 +232,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawLinearBone(
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGround(
     pose: SkeletonPose,
     camera: Camera,
+    style: SkeletonStyle,
     width: Float,
     height: Float
 ) {
@@ -241,8 +257,8 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGround(
         val p = camera.project(Vector3(pt.x, 0f, pt.z), width, height)
         drawOval(
             color = shadowColor,
-            topLeft = Offset(p.x - 30f * p.scale * camera.zoom, p.y - 9f * p.scale * camera.zoom),
-            size = androidx.compose.ui.geometry.Size(60f * p.scale * camera.zoom, 18f * p.scale * camera.zoom)
+            topLeft = Offset(p.x - style.shadowRadiusX * p.scale * camera.zoom, p.y - style.shadowRadiusY * p.scale * camera.zoom),
+            size = androidx.compose.ui.geometry.Size(style.shadowRadiusX * 2f * p.scale * camera.zoom, style.shadowRadiusY * 2f * p.scale * camera.zoom)
         )
     }
 }
