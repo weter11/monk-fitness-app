@@ -35,12 +35,19 @@ fun SkeletonRenderer(
 
         // Add bones
         for (bone in engine.bones) {
-            val p1 = camera.project(compensatedPose.getJoint(bone.parentJoint), width, height)
+            var p1 = camera.project(compensatedPose.getJoint(bone.parentJoint), width, height)
             var p2 = camera.project(compensatedPose.getJoint(bone.childJoint), width, height)
 
             // Foot perspective correction
             if (bone.childJoint == Joint.TOE_F || bone.childJoint == Joint.TOE_B) {
-                p2 = compensator.compensateFootPerspective(p1, p2, camera)
+                val ankleJoint = if (bone.childJoint == Joint.TOE_F) Joint.ANKLE_F else Joint.ANKLE_B
+                val heelJoint = if (bone.childJoint == Joint.TOE_F) Joint.HEEL_F else Joint.HEEL_B
+                val pAnkle = camera.project(compensatedPose.getJoint(ankleJoint), width, height)
+                val pHeel = camera.project(compensatedPose.getJoint(heelJoint), width, height)
+
+                val corrected = compensator.compensateFootPerspective(pAnkle, pHeel, p2, camera)
+                p1 = corrected.first // Heel
+                p2 = corrected.second // Toe
             }
 
             val avgDepth = (p1.depth + p2.depth) / 2f
@@ -265,7 +272,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGround(
 
     // contact shadows
     val shadowColor = Color(0x9605080C) // rgba(5, 8, 12, 150/255)
-    val shadowPoints = listOf(Joint.TOE_F, Joint.TOE_B, Joint.HAND_P)
+    val shadowPoints = listOf(Joint.TOE_F, Joint.TOE_B, Joint.HEEL_F, Joint.HEEL_B, Joint.HAND_P)
     for (id in shadowPoints) {
         val pt = pose.getJoint(id)
         val p = camera.project(Vector3(pt.x, 0f, pt.z), width, height)

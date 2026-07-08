@@ -7,15 +7,15 @@ class PerspectiveCompensation(
 ) {
     /**
      * Stage 1: 3D Pose Correction (Before Projection)
-     * Corrects foot orientation based on the shank (tibia).
+     * Corrects foot orientation based on the shank (tibia) and generates Heel/Toe.
      */
     fun preProcessPose(pose: SkeletonPose): SkeletonPose {
         val joints = pose.joints.toMutableMap()
 
         // Correct Fore (Left) Foot
-        adjustFootOrientation(joints, Joint.KNEE_F, Joint.ANKLE_F, Joint.TOE_F)
+        adjustFootOrientation(joints, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
         // Correct Back (Right) Foot
-        adjustFootOrientation(joints, Joint.KNEE_B, Joint.ANKLE_B, Joint.TOE_B)
+        adjustFootOrientation(joints, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
 
         return SkeletonPose(joints)
     }
@@ -24,6 +24,7 @@ class PerspectiveCompensation(
         joints: MutableMap<Joint, Vector3>,
         kneeId: Joint,
         ankleId: Joint,
+        heelId: Joint,
         toeId: Joint
     ) {
         val knee = joints[kneeId] ?: return
@@ -32,69 +33,66 @@ class PerspectiveCompensation(
         val shank = (ankle - knee).normalize()
 
         // Target: foot perpendicular to shank, pointing forward (positive X)
-        // Project world-forward onto the plane perpendicular to shank
         val forward = Vector3(1f, 0f, 0f)
         var footDir = forward - shank * forward.dot(shank)
 
         if (footDir.mag() < 1e-3) {
-            // Shank is parallel to forward, fallback to pointing down
             footDir = Vector3(0f, -1f, 0f) - shank * Vector3(0f, -1f, 0f).dot(shank)
         }
         footDir = footDir.normalize()
 
-        // Clamp foot pitch: avoid extreme angles relative to horizontal
-        // In this coordinate system, Y is up, X is forward.
+        // Clamp foot pitch
         val pitch = atan2(footDir.y, sqrt(footDir.x * footDir.x + footDir.z * footDir.z))
-        val maxPitch = 45f * PI.toFloat() / 180f
-        val clampedPitch = pitch.coerceIn(-maxPitch, maxPitch)
+        val clampedPitch = pitch.coerceIn(definition.foot.minPitch, definition.foot.maxPitch)
 
         if (abs(pitch - clampedPitch) > 1e-3) {
-            // Reconstruct direction with clamped pitch
             val horizontalDir = Vector3(footDir.x, 0f, footDir.z).normalize()
             footDir = horizontalDir * cos(clampedPitch) + Vector3(0f, 1f, 0f) * sin(clampedPitch)
         }
 
-        // Avoid unnatural twisting: keep foot mostly in the same vertical plane as the shank if possible,
-        // or just ensure it's not rotating wildly.
-        // The current forward-projection approach already handles this.
-
-        val footLen = definition.footLength
-        joints[toeId] = ankle + footDir * footLen
+        val foot = definition.foot
+        joints[toeId] = ankle + footDir * (foot.footLength * foot.toeRatio)
+        joints[heelId] = ankle - footDir * (foot.footLength * foot.heelRatio)
     }
 
     /**
      * Stage 2: 2D Projected Points Correction
-     * Maintains visual foot length.
+     * Maintains visual foot length from Heel to Toe, keeping Ankle fixed.
      */
     fun compensateFootPerspective(
         ankleProj: ProjectedPoint,
+        heelProj: ProjectedPoint,
         toeProj: ProjectedPoint,
         camera: Camera
-    ): ProjectedPoint {
-        val dx = toeProj.x - ankleProj.x
-        val dy = toeProj.y - ankleProj.y
-        val currentDist = sqrt(dx * dx + dy * dy)
+    ): Pair<ProjectedPoint, ProjectedPoint> {
+        val hdx = heelProj.x - ankleProj.x
+        val hdy = heelProj.y - ankleProj.y
+        val tdx = toeProj.x - ankleProj.x
+        val tdy = toeProj.y - ankleProj.y
 
-        if (currentDist < 1e-3) return toeProj
+        val currentDist = sqrt((toeProj.x - heelProj.x).pow(2) + (toeProj.y - heelProj.y).pow(2))
+        if (currentDist < 1e-3) return heelProj to toeProj
 
-        // The expected visual length if there was no perspective distortion
-        // (Simplified: footLength * zoom * reference_scale)
-        // Or just try to keep it close to a reasonable value.
-        // The prompt says "Apply only a small correction (10–20%)".
+        val foot = definition.foot
+        val idealDist = foot.footLength * ankleProj.scale * camera.zoom
 
-        val idealDist = definition.footLength * ankleProj.scale * camera.zoom
-
-        // We don't want to force it to idealDist, but move it TOWARDS it.
         val ratio = idealDist / currentDist
-        val correctionStrength = 0.15f // 15% correction
-        val targetRatio = 1.0f + (ratio - 1.0f) * correctionStrength
+        val targetRatio = 1.0f + (ratio - 1.0f) * 0.15f // 15% correction
 
-        return ProjectedPoint(
-            x = ankleProj.x + dx * targetRatio,
-            y = ankleProj.y + dy * targetRatio,
+        val newHeel = ProjectedPoint(
+            x = ankleProj.x + hdx * targetRatio,
+            y = ankleProj.y + hdy * targetRatio,
+            scale = heelProj.scale,
+            depth = heelProj.depth
+        )
+        val newToe = ProjectedPoint(
+            x = ankleProj.x + tdx * targetRatio,
+            y = ankleProj.y + tdy * targetRatio,
             scale = toeProj.scale,
             depth = toeProj.depth
         )
+
+        return newHeel to newToe
     }
 
     /**
