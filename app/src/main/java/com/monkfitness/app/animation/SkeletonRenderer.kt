@@ -2,6 +2,7 @@ package com.monkfitness.app.animation
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -19,52 +20,65 @@ fun SkeletonRenderer(
     highlightedJoint: Joint? = null
 ) {
     val style = engine.style
+    val compensator = remember(engine.definition) { PerspectiveCompensation(engine.definition) }
+    val compensatedPose = remember(pose, compensator) { compensator.preProcessPose(pose) }
 
     Canvas(modifier = modifier) {
         val width = size.width
         val height = size.height
 
         if (showGround) {
-            drawGround(pose, camera, style, width, height)
+            drawGround(compensatedPose, camera, style, width, height)
         }
 
         val items = mutableListOf<DrawableItem>()
 
         // Add bones
         for (bone in engine.bones) {
-            val p1 = camera.project(pose.getJoint(bone.parentJoint), width, height)
-            val p2 = camera.project(pose.getJoint(bone.childJoint), width, height)
+            val p1 = camera.project(compensatedPose.getJoint(bone.parentJoint), width, height)
+            var p2 = camera.project(compensatedPose.getJoint(bone.childJoint), width, height)
+
+            // Foot perspective correction
+            if (bone.childJoint == Joint.TOE_F || bone.childJoint == Joint.TOE_B) {
+                p2 = compensator.compensateFootPerspective(p1, p2, camera)
+            }
+
+            val avgDepth = (p1.depth + p2.depth) / 2f
+            val compensatedThickness = compensator.compensateThickness(bone.thickness, avgDepth)
+
             val isForeground = bone.colorMultiplier >= 1.0f
             items.add(
                 DrawableItem.BoneItem(
-                    p1, p2, bone.thickness, bone.colorMultiplier, (p1.depth + p2.depth) / 2f, isForeground
+                    p1, p2, compensatedThickness, bone.colorMultiplier, avgDepth, isForeground
                 )
             )
         }
 
         // Add head
-        val headPos = camera.project(pose.getJoint(Joint.HEAD_POS), width, height)
+        val headPos = camera.project(compensatedPose.getJoint(Joint.HEAD_POS), width, height)
+        val compensatedHeadScale = compensator.compensateHeadScale(headPos.scale, headPos.depth)
         items.add(
             DrawableItem.HeadItem(
-                headPos, style.headRadius, 1.0f, headPos.depth, false
+                headPos.copy(scale = compensatedHeadScale), style.headRadius, 1.0f, headPos.depth, false
             )
         )
 
         // Add active hand circle
-        val handA = camera.project(pose.getJoint(Joint.HAND_A), width, height)
+        val handA = camera.project(compensatedPose.getJoint(Joint.HAND_A), width, height)
+        val compensatedHandScale = compensator.compensateHandScale(handA.scale, handA.depth)
         items.add(
             DrawableItem.HeadItem(
-                handA, style.jointRadius, 1.05f, handA.depth, true
+                handA.copy(scale = compensatedHandScale), style.jointRadius, 1.05f, handA.depth, true
             )
         )
 
         // Calculate torso box faces on-the-fly
-        val hipF = pose.getJoint(Joint.HIP_F)
-        val hipB = pose.getJoint(Joint.HIP_B)
-        val shoulderA = pose.getJoint(Joint.SHOULDER_A)
-        val shoulderP = pose.getJoint(Joint.SHOULDER_P)
-        val pelvis = pose.getJoint(Joint.PELVIS)
-        val chest = pose.getJoint(Joint.CHEST)
+        val hipF = compensatedPose.getJoint(Joint.HIP_F)
+        val hipB = compensatedPose.getJoint(Joint.HIP_B)
+        val shoulderA = compensatedPose.getJoint(Joint.SHOULDER_A)
+        val shoulderP = compensatedPose.getJoint(Joint.SHOULDER_P)
+        val pelvis = compensatedPose.getJoint(Joint.PELVIS)
+        val chest = compensatedPose.getJoint(Joint.CHEST)
 
         val lean = (chest - pelvis).normalize()
         val shVec = (shoulderA - shoulderP).normalize()
@@ -99,7 +113,7 @@ fun SkeletonRenderer(
 
         // Add highlight if requested
         highlightedJoint?.let { jointId ->
-            val pt = pose.getJoint(jointId)
+            val pt = compensatedPose.getJoint(jointId)
             val p = camera.project(pt, width, height)
             drawCircle(
                 color = Color.White.copy(alpha = 0.5f),
