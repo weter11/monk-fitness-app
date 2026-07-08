@@ -152,7 +152,7 @@ function draw() {
   const wristAProj = camera.project(pose[Joint.WRIST_A], width, height);
   const handScale = compensator.compensateHandScale(wristAProj.scale, wristAProj.depth);
   items.push({
-    type: "head",
+    type: "hand",
     p: Object.assign({}, wristAProj, { scale: handScale }),
     radius: style.jointRadius,
     depth: wristAProj.depth,
@@ -211,7 +211,7 @@ function draw() {
       stroke(col[0], col[1], col[2]);
       strokeWeight(thick);
       line(item.p1.x, item.p1.y, item.p2.x, item.p2.y);
-    } else if (item.type === "head") {
+    } else if (item.type === "head" || item.type === "hand") {
       const col = getZColor(item.depth, item.isForeground);
       const rad = item.radius * item.p.scale * camera.zoom;
 
