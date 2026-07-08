@@ -63,6 +63,21 @@ class Vector3 {
 
 const Z_AXIS = new Vector3(0, 0, 1);
 
+const PUSHUP_START_HEIGHT = 60;
+const PUSHUP_END_HEIGHT = 25;
+const ANKLE_BASE_X = 60;
+const HEAD_OFFSET_LENGTH = 18;
+const HEAD_TILT_FACTOR = 0.2;
+const HAND_TARGET_WIDTH_MULTIPLIER = 1.5;
+const TOE_OFFSET_LENGTH = 10;
+const DRAW_ROTATION_DEGREES = -8;
+const ANIMATION_CYCLE_SECONDS = 2.4;
+const POLE_VECTOR_EPSILON = 1e-4;
+const PROJECTION_X_SCALE = 0.85;
+const PROJECTION_Z_SKEW = 0.3;
+const PROJECTION_Y_SCALE = 0.65;
+const PROJECTION_Z_OFFSET = 0.05;
+
 class JointRotation {
   constructor(axis = new Vector3(0, 0, 1), angle = 0) {
     this.axis = axis;
@@ -245,7 +260,7 @@ class PushUpPoseBuilder {
     const height = SkeletonMath.lerp(PUSHUP_START_HEIGHT, PUSHUP_END_HEIGHT, progress);
     const totalLegLen = def.shinLength + def.thighLength;
     const legRatio = height / totalLegLen;
-    const theta = Math.asin(clamp(legRatio, -1, 1));
+    const theta = Math.asin(constrain(legRatio, -1, 1));
     const horizontalDist = totalLegLen * Math.cos(theta);
     const ankleX = ANKLE_BASE_X + horizontalDist;
 
@@ -312,25 +327,6 @@ const DEFAULT_DEFINITION = {
   hipWidth: 22,
   armIKConstraint: new IKConstraint(30, 0.95)
 };
-
-const PUSHUP_START_HEIGHT = 60;
-const PUSHUP_END_HEIGHT = 25;
-const ANKLE_BASE_X = 60;
-const HEAD_OFFSET_LENGTH = 18;
-const HEAD_TILT_FACTOR = 0.2;
-const HAND_TARGET_WIDTH_MULTIPLIER = 1.5;
-const TOE_OFFSET_LENGTH = 10;
-const DRAW_ROTATION_DEGREES = -8;
-const ANIMATION_CYCLE_SECONDS = 2.4;
-const POLE_VECTOR_EPSILON = 1e-4;
-const PROJECTION_X_SCALE = 0.85;
-const PROJECTION_Z_SKEW = 0.3;
-const PROJECTION_Y_SCALE = 0.65;
-const PROJECTION_Z_OFFSET = 0.05;
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
 
 let poseBuilder;
 let bgColor;
