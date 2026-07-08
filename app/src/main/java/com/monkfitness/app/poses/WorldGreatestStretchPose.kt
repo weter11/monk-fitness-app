@@ -7,7 +7,11 @@ import com.monkfitness.app.animation.SkeletonMath.rotAround
 import com.monkfitness.app.animation.SkeletonMath.solveIK
 
 class WorldGreatestStretchPose : PoseBuilder {
-    override fun evaluate(progress: Float, side: Side, definition: SkeletonDefinition): SkeletonPose {
+    override fun build(context: PoseContext): SkeletonPose {
+        val progress = context.progress
+        val side = context.side
+        val definition = context.definition
+
         val s = if (side == Side.RIGHT) 1f else -1f
         val u = progress // 0 = threaded under, 1 = open to sky
 

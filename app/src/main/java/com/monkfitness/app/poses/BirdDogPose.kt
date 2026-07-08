@@ -5,7 +5,11 @@ import com.monkfitness.app.animation.SkeletonMath.solveIK
 import com.monkfitness.app.animation.SkeletonMath.lerp
 
 class BirdDogPose : PoseBuilder {
-    override fun evaluate(progress: Float, side: Side, definition: SkeletonDefinition): SkeletonPose {
+    override fun build(context: PoseContext): SkeletonPose {
+        val progress = context.progress
+        val side = context.side
+        val definition = context.definition
+
         // Quadruped base
         val pelvis = Vector3(50f, 45f, 0f)
         val chest = pelvis + Vector3(-definition.torsoLength, 0f, 0f)

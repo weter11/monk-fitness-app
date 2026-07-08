@@ -7,7 +7,10 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class SquatPose : PoseBuilder {
-    override fun evaluate(progress: Float, side: Side, definition: SkeletonDefinition): SkeletonPose {
+    override fun build(context: PoseContext): SkeletonPose {
+        val progress = context.progress
+        val definition = context.definition
+
         // progress 0 (up) to 1 (down)
         val pelvisHeight = lerp(definition.thighLength + definition.shinLength + 10f, 40f, progress)
         val pelvis = Vector3(0f, pelvisHeight, 0f)

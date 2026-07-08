@@ -7,7 +7,10 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class SupermanPose : PoseBuilder {
-    override fun evaluate(progress: Float, side: Side, definition: SkeletonDefinition): SkeletonPose {
+    override fun build(context: PoseContext): SkeletonPose {
+        val progress = context.progress
+        val definition = context.definition
+
         // Prone position
         // progress 0 (resting) to 1 (extended)
 

@@ -5,7 +5,10 @@ import com.monkfitness.app.animation.SkeletonMath.solveIK
 import com.monkfitness.app.animation.SkeletonMath.lerp
 
 class PushUpPose : PoseBuilder {
-    override fun evaluate(progress: Float, side: Side, definition: SkeletonDefinition): SkeletonPose {
+    override fun build(context: PoseContext): SkeletonPose {
+        val progress = context.progress
+        val definition = context.definition
+
         // progress 0 (up) to 1 (down)
 
         val height = lerp(60f, 25f, progress)

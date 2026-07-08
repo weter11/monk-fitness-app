@@ -7,7 +7,10 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class CatCowPose : PoseBuilder {
-    override fun evaluate(progress: Float, side: Side, definition: SkeletonDefinition): SkeletonPose {
+    override fun build(context: PoseContext): SkeletonPose {
+        val progress = context.progress
+        val definition = context.definition
+
         // Quadruped base
         // progress 0 (Cat - rounded) to 1 (Cow - arched)
 
@@ -34,9 +37,6 @@ class CatCowPose : PoseBuilder {
 
         val armA = solveIK(shoulderA, handBaseR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint)
         val armP = solveIK(shoulderP, handBaseL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint)
-
-        // Spine midpoint for arching
-        // val spineMid = lerp(pelvis + Vector3(-definition.torsoLength/2, 15f, 0f), pelvis + Vector3(-definition.torsoLength/2, -10f, 0f), progress)
 
         val headPitch = lerp(-0.5f, 0.5f, progress)
         val headDir = Vector3(-cos(headPitch), sin(headPitch), 0f).normalize()

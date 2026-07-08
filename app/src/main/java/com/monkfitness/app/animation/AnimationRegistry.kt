@@ -3,24 +3,31 @@ package com.monkfitness.app.animation
 import com.monkfitness.app.poses.*
 
 object AnimationRegistry {
-    private val registry = mapOf<String, PoseBuilder>(
-        "world_greatest_stretch" to WorldGreatestStretchPose(),
-        "birddog_hold" to BirdDogPose(),
-        "birddog_reps" to BirdDogPose(),
-        "cat_cow_reps" to CatCowPose(),
-        "superman_prone" to SupermanPose(),
-        "pushup_standard" to PushUpPose(),
-        "pushup_wide" to PushUpPose(),
-        "pushup_military" to PushUpPose(),
-        "pushup_knee" to PushUpPose(),
-        "pushup_diamond" to PushUpPose(),
-        "pushup_decline" to PushUpPose(),
-        "pike_pushup_standard" to PushUpPose(),
-        "squat_standard" to SquatPose(),
-        "squat_sumo" to SquatPose(),
-        "squat_jump" to SquatPose(),
-        "deep_squat_hold" to SquatPose()
-    )
+    private val registry = mutableMapOf<String, PoseBuilder>()
+
+    init {
+        // Core registrations
+        register("world_greatest_stretch", WorldGreatestStretchPose())
+        register("birddog_hold", BirdDogPose())
+        register("birddog_reps", BirdDogPose())
+        register("cat_cow_reps", CatCowPose())
+        register("superman_prone", SupermanPose())
+        register("pushup_standard", PushUpPose())
+        register("pushup_wide", PushUpPose())
+        register("pushup_military", PushUpPose())
+        register("pushup_knee", PushUpPose())
+        register("pushup_diamond", PushUpPose())
+        register("pushup_decline", PushUpPose())
+        register("pike_pushup_standard", PushUpPose())
+        register("squat_standard", SquatPose())
+        register("squat_sumo", SquatPose())
+        register("squat_jump", SquatPose())
+        register("deep_squat_hold", SquatPose())
+    }
+
+    fun register(animationId: String, builder: PoseBuilder) {
+        registry[animationId] = builder
+    }
 
     fun get(animationId: String): PoseBuilder? = registry[animationId]
 }
