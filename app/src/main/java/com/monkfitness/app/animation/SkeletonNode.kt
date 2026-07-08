@@ -1,13 +1,22 @@
 package com.monkfitness.app.animation
 
-import kotlin.math.*
-
+/**
+ * Lightweight node for hierarchical transforms (Forward Kinematics).
+ * Uses mutable world properties to avoid per-frame allocations.
+ */
 class SkeletonNode(
     val joint: Joint,
+    var parent: SkeletonNode? = null,
     var localPosition: Vector3 = Vector3(0f, 0f, 0f),
-    var parent: SkeletonNode? = null
+    var localRotationAxis: Vector3 = Vector3(0f, 0f, 1f),
+    var localRotationAngle: Float = 0f, // radians
+    val children: MutableList<SkeletonNode> = mutableListOf()
 ) {
-    val children = mutableListOf<SkeletonNode>()
+    var worldPosition: Vector3 = Vector3(0f, 0f, 0f)
+        private set
+
+    var worldRotationAngle: Float = 0f
+        private set
 
     fun addChild(node: SkeletonNode): SkeletonNode {
         node.parent = this
@@ -15,40 +24,31 @@ class SkeletonNode(
         return node
     }
 
-    fun getGlobalPosition(): Vector3 {
-        return getGlobalTransform().position
-    }
-
-    data class Transform(val position: Vector3, val rotationAxis: Vector3, val rotationAngle: Float)
-
-    private fun getGlobalTransform(): Transform {
-        val parentTransform = parent?.getGlobalTransform() ?: Transform(Vector3(0f, 0f, 0f), Vector3(0f, 1f, 0f), 0f)
-
-        // Rotate local position by parent's total rotation
-        val rotatedLocalPos = if (parentTransform.rotationAngle != 0f) {
-             SkeletonMath.rotAround(localPosition, parentTransform.rotationAxis, parentTransform.rotationAngle)
+    /**
+     * Compute world transform inheriting from parent.
+     */
+    fun updateWorldTransforms(parentWorldPos: Vector3, parentWorldRotationAngle: Float) {
+        // Biomechanical engine uses cumulative Z-rotation
+        val rotatedPos = if (parentWorldRotationAngle != 0f) {
+            SkeletonMath.rotAround(localPosition, Vector3(0f, 0f, 1f), parentWorldRotationAngle)
         } else {
             localPosition
         }
+        worldPosition = parentWorldPos + rotatedPos
+        worldRotationAngle = parentWorldRotationAngle + localRotationAngle
 
-        return Transform(
-            position = parentTransform.position + rotatedLocalPos,
-            rotationAxis = Vector3(0f, 0f, 1f), // Simplified for this engine
-            rotationAngle = parentTransform.rotationAngle + rotationAngle
-        )
-    }
-
-    private var rotationAngle: Float = 0f
-
-    fun setLocalRotation(angle: Float) {
-        rotationAngle = angle
+        for (child in children) {
+            child.updateWorldTransforms(worldPosition, worldRotationAngle)
+        }
     }
 
     /**
-     * Flatten the hierarchy into a joint map for SkeletonPose.
+     * Flatten the hierarchy into the target joint map.
      */
-    fun flatten(map: MutableMap<Joint, Vector3>) {
-        map[joint] = getGlobalPosition()
-        children.forEach { it.flatten(map) }
+    fun flatten(target: MutableMap<Joint, Vector3>) {
+        target[joint] = worldPosition
+        for (child in children) {
+            child.flatten(target)
+        }
     }
 }

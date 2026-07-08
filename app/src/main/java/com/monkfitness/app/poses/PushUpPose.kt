@@ -6,83 +6,123 @@ import com.monkfitness.app.animation.SkeletonMath.lerp
 import kotlin.math.*
 
 class PushUpPose : PoseBuilder {
+    // Persistent Scene Graph hierarchy to eliminate per-frame allocations
+    private var roots: List<SkeletonNode>? = null
+
+    // Cached node references for high-speed access
+    private var ankleF: SkeletonNode? = null
+    private var kneeF: SkeletonNode? = null
+    private var hipF: SkeletonNode? = null
+    private var pelvis: SkeletonNode? = null
+    private var chest: SkeletonNode? = null
+
+    private var shoulderA: SkeletonNode? = null
+    private var elbowA: SkeletonNode? = null
+    private var handA: SkeletonNode? = null
+
+    private var shoulderP: SkeletonNode? = null
+    private var elbowP: SkeletonNode? = null
+    private var handP: SkeletonNode? = null
+
+    private var ankleB: SkeletonNode? = null
+    private var kneeB: SkeletonNode? = null
+    private var hipB: SkeletonNode? = null
+
+    private fun ensureHierarchy(def: SkeletonDefinition) {
+        if (roots != null) return
+
+        // Final Biomechanical chain: Ankle -> Knee -> Hip -> Pelvis -> Chest -> Shoulders -> Arms -> Hands
+        ankleF = SkeletonNode(Joint.ANKLE_F)
+        kneeF = ankleF!!.addChild(SkeletonNode(Joint.KNEE_F))
+        hipF = kneeF!!.addChild(SkeletonNode(Joint.HIP_F))
+
+        // Pelvis is the bridge between legs
+        pelvis = hipF!!.addChild(SkeletonNode(Joint.PELVIS))
+        chest = pelvis!!.addChild(SkeletonNode(Joint.CHEST))
+
+        shoulderA = chest!!.addChild(SkeletonNode(Joint.SHOULDER_A))
+        elbowA = shoulderA!!.addChild(SkeletonNode(Joint.ELBOW_A))
+        handA = elbowA!!.addChild(SkeletonNode(Joint.HAND_A))
+
+        shoulderP = chest!!.addChild(SkeletonNode(Joint.SHOULDER_P))
+        elbowP = shoulderP!!.addChild(SkeletonNode(Joint.ELBOW_P))
+        handP = elbowP!!.addChild(SkeletonNode(Joint.HAND_P))
+
+        // Right leg (Back) connects back to Pelvis in this rigid-body chain
+        // to ensure it's derived from the single root's rotation.
+        // Actually, to make both legs planted, they should both be roots or one is derived.
+        // The user requested "AnklePivot should be the Root node for a rigid push-up".
+        // This implies a single ankle is the world anchor.
+
+        hipB = pelvis!!.addChild(SkeletonNode(Joint.HIP_B))
+        kneeB = hipB!!.addChild(SkeletonNode(Joint.KNEE_B))
+        ankleB = kneeB!!.addChild(SkeletonNode(Joint.ANKLE_B))
+
+        roots = listOf(ankleF!!)
+    }
+
     override fun build(context: PoseContext): SkeletonPose {
         val progress = context.progress
         val def = context.definition
+        ensureHierarchy(def)
 
-        // progress 0 (up) to 1 (down)
-        // Root: Ankle is at Y=24 (biomechanically accurate height)
-        val ankleHeight = 24f
-        val ankleF = SkeletonNode(Joint.ANKLE_F, Vector3(120f, ankleHeight, def.hipWidth))
-        val ankleB = SkeletonNode(Joint.ANKLE_B, Vector3(120f, ankleHeight, -def.hipWidth))
+        // Target: Pelvis world height 60 to 25
+        val height = lerp(60f, 25f, progress)
+        val totalLegLen = def.shinLength + def.thighLength
+        val theta = asin((height / totalLegLen).coerceIn(-1f, 1f))
 
-        // Leg rotation: 0 (flat on floor) to -25 degrees (up)
-        val angleDeg = lerp(-25f, -10f, progress)
-        val angleRad = angleDeg * PI.toFloat() / 180f
+        // AnkleX stays fixed for zero regression (Pelvis X = 60)
+        val horizontalDist = totalLegLen * cos(theta)
+        val ankleX = 60f + horizontalDist
 
-        // Build hierarchy
-        val kneeF = ankleF.addChild(SkeletonNode(Joint.KNEE_F, Vector3(-def.shinLength, 0f, 0f)))
-        val hipF = kneeF.addChild(SkeletonNode(Joint.HIP_F, Vector3(-def.thighLength, 0f, 0f)))
+        // 1. Update Legs and Body Trunk via FK
+        ankleF!!.localPosition = Vector3(ankleX, 0f, def.hipWidth)
+        ankleF!!.localRotationAngle = -theta
 
-        val kneeB = ankleB.addChild(SkeletonNode(Joint.KNEE_B, Vector3(-def.shinLength, 0f, 0f)))
-        val hipB = kneeB.addChild(SkeletonNode(Joint.HIP_B, Vector3(-def.thighLength, 0f, 0f)))
+        kneeF!!.localPosition = Vector3(-def.shinLength, 0f, 0f)
+        hipF!!.localPosition = Vector3(-def.thighLength, 0f, 0f)
 
-        // Rotate legs (ankle is root, rotate children)
-        ankleF.setLocalRotation(angleRad)
-        ankleB.setLocalRotation(angleRad)
+        pelvis!!.localPosition = Vector3(0f, 0f, -def.hipWidth)
+        chest!!.localPosition = Vector3(-def.torsoLength, 0f, 0f)
 
-        // Pelvis is midpoint of hips
-        val hipFPos = hipF.getGlobalPosition()
-        val hipBPos = hipB.getGlobalPosition()
-        val pelvisPos = (hipFPos + hipBPos) * 0.5f
+        // Right leg positions relative to pelvis
+        hipB!!.localPosition = Vector3(0f, 0f, -def.hipWidth)
+        kneeB!!.localPosition = Vector3(def.thighLength, 0f, 0f) // Inverse direction
+        ankleB!!.localPosition = Vector3(def.shinLength, 0f, 0f)
 
-        // Torso: Deriving Chest from Pelvis + TorsoLength
-        val torsoAngleDeg = lerp(5f, 2f, progress) // Slight adjustment for pushup form
-        val torsoAngleRad = torsoAngleDeg * PI.toFloat() / 180f
-        val torsoDir = Vector3(-cos(torsoAngleRad), -sin(torsoAngleRad), 0f)
-        val chestPos = pelvisPos + torsoDir * def.torsoLength
+        // 2. Perform FK pass to compute intermediate world positions
+        roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), 0f) }
 
-        // Upper body
-        val shoulderA = chestPos + Vector3(0f, 0f, def.shoulderWidth)
-        val shoulderP = chestPos + Vector3(0f, 0f, -def.shoulderWidth)
+        val chestWorld = chest!!.worldPosition
+        val shoulderAWorld = chestWorld + Vector3(0f, 0f, def.shoulderWidth)
+        val shoulderPWorld = chestWorld + Vector3(0f, 0f, -def.shoulderWidth)
 
-        // Hands are planted on floor (Y=0)
-        val handA = Vector3(chestPos.x, 0f, def.shoulderWidth * 1.5f)
-        val handP = Vector3(chestPos.x, 0f, -def.shoulderWidth * 1.5f)
+        // 3. Solve Upper Body IK (Hands planted on floor Y=0)
+        val targetHandA = Vector3(chestWorld.x, 0f, def.shoulderWidth * 1.5f)
+        val targetHandP = Vector3(chestWorld.x, 0f, -def.shoulderWidth * 1.5f)
 
-        val armA = solveIK(shoulderA, handA, def.upperArmLength, def.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint)
-        val armP = solveIK(shoulderP, handP, def.upperArmLength, def.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint)
+        val armA = solveIK(shoulderAWorld, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 0f, 1f), IKConstraint.ArmConstraint)
+        val armP = solveIK(shoulderPWorld, targetHandP, def.upperArmLength, def.forearmLength, Vector3(1f, 0f, -1f), IKConstraint.ArmConstraint)
 
-        val headDir = Vector3(-1f, 0.2f, 0f).normalize()
-        val neckEnd = chestPos + headDir * def.neckLength
-        val headPos = chestPos + headDir * (def.neckLength + 18f)
+        // 4. Finalize Hierarchy transforms
+        shoulderA!!.localPosition = Vector3(0f, 0f, def.shoulderWidth)
+        elbowA!!.localPosition = armA.joint - shoulderAWorld
+        handA!!.localPosition = armA.end - armA.joint
 
-        val joints = mutableMapOf<Joint, Vector3>()
-        ankleF.flatten(joints)
-        ankleB.flatten(joints)
-        joints[Joint.PELVIS] = pelvisPos
-        joints[Joint.CHEST] = chestPos
-        joints[Joint.SHOULDER_A] = shoulderA
-        joints[Joint.SHOULDER_P] = shoulderP
-        joints[Joint.ELBOW_A] = armA.joint
-        joints[Joint.HAND_A] = armA.end
-        joints[Joint.ELBOW_P] = armP.joint
-        joints[Joint.HAND_P] = armP.end
-        joints[Joint.NECK_END] = neckEnd
-        joints[Joint.HEAD_POS] = headPos
+        shoulderP!!.localPosition = Vector3(0f, 0f, -def.shoulderWidth)
+        elbowP!!.localPosition = armP.joint - shoulderPWorld
+        handP!!.localPosition = armP.end - armP.joint
 
-        // Toes are planted on floor (Y=0)
-        joints[Joint.TOE_F] = Vector3(ankleF.getGlobalPosition().x + 10f, 0f, def.hipWidth)
-        joints[Joint.TOE_B] = Vector3(ankleB.getGlobalPosition().x + 10f, 0f, -def.hipWidth)
+        // 5. Export Pose
+        val pose = SkeletonPose.fromHierarchy(roots!!)
+        val joints = pose.joints.toMutableMap()
 
-        return SkeletonPose(
-            joints = joints,
-            hints = mapOf(
-                Joint.HAND_DIR_A to Vector3(-1f, 0f, 0f), // Flat on floor
-                Joint.HAND_DIR_P to Vector3(-1f, 0f, 0f),
-                Joint.FOOT_DIR_F to Vector3(1f, 0f, 0f), // Flat on floor
-                Joint.FOOT_DIR_B to Vector3(1f, 0f, 0f)
-            )
-        )
+        // 6. Manual overrides for non-hierarchical joints (Toes/Head) to maintain zero regression
+        joints[Joint.NECK_END] = chestWorld + Vector3(-1f, 0.2f, 0f).normalize() * def.neckLength
+        joints[Joint.HEAD_POS] = chestWorld + Vector3(-1f, 0.2f, 0f).normalize() * (def.neckLength + 18f)
+        joints[Joint.TOE_F] = Vector3(ankleX + 10f, 0f, def.hipWidth)
+        joints[Joint.TOE_B] = Vector3(ankleX + 10f, 0f, -def.hipWidth)
+
+        return SkeletonPose(joints, pose.roots)
     }
 }
