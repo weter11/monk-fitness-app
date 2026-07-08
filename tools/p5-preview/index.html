@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Monk Fitness — Animation Engine Preview (p5.js)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      height: 100%;
+    }
+    #canvas-holder {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-holder"></div>
+
+  <!-- p5.js from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+
+  <!-- Ported skeleton animation engine + example pose + sketch -->
+  <script src="js/engine.js"></script>
+  <script src="js/poses/pushup.js"></script>
+  <script src="js/sketch.js"></script>
+</body>
+</html>
