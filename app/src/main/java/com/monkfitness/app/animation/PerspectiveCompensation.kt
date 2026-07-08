@@ -17,7 +17,40 @@ class PerspectiveCompensation(
         // Correct Back (Right) Foot
         adjustFootOrientation(joints, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
 
+        // Correct Active (Left) Hand
+        adjustHandOrientation(joints, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A)
+        // Correct Passive (Right) Hand
+        adjustHandOrientation(joints, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
+
         return SkeletonPose(joints)
+    }
+
+    private fun adjustHandOrientation(
+        joints: MutableMap<Joint, Vector3>,
+        elbowId: Joint,
+        handId: Joint,
+        wristId: Joint,
+        palmId: Joint,
+        knucklesId: Joint,
+        fingertipsId: Joint
+    ) {
+        val elbow = joints[elbowId] ?: return
+        val hand = joints[handId] ?: return
+
+        // The PoseBuilder provided hand position is used as the target for the wrist.
+        // IK already ends at 'hand', so 'wrist' = 'hand'.
+        val wrist = hand
+        joints[wristId] = wrist
+
+        // Direction is forearm direction
+        val dir = (wrist - elbow).normalize()
+
+        val handDef = definition.hand
+        val handJoints = handDef.computeHandJoints(wrist, dir)
+
+        joints[palmId] = handJoints.palm
+        joints[knucklesId] = handJoints.knuckles
+        joints[fingertipsId] = handJoints.fingertips
     }
 
     private fun adjustFootOrientation(
@@ -156,6 +189,46 @@ class PerspectiveCompensation(
 
     /**
      * Hand Perspective Compensation
+     * Maintains visual palm length regardless of camera depth.
+     */
+    fun compensateHandPerspective(
+        wristProj: ProjectedPoint,
+        palmProj: ProjectedPoint,
+        fingertipsProj: ProjectedPoint,
+        camera: Camera
+    ): Pair<ProjectedPoint, ProjectedPoint> {
+        val currentLen = sqrt((fingertipsProj.x - wristProj.x).pow(2) + (fingertipsProj.y - wristProj.y).pow(2))
+        if (currentLen < 1e-3) return palmProj to fingertipsProj
+
+        val handDef = definition.hand
+        val idealLen = (handDef.palmLength + handDef.fingerLength) * wristProj.scale * camera.zoom
+
+        val ratio = idealLen / currentLen
+        val targetRatio = 1.0f + (ratio - 1.0f) * 0.12f // 12% correction
+
+        val pdx = palmProj.x - wristProj.x
+        val pdy = palmProj.y - wristProj.y
+        val fdx = fingertipsProj.x - wristProj.x
+        val fdy = fingertipsProj.y - wristProj.y
+
+        val newPalm = ProjectedPoint(
+            x = wristProj.x + pdx * targetRatio,
+            y = wristProj.y + pdy * targetRatio,
+            scale = palmProj.scale,
+            depth = palmProj.depth
+        )
+        val newFingertips = ProjectedPoint(
+            x = wristProj.x + fdx * targetRatio,
+            y = wristProj.y + fdy * targetRatio,
+            scale = fingertipsProj.scale,
+            depth = fingertipsProj.depth
+        )
+
+        return newPalm to newFingertips
+    }
+
+    /**
+     * Hand Perspective Scale Compensation
      * Similar to head, prevent excessive shrinking of the hand indicator.
      */
     fun compensateHandScale(scale: Float, depth: Float): Float {

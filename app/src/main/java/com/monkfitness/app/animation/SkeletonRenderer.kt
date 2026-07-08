@@ -50,6 +50,29 @@ fun SkeletonRenderer(
                 p2 = corrected.second // Toe
             }
 
+            // Hand perspective correction
+            if (bone.childJoint == Joint.FINGERTIPS_A || bone.childJoint == Joint.FINGERTIPS_P ||
+                bone.childJoint == Joint.PALM_A || bone.childJoint == Joint.PALM_P) {
+                val isA = bone.childJoint == Joint.FINGERTIPS_A || bone.childJoint == Joint.PALM_A
+                val wristJoint = if (isA) Joint.WRIST_A else Joint.WRIST_P
+                val palmJoint = if (isA) Joint.PALM_A else Joint.PALM_P
+                val fingertipJoint = if (isA) Joint.FINGERTIPS_A else Joint.FINGERTIPS_P
+                val pWrist = camera.project(compensatedPose.getJoint(wristJoint), width, height)
+                val pPalm = camera.project(compensatedPose.getJoint(palmJoint), width, height)
+                val pFingertips = camera.project(compensatedPose.getJoint(fingertipJoint), width, height)
+
+                val corrected = compensator.compensateHandPerspective(pWrist, pPalm, pFingertips, camera)
+                // If this is the WRIST -> PALM bone
+                if (bone.parentJoint == Joint.WRIST_A || bone.parentJoint == Joint.WRIST_P) {
+                    p2 = corrected.first
+                }
+                // If this is the PALM -> FINGERTIPS bone
+                else if (bone.parentJoint == Joint.PALM_A || bone.parentJoint == Joint.PALM_P) {
+                    p1 = corrected.first
+                    p2 = corrected.second
+                }
+            }
+
             val avgDepth = (p1.depth + p2.depth) / 2f
             val compensatedThickness = compensator.compensateThickness(bone.thickness, avgDepth)
 
@@ -70,12 +93,12 @@ fun SkeletonRenderer(
             )
         )
 
-        // Add active hand circle
-        val handA = camera.project(compensatedPose.getJoint(Joint.HAND_A), width, height)
-        val compensatedHandScale = compensator.compensateHandScale(handA.scale, handA.depth)
+        // Add active hand circle (centered on wrist/palm junction)
+        val wristA = camera.project(compensatedPose.getJoint(Joint.WRIST_A), width, height)
+        val compensatedHandScale = compensator.compensateHandScale(wristA.scale, wristA.depth)
         items.add(
             DrawableItem.HeadItem(
-                handA.copy(scale = compensatedHandScale), style.jointRadius, 1.05f, handA.depth, true
+                wristA.copy(scale = compensatedHandScale), style.jointRadius, 1.05f, wristA.depth, true
             )
         )
 

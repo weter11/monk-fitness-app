@@ -17,8 +17,16 @@ enum class Joint {
     SHOULDER_P,
     ELBOW_A,
     HAND_A,
+    WRIST_A,
+    PALM_A,
+    KNUCKLES_A,
+    FINGERTIPS_A,
     ELBOW_P,
     HAND_P,
+    WRIST_P,
+    PALM_P,
+    KNUCKLES_P,
+    FINGERTIPS_P,
     NECK_END,
     HEAD_POS
 }

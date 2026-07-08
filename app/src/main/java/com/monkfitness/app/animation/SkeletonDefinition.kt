@@ -14,6 +14,7 @@ data class SkeletonDefinition(
     // Arms
     val upperArmLength: Float,
     val forearmLength: Float,
+    val hand: HandDefinition = HandDefinition(),
 
     // Widths
     val shoulderWidth: Float,
