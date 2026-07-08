@@ -23,8 +23,8 @@ class SupermanPose : PoseBuilder {
         val toeF = hipF + Vector3(totalLegLen * cos(legLean).toFloat(), totalLegLen * sin(legLean).toFloat(), 0f)
         val toeB = hipB + Vector3(totalLegLen * cos(legLean).toFloat(), totalLegLen * sin(legLean).toFloat(), 0f)
 
-        val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f))
-        val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f))
+        val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f), IKConstraint.LegConstraint)
+        val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f), IKConstraint.LegConstraint)
 
         val shoulderA = chest + Vector3(0f, 0f, definition.shoulderWidth)
         val shoulderP = chest + Vector3(0f, 0f, -definition.shoulderWidth)
@@ -34,8 +34,8 @@ class SupermanPose : PoseBuilder {
         val handA = shoulderA + Vector3(-totalArmLen * cos(armLean).toFloat(), -totalArmLen * sin(armLean).toFloat(), 0f)
         val handP = shoulderP + Vector3(-totalArmLen * cos(armLean).toFloat(), -totalArmLen * sin(armLean).toFloat(), 0f)
 
-        val armA = solveIK(shoulderA, handA, definition.upperArmLength, definition.forearmLength, Vector3(0f, 1f, 1f))
-        val armP = solveIK(shoulderP, handP, definition.upperArmLength, definition.forearmLength, Vector3(0f, 1f, -1f))
+        val armA = solveIK(shoulderA, handA, definition.upperArmLength, definition.forearmLength, Vector3(0f, 1f, 1f), IKConstraint.ArmConstraint)
+        val armP = solveIK(shoulderP, handP, definition.upperArmLength, definition.forearmLength, Vector3(0f, 1f, -1f), IKConstraint.ArmConstraint)
 
         val headDir = Vector3(-1f, 0.3f, 0f).normalize()
         val neckEnd = chest + headDir * definition.neckLength

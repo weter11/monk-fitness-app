@@ -18,8 +18,8 @@ class SquatPose : PoseBuilder {
         val toeF = Vector3(20f + 20f * progress, 0f, definition.hipWidth * 1.5f)
         val toeB = Vector3(20f + 20f * progress, 0f, -definition.hipWidth * 1.5f)
 
-        val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(1f, 0f, 0f))
-        val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(1f, 0f, 0f))
+        val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(1f, 0f, 0f), IKConstraint.LegConstraint)
+        val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(1f, 0f, 0f), IKConstraint.LegConstraint)
 
         val chestLean = lerp(0.1f, 0.4f, progress)
         val chest = pelvis + Vector3(sin(chestLean) * definition.torsoLength, cos(chestLean) * definition.torsoLength, 0f)
@@ -32,8 +32,8 @@ class SquatPose : PoseBuilder {
         val handA = shoulderA + Vector3(sin(armLean) * totalArmLen, -cos(armLean) * totalArmLen, 0f)
         val handP = shoulderP + Vector3(sin(armLean) * totalArmLen, -cos(armLean) * totalArmLen, 0f)
 
-        val armA = solveIK(shoulderA, handA, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f))
-        val armP = solveIK(shoulderP, handP, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f))
+        val armA = solveIK(shoulderA, handA, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint)
+        val armP = solveIK(shoulderP, handP, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint)
 
         val headDir = Vector3(0.2f, 0.9f, 0f).normalize()
         val neckEnd = chest + headDir * definition.neckLength

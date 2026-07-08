@@ -19,8 +19,8 @@ class PushUpPose : PoseBuilder {
         val toeF = Vector3(60f + totalLegLen, 0f, definition.hipWidth)
         val toeB = Vector3(60f + totalLegLen, 0f, -definition.hipWidth)
 
-        val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f))
-        val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f))
+        val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f), IKConstraint.LegConstraint)
+        val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f), IKConstraint.LegConstraint)
 
         val shoulderA = chest + Vector3(0f, 0f, definition.shoulderWidth)
         val shoulderP = chest + Vector3(0f, 0f, -definition.shoulderWidth)
@@ -28,8 +28,8 @@ class PushUpPose : PoseBuilder {
         val handA = chest + Vector3(0f, -height, definition.shoulderWidth * 1.5f)
         val handP = chest + Vector3(0f, -height, -definition.shoulderWidth * 1.5f)
 
-        val armA = solveIK(shoulderA, handA, definition.upperArmLength, definition.forearmLength, Vector3(1f, 0f, 1f))
-        val armP = solveIK(shoulderP, handP, definition.upperArmLength, definition.forearmLength, Vector3(1f, 0f, -1f))
+        val armA = solveIK(shoulderA, handA, definition.upperArmLength, definition.forearmLength, Vector3(1f, 0f, 1f), IKConstraint.ArmConstraint)
+        val armP = solveIK(shoulderP, handP, definition.upperArmLength, definition.forearmLength, Vector3(1f, 0f, -1f), IKConstraint.ArmConstraint)
 
         val headDir = Vector3(-1f, 0.2f, 0f).normalize()
         val neckEnd = chest + headDir * definition.neckLength

@@ -24,6 +24,16 @@ data class Vector3(val x: Float, val y: Float, val z: Float) {
     fun copy() = Vector3(x, y, z)
 }
 
+data class IKConstraint(
+    val minimumFlexionAngle: Float,
+    val maximumExtensionRatio: Float
+) {
+    companion object {
+        val ArmConstraint = IKConstraint(30f, 0.95f)
+        val LegConstraint = IKConstraint(5f, 0.98f)
+    }
+}
+
 object SkeletonMath {
     /**
      * Standard Ease-In-Out Quintic
@@ -63,17 +73,17 @@ object SkeletonMath {
     data class IKResult(val joint: Vector3, val end: Vector3)
 
     /**
-     * Analytical IK with strict Biological Clamps (30° - 95%)
+     * Analytical IK with strict Biological Clamps
      */
-    fun solveIK(root: Vector3, target: Vector3, L1: Float, L2: Float, pole: Vector3): IKResult {
+    fun solveIK(root: Vector3, target: Vector3, L1: Float, L2: Float, pole: Vector3, constraint: IKConstraint): IKResult {
         val d = target - root
         val dMag = d.mag()
 
-        // MAX LIMIT: 95% extension
-        val maxDist = (L1 + L2) * 0.95f
+        // MAX LIMIT
+        val maxDist = (L1 + L2) * constraint.maximumExtensionRatio
 
-        // MIN LIMIT: 30 degree bend minimum
-        val minCos = cos(30f * PI.toFloat() / 180f)
+        // MIN LIMIT
+        val minCos = cos(constraint.minimumFlexionAngle * PI.toFloat() / 180f)
         val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
 
         val dist = dMag.coerceIn(minDist, maxDist)

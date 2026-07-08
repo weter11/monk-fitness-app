@@ -25,8 +25,8 @@ class WorldGreatestStretchPose : PoseBuilder {
         val backToe = Vector3(-195f, 0f, -28f * s)
 
         // Legs — locked-length IK, anatomical knee poles
-        val legF = solveIK(hipF, frontAnkle, definition.thighLength, definition.shinLength, Vector3(1f, 0.35f, 0.15f * s))
-        val legB = solveIK(hipB, backAnkle, definition.thighLength, definition.shinLength, Vector3(0.12f, -1f, -0.08f * s))
+        val legF = solveIK(hipF, frontAnkle, definition.thighLength, definition.shinLength, Vector3(1f, 0.35f, 0.15f * s), IKConstraint.LegConstraint)
+        val legB = solveIK(hipB, backAnkle, definition.thighLength, definition.shinLength, Vector3(0.12f, -1f, -0.08f * s), IKConstraint.LegConstraint)
 
         // Spine (FK, exact torsoLength length) — rises slightly as arm opens
         val lean = Vector3(0.85f - 0.20f * u, 0.45f + 0.34f * u, 0.10f * u * s).normalize()
@@ -58,7 +58,7 @@ class WorldGreatestStretchPose : PoseBuilder {
 
         // Planted support arm (hand fixed on ground, elbow bows outward)
         val plantHand = Vector3(70f, 0f, -20f * s)
-        val armP = solveIK(shoulderP, plantHand, definition.upperArmLength, definition.forearmLength, Vector3(-0.25f, 0.15f, -0.9f * s))
+        val armP = solveIK(shoulderP, plantHand, definition.upperArmLength, definition.forearmLength, Vector3(-0.25f, 0.15f, -0.9f * s), IKConstraint.ArmConstraint)
 
         // Active arm trajectory
         val D0 = Vector3(0.32f, -0.86f, -0.40f * s)
@@ -83,7 +83,7 @@ class WorldGreatestStretchPose : PoseBuilder {
         val handTarget = if (handTargetRaw.y < 6f) handTargetRaw.copy(y = 6f) else handTargetRaw
 
         val poleA = lerp(Vector3(0f, 0f, 1f * s), Vector3(-1f, 0f, 1f * s), u)
-        val armA = solveIK(shoulderA, handTarget, definition.upperArmLength, definition.forearmLength, poleA)
+        val armA = solveIK(shoulderA, handTarget, definition.upperArmLength, definition.forearmLength, poleA, IKConstraint.ArmConstraint)
 
         return SkeletonPose(
             joints = mapOf(
