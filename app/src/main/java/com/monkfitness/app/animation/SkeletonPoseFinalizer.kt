@@ -10,25 +10,34 @@ import kotlin.math.*
 class SkeletonPoseFinalizer(
     private val definition: SkeletonDefinition
 ) {
+    private val outputPose = SkeletonPose()
+    private val tempDir = Vector3()
+    private val tempForwardHint = Vector3()
+    private val tempFootDir = Vector3()
+    private val tempHorizontalDir = Vector3()
+    private val handJointsBuffer = HandJoints()
+    private val tempV1 = Vector3()
+
     /**
      * Finalizes the 3D pose by adding calculated biomechanical joints.
+     * Updates and returns a persistent output buffer.
      */
     fun finalize(pose: SkeletonPose): SkeletonPose {
-        val joints = pose.joints.toMutableMap()
+        outputPose.copyFrom(pose)
 
         // Correct Feet (Left/Fore and Right/Back)
-        adjustFootOrientation(joints, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
-        adjustFootOrientation(joints, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
+        adjustFootOrientation(outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
+        adjustFootOrientation(outputPose, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
 
         // Correct Hands (Left/Active and Right/Passive)
-        adjustHandOrientation(joints, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A)
-        adjustHandOrientation(joints, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
+        adjustHandOrientation(outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A)
+        adjustHandOrientation(outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
 
-        return SkeletonPose(joints, pose.roots)
+        return outputPose
     }
 
     private fun adjustHandOrientation(
-        joints: MutableMap<Joint, Vector3>,
+        pose: SkeletonPose,
         elbowId: Joint,
         handId: Joint,
         wristId: Joint,
@@ -36,65 +45,73 @@ class SkeletonPoseFinalizer(
         knucklesId: Joint,
         fingertipsId: Joint
     ) {
-        val elbow = joints[elbowId] ?: return
-        val hand = joints[handId] ?: return
+        val elbow = pose.getJoint(elbowId)
+        val hand = pose.getJoint(handId)
 
         // Use the PoseBuilder provided hand position as the wrist.
-        val wrist = hand
-        joints[wristId] = wrist
+        val wrist = pose.getJoint(wristId)
+        wrist.set(hand)
 
         // Hand direction follows forearm direction
-        val dir = (wrist - elbow).normalize()
+        tempDir.set(wrist).subtract(elbow).normalize()
 
         val handDef = definition.hand
-        val handJoints = handDef.computeHandJoints(wrist, dir)
+        handDef.computeHandJoints(wrist, tempDir, handJointsBuffer)
 
-        joints[palmId] = handJoints.palm
-        joints[knucklesId] = handJoints.knuckles
-        joints[fingertipsId] = handJoints.fingertips
+        pose.getJoint(palmId).set(handJointsBuffer.palm)
+        pose.getJoint(knucklesId).set(handJointsBuffer.knuckles)
+        pose.getJoint(fingertipsId).set(handJointsBuffer.fingertips)
     }
 
     private fun adjustFootOrientation(
-        joints: MutableMap<Joint, Vector3>,
+        pose: SkeletonPose,
         kneeId: Joint,
         ankleId: Joint,
         heelId: Joint,
         toeId: Joint
     ) {
-        val knee = joints[kneeId] ?: return
-        val ankle = joints[ankleId] ?: return
-        val providedToe = joints[toeId]
+        val knee = pose.getJoint(kneeId)
+        val ankle = pose.getJoint(ankleId)
+        val providedToe = pose.getJoint(toeId)
 
+        // We use a copy of shank to avoid mutating ankle/knee
         val shank = (ankle - knee).normalize()
 
         // Use provided toe as direction hint, fallback to world forward (X+)
-        val forwardHint = if (providedToe != null && (providedToe - ankle).mag() > 1e-3) {
-            (providedToe - ankle).normalize()
+        if ((providedToe - ankle).mag() > 1e-3) {
+            tempForwardHint.set(providedToe).subtract(ankle).normalize()
         } else {
-            Vector3(1f, 0f, 0f)
+            tempForwardHint.set(1f, 0f, 0f)
         }
 
         // Target: foot perpendicular to shank
-        var footDir = forwardHint - shank * forwardHint.dot(shank)
+        // footDir = forwardHint - shank * forwardHint.dot(shank)
+        tempFootDir.set(shank).multiply(tempForwardHint.dot(shank))
+        tempFootDir.set(tempForwardHint.x - tempFootDir.x, tempForwardHint.y - tempFootDir.y, tempForwardHint.z - tempFootDir.z)
 
-        if (footDir.mag() < 1e-3) {
+        if (tempFootDir.mag() < 1e-3) {
             // Shank is parallel to hint, fallback to world down relative to shank
-            footDir = Vector3(0f, -1f, 0f) - shank * Vector3(0f, -1f, 0f).dot(shank)
+            // footDir = Vector3(0f, -1f, 0f) - shank * Vector3(0f, -1f, 0f).dot(shank)
+            val worldDown = Vector3(0f, -1f, 0f)
+            tempFootDir.set(shank).multiply(worldDown.dot(shank))
+            tempFootDir.set(worldDown.x - tempFootDir.x, worldDown.y - tempFootDir.y, worldDown.z - tempFootDir.z)
         }
-        footDir = footDir.normalize()
+        tempFootDir.normalize()
 
         // Clamp foot pitch to anatomical limits
-        val pitch = atan2(footDir.y, sqrt(footDir.x * footDir.x + footDir.z * footDir.z))
+        val pitch = atan2(tempFootDir.y, sqrt(tempFootDir.x * tempFootDir.x + tempFootDir.z * tempFootDir.z))
         val clampedPitch = pitch.coerceIn(definition.foot.minPitch, definition.foot.maxPitch)
 
         if (abs(pitch - clampedPitch) > 1e-3) {
-            val horizontalDir = Vector3(footDir.x, 0f, footDir.z).normalize()
-            footDir = horizontalDir * cos(clampedPitch) + Vector3(0f, 1f, 0f) * sin(clampedPitch)
+            tempHorizontalDir.set(tempFootDir.x, 0f, tempFootDir.z).normalize()
+            tempFootDir.set(
+                tempHorizontalDir.x * cos(clampedPitch),
+                sin(clampedPitch),
+                tempHorizontalDir.z * cos(clampedPitch)
+            )
         }
 
         val foot = definition.foot
-        val (heel, toe) = foot.computeHeelToe(ankle, footDir)
-        joints[heelId] = heel
-        joints[toeId] = toe
+        foot.computeHeelToe(ankle, tempFootDir, pose.getJoint(heelId), pose.getJoint(toeId))
     }
 }

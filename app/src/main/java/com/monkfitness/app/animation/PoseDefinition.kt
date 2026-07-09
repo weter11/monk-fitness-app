@@ -4,11 +4,22 @@ package com.monkfitness.app.animation
  * Encapsulates the joint positions for a specific frame.
  * Now owns a Scene Graph hierarchy and provides backward compatibility.
  */
-data class SkeletonPose(
-    val joints: Map<Joint, Vector3>,
-    val roots: List<SkeletonNode> = emptyList()
+class SkeletonPose(
+    val joints: Array<Vector3> = Array(Joint.entries.size) { Vector3() },
+    var roots: List<SkeletonNode> = emptyList()
 ) {
-    fun getJoint(id: Joint): Vector3 = joints[id] ?: Vector3(0f, 0f, 0f)
+    fun getJoint(id: Joint): Vector3 = joints[id.ordinal]
+
+    fun setJoint(id: Joint, v: Vector3) {
+        joints[id.ordinal].set(v)
+    }
+
+    fun copyFrom(other: SkeletonPose) {
+        for (i in joints.indices) {
+            joints[i].set(other.joints[i])
+        }
+        this.roots = other.roots
+    }
 
     companion object {
         // Cached identity rotation to avoid allocations
@@ -21,13 +32,14 @@ data class SkeletonPose(
          */
         fun fromHierarchy(
             roots: List<SkeletonNode>,
-            targetJoints: MutableMap<Joint, Vector3>
+            targetPose: SkeletonPose
         ): SkeletonPose {
             for (root in roots) {
                 root.updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION)
-                root.flatten(targetJoints)
+                root.flatten(targetPose)
             }
-            return SkeletonPose(targetJoints, roots)
+            targetPose.roots = roots
+            return targetPose
         }
     }
 }

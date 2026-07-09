@@ -14,10 +14,9 @@ data class FootDefinition(
      * Procedurally computes Heel and Toe positions from Ankle and a forward direction.
      * The ankle remains the rotational pivot (origin in this context).
      */
-    fun computeHeelToe(ankle: Vector3, forward: Vector3): Pair<Vector3, Vector3> {
-        val dir = forward.normalize()
-        val heel = ankle - dir * (footLength * heelRatio)
-        val toe = ankle + dir * (footLength * toeRatio)
-        return heel to toe
+    fun computeHeelToe(ankle: Vector3, forward: Vector3, outHeel: Vector3, outToe: Vector3) {
+        val dir = forward.normalizedCopy()
+        outHeel.set(dir).multiply(-(footLength * heelRatio)).add(ankle)
+        outToe.set(dir).multiply(footLength * toeRatio).add(ankle)
     }
 }

@@ -20,20 +20,18 @@ data class HandDefinition(
      * @param wrist The world position of the wrist joint.
      * @param direction The forward direction of the hand.
      */
-    fun computeHandJoints(wrist: Vector3, direction: Vector3): HandJoints {
-        val dir = direction.normalize()
-        return HandJoints(
-            wrist = wrist,
-            palm = wrist + dir * (palmLength * 0.5f),
-            knuckles = wrist + dir * palmLength,
-            fingertips = wrist + dir * (palmLength + fingerLength)
-        )
+    fun computeHandJoints(wrist: Vector3, direction: Vector3, result: HandJoints) {
+        val dir = direction.normalizedCopy()
+        result.wrist.set(wrist)
+        result.palm.set(dir).multiply(palmLength * 0.5f).add(wrist)
+        result.knuckles.set(dir).multiply(palmLength).add(wrist)
+        result.fingertips.set(dir).multiply(palmLength + fingerLength).add(wrist)
     }
 }
 
-data class HandJoints(
-    val wrist: Vector3,
-    val palm: Vector3,
-    val knuckles: Vector3,
-    val fingertips: Vector3
+class HandJoints(
+    val wrist: Vector3 = Vector3(),
+    val palm: Vector3 = Vector3(),
+    val knuckles: Vector3 = Vector3(),
+    val fingertips: Vector3 = Vector3()
 )

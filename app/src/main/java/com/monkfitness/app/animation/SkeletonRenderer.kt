@@ -26,8 +26,10 @@ fun SkeletonRenderer(
     val compensator = remember(screenSpaceSettings) { ScreenSpaceCompensation(screenSpaceSettings) }
 
     val skeletonBuffer = remember { ProjectedSkeleton() }
-    val items = remember { mutableListOf<DrawableItem>() }
+    val renderItems = remember { Array(100) { RenderItem() } }
+    val indices = remember { IntArray(100) }
     val scaleBuffer = remember { ScreenSpaceScale() }
+    val path = remember { Path() }
 
     Canvas(modifier = modifier) {
         val width = size.width
@@ -40,70 +42,119 @@ fun SkeletonRenderer(
             drawGroundPassive(skeletonBuffer, style, camera.zoom)
         }
 
-        items.clear()
+        var itemCount = 0
 
         for (i in 0 until skeletonBuffer.boneCount) {
             val b = skeletonBuffer.bones[i]
             compensator.computeScale(b.p1, scaleBuffer)
             val thickness = b.thickness * scaleBuffer.thicknessScale * camera.zoom
-            items.add(DrawableItem.BoneItem(b, thickness, scaleBuffer.outlineScale))
+            renderItems[itemCount++].populateBone(b, thickness, scaleBuffer.outlineScale)
         }
 
         for (j in skeletonBuffer.indicators) {
             compensator.computeScale(j.point, scaleBuffer)
             val radius = (if (j.id == Joint.HEAD_POS) style.headRadius else style.jointRadius) *
                         scaleBuffer.radiusScale * camera.zoom
-            items.add(DrawableItem.JointItem(j, radius, scaleBuffer.outlineScale))
+            renderItems[itemCount++].populateJoint(j, radius, scaleBuffer.outlineScale)
         }
 
         for (i in 0 until skeletonBuffer.faceCount) {
-            items.add(DrawableItem.FaceItem(skeletonBuffer.faces[i]))
+            renderItems[itemCount++].populateFace(skeletonBuffer.faces[i])
         }
 
-        items.sortByDescending { it.depth }
+        // Initialize indices
+        for (i in 0 until itemCount) indices[i] = i
 
-        highlightedJoint?.let { id ->
-            val p = skeletonBuffer.jointsMap[id.ordinal]
+        // In-place Insertion Sort of indices based on renderItems[idx].depth
+        for (i in 1 until itemCount) {
+            val idx = indices[i]
+            val depth = renderItems[idx].depth
+            var j = i - 1
+            while (j >= 0 && renderItems[indices[j]].depth < depth) {
+                indices[j + 1] = indices[j]
+                j--
+            }
+            indices[j + 1] = idx
+        }
+
+        if (highlightedJoint != null) {
+            val p = skeletonBuffer.jointsMap[highlightedJoint.ordinal]
             drawCircle(Color.White.copy(alpha = 0.5f), 12f * p.perspectiveScale * camera.zoom, Offset(p.x, p.y))
         }
 
-        for (item in items) {
-            when (item) {
-                is DrawableItem.BoneItem -> {
-                    val b = item.bone
+        for (i in 0 until itemCount) {
+            val item = renderItems[indices[i]]
+            when (item.type) {
+                RenderItem.Type.BONE -> {
+                    val b = item.bone!!
                     val color = getZColor(item.depth, b.isForeground, style)
                     val outline = style.outlineWidth * item.outlineScale
                     drawLinearBone(Offset(b.p1.x, b.p1.y), Offset(b.p2.x, b.p2.y), item.thickness + (outline * 2f), Color(0xFF0A0F14))
                     drawLinearBone(Offset(b.p1.x, b.p1.y), Offset(b.p2.x, b.p2.y), item.thickness, color)
                 }
-                is DrawableItem.JointItem -> {
-                    val j = item.joint
+                RenderItem.Type.JOINT -> {
+                    val j = item.joint!!
                     val color = getZColor(item.depth, j.isIndicator, style)
                     val outline = 2f * item.outlineScale
                     drawCircle(Color(0xFF0A0F14), item.radius + outline, Offset(j.point.x, j.point.y))
                     drawCircle(color, item.radius, Offset(j.point.x, j.point.y))
                 }
-                is DrawableItem.FaceItem -> {
-                    val f = item.face
+                RenderItem.Type.FACE -> {
+                    val f = item.face!!
                     val color = getZColor(f.avgDepth, false, style)
                     val strokeC = Color(color.red * 0.6f, color.green * 0.6f, color.blue * 0.6f, 1.0f)
                     val fillC = Color(color.red * 0.9f, color.green * 0.9f, color.blue * 0.9f, 1.0f)
-                    val path = Path().apply {
-                        f.points.forEachIndexed { i, p -> if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y) }
-                        close()
+                    path.reset()
+                    val facePoints = f.points
+                    for (idx in 0 until facePoints.size) {
+                        val p = facePoints[idx]
+                        if (idx == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
                     }
+                    path.close()
                     drawPath(path, fillC)
                     drawPath(path, strokeC, style = androidx.compose.ui.graphics.drawscope.Stroke(width = style.outlineWidth))
                 }
+                else -> {}
             }
         }
     }
 }
 
-private sealed class DrawableItem(val depth: Float) {
-    class BoneItem(val bone: ProjectedBone, val thickness: Float, val outlineScale: Float) : DrawableItem(bone.avgDepth)
-    class JointItem(val joint: ProjectedJoint, val radius: Float, val outlineScale: Float) : DrawableItem(joint.point.depth)
-    class FaceItem(val face: ProjectedFace) : DrawableItem(face.avgDepth)
+private class RenderItem {
+    enum class Type { NONE, BONE, JOINT, FACE }
+    var type = Type.NONE
+    var depth = 0f
+
+    var bone: ProjectedBone? = null
+    var thickness = 0f
+    var outlineScale = 0f
+
+    var joint: ProjectedJoint? = null
+    var radius = 0f
+
+    var face: ProjectedFace? = null
+
+    fun populateBone(b: ProjectedBone, thick: Float, outline: Float) {
+        type = Type.BONE
+        bone = b
+        depth = b.avgDepth
+        thickness = thick
+        outlineScale = outline
+    }
+
+    fun populateJoint(j: ProjectedJoint, rad: Float, outline: Float) {
+        type = Type.JOINT
+        joint = j
+        depth = j.point.depth
+        radius = rad
+        outlineScale = outline
+    }
+
+    fun populateFace(f: ProjectedFace) {
+        type = Type.FACE
+        face = f
+        depth = f.avgDepth
+    }
 }
 
 private fun getZColor(depth: Float, isForeground: Boolean, style: SkeletonStyle): Color {
@@ -123,7 +174,9 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGroundPassive(s
         drawLine(gridColor, Offset(l.p1.x, l.p1.y), Offset(l.p2.x, l.p2.y), strokeWidth = 1f)
     }
     val shadowColor = Color(0x9605080C)
-    for (p in skeleton.shadowPoints) {
+    val shadowPoints = skeleton.shadowPoints
+    for (i in 0 until shadowPoints.size) {
+        val p = shadowPoints[i]
         val sx = style.shadowRadiusX * p.perspectiveScale * zoom
         val sy = style.shadowRadiusY * p.perspectiveScale * zoom
         drawOval(shadowColor, Offset(p.x - sx, p.y - sy), androidx.compose.ui.geometry.Size(sx * 2f, sy * 2f))
