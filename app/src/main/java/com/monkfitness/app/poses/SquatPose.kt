@@ -12,14 +12,15 @@ class SquatPose : PoseBuilder {
         val definition = context.definition
 
         // progress 0 (up) to 1 (down)
-        val pelvisHeight = lerp(definition.thighLength + definition.shinLength + 10f, 40f, progress)
+        val ankleHeight = definition.foot.ankleHeight
+        val pelvisHeight = lerp(definition.thighLength + definition.shinLength + ankleHeight + 10f, 40f + ankleHeight, progress)
         val pelvis = Vector3(0f, pelvisHeight, 0f)
 
         val hipF = pelvis + Vector3(0f, 0f, -definition.hipWidth)
         val hipB = pelvis + Vector3(0f, 0f, definition.hipWidth)
 
-        val toeF = Vector3(20f + 20f * progress, 0f, -definition.hipWidth * 1.5f)
-        val toeB = Vector3(20f + 20f * progress, 0f, definition.hipWidth * 1.5f)
+        val toeF = Vector3(20f + 20f * progress, ankleHeight, -definition.hipWidth * 1.5f)
+        val toeB = Vector3(20f + 20f * progress, ankleHeight, definition.hipWidth * 1.5f)
 
         val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(1f, 0f, 0f), IKConstraint.LegConstraint)
         val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(1f, 0f, 0f), IKConstraint.LegConstraint)

@@ -23,10 +23,11 @@ class WorldGreatestStretchPose : PoseBuilder {
         val hipF = pelvis + Vector3(0f, 0f, -definition.hipWidth * s)
         val hipB = pelvis + Vector3(0f, 0f, definition.hipWidth * s)
 
-        val frontAnkle = Vector3(140f, 9f, -24f * s)
-        val frontToe = Vector3(175f, 0f, -27f * s)
-        val backAnkle = Vector3(-170f, 18f, 26f * s)
-        val backToe = Vector3(-195f, 0f, 28f * s)
+        val ankleHeight = definition.foot.ankleHeight
+        val frontAnkle = Vector3(140f, 9f + ankleHeight, -24f * s)
+        val frontToe = Vector3(175f, 0f + ankleHeight, -27f * s)
+        val backAnkle = Vector3(-170f, 18f + ankleHeight, 26f * s)
+        val backToe = Vector3(-195f, 0f + ankleHeight, 28f * s)
 
         // Legs — locked-length IK, anatomical knee poles
         val legF = solveIK(hipF, frontAnkle, definition.thighLength, definition.shinLength, Vector3(1f, 0.35f, -0.15f * s), IKConstraint.LegConstraint)

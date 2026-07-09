@@ -20,6 +20,7 @@ class BirdDogPose : PoseBuilder {
         val shoulderA = chest + Vector3(0f, 0f, -definition.shoulderWidth) // Right
         val shoulderP = chest + Vector3(0f, 0f, definition.shoulderWidth) // Left
 
+        val ankleHeight = definition.foot.ankleHeight
         // Target positions for "neutral" quadruped
         val baseHandR = shoulderA + Vector3(0f, -45f, 0f)
         val baseHandL = shoulderP + Vector3(0f, -45f, 0f)
@@ -50,8 +51,8 @@ class BirdDogPose : PoseBuilder {
         val kneeL = if (side == Side.LEFT) lerp(baseKneeL, extKnee, progress) else baseKneeL
 
         // Toe/Ankle positions
-        val toeF = kneeR + Vector3(10f, -10f, 0f)
-        val toeB = kneeL + Vector3(10f, -10f, 0f)
+        val toeF = kneeR + Vector3(10f, -10f + ankleHeight, 0f)
+        val toeB = kneeL + Vector3(10f, -10f + ankleHeight, 0f)
 
         val armA = solveIK(shoulderA, handR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint)
         val armP = solveIK(shoulderP, handL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint)

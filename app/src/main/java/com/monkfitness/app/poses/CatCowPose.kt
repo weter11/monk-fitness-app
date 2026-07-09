@@ -14,17 +14,18 @@ class CatCowPose : PoseBuilder {
         // Quadruped base
         // progress 0 (Cat - rounded) to 1 (Cow - arched)
 
-        val pelvisPos = lerp(45f, 40f, progress)
+        val ankleHeight = definition.foot.ankleHeight
+        val pelvisPos = lerp(45f, 40f, progress) + ankleHeight
         val pelvis = Vector3(50f, pelvisPos, 0f)
 
-        val chestPos = lerp(45f, 35f, progress)
+        val chestPos = lerp(45f, 35f, progress) + ankleHeight
         val chest = pelvis + Vector3(-definition.torsoLength, chestPos - pelvisPos, 0f)
 
         val hipF = pelvis + Vector3(0f, 0f, -definition.hipWidth)
         val hipB = pelvis + Vector3(0f, 0f, definition.hipWidth)
 
-        val kneeBaseR = Vector3(50f, 0f, -definition.hipWidth)
-        val kneeBaseL = Vector3(50f, 0f, definition.hipWidth)
+        val kneeBaseR = Vector3(50f, ankleHeight, -definition.hipWidth)
+        val kneeBaseL = Vector3(50f, ankleHeight, definition.hipWidth)
 
         val legF = solveIK(hipF, kneeBaseR, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f), IKConstraint.LegConstraint)
         val legB = solveIK(hipB, kneeBaseL, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f), IKConstraint.LegConstraint)

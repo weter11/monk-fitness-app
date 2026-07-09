@@ -23,6 +23,7 @@ class SupermanPose : PoseBuilder {
 
         val totalLegLen = definition.thighLength + definition.shinLength
         val legLean = lerp(0f, 0.3f, progress).toDouble()
+        val ankleHeight = definition.foot.ankleHeight
         val toeF = hipF + Vector3(totalLegLen * cos(legLean).toFloat(), totalLegLen * sin(legLean).toFloat(), 0f)
         val toeB = hipB + Vector3(totalLegLen * cos(legLean).toFloat(), totalLegLen * sin(legLean).toFloat(), 0f)
 

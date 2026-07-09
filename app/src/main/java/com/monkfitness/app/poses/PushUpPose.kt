@@ -69,12 +69,14 @@ class PushUpPose : PoseBuilder {
         // 1. Driving values
         val height = lerp(60f, 25f, progress)
         val totalLegLen = def.shinLength + def.thighLength
-        val theta = asin((height / totalLegLen).coerceIn(-1f, 1f))
+        val ankleHeight = def.foot.ankleHeight
+        val drivingHeight = (height - ankleHeight).coerceAtLeast(0f)
+        val theta = asin((drivingHeight / totalLegLen).coerceIn(-1f, 1f))
         val horizontalDist = totalLegLen * cos(theta)
         val ankleX = 60f + horizontalDist
 
         // 2. Local Transforms
-        ankleF!!.localPosition = Vector3(ankleX, 0f, -def.hipWidth)
+        ankleF!!.localPosition = Vector3(ankleX, ankleHeight, -def.hipWidth)
         ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), -theta)
 
         kneeF!!.localPosition = Vector3(-def.shinLength, 0f, 0f)
