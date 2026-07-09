@@ -114,11 +114,32 @@ class SkeletonPoseFinalizer(
             val parentPos = parentNode.worldPosition
             val childPos = pose.getJoint(node.joint)
 
-            // Bone vector C - P
-            tempBoneVec.set(childPos).subtract(parentPos)
-
-            // Set local position rotated backward by parent's world rotation
-            SkeletonMath.rotAround(tempBoneVec, parentWorldRot.axis, -parentWorldRot.angle, node.localPosition)
+            // Apply anatomical offsets in local space as defined by the parent's segment
+            when (node.joint) {
+                Joint.HIP_F -> {
+                    node.localPosition.set(0f, 0f, -definition.hipWidth)
+                }
+                Joint.HIP_B -> {
+                    node.localPosition.set(0f, 0f, definition.hipWidth)
+                }
+                Joint.SHOULDER_A -> {
+                    node.localPosition.set(0f, 0f, -definition.shoulderWidth)
+                }
+                Joint.SHOULDER_P -> {
+                    node.localPosition.set(0f, 0f, definition.shoulderWidth)
+                }
+                Joint.NECK_END -> {
+                    node.localPosition.set(0f, definition.neckLength, 0f)
+                }
+                Joint.HEAD_POS -> {
+                    node.localPosition.set(0f, 18f, 0f)
+                }
+                else -> {
+                    // Standard joint: calculate local position rotated backward by parent's world rotation
+                    tempBoneVec.set(childPos).subtract(parentPos)
+                    SkeletonMath.rotAround(tempBoneVec, parentWorldRot.axis, -parentWorldRot.angle, node.localPosition)
+                }
+            }
 
             // Compute the world rotation of this joint
             if (node.joint == Joint.CHEST) {
@@ -138,6 +159,7 @@ class SkeletonPoseFinalizer(
                 SkeletonMath.getRotationFromMatrix(tempColX, tempColY, tempColZ, node.worldRotation)
             } else {
                 // Shortest arc rotation aligning Vector3(1f, 0f, 0f) with bone direction
+                tempBoneVec.set(childPos).subtract(parentPos)
                 SkeletonMath.getRotationToAlign(tempBoneVec, node.worldRotation)
             }
 
@@ -194,7 +216,7 @@ class SkeletonPoseFinalizer(
             // Ensure standard compatibility hierarchy is created
             ensureHierarchy()
 
-            // Run setupTransforms to reconstruct orientation parameters
+            // Run setupTransforms to reconstruct orientation parameters and set proper local anatomical offsets
             setupTransforms(nodesMap[Joint.PELVIS.index]!!, IDENTITY_ROTATION, outputPose)
 
             // Propagate world positions and world rotations via Forward Kinematics traversal
