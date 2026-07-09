@@ -2,7 +2,8 @@ package com.monkfitness.app.animation
 
 class SkeletonEngine(
     val definition: SkeletonDefinition,
-    val style: SkeletonStyle
+    val style: SkeletonStyle,
+    val cameraDefinition: CameraDefinition = definition.defaultCamera
 ) {
     // Bone hierarchy for rendering
     val bones = listOf(

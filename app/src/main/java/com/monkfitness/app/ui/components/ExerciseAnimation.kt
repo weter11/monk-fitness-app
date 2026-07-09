@@ -52,10 +52,13 @@ fun ExerciseAnimatedVisual(
             mode = poseConfig.mode,
             alternating = poseConfig.alternating
         )
-        val camera = remember { Camera() }
         val definition = SkeletonDefinition.DEFAULT_ADULT
+        val cameraDefinition = poseConfig.builder.cameraDefinition ?: definition.defaultCamera
+        val camera = remember(cameraDefinition) { Camera(cameraDefinition) }
         val style = SkeletonStyle.DEFAULT
-        val engine = remember(definition, style) { SkeletonEngine(definition, style) }
+        val engine = remember(definition, style, cameraDefinition) {
+            SkeletonEngine(definition, style, cameraDefinition)
+        }
         val poseContext = PoseContext(
             progress = controller.progress,
             side = controller.side,

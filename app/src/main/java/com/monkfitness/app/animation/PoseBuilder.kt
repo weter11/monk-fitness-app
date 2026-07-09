@@ -1,6 +1,8 @@
 package com.monkfitness.app.animation
 
 interface PoseBuilder {
+    val cameraDefinition: CameraDefinition? get() = null
+
     fun build(context: PoseContext): SkeletonPose
 
     // Kept for backward compatibility if needed, but build(context) is now preferred
