@@ -132,10 +132,6 @@ private val tempV2 = Vector3()
         // 6. Final Pass
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
 
-        // 7. Stable anchors (Toes)
-        jointsBuffer.getJoint(Joint.TOE_F).set(ankleX + 10f, 0f, -def.hipWidth)
-        jointsBuffer.getJoint(Joint.TOE_B).set(ankleX + 10f, 0f, def.hipWidth)
-
         return jointsBuffer
     }
 }
