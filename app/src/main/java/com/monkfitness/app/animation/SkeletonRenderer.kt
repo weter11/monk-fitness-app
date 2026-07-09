@@ -22,167 +22,74 @@ fun SkeletonRenderer(
 ) {
     val style = engine.style
     val finalizer = remember(engine.definition) { SkeletonPoseFinalizer(engine.definition) }
-    val finalizedPose = remember(pose, finalizer) { finalizer.finalize(pose) }
-
+    val projector = remember { SkeletonProjector() }
     val compensator = remember(screenSpaceSettings) { ScreenSpaceCompensation(screenSpaceSettings) }
+
+    val skeletonBuffer = remember { ProjectedSkeleton() }
+    val items = remember { mutableListOf<DrawableItem>() }
+    val scaleBuffer = remember { ScreenSpaceScale() }
 
     Canvas(modifier = modifier) {
         val width = size.width
         val height = size.height
 
-        // 1. Camera Projection Stage
-        val projectedJoints = Joint.entries.associateWith { id ->
-            camera.project(finalizedPose.getJoint(id), width, height)
-        }
-        val skeleton = ProjectedSkeleton(projectedJoints)
+        val finalizedPose = finalizer.finalize(pose)
+        projector.project(finalizedPose, camera, engine, width, height, skeletonBuffer)
 
         if (showGround) {
-            drawGround(skeleton, camera, style)
+            drawGroundPassive(skeletonBuffer, style, camera.zoom)
         }
 
-        val items = mutableListOf<DrawableItem>()
+        items.clear()
 
-        // 2. Rendering & ScreenSpaceCompensation Stage
-        for (bone in engine.bones) {
-            val p1 = skeleton.getJoint(bone.parentJoint)
-            val p2 = skeleton.getJoint(bone.childJoint)
-
-            val avgPoint = ProjectedPoint(
-                (p1.x + p2.x) / 2f,
-                (p1.y + p2.y) / 2f,
-                (p1.depth + p2.depth) / 2f,
-                (p1.perspectiveScale + p2.perspectiveScale) / 2f
-            )
-
-            val scale = compensator.computeScale(avgPoint)
-            val thickness = bone.thickness * scale.thicknessScale * camera.zoom
-
-            val isForeground = bone.colorMultiplier >= 1.0f
-            items.add(
-                DrawableItem.BoneItem(
-                    p1, p2, thickness, bone.colorMultiplier, avgPoint.depth, isForeground
-                )
-            )
+        for (i in 0 until skeletonBuffer.boneCount) {
+            val b = skeletonBuffer.bones[i]
+            compensator.computeScale(b.p1, scaleBuffer)
+            val thickness = b.thickness * scaleBuffer.thicknessScale * camera.zoom
+            items.add(DrawableItem.BoneItem(b, thickness, scaleBuffer.outlineScale))
         }
 
-        // Add head
-        val headPoint = skeleton.getJoint(Joint.HEAD_POS)
-        val headScale = compensator.computeScale(headPoint)
-        items.add(
-            DrawableItem.HeadItem(
-                headPoint,
-                style.headRadius * headScale.radiusScale * camera.zoom,
-                1.0f,
-                headPoint.depth,
-                false
-            )
-        )
-
-        // Add active hand circle (indicator)
-        val wristA = skeleton.getJoint(Joint.WRIST_A)
-        val handScale = compensator.computeScale(wristA)
-        items.add(
-            DrawableItem.HeadItem(
-                wristA,
-                style.jointRadius * handScale.radiusScale * camera.zoom,
-                1.05f,
-                wristA.depth,
-                true
-            )
-        )
-
-        // Torso Box (always passive, depends only on projected points)
-        val hipF = finalizedPose.getJoint(Joint.HIP_F)
-        val hipB = finalizedPose.getJoint(Joint.HIP_B)
-        val shoulderA = finalizedPose.getJoint(Joint.SHOULDER_A)
-        val shoulderP = finalizedPose.getJoint(Joint.SHOULDER_P)
-        val pelvis = finalizedPose.getJoint(Joint.PELVIS)
-        val chest = finalizedPose.getJoint(Joint.CHEST)
-
-        val lean = (chest - pelvis).normalize()
-        val shVec = (shoulderA - shoulderP).normalize()
-        val chestNorm = lean.cross(shVec).normalize()
-
-        val offC = chestNorm * style.torsoChestDepth
-        val offH = chestNorm * style.torsoHipDepth
-
-        val pHLf = camera.project(hipF + offH, width, height)
-        val pHLb = camera.project(hipF - offH, width, height)
-        val pHRf = camera.project(hipB + offH, width, height)
-        val pHRb = camera.project(hipB - offH, width, height)
-        val pSLf = camera.project(shoulderA + offC, width, height)
-        val pSLb = camera.project(shoulderA - offC, width, height)
-        val pSRf = camera.project(shoulderP + offC, width, height)
-        val pSRb = camera.project(shoulderP - offC, width, height)
-
-        fun addFace(pts: List<ProjectedPoint>) {
-            val avgDepth = pts.map { it.depth }.average().toFloat()
-            items.add(DrawableItem.FaceItem(pts, avgDepth))
+        for (j in skeletonBuffer.indicators) {
+            compensator.computeScale(j.point, scaleBuffer)
+            val radius = (if (j.id == Joint.HEAD_POS) style.headRadius else style.jointRadius) *
+                        scaleBuffer.radiusScale * camera.zoom
+            items.add(DrawableItem.JointItem(j, radius, scaleBuffer.outlineScale))
         }
 
-        addFace(listOf(pSLf, pSRf, pHRf, pHLf)) // front
-        addFace(listOf(pSRb, pSLb, pHLb, pHRb)) // back
-        addFace(listOf(pSLb, pSLf, pHLf, pHLb)) // left
-        addFace(listOf(pSRf, pSRb, pHRb, pHRf)) // right
-        addFace(listOf(pSLb, pSRb, pSRf, pSLf)) // top
-        addFace(listOf(pHLf, pHRf, pHRb, pHLb)) // bottom
+        for (i in 0 until skeletonBuffer.faceCount) {
+            items.add(DrawableItem.FaceItem(skeletonBuffer.faces[i]))
+        }
 
-        // Sort by depth (back to front)
         items.sortByDescending { it.depth }
 
-        // Add highlight
-        highlightedJoint?.let { jointId ->
-            val p = skeleton.getJoint(jointId)
-            drawCircle(
-                color = Color.White.copy(alpha = 0.5f),
-                radius = 12f * p.perspectiveScale * camera.zoom,
-                center = Offset(p.x, p.y)
-            )
+        highlightedJoint?.let { id ->
+            val p = skeletonBuffer.jointsMap[id.ordinal]
+            drawCircle(Color.White.copy(alpha = 0.5f), 12f * p.perspectiveScale * camera.zoom, Offset(p.x, p.y))
         }
 
         for (item in items) {
             when (item) {
                 is DrawableItem.BoneItem -> {
-                    val color = getZColor(item.depth, item.isForeground, style)
-                    // Apply outline scale if we had distinct outline rendering
-                    val outlineWidth = style.outlineWidth // could be scaled by compensator if needed
-
-                    drawLinearBone(
-                        Offset(item.p1.x, item.p1.y),
-                        Offset(item.p2.x, item.p2.y),
-                        item.thickness + (outlineWidth * 2f),
-                        Color(0xFF0A0F14)
-                    )
-                    drawLinearBone(
-                        Offset(item.p1.x, item.p1.y),
-                        Offset(item.p2.x, item.p2.y),
-                        item.thickness,
-                        color
-                    )
+                    val b = item.bone
+                    val color = getZColor(item.depth, b.isForeground, style)
+                    val outline = style.outlineWidth * item.outlineScale
+                    drawLinearBone(Offset(b.p1.x, b.p1.y), Offset(b.p2.x, b.p2.y), item.thickness + (outline * 2f), Color(0xFF0A0F14))
+                    drawLinearBone(Offset(b.p1.x, b.p1.y), Offset(b.p2.x, b.p2.y), item.thickness, color)
                 }
-                is DrawableItem.HeadItem -> {
-                    val color = getZColor(item.depth, item.isForeground, style)
-
-                    drawCircle(
-                        color = Color(0xFF0A0F14),
-                        radius = item.radius + 2f,
-                        center = Offset(item.p.x, item.p.y)
-                    )
-                    drawCircle(
-                        color = color,
-                        radius = item.radius,
-                        center = Offset(item.p.x, item.p.y)
-                    )
+                is DrawableItem.JointItem -> {
+                    val j = item.joint
+                    val color = getZColor(item.depth, j.isIndicator, style)
+                    val outline = 2f * item.outlineScale
+                    drawCircle(Color(0xFF0A0F14), item.radius + outline, Offset(j.point.x, j.point.y))
+                    drawCircle(color, item.radius, Offset(j.point.x, j.point.y))
                 }
                 is DrawableItem.FaceItem -> {
-                    val color = getZColor(item.depth, false, style)
+                    val f = item.face
+                    val color = getZColor(f.avgDepth, false, style)
                     val strokeC = Color(color.red * 0.6f, color.green * 0.6f, color.blue * 0.6f, 1.0f)
                     val fillC = Color(color.red * 0.9f, color.green * 0.9f, color.blue * 0.9f, 1.0f)
-
                     val path = Path().apply {
-                        item.pts.forEachIndexed { index, p ->
-                            if (index == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y)
-                        }
+                        f.points.forEachIndexed { i, p -> if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y) }
                         close()
                     }
                     drawPath(path, fillC)
@@ -193,86 +100,32 @@ fun SkeletonRenderer(
     }
 }
 
-private sealed class DrawableItem(val depth: Float, val colorMultiplier: Float) {
-    class BoneItem(
-        val p1: ProjectedPoint,
-        val p2: ProjectedPoint,
-        val thickness: Float,
-        colorMultiplier: Float,
-        depth: Float,
-        val isForeground: Boolean
-    ) : DrawableItem(depth, colorMultiplier)
-
-    class HeadItem(
-        val p: ProjectedPoint,
-        val radius: Float,
-        colorMultiplier: Float,
-        depth: Float,
-        val isForeground: Boolean
-    ) : DrawableItem(depth, colorMultiplier)
-
-    class FaceItem(
-        val pts: List<ProjectedPoint>,
-        depth: Float
-    ) : DrawableItem(depth, 1.0f)
+private sealed class DrawableItem(val depth: Float) {
+    class BoneItem(val bone: ProjectedBone, val thickness: Float, val outlineScale: Float) : DrawableItem(bone.avgDepth)
+    class JointItem(val joint: ProjectedJoint, val radius: Float, val outlineScale: Float) : DrawableItem(joint.point.depth)
+    class FaceItem(val face: ProjectedFace) : DrawableItem(face.avgDepth)
 }
 
 private fun getZColor(depth: Float, isForeground: Boolean, style: SkeletonStyle): Color {
     val t = ((170f - depth) / 340f).coerceIn(0f, 1f)
-    val farColor = style.farColor
-    val nearColor = style.secondaryColor
-    val baseC = lerp(farColor, nearColor, t)
+    val baseC = lerp(style.farColor, style.secondaryColor, t)
     return if (isForeground) lerp(baseC, style.primaryColor, 0.3f) else baseC
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawLinearBone(
-    start: Offset,
-    end: Offset,
-    thickness: Float,
-    color: Color
-) {
-    drawLine(
-        color = color,
-        start = start,
-        end = end,
-        strokeWidth = thickness,
-        cap = StrokeCap.Round
-    )
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawLinearBone(start: Offset, end: Offset, thickness: Float, color: Color) {
+    drawLine(color = color, start = start, end = end, strokeWidth = thickness, cap = StrokeCap.Round)
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGround(
-    skeleton: ProjectedSkeleton,
-    camera: Camera,
-    style: SkeletonStyle
-) {
-    val width = size.width
-    val height = size.height
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGroundPassive(skeleton: ProjectedSkeleton, style: SkeletonStyle, zoom: Float) {
     val gridColor = Color(0x5A3A445C)
-
-    for (x in -260..260 step 65) {
-        val a = camera.project(Vector3(x.toFloat(), 0f, -170f), width, height)
-        val b = camera.project(Vector3(x.toFloat(), 0f, 170f), width, height)
-        drawLine(gridColor, Offset(a.x, a.y), Offset(b.x, b.y), strokeWidth = 1f)
+    for (i in 0 until skeleton.gridLineCount) {
+        val l = skeleton.gridLines[i]
+        drawLine(gridColor, Offset(l.p1.x, l.p1.y), Offset(l.p2.x, l.p2.y), strokeWidth = 1f)
     }
-    for (z in -170..170 step 65) {
-        val a = camera.project(Vector3(-260f, 0f, z.toFloat()), width, height)
-        val b = camera.project(Vector3(260f, 0f, z.toFloat()), width, height)
-        drawLine(gridColor, Offset(a.x, a.y), Offset(b.x, b.y), strokeWidth = 1f)
-    }
-
     val shadowColor = Color(0x9605080C)
-    val shadowJoints = listOf(Joint.TOE_F, Joint.TOE_B, Joint.HEEL_F, Joint.HEEL_B, Joint.HAND_P)
-
-    for (id in shadowJoints) {
-        val p = skeleton.getJoint(id)
-        // Adjust shadow size by perspective
-        val sx = style.shadowRadiusX * p.perspectiveScale * camera.zoom
-        val sy = style.shadowRadiusY * p.perspectiveScale * camera.zoom
-
-        drawOval(
-            color = shadowColor,
-            topLeft = Offset(p.x - sx, p.y - sy),
-            size = androidx.compose.ui.geometry.Size(sx * 2f, sy * 2f)
-        )
+    for (p in skeleton.shadowPoints) {
+        val sx = style.shadowRadiusX * p.perspectiveScale * zoom
+        val sy = style.shadowRadiusY * p.perspectiveScale * zoom
+        drawOval(shadowColor, Offset(p.x - sx, p.y - sy), androidx.compose.ui.geometry.Size(sx * 2f, sy * 2f))
     }
 }

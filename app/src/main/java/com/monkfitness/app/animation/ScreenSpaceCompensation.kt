@@ -12,46 +12,32 @@ data class ScreenSpaceSettings(
     }
 }
 
-data class ScreenSpaceScale(
-    val radiusScale: Float,
-    val thicknessScale: Float,
-    val outlineScale: Float,
-    val shadowScale: Float,
-    val alphaScale: Float
-) {
-    companion object {
-        val IDENTITY = ScreenSpaceScale(1f, 1f, 1f, 1f, 1f)
+class ScreenSpaceScale {
+    var radiusScale: Float = 1f
+    var thicknessScale: Float = 1f
+    var outlineScale: Float = 1f
+    var shadowScale: Float = 1f
+    var alphaScale: Float = 1f
+
+    fun update(p: Float, settings: ScreenSpaceSettings) {
+        radiusScale = 1.0f + (p - 1.0f) * settings.radiusStrength
+        thicknessScale = 1.0f + (p - 1.0f) * settings.thicknessStrength
+        outlineScale = 1.0f + (p - 1.0f) * settings.outlineStrength
+        shadowScale = 1.0f + (p - 1.0f) * settings.shadowStrength
+        alphaScale = 1.0f + (p - 1.0f) * settings.alphaStrength
     }
 }
 
 /**
  * ScreenSpaceCompensation is a pure post-processing stage.
- * It transforms a projected point (with camera-provided perspectiveScale)
- * into a set of visual scaling factors.
- * It has no knowledge of anatomy or camera implementation.
  */
 class ScreenSpaceCompensation(
     private val settings: ScreenSpaceSettings = ScreenSpaceSettings.DEFAULT
 ) {
     /**
-     * Computes visual scales for a projected point.
-     * Uses the perspectiveScale provided by the Camera.
+     * Updates the provided ScreenSpaceScale buffer using the perspectiveScale from the point.
      */
-    fun computeScale(point: ProjectedPoint): ScreenSpaceScale {
-        // We use the camera's natural perspective scale as the base.
-        // The 'strengths' in settings determine how much of that perspective
-        // is applied to specific visual attributes.
-        // A strength of 1.0 means the attribute follows perspective exactly.
-        // A strength of 0.0 means the attribute remains constant.
-
-        val p = point.perspectiveScale
-
-        return ScreenSpaceScale(
-            radiusScale = 1.0f + (p - 1.0f) * settings.radiusStrength,
-            thicknessScale = 1.0f + (p - 1.0f) * settings.thicknessStrength,
-            outlineScale = 1.0f + (p - 1.0f) * settings.outlineStrength,
-            shadowScale = 1.0f + (p - 1.0f) * settings.shadowStrength,
-            alphaScale = 1.0f + (p - 1.0f) * settings.alphaStrength
-        )
+    fun computeScale(point: ProjectedPoint, buffer: ScreenSpaceScale) {
+        buffer.update(point.perspectiveScale, settings)
     }
 }
