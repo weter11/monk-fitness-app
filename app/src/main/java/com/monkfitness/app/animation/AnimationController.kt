@@ -4,6 +4,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.runtime.*
 import kotlin.math.*
 
+@Deprecated("Use LoopMode", ReplaceWith("LoopMode"))
 enum class AnimationMode {
     LOOP, // Repeats progress 0 -> 1 -> 0
     HOLD  // Progress driven by breathing cycle 0 -> 1 -> 0
@@ -29,15 +30,15 @@ private class BaseAnimationController : AnimationController {
 
 @Composable
 fun rememberAnimationController(
-    mode: AnimationMode,
-    durationMs: Int = 3000,
-    alternating: Boolean = false
+    metadata: PoseMetadata,
+    alternating: Boolean = false // Still needed for side-switching exercises
 ): AnimationController {
     val controller = remember { BaseAnimationController() }
     val transition = rememberInfiniteTransition(label = "SkeletonAnimation")
+    val durationMs = (metadata.durationSeconds * 1000).toInt()
 
-    when (mode) {
-        AnimationMode.LOOP -> {
+    when (metadata.loopMode) {
+        LoopMode.LOOP -> {
             if (alternating) {
                 val totalProgress by transition.animateFloat(
                     initialValue = 0f,
@@ -76,7 +77,7 @@ fun rememberAnimationController(
                 }
             }
         }
-        AnimationMode.HOLD -> {
+        LoopMode.HOLD -> {
             val breathTime by transition.animateFloat(
                 initialValue = 0f,
                 targetValue = 1f,
@@ -96,8 +97,55 @@ fun rememberAnimationController(
                 }
             }
         }
+        LoopMode.PING_PONG -> {
+            val p by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = durationMs, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "PingPongLoop"
+            )
+            LaunchedEffect(p) {
+                controller.progress = p
+                controller.side = Side.RIGHT
+            }
+        }
+        LoopMode.ONCE -> {
+            val p by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable( // Keep it infinite but clamped for now or use Animatable
+                    animation = tween(durationMillis = durationMs, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "Once"
+            )
+            LaunchedEffect(p) {
+                controller.progress = p
+                controller.side = Side.RIGHT
+            }
+        }
     }
     return controller
+}
+
+@Deprecated("Use PoseMetadata version", ReplaceWith("rememberAnimationController(PoseMetadata(loopMode = mode, durationSeconds = durationMs / 1000f), alternating)"))
+@Composable
+fun rememberAnimationController(
+    mode: AnimationMode,
+    durationMs: Int = 3000,
+    alternating: Boolean = false
+): AnimationController {
+    val loopMode = when(mode) {
+        AnimationMode.LOOP -> LoopMode.LOOP
+        AnimationMode.HOLD -> LoopMode.HOLD
+    }
+    return rememberAnimationController(
+        PoseMetadata(loopMode = loopMode, durationSeconds = durationMs / 1000f),
+        alternating
+    )
 }
 
 private fun smoothstep(x: Float): Float {

@@ -46,7 +46,7 @@ fun ExerciseAnimatedVisual(
 
     if (poseConfig != null) {
         val controller = rememberAnimationController(
-            mode = poseConfig.mode,
+            metadata = poseConfig.builder.metadata,
             alternating = poseConfig.alternating
         )
         val definition = SkeletonDefinition.DEFAULT_ADULT
@@ -55,8 +55,9 @@ fun ExerciseAnimatedVisual(
             side = controller.side,
             definition = definition
         )
+        val metadata = poseConfig.builder.metadata
         val pose = poseConfig.builder.build(poseContext)
-        val cameraDefinition = pose.cameraDefinition
+        val cameraDefinition = metadata.camera
 
         val camera = remember(cameraDefinition) { Camera(cameraDefinition) }
         val animatedYaw by animateFloatAsState(
@@ -67,8 +68,8 @@ fun ExerciseAnimatedVisual(
         camera.yaw = animatedYaw
 
         val style = SkeletonStyle.DEFAULT
-        val engine = remember(definition, style, cameraDefinition) {
-            SkeletonEngine(definition, style, cameraDefinition)
+        val engine = remember(definition, style) {
+            SkeletonEngine(definition, style)
         }
 
         SkeletonRenderer(

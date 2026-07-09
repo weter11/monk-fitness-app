@@ -1,7 +1,10 @@
 package com.monkfitness.app.animation
 
 interface PoseBuilder {
-    val defaultCamera: CameraDefinition get() = CameraDefinition.DEFAULT
+    @Deprecated("Use metadata.camera", ReplaceWith("metadata.camera"))
+    val defaultCamera: CameraDefinition get() = metadata.camera
+
+    val metadata: PoseMetadata get() = PoseMetadata(camera = CameraDefinition.DEFAULT)
 
     fun build(context: PoseContext): SkeletonPose
 
