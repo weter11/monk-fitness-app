@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.lerp
  *
  * Consistent with first-class joint rotations, SkeletonRenderer never infers rotations or orientations
  * from joint positions; all transformations are derived strictly via Forward Kinematics traversal.
+ * ScreenSpaceCompensation is now the single source of truth for perspective zoom scaling.
  */
 @Composable
 fun SkeletonRenderer(
@@ -47,22 +48,22 @@ fun SkeletonRenderer(
         projector.project(finalizedPose, camera, engine, width, height, skeletonBuffer)
 
         if (showGround) {
-            drawGroundPassive(skeletonBuffer, style, camera.zoom)
+            drawGroundPassive(skeletonBuffer, style, compensator, camera.zoom, scaleBuffer)
         }
 
         var itemCount = 0
 
         for (i in 0 until skeletonBuffer.boneCount) {
             val b = skeletonBuffer.bones[i]
-            compensator.computeScale(b.p1, scaleBuffer)
-            val thickness = b.thickness * scaleBuffer.thicknessScale * camera.zoom
+            compensator.computeScale(b.p1, camera.zoom, scaleBuffer)
+            val thickness = b.thickness * scaleBuffer.thicknessScale
             renderItems[itemCount++].populateBone(b, thickness, scaleBuffer.outlineScale)
         }
 
         for (j in skeletonBuffer.indicators) {
-            compensator.computeScale(j.point, scaleBuffer)
+            compensator.computeScale(j.point, camera.zoom, scaleBuffer)
             val radius = (if (j.id == Joint.HEAD_POS) style.headRadius else style.jointRadius) *
-                        scaleBuffer.radiusScale * camera.zoom
+                        scaleBuffer.radiusScale
             renderItems[itemCount++].populateJoint(j, radius, scaleBuffer.outlineScale)
         }
 
@@ -87,7 +88,8 @@ fun SkeletonRenderer(
 
         if (highlightedJoint != null) {
             val p = skeletonBuffer.joints[highlightedJoint.index]
-            drawCircle(Color.White.copy(alpha = 0.5f), 12f * p.perspectiveScale * camera.zoom, Offset(p.x, p.y))
+            compensator.computeScale(p, camera.zoom, scaleBuffer)
+            drawCircle(Color.White.copy(alpha = 0.5f), 12f * scaleBuffer.radiusScale, Offset(p.x, p.y))
         }
 
         for (i in 0 until itemCount) {
@@ -175,7 +177,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawLinearBone(star
     drawLine(color = color, start = start, end = end, strokeWidth = thickness, cap = StrokeCap.Round)
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGroundPassive(skeleton: ProjectedSkeleton, style: SkeletonStyle, zoom: Float) {
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGroundPassive(
+    skeleton: ProjectedSkeleton,
+    style: SkeletonStyle,
+    compensator: ScreenSpaceCompensation,
+    zoom: Float,
+    scaleBuffer: ScreenSpaceScale
+) {
     val gridColor = Color(0x5A3A445C)
     for (i in 0 until skeleton.gridLineCount) {
         val l = skeleton.gridLines[i]
@@ -185,8 +193,9 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGroundPassive(s
     val shadowPoints = skeleton.shadowPoints
     for (i in 0 until shadowPoints.size) {
         val p = shadowPoints[i]
-        val sx = style.shadowRadiusX * p.perspectiveScale * zoom
-        val sy = style.shadowRadiusY * p.perspectiveScale * zoom
+        compensator.computeScale(p, zoom, scaleBuffer)
+        val sx = style.shadowRadiusX * scaleBuffer.shadowScale
+        val sy = style.shadowRadiusY * scaleBuffer.shadowScale
         drawOval(shadowColor, Offset(p.x - sx, p.y - sy), androidx.compose.ui.geometry.Size(sx * 2f, sy * 2f))
     }
 }
