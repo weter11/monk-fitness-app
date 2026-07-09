@@ -8,7 +8,6 @@ import kotlin.math.sin
 
 class CatCowPose : PoseBuilder {
     private val jointsBuffer = SkeletonPose()
-    private val pelvisVal = Vector3()
     private val legFIK = SkeletonMath.IKResult()
     private val legBIK = SkeletonMath.IKResult()
     private val armAIK = SkeletonMath.IKResult()
@@ -34,7 +33,7 @@ class CatCowPose : PoseBuilder {
 
         val ankleHeight = definition.foot.ankleHeight
         val pelvisPos = lerp(45f, 40f, progress) + ankleHeight
-        val pelvis = pelvisVal.set(50f, pelvisPos, 0f)
+        val pelvis = tempV1.set(50f, pelvisPos, 0f)
 
         val chestPos = lerp(45f, 35f, progress) + ankleHeight
         val chest = tempV2.set(-definition.torsoLength, chestPos - pelvisPos, 0f).add(pelvis)

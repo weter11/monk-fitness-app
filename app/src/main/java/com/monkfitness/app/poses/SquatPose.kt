@@ -8,7 +8,6 @@ import kotlin.math.sin
 
 class SquatPose : PoseBuilder {
     private val jointsBuffer = SkeletonPose()
-    private val pelvisVal = Vector3()
     private val legFIK = SkeletonMath.IKResult()
     private val legBIK = SkeletonMath.IKResult()
     private val armAIK = SkeletonMath.IKResult()
@@ -32,7 +31,7 @@ class SquatPose : PoseBuilder {
         // progress 0 (up) to 1 (down)
         val ankleHeight = definition.foot.ankleHeight
         val pelvisHeight = lerp(definition.thighLength + definition.shinLength + ankleHeight + 10f, 40f + ankleHeight, progress)
-        val pelvis = pelvisVal.set(0f, pelvisHeight, 0f)
+        val pelvis = tempV1.set(0f, pelvisHeight, 0f)
 
         val hipF = tempV2.set(0f, 0f, -definition.hipWidth).add(pelvis)
         val hipB = Vector3(0f, 0f, definition.hipWidth).add(pelvis)
