@@ -685,7 +685,7 @@ const skeletonDefinition = new HumanSkeletonDefinition();
 const pushUpPose = new PushUpPose();
 const finalizer = new SkeletonPoseFinalizer(skeletonDefinition);
 const skeletonCamera = new SkeletonCamera(
-  skeletonDefinition.defaultCamera ? skeletonDefinition.defaultCamera.defaultYaw : pushUpPose.metadata.camera.defaultYaw,
+  pushUpPose.metadata.camera.defaultYaw,
   pushUpPose.metadata.camera.defaultPitch,
   pushUpPose.metadata.camera.defaultZoom
 );
@@ -763,6 +763,8 @@ function draw() {
   // Ground shadows under contact joints
   noStroke();
   fill(5, 8, 12, 150);
+  // Matches SkeletonProjector.kt's shadowJoints list exactly (only the
+  // passive/back hand casts a shadow there too, by original design).
   const shadowJointNames = ['TOE_F', 'TOE_B', 'HEEL_F', 'HEEL_B', 'HAND_P'];
   shadowJointNames.forEach((name) => {
     const p = pose.getJoint(Joint[name]);
