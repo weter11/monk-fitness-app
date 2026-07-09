@@ -45,20 +45,23 @@ fun ExerciseAnimatedVisual(
     val poseConfig = PoseRegistry.getPoseConfig(animationId)
 
     if (poseConfig != null) {
+        val definition = SkeletonDefinition.DEFAULT_ADULT
+        val style = SkeletonStyle.DEFAULT
+        val metadata = poseConfig.builder.metadata
+
         val controller = rememberAnimationController(
-            mode = poseConfig.mode,
+            metadata = metadata,
             alternating = poseConfig.alternating
         )
-        val definition = SkeletonDefinition.DEFAULT_ADULT
         val poseContext = PoseContext(
             progress = controller.progress,
             side = controller.side,
             definition = definition
         )
         val pose = poseConfig.builder.build(poseContext)
-        val cameraDefinition = pose.cameraDefinition
+        val cameraDefinition = pose.metadata.camera
 
-        val camera = remember(cameraDefinition) { Camera(cameraDefinition) }
+        val camera = remember(cameraDefinition) { Camera().apply { configure(cameraDefinition) } }
         val animatedYaw by animateFloatAsState(
             targetValue = cameraDefinition.defaultYaw + controller.cameraYawOffset,
             animationSpec = spring(stiffness = Spring.StiffnessLow),
@@ -66,9 +69,8 @@ fun ExerciseAnimatedVisual(
         )
         camera.yaw = animatedYaw
 
-        val style = SkeletonStyle.DEFAULT
-        val engine = remember(definition, style, cameraDefinition) {
-            SkeletonEngine(definition, style, cameraDefinition)
+        val engine = remember(definition, style, metadata) {
+            SkeletonEngine(definition, style, metadata)
         }
 
         SkeletonRenderer(

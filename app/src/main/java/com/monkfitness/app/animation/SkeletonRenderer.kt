@@ -28,7 +28,7 @@ fun SkeletonRenderer(
         val height = size.height
 
         if (showGround) {
-            drawGround(compensatedPose, camera, style, width, height)
+            drawGround(compensatedPose, camera, style, width, height, pose.metadata.groundHeight)
         }
 
         val items = mutableListOf<DrawableItem>()
@@ -39,32 +39,15 @@ fun SkeletonRenderer(
             var p2 = camera.project(compensatedPose.getJoint(bone.childJoint), width, height)
 
             // Foot perspective correction
-            if (bone.childJoint == Joint.TOE_F || bone.childJoint == Joint.TOE_B ||
-                bone.childJoint == Joint.HEEL_F || bone.childJoint == Joint.HEEL_B) {
-                val isF = bone.childJoint == Joint.TOE_F || bone.childJoint == Joint.HEEL_F
-                val ankleJoint = if (isF) Joint.ANKLE_F else Joint.ANKLE_B
-                val heelJoint = if (isF) Joint.HEEL_F else Joint.HEEL_B
-                val toeJoint = if (isF) Joint.TOE_F else Joint.TOE_B
-
+            if (bone.childJoint == Joint.TOE_F || bone.childJoint == Joint.TOE_B) {
+                val ankleJoint = if (bone.childJoint == Joint.TOE_F) Joint.ANKLE_F else Joint.ANKLE_B
+                val heelJoint = if (bone.childJoint == Joint.TOE_F) Joint.HEEL_F else Joint.HEEL_B
                 val pAnkle = camera.project(compensatedPose.getJoint(ankleJoint), width, height)
                 val pHeel = camera.project(compensatedPose.getJoint(heelJoint), width, height)
-                val pToe = camera.project(compensatedPose.getJoint(toeJoint), width, height)
 
-                val corrected = compensator.compensateFootPerspective(pAnkle, pHeel, pToe, camera)
-
-                // If this is ANKLE -> HEEL
-                if (bone.parentJoint == Joint.ANKLE_F || bone.parentJoint == Joint.ANKLE_B) {
-                    if (bone.childJoint == Joint.HEEL_F || bone.childJoint == Joint.HEEL_B) {
-                        p2 = corrected.first
-                    } else if (bone.childJoint == Joint.TOE_F || bone.childJoint == Joint.TOE_B) {
-                        p2 = corrected.second
-                    }
-                }
-                // If this is HEEL -> TOE
-                else if (bone.parentJoint == Joint.HEEL_F || bone.parentJoint == Joint.HEEL_B) {
-                    p1 = corrected.first
-                    p2 = corrected.second
-                }
+                val corrected = compensator.compensateFootPerspective(pAnkle, pHeel, p2, camera)
+                p1 = corrected.first // Heel
+                p2 = corrected.second // Toe
             }
 
             // Hand perspective correction
@@ -128,7 +111,7 @@ fun SkeletonRenderer(
         val chest = compensatedPose.getJoint(Joint.CHEST)
 
         val lean = (chest - pelvis).normalize()
-        val shVec = (shoulderA - shoulderP).normalize()
+        val shVec = (shoulderP - shoulderA).normalize()
         val chestNorm = lean.cross(shVec).normalize()
 
         val offC = chestNorm * style.torsoChestDepth
@@ -295,18 +278,19 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGround(
     camera: Camera,
     style: SkeletonStyle,
     width: Float,
-    height: Float
+    height: Float,
+    groundY: Float
 ) {
     // grid
     val gridColor = Color(0x5A3A445C) // rgba(58, 68, 92, 90/255)
     for (x in -260..260 step 65) {
-        val a = camera.project(Vector3(x.toFloat(), 0f, -170f), width, height)
-        val b = camera.project(Vector3(x.toFloat(), 0f, 170f), width, height)
+        val a = camera.project(Vector3(x.toFloat(), groundY, -170f), width, height)
+        val b = camera.project(Vector3(x.toFloat(), groundY, 170f), width, height)
         drawLine(gridColor, Offset(a.x, a.y), Offset(b.x, b.y), strokeWidth = 1f)
     }
     for (z in -170..170 step 65) {
-        val a = camera.project(Vector3(-260f, 0f, z.toFloat()), width, height)
-        val b = camera.project(Vector3(260f, 0f, z.toFloat()), width, height)
+        val a = camera.project(Vector3(-260f, groundY, z.toFloat()), width, height)
+        val b = camera.project(Vector3(260f, groundY, z.toFloat()), width, height)
         drawLine(gridColor, Offset(a.x, a.y), Offset(b.x, b.y), strokeWidth = 1f)
     }
 
@@ -315,7 +299,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGround(
     val shadowPoints = listOf(Joint.TOE_F, Joint.TOE_B, Joint.HEEL_F, Joint.HEEL_B, Joint.HAND_P)
     for (id in shadowPoints) {
         val pt = pose.getJoint(id)
-        val p = camera.project(Vector3(pt.x, 0f, pt.z), width, height)
+        val p = camera.project(Vector3(pt.x, groundY, pt.z), width, height)
         drawOval(
             color = shadowColor,
             topLeft = Offset(p.x - style.shadowRadiusX * p.scale * camera.zoom, p.y - style.shadowRadiusY * p.scale * camera.zoom),

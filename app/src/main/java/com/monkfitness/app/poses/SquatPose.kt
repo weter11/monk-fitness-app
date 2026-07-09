@@ -7,10 +7,12 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class SquatPose : PoseBuilder {
-    override val defaultCamera = CameraDefinition(
-        defaultYaw = 1.19f,
-        defaultPitch = 0.22f,
-        defaultZoom = 1.3f
+    override val metadata = PoseMetadata(
+        camera = CameraDefinition(defaultYaw = -1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
+        cycleDurationMs = 3000,
+        loopMode = LoopMode.LOOP,
+        supportsMirroring = false,
+        initialFacing = FacingDirection.FRONT
     )
 
     override fun build(context: PoseContext): SkeletonPose {
@@ -18,15 +20,14 @@ class SquatPose : PoseBuilder {
         val definition = context.definition
 
         // progress 0 (up) to 1 (down)
-        val ankleHeight = definition.foot.ankleHeight
-        val pelvisHeight = lerp(definition.thighLength + definition.shinLength + ankleHeight + 10f, 40f + ankleHeight, progress)
+        val pelvisHeight = lerp(definition.thighLength + definition.shinLength + 10f, 40f, progress)
         val pelvis = Vector3(0f, pelvisHeight, 0f)
 
         val hipF = pelvis + Vector3(0f, 0f, -definition.hipWidth)
         val hipB = pelvis + Vector3(0f, 0f, definition.hipWidth)
 
-        val toeF = Vector3(20f + 20f * progress, ankleHeight, -definition.hipWidth * 1.5f)
-        val toeB = Vector3(20f + 20f * progress, ankleHeight, definition.hipWidth * 1.5f)
+        val toeF = Vector3(20f + 20f * progress, 0f, -definition.hipWidth * 1.5f)
+        val toeB = Vector3(20f + 20f * progress, 0f, definition.hipWidth * 1.5f)
 
         val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(1f, 0f, 0f), IKConstraint.LegConstraint)
         val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(1f, 0f, 0f), IKConstraint.LegConstraint)
@@ -50,7 +51,7 @@ class SquatPose : PoseBuilder {
         val headPos = chest + headDir * (definition.neckLength + 18f)
 
         return SkeletonPose(
-            joints = mapOf(
+            mapOf(
                 Joint.PELVIS to pelvis,
                 Joint.HIP_F to hipF,
                 Joint.HIP_B to hipB,
@@ -70,7 +71,7 @@ class SquatPose : PoseBuilder {
                 Joint.NECK_END to neckEnd,
                 Joint.HEAD_POS to headPos
             ),
-            cameraDefinition = defaultCamera
+            metadata = metadata
         )
     }
 }

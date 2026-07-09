@@ -1,7 +1,7 @@
 package com.monkfitness.app.animation
 
 data class CameraDefinition(
-    val defaultYaw: Float = 1.19f,
+    val defaultYaw: Float = -1.19f, // Adjusted for foreground = -Z
     val defaultPitch: Float = 0.22f,
     val defaultZoom: Float = 1.3f,
     val minYaw: Float = -1.5708f, // -90 degrees

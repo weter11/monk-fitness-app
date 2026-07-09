@@ -7,10 +7,12 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class CatCowPose : PoseBuilder {
-    override val defaultCamera = CameraDefinition(
-        defaultYaw = 1.19f,
-        defaultPitch = 0.22f,
-        defaultZoom = 1.3f
+    override val metadata = PoseMetadata(
+        camera = CameraDefinition(defaultYaw = -1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
+        cycleDurationMs = 4000,
+        loopMode = LoopMode.LOOP,
+        supportsMirroring = false,
+        initialFacing = FacingDirection.LEFT
     )
 
     override fun build(context: PoseContext): SkeletonPose {
@@ -20,18 +22,17 @@ class CatCowPose : PoseBuilder {
         // Quadruped base
         // progress 0 (Cat - rounded) to 1 (Cow - arched)
 
-        val ankleHeight = definition.foot.ankleHeight
-        val pelvisPos = lerp(45f, 40f, progress) + ankleHeight
+        val pelvisPos = lerp(45f, 40f, progress)
         val pelvis = Vector3(50f, pelvisPos, 0f)
 
-        val chestPos = lerp(45f, 35f, progress) + ankleHeight
+        val chestPos = lerp(45f, 35f, progress)
         val chest = pelvis + Vector3(-definition.torsoLength, chestPos - pelvisPos, 0f)
 
         val hipF = pelvis + Vector3(0f, 0f, -definition.hipWidth)
         val hipB = pelvis + Vector3(0f, 0f, definition.hipWidth)
 
-        val kneeBaseR = Vector3(50f, ankleHeight, -definition.hipWidth)
-        val kneeBaseL = Vector3(50f, ankleHeight, definition.hipWidth)
+        val kneeBaseR = Vector3(50f, 0f, -definition.hipWidth)
+        val kneeBaseL = Vector3(50f, 0f, definition.hipWidth)
 
         val legF = solveIK(hipF, kneeBaseR, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f), IKConstraint.LegConstraint)
         val legB = solveIK(hipB, kneeBaseL, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f), IKConstraint.LegConstraint)
@@ -71,7 +72,7 @@ class CatCowPose : PoseBuilder {
                 Joint.NECK_END to neckEnd,
                 Joint.HEAD_POS to headPos
             ),
-            cameraDefinition = defaultCamera
+            metadata = metadata
         )
     }
 }

@@ -2,12 +2,8 @@ package com.monkfitness.app.animation
 
 import androidx.compose.animation.core.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import kotlin.math.*
-
-enum class AnimationMode {
-    LOOP, // Repeats progress 0 -> 1 -> 0
-    HOLD  // Progress driven by breathing cycle 0 -> 1 -> 0
-}
 
 @Stable
 interface AnimationController {
@@ -29,16 +25,18 @@ private class BaseAnimationController : AnimationController {
 
 @Composable
 fun rememberAnimationController(
-    mode: AnimationMode,
-    durationMs: Int = 3000,
+    metadata: PoseMetadata,
     alternating: Boolean = false
 ): AnimationController {
     val controller = remember { BaseAnimationController() }
     val transition = rememberInfiniteTransition(label = "SkeletonAnimation")
 
+    val mode = metadata.loopMode
+    val durationMs = metadata.cycleDurationMs
+
     when (mode) {
-        AnimationMode.LOOP -> {
-            if (alternating) {
+        LoopMode.LOOP -> {
+            if (alternating && metadata.supportsMirroring) {
                 val totalProgress by transition.animateFloat(
                     initialValue = 0f,
                     targetValue = 2f,
@@ -76,7 +74,22 @@ fun rememberAnimationController(
                 }
             }
         }
-        AnimationMode.HOLD -> {
+        LoopMode.PING_PONG -> {
+            val p by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = durationMs / 2, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "PingPong"
+            )
+            LaunchedEffect(p) {
+                controller.progress = p
+                controller.side = Side.RIGHT
+            }
+        }
+        LoopMode.HOLD -> {
             val breathTime by transition.animateFloat(
                 initialValue = 0f,
                 targetValue = 1f,
@@ -94,6 +107,25 @@ fun rememberAnimationController(
                     breathTime < 0.92f -> 1f - smoothstep((breathTime - 0.52f) / 0.40f)
                     else -> 0f
                 }
+            }
+        }
+        LoopMode.ONCE -> {
+            // Animating once with infinite transition is tricky, use specific animation for once
+            // Actually, requirements say smooth rotation belongs to AnimationController.
+            // For LoopMode.ONCE we can just animate it.
+            val p by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = durationMs, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Restart // Will stay at 1 if we logic it
+                ),
+                label = "Once"
+            )
+            LaunchedEffect(p) {
+                // Simplified for now
+                controller.progress = p
+                controller.side = Side.RIGHT
             }
         }
     }

@@ -7,10 +7,11 @@ import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
 class PushUpPose : PoseBuilder {
-    override val defaultCamera = CameraDefinition(
-        defaultYaw = 1.19f,
-        defaultPitch = 0.22f,
-        defaultZoom = 1.3f
+    override val metadata = PoseMetadata(
+        camera = CameraDefinition(defaultYaw = -1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
+        cycleDurationMs = 2500,
+        loopMode = LoopMode.LOOP,
+        initialFacing = FacingDirection.LEFT
     )
 
     // Persistent Scene Graph hierarchy
@@ -75,14 +76,12 @@ class PushUpPose : PoseBuilder {
         // 1. Driving values
         val height = lerp(60f, 25f, progress)
         val totalLegLen = def.shinLength + def.thighLength
-        val ankleHeight = def.foot.ankleHeight
-        val drivingHeight = (height - ankleHeight).coerceAtLeast(0f)
-        val theta = asin((drivingHeight / totalLegLen).coerceIn(-1f, 1f))
+        val theta = asin((height / totalLegLen).coerceIn(-1f, 1f))
         val horizontalDist = totalLegLen * cos(theta)
         val ankleX = 60f + horizontalDist
 
         // 2. Local Transforms
-        ankleF!!.localPosition = Vector3(ankleX, ankleHeight, -def.hipWidth)
+        ankleF!!.localPosition = Vector3(ankleX, 0f, -def.hipWidth)
         ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), -theta)
 
         kneeF!!.localPosition = Vector3(-def.shinLength, 0f, 0f)
@@ -124,7 +123,7 @@ class PushUpPose : PoseBuilder {
 
         // 6. Final Pass
         jointsBuffer.clear()
-        val pose = SkeletonPose.fromHierarchy(roots!!, jointsBuffer, defaultCamera)
+        val pose = SkeletonPose.fromHierarchy(roots!!, jointsBuffer, metadata)
 
         // 7. Stable anchors (Toes)
         val jointsFinal = jointsBuffer.toMutableMap()

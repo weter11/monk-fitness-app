@@ -5,10 +5,11 @@ import com.monkfitness.app.animation.SkeletonMath.solveIK
 import com.monkfitness.app.animation.SkeletonMath.lerp
 
 class BirdDogPose : PoseBuilder {
-    override val defaultCamera = CameraDefinition(
-        defaultYaw = 1.19f,
-        defaultPitch = 0.22f,
-        defaultZoom = 1.3f
+    override val metadata = PoseMetadata(
+        camera = CameraDefinition(defaultYaw = -1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
+        cycleDurationMs = 3000,
+        loopMode = LoopMode.LOOP,
+        initialFacing = FacingDirection.LEFT
     )
 
     override fun build(context: PoseContext): SkeletonPose {
@@ -26,7 +27,6 @@ class BirdDogPose : PoseBuilder {
         val shoulderA = chest + Vector3(0f, 0f, -definition.shoulderWidth) // Right
         val shoulderP = chest + Vector3(0f, 0f, definition.shoulderWidth) // Left
 
-        val ankleHeight = definition.foot.ankleHeight
         // Target positions for "neutral" quadruped
         val baseHandR = shoulderA + Vector3(0f, -45f, 0f)
         val baseHandL = shoulderP + Vector3(0f, -45f, 0f)
@@ -57,8 +57,8 @@ class BirdDogPose : PoseBuilder {
         val kneeL = if (side == Side.LEFT) lerp(baseKneeL, extKnee, progress) else baseKneeL
 
         // Toe/Ankle positions
-        val toeF = kneeR + Vector3(10f, -10f + ankleHeight, 0f)
-        val toeB = kneeL + Vector3(10f, -10f + ankleHeight, 0f)
+        val toeF = kneeR + Vector3(10f, -10f, 0f)
+        val toeB = kneeL + Vector3(10f, -10f, 0f)
 
         val armA = solveIK(shoulderA, handR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint)
         val armP = solveIK(shoulderP, handL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint)
@@ -91,7 +91,7 @@ class BirdDogPose : PoseBuilder {
                 Joint.NECK_END to neckEnd,
                 Joint.HEAD_POS to headPos
             ),
-            cameraDefinition = defaultCamera
+            metadata = metadata
         )
     }
 }
