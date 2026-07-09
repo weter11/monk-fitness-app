@@ -20,23 +20,23 @@ class CatCowPose : PoseBuilder {
         val chestPos = lerp(45f, 35f, progress)
         val chest = pelvis + Vector3(-definition.torsoLength, chestPos - pelvisPos, 0f)
 
-        val hipF = pelvis + Vector3(0f, 0f, definition.hipWidth)
-        val hipB = pelvis + Vector3(0f, 0f, -definition.hipWidth)
+        val hipF = pelvis + Vector3(0f, 0f, -definition.hipWidth)
+        val hipB = pelvis + Vector3(0f, 0f, definition.hipWidth)
 
-        val kneeBaseR = Vector3(50f, 0f, definition.hipWidth)
-        val kneeBaseL = Vector3(50f, 0f, -definition.hipWidth)
+        val kneeBaseR = Vector3(50f, 0f, -definition.hipWidth)
+        val kneeBaseL = Vector3(50f, 0f, definition.hipWidth)
 
-        val legF = solveIK(hipF, kneeBaseR, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f), IKConstraint.LegConstraint)
-        val legB = solveIK(hipB, kneeBaseL, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f), IKConstraint.LegConstraint)
+        val legF = solveIK(hipF, kneeBaseR, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f), IKConstraint.LegConstraint)
+        val legB = solveIK(hipB, kneeBaseL, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f), IKConstraint.LegConstraint)
 
-        val shoulderA = chest + Vector3(0f, 0f, definition.shoulderWidth)
-        val shoulderP = chest + Vector3(0f, 0f, -definition.shoulderWidth)
+        val shoulderA = chest + Vector3(0f, 0f, -definition.shoulderWidth)
+        val shoulderP = chest + Vector3(0f, 0f, definition.shoulderWidth)
 
         val handBaseR = shoulderA + Vector3(0f, -chestPos, 0f)
         val handBaseL = shoulderP + Vector3(0f, -chestPos, 0f)
 
-        val armA = solveIK(shoulderA, handBaseR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint)
-        val armP = solveIK(shoulderP, handBaseL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint)
+        val armA = solveIK(shoulderA, handBaseR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint)
+        val armP = solveIK(shoulderP, handBaseL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint)
 
         val headPitch = lerp(-0.5f, 0.5f, progress)
         val headDir = Vector3(-cos(headPitch), sin(headPitch), 0f).normalize()

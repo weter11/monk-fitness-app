@@ -14,11 +14,11 @@ class BirdDogPose : PoseBuilder {
         val pelvis = Vector3(50f, 45f, 0f)
         val chest = pelvis + Vector3(-definition.torsoLength, 0f, 0f)
 
-        val hipF = pelvis + Vector3(0f, 0f, definition.hipWidth)
-        val hipB = pelvis + Vector3(0f, 0f, -definition.hipWidth)
+        val hipF = pelvis + Vector3(0f, 0f, -definition.hipWidth)
+        val hipB = pelvis + Vector3(0f, 0f, definition.hipWidth)
 
-        val shoulderA = chest + Vector3(0f, 0f, definition.shoulderWidth) // Right
-        val shoulderP = chest + Vector3(0f, 0f, -definition.shoulderWidth) // Left
+        val shoulderA = chest + Vector3(0f, 0f, -definition.shoulderWidth) // Right
+        val shoulderP = chest + Vector3(0f, 0f, definition.shoulderWidth) // Left
 
         // Target positions for "neutral" quadruped
         val baseHandR = shoulderA + Vector3(0f, -45f, 0f)
@@ -53,11 +53,11 @@ class BirdDogPose : PoseBuilder {
         val toeF = kneeR + Vector3(10f, -10f, 0f)
         val toeB = kneeL + Vector3(10f, -10f, 0f)
 
-        val armA = solveIK(shoulderA, handR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint)
-        val armP = solveIK(shoulderP, handL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint)
+        val armA = solveIK(shoulderA, handR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint)
+        val armP = solveIK(shoulderP, handL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint)
 
-        val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f), IKConstraint.LegConstraint)
-        val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f), IKConstraint.LegConstraint)
+        val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f), IKConstraint.LegConstraint)
+        val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f), IKConstraint.LegConstraint)
 
         val headDir = Vector3(-1f, 0.1f, 0f).normalize()
         val neckEnd = chest + headDir * definition.neckLength

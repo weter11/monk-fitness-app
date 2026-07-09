@@ -20,7 +20,7 @@ class Camera(
     fun project(v: Vector3, width: Float, height: Float): ProjectedPoint {
         val cy = cos(yaw)
         val sy = sin(yaw)
-        val xr = v.x * cy + v.z * sy
+        val xr = v.x * cy - v.z * sy
         val zr = -v.x * sy + v.z * cy
 
         val cp = cos(pitch)

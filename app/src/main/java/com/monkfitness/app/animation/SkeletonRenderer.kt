@@ -111,7 +111,7 @@ fun SkeletonRenderer(
         val chest = compensatedPose.getJoint(Joint.CHEST)
 
         val lean = (chest - pelvis).normalize()
-        val shVec = (shoulderA - shoulderP).normalize()
+        val shVec = (shoulderP - shoulderA).normalize()
         val chestNorm = lean.cross(shVec).normalize()
 
         val offC = chestNorm * style.torsoChestDepth
