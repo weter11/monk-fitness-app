@@ -74,7 +74,8 @@ class ProjectedGridLine {
  * Designed for buffer reuse to eliminate heap allocations in the hot path.
  */
 class ProjectedSkeleton {
-    val jointsMap = Array(Joint.entries.size) { ProjectedPoint() }
+    val joints = Array(Joint.entries.size) { ProjectedPoint() }
+    val jointScales = Array(Joint.entries.size) { ScreenSpaceScale() }
     val indicators = Array(2) { ProjectedJoint() }
     val bones = Array(30) { ProjectedBone() }
     val faces = Array(6) { ProjectedFace() }

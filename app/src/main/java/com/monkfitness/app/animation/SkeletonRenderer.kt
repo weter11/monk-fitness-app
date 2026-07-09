@@ -38,6 +38,9 @@ fun SkeletonRenderer(
         val finalizedPose = finalizer.finalize(pose)
         projector.project(finalizedPose, camera, engine, width, height, skeletonBuffer)
 
+        // Bulk compute ScreenSpaceScale values for all joints using contiguous indexed arrays
+        compensator.computeScales(skeletonBuffer.joints, skeletonBuffer.jointScales)
+
         if (showGround) {
             drawGroundPassive(skeletonBuffer, style, camera.zoom)
         }
@@ -52,10 +55,10 @@ fun SkeletonRenderer(
         }
 
         for (j in skeletonBuffer.indicators) {
-            compensator.computeScale(j.point, scaleBuffer)
+            val scale = skeletonBuffer.jointScales[j.id.index]
             val radius = (if (j.id == Joint.HEAD_POS) style.headRadius else style.jointRadius) *
-                        scaleBuffer.radiusScale * camera.zoom
-            renderItems[itemCount++].populateJoint(j, radius, scaleBuffer.outlineScale)
+                        scale.radiusScale * camera.zoom
+            renderItems[itemCount++].populateJoint(j, radius, scale.outlineScale)
         }
 
         for (i in 0 until skeletonBuffer.faceCount) {
@@ -78,7 +81,7 @@ fun SkeletonRenderer(
         }
 
         if (highlightedJoint != null) {
-            val p = skeletonBuffer.jointsMap[highlightedJoint.ordinal]
+            val p = skeletonBuffer.joints[highlightedJoint.index]
             drawCircle(Color.White.copy(alpha = 0.5f), 12f * p.perspectiveScale * camera.zoom, Offset(p.x, p.y))
         }
 
