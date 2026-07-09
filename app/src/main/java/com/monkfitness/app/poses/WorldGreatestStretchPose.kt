@@ -7,6 +7,12 @@ import com.monkfitness.app.animation.SkeletonMath.rotAround
 import com.monkfitness.app.animation.SkeletonMath.solveIK
 
 class WorldGreatestStretchPose : PoseBuilder {
+    override val defaultCamera = CameraDefinition(
+        defaultYaw = 1.19f,
+        defaultPitch = 0.22f,
+        defaultZoom = 1.3f
+    )
+
     override fun build(context: PoseContext): SkeletonPose {
         val progress = context.progress
         val side = context.side
@@ -98,7 +104,8 @@ class WorldGreatestStretchPose : PoseBuilder {
                 Joint.HAND_P to armP.end,
                 Joint.NECK_END to neckEnd,
                 Joint.HEAD_POS to headPos
-            )
+            ),
+            cameraDefinition = defaultCamera
         )
     }
 }

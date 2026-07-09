@@ -7,6 +7,12 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class SupermanPose : PoseBuilder {
+    override val defaultCamera = CameraDefinition(
+        defaultYaw = 1.19f,
+        defaultPitch = 0.22f,
+        defaultZoom = 1.3f
+    )
+
     override fun build(context: PoseContext): SkeletonPose {
         val progress = context.progress
         val definition = context.definition
@@ -46,7 +52,7 @@ class SupermanPose : PoseBuilder {
         val headPos = chest + headDir * (definition.neckLength + 18f)
 
         return SkeletonPose(
-            mapOf(
+            joints = mapOf(
                 Joint.PELVIS to pelvis,
                 Joint.HIP_F to hipF,
                 Joint.HIP_B to hipB,
@@ -65,7 +71,8 @@ class SupermanPose : PoseBuilder {
                 Joint.HAND_P to armP.end,
                 Joint.NECK_END to neckEnd,
                 Joint.HEAD_POS to headPos
-            )
+            ),
+            cameraDefinition = defaultCamera
         )
     }
 }

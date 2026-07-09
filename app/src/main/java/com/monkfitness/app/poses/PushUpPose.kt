@@ -7,6 +7,12 @@ import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
 class PushUpPose : PoseBuilder {
+    override val defaultCamera = CameraDefinition(
+        defaultYaw = 1.19f,
+        defaultPitch = 0.22f,
+        defaultZoom = 1.3f
+    )
+
     // Persistent Scene Graph hierarchy
     private var roots: List<SkeletonNode>? = null
 
@@ -118,7 +124,7 @@ class PushUpPose : PoseBuilder {
 
         // 6. Final Pass
         jointsBuffer.clear()
-        val pose = SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
+        val pose = SkeletonPose.fromHierarchy(roots!!, jointsBuffer, defaultCamera)
 
         // 7. Stable anchors (Toes)
         val jointsFinal = jointsBuffer.toMutableMap()
