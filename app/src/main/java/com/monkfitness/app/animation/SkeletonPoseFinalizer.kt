@@ -5,7 +5,7 @@ import kotlin.math.*
 /**
  * SkeletonPoseFinalizer is responsible for completing the 3D pose before it is projected to screen space.
  * It adds biomechanical details like Heel/Toe and Hand segments that are not part of the core PoseBuilder logic.
- * This stage ensures the 3D skeleton is anatomically complete.
+ * This stage ensures the 3D skeleton is anatomically complete and that all world positions and rotations are derived by FK traversal.
  */
 class SkeletonPoseFinalizer(
     private val definition: SkeletonDefinition
@@ -17,6 +17,142 @@ class SkeletonPoseFinalizer(
     private val tempHorizontalDir = Vector3()
     private val handJointsBuffer = HandJoints()
     private val tempV1 = Vector3()
+
+    // Pre-allocated standard SkeletonNode hierarchy
+    private var roots: List<SkeletonNode>? = null
+    private val nodesMap = Array<SkeletonNode?>(Joint.entries.size) { null }
+
+    private val IDENTITY_ROTATION = JointRotation()
+    private val ZERO_VECTOR = Vector3(0f, 0f, 0f)
+
+    // Scratch buffers for 3D rotation math to achieve zero allocations in the hot path
+    private val tempColX = Vector3()
+    private val tempColY = Vector3()
+    private val tempColZ = Vector3()
+    private val tempBoneVec = Vector3()
+    private val parentMatX = Vector3()
+    private val parentMatY = Vector3()
+    private val parentMatZ = Vector3()
+    private val worldMatX = Vector3()
+    private val worldMatY = Vector3()
+    private val worldMatZ = Vector3()
+    private val localMatX = Vector3()
+    private val localMatY = Vector3()
+    private val localMatZ = Vector3()
+
+    private fun ensureHierarchy() {
+        if (roots != null) return
+
+        // Create all nodes
+        for (joint in Joint.entries) {
+            nodesMap[joint.index] = SkeletonNode(joint)
+        }
+
+        fun getNode(joint: Joint): SkeletonNode = nodesMap[joint.index]!!
+
+        // Parent-child connections
+        // Spine
+        getNode(Joint.PELVIS).addChild(getNode(Joint.CHEST))
+        getNode(Joint.CHEST).addChild(getNode(Joint.NECK_END))
+        getNode(Joint.NECK_END).addChild(getNode(Joint.HEAD_POS))
+
+        // Left Arm (Active)
+        getNode(Joint.CHEST).addChild(getNode(Joint.SHOULDER_A))
+        getNode(Joint.SHOULDER_A).addChild(getNode(Joint.ELBOW_A))
+        getNode(Joint.ELBOW_A).addChild(getNode(Joint.HAND_A))
+        getNode(Joint.HAND_A).addChild(getNode(Joint.WRIST_A))
+        getNode(Joint.WRIST_A).addChild(getNode(Joint.PALM_A))
+        getNode(Joint.PALM_A).addChild(getNode(Joint.KNUCKLES_A))
+        getNode(Joint.KNUCKLES_A).addChild(getNode(Joint.FINGERTIPS_A))
+
+        // Right Arm (Passive)
+        getNode(Joint.CHEST).addChild(getNode(Joint.SHOULDER_P))
+        getNode(Joint.SHOULDER_P).addChild(getNode(Joint.ELBOW_P))
+        getNode(Joint.ELBOW_P).addChild(getNode(Joint.HAND_P))
+        getNode(Joint.HAND_P).addChild(getNode(Joint.WRIST_P))
+        getNode(Joint.WRIST_P).addChild(getNode(Joint.PALM_P))
+        getNode(Joint.PALM_P).addChild(getNode(Joint.KNUCKLES_P))
+        getNode(Joint.KNUCKLES_P).addChild(getNode(Joint.FINGERTIPS_P))
+
+        // Left Leg (Foreground)
+        getNode(Joint.PELVIS).addChild(getNode(Joint.HIP_F))
+        getNode(Joint.HIP_F).addChild(getNode(Joint.KNEE_F))
+        getNode(Joint.KNEE_F).addChild(getNode(Joint.ANKLE_F))
+        getNode(Joint.ANKLE_F).addChild(getNode(Joint.HEEL_F))
+        getNode(Joint.ANKLE_F).addChild(getNode(Joint.TOE_F))
+
+        // Right Leg (Background)
+        getNode(Joint.PELVIS).addChild(getNode(Joint.HIP_B))
+        getNode(Joint.HIP_B).addChild(getNode(Joint.KNEE_B))
+        getNode(Joint.KNEE_B).addChild(getNode(Joint.ANKLE_B))
+        getNode(Joint.ANKLE_B).addChild(getNode(Joint.HEEL_B))
+        getNode(Joint.ANKLE_B).addChild(getNode(Joint.TOE_B))
+
+        roots = listOf(getNode(Joint.PELVIS))
+    }
+
+    private fun setupTransforms(node: SkeletonNode, parentWorldRot: JointRotation, pose: SkeletonPose) {
+        val parentNode = node.parent
+        if (parentNode == null) {
+            // Root node (PELVIS)
+            node.localPosition.set(pose.getJoint(node.joint))
+
+            // Set pelvis rotation based on Chest-Pelvis direction (spine)
+            val chestPos = pose.getJoint(Joint.CHEST)
+            val pelvisPos = pose.getJoint(Joint.PELVIS)
+            tempBoneVec.set(chestPos).subtract(pelvisPos)
+            SkeletonMath.getRotationToAlign(Vector3(0f, 1f, 0f), tempBoneVec, tempV1, node.localRotation)
+
+            node.worldPosition.set(node.localPosition)
+            node.worldRotation.copyFrom(node.localRotation)
+        } else {
+            // Child node
+            val parentPos = parentNode.worldPosition
+            val childPos = pose.getJoint(node.joint)
+
+            // Bone vector C - P
+            tempBoneVec.set(childPos).subtract(parentPos)
+
+            // Set local position rotated backward by parent's world rotation
+            SkeletonMath.rotAround(tempBoneVec, parentWorldRot.axis, -parentWorldRot.angle, node.localPosition)
+
+            // Compute the world rotation of this joint
+            if (node.joint == Joint.CHEST) {
+                // Chest is the torso, compute its 3D rotation matrix to avoid position subtractions in projector/renderer
+                val chestPos = pose.getJoint(Joint.CHEST)
+                val pelvisPos = pose.getJoint(Joint.PELVIS)
+                val shoulderA = pose.getJoint(Joint.SHOULDER_A)
+                val shoulderP = pose.getJoint(Joint.SHOULDER_P)
+
+                val lean = tempColY.set(chestPos).subtract(pelvisPos).normalize()
+                val shVec = tempColZ.set(shoulderA).subtract(shoulderP).normalize()
+                val chestNorm = lean.cross(shVec, tempColX).normalize()
+
+                // colZ should be -shVec
+                tempColZ.multiply(-1f)
+
+                SkeletonMath.getRotationFromMatrix(tempColX, tempColY, tempColZ, node.worldRotation)
+            } else {
+                // Shortest arc rotation aligning Vector3(1f, 0f, 0f) with bone direction
+                SkeletonMath.getRotationToAlign(tempBoneVec, node.worldRotation)
+            }
+
+            // localRotation is the relative rotation: R_local = R_parent.inverse * R_world
+            // Compute relative rotation via matrix transpose multiplication:
+            SkeletonMath.rotationToMatrix(parentWorldRot, parentMatX, parentMatY, parentMatZ)
+            SkeletonMath.rotationToMatrix(node.worldRotation, worldMatX, worldMatY, worldMatZ)
+            SkeletonMath.transposeMultiply(parentMatX, parentMatY, parentMatZ, worldMatX, worldMatY, worldMatZ, localMatX, localMatY, localMatZ)
+            SkeletonMath.getRotationFromMatrix(localMatX, localMatY, localMatZ, node.localRotation)
+
+            // Set temporary world transforms during setup pass
+            node.worldPosition.set(childPos)
+        }
+
+        // Setup children
+        for (child in node.children) {
+            setupTransforms(child, node.worldRotation, pose)
+        }
+    }
 
     /**
      * Finalizes the 3D pose by adding calculated biomechanical joints.
@@ -32,6 +168,21 @@ class SkeletonPoseFinalizer(
         // Correct Hands (Left/Active and Right/Passive)
         adjustHandOrientation(outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A)
         adjustHandOrientation(outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
+
+        // Ensure standard hierarchy is created
+        ensureHierarchy()
+
+        // Set up the local transforms from the finalized joint positions
+        setupTransforms(nodesMap[Joint.PELVIS.index]!!, IDENTITY_ROTATION, outputPose)
+
+        // Run FK Traversal (Forward Kinematics propagation)
+        roots!!.forEach { it.updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION) }
+
+        // Flatten back into outputPose to ensure worldPosition and worldRotation are written
+        roots!!.forEach { it.flatten(outputPose) }
+
+        // Explicitly assign roots to outputPose to satisfy backward compatibility
+        outputPose.roots = roots!!
 
         return outputPose
     }
@@ -91,7 +242,6 @@ class SkeletonPoseFinalizer(
 
         if (tempFootDir.mag() < 1e-3) {
             // Shank is parallel to hint, fallback to world down relative to shank
-            // footDir = Vector3(0f, -1f, 0f) - shank * Vector3(0f, -1f, 0f).dot(shank)
             val worldDown = Vector3(0f, -1f, 0f)
             tempFootDir.set(shank).multiply(worldDown.dot(shank))
             tempFootDir.set(worldDown.x - tempFootDir.x, worldDown.y - tempFootDir.y, worldDown.z - tempFootDir.z)

@@ -10,6 +10,14 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
 
+/**
+ * SkeletonRenderer is a passive rendering component in the animation engine v1.0 pipeline.
+ * It applies pre-computed ScreenSpaceScale values (computed by ScreenSpaceCompensation)
+ * to visual parameters without performing additional perspective math or geometry modification.
+ *
+ * Consistent with first-class joint rotations, SkeletonRenderer never infers rotations or orientations
+ * from joint positions; all transformations are derived strictly via Forward Kinematics traversal.
+ */
 @Composable
 fun SkeletonRenderer(
     pose: SkeletonPose,

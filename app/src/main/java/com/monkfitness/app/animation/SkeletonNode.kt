@@ -4,16 +4,21 @@ package com.monkfitness.app.animation
  * Mutable axis-angle rotation to avoid allocations.
  */
 class JointRotation(
-    var axis: Vector3 = Vector3(0f, 0f, 1f),
+    val axis: Vector3 = Vector3(0f, 0f, 1f),
     var angle: Float = 0f // radians
 ) {
     fun set(axis: Vector3, angle: Float) {
-        this.axis = axis
+        this.axis.set(axis)
+        this.angle = angle
+    }
+
+    fun set(x: Float, y: Float, z: Float, angle: Float) {
+        this.axis.set(x, y, z)
         this.angle = angle
     }
 
     fun copyFrom(other: JointRotation) {
-        this.axis = other.axis
+        this.axis.set(other.axis)
         this.angle = other.angle
     }
 }
@@ -29,10 +34,20 @@ class SkeletonNode(
     val localRotation: JointRotation = JointRotation(),
     val children: MutableList<SkeletonNode> = mutableListOf()
 ) {
-    var worldPosition: Vector3 = Vector3(0f, 0f, 0f)
-        private set
+    val worldPosition: Vector3 = Vector3(0f, 0f, 0f)
 
     val worldRotation: JointRotation = JointRotation()
+
+    // Persistent scratch buffers to completely avoid allocations during FK traversal
+    private val pX = Vector3()
+    private val pY = Vector3()
+    private val pZ = Vector3()
+    private val lX = Vector3()
+    private val lY = Vector3()
+    private val lZ = Vector3()
+    private val wX = Vector3()
+    private val wY = Vector3()
+    private val wZ = Vector3()
 
     fun addChild(node: SkeletonNode): SkeletonNode {
         node.parent = this
@@ -41,20 +56,22 @@ class SkeletonNode(
     }
 
     /**
-     * Compute world transform inheriting from parent.
+     * Compute world transform inheriting from parent via full 3D matrix concatenation.
      */
     fun updateWorldTransforms(parentWorldPos: Vector3, parentWorldRotation: JointRotation) {
         // Position propagation: Rotate local offset by parent's world rotation
-        val rotatedPos = if (parentWorldRotation.angle != 0f) {
-            SkeletonMath.rotAround(localPosition, parentWorldRotation.axis, parentWorldRotation.angle)
+        if (parentWorldRotation.angle != 0f) {
+            SkeletonMath.rotAround(localPosition, parentWorldRotation.axis, parentWorldRotation.angle, worldPosition)
         } else {
-            localPosition
+            worldPosition.set(localPosition)
         }
-        worldPosition = parentWorldPos + rotatedPos
+        worldPosition.add(parentWorldPos)
 
-        // Rotation propagation (cumulative)
-        worldRotation.axis = parentWorldRotation.axis
-        worldRotation.angle = parentWorldRotation.angle + localRotation.angle
+        // Rotation propagation: Concatenate parent's world rotation with local rotation
+        SkeletonMath.rotationToMatrix(parentWorldRotation, pX, pY, pZ)
+        SkeletonMath.rotationToMatrix(localRotation, lX, lY, lZ)
+        SkeletonMath.multiplyMatrices(pX, pY, pZ, lX, lY, lZ, wX, wY, wZ)
+        SkeletonMath.getRotationFromMatrix(wX, wY, wZ, worldRotation)
 
         for (child in children) {
             child.updateWorldTransforms(worldPosition, worldRotation)
@@ -66,6 +83,7 @@ class SkeletonNode(
      */
     fun flatten(target: SkeletonPose) {
         target.setJoint(joint, worldPosition)
+        target.setJointRotation(joint, worldRotation)
         for (child in children) {
             child.flatten(target)
         }

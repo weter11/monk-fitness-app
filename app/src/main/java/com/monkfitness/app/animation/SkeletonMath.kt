@@ -127,7 +127,6 @@ object SkeletonMath {
 
     // Rodrigues rotation: rotate v around unit axis k by ang
     fun rotAround(v: Vector3, axis: Vector3, ang: Float, result: Vector3): Vector3 {
-        // We need a unit axis. Normalization can happen in-place on a copy.
         val kx: Float; val ky: Float; val kz: Float
         val m = sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z)
         if (m > 1e-6f) {
@@ -140,12 +139,10 @@ object SkeletonMath {
         val s = sin(ang)
         val dot = v.x * kx + v.y * ky + v.z * kz
 
-        // cross = k cross v
         val cx = ky * v.z - kz * v.y
         val cy = kz * v.x - kx * v.z
         val cz = kx * v.y - ky * v.x
 
-        // (v * c) + (cross * s) + (k * (dot * (1 - c)))
         val omc = 1f - c
         result.set(
             v.x * c + cx * s + kx * dot * omc,
@@ -179,10 +176,8 @@ object SkeletonMath {
         val dz = target.z - root.z
         val dMag = sqrt(dx * dx + dy * dy + dz * dz)
 
-        // MAX LIMIT
         val maxDist = (L1 + L2) * constraint.maximumExtensionRatio
 
-        // MIN LIMIT
         val minCos = cos(constraint.minimumFlexionAngle * PI.toFloat() / 180f)
         val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
 
@@ -200,7 +195,6 @@ object SkeletonMath {
         val a = (dist * dist + L1 * L1 - L2 * L2) / (2 * dist)
         val h = sqrt(max(L1 * L1 - a * a, 0f))
 
-        // p = component of pole perpendicular to bone axis
         val pDotDir = pole.x * dirX + pole.y * dirY + pole.z * dirZ
         var px = pole.x - dirX * pDotDir
         var py = pole.y - dirY * pDotDir
@@ -208,8 +202,6 @@ object SkeletonMath {
 
         val pMag = sqrt(px * px + py * py + pz * pz)
         if (pMag < 1e-4f) {
-            // Shank is parallel to hint, fallback to world down relative to shank
-            // worldDown = (0, 1, 0)
             val wdDotDir = dirY
             px = 0f - dirX * wdDotDir
             py = 1f - dirY * wdDotDir
@@ -231,5 +223,138 @@ object SkeletonMath {
         )
 
         return result
+    }
+
+    // High-fidelity 3D Rotation Matrix utilities for zero-allocation FK propagation
+
+    fun rotationToMatrix(rot: JointRotation, colX: Vector3, colY: Vector3, colZ: Vector3) {
+        val c = cos(rot.angle)
+        val s = sin(rot.angle)
+        val omc = 1f - c
+        val x = rot.axis.x
+        val y = rot.axis.y
+        val z = rot.axis.z
+
+        colX.set(
+            c + x * x * omc,
+            y * x * omc + z * s,
+            z * x * omc - y * s
+        )
+        colY.set(
+            x * y * omc - z * s,
+            c + y * y * omc,
+            z * y * omc + x * s
+        )
+        colZ.set(
+            x * z * omc + y * s,
+            y * z * omc - x * s,
+            c + z * z * omc
+        )
+    }
+
+    fun getRotationFromMatrix(colX: Vector3, colY: Vector3, colZ: Vector3, result: JointRotation) {
+        val tr = colX.x + colY.y + colZ.z
+        val angle = acos(((tr - 1f) / 2f).coerceIn(-1f, 1f))
+        if (angle < 1e-4f) {
+            result.set(0f, 0f, 1f, 0f)
+            return
+        }
+        val x = colY.z - colZ.y
+        val y = colZ.x - colX.z
+        val z = colX.y - colY.x
+        val mag = sqrt(x * x + y * y + z * z)
+        if (mag < 1e-4f) {
+            result.set(0f, 0f, 1f, angle)
+        } else {
+            result.set(x / mag, y / mag, z / mag, angle)
+        }
+    }
+
+    fun matrixMultiplyVector(pX: Vector3, pY: Vector3, pZ: Vector3, v: Vector3, result: Vector3) {
+        val rx = pX.x * v.x + pY.x * v.y + pZ.x * v.z
+        val ry = pX.y * v.x + pY.y * v.y + pZ.y * v.z
+        val rz = pX.z * v.x + pY.z * v.y + pZ.z * v.z
+        result.set(rx, ry, rz)
+    }
+
+    fun multiplyMatrices(
+        pX: Vector3, pY: Vector3, pZ: Vector3,
+        lX: Vector3, lY: Vector3, lZ: Vector3,
+        rX: Vector3, rY: Vector3, rZ: Vector3
+    ) {
+        matrixMultiplyVector(pX, pY, pZ, lX, rX)
+        matrixMultiplyVector(pX, pY, pZ, lY, rY)
+        matrixMultiplyVector(pX, pY, pZ, lZ, rZ)
+    }
+
+    fun transposeMultiply(
+        pX: Vector3, pY: Vector3, pZ: Vector3,
+        wX: Vector3, wY: Vector3, wZ: Vector3,
+        rX: Vector3, rY: Vector3, rZ: Vector3
+    ) {
+        val rxX = pX.dot(wX)
+        val rxY = pY.dot(wX)
+        val rxZ = pZ.dot(wX)
+
+        val ryX = pX.dot(wY)
+        val ryY = pY.dot(wY)
+        val ryZ = pZ.dot(wY)
+
+        val rzX = pX.dot(wZ)
+        val rzY = pY.dot(wZ)
+        val rzZ = pZ.dot(wZ)
+
+        rX.set(rxX, rxY, rxZ)
+        rY.set(ryX, ryY, ryZ)
+        rZ.set(rzX, rzY, rzZ)
+    }
+
+    fun getRotationToAlign(from: Vector3, to: Vector3, tempScratch: Vector3, result: JointRotation) {
+        val fromMag = from.mag()
+        val toMag = to.mag()
+        if (fromMag < 1e-4f || toMag < 1e-4f) {
+            result.set(0f, 0f, 1f, 0f)
+            return
+        }
+        val dot = (from.dot(to) / (fromMag * toMag)).coerceIn(-1f, 1f)
+        val angle = acos(dot)
+        if (angle < 1e-4f) {
+            result.set(0f, 0f, 1f, 0f)
+            return
+        }
+        if (angle > PI.toFloat() - 1e-4f) {
+            val perp = if (abs(from.x) < 0.9f) Vector3(1f, 0f, 0f) else Vector3(0f, 1f, 0f)
+            val axis = from.cross(perp, tempScratch).normalize()
+            result.set(axis, angle)
+            return
+        }
+        val axis = from.cross(to, tempScratch).normalize()
+        result.set(axis, angle)
+    }
+
+    fun getRotationToAlign(to: Vector3, result: JointRotation) {
+        val toMag = to.mag()
+        if (toMag < 1e-4f) {
+            result.set(0f, 0f, 1f, 0f)
+            return
+        }
+        val dx = to.x / toMag
+        val dy = to.y / toMag
+        val dz = to.z / toMag
+
+        val angle = acos(dx.coerceIn(-1f, 1f))
+        if (angle < 1e-4f) {
+            result.set(0f, 0f, 1f, 0f)
+            return
+        }
+        val ax = 0f
+        val ay = -dz
+        val az = dy
+        val amag = sqrt(ay * ay + az * az)
+        if (amag < 1e-4f) {
+            result.set(0f, 0f, 1f, angle)
+        } else {
+            result.set(ax, ay / amag, az / amag, angle)
+        }
     }
 }
