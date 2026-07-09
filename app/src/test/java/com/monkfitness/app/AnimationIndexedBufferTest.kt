@@ -51,4 +51,52 @@ class AnimationIndexedBufferTest {
         assertEquals(30f, skeleton.joints[head.index].depth)
         assertEquals(1.5f, skeleton.joints[head.index].perspectiveScale)
     }
+
+    @Test
+    fun testValidatePoses() {
+        val definition = SkeletonDefinition.DEFAULT_ADULT
+        val finalizer = SkeletonPoseFinalizer(definition)
+
+        // 1. Validate Squat Pose
+        val squat = com.monkfitness.app.poses.SquatPose()
+        val squatContext = PoseContext(
+            progress = 0.5f,
+            deltaTime = 0f,
+            cycleDuration = 3f,
+            playbackSpeed = 1f,
+            side = Side.LEFT,
+            mirrored = false,
+            phase = 0f,
+            loopIndex = 0,
+            definition = definition
+        )
+        val squatPoseRaw = squat.build(squatContext)
+        val squatPoseFinal = finalizer.finalize(squatPoseRaw)
+
+        // Ensure PELVIS is at its valid height and not mutated to headDir
+        val squatPelvis = squatPoseFinal.getJoint(Joint.PELVIS)
+        assertTrue("Squat Pelvis height should be valid", squatPelvis.y > 40f)
+
+        // 2. Validate World's Greatest Stretch
+        val wgs = com.monkfitness.app.poses.WorldGreatestStretchPose()
+        val wgsContext = PoseContext(
+            progress = 0.5f,
+            deltaTime = 0f,
+            cycleDuration = 6f,
+            playbackSpeed = 1f,
+            side = Side.RIGHT,
+            mirrored = false,
+            phase = 0f,
+            loopIndex = 0,
+            definition = definition
+        )
+        val wgsPoseRaw = wgs.build(wgsContext)
+        val wgsPoseFinal = finalizer.finalize(wgsPoseRaw)
+
+        // Ensure PELVIS is at its valid position and not mutated to hand/wrist
+        val wgsPelvis = wgsPoseFinal.getJoint(Joint.PELVIS)
+        val wgsWristA = wgsPoseFinal.getJoint(Joint.WRIST_A)
+        assertTrue("WGS Pelvis position should be correct", wgsPelvis.y in 35f..55f)
+        assertTrue("WGS Pelvis should not be mutated to WRIST_A", wgsPelvis != wgsWristA)
+    }
 }

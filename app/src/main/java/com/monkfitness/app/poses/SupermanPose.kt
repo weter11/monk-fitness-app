@@ -8,6 +8,7 @@ import kotlin.math.sin
 
 class SupermanPose : PoseBuilder {
     private val jointsBuffer = SkeletonPose()
+    private val pelvisVal = Vector3()
     private val legFIK = SkeletonMath.IKResult()
     private val legBIK = SkeletonMath.IKResult()
     private val armAIK = SkeletonMath.IKResult()
@@ -31,7 +32,7 @@ class SupermanPose : PoseBuilder {
         // Prone position
         // progress 0 (resting) to 1 (extended)
 
-        val pelvis = tempV1.set(0f, 10f, 0f)
+        val pelvis = pelvisVal.set(0f, 10f, 0f)
         val chestLean = lerp(0f, -0.2f, progress).toDouble()
         val chest = tempV2.set(-definition.torsoLength * cos(chestLean).toFloat(), -definition.torsoLength * sin(chestLean).toFloat(), 0f).add(pelvis)
 

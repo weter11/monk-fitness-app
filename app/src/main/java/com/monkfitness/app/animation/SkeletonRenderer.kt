@@ -36,6 +36,7 @@ fun SkeletonRenderer(
         val height = size.height
 
         val finalizedPose = finalizer.finalize(pose)
+        performValidationPass(finalizedPose, engine)
         projector.project(finalizedPose, camera, engine, width, height, skeletonBuffer)
 
         // Bulk compute ScreenSpaceScale values for all joints using contiguous indexed arrays
@@ -90,10 +91,19 @@ fun SkeletonRenderer(
             when (item.type) {
                 RenderItem.Type.BONE -> {
                     val b = item.bone!!
-                    val color = getZColor(item.depth, b.isForeground, style)
-                    val outline = style.outlineWidth * item.outlineScale
-                    drawLinearBone(Offset(b.p1.x, b.p1.y), Offset(b.p2.x, b.p2.y), item.thickness + (outline * 2f), Color(0xFF0A0F14))
-                    drawLinearBone(Offset(b.p1.x, b.p1.y), Offset(b.p2.x, b.p2.y), item.thickness, color)
+                    val dx = b.p1.x - b.p2.x
+                    val dy = b.p1.y - b.p2.y
+                    val isIdentical = (dx * dx + dy * dy) < 0.01f
+                    val isInvalid = b.p1.x.isNaN() || b.p1.y.isNaN() || b.p2.x.isNaN() || b.p2.y.isNaN() ||
+                                    b.p1.x.isInfinite() || b.p1.y.isInfinite() || b.p2.x.isInfinite() || b.p2.y.isInfinite() ||
+                                    (b.p1.x == 0f && b.p1.y == 0f && b.p2.x == 0f && b.p2.y == 0f)
+
+                    if (!isIdentical && !isInvalid) {
+                        val color = getZColor(item.depth, b.isForeground, style)
+                        val outline = style.outlineWidth * item.outlineScale
+                        drawLinearBone(Offset(b.p1.x, b.p1.y), Offset(b.p2.x, b.p2.y), item.thickness + (outline * 2f), Color(0xFF0A0F14))
+                        drawLinearBone(Offset(b.p1.x, b.p1.y), Offset(b.p2.x, b.p2.y), item.thickness, color)
+                    }
                 }
                 RenderItem.Type.JOINT -> {
                     val j = item.joint!!
@@ -183,5 +193,97 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGroundPassive(s
         val sx = style.shadowRadiusX * p.perspectiveScale * zoom
         val sy = style.shadowRadiusY * p.perspectiveScale * zoom
         drawOval(shadowColor, Offset(p.x - sx, p.y - sy), androidx.compose.ui.geometry.Size(sx * 2f, sy * 2f))
+    }
+}
+
+private fun performValidationPass(pose: SkeletonPose, engine: SkeletonEngine) {
+    val def = engine.definition
+    val joints = pose.joints
+
+    // 1. Duplicate joint indices
+    val indicesList = Joint.entries.map { it.index }
+    val uniqueIndices = indicesList.distinct()
+    if (indicesList.size != uniqueIndices.size) {
+        val duplicates = indicesList.groupBy { it }.filter { it.value.size > 1 }.keys
+        println("[VALIDATION ALERT] Duplicate joint indices found: $duplicates")
+    }
+
+    // 2. Missing joints
+    val hasNonZero = joints.any { it.x != 0f || it.y != 0f || it.z != 0f }
+    if (hasNonZero) {
+        for (joint in Joint.entries) {
+            val pos = joints[joint.index]
+            if (pos.x == 0f && pos.y == 0f && pos.z == 0f && joint != Joint.PELVIS) {
+                println("[VALIDATION ALERT] Missing joint: ${joint.name} is at (0, 0, 0)")
+            }
+        }
+    }
+
+    // 3. Bone validation
+    for (bone in engine.bones) {
+        val p = joints[bone.parentJoint.index]
+        val c = joints[bone.childJoint.index]
+
+        // Invalid parent-child connection
+        if (bone.parentJoint == bone.childJoint) {
+            println("[VALIDATION ALERT] Invalid parent-child connection: Bone connects ${bone.parentJoint.name} to itself!")
+            continue
+        }
+        if (bone.parentJoint.index !in joints.indices || bone.childJoint.index !in joints.indices) {
+            println("[VALIDATION ALERT] Invalid parent-child connection: Bone joint indices out of bounds!")
+            continue
+        }
+
+        // Distance in 3D
+        val dx = p.x - c.x
+        val dy = p.y - c.y
+        val dz = p.z - c.z
+        val length = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+
+        // Zero-length bones
+        if (length < 0.1f) {
+            println("[VALIDATION ALERT] Zero-length bone found between ${bone.parentJoint.name} and ${bone.childJoint.name} (length: $length)")
+        }
+
+        // Expected length comparison (Anatomical reference)
+        val refLength = when {
+            (bone.parentJoint == Joint.HIP_B && bone.childJoint == Joint.KNEE_B) ||
+            (bone.parentJoint == Joint.HIP_F && bone.childJoint == Joint.KNEE_F) -> def.thighLength
+
+            (bone.parentJoint == Joint.KNEE_B && bone.childJoint == Joint.ANKLE_B) ||
+            (bone.parentJoint == Joint.KNEE_F && bone.childJoint == Joint.ANKLE_F) -> def.shinLength
+
+            (bone.parentJoint == Joint.ANKLE_B && bone.childJoint == Joint.HEEL_B) ||
+            (bone.parentJoint == Joint.ANKLE_F && bone.childJoint == Joint.HEEL_F) -> def.footLength * def.foot.heelRatio
+
+            (bone.parentJoint == Joint.ANKLE_B && bone.childJoint == Joint.TOE_B) ||
+            (bone.parentJoint == Joint.ANKLE_F && bone.childJoint == Joint.TOE_F) -> def.footLength * def.foot.toeRatio
+
+            (bone.parentJoint == Joint.HEEL_B && bone.childJoint == Joint.TOE_B) ||
+            (bone.parentJoint == Joint.HEEL_F && bone.childJoint == Joint.TOE_F) -> def.footLength
+
+            (bone.parentJoint == Joint.SHOULDER_P && bone.childJoint == Joint.ELBOW_P) ||
+            (bone.parentJoint == Joint.SHOULDER_A && bone.childJoint == Joint.ELBOW_A) -> def.upperArmLength
+
+            (bone.parentJoint == Joint.ELBOW_P && bone.childJoint == Joint.WRIST_P) ||
+            (bone.parentJoint == Joint.ELBOW_A && bone.childJoint == Joint.WRIST_A) -> def.forearmLength
+
+            (bone.parentJoint == Joint.WRIST_P && bone.childJoint == Joint.PALM_P) ||
+            (bone.parentJoint == Joint.WRIST_A && bone.childJoint == Joint.PALM_A) -> def.hand.palmLength
+
+            (bone.parentJoint == Joint.PALM_P && bone.childJoint == Joint.FINGERTIPS_P) ||
+            (bone.parentJoint == Joint.PALM_A && bone.childJoint == Joint.FINGERTIPS_A) -> def.hand.palmLength + def.hand.fingerLength
+
+            (bone.parentJoint == Joint.PELVIS && bone.childJoint == Joint.CHEST) -> def.torsoLength
+            (bone.parentJoint == Joint.CHEST && bone.childJoint == Joint.NECK_END) -> def.neckLength
+            else -> null
+        }
+
+        if (refLength != null) {
+            val ratio = length / refLength
+            if (ratio > 2.0f) {
+                println("[VALIDATION ALERT] Unexpected long bone between ${bone.parentJoint.name} and ${bone.childJoint.name}: length is $length (ref: $refLength, ratio: $ratio)")
+            }
+        }
     }
 }

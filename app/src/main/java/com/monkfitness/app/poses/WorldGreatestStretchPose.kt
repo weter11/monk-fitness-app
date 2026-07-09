@@ -8,6 +8,7 @@ import com.monkfitness.app.animation.SkeletonMath.solveIK
 
 class WorldGreatestStretchPose : PoseBuilder {
     private val jointsBuffer = SkeletonPose()
+    private val pelvisVal = Vector3()
     private val legFIK = SkeletonMath.IKResult()
     private val legBIK = SkeletonMath.IKResult()
     private val armAIK = SkeletonMath.IKResult()
@@ -34,7 +35,7 @@ class WorldGreatestStretchPose : PoseBuilder {
         val u = progress // 0 = threaded under, 1 = open to sky
 
         // Root & anchors (runner's lunge, back toe on ground)
-        val pelvis = tempV1.set(-18f, 35f + 20f * u, 0f)
+        val pelvis = pelvisVal.set(-18f, 35f + 20f * u, 0f)
 
         // Hip mapping: L is front/active, R is back/planted in the p5 code
         // We maintain: hipF (active/front), hipB (planted/back)
