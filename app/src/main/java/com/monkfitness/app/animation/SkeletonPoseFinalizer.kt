@@ -6,6 +6,10 @@ import kotlin.math.*
  * SkeletonPoseFinalizer is responsible for completing the 3D pose before it is projected to screen space.
  * It adds biomechanical details like Heel/Toe and Hand segments that are not part of the core PoseBuilder logic.
  * This stage ensures the 3D skeleton is anatomically complete and that all world positions and rotations are derived by FK traversal.
+ *
+ * Under the progressive rotation-driven migration, SkeletonPoseFinalizer serves as a compatibility layer:
+ * - If a custom hierarchy (pose.roots) is supplied, it bypasses legacy position-to-rotation reconstruction.
+ * - If pose.roots is empty, it runs the legacy reconstruction bridge to derive 3D transforms with zero regressions.
  */
 class SkeletonPoseFinalizer(
     private val definition: SkeletonDefinition
@@ -18,7 +22,7 @@ class SkeletonPoseFinalizer(
     private val handJointsBuffer = HandJoints()
     private val tempV1 = Vector3()
 
-    // Pre-allocated standard SkeletonNode hierarchy
+    // Pre-allocated standard SkeletonNode hierarchy (for legacy compat path)
     private var roots: List<SkeletonNode>? = null
     private val nodesMap = Array<SkeletonNode?>(Joint.entries.size) { null }
 
@@ -155,36 +159,69 @@ class SkeletonPoseFinalizer(
     }
 
     /**
-     * Finalizes the 3D pose by adding calculated biomechanical joints.
-     * Updates and returns a persistent output buffer.
+     * Finalizes the 3D pose. Supports both modern rotation-driven custom hierarchies and legacy position-driven poses.
      */
     fun finalize(pose: SkeletonPose): SkeletonPose {
         outputPose.copyFrom(pose)
 
-        // Correct Feet (Left/Fore and Right/Back)
-        adjustFootOrientation(outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
-        adjustFootOrientation(outputPose, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
+        if (pose.roots.isNotEmpty()) {
+            // Modern rotation-driven path: Execute Forward Kinematics traversal directly using direct local joint rotations/offsets
+            pose.roots.forEach { it.updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION) }
+            pose.roots.forEach { it.flatten(outputPose) }
+            outputPose.roots = pose.roots
 
-        // Correct Hands (Left/Active and Right/Passive)
-        adjustHandOrientation(outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A)
-        adjustHandOrientation(outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
+            // Complete missing elements from the hierarchy if they are absent
+            if (!containsJoint(pose.roots, Joint.HEEL_F) || !containsJoint(pose.roots, Joint.TOE_F)) {
+                adjustFootOrientation(outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
+            }
+            if (!containsJoint(pose.roots, Joint.HEEL_B) || !containsJoint(pose.roots, Joint.TOE_B)) {
+                adjustFootOrientation(outputPose, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
+            }
+            if (!containsJoint(pose.roots, Joint.PALM_A) || !containsJoint(pose.roots, Joint.FINGERTIPS_A)) {
+                adjustHandOrientation(outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A)
+            }
+            if (!containsJoint(pose.roots, Joint.PALM_P) || !containsJoint(pose.roots, Joint.FINGERTIPS_P)) {
+                adjustHandOrientation(outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
+            }
+        } else {
+            // Legacy position-driven compatibility bridge: Compute anatomical foot & hand extensions procedurally
+            adjustFootOrientation(outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
+            adjustFootOrientation(outputPose, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
 
-        // Ensure standard hierarchy is created
-        ensureHierarchy()
+            adjustHandOrientation(outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A)
+            adjustHandOrientation(outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
 
-        // Set up the local transforms from the finalized joint positions
-        setupTransforms(nodesMap[Joint.PELVIS.index]!!, IDENTITY_ROTATION, outputPose)
+            // Ensure standard compatibility hierarchy is created
+            ensureHierarchy()
 
-        // Run FK Traversal (Forward Kinematics propagation)
-        roots!!.forEach { it.updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION) }
+            // Run setupTransforms to reconstruct orientation parameters
+            setupTransforms(nodesMap[Joint.PELVIS.index]!!, IDENTITY_ROTATION, outputPose)
 
-        // Flatten back into outputPose to ensure worldPosition and worldRotation are written
-        roots!!.forEach { it.flatten(outputPose) }
+            // Propagate world positions and world rotations via Forward Kinematics traversal
+            roots!!.forEach { it.updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION) }
 
-        // Explicitly assign roots to outputPose to satisfy backward compatibility
-        outputPose.roots = roots!!
+            // Flatten standard compatibility hierarchy back into outputPose
+            roots!!.forEach { it.flatten(outputPose) }
+
+            outputPose.roots = roots!!
+        }
 
         return outputPose
+    }
+
+    private fun containsJoint(roots: List<SkeletonNode>, joint: Joint): Boolean {
+        for (root in roots) {
+            if (containsJointNode(root, joint)) return true
+        }
+        return false
+    }
+
+    private fun containsJointNode(node: SkeletonNode, joint: Joint): Boolean {
+        if (node.joint == joint) return true
+        for (child in node.children) {
+            if (containsJointNode(child, joint)) return true
+        }
+        return false
     }
 
     private fun adjustHandOrientation(
@@ -199,11 +236,9 @@ class SkeletonPoseFinalizer(
         val elbow = pose.getJoint(elbowId)
         val hand = pose.getJoint(handId)
 
-        // Use the PoseBuilder provided hand position as the wrist.
         val wrist = pose.getJoint(wristId)
         wrist.set(hand)
 
-        // Hand direction follows forearm direction
         tempDir.set(wrist).subtract(elbow).normalize()
 
         val handDef = definition.hand
@@ -225,30 +260,24 @@ class SkeletonPoseFinalizer(
         val ankle = pose.getJoint(ankleId)
         val providedToe = pose.getJoint(toeId)
 
-        // We use a copy of shank to avoid mutating ankle/knee
         val shank = (ankle - knee).normalize()
 
-        // Use provided toe as direction hint, fallback to world forward (X+)
         if ((providedToe - ankle).mag() > 1e-3) {
             tempForwardHint.set(providedToe).subtract(ankle).normalize()
         } else {
             tempForwardHint.set(1f, 0f, 0f)
         }
 
-        // Target: foot perpendicular to shank
-        // footDir = forwardHint - shank * forwardHint.dot(shank)
         tempFootDir.set(shank).multiply(tempForwardHint.dot(shank))
         tempFootDir.set(tempForwardHint.x - tempFootDir.x, tempForwardHint.y - tempFootDir.y, tempForwardHint.z - tempFootDir.z)
 
         if (tempFootDir.mag() < 1e-3) {
-            // Shank is parallel to hint, fallback to world down relative to shank
             val worldDown = Vector3(0f, -1f, 0f)
             tempFootDir.set(shank).multiply(worldDown.dot(shank))
             tempFootDir.set(worldDown.x - tempFootDir.x, worldDown.y - tempFootDir.y, worldDown.z - tempFootDir.z)
         }
         tempFootDir.normalize()
 
-        // Clamp foot pitch to anatomical limits
         val pitch = atan2(tempFootDir.y, sqrt(tempFootDir.x * tempFootDir.x + tempFootDir.z * tempFootDir.z))
         val clampedPitch = pitch.coerceIn(definition.foot.minPitch, definition.foot.maxPitch)
 
