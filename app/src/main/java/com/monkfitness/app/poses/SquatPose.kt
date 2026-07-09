@@ -7,10 +7,12 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class SquatPose : PoseBuilder {
-    override val defaultCamera = CameraDefinition(
-        defaultYaw = 1.19f,
+    override val metadata = PoseMetadata(
+        camera = CameraDefinition(defaultYaw = 1.19f,
         defaultPitch = 0.22f,
-        defaultZoom = 1.3f
+        defaultZoom = 1.3f),
+        durationSeconds = 3.0f,
+        loopMode = LoopMode.LOOP
     )
 
     override fun build(context: PoseContext): SkeletonPose {
@@ -69,8 +71,6 @@ class SquatPose : PoseBuilder {
                 Joint.HAND_P to armP.end,
                 Joint.NECK_END to neckEnd,
                 Joint.HEAD_POS to headPos
-            ),
-            cameraDefinition = defaultCamera
-        )
+            ))
     }
 }
