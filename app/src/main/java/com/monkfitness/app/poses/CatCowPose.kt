@@ -7,6 +7,12 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class CatCowPose : PoseBuilder {
+    override val defaultCamera = CameraDefinition(
+        defaultYaw = 1.19f,
+        defaultPitch = 0.22f,
+        defaultZoom = 1.3f
+    )
+
     override fun build(context: PoseContext): SkeletonPose {
         val progress = context.progress
         val definition = context.definition
@@ -14,29 +20,30 @@ class CatCowPose : PoseBuilder {
         // Quadruped base
         // progress 0 (Cat - rounded) to 1 (Cow - arched)
 
-        val pelvisPos = lerp(45f, 40f, progress)
+        val ankleHeight = definition.foot.ankleHeight
+        val pelvisPos = lerp(45f, 40f, progress) + ankleHeight
         val pelvis = Vector3(50f, pelvisPos, 0f)
 
-        val chestPos = lerp(45f, 35f, progress)
+        val chestPos = lerp(45f, 35f, progress) + ankleHeight
         val chest = pelvis + Vector3(-definition.torsoLength, chestPos - pelvisPos, 0f)
 
-        val hipF = pelvis + Vector3(0f, 0f, definition.hipWidth)
-        val hipB = pelvis + Vector3(0f, 0f, -definition.hipWidth)
+        val hipF = pelvis + Vector3(0f, 0f, -definition.hipWidth)
+        val hipB = pelvis + Vector3(0f, 0f, definition.hipWidth)
 
-        val kneeBaseR = Vector3(50f, 0f, definition.hipWidth)
-        val kneeBaseL = Vector3(50f, 0f, -definition.hipWidth)
+        val kneeBaseR = Vector3(50f, ankleHeight, -definition.hipWidth)
+        val kneeBaseL = Vector3(50f, ankleHeight, definition.hipWidth)
 
-        val legF = solveIK(hipF, kneeBaseR, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f), IKConstraint.LegConstraint)
-        val legB = solveIK(hipB, kneeBaseL, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f), IKConstraint.LegConstraint)
+        val legF = solveIK(hipF, kneeBaseR, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f), IKConstraint.LegConstraint)
+        val legB = solveIK(hipB, kneeBaseL, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f), IKConstraint.LegConstraint)
 
-        val shoulderA = chest + Vector3(0f, 0f, definition.shoulderWidth)
-        val shoulderP = chest + Vector3(0f, 0f, -definition.shoulderWidth)
+        val shoulderA = chest + Vector3(0f, 0f, -definition.shoulderWidth)
+        val shoulderP = chest + Vector3(0f, 0f, definition.shoulderWidth)
 
         val handBaseR = shoulderA + Vector3(0f, -chestPos, 0f)
         val handBaseL = shoulderP + Vector3(0f, -chestPos, 0f)
 
-        val armA = solveIK(shoulderA, handBaseR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint)
-        val armP = solveIK(shoulderP, handBaseL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint)
+        val armA = solveIK(shoulderA, handBaseR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint)
+        val armP = solveIK(shoulderP, handBaseL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint)
 
         val headPitch = lerp(-0.5f, 0.5f, progress)
         val headDir = Vector3(-cos(headPitch), sin(headPitch), 0f).normalize()
@@ -44,7 +51,7 @@ class CatCowPose : PoseBuilder {
         val headPos = chest + headDir * (definition.neckLength + 18f)
 
         return SkeletonPose(
-            mapOf(
+            joints = mapOf(
                 Joint.PELVIS to pelvis,
                 Joint.HIP_F to hipF,
                 Joint.HIP_B to hipB,
@@ -63,7 +70,8 @@ class CatCowPose : PoseBuilder {
                 Joint.HAND_P to armP.end,
                 Joint.NECK_END to neckEnd,
                 Joint.HEAD_POS to headPos
-            )
+            ),
+            cameraDefinition = defaultCamera
         )
     }
 }

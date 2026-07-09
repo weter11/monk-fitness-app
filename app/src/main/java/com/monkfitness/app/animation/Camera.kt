@@ -17,6 +17,12 @@ class Camera(
     var centerX: Float = 0.5f,
     var centerY: Float = 0.7f
 ) {
+    constructor(definition: CameraDefinition) : this(
+        yaw = definition.defaultYaw,
+        pitch = definition.defaultPitch,
+        zoom = definition.defaultZoom
+    )
+
     fun project(v: Vector3, width: Float, height: Float): ProjectedPoint {
         val cy = cos(yaw)
         val sy = sin(yaw)

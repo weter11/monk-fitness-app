@@ -6,7 +6,8 @@ package com.monkfitness.app.animation
  */
 data class SkeletonPose(
     val joints: Map<Joint, Vector3>,
-    val roots: List<SkeletonNode> = emptyList()
+    val roots: List<SkeletonNode> = emptyList(),
+    val cameraDefinition: CameraDefinition = CameraDefinition.DEFAULT
 ) {
     fun getJoint(id: Joint): Vector3 = joints[id] ?: Vector3(0f, 0f, 0f)
 
@@ -19,12 +20,16 @@ data class SkeletonPose(
          * Factory method to build a pose from a Scene Graph hierarchy.
          * Updates transforms and flattens into the compatible joint map.
          */
-        fun fromHierarchy(roots: List<SkeletonNode>, targetJoints: MutableMap<Joint, Vector3>): SkeletonPose {
+        fun fromHierarchy(
+            roots: List<SkeletonNode>,
+            targetJoints: MutableMap<Joint, Vector3>,
+            cameraDefinition: CameraDefinition = CameraDefinition.DEFAULT
+        ): SkeletonPose {
             for (root in roots) {
                 root.updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION)
                 root.flatten(targetJoints)
             }
-            return SkeletonPose(targetJoints, roots)
+            return SkeletonPose(targetJoints, roots, cameraDefinition)
         }
     }
 }

@@ -1,12 +1,8 @@
 package com.monkfitness.app.ui.components
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -20,6 +16,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.animation.Camera
@@ -52,22 +49,42 @@ fun ExerciseAnimatedVisual(
             mode = poseConfig.mode,
             alternating = poseConfig.alternating
         )
-        val camera = remember { Camera() }
         val definition = SkeletonDefinition.DEFAULT_ADULT
-        val style = SkeletonStyle.DEFAULT
-        val engine = remember(definition, style) { SkeletonEngine(definition, style) }
         val poseContext = PoseContext(
             progress = controller.progress,
             side = controller.side,
             definition = definition
         )
         val pose = poseConfig.builder.build(poseContext)
+        val cameraDefinition = pose.cameraDefinition
+
+        val camera = remember(cameraDefinition) { Camera(cameraDefinition) }
+        val animatedYaw by animateFloatAsState(
+            targetValue = cameraDefinition.defaultYaw + controller.cameraYawOffset,
+            animationSpec = spring(stiffness = Spring.StiffnessLow),
+            label = "CameraRotation"
+        )
+        camera.yaw = animatedYaw
+
+        val style = SkeletonStyle.DEFAULT
+        val engine = remember(definition, style, cameraDefinition) {
+            SkeletonEngine(definition, style, cameraDefinition)
+        }
 
         SkeletonRenderer(
             pose = pose,
             camera = camera,
             engine = engine,
-            modifier = modifier.fillMaxSize()
+            modifier = modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectDragGestures { change, dragAmount ->
+                        change.consume()
+                        // Sensitivity: roughly 180 degrees (PI) across 600dp
+                        val sensitivity = 3.14159f / 600f
+                        controller.onRotate(dragAmount.x * sensitivity)
+                    }
+                }
         )
         return
     }

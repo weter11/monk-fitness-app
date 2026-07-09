@@ -15,6 +15,7 @@ interface SkeletonDefinition {
     val hand: HandDefinition
     val shoulderWidth: Float
     val hipWidth: Float
+    val defaultCamera: CameraDefinition
 
     // Biomechanical constraints
     val armIKConstraint: IKConstraint
@@ -40,6 +41,7 @@ data class HumanSkeletonDefinition(
     override val hand: HandDefinition = HandDefinition(),
     override val shoulderWidth: Float = 42f,
     override val hipWidth: Float = 22f,
+    override val defaultCamera: CameraDefinition = CameraDefinition.DEFAULT,
 
     override val armIKConstraint: IKConstraint = IKConstraint.ArmConstraint,
     override val legIKConstraint: IKConstraint = IKConstraint.LegConstraint
