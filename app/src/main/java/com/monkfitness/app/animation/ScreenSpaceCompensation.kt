@@ -40,4 +40,13 @@ class ScreenSpaceCompensation(
     fun computeScale(point: ProjectedPoint, buffer: ScreenSpaceScale) {
         buffer.update(point.perspectiveScale, settings)
     }
+
+    /**
+     * Batch process joints directly on indexed arrays in-place with zero allocations.
+     */
+    fun computeScales(joints: Array<ProjectedPoint>, scales: Array<ScreenSpaceScale>) {
+        for (i in joints.indices) {
+            scales[i].update(joints[i].perspectiveScale, settings)
+        }
+    }
 }

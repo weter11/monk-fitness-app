@@ -73,11 +73,12 @@ class ProjectedGridLine {
  * Encapsulates a skeleton after it has been projected into screen space.
  * Designed for buffer reuse to eliminate heap allocations in the hot path.
  */
-class ProjectedSkeleton {
-    val jointsMap = Array(Joint.entries.size) { ProjectedPoint() }
+class ProjectedSkeleton(
+    val joints: Array<ProjectedPoint> = Array(Joint.entries.size) { ProjectedPoint() },
+    val bones: Array<ProjectedBone> = Array(30) { ProjectedBone() },
+    val faces: Array<ProjectedFace> = Array(6) { ProjectedFace() }
+) {
     val indicators = Array(2) { ProjectedJoint() }
-    val bones = Array(30) { ProjectedBone() }
-    val faces = Array(6) { ProjectedFace() }
     val shadowPoints = Array(5) { ProjectedPoint() }
     val gridLines = Array(20) { ProjectedGridLine() }
 
