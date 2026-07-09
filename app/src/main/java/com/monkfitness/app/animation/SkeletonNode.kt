@@ -64,8 +64,8 @@ class SkeletonNode(
     /**
      * Flatten the hierarchy into the target joint map.
      */
-    fun flatten(target: MutableMap<Joint, Vector3>) {
-        target[joint] = worldPosition
+    fun flatten(target: SkeletonPose) {
+        target.setJoint(joint, worldPosition)
         for (child in children) {
             child.flatten(target)
         }

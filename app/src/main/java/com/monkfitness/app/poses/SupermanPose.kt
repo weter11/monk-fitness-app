@@ -7,6 +7,15 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class SupermanPose : PoseBuilder {
+    private val jointsBuffer = SkeletonPose()
+    private val legFIK = SkeletonMath.IKResult()
+    private val legBIK = SkeletonMath.IKResult()
+    private val armAIK = SkeletonMath.IKResult()
+    private val armPIK = SkeletonMath.IKResult()
+    private val tempV1 = Vector3()
+    private val tempV2 = Vector3()
+    private val tempV3 = Vector3()
+
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f,
         defaultPitch = 0.22f,
@@ -22,57 +31,55 @@ class SupermanPose : PoseBuilder {
         // Prone position
         // progress 0 (resting) to 1 (extended)
 
-        val pelvis = Vector3(0f, 10f, 0f)
+        val pelvis = tempV1.set(0f, 10f, 0f)
         val chestLean = lerp(0f, -0.2f, progress).toDouble()
-        val chest = pelvis + Vector3(-definition.torsoLength * cos(chestLean).toFloat(), -definition.torsoLength * sin(chestLean).toFloat(), 0f)
+        val chest = tempV2.set(-definition.torsoLength * cos(chestLean).toFloat(), -definition.torsoLength * sin(chestLean).toFloat(), 0f).add(pelvis)
 
-        val hipF = pelvis + Vector3(0f, 0f, -definition.hipWidth)
-        val hipB = pelvis + Vector3(0f, 0f, definition.hipWidth)
+        val hipF = tempV3.set(0f, 0f, -definition.hipWidth).add(pelvis)
+        val hipB = Vector3(0f, 0f, definition.hipWidth).add(pelvis)
 
         val totalLegLen = definition.thighLength + definition.shinLength
         val legLean = lerp(0f, 0.3f, progress).toDouble()
-        val ankleHeight = definition.foot.ankleHeight
-        val toeF = hipF + Vector3(totalLegLen * cos(legLean).toFloat(), totalLegLen * sin(legLean).toFloat(), 0f)
-        val toeB = hipB + Vector3(totalLegLen * cos(legLean).toFloat(), totalLegLen * sin(legLean).toFloat(), 0f)
+        val toeF = Vector3(totalLegLen * cos(legLean).toFloat(), totalLegLen * sin(legLean).toFloat(), 0f).add(hipF)
+        val toeB = Vector3(totalLegLen * cos(legLean).toFloat(), totalLegLen * sin(legLean).toFloat(), 0f).add(hipB)
 
-        val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f), IKConstraint.LegConstraint)
-        val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f), IKConstraint.LegConstraint)
+        val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f), IKConstraint.LegConstraint, legFIK)
+        val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f), IKConstraint.LegConstraint, legBIK)
 
-        val shoulderA = chest + Vector3(0f, 0f, -definition.shoulderWidth)
-        val shoulderP = chest + Vector3(0f, 0f, definition.shoulderWidth)
+        val shoulderA = Vector3(0f, 0f, -definition.shoulderWidth).add(chest)
+        val shoulderP = Vector3(0f, 0f, definition.shoulderWidth).add(chest)
 
         val totalArmLen = definition.upperArmLength + definition.forearmLength
         val armLean = lerp(0.1f, -0.4f, progress).toDouble()
-        val handA = shoulderA + Vector3(-totalArmLen * cos(armLean).toFloat(), -totalArmLen * sin(armLean).toFloat(), 0f)
-        val handP = shoulderP + Vector3(-totalArmLen * cos(armLean).toFloat(), -totalArmLen * sin(armLean).toFloat(), 0f)
+        val handA = Vector3(-totalArmLen * cos(armLean).toFloat(), -totalArmLen * sin(armLean).toFloat(), 0f).add(shoulderA)
+        val handP = Vector3(-totalArmLen * cos(armLean).toFloat(), -totalArmLen * sin(armLean).toFloat(), 0f).add(shoulderP)
 
-        val armA = solveIK(shoulderA, handA, definition.upperArmLength, definition.forearmLength, Vector3(0f, 1f, -1f), IKConstraint.ArmConstraint)
-        val armP = solveIK(shoulderP, handP, definition.upperArmLength, definition.forearmLength, Vector3(0f, 1f, 1f), IKConstraint.ArmConstraint)
+        val armA = solveIK(shoulderA, handA, definition.upperArmLength, definition.forearmLength, Vector3(0f, 1f, -1f), IKConstraint.ArmConstraint, armAIK)
+        val armP = solveIK(shoulderP, handP, definition.upperArmLength, definition.forearmLength, Vector3(0f, 1f, 1f), IKConstraint.ArmConstraint, armPIK)
 
-        val headDir = Vector3(-1f, 0.3f, 0f).normalize()
-        val neckEnd = chest + headDir * definition.neckLength
-        val headPos = chest + headDir * (definition.neckLength + 18f)
+        val headDir = tempV1.set(-1f, 0.3f, 0f).normalize().copy()
+        val neckEnd = Vector3(headDir.x, headDir.y, headDir.z).multiply(definition.neckLength).add(chest)
+        val headPos = headDir.multiply(definition.neckLength + 18f).add(chest)
 
-        return SkeletonPose(
-            joints = mapOf(
-                Joint.PELVIS to pelvis,
-                Joint.HIP_F to hipF,
-                Joint.HIP_B to hipB,
-                Joint.KNEE_F to legF.joint,
-                Joint.ANKLE_F to legF.end,
-                Joint.TOE_F to toeF,
-                Joint.KNEE_B to legB.joint,
-                Joint.ANKLE_B to legB.end,
-                Joint.TOE_B to toeB,
-                Joint.CHEST to chest,
-                Joint.SHOULDER_A to shoulderA,
-                Joint.SHOULDER_P to shoulderP,
-                Joint.ELBOW_A to armA.joint,
-                Joint.HAND_A to armA.end,
-                Joint.ELBOW_P to armP.joint,
-                Joint.HAND_P to armP.end,
-                Joint.NECK_END to neckEnd,
-                Joint.HEAD_POS to headPos
-            ))
+        jointsBuffer.setJoint(Joint.PELVIS, pelvis)
+        jointsBuffer.setJoint(Joint.HIP_F, hipF)
+        jointsBuffer.setJoint(Joint.HIP_B, hipB)
+        jointsBuffer.setJoint(Joint.KNEE_F, legF.joint)
+        jointsBuffer.setJoint(Joint.ANKLE_F, legF.end)
+        jointsBuffer.setJoint(Joint.TOE_F, toeF)
+        jointsBuffer.setJoint(Joint.KNEE_B, legB.joint)
+        jointsBuffer.setJoint(Joint.ANKLE_B, legB.end)
+        jointsBuffer.setJoint(Joint.TOE_B, toeB)
+        jointsBuffer.setJoint(Joint.CHEST, chest)
+        jointsBuffer.setJoint(Joint.SHOULDER_A, shoulderA)
+        jointsBuffer.setJoint(Joint.SHOULDER_P, shoulderP)
+        jointsBuffer.setJoint(Joint.ELBOW_A, armA.joint)
+        jointsBuffer.setJoint(Joint.HAND_A, armA.end)
+        jointsBuffer.setJoint(Joint.ELBOW_P, armP.joint)
+        jointsBuffer.setJoint(Joint.HAND_P, armP.end)
+        jointsBuffer.setJoint(Joint.NECK_END, neckEnd)
+        jointsBuffer.setJoint(Joint.HEAD_POS, headPos)
+
+        return jointsBuffer
     }
 }

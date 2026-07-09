@@ -36,8 +36,8 @@ class PushUpPose : PoseBuilder {
     private var kneeB: SkeletonNode? = null
     private var ankleB: SkeletonNode? = null
 
-    // Reuse target map to avoid allocations
-    private val jointsBuffer = mutableMapOf<Joint, Vector3>()
+    // Reuse target pose to avoid allocations
+    private val jointsBuffer = SkeletonPose()
 
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
@@ -68,6 +68,11 @@ class PushUpPose : PoseBuilder {
 
         roots = listOf(ankleF!!)
     }
+
+private val armAIK = SkeletonMath.IKResult()
+private val armPIK = SkeletonMath.IKResult()
+private val tempV1 = Vector3()
+private val tempV2 = Vector3()
 
     override fun build(context: PoseContext): SkeletonPose {
         val progress = context.progress
@@ -105,34 +110,32 @@ class PushUpPose : PoseBuilder {
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
         val chestW = chest!!.worldPosition
-        val shoulderAW = chestW + rotAround(Vector3(0f, 0f, -def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle)
-        val shoulderPW = chestW + rotAround(Vector3(0f, 0f, def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle)
+    val shoulderAW = rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle, tempV2).add(chestW)
+    val shoulderPW = rotAround(tempV1.set(0f, 0f, def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle, tempV2).add(chestW)
 
         // 4. IK
-        val targetHandA = Vector3(chestW.x, 0f, -def.shoulderWidth * 1.5f)
-        val targetHandP = Vector3(chestW.x, 0f, def.shoulderWidth * 1.5f)
+    val targetHandA = tempV1.set(chestW.x, 0f, -def.shoulderWidth * 1.5f)
+    val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 0f, -1f), def.armIKConstraint, armAIK)
 
-        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 0f, -1f), def.armIKConstraint)
-        val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, Vector3(1f, 0f, 1f), def.armIKConstraint)
+    val targetHandP = tempV1.set(chestW.x, 0f, def.shoulderWidth * 1.5f)
+    val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, Vector3(1f, 0f, 1f), def.armIKConstraint, armPIK)
 
         // 5. Hierarchy Update (Transform IK to local space)
-        shoulderA!!.localPosition = Vector3(0f, 0f, -def.shoulderWidth)
-        elbowA!!.localPosition = rotAround(armA.joint - shoulderAW, Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle)
-        handA!!.localPosition = rotAround(armA.end - armA.joint, Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle)
+    shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
+    rotAround(tempV1.set(armA.joint).subtract(shoulderAW), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, elbowA!!.localPosition)
+    rotAround(tempV1.set(armA.end).subtract(armA.joint), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, handA!!.localPosition)
 
-        shoulderP!!.localPosition = Vector3(0f, 0f, def.shoulderWidth)
-        elbowP!!.localPosition = rotAround(armP.joint - shoulderPW, Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle)
-        handP!!.localPosition = rotAround(armP.end - armP.joint, Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle)
+    shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
+    rotAround(tempV1.set(armP.joint).subtract(shoulderPW), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, elbowP!!.localPosition)
+    rotAround(tempV1.set(armP.end).subtract(armP.joint), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, handP!!.localPosition)
 
         // 6. Final Pass
-        jointsBuffer.clear()
-        val pose = SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
+        SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
 
         // 7. Stable anchors (Toes)
-        val jointsFinal = jointsBuffer.toMutableMap()
-        jointsFinal[Joint.TOE_F] = Vector3(ankleX + 10f, 0f, -def.hipWidth)
-        jointsFinal[Joint.TOE_B] = Vector3(ankleX + 10f, 0f, def.hipWidth)
+        jointsBuffer.getJoint(Joint.TOE_F).set(ankleX + 10f, 0f, -def.hipWidth)
+        jointsBuffer.getJoint(Joint.TOE_B).set(ankleX + 10f, 0f, def.hipWidth)
 
-        return SkeletonPose(jointsFinal, pose.roots)
+        return jointsBuffer
     }
 }

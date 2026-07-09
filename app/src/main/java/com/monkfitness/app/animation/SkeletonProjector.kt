@@ -9,6 +9,11 @@ import kotlin.math.*
 class SkeletonProjector {
     private val torsoPoints = Array(8) { ProjectedPoint() }
     private val tempV = Vector3(0f, 0f, 0f)
+    private val tempV2 = Vector3(0f, 0f, 0f)
+    private val tempV3 = Vector3(0f, 0f, 0f)
+    private val tempV4 = Vector3(0f, 0f, 0f)
+
+    private val shadowJoints = arrayOf(Joint.TOE_F, Joint.TOE_B, Joint.HEEL_F, Joint.HEEL_B, Joint.HAND_P)
 
     fun project(
         pose: SkeletonPose,
@@ -21,7 +26,9 @@ class SkeletonProjector {
         val style = engine.style
 
         // 1. Project Joints
-        Joint.entries.forEach { id ->
+        val jointEntries = Joint.entries
+        for (i in 0 until jointEntries.size) {
+            val id = jointEntries[i]
             camera.project(pose.getJoint(id), width, height, buffer.jointsMap[id.ordinal])
         }
 
@@ -30,8 +37,10 @@ class SkeletonProjector {
         buffer.indicators[1].update(buffer.jointsMap[Joint.WRIST_A.ordinal], Joint.WRIST_A, indicator = true)
 
         // 3. Bones
-        buffer.boneCount = engine.bones.size
-        engine.bones.forEachIndexed { i, bone ->
+        val engineBones = engine.bones
+        buffer.boneCount = engineBones.size
+        for (i in 0 until engineBones.size) {
+            val bone = engineBones[i]
             if (i < buffer.bones.size) {
                 buffer.bones[i].update(
                     buffer.jointsMap[bone.parentJoint.ordinal],
@@ -51,7 +60,8 @@ class SkeletonProjector {
         // 6. Depth Range
         var dMin = Float.MAX_VALUE
         var dMax = Float.MIN_VALUE
-        buffer.jointsMap.forEach {
+        for (i in 0 until buffer.jointsMap.size) {
+            val it = buffer.jointsMap[i]
             dMin = min(dMin, it.depth)
             dMax = max(dMax, it.depth)
         }
@@ -71,21 +81,21 @@ class SkeletonProjector {
         val shoulderA = pose.getJoint(Joint.SHOULDER_A); val shoulderP = pose.getJoint(Joint.SHOULDER_P)
         val pelvis = pose.getJoint(Joint.PELVIS); val chest = pose.getJoint(Joint.CHEST)
 
-        val lean = (chest - pelvis).normalize()
-        val shVec = (shoulderA - shoulderP).normalize()
-        val chestNorm = lean.cross(shVec).normalize()
+        val lean = tempV.set(chest).subtract(pelvis).normalize()
+        val shVec = tempV2.set(shoulderA).subtract(shoulderP).normalize()
+        val chestNorm = lean.cross(shVec, tempV3).normalize()
 
-        val offC = chestNorm * style.torsoChestDepth
-        val offH = chestNorm * style.torsoHipDepth
+        val offC = tempV.set(chestNorm).multiply(style.torsoChestDepth)
+        val offH = tempV2.set(chestNorm).multiply(style.torsoHipDepth)
 
-        camera.project(hipF + offH, width, height, torsoPoints[0])
-        camera.project(hipF - offH, width, height, torsoPoints[1])
-        camera.project(hipB + offH, width, height, torsoPoints[2])
-        camera.project(hipB - offH, width, height, torsoPoints[3])
-        camera.project(shoulderA + offC, width, height, torsoPoints[4])
-        camera.project(shoulderA - offC, width, height, torsoPoints[5])
-        camera.project(shoulderP + offC, width, height, torsoPoints[6])
-        camera.project(shoulderP - offC, width, height, torsoPoints[7])
+        camera.project(tempV3.set(hipF).add(offH), width, height, torsoPoints[0])
+        camera.project(tempV3.set(hipF).subtract(offH), width, height, torsoPoints[1])
+        camera.project(tempV3.set(hipB).add(offH), width, height, torsoPoints[2])
+        camera.project(tempV3.set(hipB).subtract(offH), width, height, torsoPoints[3])
+        camera.project(tempV3.set(shoulderA).add(offC), width, height, torsoPoints[4])
+        camera.project(tempV3.set(shoulderA).subtract(offC), width, height, torsoPoints[5])
+        camera.project(tempV3.set(shoulderP).add(offC), width, height, torsoPoints[6])
+        camera.project(tempV3.set(shoulderP).subtract(offC), width, height, torsoPoints[7])
 
         buffer.faceCount = 6
         buffer.faces[0].update(torsoPoints[4], torsoPoints[6], torsoPoints[2], torsoPoints[0]) // front
@@ -100,22 +110,22 @@ class SkeletonProjector {
         var lineIdx = 0
         for (x in -260..260 step 65) {
             if (lineIdx >= buffer.gridLines.size) break
-            camera.project(Vector3(x.toFloat(), 0f, -170f), width, height, buffer.gridLines[lineIdx].p1)
-            camera.project(Vector3(x.toFloat(), 0f, 170f), width, height, buffer.gridLines[lineIdx].p2)
+            camera.project(tempV.set(x.toFloat(), 0f, -170f), width, height, buffer.gridLines[lineIdx].p1)
+            camera.project(tempV.set(x.toFloat(), 0f, 170f), width, height, buffer.gridLines[lineIdx].p2)
             lineIdx++
         }
         for (z in -170..170 step 65) {
             if (lineIdx >= buffer.gridLines.size) break
-            camera.project(Vector3(-260f, 0f, z.toFloat()), width, height, buffer.gridLines[lineIdx].p1)
-            camera.project(Vector3(260f, 0f, z.toFloat()), width, height, buffer.gridLines[lineIdx].p2)
+            camera.project(tempV.set(-260f, 0f, z.toFloat()), width, height, buffer.gridLines[lineIdx].p1)
+            camera.project(tempV.set(260f, 0f, z.toFloat()), width, height, buffer.gridLines[lineIdx].p2)
             lineIdx++
         }
         buffer.gridLineCount = lineIdx
 
-        val shadowJoints = listOf(Joint.TOE_F, Joint.TOE_B, Joint.HEEL_F, Joint.HEEL_B, Joint.HAND_P)
-        shadowJoints.forEachIndexed { i, id ->
+        for (i in 0 until shadowJoints.size) {
+            val id = shadowJoints[i]
             val pt = pose.getJoint(id)
-            camera.project(Vector3(pt.x, 0f, pt.z), width, height, buffer.shadowPoints[i])
+            camera.project(tempV.set(pt.x, 0f, pt.z), width, height, buffer.shadowPoints[i])
         }
     }
 }

@@ -7,6 +7,16 @@ import com.monkfitness.app.animation.SkeletonMath.rotAround
 import com.monkfitness.app.animation.SkeletonMath.solveIK
 
 class WorldGreatestStretchPose : PoseBuilder {
+    private val jointsBuffer = SkeletonPose()
+    private val legFIK = SkeletonMath.IKResult()
+    private val legBIK = SkeletonMath.IKResult()
+    private val armAIK = SkeletonMath.IKResult()
+    private val armPIK = SkeletonMath.IKResult()
+    private val tempV1 = Vector3()
+    private val tempV2 = Vector3()
+    private val tempV3 = Vector3()
+    private val tempV4 = Vector3()
+
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f,
         defaultPitch = 0.22f,
@@ -24,12 +34,12 @@ class WorldGreatestStretchPose : PoseBuilder {
         val u = progress // 0 = threaded under, 1 = open to sky
 
         // Root & anchors (runner's lunge, back toe on ground)
-        val pelvis = Vector3(-18f, 35f + 20f * u, 0f)
+        val pelvis = tempV1.set(-18f, 35f + 20f * u, 0f)
 
         // Hip mapping: L is front/active, R is back/planted in the p5 code
         // We maintain: hipF (active/front), hipB (planted/back)
-        val hipF = pelvis + Vector3(0f, 0f, -definition.hipWidth * s)
-        val hipB = pelvis + Vector3(0f, 0f, definition.hipWidth * s)
+        val hipF = tempV2.set(0f, 0f, -definition.hipWidth * s).add(pelvis)
+        val hipB = Vector3(0f, 0f, definition.hipWidth * s).add(pelvis)
 
         val ankleHeight = definition.foot.ankleHeight
         val frontAnkle = Vector3(140f, 9f + ankleHeight, -24f * s)
@@ -38,28 +48,28 @@ class WorldGreatestStretchPose : PoseBuilder {
         val backToe = Vector3(-195f, 0f + ankleHeight, 28f * s)
 
         // Legs — locked-length IK, anatomical knee poles
-        val legF = solveIK(hipF, frontAnkle, definition.thighLength, definition.shinLength, Vector3(1f, 0.35f, -0.15f * s), IKConstraint.LegConstraint)
-        val legB = solveIK(hipB, backAnkle, definition.thighLength, definition.shinLength, Vector3(0.12f, -1f, 0.08f * s), IKConstraint.LegConstraint)
+        val legF = solveIK(hipF, frontAnkle, definition.thighLength, definition.shinLength, Vector3(1f, 0.35f, -0.15f * s), IKConstraint.LegConstraint, legFIK)
+        val legB = solveIK(hipB, backAnkle, definition.thighLength, definition.shinLength, Vector3(0.12f, -1f, 0.08f * s), IKConstraint.LegConstraint, legBIK)
 
         // Spine (FK, exact torsoLength length) — rises slightly as arm opens
-        val lean = Vector3(0.85f - 0.20f * u, 0.45f + 0.34f * u, -0.10f * u * s).normalize()
-        val chest = pelvis + (lean * definition.torsoLength)
+        val lean = tempV3.set(0.85f - 0.20f * u, 0.45f + 0.34f * u, -0.10f * u * s).normalize().copy()
+        val chest = tempV4.set(lean).multiply(definition.torsoLength).add(pelvis)
 
         // Thoracic twist: shoulder girdle rotates about the spine axis
         val tw = lerp(0.50f, -1.35f, u) * s
-        val shVec = rotAround(Vector3(0f, 0f, -1f), lean, tw).normalize()
-        val shoulderA = chest + (shVec * (definition.shoulderWidth * s)) // active side
-        val shoulderP = chest + (shVec * (-definition.shoulderWidth * s)) // planted side
+        val shVec = rotAround(Vector3(0f, 0f, -1f), lean, tw, tempV2).normalize().copy()
+        val shoulderA = Vector3(shVec.x, shVec.y, shVec.z).multiply(definition.shoulderWidth * s).add(chest) // active side
+        val shoulderP = Vector3(shVec.x, shVec.y, shVec.z).multiply(-(definition.shoulderWidth * s)).add(chest) // planted side
 
         // Head follows the twist, gaze rises with the opening arm
-        val neckBase = lerp(shoulderA, shoulderP, 0.5f)
-        val headDir = (lean * 0.8f + Vector3(0f, 0.4f + 0.6f * u, -0.2f * u * s)).normalize()
-        val neckEnd = neckBase + (headDir * definition.neckLength)
-        val headPos = neckEnd + (headDir * 18f)
+        val neckBase = lerp(shoulderA, shoulderP, 0.5f, tempV1).copy()
+        val headDir = tempV1.set(lean).multiply(0.8f).add(Vector3(0f, 0.4f + 0.6f * u, -0.2f * u * s)).normalize().copy()
+        val neckEnd = Vector3(headDir.x, headDir.y, headDir.z).multiply(definition.neckLength).add(neckBase)
+        val headPos = Vector3(headDir.x, headDir.y, headDir.z).multiply(definition.neckLength + 18f).add(neckBase)
 
         // Planted support arm (hand fixed on ground, elbow bows outward)
         val plantHand = Vector3(70f, 0f, 20f * s)
-        val armP = solveIK(shoulderP, plantHand, definition.upperArmLength, definition.forearmLength, Vector3(-0.25f, 0.15f, 0.9f * s), IKConstraint.ArmConstraint)
+        val armP = solveIK(shoulderP, plantHand, definition.upperArmLength, definition.forearmLength, Vector3(-0.25f, 0.15f, 0.9f * s), IKConstraint.ArmConstraint, armPIK)
 
         // Active arm trajectory
         val D0 = Vector3(0.32f, -0.86f, 0.40f * s)
@@ -72,40 +82,43 @@ class WorldGreatestStretchPose : PoseBuilder {
 
         if (u < 0.5f) {
             val k = easeInOut(u * 2f)
-            dir = lerp(D0, Dm, k).normalize()
+            dir = lerp(D0, Dm, k, tempV1).normalize().copy()
             r = lerp(0.72f, 0.92f, k) * totalArmLen
         } else {
             val k = easeInOut(u * 2f - 1f)
-            dir = lerp(Dm, D2, k).normalize()
+            dir = lerp(Dm, D2, k, tempV1).normalize().copy()
             r = lerp(0.92f, 0.985f, k) * totalArmLen
         }
 
-        val handTargetRaw = shoulderA + (dir * r)
-        val handTarget = if (handTargetRaw.y < 6f) handTargetRaw.copy(y = 6f) else handTargetRaw
+        val handTargetRaw = tempV1.set(dir).multiply(r).add(shoulderA)
+        val handTarget = if (handTargetRaw.y < 6f) {
+            val v = handTargetRaw.copy()
+            v.y = 6f
+            v
+        } else handTargetRaw
 
-        val poleA = lerp(Vector3(0f, 0f, -1f * s), Vector3(-1f, 0f, -1f * s), u)
-        val armA = solveIK(shoulderA, handTarget, definition.upperArmLength, definition.forearmLength, poleA, IKConstraint.ArmConstraint)
+        val poleA = lerp(Vector3(0f, 0f, -1f * s), Vector3(-1f, 0f, -1f * s), u, tempV2).copy()
+        val armA = solveIK(shoulderA, handTarget, definition.upperArmLength, definition.forearmLength, poleA, IKConstraint.ArmConstraint, armAIK)
 
-        return SkeletonPose(
-            joints = mapOf(
-                Joint.PELVIS to pelvis,
-                Joint.HIP_F to hipF,
-                Joint.HIP_B to hipB,
-                Joint.KNEE_F to legF.joint,
-                Joint.ANKLE_F to legF.end,
-                Joint.TOE_F to frontToe,
-                Joint.KNEE_B to legB.joint,
-                Joint.ANKLE_B to legB.end,
-                Joint.TOE_B to backToe,
-                Joint.CHEST to chest,
-                Joint.SHOULDER_A to shoulderA,
-                Joint.SHOULDER_P to shoulderP,
-                Joint.ELBOW_A to armA.joint,
-                Joint.HAND_A to armA.end,
-                Joint.ELBOW_P to armP.joint,
-                Joint.HAND_P to armP.end,
-                Joint.NECK_END to neckEnd,
-                Joint.HEAD_POS to headPos
-            ))
+        jointsBuffer.setJoint(Joint.PELVIS, pelvis)
+        jointsBuffer.setJoint(Joint.HIP_F, hipF)
+        jointsBuffer.setJoint(Joint.HIP_B, hipB)
+        jointsBuffer.setJoint(Joint.KNEE_F, legF.joint)
+        jointsBuffer.setJoint(Joint.ANKLE_F, legF.end)
+        jointsBuffer.setJoint(Joint.TOE_F, frontToe)
+        jointsBuffer.setJoint(Joint.KNEE_B, legB.joint)
+        jointsBuffer.setJoint(Joint.ANKLE_B, legB.end)
+        jointsBuffer.setJoint(Joint.TOE_B, backToe)
+        jointsBuffer.setJoint(Joint.CHEST, chest)
+        jointsBuffer.setJoint(Joint.SHOULDER_A, shoulderA)
+        jointsBuffer.setJoint(Joint.SHOULDER_P, shoulderP)
+        jointsBuffer.setJoint(Joint.ELBOW_A, armA.joint)
+        jointsBuffer.setJoint(Joint.HAND_A, armA.end)
+        jointsBuffer.setJoint(Joint.ELBOW_P, armP.joint)
+        jointsBuffer.setJoint(Joint.HAND_P, armP.end)
+        jointsBuffer.setJoint(Joint.NECK_END, neckEnd)
+        jointsBuffer.setJoint(Joint.HEAD_POS, headPos)
+
+        return jointsBuffer
     }
 }
