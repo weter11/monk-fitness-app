@@ -2,13 +2,9 @@ package com.monkfitness.app.animation
 
 import kotlin.math.*
 
-data class ProjectedPoint(
-    val x: Float,
-    val y: Float,
-    val scale: Float,
-    val depth: Float
-)
-
+/**
+ * Camera is a generic mathematical projection utility.
+ */
 class Camera(
     var yaw: Float = 1.19f,
     var pitch: Float = 0.22f,
@@ -23,7 +19,10 @@ class Camera(
         zoom = definition.defaultZoom
     )
 
-    fun project(v: Vector3, width: Float, height: Float): ProjectedPoint {
+    /**
+     * Projects a 3D world-space vector into the provided ProjectedPoint buffer.
+     */
+    fun project(v: Vector3, width: Float, height: Float, buffer: ProjectedPoint) {
         val cy = cos(yaw)
         val sy = sin(yaw)
         val xr = v.x * cy + v.z * sy
@@ -36,11 +35,11 @@ class Camera(
 
         val sc = focalLength / (focalLength + z2)
 
-        return ProjectedPoint(
+        buffer.update(
             x = width * centerX + xr * sc * zoom,
             y = height * centerY - y2 * sc * zoom,
-            scale = sc,
-            depth = z2
+            depth = z2,
+            scale = sc
         )
     }
 }
