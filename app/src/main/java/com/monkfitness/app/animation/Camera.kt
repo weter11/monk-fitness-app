@@ -5,8 +5,8 @@ import kotlin.math.*
 data class ProjectedPoint(
     val x: Float,
     val y: Float,
-    val scale: Float,
-    val depth: Float
+    val depth: Float,
+    val perspectiveScale: Float
 )
 
 class Camera(
@@ -39,8 +39,8 @@ class Camera(
         return ProjectedPoint(
             x = width * centerX + xr * sc * zoom,
             y = height * centerY - y2 * sc * zoom,
-            scale = sc,
-            depth = z2
+            depth = z2,
+            perspectiveScale = sc
         )
     }
 }
