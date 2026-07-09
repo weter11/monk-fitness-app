@@ -78,7 +78,7 @@ fun SkeletonRenderer(
         }
 
         if (highlightedJoint != null) {
-            val p = skeletonBuffer.jointsMap[highlightedJoint.ordinal]
+            val p = skeletonBuffer.joints[highlightedJoint.index]
             drawCircle(Color.White.copy(alpha = 0.5f), 12f * p.perspectiveScale * camera.zoom, Offset(p.x, p.y))
         }
 

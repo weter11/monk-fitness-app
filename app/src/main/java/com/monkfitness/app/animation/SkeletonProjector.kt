@@ -28,13 +28,13 @@ class SkeletonProjector {
         // 1. Project Joints
         val jointEntries = Joint.entries
         for (i in 0 until jointEntries.size) {
-            val id = jointEntries[i]
-            camera.project(pose.getJoint(id), width, height, buffer.jointsMap[id.ordinal])
+            val joint = jointEntries[i]
+            camera.project(pose.getJoint(joint), width, height, buffer.joints[joint.index])
         }
 
         // 2. Indicators
-        buffer.indicators[0].update(buffer.jointsMap[Joint.HEAD_POS.ordinal], Joint.HEAD_POS)
-        buffer.indicators[1].update(buffer.jointsMap[Joint.WRIST_A.ordinal], Joint.WRIST_A, indicator = true)
+        buffer.indicators[0].update(buffer.joints[Joint.HEAD_POS.index], Joint.HEAD_POS)
+        buffer.indicators[1].update(buffer.joints[Joint.WRIST_A.index], Joint.WRIST_A, indicator = true)
 
         // 3. Bones
         val engineBones = engine.bones
@@ -43,8 +43,8 @@ class SkeletonProjector {
             val bone = engineBones[i]
             if (i < buffer.bones.size) {
                 buffer.bones[i].update(
-                    buffer.jointsMap[bone.parentJoint.ordinal],
-                    buffer.jointsMap[bone.childJoint.ordinal],
+                    buffer.joints[bone.parentJoint.index],
+                    buffer.joints[bone.childJoint.index],
                     bone.thickness,
                     bone.colorMultiplier
                 )
@@ -60,8 +60,8 @@ class SkeletonProjector {
         // 6. Depth Range
         var dMin = Float.MAX_VALUE
         var dMax = Float.MIN_VALUE
-        for (i in 0 until buffer.jointsMap.size) {
-            val it = buffer.jointsMap[i]
+        for (i in buffer.joints.indices) {
+            val it = buffer.joints[i]
             dMin = min(dMin, it.depth)
             dMax = max(dMax, it.depth)
         }

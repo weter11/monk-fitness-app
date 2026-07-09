@@ -8,10 +8,10 @@ class SkeletonPose(
     val joints: Array<Vector3> = Array(Joint.entries.size) { Vector3() },
     var roots: List<SkeletonNode> = emptyList()
 ) {
-    fun getJoint(id: Joint): Vector3 = joints[id.ordinal]
+    fun getJoint(id: Joint): Vector3 = joints[id.index]
 
     fun setJoint(id: Joint, v: Vector3) {
-        joints[id.ordinal].set(v)
+        joints[id.index].set(v)
     }
 
     fun copyFrom(other: SkeletonPose) {
