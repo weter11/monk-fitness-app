@@ -6,7 +6,7 @@ import com.monkfitness.app.animation.SkeletonMath.lerp
 import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
-class PushUpPose : PoseBuilder {
+class PushUpPose(private val variantId: String = "pushup_standard") : PoseBuilder {
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f,
         defaultPitch = 0.22f,
@@ -14,6 +14,10 @@ class PushUpPose : PoseBuilder {
         durationSeconds = 2.5f,
         loopMode = LoopMode.LOOP
     )
+
+    private val isWide = variantId == "pushup_wide"
+    private val bottomHeight = if (isWide) 18f else 20f
+    private val handMultiplier = if (isWide) 1.9f else 1.3f
 
     // Persistent Scene Graph hierarchy
     private var roots: List<SkeletonNode>? = null
@@ -78,8 +82,8 @@ class PushUpPose : PoseBuilder {
     private val targetHandA = Vector3()
     private val targetHandP = Vector3()
     private val zAxis = Vector3(0f, 0f, 1f)
-    private val poleA = Vector3(1f, 0.5f, -1f)
-    private val poleP = Vector3(1f, 0.5f, 1f)
+    private val poleA = if (isWide) Vector3(0.2f, 0.8f, -2.0f) else Vector3(1f, 0.5f, -1f)
+    private val poleP = if (isWide) Vector3(0.2f, 0.8f, 2.0f) else Vector3(1f, 0.5f, 1f)
 
     override fun build(context: PoseContext): SkeletonPose {
         val progress = context.progress
@@ -87,7 +91,7 @@ class PushUpPose : PoseBuilder {
         ensureHierarchy(def)
 
         // 1. Driving values
-        val height = lerp(60f, 20f, progress)
+        val height = lerp(60f, bottomHeight, progress)
         val totalLegLen = def.shinLength + def.thighLength
         val ankleHeight = def.foot.ankleHeight
         val drivingHeight = (height - ankleHeight).coerceAtLeast(0f)
@@ -127,8 +131,8 @@ class PushUpPose : PoseBuilder {
         val maxTheta = asin((maxDrivingHeight / totalLegLen).coerceIn(-1f, 1f))
         val handAnchorX = (60f + totalLegLen * cos(maxTheta)) - (totalLegLen + def.torsoLength) * cos(maxTheta)
 
-        targetHandA.set(handAnchorX, 0f, -def.shoulderWidth * 1.3f)
-        targetHandP.set(handAnchorX, 0f, def.shoulderWidth * 1.3f)
+        targetHandA.set(handAnchorX, 0f, -def.shoulderWidth * handMultiplier)
+        targetHandP.set(handAnchorX, 0f, def.shoulderWidth * handMultiplier)
 
         // POLISH 3: Elbow Flare. Adjusted the pole vectors from (1,0,-1) to (1,0.5,-1) to flare elbows up and back.
         val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, armAIK)
