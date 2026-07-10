@@ -78,6 +78,7 @@ fun ExerciseAnimatedVisual(
             pose = pose,
             camera = camera,
             engine = engine,
+            environment = metadata.environment,
             modifier = modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {

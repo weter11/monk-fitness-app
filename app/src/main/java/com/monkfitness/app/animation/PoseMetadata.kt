@@ -19,5 +19,6 @@ data class PoseMetadata(
     val loopMode: LoopMode = LoopMode.LOOP,
     val supportsMirroring: Boolean = false,
     val groundHeight: Float = 0f,
-    val initialFacing: FacingDirection = FacingDirection.FRONT
+    val initialFacing: FacingDirection = FacingDirection.FRONT,
+    val environment: EnvironmentDefinition = EnvironmentDefinition()
 )
