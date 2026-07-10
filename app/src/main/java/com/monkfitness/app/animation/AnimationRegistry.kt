@@ -18,7 +18,7 @@ object AnimationRegistry {
         register("pushup_knee", KneePushUpPose())
         register("pushup_diamond", DiamondPushUpPose())
         register("pushup_decline", DeclinePushUpPose())
-        register("pike_pushup_standard", PushUpPose())
+        register("pike_pushup_standard", PikePushUpPose())
         register("squat_standard", SquatPose())
         register("squat_sumo", SquatPose())
         register("squat_jump", SquatPose())
