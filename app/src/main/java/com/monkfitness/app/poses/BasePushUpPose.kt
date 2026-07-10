@@ -7,7 +7,11 @@ abstract class BasePushUpPose : PoseBuilder {
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
         durationSeconds = 2.5f,
         loopMode = LoopMode.LOOP,
-        motionCurve = MotionCurve.FAST_DOWN_SLOW_UP
+        motionCurve = MotionCurve.EASE_IN_OUT,
+        environment = EnvironmentDefinition(
+            ground = GroundDefinition(visible = true, level = 0f),
+            props = emptyList()
+        )
     )
 
     protected var roots: List<SkeletonNode>? = null
