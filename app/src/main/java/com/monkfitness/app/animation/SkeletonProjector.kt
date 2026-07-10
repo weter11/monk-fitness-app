@@ -11,7 +11,10 @@ class SkeletonProjector {
     private val tempV = Vector3(0f, 0f, 0f)
     private val tempV2 = Vector3(0f, 0f, 0f)
     private val tempV3 = Vector3(0f, 0f, 0f)
-    private val tempV4 = Vector3(0f, 0f, 0f)
+
+    // Preallocated default unit vectors to completely prevent GC pressure/allocations in the hot path
+    private val defaultSpineDir = Vector3(0f, 1f, 0f)
+    private val defaultShoulderDir = Vector3(0f, 0f, -1f)
 
     private val shadowJoints = arrayOf(Joint.TOE_F, Joint.TOE_B, Joint.HEEL_F, Joint.HEEL_B, Joint.HAND_P)
 
@@ -79,10 +82,13 @@ class SkeletonProjector {
     ) {
         val hipF = pose.getJoint(Joint.HIP_F); val hipB = pose.getJoint(Joint.HIP_B)
         val shoulderA = pose.getJoint(Joint.SHOULDER_A); val shoulderP = pose.getJoint(Joint.SHOULDER_P)
-        val pelvis = pose.getJoint(Joint.PELVIS); val chest = pose.getJoint(Joint.CHEST)
 
-        val lean = tempV.set(chest).subtract(pelvis).normalize()
-        val shVec = tempV2.set(shoulderA).subtract(shoulderP).normalize()
+        // Retrieve torso rotation from the CHEST joint world rotation (first-class source of truth)
+        val chestRot = pose.getJointRotation(Joint.CHEST)
+
+        // Derive lean (spine direction) and shVec (shoulder direction) from rotation instead of positions
+        val lean = SkeletonMath.rotAround(defaultSpineDir, chestRot.axis, chestRot.angle, tempV).normalize()
+        val shVec = SkeletonMath.rotAround(defaultShoulderDir, chestRot.axis, chestRot.angle, tempV2).normalize()
         val chestNorm = lean.cross(shVec, tempV3).normalize()
 
         val offC = tempV.set(chestNorm).multiply(style.torsoChestDepth)

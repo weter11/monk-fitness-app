@@ -83,4 +83,67 @@ class ProceduralAnimationPerformanceRefactorTest {
         assertTrue(scales[0].radiusScale < 1.0f)
         assertTrue(scales[2].radiusScale > 1.0f)
     }
+
+    @Test
+    fun testRotationDrivenPoseBuilderAndCompatibility() {
+        val pelvis = SkeletonNode(Joint.PELVIS)
+        pelvis.localPosition.set(0f, 10f, 0f)
+        pelvis.localRotation.set(Vector3(0f, 0f, 1f), 0.1f)
+
+        val chest = SkeletonNode(Joint.CHEST)
+        chest.localPosition.set(0f, 50f, 0f)
+        chest.localRotation.set(Vector3(0f, 0f, 1f), 0.2f)
+        pelvis.addChild(chest)
+
+        val shoulderA = SkeletonNode(Joint.SHOULDER_A)
+        shoulderA.localPosition.set(0f, 0f, -20f)
+        chest.addChild(shoulderA)
+
+        val elbowA = SkeletonNode(Joint.ELBOW_A)
+        elbowA.localPosition.set(-30f, 0f, 0f)
+        shoulderA.addChild(elbowA)
+
+        val handA = SkeletonNode(Joint.HAND_A)
+        handA.localPosition.set(-30f, 0f, 0f)
+        elbowA.addChild(handA)
+
+        val wristA = SkeletonNode(Joint.WRIST_A)
+        wristA.localPosition.set(0f, 0f, 0f)
+        handA.addChild(wristA)
+
+        val hipF = SkeletonNode(Joint.HIP_F)
+        hipF.localPosition.set(0f, 0f, -20f)
+        pelvis.addChild(hipF)
+
+        val kneeF = SkeletonNode(Joint.KNEE_F)
+        kneeF.localPosition.set(0f, -40f, 0f)
+        hipF.addChild(kneeF)
+
+        val ankleF = SkeletonNode(Joint.ANKLE_F)
+        ankleF.localPosition.set(0f, -40f, 0f)
+        kneeF.addChild(ankleF)
+
+        val pose = SkeletonPose()
+        pose.roots = listOf(pelvis)
+
+        val finalizer = SkeletonPoseFinalizer(SkeletonDefinition.DEFAULT_ADULT)
+        val finalizedPose = finalizer.finalize(pose)
+
+        // Check roots reference preservation
+        assertEquals(pose.roots, finalizedPose.roots)
+
+        // Check world position derivation via FK:
+        // Pelvis world position should be (0, 10, 0)
+        assertEquals(0f, finalizedPose.getJoint(Joint.PELVIS).x, 1e-4f)
+        assertEquals(10f, finalizedPose.getJoint(Joint.PELVIS).y, 1e-4f)
+
+        // Pelvis world rotation should be 0.1 rad around Z-axis
+        val pelvisRot = finalizedPose.getJointRotation(Joint.PELVIS)
+        assertEquals(0.1f, pelvisRot.angle, 1e-4f)
+
+        // Verify that missing segments like Heel/Toe and Palm/Fingertips are completed
+        assertNotEquals(0f, finalizedPose.getJoint(Joint.TOE_F).mag(), 1e-4f)
+        assertNotEquals(0f, finalizedPose.getJoint(Joint.HEEL_F).mag(), 1e-4f)
+        assertNotEquals(0f, finalizedPose.getJoint(Joint.FINGERTIPS_A).mag(), 1e-4f)
+    }
 }
