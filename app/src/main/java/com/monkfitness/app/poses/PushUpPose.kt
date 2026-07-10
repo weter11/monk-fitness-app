@@ -69,10 +69,17 @@ class PushUpPose : PoseBuilder {
         roots = listOf(ankleF!!)
     }
 
-private val armAIK = SkeletonMath.IKResult()
-private val armPIK = SkeletonMath.IKResult()
-private val tempV1 = Vector3()
-private val tempV2 = Vector3()
+    private val armAIK = SkeletonMath.IKResult()
+    private val armPIK = SkeletonMath.IKResult()
+    private val tempV1 = Vector3()
+    private val tempV2 = Vector3()
+    private val shoulderAW = Vector3()
+    private val shoulderPW = Vector3()
+    private val targetHandA = Vector3()
+    private val targetHandP = Vector3()
+    private val zAxis = Vector3(0f, 0f, 1f)
+    private val poleA = Vector3(1f, 0.5f, -1f)
+    private val poleP = Vector3(1f, 0.5f, 1f)
 
     override fun build(context: PoseContext): SkeletonPose {
         val progress = context.progress
@@ -80,7 +87,7 @@ private val tempV2 = Vector3()
         ensureHierarchy(def)
 
         // 1. Driving values
-        val height = lerp(60f, 25f, progress)
+        val height = lerp(60f, 20f, progress)
         val totalLegLen = def.shinLength + def.thighLength
         val ankleHeight = def.foot.ankleHeight
         val drivingHeight = (height - ankleHeight).coerceAtLeast(0f)
@@ -110,24 +117,31 @@ private val tempV2 = Vector3()
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
         val chestW = chest!!.worldPosition
-    val shoulderAW = rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle, tempV2).add(chestW)
-    val shoulderPW = rotAround(tempV1.set(0f, 0f, def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle, tempV2).add(chestW)
+        rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), zAxis, chest!!.worldRotation.angle, shoulderAW).add(chestW)
+        rotAround(tempV1.set(0f, 0f, def.shoulderWidth), zAxis, chest!!.worldRotation.angle, shoulderPW).add(chestW)
 
         // 4. IK
-    val targetHandA = tempV1.set(chestW.x, 0f, -def.shoulderWidth * 1.5f)
-    val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 0f, -1f), def.armIKConstraint, armAIK)
+        // POLISH 1: Anchor Hands. Calculate the absolute X position of the chest when standing at peak height.
+        // This stops the hands from "ice skating" backward as the chest hinges toward the ground.
+        val maxDrivingHeight = (60f - ankleHeight).coerceAtLeast(0f)
+        val maxTheta = asin((maxDrivingHeight / totalLegLen).coerceIn(-1f, 1f))
+        val handAnchorX = (60f + totalLegLen * cos(maxTheta)) - (totalLegLen + def.torsoLength) * cos(maxTheta)
 
-    val targetHandP = tempV1.set(chestW.x, 0f, def.shoulderWidth * 1.5f)
-    val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, Vector3(1f, 0f, 1f), def.armIKConstraint, armPIK)
+        targetHandA.set(handAnchorX, 0f, -def.shoulderWidth * 1.3f)
+        targetHandP.set(handAnchorX, 0f, def.shoulderWidth * 1.3f)
+
+        // POLISH 3: Elbow Flare. Adjusted the pole vectors from (1,0,-1) to (1,0.5,-1) to flare elbows up and back.
+        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, armAIK)
+        val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, armPIK)
 
         // 5. Hierarchy Update (Transform IK to local space)
-    shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
-    rotAround(tempV1.set(armA.joint).subtract(shoulderAW), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, elbowA!!.localPosition)
-    rotAround(tempV1.set(armA.end).subtract(armA.joint), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, handA!!.localPosition)
+        shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
+        rotAround(tempV1.set(armA.joint).subtract(shoulderAW), zAxis, -chest!!.worldRotation.angle, elbowA!!.localPosition)
+        rotAround(tempV1.set(armA.end).subtract(armA.joint), zAxis, -chest!!.worldRotation.angle, handA!!.localPosition)
 
-    shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
-    rotAround(tempV1.set(armP.joint).subtract(shoulderPW), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, elbowP!!.localPosition)
-    rotAround(tempV1.set(armP.end).subtract(armP.joint), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, handP!!.localPosition)
+        shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
+        rotAround(tempV1.set(armP.joint).subtract(shoulderPW), zAxis, -chest!!.worldRotation.angle, elbowP!!.localPosition)
+        rotAround(tempV1.set(armP.end).subtract(armP.joint), zAxis, -chest!!.worldRotation.angle, handP!!.localPosition)
 
         // 6. Final Pass
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
