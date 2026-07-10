@@ -70,6 +70,12 @@ class PushUpPose(private val variantId: String = "pushup_standard") : PoseBuilde
         kneeB = hipB!!.addChild(SkeletonNode(Joint.KNEE_B))
         ankleB = kneeB!!.addChild(SkeletonNode(Joint.ANKLE_B))
 
+        // Set World Locked orientation modes
+        ankleF!!.orientationMode = JointOrientationMode.WORLD_LOCKED
+        ankleB!!.orientationMode = JointOrientationMode.WORLD_LOCKED
+        handA!!.orientationMode = JointOrientationMode.WORLD_LOCKED
+        handP!!.orientationMode = JointOrientationMode.WORLD_LOCKED
+
         roots = listOf(ankleF!!)
     }
 
@@ -116,6 +122,7 @@ class PushUpPose(private val variantId: String = "pushup_standard") : PoseBuilde
         hipB!!.localPosition = Vector3(0f, 0f, def.hipWidth)
         kneeB!!.localPosition = Vector3(def.thighLength, 0f, 0f)
         ankleB!!.localPosition = Vector3(def.shinLength, 0f, 0f)
+        ankleB!!.localRotation.set(Vector3(0f, 0f, 1f), -theta)
 
         // 3. Preliminary FK pass
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
@@ -146,6 +153,16 @@ class PushUpPose(private val variantId: String = "pushup_standard") : PoseBuilde
         shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
         rotAround(tempV1.set(armP.joint).subtract(shoulderPW), zAxis, -chest!!.worldRotation.angle, elbowP!!.localPosition)
         rotAround(tempV1.set(armP.end).subtract(armP.joint), zAxis, -chest!!.worldRotation.angle, handP!!.localPosition)
+
+        // Set localRotations of hands to define splayed orientation (world rotation will copy local rotation when locked)
+        val splayA = if (isWide) -0.4f else -0.25f
+        val splayP = if (isWide) 0.4f else 0.25f
+
+        val dirA = tempV1.set(-1f, 0f, splayA).normalize()
+        SkeletonMath.getRotationToAlign(Vector3(-1f, 0f, 0f), dirA, tempV2, handA!!.localRotation)
+
+        val dirP = tempV1.set(-1f, 0f, splayP).normalize()
+        SkeletonMath.getRotationToAlign(Vector3(-1f, 0f, 0f), dirP, tempV2, handP!!.localRotation)
 
         // 6. Final Pass
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)

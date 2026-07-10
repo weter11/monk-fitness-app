@@ -146,4 +146,23 @@ class ProceduralAnimationPerformanceRefactorTest {
         assertNotEquals(0f, finalizedPose.getJoint(Joint.HEEL_F).mag(), 1e-4f)
         assertNotEquals(0f, finalizedPose.getJoint(Joint.FINGERTIPS_A).mag(), 1e-4f)
     }
+
+    @Test
+    fun testWorldLockedOrientationMode() {
+        val root = SkeletonNode(Joint.PELVIS)
+        root.localPosition.set(0f, 10f, 0f)
+        root.localRotation.set(Vector3(0f, 0f, 1f), 0.5f) // Parent rotated by 0.5 rad
+
+        val child = SkeletonNode(Joint.CHEST)
+        child.localPosition.set(0f, 50f, 0f)
+        child.localRotation.set(Vector3(0f, 0f, 1f), 0.2f)
+        child.orientationMode = JointOrientationMode.WORLD_LOCKED // Child is WORLD_LOCKED!
+        root.addChild(child)
+
+        root.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation())
+
+        // Under INHERIT, child world rotation would be parent (0.5) + local (0.2) = 0.7.
+        // Under WORLD_LOCKED, child world rotation must be exactly local (0.2)!
+        assertEquals(0.2f, child.worldRotation.angle, 1e-4f)
+    }
 }

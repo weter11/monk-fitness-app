@@ -34,6 +34,8 @@ class SkeletonNode(
     val localRotation: JointRotation = JointRotation(),
     val children: MutableList<SkeletonNode> = mutableListOf()
 ) {
+    var orientationMode: JointOrientationMode = JointOrientationMode.INHERIT
+
     val worldPosition: Vector3 = Vector3(0f, 0f, 0f)
 
     val worldRotation: JointRotation = JointRotation()
@@ -68,10 +70,14 @@ class SkeletonNode(
         worldPosition.add(parentWorldPos)
 
         // Rotation propagation: Concatenate parent's world rotation with local rotation
-        SkeletonMath.rotationToMatrix(parentWorldRotation, pX, pY, pZ)
-        SkeletonMath.rotationToMatrix(localRotation, lX, lY, lZ)
-        SkeletonMath.multiplyMatrices(pX, pY, pZ, lX, lY, lZ, wX, wY, wZ)
-        SkeletonMath.getRotationFromMatrix(wX, wY, wZ, worldRotation)
+        if (orientationMode == JointOrientationMode.WORLD_LOCKED) {
+            worldRotation.copyFrom(localRotation)
+        } else {
+            SkeletonMath.rotationToMatrix(parentWorldRotation, pX, pY, pZ)
+            SkeletonMath.rotationToMatrix(localRotation, lX, lY, lZ)
+            SkeletonMath.multiplyMatrices(pX, pY, pZ, lX, lY, lZ, wX, wY, wZ)
+            SkeletonMath.getRotationFromMatrix(wX, wY, wZ, worldRotation)
+        }
 
         for (child in children) {
             child.updateWorldTransforms(worldPosition, worldRotation)

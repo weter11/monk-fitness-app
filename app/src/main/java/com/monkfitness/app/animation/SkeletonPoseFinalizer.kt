@@ -246,6 +246,23 @@ class SkeletonPoseFinalizer(
         return false
     }
 
+    private fun findNode(roots: List<SkeletonNode>, joint: Joint): SkeletonNode? {
+        for (root in roots) {
+            val found = findNodeInHierarchy(root, joint)
+            if (found != null) return found
+        }
+        return null
+    }
+
+    private fun findNodeInHierarchy(node: SkeletonNode, joint: Joint): SkeletonNode? {
+        if (node.joint == joint) return node
+        for (child in node.children) {
+            val found = findNodeInHierarchy(child, joint)
+            if (found != null) return found
+        }
+        return null
+    }
+
     private fun adjustHandOrientation(
         pose: SkeletonPose,
         elbowId: Joint,
@@ -261,7 +278,12 @@ class SkeletonPoseFinalizer(
         val wrist = pose.getJoint(wristId)
         wrist.set(hand)
 
-        tempDir.set(wrist).subtract(elbow).normalize()
+        val handNode = findNode(pose.roots, handId)
+        if (handNode != null && handNode.orientationMode == JointOrientationMode.WORLD_LOCKED) {
+            SkeletonMath.rotAround(Vector3(-1f, 0f, 0f), handNode.worldRotation.axis, handNode.worldRotation.angle, tempDir)
+        } else {
+            tempDir.set(wrist).subtract(elbow).normalize()
+        }
 
         val handDef = definition.hand
         handDef.computeHandJoints(wrist, tempDir, handJointsBuffer)
@@ -282,34 +304,39 @@ class SkeletonPoseFinalizer(
         val ankle = pose.getJoint(ankleId)
         val providedToe = pose.getJoint(toeId)
 
-        val shank = (ankle - knee).normalize()
-
-        if ((providedToe - ankle).mag() > 1e-3) {
-            tempForwardHint.set(providedToe).subtract(ankle).normalize()
+        val ankleNode = findNode(pose.roots, ankleId)
+        if (ankleNode != null && ankleNode.orientationMode == JointOrientationMode.WORLD_LOCKED) {
+            SkeletonMath.rotAround(Vector3(1f, 0f, 0f), ankleNode.worldRotation.axis, ankleNode.worldRotation.angle, tempFootDir)
         } else {
-            tempForwardHint.set(1f, 0f, 0f)
-        }
+            val shank = (ankle - knee).normalize()
 
-        tempFootDir.set(shank).multiply(tempForwardHint.dot(shank))
-        tempFootDir.set(tempForwardHint.x - tempFootDir.x, tempForwardHint.y - tempFootDir.y, tempForwardHint.z - tempFootDir.z)
+            if ((providedToe - ankle).mag() > 1e-3) {
+                tempForwardHint.set(providedToe).subtract(ankle).normalize()
+            } else {
+                tempForwardHint.set(1f, 0f, 0f)
+            }
 
-        if (tempFootDir.mag() < 1e-3) {
-            val worldDown = Vector3(0f, -1f, 0f)
-            tempFootDir.set(shank).multiply(worldDown.dot(shank))
-            tempFootDir.set(worldDown.x - tempFootDir.x, worldDown.y - tempFootDir.y, worldDown.z - tempFootDir.z)
-        }
-        tempFootDir.normalize()
+            tempFootDir.set(shank).multiply(tempForwardHint.dot(shank))
+            tempFootDir.set(tempForwardHint.x - tempFootDir.x, tempForwardHint.y - tempFootDir.y, tempForwardHint.z - tempFootDir.z)
 
-        val pitch = atan2(tempFootDir.y, sqrt(tempFootDir.x * tempFootDir.x + tempFootDir.z * tempFootDir.z))
-        val clampedPitch = pitch.coerceIn(definition.foot.minPitch, definition.foot.maxPitch)
+            if (tempFootDir.mag() < 1e-3) {
+                val worldDown = Vector3(0f, -1f, 0f)
+                tempFootDir.set(shank).multiply(worldDown.dot(shank))
+                tempFootDir.set(worldDown.x - tempFootDir.x, worldDown.y - tempFootDir.y, worldDown.z - tempFootDir.z)
+            }
+            tempFootDir.normalize()
 
-        if (abs(pitch - clampedPitch) > 1e-3) {
-            tempHorizontalDir.set(tempFootDir.x, 0f, tempFootDir.z).normalize()
-            tempFootDir.set(
-                tempHorizontalDir.x * cos(clampedPitch),
-                sin(clampedPitch),
-                tempHorizontalDir.z * cos(clampedPitch)
-            )
+            val pitch = atan2(tempFootDir.y, sqrt(tempFootDir.x * tempFootDir.x + tempFootDir.z * tempFootDir.z))
+            val clampedPitch = pitch.coerceIn(definition.foot.minPitch, definition.foot.maxPitch)
+
+            if (abs(pitch - clampedPitch) > 1e-3) {
+                tempHorizontalDir.set(tempFootDir.x, 0f, tempFootDir.z).normalize()
+                tempFootDir.set(
+                    tempHorizontalDir.x * cos(clampedPitch),
+                    sin(clampedPitch),
+                    tempHorizontalDir.z * cos(clampedPitch)
+                )
+            }
         }
 
         val foot = definition.foot
