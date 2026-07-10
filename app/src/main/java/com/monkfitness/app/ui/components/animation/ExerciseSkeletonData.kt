@@ -404,7 +404,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     )
 
     register(
-        ids = setOf("glute_bridge_standard", "pelvic_tilt_standard"),
+        ids = setOf("glute_bridge_standard", "pelvic_tilt_standard", "leg_raise_standard"),
         animation = animation(
             1600,
             true,
@@ -496,7 +496,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     )
 
     register(
-        ids = setOf("cobra_stretch_prone", "child_pose_hold", "superman_prone"),
+        ids = setOf("cobra_stretch_prone", "cobra_stretch_hold", "child_pose_hold", "superman_prone"),
         animation = animation(
             2400,
             true,
