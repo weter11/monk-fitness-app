@@ -69,10 +69,10 @@ class PushUpPose : PoseBuilder {
         roots = listOf(ankleF!!)
     }
 
-private val armAIK = SkeletonMath.IKResult()
-private val armPIK = SkeletonMath.IKResult()
-private val tempV1 = Vector3()
-private val tempV2 = Vector3()
+    private val armAIK = SkeletonMath.IKResult()
+    private val armPIK = SkeletonMath.IKResult()
+    private val tempV1 = Vector3()
+    private val tempV2 = Vector3()
 
     override fun build(context: PoseContext): SkeletonPose {
         val progress = context.progress
@@ -110,24 +110,31 @@ private val tempV2 = Vector3()
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
         val chestW = chest!!.worldPosition
-    val shoulderAW = rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle, tempV2).add(chestW)
-    val shoulderPW = rotAround(tempV1.set(0f, 0f, def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle, tempV2).add(chestW)
+        val shoulderAW = rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle, tempV2).add(chestW)
+        val shoulderPW = rotAround(tempV1.set(0f, 0f, def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle, tempV2).add(chestW)
 
-        // 4. IK
-    val targetHandA = tempV1.set(chestW.x, 0f, -def.shoulderWidth * 1.5f)
-    val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 0f, -1f), def.armIKConstraint, armAIK)
+        // 4. IK (Polished Biomechanics)
+        
+        // Calculate a strict hand anchor so hands don't "ice-skate" backward as the chest hinges
+        val maxDrivingHeight = (60f - ankleHeight).coerceAtLeast(0f)
+        val maxTheta = asin((maxDrivingHeight / totalLegLen).coerceIn(-1f, 1f))
+        val handAnchorX = 60f - def.torsoLength * cos(maxTheta)
 
-    val targetHandP = tempV1.set(chestW.x, 0f, def.shoulderWidth * 1.5f)
-    val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, Vector3(1f, 0f, 1f), def.armIKConstraint, armPIK)
+        // IK Solve with fixed anchors and anatomically correct 45-degree elbow flare (Pole.y = 0.5f)
+        val targetHandA = tempV1.set(handAnchorX, 0f, -def.shoulderWidth * 1.5f)
+        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 0.5f, -1f), def.armIKConstraint, armAIK)
+
+        val targetHandP = tempV1.set(handAnchorX, 0f, def.shoulderWidth * 1.5f)
+        val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, Vector3(1f, 0.5f, 1f), def.armIKConstraint, armPIK)
 
         // 5. Hierarchy Update (Transform IK to local space)
-    shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
-    rotAround(tempV1.set(armA.joint).subtract(shoulderAW), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, elbowA!!.localPosition)
-    rotAround(tempV1.set(armA.end).subtract(armA.joint), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, handA!!.localPosition)
+        shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
+        rotAround(tempV1.set(armA.joint).subtract(shoulderAW), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, elbowA!!.localPosition)
+        rotAround(tempV1.set(armA.end).subtract(armA.joint), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, handA!!.localPosition)
 
-    shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
-    rotAround(tempV1.set(armP.joint).subtract(shoulderPW), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, elbowP!!.localPosition)
-    rotAround(tempV1.set(armP.end).subtract(armP.joint), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, handP!!.localPosition)
+        shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
+        rotAround(tempV1.set(armP.joint).subtract(shoulderPW), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, elbowP!!.localPosition)
+        rotAround(tempV1.set(armP.end).subtract(armP.joint), Vector3(0f, 0f, 1f), -chest!!.worldRotation.angle, handP!!.localPosition)
 
         // 6. Final Pass
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
