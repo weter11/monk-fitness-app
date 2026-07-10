@@ -21,7 +21,8 @@ class CatCowPose : PoseBuilder {
         defaultPitch = 0.22f,
         defaultZoom = 1.3f),
         durationSeconds = 4.0f,
-        loopMode = LoopMode.LOOP
+        loopMode = LoopMode.LOOP,
+        motionCurve = MotionCurve.SINE
     )
 
     override fun build(context: PoseContext): SkeletonPose {

@@ -25,6 +25,7 @@ fun SkeletonRenderer(
     camera: Camera,
     engine: SkeletonEngine,
     modifier: Modifier = Modifier,
+    environment: EnvironmentDefinition = EnvironmentDefinition(),
     showGround: Boolean = true,
     highlightedJoint: Joint? = null,
     screenSpaceSettings: ScreenSpaceSettings = ScreenSpaceSettings.DEFAULT
@@ -45,12 +46,29 @@ fun SkeletonRenderer(
         val height = size.height
 
         val finalizedPose = finalizer.finalize(pose)
-        projector.project(finalizedPose, camera, engine, width, height, skeletonBuffer)
+        projector.project(
+            pose = finalizedPose,
+            camera = camera,
+            engine = engine,
+            width = width,
+            height = height,
+            buffer = skeletonBuffer,
+            groundLevel = environment.ground.level
+        )
 
-        if (showGround) {
+        // Rendering Pipeline:
+        // 1. drawBackground()
+        drawBackground()
+
+        // 2. drawGround()
+        if (showGround && environment.ground.visible) {
             drawGroundPassive(skeletonBuffer, style, compensator, camera.zoom, scaleBuffer)
         }
 
+        // 3. drawEnvironment()
+        drawEnvironmentPassive(environment, camera, style, width, height, path)
+
+        // 4. drawSkeleton()
         var itemCount = 0
 
         for (i in 0 until skeletonBuffer.boneCount) {
@@ -127,6 +145,9 @@ fun SkeletonRenderer(
                 else -> {}
             }
         }
+
+        // 5. drawForeground()
+        drawForeground()
     }
 }
 
@@ -197,5 +218,111 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGroundPassive(
         val sx = style.shadowRadiusX * scaleBuffer.shadowScale
         val sy = style.shadowRadiusY * scaleBuffer.shadowScale
         drawOval(shadowColor, Offset(p.x - sx, p.y - sy), androidx.compose.ui.geometry.Size(sx * 2f, sy * 2f))
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBackground() {
+    // Left empty for future compatibility, fulfilling the rendering pipeline order.
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawForeground() {
+    // Left empty for future compatibility, fulfilling the rendering pipeline order.
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawEnvironmentPassive(
+    environment: EnvironmentDefinition,
+    camera: Camera,
+    style: SkeletonStyle,
+    width: Float,
+    height: Float,
+    path: Path
+) {
+    for (prop in environment.props) {
+        when (prop) {
+            is BoxProp -> drawBoxyProp(prop.center, prop.width, prop.height, prop.depth, camera, style, width, height, path) { it }
+            is StepProp -> drawBoxyProp(prop.center, prop.width, prop.height, prop.depth, camera, style, width, height, path) {
+                // StepProp: slight green/teal tint
+                Color(it.red * 0.8f, it.green * 0.95f, it.blue * 0.9f, it.alpha)
+            }
+            is BenchProp -> drawBoxyProp(prop.center, prop.width, prop.height, prop.depth, camera, style, width, height, path) {
+                // BenchProp: slight reddish/wood/orange-brown tint
+                Color(it.red * 0.75f, it.green * 0.7f, it.blue * 0.65f, it.alpha)
+            }
+            is WallProp -> drawBoxyProp(prop.center, prop.width, prop.height, prop.depth, camera, style, width, height, path) {
+                // WallProp: concrete/light-gray and semi-transparent
+                it.copy(alpha = 0.5f)
+            }
+        }
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBoxyProp(
+    center: Vector3,
+    pWidth: Float,
+    pHeight: Float,
+    pDepth: Float,
+    camera: Camera,
+    style: SkeletonStyle,
+    width: Float,
+    height: Float,
+    path: Path,
+    tint: (Color) -> Color
+) {
+    val hw = pWidth / 2f
+    val hh = pHeight / 2f
+    val hd = pDepth / 2f
+
+    // 8 corners of the cuboid in world space
+    val c0 = Vector3(center.x - hw, center.y - hh, center.z - hd)
+    val c1 = Vector3(center.x + hw, center.y - hh, center.z - hd)
+    val c2 = Vector3(center.x + hw, center.y + hh, center.z - hd)
+    val c3 = Vector3(center.x - hw, center.y + hh, center.z - hd)
+    val c4 = Vector3(center.x - hw, center.y - hh, center.z + hd)
+    val c5 = Vector3(center.x + hw, center.y - hh, center.z + hd)
+    val c6 = Vector3(center.x + hw, center.y + hh, center.z + hd)
+    val c7 = Vector3(center.x - hw, center.y + hh, center.z + hd)
+
+    // Project all 8 corners through Camera
+    val p0 = ProjectedPoint(); camera.project(c0, width, height, p0)
+    val p1 = ProjectedPoint(); camera.project(c1, width, height, p1)
+    val p2 = ProjectedPoint(); camera.project(c2, width, height, p2)
+    val p3 = ProjectedPoint(); camera.project(c3, width, height, p3)
+    val p4 = ProjectedPoint(); camera.project(c4, width, height, p4)
+    val p5 = ProjectedPoint(); camera.project(c5, width, height, p5)
+    val p6 = ProjectedPoint(); camera.project(c6, width, height, p6)
+    val p7 = ProjectedPoint(); camera.project(c7, width, height, p7)
+
+    class PropFace(val pts: List<ProjectedPoint>) {
+        val avgDepth = (pts[0].depth + pts[1].depth + pts[2].depth + pts[3].depth) / 4f
+    }
+
+    // 6 faces of the box
+    val faces = listOf(
+        PropFace(listOf(p0, p1, p2, p3)), // front (z = -hd)
+        PropFace(listOf(p5, p4, p7, p6)), // back (z = +hd)
+        PropFace(listOf(p4, p0, p3, p7)), // left (x = -hw)
+        PropFace(listOf(p1, p5, p6, p2)), // right (x = +hw)
+        PropFace(listOf(p3, p2, p6, p7)), // top (y = +hh)
+        PropFace(listOf(p4, p5, p1, p0))  // bottom (y = -hh)
+    )
+
+    // Painter's algorithm: sort faces from back to front (descending depth)
+    val sortedFaces = faces.sortedByDescending { it.avgDepth }
+
+    for (f in sortedFaces) {
+        val baseColor = getZColor(f.avgDepth, false, style)
+        val color = tint(baseColor)
+        val strokeC = Color(color.red * 0.6f, color.green * 0.6f, color.blue * 0.6f, color.alpha)
+        val fillC = Color(color.red * 0.9f, color.green * 0.9f, color.blue * 0.9f, color.alpha)
+
+        path.reset()
+        path.moveTo(f.pts[0].x, f.pts[0].y)
+        path.lineTo(f.pts[1].x, f.pts[1].y)
+        path.lineTo(f.pts[2].x, f.pts[2].y)
+        path.lineTo(f.pts[3].x, f.pts[3].y)
+        path.close()
+
+        drawPath(path, fillC)
+        drawPath(path, strokeC, style = androidx.compose.ui.graphics.drawscope.Stroke(width = style.outlineWidth))
     }
 }

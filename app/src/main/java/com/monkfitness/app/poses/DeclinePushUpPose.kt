@@ -7,6 +7,23 @@ import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
 class DeclinePushUpPose : BasePushUpPose() {
+    override val metadata = PoseMetadata(
+        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
+        durationSeconds = 2.5f,
+        loopMode = LoopMode.LOOP,
+        environment = EnvironmentDefinition(
+            props = listOf(
+                BoxProp(
+                    center = Vector3(150f, 20f, 0f),
+                    width = 60f,
+                    height = 40f,
+                    depth = 60f
+                )
+            )
+        ),
+        motionCurve = MotionCurve.FAST_DOWN_SLOW_UP
+    )
+
     override fun build(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)

@@ -9,7 +9,9 @@ import kotlin.math.*
 class PikePushUpPose : PoseBuilder {
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
-        durationSeconds = 2.5f, loopMode = LoopMode.LOOP
+        durationSeconds = 2.5f,
+        loopMode = LoopMode.LOOP,
+        motionCurve = MotionCurve.FAST_DOWN_SLOW_UP
     )
 
     private var roots: List<SkeletonNode>? = null

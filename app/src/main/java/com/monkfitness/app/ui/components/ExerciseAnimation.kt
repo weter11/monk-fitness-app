@@ -45,19 +45,20 @@ fun ExerciseAnimatedVisual(
     val poseConfig = PoseRegistry.getPoseConfig(animationId)
 
     if (poseConfig != null) {
+        val metadata = poseConfig.builder.metadata
         val controller = rememberAnimationController(
-            metadata = poseConfig.builder.metadata,
+            metadata = metadata,
             alternating = poseConfig.alternating
         )
         val definition = SkeletonDefinition.DEFAULT_ADULT
+        val curveProgress = com.monkfitness.app.animation.MotionCurves.transform(metadata.motionCurve, controller.progress)
         val poseContext = PoseContext(
             state = com.monkfitness.app.animation.AnimationState(
-                progress = controller.progress,
+                progress = curveProgress,
                 side = controller.side
             ),
             definition = definition
         )
-        val metadata = poseConfig.builder.metadata
         val pose = poseConfig.builder.build(poseContext)
         val cameraDefinition = metadata.camera
 
@@ -78,6 +79,7 @@ fun ExerciseAnimatedVisual(
             pose = pose,
             camera = camera,
             engine = engine,
+            environment = metadata.environment,
             modifier = modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {

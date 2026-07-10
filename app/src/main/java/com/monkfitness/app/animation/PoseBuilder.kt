@@ -11,7 +11,8 @@ interface PoseBuilder {
     // Kept for backward compatibility if needed, but build(context) is now preferred
     @Deprecated("Use build(context: PoseContext)", ReplaceWith("build(context)"))
     fun evaluate(progress: Float, side: Side, definition: SkeletonDefinition): SkeletonPose {
-        return build(PoseContext(progress, side, definition))
+        val curveProgress = MotionCurves.transform(metadata.motionCurve, progress)
+        return build(PoseContext(curveProgress, side, definition))
     }
 }
 
