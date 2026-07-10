@@ -72,6 +72,11 @@ class SkeletonNode(
         // Rotation propagation: Concatenate parent's world rotation with local rotation
         if (orientationMode == JointOrientationMode.WORLD_LOCKED) {
             worldRotation.copyFrom(localRotation)
+            // Compute the required localRotation so that local = inverse(parentWorld) * desiredWorld
+            SkeletonMath.rotationToMatrix(parentWorldRotation, pX, pY, pZ)
+            SkeletonMath.rotationToMatrix(worldRotation, wX, wY, wZ)
+            SkeletonMath.transposeMultiply(pX, pY, pZ, wX, wY, wZ, lX, lY, lZ)
+            SkeletonMath.getRotationFromMatrix(lX, lY, lZ, localRotation)
         } else {
             SkeletonMath.rotationToMatrix(parentWorldRotation, pX, pY, pZ)
             SkeletonMath.rotationToMatrix(localRotation, lX, lY, lZ)

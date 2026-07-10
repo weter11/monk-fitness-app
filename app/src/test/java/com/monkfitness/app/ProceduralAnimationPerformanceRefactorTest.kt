@@ -164,5 +164,11 @@ class ProceduralAnimationPerformanceRefactorTest {
         // Under INHERIT, child world rotation would be parent (0.5) + local (0.2) = 0.7.
         // Under WORLD_LOCKED, child world rotation must be exactly local (0.2)!
         assertEquals(0.2f, child.worldRotation.angle, 1e-4f)
+
+        // And child localRotation must be computed as inverse(parentWorldRotation) * worldRotation
+        // R_parent = 0.5 rad around Z. R_world = 0.2 rad around Z.
+        // R_local should be -0.3 rad around (0, 0, 1) [or 0.3 rad around (0, 0, -1)]
+        val computedAngle = child.localRotation.angle * child.localRotation.axis.z
+        assertEquals(-0.3f, computedAngle, 1e-4f)
     }
 }
