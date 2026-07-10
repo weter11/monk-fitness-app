@@ -146,4 +146,48 @@ class ProceduralAnimationPerformanceRefactorTest {
         assertNotEquals(0f, finalizedPose.getJoint(Joint.HEEL_F).mag(), 1e-4f)
         assertNotEquals(0f, finalizedPose.getJoint(Joint.FINGERTIPS_A).mag(), 1e-4f)
     }
+
+    @Test
+    fun testAnimationStateAndPoseContextAPI() {
+        val state = AnimationState(
+            progress = 0.5f,
+            side = Side.LEFT,
+            phase = 1.5f,
+            playbackSpeed = 1.2f,
+            loopIndex = 3,
+            deltaTime = 16.6f,
+            mirrored = true
+        )
+        val context = PoseContext(
+            state = state,
+            definition = SkeletonDefinition.DEFAULT_ADULT,
+            cycleDuration = 4000f
+        )
+
+        // Verify primary values are accessible via PoseContext
+        assertEquals(state, context.state)
+        assertEquals(0.5f, context.progress, 1e-4f)
+        assertEquals(Side.LEFT, context.side)
+        assertEquals(1.5f, context.phase, 1e-4f)
+        assertEquals(1.2f, context.playbackSpeed, 1e-4f)
+        assertEquals(3, context.loopIndex)
+        assertEquals(16.6f, context.deltaTime, 1e-4f)
+        assertTrue(context.mirrored)
+        assertEquals(4000f, context.cycleDuration, 1e-4f)
+
+        // Verify compatibility constructor creates matching state
+        val compatContext = PoseContext(
+            progress = 0.5f,
+            side = Side.LEFT,
+            definition = SkeletonDefinition.DEFAULT_ADULT,
+            deltaTime = 16.6f,
+            cycleDuration = 4000f,
+            playbackSpeed = 1.2f,
+            mirrored = true,
+            phase = 1.5f,
+            loopIndex = 3
+        )
+        assertEquals(state, compatContext.state)
+        assertEquals(4000f, compatContext.cycleDuration, 1e-4f)
+    }
 }

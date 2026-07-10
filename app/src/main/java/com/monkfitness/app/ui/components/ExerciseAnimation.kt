@@ -51,8 +51,10 @@ fun ExerciseAnimatedVisual(
         )
         val definition = SkeletonDefinition.DEFAULT_ADULT
         val poseContext = PoseContext(
-            progress = controller.progress,
-            side = controller.side,
+            state = com.monkfitness.app.animation.AnimationState(
+                progress = controller.progress,
+                side = controller.side
+            ),
             definition = definition
         )
         val metadata = poseConfig.builder.metadata
