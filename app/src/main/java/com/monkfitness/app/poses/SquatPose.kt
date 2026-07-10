@@ -21,7 +21,8 @@ class SquatPose : PoseBuilder {
         defaultPitch = 0.22f,
         defaultZoom = 1.3f),
         durationSeconds = 3.0f,
-        loopMode = LoopMode.LOOP
+        loopMode = LoopMode.LOOP,
+        motionCurve = MotionCurve.SLOW_DOWN_FAST_UP
     )
 
     override fun build(context: PoseContext): SkeletonPose {

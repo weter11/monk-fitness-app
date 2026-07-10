@@ -20,5 +20,6 @@ data class PoseMetadata(
     val supportsMirroring: Boolean = false,
     val groundHeight: Float = 0f,
     val initialFacing: FacingDirection = FacingDirection.FRONT,
-    val environment: EnvironmentDefinition = EnvironmentDefinition()
+    val environment: EnvironmentDefinition = EnvironmentDefinition(),
+    val motionCurve: MotionCurve = MotionCurve.LINEAR
 )

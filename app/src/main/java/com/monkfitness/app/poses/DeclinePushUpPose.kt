@@ -20,7 +20,8 @@ class DeclinePushUpPose : BasePushUpPose() {
                     depth = 60f
                 )
             )
-        )
+        ),
+        motionCurve = MotionCurve.FAST_DOWN_SLOW_UP
     )
 
     override fun build(context: PoseContext): SkeletonPose {

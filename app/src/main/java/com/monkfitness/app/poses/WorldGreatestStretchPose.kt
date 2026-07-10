@@ -22,7 +22,8 @@ class WorldGreatestStretchPose : PoseBuilder {
         defaultPitch = 0.22f,
         defaultZoom = 1.3f),
         durationSeconds = 6.0f,
-        loopMode = LoopMode.HOLD
+        loopMode = LoopMode.HOLD,
+        motionCurve = MotionCurve.EASE_IN_OUT
     )
 
     override fun build(context: PoseContext): SkeletonPose {
