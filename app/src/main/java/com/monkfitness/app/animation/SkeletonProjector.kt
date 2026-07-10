@@ -24,7 +24,8 @@ class SkeletonProjector {
         engine: SkeletonEngine,
         width: Float,
         height: Float,
-        buffer: ProjectedSkeleton
+        buffer: ProjectedSkeleton,
+        groundLevel: Float = 0f
     ) {
         val style = engine.style
 
@@ -58,7 +59,7 @@ class SkeletonProjector {
         updateTorsoFaces(pose, camera, style, width, height, buffer)
 
         // 5. Ground
-        updateGround(pose, camera, width, height, buffer)
+        updateGround(pose, camera, width, height, buffer, groundLevel)
 
         // 6. Depth Range
         var dMin = Float.MAX_VALUE
@@ -112,18 +113,25 @@ class SkeletonProjector {
         buffer.faces[5].update(torsoPoints[0], torsoPoints[2], torsoPoints[3], torsoPoints[1]) // bottom
     }
 
-    private fun updateGround(pose: SkeletonPose, camera: Camera, width: Float, height: Float, buffer: ProjectedSkeleton) {
+    private fun updateGround(
+        pose: SkeletonPose,
+        camera: Camera,
+        width: Float,
+        height: Float,
+        buffer: ProjectedSkeleton,
+        groundLevel: Float
+    ) {
         var lineIdx = 0
         for (x in -260..260 step 65) {
             if (lineIdx >= buffer.gridLines.size) break
-            camera.project(tempV.set(x.toFloat(), 0f, -170f), width, height, buffer.gridLines[lineIdx].p1)
-            camera.project(tempV.set(x.toFloat(), 0f, 170f), width, height, buffer.gridLines[lineIdx].p2)
+            camera.project(tempV.set(x.toFloat(), groundLevel, -170f), width, height, buffer.gridLines[lineIdx].p1)
+            camera.project(tempV.set(x.toFloat(), groundLevel, 170f), width, height, buffer.gridLines[lineIdx].p2)
             lineIdx++
         }
         for (z in -170..170 step 65) {
             if (lineIdx >= buffer.gridLines.size) break
-            camera.project(tempV.set(-260f, 0f, z.toFloat()), width, height, buffer.gridLines[lineIdx].p1)
-            camera.project(tempV.set(260f, 0f, z.toFloat()), width, height, buffer.gridLines[lineIdx].p2)
+            camera.project(tempV.set(-260f, groundLevel, z.toFloat()), width, height, buffer.gridLines[lineIdx].p1)
+            camera.project(tempV.set(260f, groundLevel, z.toFloat()), width, height, buffer.gridLines[lineIdx].p2)
             lineIdx++
         }
         buffer.gridLineCount = lineIdx
@@ -131,7 +139,7 @@ class SkeletonProjector {
         for (i in 0 until shadowJoints.size) {
             val id = shadowJoints[i]
             val pt = pose.getJoint(id)
-            camera.project(tempV.set(pt.x, 0f, pt.z), width, height, buffer.shadowPoints[i])
+            camera.project(tempV.set(pt.x, groundLevel, pt.z), width, height, buffer.shadowPoints[i])
         }
     }
 }

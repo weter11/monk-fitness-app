@@ -1,7 +1,12 @@
 package com.monkfitness.app.animation
 
+data class GroundDefinition(
+    val visible: Boolean = true,
+    val level: Float = 0f
+)
+
 data class EnvironmentDefinition(
-    val groundVisible: Boolean = true,
+    val ground: GroundDefinition = GroundDefinition(),
     val props: List<EnvironmentProp> = emptyList()
 )
 

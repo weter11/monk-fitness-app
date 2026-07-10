@@ -16,11 +16,12 @@ class EnvironmentSystemTest {
         val wall = WallProp(center = center, width = 5f, height = 100f, depth = 200f)
 
         val env = EnvironmentDefinition(
-            groundVisible = false,
+            ground = GroundDefinition(visible = false, level = 15f),
             props = listOf(box, step, bench, wall)
         )
 
-        assertFalse(env.groundVisible)
+        assertFalse(env.ground.visible)
+        assertEquals(15f, env.ground.level, 1e-4f)
         assertEquals(4, env.props.size)
         assertTrue(env.props[0] is BoxProp)
         assertTrue(env.props[1] is StepProp)
@@ -51,7 +52,8 @@ class EnvironmentSystemTest {
     @Test
     fun testDefaultEnvironmentDefinition() {
         val metadata = PoseMetadata()
-        assertTrue(metadata.environment.groundVisible)
+        assertTrue(metadata.environment.ground.visible)
+        assertEquals(0f, metadata.environment.ground.level, 1e-4f)
         assertTrue(metadata.environment.props.isEmpty())
     }
 }

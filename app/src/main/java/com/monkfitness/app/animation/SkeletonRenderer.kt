@@ -46,14 +46,22 @@ fun SkeletonRenderer(
         val height = size.height
 
         val finalizedPose = finalizer.finalize(pose)
-        projector.project(finalizedPose, camera, engine, width, height, skeletonBuffer)
+        projector.project(
+            pose = finalizedPose,
+            camera = camera,
+            engine = engine,
+            width = width,
+            height = height,
+            buffer = skeletonBuffer,
+            groundLevel = environment.ground.level
+        )
 
         // Rendering Pipeline:
         // 1. drawBackground()
         drawBackground()
 
         // 2. drawGround()
-        if (showGround && environment.groundVisible) {
+        if (showGround && environment.ground.visible) {
             drawGroundPassive(skeletonBuffer, style, compensator, camera.zoom, scaleBuffer)
         }
 
