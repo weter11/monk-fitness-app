@@ -11,18 +11,22 @@ class DeclinePushUpPose : BasePushUpPose() {
         val def = context.definition
         ensureHierarchy(def)
 
-        // DECLINE PUSHUP: Body height is shifted down, but ankleHeight is elevated.
-        val height = lerp(90f, 55f, context.progress)
+        // DECLINE FIX: Feet rest on a 40f box.
+        val boxHeight = 40f
+        val ankleHeight = boxHeight + 25f
+
+        val height = lerp(60f, 20f, context.progress)
         val totalLegLen = def.shinLength + def.thighLength
-        val ankleHeight = 55f // Elevated feet support geometry
-        val drivingHeight = (height - ankleHeight).coerceAtLeast(0f)
+
+        // At the bottom of the push-up, driving height will be negative. asin() handles this seamlessly!
+        val drivingHeight = (height - ankleHeight)
         val theta = asin((drivingHeight / totalLegLen).coerceIn(-1f, 1f))
         val ankleX = 60f + (totalLegLen * cos(theta))
 
         ankleF!!.localPosition = Vector3(ankleX, ankleHeight, -def.hipWidth)
         ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), -theta)
 
-        // PERPENDICULAR FEET: World vector points straight down (0, -1, 0)
+        // Feet stick perfectly perpendicular to the floor/box surface.
         val worldFootDir = Vector3(0f, -1f, 0f)
         val localFootDir = rotAround(worldFootDir, Vector3(0f, 0f, 1f), theta, Vector3())
         heelF!!.localPosition = Vector3(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
@@ -34,11 +38,9 @@ class DeclinePushUpPose : BasePushUpPose() {
         hipF!!.localPosition = Vector3(-def.thighLength, 0f, 0f)
         pelvis!!.localPosition = Vector3(0f, 0f, def.hipWidth)
         chest!!.localPosition = Vector3(-def.torsoLength, 0f, 0f)
-
         val headDir = Vector3(-1f, 0.2f, 0f).normalize()
         neck!!.localPosition = Vector3(headDir.x * def.neckLength, headDir.y * def.neckLength, headDir.z * def.neckLength)
         head!!.localPosition = Vector3(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
-
         hipB!!.localPosition = Vector3(0f, 0f, def.hipWidth)
         kneeB!!.localPosition = Vector3(def.thighLength, 0f, 0f)
         ankleB!!.localPosition = Vector3(def.shinLength, 0f, 0f)
@@ -49,11 +51,10 @@ class DeclinePushUpPose : BasePushUpPose() {
         val shoulderAW = rotAround(Vector3(0f, 0f, -def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle, Vector3()).add(chestW)
         val shoulderPW = rotAround(Vector3(0f, 0f, def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle, Vector3()).add(chestW)
 
-        val maxDrivingHeight = (90f - ankleHeight).coerceAtLeast(0f)
+        val maxDrivingHeight = (60f - ankleHeight)
         val maxTheta = asin((maxDrivingHeight / totalLegLen).coerceIn(-1f, 1f))
         val handAnchorX = 60f - def.torsoLength * cos(maxTheta)
 
-        // STANDARD BIOMECHANICS: 1.5x width, 45-deg elbow flare
         val targetHandA = Vector3(handAnchorX, 0f, -def.shoulderWidth * 1.5f)
         val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 0.5f, -1f), def.armIKConstraint, armAIK)
         val targetHandP = Vector3(handAnchorX, 0f, def.shoulderWidth * 1.5f)
@@ -67,7 +68,6 @@ class DeclinePushUpPose : BasePushUpPose() {
         rotAround(Vector3(armP.joint.x - shoulderPW.x, armP.joint.y - shoulderPW.y, armP.joint.z - shoulderPW.z), Vector3(0f, 0f, 1f), theta, elbowP!!.localPosition)
         rotAround(Vector3(armP.end.x - armP.joint.x, armP.end.y - armP.joint.y, armP.end.z - armP.joint.z), Vector3(0f, 0f, 1f), theta, handP!!.localPosition)
 
-        // Standard Splay
         handA!!.localRotation.set(Vector3(0f, 0f, 1f), theta)
         val handDirA = Vector3(-1f, 0f, -0.2f).normalize()
         palmA!!.localPosition = Vector3(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); knucklesA!!.localPosition = Vector3(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); fingertipsA!!.localPosition = Vector3(handDirA.x * 10f, handDirA.y * 10f, handDirA.z * 10f)
@@ -78,7 +78,6 @@ class DeclinePushUpPose : BasePushUpPose() {
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
-
         return jointsBuffer
     }
 }
