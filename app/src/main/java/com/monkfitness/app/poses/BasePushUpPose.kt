@@ -15,11 +15,11 @@ abstract class BasePushUpPose : PoseBuilder {
     )
 
     protected var roots: List<SkeletonNode>? = null
-    protected var ankleF: SkeletonNode? = null; protected var kneeF: SkeletonNode? = null; protected var hipF: SkeletonNode? = null; protected var pelvis: SkeletonNode? = null; protected var chest: SkeletonNode? = null; protected var neck: SkeletonNode? = null; protected var head: SkeletonNode? = null
+    protected var frontLeg: LegChain? = null
+    protected var pelvis: SkeletonNode? = null; protected var chest: SkeletonNode? = null; protected var neck: SkeletonNode? = null; protected var head: SkeletonNode? = null
     protected var frontArm: ArmChain? = null
     protected var backArm: ArmChain? = null
-    protected var hipB: SkeletonNode? = null; protected var kneeB: SkeletonNode? = null; protected var ankleB: SkeletonNode? = null
-    protected var heelF: SkeletonNode? = null; protected var toeF: SkeletonNode? = null; protected var heelB: SkeletonNode? = null; protected var toeB: SkeletonNode? = null
+    protected var backLeg: LegChain? = null
 
     protected val jointsBuffer = SkeletonPose()
     protected val armAIK = SkeletonMath.IKResult()
@@ -27,17 +27,17 @@ abstract class BasePushUpPose : PoseBuilder {
 
     protected fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
-        ankleF = SkeletonNode(Joint.ANKLE_F)
-        heelF = ankleF!!.addChild(SkeletonNode(Joint.HEEL_F)); toeF = ankleF!!.addChild(SkeletonNode(Joint.TOE_F))
-        kneeF = ankleF!!.addChild(SkeletonNode(Joint.KNEE_F)); hipF = kneeF!!.addChild(SkeletonNode(Joint.HIP_F))
-        pelvis = hipF!!.addChild(SkeletonNode(Joint.PELVIS)); chest = pelvis!!.addChild(SkeletonNode(Joint.CHEST))
+        val dummy = SkeletonNode(Joint.PELVIS)
+        frontLeg = LegChain.create(dummy, Joint.HIP_F, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
+
+        pelvis = frontLeg!!.hip.addChild(SkeletonNode(Joint.PELVIS))
+        chest = pelvis!!.addChild(SkeletonNode(Joint.CHEST))
         neck = chest!!.addChild(SkeletonNode(Joint.NECK_END)); head = neck!!.addChild(SkeletonNode(Joint.HEAD_POS))
 
         frontArm = ArmChain.create(chest!!, Joint.SHOULDER_A, Joint.ELBOW_A, Joint.HAND_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A)
         backArm = ArmChain.create(chest!!, Joint.SHOULDER_P, Joint.ELBOW_P, Joint.HAND_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
 
-        hipB = pelvis!!.addChild(SkeletonNode(Joint.HIP_B)); kneeB = hipB!!.addChild(SkeletonNode(Joint.KNEE_B)); ankleB = kneeB!!.addChild(SkeletonNode(Joint.ANKLE_B))
-        heelB = ankleB!!.addChild(SkeletonNode(Joint.HEEL_B)); toeB = ankleB!!.addChild(SkeletonNode(Joint.TOE_B))
-        roots = listOf(ankleF!!)
+        backLeg = LegChain.create(pelvis!!, Joint.HIP_B, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
+        roots = listOf(frontLeg!!.ankle)
     }
 }

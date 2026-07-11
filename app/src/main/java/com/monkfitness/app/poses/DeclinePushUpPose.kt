@@ -44,18 +44,18 @@ class DeclinePushUpPose : BasePushUpPose() {
         val theta = asin((drivingHeight / totalLegLen).coerceIn(-1f, 1f))
         val ankleX = 60f + (totalLegLen * cos(theta))
 
-        ankleF!!.localPosition = Vector3(ankleX, ankleHeight, -def.hipWidth)
-        ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), -theta)
+        frontLeg!!.ankle.localPosition = Vector3(ankleX, ankleHeight, -def.hipWidth)
+        frontLeg!!.ankle.localRotation.set(Vector3(0f, 0f, 1f), -theta)
 
         val worldFootDir = Vector3(0f, -1f, 0f)
         val localFootDir = rotAround(worldFootDir, Vector3(0f, 0f, 1f), theta, Vector3())
-        heelF!!.localPosition = Vector3(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
-        toeF!!.localPosition = Vector3(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
-        heelB!!.localPosition = Vector3(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
-        toeB!!.localPosition = Vector3(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
+        frontLeg!!.heel!!.localPosition = Vector3(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
+        frontLeg!!.toe!!.localPosition = Vector3(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
+        backLeg!!.heel!!.localPosition = Vector3(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
+        backLeg!!.toe!!.localPosition = Vector3(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
 
-        kneeF!!.localPosition = Vector3(-def.shinLength, 0f, 0f)
-        hipF!!.localPosition = Vector3(-def.thighLength, 0f, 0f)
+        frontLeg!!.knee.localPosition = Vector3(-def.shinLength, 0f, 0f)
+        frontLeg!!.hip.localPosition = Vector3(-def.thighLength, 0f, 0f)
         pelvis!!.localPosition = Vector3(0f, 0f, def.hipWidth)
         chest!!.localPosition = Vector3(-def.torsoLength, 0f, 0f)
 
@@ -63,9 +63,9 @@ class DeclinePushUpPose : BasePushUpPose() {
         neck!!.localPosition = Vector3(headDir.x * def.neckLength, headDir.y * def.neckLength, headDir.z * def.neckLength)
         head!!.localPosition = Vector3(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
 
-        hipB!!.localPosition = Vector3(0f, 0f, def.hipWidth)
-        kneeB!!.localPosition = Vector3(def.thighLength, 0f, 0f)
-        ankleB!!.localPosition = Vector3(def.shinLength, 0f, 0f)
+        backLeg!!.hip.localPosition = Vector3(0f, 0f, def.hipWidth)
+        backLeg!!.knee.localPosition = Vector3(def.thighLength, 0f, 0f)
+        backLeg!!.ankle.localPosition = Vector3(def.shinLength, 0f, 0f)
 
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 

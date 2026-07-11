@@ -60,18 +60,18 @@ class PikePushUpPose : BasePushUpPose() {
         val torsoVecY = chestY - py
         val torsoGlobalPitch = atan2(-torsoVecY, -torsoVecX)
 
-        ankleF!!.localPosition = Vector3(ankleX, ankleHeight, -def.hipWidth)
-        ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), legPitch)
+        frontLeg!!.ankle.localPosition = Vector3(ankleX, ankleHeight, -def.hipWidth)
+        frontLeg!!.ankle.localRotation.set(Vector3(0f, 0f, 1f), legPitch)
 
         val worldFootDir = Vector3(0f, -1f, 0f)
         val localFootDir = rotAround(worldFootDir, Vector3(0f, 0f, 1f), -legPitch, Vector3())
-        heelF!!.localPosition = Vector3(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
-        toeF!!.localPosition = Vector3(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
-        heelB!!.localPosition = Vector3(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
-        toeB!!.localPosition = Vector3(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
+        frontLeg!!.heel!!.localPosition = Vector3(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
+        frontLeg!!.toe!!.localPosition = Vector3(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
+        backLeg!!.heel!!.localPosition = Vector3(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
+        backLeg!!.toe!!.localPosition = Vector3(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
 
-        kneeF!!.localPosition = Vector3(-def.shinLength, 0f, 0f)
-        hipF!!.localPosition = Vector3(-def.thighLength, 0f, 0f)
+        frontLeg!!.knee.localPosition = Vector3(-def.shinLength, 0f, 0f)
+        frontLeg!!.hip.localPosition = Vector3(-def.thighLength, 0f, 0f)
 
         pelvis!!.localPosition = Vector3(0f, 0f, def.hipWidth)
         pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), torsoGlobalPitch - legPitch)
@@ -79,11 +79,11 @@ class PikePushUpPose : BasePushUpPose() {
 
         // 1. Correcting the Right-Side (Side B) Floating Leg Asymmetry
         // By subtracting the torso pitch, we isolate and enforce the exact same global leg pitch on both sides.
-        hipB!!.localPosition = Vector3(0f, 0f, def.hipWidth)
-        hipB!!.localRotation.set(Vector3(0f, 0f, 1f), legPitch - torsoGlobalPitch)
-        kneeB!!.localPosition = Vector3(def.thighLength, 0f, 0f)
-        kneeB!!.localRotation.set(Vector3(0f, 0f, 1f), 0f)
-        ankleB!!.localPosition = Vector3(def.shinLength, 0f, 0f)
+        backLeg!!.hip.localPosition = Vector3(0f, 0f, def.hipWidth)
+        backLeg!!.hip.localRotation.set(Vector3(0f, 0f, 1f), legPitch - torsoGlobalPitch)
+        backLeg!!.knee.localPosition = Vector3(def.thighLength, 0f, 0f)
+        backLeg!!.knee.localRotation.set(Vector3(0f, 0f, 1f), 0f)
+        backLeg!!.ankle.localPosition = Vector3(def.shinLength, 0f, 0f)
 
         val headDir = Vector3(-1f, -0.6f, 0f).normalize()
         neck!!.localPosition = Vector3(headDir.x * def.neckLength, headDir.y * def.neckLength, headDir.z * def.neckLength)

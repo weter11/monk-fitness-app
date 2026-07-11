@@ -34,32 +34,32 @@ class KneePushUpPose : BasePushUpPose() {
         // 1. Root Anchoring
         val ankleX = kneeX + def.shinLength * cos(shinPitch)
         val ankleY = kneeHeight + def.shinLength * sin(shinPitch)
-        ankleF!!.localPosition = Vector3(ankleX, ankleY, -def.hipWidth)
-        ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), shinPitch)
+        frontLeg!!.ankle.localPosition = Vector3(ankleX, ankleY, -def.hipWidth)
+        frontLeg!!.ankle.localRotation.set(Vector3(0f, 0f, 1f), shinPitch)
 
         val footDir = rotAround(Vector3(1f, -1f, 0f).normalize(), Vector3(0f, 0f, 1f), -shinPitch, Vector3())
-        heelF!!.localPosition = Vector3(footDir.x * -def.foot.footLength * 0.29f, footDir.y * -def.foot.footLength * 0.29f, footDir.z * -def.foot.footLength * 0.29f)
-        toeF!!.localPosition = Vector3(footDir.x * def.foot.footLength * 0.71f, footDir.y * def.foot.footLength * 0.71f, footDir.z * def.foot.footLength * 0.71f)
-        heelB!!.localPosition = Vector3(footDir.x * -def.foot.footLength * 0.29f, footDir.y * -def.foot.footLength * 0.29f, footDir.z * -def.foot.footLength * 0.29f)
-        toeB!!.localPosition = Vector3(footDir.x * def.foot.footLength * 0.71f, footDir.y * def.foot.footLength * 0.71f, footDir.z * def.foot.footLength * 0.71f)
+        frontLeg!!.heel!!.localPosition = Vector3(footDir.x * -def.foot.footLength * 0.29f, footDir.y * -def.foot.footLength * 0.29f, footDir.z * -def.foot.footLength * 0.29f)
+        frontLeg!!.toe!!.localPosition = Vector3(footDir.x * def.foot.footLength * 0.71f, footDir.y * def.foot.footLength * 0.71f, footDir.z * def.foot.footLength * 0.71f)
+        backLeg!!.heel!!.localPosition = Vector3(footDir.x * -def.foot.footLength * 0.29f, footDir.y * -def.foot.footLength * 0.29f, footDir.z * -def.foot.footLength * 0.29f)
+        backLeg!!.toe!!.localPosition = Vector3(footDir.x * def.foot.footLength * 0.71f, footDir.y * def.foot.footLength * 0.71f, footDir.z * def.foot.footLength * 0.71f)
 
         // 2. Main Plank (Side F)
-        kneeF!!.localPosition = Vector3(-def.shinLength, 0f, 0f)
-        kneeF!!.localRotation.set(Vector3(0f, 0f, 1f), -theta - shinPitch)
+        frontLeg!!.knee.localPosition = Vector3(-def.shinLength, 0f, 0f)
+        frontLeg!!.knee.localRotation.set(Vector3(0f, 0f, 1f), -theta - shinPitch)
 
-        hipF!!.localPosition = Vector3(-def.thighLength, 0f, 0f)
+        frontLeg!!.hip.localPosition = Vector3(-def.thighLength, 0f, 0f)
         pelvis!!.localPosition = Vector3(0f, 0f, def.hipWidth)
         chest!!.localPosition = Vector3(-def.torsoLength, 0f, 0f)
 
         // 3. Perfect Symmetry (Side B)
         // Because Side B builds downwards from Pelvis, Thigh B local rotation is 0 (to inherit -theta).
-        hipB!!.localPosition = Vector3(0f, 0f, def.hipWidth)
-        hipB!!.localRotation.set(Vector3(0f, 0f, 1f), 0f)
+        backLeg!!.hip.localPosition = Vector3(0f, 0f, def.hipWidth)
+        backLeg!!.hip.localRotation.set(Vector3(0f, 0f, 1f), 0f)
 
         // Shin B must counter-rotate the -theta to match the 45 degree upward pitch
-        kneeB!!.localPosition = Vector3(def.thighLength, 0f, 0f)
-        kneeB!!.localRotation.set(Vector3(0f, 0f, 1f), shinPitch + theta)
-        ankleB!!.localPosition = Vector3(def.shinLength, 0f, 0f)
+        backLeg!!.knee.localPosition = Vector3(def.thighLength, 0f, 0f)
+        backLeg!!.knee.localRotation.set(Vector3(0f, 0f, 1f), shinPitch + theta)
+        backLeg!!.ankle.localPosition = Vector3(def.shinLength, 0f, 0f)
 
         val headDir = Vector3(-1f, 0.2f, 0f).normalize()
         neck!!.localPosition = Vector3(headDir.x * def.neckLength, headDir.y * def.neckLength, headDir.z * def.neckLength)
