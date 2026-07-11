@@ -34,6 +34,7 @@ object PoseRegistry {
         "glute_bridge_standard" to false,
         "pelvic_tilt_standard" to false,
         "burpee_standard" to false,
+        "face_pull_banded" to false,
         "cobra_stretch_hold" to false,
         "side_plank_standard" to false,
         "plank_standard" to false,
