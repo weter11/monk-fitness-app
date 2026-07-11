@@ -36,6 +36,7 @@ object PoseRegistry {
         "burpee_standard" to false,
         "face_pull_banded" to false,
         "scapular_retraction_hold" to false,
+        "wall_slide_standard" to false,
         "cobra_stretch_hold" to false,
         "side_plank_standard" to false,
         "plank_standard" to false,

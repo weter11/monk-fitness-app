@@ -33,6 +33,7 @@ object AnimationRegistry {
         register("burpee_standard", BurpeePose())
         register("face_pull_banded", FacePullPose())
         register("scapular_retraction_hold", ScapularRetractionPose())
+        register("wall_slide_standard", WallSlidesPose())
         register("cobra_stretch_hold", ProneCobraStretchPose())
         register("side_plank_standard", IsometricSidePlankPose())
         register("plank_standard", StaticForearmPlankPose())
