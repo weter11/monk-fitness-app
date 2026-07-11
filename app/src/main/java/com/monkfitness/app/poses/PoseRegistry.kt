@@ -31,6 +31,17 @@ object PoseRegistry {
         "thoracic_rotations_reps" to false,
         "thoracic_extension_reps" to false,
         "hamstring_stretch_hold" to false,
+        "cobra_stretch_hold" to false,
+        "side_plank_standard" to false,
+        "plank_standard" to false,
+        "pullup_standard" to false,
+        "chinup_standard" to false,
+        "pullup_neutral" to false,
+        "pullup_wide" to false,
+        "dead_hang" to false,
+        "lunge_forward" to false,
+        "lunge_reverse" to false,
+        "lunge_side" to false,
         "row_standard" to false
     )
 
