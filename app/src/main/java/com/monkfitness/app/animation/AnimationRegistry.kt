@@ -31,6 +31,8 @@ object AnimationRegistry {
         register("cobra_stretch_hold", ProneCobraStretchPose())
         register("side_plank_standard", IsometricSidePlankPose())
         register("plank_standard", StaticForearmPlankPose())
+        register("pullup_standard", StandardPullUpPose())
+        register("chinup_standard", UnderhandChinUpPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {

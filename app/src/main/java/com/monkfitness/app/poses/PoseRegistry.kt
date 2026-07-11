@@ -33,7 +33,9 @@ object PoseRegistry {
         "hamstring_stretch_hold" to false,
         "cobra_stretch_hold" to false,
         "side_plank_standard" to false,
-        "plank_standard" to false
+        "plank_standard" to false,
+        "pullup_standard" to false,
+        "chinup_standard" to false
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? {

@@ -80,6 +80,38 @@ class NewEnginePosesTest {
     }
 
     @Test
+    fun testStandardPullUpPoseBuildsCorrectly() {
+        val pose = StandardPullUpPose()
+        assertNotNull(pose.metadata)
+
+        val result0 = pose.build(context0)
+        assertNotNull(result0)
+        val pelvisY0 = result0.getJoint(Joint.PELVIS).y
+        assertEquals("Pelvis Y should start at deep hang (230f)", 230f, pelvisY0, 1e-4f)
+
+        val result1 = pose.build(context1)
+        assertNotNull(result1)
+        val pelvisY1 = result1.getJoint(Joint.PELVIS).y
+        assertEquals("Pelvis Y should lift to full contraction (380f)", 380f, pelvisY1, 1e-4f)
+    }
+
+    @Test
+    fun testUnderhandChinUpPoseBuildsCorrectly() {
+        val pose = UnderhandChinUpPose()
+        assertNotNull(pose.metadata)
+
+        val result0 = pose.build(context0)
+        assertNotNull(result0)
+        val pelvisY0 = result0.getJoint(Joint.PELVIS).y
+        assertEquals("Pelvis Y should start at deep hang (230f)", 230f, pelvisY0, 1e-4f)
+
+        val result1 = pose.build(context1)
+        assertNotNull(result1)
+        val pelvisY1 = result1.getJoint(Joint.PELVIS).y
+        assertEquals("Pelvis Y should lift slightly higher (395f)", 395f, pelvisY1, 1e-4f)
+    }
+
+    @Test
     fun testRegistryIntegration() {
         // Verify they are successfully registered and retrieved
         val cobraConfig = PoseRegistry.getPoseConfig("cobra_stretch_hold")
@@ -93,5 +125,13 @@ class NewEnginePosesTest {
         val plankConfig = PoseRegistry.getPoseConfig("plank_standard")
         assertNotNull("plank_standard should be registered", plankConfig)
         assertTrue(plankConfig!!.builder is StaticForearmPlankPose)
+
+        val pullupConfig = PoseRegistry.getPoseConfig("pullup_standard")
+        assertNotNull("pullup_standard should be registered", pullupConfig)
+        assertTrue(pullupConfig!!.builder is StandardPullUpPose)
+
+        val chinupConfig = PoseRegistry.getPoseConfig("chinup_standard")
+        assertNotNull("chinup_standard should be registered", chinupConfig)
+        assertTrue(chinupConfig!!.builder is UnderhandChinUpPose)
     }
 }
