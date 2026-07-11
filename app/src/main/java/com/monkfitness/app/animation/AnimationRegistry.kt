@@ -23,6 +23,8 @@ object AnimationRegistry {
         register("squat_sumo", SumoSquatPose())
         register("squat_jump", JumpSquatPose())
         register("deep_squat_hold", DeepSquatHoldPose())
+        register("couch_stretch_hold", CouchStretchPose())
+        register("hip_flexor_stretch_hold", HalfKneelingStretchPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {
