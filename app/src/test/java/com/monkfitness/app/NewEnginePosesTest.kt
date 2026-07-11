@@ -112,6 +112,56 @@ class NewEnginePosesTest {
     }
 
     @Test
+    fun testNeutralGripPullUpPoseBuildsCorrectly() {
+        val pose = NeutralGripPullUpPose()
+        assertNotNull(pose.metadata)
+
+        val result0 = pose.build(context0)
+        assertNotNull(result0)
+        val pelvisY0 = result0.getJoint(Joint.PELVIS).y
+        assertEquals("Pelvis Y should start at deep hang (230f)", 230f, pelvisY0, 1e-4f)
+
+        val result1 = pose.build(context1)
+        assertNotNull(result1)
+        val pelvisY1 = result1.getJoint(Joint.PELVIS).y
+        assertEquals("Pelvis Y should lift to full contraction (395f)", 395f, pelvisY1, 1e-4f)
+    }
+
+    @Test
+    fun testWideGripPullUpPoseBuildsCorrectly() {
+        val pose = WideGripPullUpPose()
+        assertNotNull(pose.metadata)
+
+        val result0 = pose.build(context0)
+        assertNotNull(result0)
+        val pelvisY0 = result0.getJoint(Joint.PELVIS).y
+        assertEquals("Pelvis Y should start at deep hang (230f)", 230f, pelvisY0, 1e-4f)
+
+        val result1 = pose.build(context1)
+        assertNotNull(result1)
+        val pelvisY1 = result1.getJoint(Joint.PELVIS).y
+        assertEquals("Pelvis Y should lift (360f)", 360f, pelvisY1, 1e-4f)
+    }
+
+    @Test
+    fun testHangPoseBuildsCorrectly() {
+        val pose = HangPose()
+        assertNotNull(pose.metadata)
+
+        val result0 = pose.build(context0)
+        assertNotNull(result0)
+        val pelvisY0 = result0.getJoint(Joint.PELVIS).y
+        // At progress = 0f, breathingSwayY = sin(0) * 2f = 0f. PelvisY = 220f.
+        assertEquals("Pelvis Y should start at resting hang height (220f)", 220f, pelvisY0, 1e-4f)
+
+        val result1 = pose.build(context1)
+        assertNotNull(result1)
+        val pelvisY1 = result1.getJoint(Joint.PELVIS).y
+        // At progress = 1f, cycle = 2f * PI. sin(2*PI) = 0f. PelvisY = 220f.
+        assertEquals("Pelvis Y should end at resting hang height (220f)", 220f, pelvisY1, 1e-4f)
+    }
+
+    @Test
     fun testRegistryIntegration() {
         // Verify they are successfully registered and retrieved
         val cobraConfig = PoseRegistry.getPoseConfig("cobra_stretch_hold")
@@ -133,5 +183,17 @@ class NewEnginePosesTest {
         val chinupConfig = PoseRegistry.getPoseConfig("chinup_standard")
         assertNotNull("chinup_standard should be registered", chinupConfig)
         assertTrue(chinupConfig!!.builder is UnderhandChinUpPose)
+
+        val neutralPullupConfig = PoseRegistry.getPoseConfig("pullup_neutral")
+        assertNotNull("pullup_neutral should be registered", neutralPullupConfig)
+        assertTrue(neutralPullupConfig!!.builder is NeutralGripPullUpPose)
+
+        val widePullupConfig = PoseRegistry.getPoseConfig("pullup_wide")
+        assertNotNull("pullup_wide should be registered", widePullupConfig)
+        assertTrue(widePullupConfig!!.builder is WideGripPullUpPose)
+
+        val hangConfig = PoseRegistry.getPoseConfig("dead_hang")
+        assertNotNull("dead_hang should be registered", hangConfig)
+        assertTrue(hangConfig!!.builder is HangPose)
     }
 }

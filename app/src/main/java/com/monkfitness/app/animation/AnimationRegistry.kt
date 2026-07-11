@@ -33,6 +33,9 @@ object AnimationRegistry {
         register("plank_standard", StaticForearmPlankPose())
         register("pullup_standard", StandardPullUpPose())
         register("chinup_standard", UnderhandChinUpPose())
+        register("pullup_neutral", NeutralGripPullUpPose())
+        register("pullup_wide", WideGripPullUpPose())
+        register("dead_hang", HangPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {
