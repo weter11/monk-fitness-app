@@ -30,7 +30,8 @@ object PoseRegistry {
         "hip_flexor_stretch_hold" to false,
         "thoracic_rotations_reps" to false,
         "thoracic_extension_reps" to false,
-        "hamstring_stretch_hold" to false
+        "hamstring_stretch_hold" to false,
+        "step_up_standard" to false
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? {

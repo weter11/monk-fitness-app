@@ -28,6 +28,7 @@ object AnimationRegistry {
         register("thoracic_rotations_reps", QuadrupedThoracicRotationsPose())
         register("thoracic_extension_reps", ThoracicExtensionPose())
         register("hamstring_stretch_hold", HamstringStretchPose())
+        register("step_up_standard", StepUpPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {
