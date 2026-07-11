@@ -132,7 +132,7 @@ class SkeletonSnapshotRenderer(
                 transparentBackground = transparentBackground,
                 backgroundColor = backgroundColor
             )
-            snapshots.add(ExerciseSnapshot(i, progress, bitmap))
+            snapshots.add(ExerciseSnapshot(i, progress, bitmap, pose))
         }
         return ExerciseSnapshotSequence(snapshots)
     }

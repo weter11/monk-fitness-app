@@ -8,5 +8,6 @@ import android.graphics.Bitmap
 data class ExerciseSnapshot(
     val frameIndex: Int,
     val progress: Float,
-    val bitmap: Bitmap
+    val bitmap: Bitmap,
+    val pose: SkeletonPose? = null
 )
