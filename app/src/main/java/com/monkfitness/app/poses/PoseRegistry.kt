@@ -35,6 +35,7 @@ object PoseRegistry {
         "dead_bug_standard" to false,
         "kb_swing_backpack" to false,
         "reverse_snow_angel_prone" to false,
+        "scapular_pullup_deadhang" to false,
         "leg_raise_standard" to false,
         "mountain_climber_standard" to false,
         "side_plank_standard" to false,
