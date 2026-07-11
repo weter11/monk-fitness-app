@@ -36,6 +36,9 @@ object AnimationRegistry {
         register("pullup_neutral", NeutralGripPullUpPose())
         register("pullup_wide", WideGripPullUpPose())
         register("dead_hang", HangPose())
+        register("lunge_forward", AlternatingForwardLungesPose())
+        register("lunge_reverse", AlternatingReverseLungesPose())
+        register("lunge_side", AlternatingSideLungesPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {

@@ -38,7 +38,10 @@ object PoseRegistry {
         "chinup_standard" to false,
         "pullup_neutral" to false,
         "pullup_wide" to false,
-        "dead_hang" to false
+        "dead_hang" to false,
+        "lunge_forward" to false,
+        "lunge_reverse" to false,
+        "lunge_side" to false
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? {

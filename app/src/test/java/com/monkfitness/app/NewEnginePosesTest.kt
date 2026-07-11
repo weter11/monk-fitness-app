@@ -162,6 +162,57 @@ class NewEnginePosesTest {
     }
 
     @Test
+    fun testAlternatingForwardLungesPoseBuildsCorrectly() {
+        val pose = AlternatingForwardLungesPose()
+        assertNotNull(pose.metadata)
+
+        val result0 = pose.build(context0)
+        assertNotNull(result0)
+        val pelvisX0 = result0.getJoint(Joint.PELVIS).x
+        assertEquals("Pelvis X should start at 0f", 0f, pelvisX0, 1e-4f)
+
+        // At progress = 0.25f, cycle = PI/2, sin(cycle) = 1.0f. activeDrop = 1f, pelvisX should be 40f.
+        val contextMid = PoseContext(progress = 0.25f, side = Side.LEFT, definition = SkeletonDefinition.DEFAULT_ADULT)
+        val resultMid = pose.build(contextMid)
+        val pelvisXMid = resultMid.getJoint(Joint.PELVIS).x
+        assertEquals("Pelvis X should shift forward on step", 40f, pelvisXMid, 1e-4f)
+    }
+
+    @Test
+    fun testAlternatingReverseLungesPoseBuildsCorrectly() {
+        val pose = AlternatingReverseLungesPose()
+        assertNotNull(pose.metadata)
+
+        val result0 = pose.build(context0)
+        assertNotNull(result0)
+        val pelvisX0 = result0.getJoint(Joint.PELVIS).x
+        assertEquals("Pelvis X should start at 0f", 0f, pelvisX0, 1e-4f)
+
+        // At progress = 0.25f, cycle = PI/2, sin(cycle) = 1.0f. activeDrop = 1f, pelvisX should be -40f.
+        val contextMid = PoseContext(progress = 0.25f, side = Side.LEFT, definition = SkeletonDefinition.DEFAULT_ADULT)
+        val resultMid = pose.build(contextMid)
+        val pelvisXMid = resultMid.getJoint(Joint.PELVIS).x
+        assertEquals("Pelvis X should shift backward on step", -40f, pelvisXMid, 1e-4f)
+    }
+
+    @Test
+    fun testAlternatingSideLungesPoseBuildsCorrectly() {
+        val pose = AlternatingSideLungesPose()
+        assertNotNull(pose.metadata)
+
+        val result0 = pose.build(context0)
+        assertNotNull(result0)
+        val pelvisZ0 = result0.getJoint(Joint.PELVIS).z
+        assertEquals("Pelvis Z should start at 0f", 0f, pelvisZ0, 1e-4f)
+
+        // At progress = 0.25f, cycle = PI/2, sin(cycle) = 1.0f. activeDrop = 1f, pelvisZ should be 50f.
+        val contextMid = PoseContext(progress = 0.25f, side = Side.LEFT, definition = SkeletonDefinition.DEFAULT_ADULT)
+        val resultMid = pose.build(contextMid)
+        val pelvisZMid = resultMid.getJoint(Joint.PELVIS).z
+        assertEquals("Pelvis Z should shift sideways on step", 50f, pelvisZMid, 1e-4f)
+    }
+
+    @Test
     fun testRegistryIntegration() {
         // Verify they are successfully registered and retrieved
         val cobraConfig = PoseRegistry.getPoseConfig("cobra_stretch_hold")
@@ -195,5 +246,17 @@ class NewEnginePosesTest {
         val hangConfig = PoseRegistry.getPoseConfig("dead_hang")
         assertNotNull("dead_hang should be registered", hangConfig)
         assertTrue(hangConfig!!.builder is HangPose)
+
+        val lungeForwardConfig = PoseRegistry.getPoseConfig("lunge_forward")
+        assertNotNull("lunge_forward should be registered", lungeForwardConfig)
+        assertTrue(lungeForwardConfig!!.builder is AlternatingForwardLungesPose)
+
+        val lungeReverseConfig = PoseRegistry.getPoseConfig("lunge_reverse")
+        assertNotNull("lunge_reverse should be registered", lungeReverseConfig)
+        assertTrue(lungeReverseConfig!!.builder is AlternatingReverseLungesPose)
+
+        val lungeSideConfig = PoseRegistry.getPoseConfig("lunge_side")
+        assertNotNull("lunge_side should be registered", lungeSideConfig)
+        assertTrue(lungeSideConfig!!.builder is AlternatingSideLungesPose)
     }
 }
