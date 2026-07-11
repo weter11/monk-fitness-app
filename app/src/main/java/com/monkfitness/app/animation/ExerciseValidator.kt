@@ -22,39 +22,42 @@ class ExerciseValidator(
     val config: ValidatorConfig = ValidatorConfig()
 ) {
     private val scratchHeadPoint = ProjectedPoint()
-    private val jointsArray = Joint.values()
 
-    // Pre-allocated arrays to completely avoid heap allocations in the validation loop
-    private val feetJoints = arrayOf(
-        Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F,
-        Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B
-    )
+    companion object {
+        // Pre-allocated static arrays to completely avoid heap allocations at runtime
+        private val JOINTS_ARRAY = Joint.values()
 
-    private val hands = arrayOf(
-        Joint.HAND_A, Joint.HAND_P,
-        Joint.WRIST_A, Joint.WRIST_P
-    )
+        private val FEET_JOINTS = arrayOf(
+            Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F,
+            Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B
+        )
 
-    private val candidateSupportJoints = arrayOf(
-        Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F,
-        Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B,
-        Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.FINGERTIPS_A,
-        Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.FINGERTIPS_P,
-        Joint.KNEE_F, Joint.KNEE_B
-    )
+        private val HANDS_JOINTS = arrayOf(
+            Joint.HAND_A, Joint.HAND_P,
+            Joint.WRIST_A, Joint.WRIST_P
+        )
 
-    private val allRules = arrayOf(
-        "FINITE_COORDINATES",
-        "BONE_LENGTH",
-        "HEAD_VIEWPORT",
-        "FOOT_GROUND_PENETRATION",
-        "HAND_SLIDING",
-        "IK_CONSTRAINT_LIMIT",
-        "POSITION_DISCONTINUITY",
-        "VELOCITY_DISCONTINUITY",
-        "ACCELERATION_SPIKE",
-        "STATIC_SUPPORT_POLYGON"
-    )
+        private val CANDIDATE_SUPPORT_JOINTS = arrayOf(
+            Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F,
+            Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B,
+            Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.FINGERTIPS_A,
+            Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.FINGERTIPS_P,
+            Joint.KNEE_F, Joint.KNEE_B
+        )
+
+        private val ALL_RULES = arrayOf(
+            "FINITE_COORDINATES",
+            "BONE_LENGTH",
+            "HEAD_VIEWPORT",
+            "FOOT_GROUND_PENETRATION",
+            "HAND_SLIDING",
+            "IK_CONSTRAINT_LIMIT",
+            "POSITION_DISCONTINUITY",
+            "VELOCITY_DISCONTINUITY",
+            "ACCELERATION_SPIKE",
+            "STATIC_SUPPORT_POLYGON"
+        )
+    }
 
     /**
      * Validates a SkeletonPose under the current environment, camera, and history.
@@ -97,9 +100,9 @@ class ExerciseValidator(
         validateSupportPolygon(pose, environment, issues)
 
         // Assemble report (allocations allowed here)
-        val results = ArrayList<ValidationResult>(allRules.size)
-        for (r in 0 until allRules.size) {
-            val ruleId = allRules[r]
+        val results = ArrayList<ValidationResult>(ALL_RULES.size)
+        for (r in 0 until ALL_RULES.size) {
+            val ruleId = ALL_RULES[r]
             val ruleIssues = ArrayList<ValidationIssue>()
             for (i in 0 until issues.size) {
                 val issue = issues[i]
@@ -129,8 +132,8 @@ class ExerciseValidator(
     }
 
     private fun validateFiniteCoordinates(pose: SkeletonPose, issues: MutableList<ValidationIssue>) {
-        for (i in 0 until jointsArray.size) {
-            val joint = jointsArray[i]
+        for (i in 0 until JOINTS_ARRAY.size) {
+            val joint = JOINTS_ARRAY[i]
             val pos = pose.getJoint(joint)
             if (!pos.x.isFinite() || !pos.y.isFinite() || !pos.z.isFinite()) {
                 issues.add(ValidationIssue(
@@ -217,8 +220,8 @@ class ExerciseValidator(
     private fun validateFeetGroundPenetration(pose: SkeletonPose, environment: EnvironmentDefinition, issues: MutableList<ValidationIssue>) {
         if (!config.allowFootGroundPenetration) {
             val groundLevel = environment.ground.level
-            for (i in 0 until feetJoints.size) {
-                val joint = feetJoints[i]
+            for (i in 0 until FEET_JOINTS.size) {
+                val joint = FEET_JOINTS[i]
                 val pos = pose.getJoint(joint)
                 if (pos.y < groundLevel - 0.01f) {
                     issues.add(ValidationIssue(
@@ -235,8 +238,8 @@ class ExerciseValidator(
     private fun validateHandsSliding(pose: SkeletonPose, previousPose: SkeletonPose?, environment: EnvironmentDefinition, issues: MutableList<ValidationIssue>) {
         if (previousPose != null) {
             val groundLevel = environment.ground.level
-            for (i in 0 until hands.size) {
-                val joint = hands[i]
+            for (i in 0 until HANDS_JOINTS.size) {
+                val joint = HANDS_JOINTS[i]
                 val currPos = pose.getJoint(joint)
                 val prevPos = previousPose.getJoint(joint)
 
@@ -330,8 +333,8 @@ class ExerciseValidator(
     ) {
         if (previousPose != null) {
             val dt = if (deltaTime > 0f) deltaTime else 0.033f
-            for (i in 0 until jointsArray.size) {
-                val joint = jointsArray[i]
+            for (i in 0 until JOINTS_ARRAY.size) {
+                val joint = JOINTS_ARRAY[i]
                 val curr = pose.getJoint(joint)
                 val prev = previousPose.getJoint(joint)
 
@@ -403,8 +406,8 @@ class ExerciseValidator(
             var contactCount = 0
 
             val groundLevel = environment.ground.level
-            for (i in 0 until candidateSupportJoints.size) {
-                val joint = candidateSupportJoints[i]
+            for (i in 0 until CANDIDATE_SUPPORT_JOINTS.size) {
+                val joint = CANDIDATE_SUPPORT_JOINTS[i]
                 val pos = pose.getJoint(joint)
                 var onSupport = kotlin.math.abs(pos.y - groundLevel) < 2.0f
                 if (!onSupport) {
