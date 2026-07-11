@@ -73,9 +73,9 @@ class PikePushUpPose : BasePushUpPose() {
         frontLeg!!.knee.localPosition = Vector3(-def.shinLength, 0f, 0f)
         frontLeg!!.hip.localPosition = Vector3(-def.thighLength, 0f, 0f)
 
-        pelvis!!.localPosition = Vector3(0f, 0f, def.hipWidth)
-        pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), torsoGlobalPitch - legPitch)
-        chest!!.localPosition = Vector3(-def.torsoLength, 0f, 0f)
+        spine!!.pelvis.localPosition = Vector3(0f, 0f, def.hipWidth)
+        spine!!.pelvis.localRotation.set(Vector3(0f, 0f, 1f), torsoGlobalPitch - legPitch)
+        spine!!.chest.localPosition = Vector3(-def.torsoLength, 0f, 0f)
 
         // 1. Correcting the Right-Side (Side B) Floating Leg Asymmetry
         // By subtracting the torso pitch, we isolate and enforce the exact same global leg pitch on both sides.
@@ -86,8 +86,8 @@ class PikePushUpPose : BasePushUpPose() {
         backLeg!!.ankle.localPosition = Vector3(def.shinLength, 0f, 0f)
 
         val headDir = Vector3(-1f, -0.6f, 0f).normalize()
-        neck!!.localPosition = Vector3(headDir.x * def.neckLength, headDir.y * def.neckLength, headDir.z * def.neckLength)
-        head!!.localPosition = Vector3(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
+        spine!!.neck.localPosition = Vector3(headDir.x * def.neckLength, headDir.y * def.neckLength, headDir.z * def.neckLength)
+        spine!!.head.localPosition = Vector3(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
 
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
@@ -95,7 +95,7 @@ class PikePushUpPose : BasePushUpPose() {
 
         GroundArmSupport.solve(
             definition = def,
-            chest = chest!!,
+            chest = spine!!.chest,
             shoulderA = frontArm!!.shoulder,
             elbowA = frontArm!!.elbow,
             handA = frontArm!!.hand,
