@@ -33,6 +33,7 @@ object PoseRegistry {
         "hamstring_stretch_hold" to false,
         "cobra_stretch_hold" to false,
         "dead_bug_standard" to false,
+        "leg_raise_standard" to false,
         "side_plank_standard" to false,
         "plank_standard" to false,
         "pullup_standard" to false,
