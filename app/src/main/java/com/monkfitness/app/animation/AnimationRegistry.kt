@@ -39,6 +39,7 @@ object AnimationRegistry {
         register("lunge_forward", AlternatingForwardLungesPose())
         register("lunge_reverse", AlternatingReverseLungesPose())
         register("lunge_side", AlternatingSideLungesPose())
+        register("row_standard", InvertedRowPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {
