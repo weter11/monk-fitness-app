@@ -53,6 +53,7 @@ object PoseRegistry {
         "pullup_wide" to false,
         "dead_hang" to false,
         "arm_circles_hold" to false,
+        "hip_cars_standard" to false,
         "lunge_forward" to false,
         "lunge_reverse" to false,
         "lunge_side" to false,
