@@ -21,14 +21,36 @@ class SkeletonPoseFinalizer(
     private val tempHorizontalDir = Vector3()
     private val handJointsBuffer = HandJoints()
     private val tempV1 = Vector3()
-    private val presentJoints = BooleanArray(Joint.entries.size)
 
-    private fun markPresent(node: SkeletonNode) {
-        presentJoints[node.joint.index] = true
+    private var cachedRootsIdentity: List<SkeletonNode>? = null
+    private var cachedHasHeelToeF = false
+    private var cachedHasHeelToeB = false
+    private var cachedHasHandDetailA = false
+    private var cachedHasHandDetailP = false
+
+    private fun containsJoint(roots: List<SkeletonNode>, joint: Joint): Boolean {
+        for (i in 0 until roots.size) {
+            if (containsJointNode(roots[i], joint)) return true
+        }
+        return false
+    }
+
+    private fun containsJointNode(node: SkeletonNode, joint: Joint): Boolean {
+        if (node.joint == joint) return true
         val children = node.children
         for (i in 0 until children.size) {
-            markPresent(children[i])
+            if (containsJointNode(children[i], joint)) return true
         }
+        return false
+    }
+
+    private fun refreshJointPresenceCache(roots: List<SkeletonNode>) {
+        if (roots === cachedRootsIdentity) return
+        cachedRootsIdentity = roots
+        cachedHasHeelToeF = containsJoint(roots, Joint.HEEL_F) && containsJoint(roots, Joint.TOE_F)
+        cachedHasHeelToeB = containsJoint(roots, Joint.HEEL_B) && containsJoint(roots, Joint.TOE_B)
+        cachedHasHandDetailA = containsJoint(roots, Joint.PALM_A) && containsJoint(roots, Joint.FINGERTIPS_A)
+        cachedHasHandDetailP = containsJoint(roots, Joint.PALM_P) && containsJoint(roots, Joint.FINGERTIPS_P)
     }
 
     // Pre-allocated standard SkeletonNode hierarchy (for legacy compat path)
@@ -197,35 +219,30 @@ class SkeletonPoseFinalizer(
 
         if (pose.roots.isNotEmpty()) {
             // Modern rotation-driven path: Execute Forward Kinematics traversal directly using direct local joint rotations/offsets
-            val size = pose.roots.size
             if (!pose.isTransformsUpdated) {
+                val size = pose.roots.size
                 for (i in 0 until size) {
                     pose.roots[i].updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION)
                 }
+                for (i in 0 until size) {
+                    pose.roots[i].flatten(outputPose)
+                }
                 pose.isTransformsUpdated = true
             }
-            for (i in 0 until size) {
-                pose.roots[i].flatten(outputPose)
-            }
-            outputPose.isTransformsUpdated = pose.isTransformsUpdated
             outputPose.roots = pose.roots
 
-            // Complete missing elements from the hierarchy if they are absent
-            presentJoints.fill(false)
-            for (i in 0 until size) {
-                markPresent(pose.roots[i])
-            }
+            refreshJointPresenceCache(pose.roots)
 
-            if (!presentJoints[Joint.HEEL_F.index] || !presentJoints[Joint.TOE_F.index]) {
+            if (!cachedHasHeelToeF) {
                 adjustFootOrientation(outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
             }
-            if (!presentJoints[Joint.HEEL_B.index] || !presentJoints[Joint.TOE_B.index]) {
+            if (!cachedHasHeelToeB) {
                 adjustFootOrientation(outputPose, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
             }
-            if (!presentJoints[Joint.PALM_A.index] || !presentJoints[Joint.FINGERTIPS_A.index]) {
+            if (!cachedHasHandDetailA) {
                 adjustHandOrientation(outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A)
             }
-            if (!presentJoints[Joint.PALM_P.index] || !presentJoints[Joint.FINGERTIPS_P.index]) {
+            if (!cachedHasHandDetailP) {
                 adjustHandOrientation(outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
             }
         } else {
