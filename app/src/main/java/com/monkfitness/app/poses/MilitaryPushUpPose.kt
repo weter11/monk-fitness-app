@@ -7,11 +7,19 @@ import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
 class MilitaryPushUpPose : BasePushUpPose() {
+    override val metadata = PoseMetadata(
+        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
+        durationSeconds = 2.5f,
+        loopMode = LoopMode.LOOP,
+        motionCurve = MotionCurve.EASE_IN_OUT,
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+    )
+
     override fun build(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
 
-        // FIX: Depth stops at 38f so the forearm and bicep have geometric room to fold without pushing the wrist below ground
+        // Depth stops at 38f so the forearm and bicep have geometric room to fold back
         val height = lerp(60f, 38f, context.progress)
         val totalLegLen = def.shinLength + def.thighLength
         val ankleHeight = 25f
@@ -49,12 +57,13 @@ class MilitaryPushUpPose : BasePushUpPose() {
         val maxDrivingHeight = (60f - ankleHeight).coerceAtLeast(0f)
         val maxTheta = asin((maxDrivingHeight / totalLegLen).coerceIn(-1f, 1f))
 
-        // Push hand anchor slightly forward to encourage triceps tuck
+        // Push hand anchor slightly forward (+5f) to force triceps engagement
         val handAnchorX = 60f - def.torsoLength * cos(maxTheta) + 5f
 
         val targetHandA = Vector3(handAnchorX, 0f, -def.shoulderWidth * 1.0f)
-        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 0.2f, -0.1f), def.armIKConstraint, armAIK)
         val targetHandP = Vector3(handAnchorX, 0f, def.shoulderWidth * 1.0f)
+
+        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 0.2f, -0.1f), def.armIKConstraint, armAIK)
         val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, Vector3(1f, 0.2f, 0.1f), def.armIKConstraint, armPIK)
 
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)

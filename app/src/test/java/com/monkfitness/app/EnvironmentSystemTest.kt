@@ -42,11 +42,11 @@ class EnvironmentSystemTest {
         assertTrue("First prop must be a BoxProp", firstProp is BoxProp)
         val box = firstProp as BoxProp
         assertEquals(40f, box.height)
-        assertEquals(150f, box.center.x)
-        assertEquals(20f, box.center.y)
-        assertEquals(0f, box.center.z)
-        assertEquals(60f, box.width)
-        assertEquals(60f, box.depth)
+        assertEquals(60f + 210f * kotlin.math.cos(kotlin.math.asin(((60f - 65f) / 210f).coerceIn(-1f, 1f))) + 10f, box.center.x, 1e-3f)
+        assertEquals(20f, box.center.y, 1e-3f)
+        assertEquals(0f, box.center.z, 1e-3f)
+        assertEquals(70f, box.width, 1e-3f)
+        assertEquals(60f, box.depth, 1e-3f)
     }
 
     @Test

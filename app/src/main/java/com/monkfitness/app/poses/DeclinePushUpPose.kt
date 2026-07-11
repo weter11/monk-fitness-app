@@ -7,35 +7,36 @@ import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
 class DeclinePushUpPose : BasePushUpPose() {
+
+    // Calculates top anchor dynamically for environment metadata initialization
+    private val boxHeight = 40f
+    private val ankleHeight = boxHeight + 25f
+
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
-        durationSeconds = 2.5f,
-        loopMode = LoopMode.LOOP,
+        durationSeconds = 2.5f, loopMode = LoopMode.LOOP,
+        motionCurve = MotionCurve.EASE_IN_OUT,
         environment = EnvironmentDefinition(
+            ground = GroundDefinition(visible = true, level = 0f),
+            // The box is strictly centered at Z=0, aligned beneath the ankle's X projection
             props = listOf(
                 BoxProp(
-                    center = Vector3(150f, 20f, 0f),
-                    width = 60f,
-                    height = 40f,
+                    center = Vector3(60f + 210f * cos(asin(((60f - 65f) / 210f).coerceIn(-1f,1f))) + 10f, boxHeight / 2f, 0f),
+                    width = 70f,
+                    height = boxHeight,
                     depth = 60f
                 )
             )
-        ),
-        motionCurve = MotionCurve.FAST_DOWN_SLOW_UP
+        )
     )
 
     override fun build(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
 
-        // DECLINE FIX: Feet rest on a 40f box.
-        val boxHeight = 40f
-        val ankleHeight = boxHeight + 25f
-
         val height = lerp(60f, 20f, context.progress)
         val totalLegLen = def.shinLength + def.thighLength
 
-        // At the bottom of the push-up, driving height will be negative. asin() handles this seamlessly!
         val drivingHeight = (height - ankleHeight)
         val theta = asin((drivingHeight / totalLegLen).coerceIn(-1f, 1f))
         val ankleX = 60f + (totalLegLen * cos(theta))
@@ -43,7 +44,6 @@ class DeclinePushUpPose : BasePushUpPose() {
         ankleF!!.localPosition = Vector3(ankleX, ankleHeight, -def.hipWidth)
         ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), -theta)
 
-        // Feet stick perfectly perpendicular to the floor/box surface.
         val worldFootDir = Vector3(0f, -1f, 0f)
         val localFootDir = rotAround(worldFootDir, Vector3(0f, 0f, 1f), theta, Vector3())
         heelF!!.localPosition = Vector3(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
@@ -55,9 +55,11 @@ class DeclinePushUpPose : BasePushUpPose() {
         hipF!!.localPosition = Vector3(-def.thighLength, 0f, 0f)
         pelvis!!.localPosition = Vector3(0f, 0f, def.hipWidth)
         chest!!.localPosition = Vector3(-def.torsoLength, 0f, 0f)
+
         val headDir = Vector3(-1f, 0.2f, 0f).normalize()
         neck!!.localPosition = Vector3(headDir.x * def.neckLength, headDir.y * def.neckLength, headDir.z * def.neckLength)
         head!!.localPosition = Vector3(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
+
         hipB!!.localPosition = Vector3(0f, 0f, def.hipWidth)
         kneeB!!.localPosition = Vector3(def.thighLength, 0f, 0f)
         ankleB!!.localPosition = Vector3(def.shinLength, 0f, 0f)
@@ -70,11 +72,14 @@ class DeclinePushUpPose : BasePushUpPose() {
 
         val maxDrivingHeight = (60f - ankleHeight)
         val maxTheta = asin((maxDrivingHeight / totalLegLen).coerceIn(-1f, 1f))
-        val handAnchorX = 60f - def.torsoLength * cos(maxTheta)
+
+        // Correcting Hand Target: Pulling target inward +5f guarantees elbows do not hyperextend at the peak height
+        val handAnchorX = 60f - def.torsoLength * cos(maxTheta) + 5f
 
         val targetHandA = Vector3(handAnchorX, 0f, -def.shoulderWidth * 1.5f)
-        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 0.5f, -1f), def.armIKConstraint, armAIK)
         val targetHandP = Vector3(handAnchorX, 0f, def.shoulderWidth * 1.5f)
+
+        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 0.5f, -1f), def.armIKConstraint, armAIK)
         val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, Vector3(1f, 0.5f, 1f), def.armIKConstraint, armPIK)
 
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)

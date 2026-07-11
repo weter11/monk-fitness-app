@@ -7,11 +7,20 @@ import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
 class DiamondPushUpPose : BasePushUpPose() {
+    override val metadata = PoseMetadata(
+        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
+        durationSeconds = 2.5f,
+        loopMode = LoopMode.LOOP,
+        motionCurve = MotionCurve.EASE_IN_OUT,
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+    )
+
     override fun build(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
 
-        val height = lerp(60f, 25f, context.progress)
+        // Chest stays slightly elevated to prevent deep folded geometry breakdown
+        val height = lerp(60f, 30f, context.progress)
         val totalLegLen = def.shinLength + def.thighLength
         val ankleHeight = 25f
         val drivingHeight = (height - ankleHeight).coerceAtLeast(0f)
@@ -32,11 +41,9 @@ class DiamondPushUpPose : BasePushUpPose() {
         hipF!!.localPosition = Vector3(-def.thighLength, 0f, 0f)
         pelvis!!.localPosition = Vector3(0f, 0f, def.hipWidth)
         chest!!.localPosition = Vector3(-def.torsoLength, 0f, 0f)
-
         val headDir = Vector3(-1f, 0.2f, 0f).normalize()
         neck!!.localPosition = Vector3(headDir.x * def.neckLength, headDir.y * def.neckLength, headDir.z * def.neckLength)
         head!!.localPosition = Vector3(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
-
         hipB!!.localPosition = Vector3(0f, 0f, def.hipWidth)
         kneeB!!.localPosition = Vector3(def.thighLength, 0f, 0f)
         ankleB!!.localPosition = Vector3(def.shinLength, 0f, 0f)
@@ -49,19 +56,16 @@ class DiamondPushUpPose : BasePushUpPose() {
 
         val maxDrivingHeight = (60f - ankleHeight).coerceAtLeast(0f)
         val maxTheta = asin((maxDrivingHeight / totalLegLen).coerceIn(-1f, 1f))
-        val handAnchorX = 60f - def.torsoLength * cos(maxTheta)
 
-        // DIAMOND BIOMECHANICS: Derive from MilitaryPushUpPose.
-        // - Hands placed close together beneath the sternum (0.35x shoulder width multiplier)
-        // - Thumbs/index fingers nearly touching
-        // - Elbows remain close to torso
-        // - Narrower IK targets
-        // - Reduced elbow flare (using a small, tucked pole vector: Vector3(1f, 0.2f, -0.05f) and Vector3(1f, 0.2f, 0.05f))
-        // - Body remains rigid
-        val targetHandA = Vector3(handAnchorX, 0f, -def.shoulderWidth * 0.35f)
-        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 0.2f, -0.05f), def.armIKConstraint, armAIK)
-        val targetHandP = Vector3(handAnchorX, 0f, def.shoulderWidth * 0.35f)
-        val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, Vector3(1f, 0.2f, 0.05f), def.armIKConstraint, armPIK)
+        val handAnchorX = 60f - def.torsoLength * cos(maxTheta) + 2f
+
+        // DIAMOND STANCE: Hands are 0.1x shoulder width from centerline (practically touching)
+        val targetHandA = Vector3(handAnchorX, 0f, -def.shoulderWidth * 0.1f)
+        val targetHandP = Vector3(handAnchorX, 0f, def.shoulderWidth * 0.1f)
+
+        // Elbows flare outward around the ribs to accommodate the close grip
+        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0.5f, 0.5f, -2.0f), def.armIKConstraint, armAIK)
+        val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0.5f, 0.5f, 2.0f), def.armIKConstraint, armPIK)
 
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
         rotAround(Vector3(armA.joint.x - shoulderAW.x, armA.joint.y - shoulderAW.y, armA.joint.z - shoulderAW.z), Vector3(0f, 0f, 1f), theta, elbowA!!.localPosition)
@@ -71,18 +75,17 @@ class DiamondPushUpPose : BasePushUpPose() {
         rotAround(Vector3(armP.joint.x - shoulderPW.x, armP.joint.y - shoulderPW.y, armP.joint.z - shoulderPW.z), Vector3(0f, 0f, 1f), theta, elbowP!!.localPosition)
         rotAround(Vector3(armP.end.x - armP.joint.x, armP.end.y - armP.joint.y, armP.end.z - armP.joint.z), Vector3(0f, 0f, 1f), theta, handP!!.localPosition)
 
-        // Diamond Splay: Hands rotated inwards towards each other (thumbs/index fingers nearly touching)
+        // Wrists angle heavily INWARD (+0.7f for Left hand, -0.7f for Right hand) so index fingers touch
         handA!!.localRotation.set(Vector3(0f, 0f, 1f), theta)
-        val handDirA = Vector3(-1f, 0f, 0.6f).normalize() // Pointing inward (positive Z)
+        val handDirA = Vector3(-1f, 0f, 0.7f).normalize()
         palmA!!.localPosition = Vector3(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); knucklesA!!.localPosition = Vector3(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); fingertipsA!!.localPosition = Vector3(handDirA.x * 10f, handDirA.y * 10f, handDirA.z * 10f)
 
         handP!!.localRotation.set(Vector3(0f, 0f, 1f), theta)
-        val handDirP = Vector3(-1f, 0f, -0.6f).normalize() // Pointing inward (negative Z)
+        val handDirP = Vector3(-1f, 0f, -0.7f).normalize()
         palmP!!.localPosition = Vector3(handDirP.x * 6f, handDirP.y * 6f, handDirP.z * 6f); knucklesP!!.localPosition = Vector3(handDirP.x * 6f, handDirP.y * 6f, handDirP.z * 6f); fingertipsP!!.localPosition = Vector3(handDirP.x * 10f, handDirP.y * 10f, handDirP.z * 10f)
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
-
         return jointsBuffer
     }
 }
