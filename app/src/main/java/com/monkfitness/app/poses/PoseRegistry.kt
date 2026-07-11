@@ -32,6 +32,13 @@ object PoseRegistry {
         "thoracic_extension_reps" to false,
         "hamstring_stretch_hold" to false,
         "cobra_stretch_hold" to false,
+        "dead_bug_standard" to false,
+        "kb_swing_backpack" to false,
+        "reverse_snow_angel_prone" to false,
+        "scapular_pullup_deadhang" to false,
+        "lat_stretch_hold" to false,
+        "leg_raise_standard" to false,
+        "mountain_climber_standard" to false,
         "side_plank_standard" to false,
         "plank_standard" to false,
         "pullup_standard" to false,
@@ -42,10 +49,7 @@ object PoseRegistry {
         "lunge_forward" to false,
         "lunge_reverse" to false,
         "lunge_side" to false,
-        "row_standard" to false,
-        "band_pull_aparts_standard" to false,
-        "yt_raises_standard" to false,
-        "shoulder_cars_standard" to false
+        "step_up_standard" to false
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? {

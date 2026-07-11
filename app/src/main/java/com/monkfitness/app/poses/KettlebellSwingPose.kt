@@ -6,11 +6,12 @@ import com.monkfitness.app.animation.SkeletonMath.lerp
 import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
-class ShoulderCarsPose : PoseBuilder {
+class KettlebellSwingPose : PoseBuilder {
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
-        durationSeconds = 4.0f, loopMode = LoopMode.LOOP,
-        motionCurve = MotionCurve.LINEAR, // Let the progression be linear so the speed is perfectly uniform
+        durationSeconds = 2.0f,
+        loopMode = LoopMode.LOOP,
+        motionCurve = MotionCurve.LINEAR,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
     )
 
@@ -27,15 +28,10 @@ class ShoulderCarsPose : PoseBuilder {
     private val armABuffer = SkeletonMath.IKResult()
     private val armPBuffer = SkeletonMath.IKResult()
 
-    private val zeroVector = Vector3(0f, 0f, 0f)
-    private val identityRotation = JointRotation()
-    private val axisZ = Vector3(0f, 0f, 1f)
-    private val tempV3 = Vector3()
-
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
 
-        // Standing upright root is Pelvis
+        // Root is Pelvis for perfect swing mechanics
         pelvis = SkeletonNode(Joint.PELVIS)
         chest = pelvis!!.addChild(SkeletonNode(Joint.CHEST))
         neck = chest!!.addChild(SkeletonNode(Joint.NECK_END)); head = neck!!.addChild(SkeletonNode(Joint.HEAD_POS))
@@ -53,67 +49,58 @@ class ShoulderCarsPose : PoseBuilder {
         val def = context.definition
         ensureHierarchy(def)
 
-        // 1. Circle angle based on a uniform circular progression
-        val progress = context.progress
-        val phi = progress.toDouble() * 2.0 * Math.PI
+        // 1. Core Hip Hinge Positioning
+        // Smooth C2 cosine wave mapping progress 0.0 -> 0.5 (upright snap) -> 1.0 (deep hike)
+        val u = (1f - cos(context.progress * 2f * PI.toFloat())) * 0.5f
 
-        val dirX = sin(phi).toFloat()
-        val dirY = -cos(phi).toFloat()
-
-        // Standing height
-        val pelvisY = def.shinLength + def.thighLength + 25f
-        val pelvisX = 0f
-        val leanAngle = 0f
+        val pelvisY = lerp(175f, 210f, u)
+        val pelvisX = lerp(-20f, 0f, u)
+        val leanAngle = lerp(1.1f, 0f, u)
 
         pelvis!!.localPosition = Vector3(pelvisX, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, leanAngle)
+        pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), -leanAngle)
 
         chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)
-        neck!!.localPosition = Vector3(0f, def.neckLength, 0f)
-        head!!.localPosition = Vector3(0f, 18f, 0f)
+        neck!!.localPosition = Vector3(0f, def.neckLength, 0f); head!!.localPosition = Vector3(0f, 18f, 0f)
         hipF!!.localPosition = Vector3(0f, 0f, -def.hipWidth)
         hipB!!.localPosition = Vector3(0f, 0f, def.hipWidth)
         shoulderA!!.localPosition = Vector3(0f, 0f, -def.shoulderWidth)
         shoulderP!!.localPosition = Vector3(0f, 0f, def.shoulderWidth)
 
-        // Propagate spine FK
-        roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
+        // Flush Spine FK to get precise Hip and Shoulder origins
+        roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
-        // 2. Leg IK (completely static standing, flat on the floor)
-        val targetAnkleF = Vector3(0f, 25f, -def.hipWidth * 1.2f)
-        val targetAnkleB = Vector3(0f, 25f, def.hipWidth * 1.2f)
+        // 2. LEG TARGETS (Completely planted on the floor)
+        val targetAnkleF = Vector3(0f, 10f, -def.hipWidth * 1.5f)
+        val targetAnkleB = Vector3(0f, 10f, def.hipWidth * 1.5f)
 
+        // Solve Leg IK (knees bend slightly during hinge)
         val legFIK = solveIK(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, legFBuffer)
         val legBIK = solveIK(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, legBBuffer)
 
-        rotAround(tempV3.set(legFIK.joint).subtract(hipF!!.worldPosition), axisZ, leanAngle, kneeF!!.localPosition)
-        rotAround(tempV3.set(legFIK.end).subtract(legFIK.joint), axisZ, leanAngle, ankleF!!.localPosition)
-        rotAround(tempV3.set(legBIK.joint).subtract(hipB!!.worldPosition), axisZ, leanAngle, kneeB!!.localPosition)
-        rotAround(tempV3.set(legBIK.end).subtract(legBIK.joint), axisZ, leanAngle, ankleB!!.localPosition)
+        // Set Leg joint local coordinates
+        rotAround(Vector3(legFIK.joint.x - hipF!!.worldPosition.x, legFIK.joint.y - hipF!!.worldPosition.y, legFIK.joint.z - hipF!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, kneeF!!.localPosition)
+        rotAround(Vector3(legFIK.end.x - legFIK.joint.x, legFIK.end.y - legFIK.joint.y, legFIK.end.z - legFIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, ankleF!!.localPosition)
+        rotAround(Vector3(legBIK.joint.x - hipB!!.worldPosition.x, legBIK.joint.y - hipB!!.worldPosition.y, legBIK.joint.z - hipB!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, kneeB!!.localPosition)
+        rotAround(Vector3(legBIK.end.x - legBIK.joint.x, legBIK.end.y - legBIK.joint.y, legBIK.end.z - legBIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, ankleB!!.localPosition)
 
-        ankleF!!.localRotation.set(axisZ, leanAngle)
-        ankleB!!.localRotation.set(axisZ, leanAngle)
-        heelF!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f)
-        toeF!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
-        heelB!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f)
-        toeB!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
+        ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle); ankleB!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle)
+        heelF!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeF!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
+        heelB!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeB!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
 
-        // 3. Arm IK (shoulder articular circular rotations)
-        val shoulderY = pelvisY + def.torsoLength
-        val targetHandA = Vector3(dirX * 135f, shoulderY + dirY * 135f, -def.shoulderWidth)
-        val targetHandP = Vector3(dirX * 135f, shoulderY + dirY * 135f, def.shoulderWidth)
+        // 3. ARM TARGETS (Explosive kettlebell swing forward and backward)
+        val targetHandX = lerp(-35f, 40f, u)
+        val targetHandY = lerp(130f, pelvisY + def.torsoLength, u)
 
-        // Elbow poles point outwards depending on side to maintain anatomically clean arm posture
-        val armAIK = solveIK(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 0f, -1f), def.armIKConstraint, armABuffer)
-        val armPIK = solveIK(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 0f, 1f), def.armIKConstraint, armPBuffer)
+        val armAIK = solveIK(shoulderA!!.worldPosition, Vector3(targetHandX, targetHandY, -def.shoulderWidth * 0.8f), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, armABuffer)
+        val armPIK = solveIK(shoulderP!!.worldPosition, Vector3(targetHandX, targetHandY, def.shoulderWidth * 0.8f), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, armPBuffer)
 
-        rotAround(tempV3.set(armAIK.joint).subtract(shoulderA!!.worldPosition), axisZ, leanAngle, elbowA!!.localPosition)
-        rotAround(tempV3.set(armAIK.end).subtract(armAIK.joint), axisZ, leanAngle, handA!!.localPosition)
-        rotAround(tempV3.set(armPIK.joint).subtract(shoulderP!!.worldPosition), axisZ, leanAngle, elbowP!!.localPosition)
-        rotAround(tempV3.set(armPIK.end).subtract(armPIK.joint), axisZ, leanAngle, handP!!.localPosition)
+        rotAround(Vector3(armAIK.joint.x - shoulderA!!.worldPosition.x, armAIK.joint.y - shoulderA!!.worldPosition.y, armAIK.joint.z - shoulderA!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, elbowA!!.localPosition)
+        rotAround(Vector3(armAIK.end.x - armAIK.joint.x, armAIK.end.y - armAIK.joint.y, armAIK.end.z - armAIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, handA!!.localPosition)
+        rotAround(Vector3(armPIK.joint.x - shoulderP!!.worldPosition.x, armPIK.joint.y - shoulderP!!.worldPosition.y, armPIK.joint.z - shoulderP!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, elbowP!!.localPosition)
+        rotAround(Vector3(armPIK.end.x - armPIK.joint.x, armPIK.end.y - armPIK.joint.y, armPIK.end.z - armPIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, handP!!.localPosition)
 
-        handA!!.localRotation.set(axisZ, leanAngle)
-        handP!!.localRotation.set(axisZ, leanAngle)
+        handA!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle); handP!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle)
         palmA!!.localPosition = Vector3(6f, 0f, 0f); knucklesA!!.localPosition = Vector3(6f, 0f, 0f); fingertipsA!!.localPosition = Vector3(10f, 0f, 0f)
         palmP!!.localPosition = Vector3(6f, 0f, 0f); knucklesP!!.localPosition = Vector3(6f, 0f, 0f); fingertipsP!!.localPosition = Vector3(10f, 0f, 0f)
 
