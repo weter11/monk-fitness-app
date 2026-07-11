@@ -26,6 +26,8 @@ object AnimationRegistry {
         register("couch_stretch_hold", CouchStretchPose())
         register("hip_flexor_stretch_hold", HalfKneelingStretchPose())
         register("thoracic_rotations_reps", QuadrupedThoracicRotationsPose())
+        register("thoracic_extension_reps", ThoracicExtensionPose())
+        register("hamstring_stretch_hold", HamstringStretchPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {
