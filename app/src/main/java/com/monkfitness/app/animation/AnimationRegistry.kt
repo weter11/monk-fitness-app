@@ -30,6 +30,7 @@ object AnimationRegistry {
         register("hamstring_stretch_hold", HamstringStretchPose())
         register("glute_bridge_standard", GluteBridgePose())
         register("pelvic_tilt_standard", PelvicTiltPose())
+        register("burpee_standard", BurpeePose())
         register("cobra_stretch_hold", ProneCobraStretchPose())
         register("side_plank_standard", IsometricSidePlankPose())
         register("plank_standard", StaticForearmPlankPose())
