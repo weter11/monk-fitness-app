@@ -502,9 +502,9 @@
     <string name="ex_child_pose_steps">1. Kneel on the floor and sit the hips back toward the heels.\n2. Fold the torso forward and reach the arms long in front.\n3. Let the forehead rest down and breathe into the ribcage.\n4. Hold the stretch, then slowly rise back up.</string>
     <string name="ex_child_pose_tech">Relax the shoulders and keep the breath slow. Widen the knees if you need more space for the torso.</string>
     <string name="ex_child_pose_mistakes">Holding tension in the neck, bouncing into the stretch, and forcing the hips to the heels when mobility is limited.</string>
-    <string name="ex_thoracic_extension">Thoracic Extension</string>
-    <string name="ex_thoracic_extension_desc">An upper-back mobility drill that restores extension through the thoracic spine.</string>
-    <string name="ex_thoracic_extension_steps">1. Sit or kneel tall with hands supporting the back of the head.\n2. Lift the chest and gently extend over the upper back.\n3. Pause briefly without flaring the ribs excessively.\n4. Return to neutral and repeat with control.</string>
+    <string name="ex_thoracic_extension">Tall Kneeling Thoracic Extension</string>
+    <string name="ex_thoracic_extension_desc">A tall kneeling mobility drill that restores extension through the thoracic spine and opens the chest.</string>
+    <string name="ex_thoracic_extension_steps">1. Kneel tall on both knees with hands supporting the back of the head.\n2. Gently tuck the pelvis and lift the chest up toward the ceiling.\n3. Extend over the upper back, opening the elbows wide.\n4. Pause briefly and return to upright neutral.</string>
     <string name="ex_thoracic_extension_tech">Keep the lower back quiet and focus on opening through the sternum. Think about length before extension.</string>
     <string name="ex_thoracic_extension_mistakes">Turning it into a lower-back bend, pulling the head forward, and rushing the movement.</string>
     <string name="ex_hip_flexor_stretch">Half-Kneeling Hip Flexor Stretch</string>
@@ -534,9 +534,9 @@
     <string name="ex_deep_squat_tech">Keep heels on the ground and chest up.</string>
     <string name="ex_deep_squat_steps">1. Stand with feet slightly wider than hips and toes turned out as needed.\n2. Lower into your deepest comfortable squat.\n3. Keep the heels grounded and chest lifted.\n4. Hold the position while breathing steadily.</string>
     <string name="ex_deep_squat_mistakes">Letting the heels pop up, collapsing the chest forward, and forcing depth without control.</string>
-    <string name="ex_hamstring_stretch">Hamstring Stretch</string>
-    <string name="ex_hamstring_stretch_desc">A classic stretch for the back of the thigh that can help improve hip hinge comfort.</string>
-    <string name="ex_hamstring_stretch_steps">1. Extend one leg in front with the heel on the floor or a low surface.\n2. Keep the back flat and hinge forward from the hips.\n3. Stop when you feel a stretch along the back of the thigh.\n4. Hold, then switch sides.</string>
+    <string name="ex_hamstring_stretch">Seated Hamstring Stretch</string>
+    <string name="ex_hamstring_stretch_desc">A targeted stretch for the hamstrings in a seated position to improve mobility and lower back comfort.</string>
+    <string name="ex_hamstring_stretch_steps">1. Sit tall on the floor with one leg extended straight forward and the other tucked in.\n2. Keep your spine long and hinge forward from your hips.\n3. Reach forward until you feel a gentle stretch along the back of the extended thigh.\n4. Hold, breathe slowly, and switch sides.</string>
     <string name="ex_hamstring_stretch_tech">Lead with the chest instead of rounding the back. A small bend in the knee is fine if it helps keep the spine long.</string>
     <string name="ex_hamstring_stretch_mistakes">Rounding the spine, locking the knee aggressively, and bouncing into the stretch.</string>
     <string name="ex_decline_pushups">Feet-Elevated Decline Push-up</string>
