@@ -29,6 +29,17 @@ object AnimationRegistry {
         register("thoracic_extension_reps", ThoracicExtensionPose())
         register("hamstring_stretch_hold", HamstringStretchPose())
         register("glute_bridge_standard", GluteBridgePose())
+        register("cobra_stretch_hold", ProneCobraStretchPose())
+        register("side_plank_standard", IsometricSidePlankPose())
+        register("plank_standard", StaticForearmPlankPose())
+        register("pullup_standard", StandardPullUpPose())
+        register("chinup_standard", UnderhandChinUpPose())
+        register("pullup_neutral", NeutralGripPullUpPose())
+        register("pullup_wide", WideGripPullUpPose())
+        register("dead_hang", HangPose())
+        register("lunge_forward", AlternatingForwardLungesPose())
+        register("lunge_reverse", AlternatingReverseLungesPose())
+        register("lunge_side", AlternatingSideLungesPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {
