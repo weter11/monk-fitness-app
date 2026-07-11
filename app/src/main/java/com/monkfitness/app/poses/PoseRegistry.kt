@@ -44,7 +44,8 @@ object PoseRegistry {
         "lunge_side" to false,
         "row_standard" to false,
         "band_pull_aparts_standard" to false,
-        "yt_raises_standard" to false
+        "yt_raises_standard" to false,
+        "shoulder_cars_standard" to false
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? {

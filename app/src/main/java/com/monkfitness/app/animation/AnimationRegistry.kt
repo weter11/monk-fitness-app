@@ -42,6 +42,7 @@ object AnimationRegistry {
         register("row_standard", InvertedRowPose())
         register("band_pull_aparts_standard", BandPullApartsPose())
         register("yt_raises_standard", YTRaisesPose())
+        register("shoulder_cars_standard", ShoulderCarsPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {
