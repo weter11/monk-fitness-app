@@ -19,10 +19,10 @@ object AnimationRegistry {
         register("pushup_diamond", DiamondPushUpPose())
         register("pushup_decline", DeclinePushUpPose())
         register("pike_pushup_standard", PikePushUpPose())
-        register("squat_standard", SquatPose())
-        register("squat_sumo", SquatPose())
-        register("squat_jump", SquatPose())
-        register("deep_squat_hold", SquatPose())
+        register("squat_standard", AirSquatPose())
+        register("squat_sumo", SumoSquatPose())
+        register("squat_jump", JumpSquatPose())
+        register("deep_squat_hold", DeepSquatHoldPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {
