@@ -27,7 +27,8 @@ object PoseRegistry {
         "cat_cow_reps" to false,
         "superman_prone" to false,
         "couch_stretch_hold" to false,
-        "hip_flexor_stretch_hold" to false
+        "hip_flexor_stretch_hold" to false,
+        "thoracic_rotations_reps" to false
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? {

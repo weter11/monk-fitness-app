@@ -7,7 +7,7 @@ object AnimationRegistry {
 
     init {
         // Core registrations
-        register("world_greatest_stretch", WorldGreatestStretchPose())
+        register("world_greatest_stretch", DynamicWorldsGreatestStretchPose())
         register("birddog_hold", StaticBirdDogHoldPose())
         register("birddog_reps", AlternatingBirdDogPose())
         register("cat_cow_reps", CatCowPose())
@@ -25,6 +25,7 @@ object AnimationRegistry {
         register("deep_squat_hold", DeepSquatHoldPose())
         register("couch_stretch_hold", CouchStretchPose())
         register("hip_flexor_stretch_hold", HalfKneelingStretchPose())
+        register("thoracic_rotations_reps", QuadrupedThoracicRotationsPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {
