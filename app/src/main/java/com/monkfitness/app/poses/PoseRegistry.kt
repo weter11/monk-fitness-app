@@ -34,6 +34,7 @@ object PoseRegistry {
         "cobra_stretch_hold" to false,
         "dead_bug_standard" to false,
         "leg_raise_standard" to false,
+        "mountain_climber_standard" to false,
         "side_plank_standard" to false,
         "plank_standard" to false,
         "pullup_standard" to false,
