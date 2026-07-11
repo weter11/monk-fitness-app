@@ -25,6 +25,20 @@ abstract class BasePushUpPose : PoseBuilder {
     protected val armAIK = SkeletonMath.IKResult()
     protected val armPIK = SkeletonMath.IKResult()
 
+    protected val zeroVector = Vector3(0f, 0f, 0f)
+    protected val identityRotation = JointRotation()
+    protected val axisZ = Vector3(0f, 0f, 1f) // (0,0,1) is used as the rotation axis everywhere in these poses
+    protected val tempV1 = Vector3()
+    protected val tempV2 = Vector3()
+    protected val tempV3 = Vector3()
+
+    protected val shoulderAWBuffer = Vector3()
+    protected val shoulderPWBuffer = Vector3()
+    protected val targetHandABuffer = Vector3()
+    protected val targetHandPBuffer = Vector3()
+    protected val poleABuffer = Vector3()
+    protected val polePBuffer = Vector3()
+
     protected fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
         ankleF = SkeletonNode(Joint.ANKLE_F)

@@ -7,7 +7,8 @@ package com.monkfitness.app.animation
 class SkeletonPose(
     val joints: Array<Vector3> = Array(Joint.entries.size) { Vector3() },
     val rotations: Array<JointRotation> = Array(Joint.entries.size) { JointRotation() },
-    var roots: List<SkeletonNode> = emptyList()
+    var roots: List<SkeletonNode> = emptyList(),
+    var isTransformsUpdated: Boolean = false
 ) {
     fun getJoint(id: Joint): Vector3 = joints[id.index]
 
@@ -27,6 +28,7 @@ class SkeletonPose(
             rotations[i].copyFrom(other.rotations[i])
         }
         this.roots = other.roots
+        this.isTransformsUpdated = other.isTransformsUpdated
     }
 
     companion object {
@@ -47,6 +49,7 @@ class SkeletonPose(
                 root.flatten(targetPose)
             }
             targetPose.roots = roots
+            targetPose.isTransformsUpdated = true
             return targetPose
         }
     }

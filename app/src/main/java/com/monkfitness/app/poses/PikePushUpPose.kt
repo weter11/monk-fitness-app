@@ -56,64 +56,67 @@ class PikePushUpPose : BasePushUpPose() {
         val torsoVecY = chestY - py
         val torsoGlobalPitch = atan2(-torsoVecY, -torsoVecX)
 
-        ankleF!!.localPosition = Vector3(ankleX, ankleHeight, -def.hipWidth)
-        ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), legPitch)
+        ankleF!!.localPosition.set(ankleX, ankleHeight, -def.hipWidth)
+        ankleF!!.localRotation.set(axisZ, legPitch)
 
-        val worldFootDir = Vector3(0f, -1f, 0f)
-        val localFootDir = rotAround(worldFootDir, Vector3(0f, 0f, 1f), -legPitch, Vector3())
-        heelF!!.localPosition = Vector3(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
-        toeF!!.localPosition = Vector3(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
-        heelB!!.localPosition = Vector3(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
-        toeB!!.localPosition = Vector3(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
+        val worldFootDir = tempV1.set(0f, -1f, 0f)
+        val localFootDir = rotAround(worldFootDir, axisZ, -legPitch, tempV2)
+        heelF!!.localPosition.set(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
+        toeF!!.localPosition.set(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
+        heelB!!.localPosition.set(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
+        toeB!!.localPosition.set(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
 
-        kneeF!!.localPosition = Vector3(-def.shinLength, 0f, 0f)
-        hipF!!.localPosition = Vector3(-def.thighLength, 0f, 0f)
+        kneeF!!.localPosition.set(-def.shinLength, 0f, 0f)
+        hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
 
-        pelvis!!.localPosition = Vector3(0f, 0f, def.hipWidth)
-        pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), torsoGlobalPitch - legPitch)
-        chest!!.localPosition = Vector3(-def.torsoLength, 0f, 0f)
+        pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
+        pelvis!!.localRotation.set(axisZ, torsoGlobalPitch - legPitch)
+        chest!!.localPosition.set(-def.torsoLength, 0f, 0f)
 
         // 1. Correcting the Right-Side (Side B) Floating Leg Asymmetry
         // By subtracting the torso pitch, we isolate and enforce the exact same global leg pitch on both sides.
-        hipB!!.localPosition = Vector3(0f, 0f, def.hipWidth)
-        hipB!!.localRotation.set(Vector3(0f, 0f, 1f), legPitch - torsoGlobalPitch)
-        kneeB!!.localPosition = Vector3(def.thighLength, 0f, 0f)
-        kneeB!!.localRotation.set(Vector3(0f, 0f, 1f), 0f)
-        ankleB!!.localPosition = Vector3(def.shinLength, 0f, 0f)
+        hipB!!.localPosition.set(0f, 0f, def.hipWidth)
+        hipB!!.localRotation.set(axisZ, legPitch - torsoGlobalPitch)
+        kneeB!!.localPosition.set(def.thighLength, 0f, 0f)
+        kneeB!!.localRotation.set(axisZ, 0f)
+        ankleB!!.localPosition.set(def.shinLength, 0f, 0f)
 
-        val headDir = Vector3(-1f, -0.6f, 0f).normalize()
-        neck!!.localPosition = Vector3(headDir.x * def.neckLength, headDir.y * def.neckLength, headDir.z * def.neckLength)
-        head!!.localPosition = Vector3(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
+        val headDir = tempV1.set(-1f, -0.6f, 0f).normalize()
+        neck!!.localPosition.set(headDir.x * def.neckLength, headDir.y * def.neckLength, headDir.z * def.neckLength)
+        head!!.localPosition.set(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
 
-        roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
+        val rSize = roots!!.size
+        for (i in 0 until rSize) {
+            roots!![i].updateWorldTransforms(zeroVector, identityRotation)
+        }
 
         val chestW = chest!!.worldPosition
-        val shoulderAW = rotAround(Vector3(0f, 0f, -def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle, Vector3()).add(chestW)
-        val shoulderPW = rotAround(Vector3(0f, 0f, def.shoulderWidth), Vector3(0f, 0f, 1f), chest!!.worldRotation.angle, Vector3()).add(chestW)
+        val shoulderAW = rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV2).add(chestW)
+        val shoulderPW = rotAround(tempV1.set(0f, 0f, def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV3).add(chestW)
 
         val handAnchorX = -25f
-        val targetHandA = Vector3(handAnchorX, 0f, -def.shoulderWidth * 1.2f)
-        val targetHandP = Vector3(handAnchorX, 0f, def.shoulderWidth * 1.2f)
+        val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * 1.2f)
+        val targetHandP = targetHandPBuffer.set(handAnchorX, 0f, def.shoulderWidth * 1.2f)
 
         // Pole vectors (1, 1, ±2) perfectly orient the shoulder joints outwards
-        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 1f, -2f), def.armIKConstraint, armAIK)
-        val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, Vector3(1f, 1f, 2f), def.armIKConstraint, armPIK)
+        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleABuffer.set(1f, 1f, -2f), def.armIKConstraint, armAIK)
+        val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, polePBuffer.set(1f, 1f, 2f), def.armIKConstraint, armPIK)
 
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
-        rotAround(Vector3(armA.joint.x - shoulderAW.x, armA.joint.y - shoulderAW.y, armA.joint.z - shoulderAW.z), Vector3(0f, 0f, 1f), -torsoGlobalPitch, elbowA!!.localPosition)
-        rotAround(Vector3(armA.end.x - armA.joint.x, armA.end.y - armA.joint.y, armA.end.z - armA.joint.z), Vector3(0f, 0f, 1f), -torsoGlobalPitch, handA!!.localPosition)
+        rotAround(tempV1.set(armA.joint.x - shoulderAW.x, armA.joint.y - shoulderAW.y, armA.joint.z - shoulderAW.z), axisZ, -torsoGlobalPitch, elbowA!!.localPosition)
+        rotAround(tempV1.set(armA.end.x - armA.joint.x, armA.end.y - armA.joint.y, armA.end.z - armA.joint.z), axisZ, -torsoGlobalPitch, handA!!.localPosition)
 
         shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
-        rotAround(Vector3(armP.joint.x - shoulderPW.x, armP.joint.y - shoulderPW.y, armP.joint.z - shoulderPW.z), Vector3(0f, 0f, 1f), -torsoGlobalPitch, elbowP!!.localPosition)
-        rotAround(Vector3(armP.end.x - armP.joint.x, armP.end.y - armP.joint.y, armP.end.z - armP.joint.z), Vector3(0f, 0f, 1f), -torsoGlobalPitch, handP!!.localPosition)
+        rotAround(tempV1.set(armP.joint.x - shoulderPW.x, armP.joint.y - shoulderPW.y, armP.joint.z - shoulderPW.z), axisZ, -torsoGlobalPitch, elbowP!!.localPosition)
+        rotAround(tempV1.set(armP.end.x - armP.joint.x, armP.end.y - armP.joint.y, armP.end.z - armP.joint.z), axisZ, -torsoGlobalPitch, handP!!.localPosition)
 
-        handA!!.localRotation.set(Vector3(0f, 0f, 1f), -torsoGlobalPitch)
-        val handDirA = Vector3(-1f, 0f, -0.1f).normalize()
-        palmA!!.localPosition = Vector3(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); knucklesA!!.localPosition = Vector3(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); fingertipsA!!.localPosition = Vector3(handDirA.x * 10f, handDirA.y * 10f, handDirA.z * 10f)
+        handA!!.localRotation.set(axisZ, -torsoGlobalPitch)
+        val handDirA = tempV1.set(-1f, 0f, -0.1f).normalize()
+        palmA!!.localPosition.set(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); knucklesA!!.localPosition.set(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); fingertipsA!!.localPosition.set(handDirA.x * 10f, handDirA.y * 10f, handDirA.z * 10f)
 
-        handP!!.localRotation.set(Vector3(0f, 0f, 1f), -torsoGlobalPitch)
-        val handDirP = Vector3(-1f, 0f, 0.1f).normalize()
-        palmP!!.localPosition = Vector3(handDirP.x * 6f, handDirP.y * 6f, handDirP.z * 6f); knucklesP!!.localPosition = Vector3(handDirP.x * 6f, handDirP.y * 6f, handDirP.z * 6f); fingertipsP!!.localPosition = Vector3(handDirP.x * 10f, handDirP.y * 10f, handDirP.z * 10f)
+        handP!!.localRotation.set(axisZ, -torsoGlobalPitch)
+        val handDirP = tempV1.set(-1f, 0f, 0.1f).normalize()
+        palmP!!.localPosition.set(handDirP.x * 6f, handDirP.y * 6f, handDirP.z * 6f); knucklesP!!.localPosition.set(handDirP.x * 6f, handDirP.y * 6f, handDirP.z * 6f); fingertipsP!!.localPosition.set(handDirP.x * 10f, handDirP.y * 10f, handDirP.z * 10f)
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))

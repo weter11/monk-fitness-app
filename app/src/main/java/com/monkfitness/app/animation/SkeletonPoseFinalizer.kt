@@ -22,6 +22,37 @@ class SkeletonPoseFinalizer(
     private val handJointsBuffer = HandJoints()
     private val tempV1 = Vector3()
 
+    private var cachedRootsIdentity: List<SkeletonNode>? = null
+    private var cachedHasHeelToeF = false
+    private var cachedHasHeelToeB = false
+    private var cachedHasHandDetailA = false
+    private var cachedHasHandDetailP = false
+
+    private fun containsJoint(roots: List<SkeletonNode>, joint: Joint): Boolean {
+        for (i in 0 until roots.size) {
+            if (containsJointNode(roots[i], joint)) return true
+        }
+        return false
+    }
+
+    private fun containsJointNode(node: SkeletonNode, joint: Joint): Boolean {
+        if (node.joint == joint) return true
+        val children = node.children
+        for (i in 0 until children.size) {
+            if (containsJointNode(children[i], joint)) return true
+        }
+        return false
+    }
+
+    private fun refreshJointPresenceCache(roots: List<SkeletonNode>) {
+        if (roots === cachedRootsIdentity) return
+        cachedRootsIdentity = roots
+        cachedHasHeelToeF = containsJoint(roots, Joint.HEEL_F) && containsJoint(roots, Joint.TOE_F)
+        cachedHasHeelToeB = containsJoint(roots, Joint.HEEL_B) && containsJoint(roots, Joint.TOE_B)
+        cachedHasHandDetailA = containsJoint(roots, Joint.PALM_A) && containsJoint(roots, Joint.FINGERTIPS_A)
+        cachedHasHandDetailP = containsJoint(roots, Joint.PALM_P) && containsJoint(roots, Joint.FINGERTIPS_P)
+    }
+
     // Pre-allocated standard SkeletonNode hierarchy (for legacy compat path)
     private var roots: List<SkeletonNode>? = null
     private val nodesMap = Array<SkeletonNode?>(Joint.entries.size) { null }
@@ -188,21 +219,30 @@ class SkeletonPoseFinalizer(
 
         if (pose.roots.isNotEmpty()) {
             // Modern rotation-driven path: Execute Forward Kinematics traversal directly using direct local joint rotations/offsets
-            pose.roots.forEach { it.updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION) }
-            pose.roots.forEach { it.flatten(outputPose) }
+            if (!pose.isTransformsUpdated) {
+                val size = pose.roots.size
+                for (i in 0 until size) {
+                    pose.roots[i].updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION)
+                }
+                for (i in 0 until size) {
+                    pose.roots[i].flatten(outputPose)
+                }
+                pose.isTransformsUpdated = true
+            }
             outputPose.roots = pose.roots
 
-            // Complete missing elements from the hierarchy if they are absent
-            if (!containsJoint(pose.roots, Joint.HEEL_F) || !containsJoint(pose.roots, Joint.TOE_F)) {
+            refreshJointPresenceCache(pose.roots)
+
+            if (!cachedHasHeelToeF) {
                 adjustFootOrientation(outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
             }
-            if (!containsJoint(pose.roots, Joint.HEEL_B) || !containsJoint(pose.roots, Joint.TOE_B)) {
+            if (!cachedHasHeelToeB) {
                 adjustFootOrientation(outputPose, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
             }
-            if (!containsJoint(pose.roots, Joint.PALM_A) || !containsJoint(pose.roots, Joint.FINGERTIPS_A)) {
+            if (!cachedHasHandDetailA) {
                 adjustHandOrientation(outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A)
             }
-            if (!containsJoint(pose.roots, Joint.PALM_P) || !containsJoint(pose.roots, Joint.FINGERTIPS_P)) {
+            if (!cachedHasHandDetailP) {
                 adjustHandOrientation(outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
             }
         } else {
@@ -229,21 +269,6 @@ class SkeletonPoseFinalizer(
         }
 
         return outputPose
-    }
-
-    private fun containsJoint(roots: List<SkeletonNode>, joint: Joint): Boolean {
-        for (root in roots) {
-            if (containsJointNode(root, joint)) return true
-        }
-        return false
-    }
-
-    private fun containsJointNode(node: SkeletonNode, joint: Joint): Boolean {
-        if (node.joint == joint) return true
-        for (child in node.children) {
-            if (containsJointNode(child, joint)) return true
-        }
-        return false
     }
 
     private fun adjustHandOrientation(
