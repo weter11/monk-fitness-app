@@ -2,7 +2,6 @@ package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
 import com.monkfitness.app.animation.SkeletonMath.solveIK
-import com.monkfitness.app.animation.SkeletonMath.lerp
 import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
@@ -10,7 +9,9 @@ class JumpSquatPose : PoseBuilder {
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
         durationSeconds = 1.8f, loopMode = LoopMode.LOOP,
-        motionCurve = MotionCurve.LINEAR, // Overridden so harmonic sine wave can control sequence natively
+        // CRITICAL: Overridden to LINEAR so our internal sine wave isn't distorted by double-easing.
+        // We want absolute mathematical control over the physics clock.
+        motionCurve = MotionCurve.LINEAR,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
     )
 
@@ -27,10 +28,13 @@ class JumpSquatPose : PoseBuilder {
 
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
+        // Core Architecture: Pelvis is the unconstrained root.
         pelvis = SkeletonNode(Joint.PELVIS); chest = pelvis!!.addChild(SkeletonNode(Joint.CHEST))
         neck = chest!!.addChild(SkeletonNode(Joint.NECK_END)); head = neck!!.addChild(SkeletonNode(Joint.HEAD_POS))
+
         shoulderA = chest!!.addChild(SkeletonNode(Joint.SHOULDER_A)); elbowA = shoulderA!!.addChild(SkeletonNode(Joint.ELBOW_A)); handA = elbowA!!.addChild(SkeletonNode(Joint.HAND_A)); palmA = handA!!.addChild(SkeletonNode(Joint.PALM_A)); knucklesA = palmA!!.addChild(SkeletonNode(Joint.KNUCKLES_A)); fingertipsA = knucklesA!!.addChild(SkeletonNode(Joint.FINGERTIPS_A))
         shoulderP = chest!!.addChild(SkeletonNode(Joint.SHOULDER_P)); elbowP = shoulderP!!.addChild(SkeletonNode(Joint.ELBOW_P)); handP = elbowP!!.addChild(SkeletonNode(Joint.HAND_P)); palmP = handP!!.addChild(SkeletonNode(Joint.PALM_P)); knucklesP = palmP!!.addChild(SkeletonNode(Joint.KNUCKLES_P)); fingertipsP = knucklesP!!.addChild(SkeletonNode(Joint.FINGERTIPS_P))
+
         hipF = pelvis!!.addChild(SkeletonNode(Joint.HIP_F)); kneeF = hipF!!.addChild(SkeletonNode(Joint.KNEE_F)); ankleF = kneeF!!.addChild(SkeletonNode(Joint.ANKLE_F)); heelF = ankleF!!.addChild(SkeletonNode(Joint.HEEL_F)); toeF = ankleF!!.addChild(SkeletonNode(Joint.TOE_F))
         hipB = pelvis!!.addChild(SkeletonNode(Joint.HIP_B)); kneeB = hipB!!.addChild(SkeletonNode(Joint.KNEE_B)); ankleB = kneeB!!.addChild(SkeletonNode(Joint.ANKLE_B)); heelB = ankleB!!.addChild(SkeletonNode(Joint.HEEL_B)); toeB = ankleB!!.addChild(SkeletonNode(Joint.TOE_B))
         roots = listOf(pelvis!!)
@@ -40,15 +44,26 @@ class JumpSquatPose : PoseBuilder {
         val def = context.definition
         ensureHierarchy(def)
 
-        // Native harmonic jump cycle. > 0 is jumping. < 0 is squatting.
-        val cycle = sin(context.progress * 2f * PI.toFloat())
-        val isJumping = cycle > 0f
-        val dropRatio = if (isJumping) 0f else -cycle
+        // ====================================================================
+        // CONTINUOUS MATHEMATICAL PHASE MAP (Branchless Physics)
+        // ====================================================================
+
+        // Maps progress [0..1] to [0..2PI].
+        // We offset it so progress=0 starts exactly at the deepest point of the squat (-PI/2)
+        val cycle = (context.progress * 2f * PI.toFloat()) - (PI.toFloat() / 2f)
+        val rawSin = sin(cycle) // Ranges from -1 (Deep Squat) to 1 (Peak Flight)
+
+        // Continuous functional clamps to isolate phase behaviors without IF statements
+        val squatFactor = max(0f, -rawSin)  // Returns [0 to 1] ONLY during the squat/landing phases
+        val flightFactor = max(0f, rawSin)  // Returns [0 to 1] ONLY during the liftoff/flight phases
 
         val standH = def.shinLength + def.thighLength + 25f
-        val pelvisY = standH + (if (isJumping) cycle * 45f else cycle * 40f)
-        val pelvisX = dropRatio * -25f
-        val leanAngle = dropRatio * 0.45f
+
+        // 1. Core Ballistic Pelvis Arc
+        // Drop 40f into the squat, jump 35f into the air. Perfectly smooth transition through standH.
+        val pelvisY = standH + (rawSin * 40f)
+        val pelvisX = squatFactor * -25f
+        val leanAngle = squatFactor * 0.45f
 
         pelvis!!.localPosition = Vector3(pelvisX, pelvisY, 0f)
         pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), -leanAngle)
@@ -62,28 +77,40 @@ class JumpSquatPose : PoseBuilder {
 
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
-        val footLift = if (isJumping) cycle * 35f else 0f
+        // ====================================================================
+        // INVERSE KINEMATICS: DYNAMIC RECOVERY
+        // ====================================================================
+
+        // 2. Flight Kinematics (Legs)
+        // The feet follow the pelvis up, but trail behind by mathematically lifting less than the pelvis
+        // (40f jump - 25f foot lift = 15f compression -> natural bent knees in flight)
+        val footLift = flightFactor * 25f
         val targetAnkleF = Vector3(0f, 25f + footLift, -def.hipWidth * 1.5f)
         val targetAnkleB = Vector3(0f, 25f + footLift, def.hipWidth * 1.5f)
 
+        // Solve IK to force legs to reach the computed ankle targets
         val legFIK = solveIK(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.3f), def.legIKConstraint, legFBuffer)
         val legBIK = solveIK(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.3f), def.legIKConstraint, legBBuffer)
 
+        // Convert Global IK solution back to local Scene Graph nodes, canceling out the pelvis lean
         rotAround(Vector3(legFIK.joint.x - hipF!!.worldPosition.x, legFIK.joint.y - hipF!!.worldPosition.y, legFIK.joint.z - hipF!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, kneeF!!.localPosition)
         rotAround(Vector3(legFIK.end.x - legFIK.joint.x, legFIK.end.y - legFIK.joint.y, legFIK.end.z - legFIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, ankleF!!.localPosition)
         rotAround(Vector3(legBIK.joint.x - hipB!!.worldPosition.x, legBIK.joint.y - hipB!!.worldPosition.y, legBIK.joint.z - hipB!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, kneeB!!.localPosition)
         rotAround(Vector3(legBIK.end.x - legBIK.joint.x, legBIK.end.y - legBIK.joint.y, legBIK.end.z - legBIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, ankleB!!.localPosition)
 
-        val footPitch = if (isJumping) cycle * 0.6f else 0f
+        // 3. Plantar Flexion (Toes point down during flight)
+        val footPitch = flightFactor * 0.6f
         ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle - footPitch)
         ankleB!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle - footPitch)
 
         heelF!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeF!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
         heelB!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeB!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
 
-        // Arms swing dynamically
-        val handTargetX = if (isJumping) lerp(0f, -20f, cycle) else lerp(0f, 40f, -cycle)
-        val handTargetY = if (isJumping) lerp(pelvisY + 20f, pelvisY - 20f, cycle) else lerp(pelvisY + 20f, pelvisY + def.torsoLength - 10f, -cycle)
+        // 4. Arm Ballistics
+        // Arms are driven smoothly by the inverse of the rawSin wave.
+        // Peak forward (+40) during deep squat (-1). Peak backward (-30) during flight (1).
+        val handTargetX = pelvisX + (-rawSin * 35f) + 5f
+        val handTargetY = pelvisY + def.torsoLength - 10f + (-rawSin * 15f)
 
         val armAIK = solveIK(shoulderA!!.worldPosition, Vector3(handTargetX, handTargetY, -def.shoulderWidth * 1.5f), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, armABuffer)
         val armPIK = solveIK(shoulderP!!.worldPosition, Vector3(handTargetX, handTargetY, def.shoulderWidth * 1.5f), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, armPBuffer)
@@ -93,7 +120,10 @@ class JumpSquatPose : PoseBuilder {
         rotAround(Vector3(armPIK.joint.x - shoulderP!!.worldPosition.x, armPIK.joint.y - shoulderP!!.worldPosition.y, armPIK.joint.z - shoulderP!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, elbowP!!.localPosition)
         rotAround(Vector3(armPIK.end.x - armPIK.joint.x, armPIK.end.y - armPIK.joint.y, armPIK.end.z - armPIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, handP!!.localPosition)
 
-        handA!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle); handP!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle)
+        // Slight wrist flick backward during jump apex to match momentum
+        handA!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle + (flightFactor * 0.3f))
+        handP!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle + (flightFactor * 0.3f))
+
         palmA!!.localPosition = Vector3(6f, 0f, 0f); knucklesA!!.localPosition = Vector3(6f, 0f, 0f); fingertipsA!!.localPosition = Vector3(10f, 0f, 0f)
         palmP!!.localPosition = Vector3(6f, 0f, 0f); knucklesP!!.localPosition = Vector3(6f, 0f, 0f); fingertipsP!!.localPosition = Vector3(10f, 0f, 0f)
 

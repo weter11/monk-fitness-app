@@ -8,8 +8,8 @@ object AnimationRegistry {
     init {
         // Core registrations
         register("world_greatest_stretch", WorldGreatestStretchPose())
-        register("birddog_hold", BirdDogPose())
-        register("birddog_reps", BirdDogPose())
+        register("birddog_hold", StaticBirdDogHoldPose())
+        register("birddog_reps", AlternatingBirdDogPose())
         register("cat_cow_reps", CatCowPose())
         register("superman_prone", SupermanPose())
         register("pushup_standard", StandardPushUpPose())

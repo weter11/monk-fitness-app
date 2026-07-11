@@ -71,9 +71,9 @@ class SquatPosesTest {
         assertNotNull(pose.metadata)
         assertEquals(MotionCurve.LINEAR, pose.metadata.motionCurve)
 
-        // At progress 0.25, sin(0.25 * 2 * PI) = 1.0 (isJumping == true)
+        // At progress 0.5, rawSin = sin(0.5 * 2 * PI - PI/2) = sin(PI/2) = 1.0 (Peak flight)
         val contextJump = PoseContext(
-            progress = 0.25f,
+            progress = 0.5f,
             side = Side.LEFT,
             definition = SkeletonDefinition.DEFAULT_ADULT,
             deltaTime = 16.6f,
@@ -87,9 +87,9 @@ class SquatPosesTest {
         assertNotNull(resultJump)
         val pelvisYJump = resultJump.getJoint(Joint.PELVIS).y
 
-        // At progress 0.75, sin(0.75 * 2 * PI) = -1.0 (isJumping == false)
+        // At progress 0.0, rawSin = sin(0.0 * 2 * PI - PI/2) = sin(-PI/2) = -1.0 (Deep squat)
         val contextSquat = PoseContext(
-            progress = 0.75f,
+            progress = 0.0f,
             side = Side.LEFT,
             definition = SkeletonDefinition.DEFAULT_ADULT,
             deltaTime = 16.6f,
