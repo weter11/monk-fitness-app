@@ -43,6 +43,7 @@ object AnimationRegistry {
         register("dead_bug_standard", DeadBugPose())
         register("leg_raise_standard", LegRaisePose())
         register("mountain_climber_standard", MountainClimberPose())
+        register("kb_swing_backpack", KettlebellSwingPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {
