@@ -39,13 +39,10 @@ object AnimationRegistry {
         register("lunge_forward", AlternatingForwardLungesPose())
         register("lunge_reverse", AlternatingReverseLungesPose())
         register("lunge_side", AlternatingSideLungesPose())
-        register("step_up_standard", StepUpPose())
-        register("dead_bug_standard", DeadBugPose())
-        register("leg_raise_standard", LegRaisePose())
-        register("mountain_climber_standard", MountainClimberPose())
-        register("kb_swing_backpack", KettlebellSwingPose())
-        register("reverse_snow_angel_prone", ReverseSnowAngelPose())
-        register("scapular_pullup_deadhang", ScapularPullUpPose())
+        register("row_standard", InvertedRowPose())
+        register("band_pull_aparts_standard", BandPullApartsPose())
+        register("yt_raises_standard", YTRaisesPose())
+        register("shoulder_cars_standard", ShoulderCarsPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {
