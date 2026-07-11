@@ -44,6 +44,7 @@ object AnimationRegistry {
         register("leg_raise_standard", LegRaisePose())
         register("mountain_climber_standard", MountainClimberPose())
         register("kb_swing_backpack", KettlebellSwingPose())
+        register("reverse_snow_angel_prone", ReverseSnowAngelPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {
