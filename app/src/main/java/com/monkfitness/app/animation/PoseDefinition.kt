@@ -8,7 +8,8 @@ class SkeletonPose(
     val joints: Array<Vector3> = Array(Joint.entries.size) { Vector3() },
     val rotations: Array<JointRotation> = Array(Joint.entries.size) { JointRotation() },
     var roots: List<SkeletonNode> = emptyList(),
-    var isTransformsUpdated: Boolean = false
+    var isTransformsUpdated: Boolean = false,
+    val ikClampAmounts: ArrayList<Float> = ArrayList()
 ) {
     fun getJoint(id: Joint): Vector3 = joints[id.index]
 
@@ -29,6 +30,8 @@ class SkeletonPose(
         }
         this.roots = other.roots
         this.isTransformsUpdated = other.isTransformsUpdated
+        this.ikClampAmounts.clear()
+        this.ikClampAmounts.addAll(other.ikClampAmounts)
     }
 
     companion object {
@@ -44,6 +47,7 @@ class SkeletonPose(
             roots: List<SkeletonNode>,
             targetPose: SkeletonPose
         ): SkeletonPose {
+            targetPose.ikClampAmounts.clear()
             for (root in roots) {
                 root.updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION)
                 root.flatten(targetPose)

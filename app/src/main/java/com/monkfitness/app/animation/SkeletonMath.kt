@@ -88,11 +88,25 @@ data class IKConstraint(
 ) {
     companion object {
         val ArmConstraint = IKConstraint(30f, 0.95f)
-        val LegConstraint = IKConstraint(30f, 0.98f)
+        val LegConstraint = IKConstraint(30f, 0.998f)
     }
 }
 
 object SkeletonMath {
+    /**
+     * Computes the perpendicular (kX, kY)-style local offset for a two-bone limb
+     * that should look nearly straight, driven by a target flexion angle rather
+     * than an arbitrary linear-extension ratio (which does not correspond
+     * linearly to visual straightness near full extension).
+     */
+    fun solveNearStraightLimb(L1: Float, L2: Float, targetFlexionDegrees: Float): Pair<Float, Float> {
+        val phi = targetFlexionDegrees * PI.toFloat() / 180f
+        val d = sqrt(L1 * L1 + L2 * L2 + 2f * L1 * L2 * cos(phi))
+        val x = (L1 * L1 - L2 * L2 + d * d) / (2f * d)
+        val y = -sqrt((L1 * L1 - x * x).coerceAtLeast(0f))
+        return x to y
+    }
+
     /**
      * Standard Ease-In-Out Quintic
      */
@@ -157,7 +171,13 @@ object SkeletonMath {
     }
 
     // Hard-locked 2-bone IK solver
-    class IKResult(val joint: Vector3 = Vector3(), val end: Vector3 = Vector3())
+    class IKResult(
+        val joint: Vector3 = Vector3(),
+        val end: Vector3 = Vector3(),
+        var requestedDistance: Float = 0f,
+        var clampedDistance: Float = 0f,
+        var clampAmount: Float = 0f
+    )
 
     /**
      * Analytical IK with strict Biological Clamps
@@ -182,6 +202,10 @@ object SkeletonMath {
         val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
 
         val dist = dMag.coerceIn(minDist, maxDist)
+
+        result.requestedDistance = dMag
+        result.clampedDistance = dist
+        result.clampAmount = abs(dist - dMag)
 
         val dirX: Float; val dirY: Float; val dirZ: Float
         if (dMag > 1e-6f) {

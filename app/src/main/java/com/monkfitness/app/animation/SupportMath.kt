@@ -7,7 +7,52 @@ import kotlin.math.*
  * Exposes methods to calculate effective support centroid, body lever length,
  * and the LeverModel without exercise-specific branching.
  */
+data class PushUpGeometry(
+    val height: Float,
+    val theta: Float,
+    val handAnchorX: Float
+)
+
 object SupportMath {
+
+    /**
+     * Consistently derives push-up geometry for any support height (flat or elevated).
+     * - progress: frame progress from 0.0 (top) to 1.0 (bottom)
+     * - pivotSupportHeight: support height of the pivot (e.g. 0f for standard, 40f for decline box)
+     * - definition: skeleton definition
+     * - topBodyHeight: target shoulder height at the peak of the pushup (typically 60f)
+     * - bottomBodyHeight: target shoulder height at the bottom of the pushup (typically 25f or 20f)
+     */
+    fun computePushUpGeometry(
+        progress: Float,
+        pivotSupportHeight: Float,
+        definition: SkeletonDefinition,
+        topBodyHeight: Float = 60f,
+        bottomBodyHeight: Float = 25f
+    ): PushUpGeometry {
+        val totalLegLen = definition.shinLength + definition.thighLength
+        // Slightly flexed legTargetLen (8 degrees target flexion) to satisfy LegConstraint limit (0.998f max)
+        val legTargetLen = totalLegLen * 0.99757f
+
+        // Pivot's actual height off the floor
+        val pivotHeight = pivotSupportHeight + 25f // 25f is ankle/knee height above their support
+
+        // Body (shoulder) height range relative to the floor
+        val height = lerp(topBodyHeight, bottomBodyHeight, progress)
+
+        // Solve drivingHeight and theta for the leg angle
+        val drivingHeight = (height - pivotHeight)
+        val theta = asin((drivingHeight / legTargetLen).coerceIn(-1f, 1f))
+
+        // Peak driving height to establish static hand placement
+        val maxDrivingHeight = (topBodyHeight - pivotHeight)
+        val maxTheta = asin((maxDrivingHeight / legTargetLen).coerceIn(-1f, 1f))
+        val handAnchorX = 60f - definition.torsoLength * cos(maxTheta)
+
+        return PushUpGeometry(height, theta, handAnchorX)
+    }
+
+    private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
 
     /**
      * Determines the automatic/effective body lever length based on the PivotType.

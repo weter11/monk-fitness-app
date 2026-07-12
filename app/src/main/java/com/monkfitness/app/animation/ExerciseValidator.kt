@@ -59,7 +59,8 @@ class ExerciseValidator(
             "ACCELERATION_SPIKE",
             "STATIC_SUPPORT_POLYGON",
             "BILATERAL_SYMMETRY",
-            "HAND_SHOULDER_ALIGNMENT"
+            "HAND_SHOULDER_ALIGNMENT",
+            "IK_TARGET_UNREACHABLE"
         )
     }
 
@@ -108,6 +109,9 @@ class ExerciseValidator(
 
         // Rule 12: Hand Shoulder Alignment
         validateHandShoulderAlignment(pose, issues)
+
+        // Rule 13: IK Target Unreachable
+        validateIKTargetUnreachable(pose, issues)
 
         // Assemble report (allocations allowed here)
         val results = ArrayList<ValidationResult>(ALL_RULES.size)
@@ -554,6 +558,19 @@ class ExerciseValidator(
                 severity = ValidationSeverity.ERROR,
                 joint = Joint.HAND_A
             ))
+        }
+    }
+
+    private fun validateIKTargetUnreachable(pose: SkeletonPose, issues: MutableList<ValidationIssue>) {
+        for (clamp in pose.ikClampAmounts) {
+            if (clamp > 0.05f) { // tolerance of 0.05
+                issues.add(ValidationIssue(
+                    ruleId = "IK_TARGET_UNREACHABLE",
+                    message = "IK target unreachable: solve required clamping by $clamp",
+                    severity = ValidationSeverity.ERROR,
+                    joint = Joint.HAND_A
+                ))
+            }
         }
     }
 }
