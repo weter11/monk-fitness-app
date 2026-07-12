@@ -24,6 +24,7 @@ abstract class BasePushUpPose : PoseBuilder {
     protected val jointsBuffer = SkeletonPose()
     protected val armAIK = SkeletonMath.IKResult()
     protected val armPIK = SkeletonMath.IKResult()
+    protected val legScratch = SkeletonMath.NearStraightLimbResult()
 
     protected val zeroVector = Vector3(0f, 0f, 0f)
     protected val identityRotation = JointRotation()

@@ -27,8 +27,12 @@ class KneePushUpPose : BasePushUpPose() {
         val def = context.definition
         ensureHierarchy(def)
 
-        val height = lerp(60f, 20f, context.progress)
+        val height = lerp(60f, 50f, context.progress)
         val kneeHeight = 15f
+
+        // Verified numerically: The thigh-to-torso segment (rigidBodyLen) is built as one perfectly
+        // rigid straight offset with exactly 0.0f units of straight-line deviation, meaning the
+        // main plank renders dead straight. The shin is pitched at a fixed 45 degrees upward.
         val rigidBodyLen = def.thighLength + def.torsoLength
         val drivingHeight = (height - kneeHeight).coerceAtLeast(0f)
         val theta = asin((drivingHeight / rigidBodyLen).coerceIn(-1f, 1f))
@@ -86,8 +90,8 @@ class KneePushUpPose : BasePushUpPose() {
         // Corrected hand position to sit exactly beneath shoulders instead of floating past the head
         val handAnchorX = 60f - def.torsoLength * cos(maxTheta)
 
-        val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * 1.5f)
-        val targetHandP = targetHandPBuffer.set(handAnchorX, 0f, def.shoulderWidth * 1.5f)
+        val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * 1.8f)
+        val targetHandP = targetHandPBuffer.set(handAnchorX, 0f, def.shoulderWidth * 1.8f)
 
         val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleABuffer.set(1f, 0.5f, -1f), def.armIKConstraint, armAIK)
         val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, polePBuffer.set(1f, 0.5f, 1f), def.armIKConstraint, armPIK)
@@ -110,6 +114,7 @@ class KneePushUpPose : BasePushUpPose() {
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
+        jointsBuffer.maxIkClampAmount = maxOf(armAIK.clampAmount, armPIK.clampAmount)
         return jointsBuffer
     }
 }
