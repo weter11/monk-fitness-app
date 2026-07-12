@@ -44,15 +44,27 @@ class DeclinePushUpPose : BasePushUpPose() {
         val def = context.definition
         ensureHierarchy(def)
 
-        val height = lerp(60f, 20f, context.progress)
         val shinL = def.shinLength
         val thighL = def.thighLength
-        val totalLegLen = shinL + thighL
-        val legTargetLen = totalLegLen * 0.97f // Slightly flexed to satisfy IK constraint and avoid locked-out leg issues
 
-        val drivingHeight = (height - ankleHeight)
-        val theta = asin((drivingHeight / legTargetLen).coerceIn(-1f, 1f))
-        val ankleX = 60f + (legTargetLen * cos(theta))
+        // Target roughly 8 degrees of knee flexion for a visual and anatomically natural, barely-perceptible knee bend
+        val targetFlexionDegrees = 8f
+        val limbResult = SkeletonMath.solveNearStraightLimb(shinL, thighL, targetFlexionDegrees, legScratch)
+        val legTargetLen = limbResult.d
+
+        val geometry = SupportMath.derivePushUpGeometry(
+            progress = context.progress,
+            supportHeight = boxHeight,
+            legTargetLen = legTargetLen,
+            torsoLength = def.torsoLength,
+            pelvisOffsetTop = 35f,
+            pelvisOffsetBottom = 15f
+        )
+
+        val height = geometry.pelvisHeight
+        val theta = geometry.theta
+        val ankleX = geometry.ankleX
+        val handAnchorX = geometry.handAnchorX
 
         ankleF!!.localPosition.set(ankleX, ankleHeight, -def.hipWidth)
         ankleF!!.localRotation.set(axisZ, -theta)
@@ -64,9 +76,9 @@ class DeclinePushUpPose : BasePushUpPose() {
         heelB!!.localPosition.set(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
         toeB!!.localPosition.set(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
 
-        // Precompute local knee flexion coordinates to satisfy the leg IK constraint of 98% maximum extension
-        val kX = (thighL * thighL - shinL * shinL - legTargetLen * legTargetLen) / (2f * legTargetLen)
-        val kY = -sqrt((shinL * shinL - kX * kX).coerceAtLeast(0f))
+        // Precompute local knee flexion coordinates (F-leg: ankle is the parent, hip is child)
+        val kX = -limbResult.x
+        val kY = limbResult.y
 
         kneeF!!.localPosition.set(kX, kY, 0f)
         hipF!!.localPosition.set(-legTargetLen - kX, -kY, 0f)
@@ -81,8 +93,9 @@ class DeclinePushUpPose : BasePushUpPose() {
         // B-leg: hip is the parent, ankle is the child — this is a DIFFERENT triangle
         // traversal than the F-leg's (ankle-parent, hip-child), so it needs its own
         // derivation, not a relabeling of the F-leg's kX/kY.
-        val bX = (thighL * thighL - shinL * shinL + legTargetLen * legTargetLen) / (2f * legTargetLen)
-        val bY = -sqrt((thighL * thighL - bX * bX).coerceAtLeast(0f))
+        val bXResult = SkeletonMath.solveNearStraightLimb(thighL, shinL, targetFlexionDegrees, legScratch)
+        val bX = bXResult.x
+        val bY = bXResult.y
 
         kneeB!!.localPosition.set(bX, bY, 0f)
         ankleB!!.localPosition.set(legTargetLen - bX, -bY, 0f)
@@ -95,12 +108,6 @@ class DeclinePushUpPose : BasePushUpPose() {
         val chestW = chest!!.worldPosition
         val shoulderAW = rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV2).add(chestW)
         val shoulderPW = rotAround(tempV1.set(0f, 0f, def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV3).add(chestW)
-
-        val maxDrivingHeight = (60f - ankleHeight)
-        val maxTheta = asin((maxDrivingHeight / legTargetLen).coerceIn(-1f, 1f))
-
-        // Correcting Hand Target: Placing handAnchorX perfectly aligned beneath shoulders
-        val handAnchorX = 60f - def.torsoLength * cos(maxTheta)
 
         val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * 1.5f)
         val targetHandP = targetHandPBuffer.set(handAnchorX, 0f, def.shoulderWidth * 1.5f)
@@ -126,6 +133,7 @@ class DeclinePushUpPose : BasePushUpPose() {
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
+        jointsBuffer.maxIkClampAmount = maxOf(armAIK.clampAmount, armPIK.clampAmount)
         return jointsBuffer
     }
 }

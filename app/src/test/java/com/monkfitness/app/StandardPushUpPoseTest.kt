@@ -22,6 +22,7 @@ class StandardPushUpPoseTest {
             isStaticExercise = false,
             checkBilateralSymmetry = true,
             checkHandShoulderAlignment = true,
+            checkIkTargetReachability = true,
             expectedSupportJoints = setOf(
                 Joint.HAND_A, Joint.HAND_P,
                 Joint.WRIST_A, Joint.WRIST_P,
@@ -194,5 +195,54 @@ class StandardPushUpPoseTest {
             println(String.format("    devB   : %.6f", devB))
         }
         println("=========================================")
+    }
+
+    @Test
+    fun testPrintRequiredArmReach() {
+        val poseBuilder = StandardPushUpPose()
+        val def = SkeletonDefinition.DEFAULT_ADULT
+        val finalizer = SkeletonPoseFinalizer(def)
+        val progressValues = arrayOf(0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f)
+
+        val L1 = def.upperArmLength
+        val L2 = def.forearmLength
+        val minCos = kotlin.math.cos(def.armIKConstraint.minimumFlexionAngle * kotlin.math.PI.toFloat() / 180f)
+        val minDist = kotlin.math.sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
+        val maxDist = (L1 + L2) * def.armIKConstraint.maximumExtensionRatio
+
+        println("=== STANDARD PUSH-UP REQUIRED ARM REACH (POST-FIX) ===")
+        println(String.format("%-10s | %-15s | %-12s | %-12s | %-12s", "Progress", "Req Reach (3D)", "minDist", "maxDist", "Clamp Amount"))
+        println("-------------------------------------------------------------------------")
+        for (progress in progressValues) {
+            val context = PoseContext(
+                progress = progress,
+                side = Side.RIGHT,
+                definition = def,
+                deltaTime = 0.0166f,
+                cycleDuration = 2500f
+            )
+            val rawPose = poseBuilder.build(context)
+            val pose = finalizer.finalize(rawPose)
+
+            val chestW = pose.getJoint(Joint.CHEST)
+            val shoulderAW = Vector3(chestW.x, chestW.y, chestW.z - def.shoulderWidth)
+            val legTargetLen = (def.shinLength + def.thighLength) * 0.99757f // post-fix d
+            val boxHeight = 0f
+
+            val geometry = SupportMath.derivePushUpGeometry(
+                progress = progress,
+                supportHeight = boxHeight,
+                legTargetLen = legTargetLen,
+                torsoLength = def.torsoLength,
+                pelvisOffsetTop = 35f,
+                pelvisOffsetBottom = 15f
+            )
+            val targetHandA = Vector3(geometry.handAnchorX, 0f, -def.shoulderWidth * 1.5f)
+            val dMag = (targetHandA - shoulderAW).mag()
+            val clampAmount = if (dMag < minDist) minDist - dMag else if (dMag > maxDist) dMag - maxDist else 0f
+
+            println(String.format("%-10.1f | %-15.4f | %-12.4f | %-12.4f | %-12.4f", progress, dMag, minDist, maxDist, clampAmount))
+        }
+        println("=========================================================================")
     }
 }

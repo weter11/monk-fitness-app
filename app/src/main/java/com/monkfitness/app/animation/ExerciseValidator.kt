@@ -12,7 +12,8 @@ data class ValidatorConfig(
     val supportMargin: Float = 10f,
     val expectedSupportJoints: Set<Joint> = emptySet(),
     val checkBilateralSymmetry: Boolean = false,
-    val checkHandShoulderAlignment: Boolean = false
+    val checkHandShoulderAlignment: Boolean = false,
+    val checkIkTargetReachability: Boolean = false
 )
 
 /**
@@ -59,7 +60,8 @@ class ExerciseValidator(
             "ACCELERATION_SPIKE",
             "STATIC_SUPPORT_POLYGON",
             "BILATERAL_SYMMETRY",
-            "HAND_SHOULDER_ALIGNMENT"
+            "HAND_SHOULDER_ALIGNMENT",
+            "IK_TARGET_UNREACHABLE"
         )
     }
 
@@ -108,6 +110,9 @@ class ExerciseValidator(
 
         // Rule 12: Hand Shoulder Alignment
         validateHandShoulderAlignment(pose, issues)
+
+        // Rule 13: IK Target Reachability (unreachable checks)
+        validateIkTargetReachability(pose, issues)
 
         // Assemble report (allocations allowed here)
         val results = ArrayList<ValidationResult>(ALL_RULES.size)
@@ -290,8 +295,9 @@ class ExerciseValidator(
     private fun validateIKConstraints(pose: SkeletonPose, def: SkeletonDefinition, issues: MutableList<ValidationIssue>) {
         validateIKConstraint(pose, Joint.SHOULDER_A, Joint.ELBOW_A, Joint.HAND_A, def.upperArmLength, def.forearmLength, def.armIKConstraint, issues)
         validateIKConstraint(pose, Joint.SHOULDER_P, Joint.ELBOW_P, Joint.HAND_P, def.upperArmLength, def.forearmLength, def.armIKConstraint, issues)
-        validateIKConstraint(pose, Joint.HIP_F, Joint.KNEE_F, Joint.ANKLE_F, def.thighLength, def.shinLength, def.legIKConstraint, issues)
-        validateIKConstraint(pose, Joint.HIP_B, Joint.KNEE_B, Joint.ANKLE_B, def.thighLength, def.shinLength, def.legIKConstraint, issues)
+        // For hand-derived straight leg poses, we validate up to 1.0 (100% of maximum physical extension), not the 0.98 solver-specific cap
+        validateIKConstraint(pose, Joint.HIP_F, Joint.KNEE_F, Joint.ANKLE_F, def.thighLength, def.shinLength, def.legIKConstraint, issues, overrideMaxRatio = 1.0f)
+        validateIKConstraint(pose, Joint.HIP_B, Joint.KNEE_B, Joint.ANKLE_B, def.thighLength, def.shinLength, def.legIKConstraint, issues, overrideMaxRatio = 1.0f)
     }
 
     private fun validateIKConstraint(
@@ -302,7 +308,8 @@ class ExerciseValidator(
         L1: Float,
         L2: Float,
         constraint: IKConstraint,
-        issues: MutableList<ValidationIssue>
+        issues: MutableList<ValidationIssue>,
+        overrideMaxRatio: Float? = null
     ) {
         val pStart = pose.getJoint(startJoint)
         val pEnd = pose.getJoint(endJoint)
@@ -312,7 +319,8 @@ class ExerciseValidator(
         val dz = pEnd.z - pStart.z
         val actualDist = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
 
-        val maxDist = (L1 + L2) * constraint.maximumExtensionRatio
+        val maxRatio = overrideMaxRatio ?: constraint.maximumExtensionRatio
+        val maxDist = (L1 + L2) * maxRatio
         val minCos = kotlin.math.cos(constraint.minimumFlexionAngle * kotlin.math.PI.toFloat() / 180f)
         val minDist = kotlin.math.sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
 
@@ -551,6 +559,19 @@ class ExerciseValidator(
             issues.add(ValidationIssue(
                 ruleId = "HAND_SHOULDER_ALIGNMENT",
                 message = "Hands not properly aligned beneath shoulders. Hand offset: $handForwardOffset",
+                severity = ValidationSeverity.ERROR,
+                joint = Joint.HAND_A
+            ))
+        }
+    }
+
+    private fun validateIkTargetReachability(pose: SkeletonPose, issues: MutableList<ValidationIssue>) {
+        if (!config.checkIkTargetReachability) return
+        // If the pose's maxIkClampAmount exceeds a small tolerance (e.g., 0.1 units), flag it!
+        if (pose.maxIkClampAmount > 0.1f) {
+            issues.add(ValidationIssue(
+                ruleId = "IK_TARGET_UNREACHABLE",
+                message = "IK target is physically unreachable: requested distance was clamped by ${pose.maxIkClampAmount} units.",
                 severity = ValidationSeverity.ERROR,
                 joint = Joint.HAND_A
             ))

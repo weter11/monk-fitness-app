@@ -20,6 +20,7 @@ class KneePushUpPoseTest {
             isStaticExercise = false,
             checkBilateralSymmetry = true,
             checkHandShoulderAlignment = true,
+            checkIkTargetReachability = true,
             expectedSupportJoints = setOf(
                 Joint.HAND_A, Joint.HAND_P,
                 Joint.WRIST_A, Joint.WRIST_P,
@@ -118,6 +119,7 @@ class KneePushUpPoseTest {
             val hipF = pose.getJoint(Joint.HIP_F)
             val kneeF = pose.getJoint(Joint.KNEE_F)
             val ankleF = pose.getJoint(Joint.ANKLE_F)
+            val chest = pose.getJoint(Joint.CHEST)
 
             val hipB = pose.getJoint(Joint.HIP_B)
             val kneeB = pose.getJoint(Joint.KNEE_B)
@@ -166,6 +168,7 @@ class KneePushUpPoseTest {
             val hipF = pose.getJoint(Joint.HIP_F)
             val kneeF = pose.getJoint(Joint.KNEE_F)
             val ankleF = pose.getJoint(Joint.ANKLE_F)
+            val chest = pose.getJoint(Joint.CHEST)
 
             val hipB = pose.getJoint(Joint.HIP_B)
             val kneeB = pose.getJoint(Joint.KNEE_B)
@@ -173,6 +176,9 @@ class KneePushUpPoseTest {
 
             val devF = getSignedPerpendicularDeviation2D(hipF, ankleF, kneeF)
             val devB = getSignedPerpendicularDeviation2D(hipB, ankleB, kneeB)
+
+            // Let's check deviation of hipF from the kneeF-to-chest line
+            val devHipTorso = getSignedPerpendicularDeviation2D(kneeF, chest, hipF)
 
             val shoulderA = pose.getJoint(Joint.SHOULDER_A)
             val handA = pose.getJoint(Joint.HAND_A)
@@ -182,6 +188,9 @@ class KneePushUpPoseTest {
             println(String.format("    KNEE_F : (x=%.4f, y=%.4f, z=%.4f)", kneeF.x, kneeF.y, kneeF.z))
             println(String.format("    ANKLE_F: (x=%.4f, y=%.4f, z=%.4f)", ankleF.x, ankleF.y, ankleF.z))
             println(String.format("    devF   : %.6f", devF))
+            println(String.format("  Torso / Thigh Alignment (deviation of HIP_F from KNEE_F to CHEST line):"))
+            println(String.format("    CHEST  : (x=%.4f, y=%.4f, z=%.4f)", chest.x, chest.y, chest.z))
+            println(String.format("    devHipTorso : %.6f", devHipTorso))
             println(String.format("  Back Leg:"))
             println(String.format("    HIP_B  : (x=%.4f, y=%.4f, z=%.4f)", hipB.x, hipB.y, hipB.z))
             println(String.format("    KNEE_B : (x=%.4f, y=%.4f, z=%.4f)", kneeB.x, kneeB.y, kneeB.z))

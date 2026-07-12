@@ -101,4 +101,26 @@ class SupportMathTest {
         // Lever length should be knees length: thigh + torso = 112 + 120 = 232f
         assertEquals(232f, model.leverLength, 1e-4f)
     }
+
+    @Test
+    fun testSolveNearStraightLimb() {
+        // Test with L1 = 98 (shin), L2 = 112 (thigh), targetFlexionDegrees = 8f
+        val result = SkeletonMath.solveNearStraightLimb(98f, 112f, 8f)
+
+        // Expected target linear distance (d) is around 209.4907 (roughly 99.76% of 210)
+        assertEquals(209.4907f, result.d, 0.01f)
+
+        // Linear ratio check
+        val ratio = result.d / (98f + 112f)
+        assertTrue(ratio >= 0.996f && ratio <= 0.999f)
+
+        // Verify x and y satisfy L1^2 = x^2 + y^2
+        val lengthSquared = result.x * result.x + result.y * result.y
+        assertEquals(98f * 98f, lengthSquared, 1e-2f)
+
+        // Verify the other side's distance: (d - x)^2 + y^2 should equal L2^2
+        val remainingX = result.d - result.x
+        val otherSideSquared = remainingX * remainingX + result.y * result.y
+        assertEquals(112f * 112f, otherSideSquared, 1e-2f)
+    }
 }
