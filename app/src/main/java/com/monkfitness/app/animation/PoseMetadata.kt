@@ -21,5 +21,8 @@ data class PoseMetadata(
     val groundHeight: Float = 0f,
     val initialFacing: FacingDirection = FacingDirection.FRONT,
     val environment: EnvironmentDefinition = EnvironmentDefinition(),
-    val motionCurve: MotionCurve = MotionCurve.LINEAR
+    val motionCurve: MotionCurve = MotionCurve.EASE_IN_OUT,
+    val breathInFraction: Float = 0.40f,
+    val breathHoldFraction: Float = 0.12f,
+    val breathOutFraction: Float = 0.40f
 )
