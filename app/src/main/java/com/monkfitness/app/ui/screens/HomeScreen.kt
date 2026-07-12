@@ -68,7 +68,7 @@ fun HomeScreen(
             },
             title = { Text("Repeat Workout") },
             text = {
-                Text("Today's workout has already been completed. You may repeat it for practice, but no additional daily completion or reward points will be awarded.")
+                Text("You have already completed today's workout.\n\nYou are welcome to repeat it for practice, but no additional daily rewards, points, or achievements will be granted.")
             }
         )
     }
@@ -195,6 +195,34 @@ fun HomeScreen(
         }
 
         Spacer(modifier = Modifier.height(48.dp))
+
+        if (uiState.todayProgramDayState.isCompleted) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "✓ Today's workout completed",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "Practice mode available.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+        }
 
         MonkButton(
             text = stringResource(R.string.start_workout),

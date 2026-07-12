@@ -77,11 +77,21 @@ class SettingsManager(private val context: Context) {
         val disabled = preferences[DISABLED_EXERCISE_FAMILIES].orEmpty()
         val allKeys = com.monkfitness.app.data.model.ExerciseCategoryFilter.entries.map { it.key }.toSet()
         val enabled = allKeys - disabled
-        if (enabled.isEmpty()) {
+        val baseDisabled = if (enabled.isEmpty()) {
             emptySet()
         } else {
             disabled
         }
+
+        val flexType = preferences[FLEXIBILITY_TRAINING_TYPE].toFlexibilityTrainingType()
+        val focusAreas = preferences[FLEXIBILITY_FOCUS_AREAS].toExerciseSubCategorySet()
+
+        val resolution = com.monkfitness.app.data.model.SettingsConstraintResolver.resolve(
+            disabledFamilies = baseDisabled,
+            flexibilityType = flexType,
+            focusAreas = focusAreas
+        )
+        resolution.adjustedDisabledFamilies
     }
 
     suspend fun setDisabledExerciseFamilies(families: Set<String>) {

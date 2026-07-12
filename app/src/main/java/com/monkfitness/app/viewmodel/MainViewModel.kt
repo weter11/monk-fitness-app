@@ -300,6 +300,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         LibraryStats(0, 0, 0, 0, 0, 0)
     )
 
+    val categoryExerciseCounts: StateFlow<Map<String, Int>> = flowOf(
+        com.monkfitness.app.data.model.ExerciseCategoryFilter.entries.associateWith { filter ->
+            val allExercises = workoutGenerator.getExerciseLibrary(com.monkfitness.app.data.model.Equipment.entries.toSet())
+            allExercises.count { exercise ->
+                val families = com.monkfitness.app.data.model.exerciseToFamiliesMap[exercise.id].orEmpty()
+                families.contains(filter)
+            }
+        }.mapKeys { it.key.key }
+    ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     private val _streak = MutableStateFlow(0)
     val streak: StateFlow<Int> = _streak
     private val _bodyWeightErrorEvents = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -319,6 +329,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun dismissCategoryErrorDialog() {
         _showCategoryErrorDialog.value = false
     }
+
+    private val _showAdjustedValidationMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val showAdjustedValidationMessage = _showAdjustedValidationMessage.asSharedFlow()
+
+    val disabledOptionsExplanations = combine(
+        disabledExerciseFamilies,
+        flexibilityTrainingType,
+        flexibilityFocusAreas
+    ) { disabled, flexType, focusAreas ->
+        com.monkfitness.app.data.model.SettingsConstraintResolver.resolve(disabled, flexType, focusAreas).disabledOptionsExplanation
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     fun setFilterLibraryByCategories(enabled: Boolean) {
         viewModelScope.launch {
@@ -900,11 +921,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun completeWorkout(day: Int) {
         viewModelScope.launch {
-            val rewardKey = "workout_$day"
-            if (rewardsGrantedDays.value.contains(rewardKey)) {
-                // Suppress rewards/completion updates for repeated workouts
-                return@launch
-            }
             val completedAt = System.currentTimeMillis()
             val progress = UserProgress(
                 day = day,
@@ -922,16 +938,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     completedAt = completedAt
                 )
             )
-            settingsManager.setRewardGranted(rewardKey)
+
+            // Separate Reward Concept: Grant reward only once
+            val rewardKey = "workout_$day"
+            if (!rewardsGrantedDays.value.contains(rewardKey)) {
+                settingsManager.setRewardGranted(rewardKey)
+            }
         }
     }
 
     fun completeRecoveryDay(day: Int) {
         viewModelScope.launch {
-            val rewardKey = "recovery_$day"
-            if (rewardsGrantedDays.value.contains(rewardKey)) {
-                return@launch
-            }
             repository.upsertProgramDayState(
                 ProgramDayState(
                     programDay = day,
@@ -941,16 +958,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     completedAt = System.currentTimeMillis()
                 )
             )
-            settingsManager.setRewardGranted(rewardKey)
+
+            // Separate Reward Concept: Grant reward only once
+            val rewardKey = "recovery_$day"
+            if (!rewardsGrantedDays.value.contains(rewardKey)) {
+                settingsManager.setRewardGranted(rewardKey)
+            }
         }
     }
 
     fun completePostureWorkout(day: Int) {
         viewModelScope.launch {
-            val rewardKey = "posture_$day"
-            if (rewardsGrantedDays.value.contains(rewardKey)) {
-                return@launch
-            }
             val progress = PostureSessionProgress(
                 day = day,
                 isCompleted = true,
@@ -958,7 +976,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 focusArea = flexibilityFocusAreas.value.joinToString(",") { it.name }
             )
             repository.updatePostureProgress(progress)
-            settingsManager.setRewardGranted(rewardKey)
+
+            // Separate Reward Concept: Grant reward only once
+            val rewardKey = "posture_$day"
+            if (!rewardsGrantedDays.value.contains(rewardKey)) {
+                settingsManager.setRewardGranted(rewardKey)
+            }
         }
     }
 
@@ -1030,6 +1053,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setFlexibilityTrainingType(trainingType: FlexibilityTrainingType) {
         viewModelScope.launch {
             settingsManager.setFlexibilityTrainingType(trainingType)
+            val resolution = com.monkfitness.app.data.model.SettingsConstraintResolver.resolve(
+                disabledFamilies = disabledExerciseFamilies.value,
+                flexibilityType = trainingType,
+                focusAreas = flexibilityFocusAreas.value
+            )
+            if (resolution.adjustedDisabledFamilies != disabledExerciseFamilies.value) {
+                settingsManager.setDisabledExerciseFamilies(resolution.adjustedDisabledFamilies)
+                _showAdjustedValidationMessage.emit("Some options were adjusted because they conflict with your current selection.")
+            }
         }
     }
 
@@ -1317,6 +1349,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             settingsManager.setFlexibilityFocusAreas(nextSelection)
+            val resolution = com.monkfitness.app.data.model.SettingsConstraintResolver.resolve(
+                disabledFamilies = disabledExerciseFamilies.value,
+                flexibilityType = flexibilityTrainingType.value,
+                focusAreas = nextSelection
+            )
+            if (resolution.adjustedDisabledFamilies != disabledExerciseFamilies.value) {
+                settingsManager.setDisabledExerciseFamilies(resolution.adjustedDisabledFamilies)
+                _showAdjustedValidationMessage.emit("Some options were adjusted because they conflict with your current selection.")
+            }
         }
     }
 
