@@ -24,5 +24,6 @@ data class PoseMetadata(
     val motionCurve: MotionCurve = MotionCurve.EASE_IN_OUT,
     val breathInFraction: Float = 0.40f,
     val breathHoldFraction: Float = 0.12f,
-    val breathOutFraction: Float = 0.40f
+    val breathOutFraction: Float = 0.40f,
+    val support: SupportDefinition = SupportDefinition(PivotType.FEET, emptySet())
 )
