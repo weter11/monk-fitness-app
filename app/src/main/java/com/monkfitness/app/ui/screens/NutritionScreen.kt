@@ -529,6 +529,21 @@ fun NutritionPreviewDialog(
                 val shoppingItems = previewPlan.shoppingList.values.flatten()
                 val availableCount = shoppingItems.count { it.ingredient.key in availableProducts }
                 val missingCount = shoppingItems.count { it.ingredient.key !in availableProducts }
+
+                // Variety Score calculation
+                val uniqueRatio = if (totalRecipes.isNotEmpty()) uniqueRecipesCount.toFloat() / totalRecipes.size else 0f
+                val varietyIndicator = when {
+                    uniqueRatio >= 0.8f -> "Excellent Variety"
+                    uniqueRatio >= 0.5f -> "Good Variety"
+                    else -> "Low Variety"
+                }
+                val varietyColor = when {
+                    uniqueRatio >= 0.8f -> MaterialTheme.colorScheme.primary
+                    uniqueRatio >= 0.5f -> MaterialTheme.colorScheme.secondary
+                    else -> MaterialTheme.colorScheme.error
+                }
+
+                // Shopping Indicator
                 val shoppingIndicator = if (missingCount == 0) "Ready to cook" else "Need shopping"
                 val shoppingIndicatorColor = if (missingCount == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
 
@@ -544,41 +559,89 @@ fun NutritionPreviewDialog(
                             Text("${previewPlan.days.size} days", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Recipe Count:", style = MaterialTheme.typography.bodyMedium)
-                            Text("${totalRecipes.size} total (${uniqueRecipesCount} unique, ${repeatedRecipesCount} repeated)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            Text("Recipes:", style = MaterialTheme.typography.bodyMedium)
+                            Text("${totalRecipes.size}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Available Ingredients:", style = MaterialTheme.typography.bodyMedium)
+                            Text("Unique recipes:", style = MaterialTheme.typography.bodyMedium)
+                            Text("${uniqueRecipesCount}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Repeated recipes:", style = MaterialTheme.typography.bodyMedium)
+                            Text("${repeatedRecipesCount}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Products required:", style = MaterialTheme.typography.bodyMedium)
+                            Text("${shoppingItems.size}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Already available:", style = MaterialTheme.typography.bodyMedium)
                             Text("$availableCount", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Missing Ingredients:", style = MaterialTheme.typography.bodyMedium)
+                            Text("Need to buy:", style = MaterialTheme.typography.bodyMedium)
                             Text("$missingCount", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Variety Score:", style = MaterialTheme.typography.bodyMedium)
+                            Text(varietyIndicator, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = varietyColor)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Shopping Status:", style = MaterialTheme.typography.bodyMedium)
-                            Text(shoppingIndicator, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = shoppingIndicatorColor)
+                            Text(
+                                text = if (missingCount == 0) shoppingIndicator else "$shoppingIndicator ($missingCount missing)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = shoppingIndicatorColor
+                            )
                         }
 
                         // Optional comparison with current cycle
                         if (currentPlan.days.isNotEmpty()) {
+                            val currentRecipes = currentPlan.days.flatMap { it.meals }
+                            val currentTemplates = currentRecipes.map { it.templateId }.toSet()
+                            val previewTemplates = totalRecipes.map { it.templateId }.toSet()
+
+                            val newRecipesCount = previewTemplates.count { it !in currentTemplates }
+                            val repeatedFromPrevCount = previewTemplates.count { it in currentTemplates }
+
+                            val currentIngredients = currentRecipes.flatMap { it.ingredients }.map { it.ingredient.key }.toSet()
+                            val previewIngredients = totalRecipes.flatMap { it.ingredients }.map { it.ingredient.key }.toSet()
+
+                            val newIngredientsCount = previewIngredients.count { it !in currentIngredients }
+
                             val currentAvg = currentPlan.days.map { it.totalCalories }.average().roundToInt()
                             val previewAvg = previewPlan.days.map { it.totalCalories }.average().roundToInt()
-                            val currentProtein = currentPlan.days.map { it.totalProteinGrams }.average().roundToInt()
-                            val previewProtein = previewPlan.days.map { it.totalProteinGrams }.average().roundToInt()
 
                             Spacer(modifier = Modifier.height(4.dp))
                             Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)))
                             Spacer(modifier = Modifier.height(4.dp))
 
                             Text("Comparison with Current Cycle", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("New recipes:", style = MaterialTheme.typography.bodySmall)
+                                Text("+$newRecipesCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Repeated from previous cycle:", style = MaterialTheme.typography.bodySmall)
+                                Text("$repeatedFromPrevCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("New ingredients introduced:", style = MaterialTheme.typography.bodySmall)
+                                Text("$newIngredientsCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Ingredients already stocked:", style = MaterialTheme.typography.bodySmall)
+                                Text("$availableCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Missing ingredients:", style = MaterialTheme.typography.bodySmall)
+                                Text("$missingCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("Avg Daily Calories:", style = MaterialTheme.typography.bodySmall)
                                 Text("$previewAvg kcal (Current: $currentAvg kcal)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Avg Daily Protein:", style = MaterialTheme.typography.bodySmall)
-                                Text("${previewProtein}g (Current: ${currentProtein}g)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
