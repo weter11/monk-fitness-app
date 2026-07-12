@@ -49,6 +49,17 @@ class SettingsManager(private val context: Context) {
         val SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION = booleanPreferencesKey("show_excluded_products_in_nutrition")
         val DISABLED_EXERCISE_FAMILIES = stringSetPreferencesKey("disabled_exercise_families")
         val REWARDS_GRANTED_DAYS = stringSetPreferencesKey("rewards_granted_days")
+        val FILTER_LIBRARY_BY_CATEGORIES = booleanPreferencesKey("filter_library_by_categories")
+    }
+
+    val filterLibraryByCategoriesFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[FILTER_LIBRARY_BY_CATEGORIES] ?: true
+    }
+
+    suspend fun setFilterLibraryByCategories(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[FILTER_LIBRARY_BY_CATEGORIES] = enabled
+        }
     }
 
     val rewardsGrantedDaysFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
@@ -63,7 +74,14 @@ class SettingsManager(private val context: Context) {
     }
 
     val disabledExerciseFamiliesFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
-        preferences[DISABLED_EXERCISE_FAMILIES].orEmpty()
+        val disabled = preferences[DISABLED_EXERCISE_FAMILIES].orEmpty()
+        val allKeys = com.monkfitness.app.data.model.ExerciseCategoryFilter.entries.map { it.key }.toSet()
+        val enabled = allKeys - disabled
+        if (enabled.isEmpty()) {
+            emptySet()
+        } else {
+            disabled
+        }
     }
 
     suspend fun setDisabledExerciseFamilies(families: Set<String>) {

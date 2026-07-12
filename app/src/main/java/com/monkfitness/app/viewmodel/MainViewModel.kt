@@ -309,6 +309,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
     )
 
+    val filterLibraryByCategories = settingsManager.filterLibraryByCategoriesFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), true
+    )
+
+    private val _showCategoryErrorDialog = MutableStateFlow(false)
+    val showCategoryErrorDialog = _showCategoryErrorDialog.asStateFlow()
+
+    fun dismissCategoryErrorDialog() {
+        _showCategoryErrorDialog.value = false
+    }
+
+    fun setFilterLibraryByCategories(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setFilterLibraryByCategories(enabled)
+        }
+    }
+
     val rewardsGrantedDays = settingsManager.rewardsGrantedDaysFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
     )
@@ -546,15 +563,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getExerciseLibrary(
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
         availableEquipment: Set<Equipment> = this.availableEquipment.value
-    ) = workoutGenerator.getExerciseLibrary(availableEquipment).map {
-        enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+    ): List<Exercise> {
+        val baseList = workoutGenerator.getExerciseLibrary(availableEquipment)
+        val filteredList = if (filterLibraryByCategories.value) {
+            val disabled = disabledExerciseFamilies.value
+            baseList.filter { exercise ->
+                val families = com.monkfitness.app.data.model.exerciseToFamiliesMap[exercise.id].orEmpty()
+                families.isEmpty() || families.none { it.key in disabled }
+            }
+        } else {
+            baseList
+        }
+        return filteredList.map {
+            enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+        }
     }
 
     fun getPostureExercises(
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
         focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value
-    ) = workoutGenerator.getPostureExercises(focusAreas).map {
-        enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+    ): List<Exercise> {
+        val baseList = workoutGenerator.getPostureExercises(focusAreas)
+        val filteredList = if (filterLibraryByCategories.value) {
+            val disabled = disabledExerciseFamilies.value
+            baseList.filter { exercise ->
+                val families = com.monkfitness.app.data.model.exerciseToFamiliesMap[exercise.id].orEmpty()
+                families.isEmpty() || families.none { it.key in disabled }
+            }
+        } else {
+            baseList
+        }
+        return filteredList.map {
+            enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+        }
     }
 
     fun getWarmupExercises(
@@ -1040,8 +1081,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleExerciseFamily(familyKey: String) {
         viewModelScope.launch {
             val current = disabledExerciseFamilies.value
+            val allKeys = com.monkfitness.app.data.model.ExerciseCategoryFilter.entries.map { it.key }.toSet()
+            val currentlyEnabled = allKeys - current
+
+            val isCurrentlyEnabled = familyKey !in current
+            if (isCurrentlyEnabled) {
+                // If it is currently enabled and we want to disable it, check if it's the last remaining enabled category
+                if (currentlyEnabled.size <= 1) {
+                    _showCategoryErrorDialog.value = true
+                    return@launch
+                }
+            }
+
             val next = if (familyKey in current) current - familyKey else current + familyKey
             settingsManager.setDisabledExerciseFamilies(next)
+        }
+    }
+
+    fun enableAllInGroup(categoriesInGroup: List<String>) {
+        viewModelScope.launch {
+            val currentDisabled = disabledExerciseFamilies.value
+            val nextDisabled = currentDisabled - categoriesInGroup.toSet()
+            settingsManager.setDisabledExerciseFamilies(nextDisabled)
+        }
+    }
+
+    fun disableAllInGroup(categoriesInGroup: List<String>) {
+        viewModelScope.launch {
+            val currentDisabled = disabledExerciseFamilies.value
+            val allKeys = com.monkfitness.app.data.model.ExerciseCategoryFilter.entries.map { it.key }.toSet()
+            val currentlyEnabled = allKeys - currentDisabled
+
+            val toDisable = categoriesInGroup.filter { it in currentlyEnabled }
+            if (toDisable.isEmpty()) return@launch
+
+            if (currentlyEnabled.size - toDisable.size == 0) {
+                // Rule #5 violation: everything would be disabled!
+                // Keep the single last remaining enabled category across the entire app
+                val lastEnabled = currentlyEnabled.first()
+                val newDisabled = allKeys - setOf(lastEnabled)
+                settingsManager.setDisabledExerciseFamilies(newDisabled)
+                _showCategoryErrorDialog.value = true
+            } else {
+                val nextDisabled = currentDisabled + toDisable
+                settingsManager.setDisabledExerciseFamilies(nextDisabled)
+            }
         }
     }
 
