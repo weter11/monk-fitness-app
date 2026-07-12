@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -59,6 +61,22 @@ fun SettingsScreen(
     val nutritionCycleLength by viewModel.nutritionCycleLength.collectAsState()
     val showExcludedProductsInNutrition by viewModel.showExcludedProductsInNutrition.collectAsState()
     val libraryStats by viewModel.libraryStats.collectAsState()
+    val disabledExerciseFamilies by viewModel.disabledExerciseFamilies.collectAsState()
+    val filterLibraryByCategories by viewModel.filterLibraryByCategories.collectAsState()
+    val showCategoryErrorDialog by viewModel.showCategoryErrorDialog.collectAsState()
+
+    if (showCategoryErrorDialog) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissCategoryErrorDialog,
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissCategoryErrorDialog) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = { Text("At least one category must remain enabled") },
+            text = { Text("Please enable at least one exercise category to generate workouts.") }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -196,9 +214,100 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            ExerciseFamiliesSelector(
+                disabledFamilies = disabledExerciseFamilies,
+                filterLibrary = filterLibraryByCategories,
+                onToggleFilterLibrary = viewModel::setFilterLibraryByCategories,
+                onToggle = viewModel::toggleExerciseFamily,
+                onEnableAll = viewModel::enableAllInGroup,
+                onDisableAll = viewModel::disableAllInGroup
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             LibraryStatisticsSection(stats = libraryStats)
 
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun ExerciseFamiliesSelector(
+    disabledFamilies: Set<String>,
+    filterLibrary: Boolean,
+    onToggleFilterLibrary: (Boolean) -> Unit,
+    onToggle: (String) -> Unit,
+    onEnableAll: (List<String>) -> Unit,
+    onDisableAll: (List<String>) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(text = "Exercises", style = MaterialTheme.typography.titleLarge)
+
+        SettingSwitchRow(
+            title = "Show only exercises matching selected categories",
+            checked = filterLibrary,
+            onCheckedChange = onToggleFilterLibrary
+        )
+        Text(
+            text = "When enabled, the Exercise Library and Search only display exercises belonging to the selected categories.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        val groups = com.monkfitness.app.data.model.exerciseCategoryGroups
+        groups.forEach { group ->
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = group.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(
+                            onClick = { onEnableAll(group.categories.map { it.key }) },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Text("Enable All")
+                        }
+                        TextButton(
+                            onClick = { onDisableAll(group.categories.map { it.key }) },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Text("Disable All")
+                        }
+                    }
+                }
+
+                group.categories.chunked(2).forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        rowItems.forEach { family ->
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = family.key !in disabledFamilies,
+                                    onCheckedChange = { onToggle(family.key) }
+                                )
+                                Text(
+                                    text = family.displayName,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                        if (rowItems.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
         }
     }
 }

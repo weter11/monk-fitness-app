@@ -175,4 +175,26 @@ class NutritionPlanTest {
             assertTrue(instructions.size in 2..3)
         }
     }
+
+    @Test
+    fun testMealCanonicalOrdering() {
+        val types = listOf(
+            NutritionMealType.SNACK,
+            NutritionMealType.DINNER,
+            NutritionMealType.LUNCH,
+            NutritionMealType.BREAKFAST,
+            NutritionMealType.POST_WORKOUT
+        )
+        val sorted = types.sortedBy { it.orderIndex }
+        assertEquals(
+            listOf(
+                NutritionMealType.BREAKFAST,
+                NutritionMealType.LUNCH,
+                NutritionMealType.DINNER,
+                NutritionMealType.POST_WORKOUT,
+                NutritionMealType.SNACK
+            ),
+            sorted
+        )
+    }
 }

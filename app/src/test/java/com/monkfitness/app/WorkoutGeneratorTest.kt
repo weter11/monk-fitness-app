@@ -392,4 +392,18 @@ class WorkoutGeneratorTest {
             "Exercise $id was not generated in days $days. Available in those days: $available"
         }
     }
+
+    @Test
+    fun testWorkoutGenerationFiltersDisabledFamilies() {
+        val disabled = setOf("shaolin")
+        val workout = generator.generatePostureMobilityWorkout(
+            day = 1,
+            flexibilityTrainingType = FlexibilityTrainingType.BOTH,
+            focusAreas = setOf(ExerciseSubCategory.FULL_BODY),
+            disabledFamilies = disabled
+        )
+        val exerciseIds = workout.exercises.map { it.id }
+        assertFalse(exerciseIds.contains("horse_stance"))
+        assertFalse(exerciseIds.contains("jumping_jacks"))
+    }
 }

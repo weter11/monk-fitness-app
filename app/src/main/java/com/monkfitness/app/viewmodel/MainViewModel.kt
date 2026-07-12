@@ -305,6 +305,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _bodyWeightErrorEvents = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val bodyWeightErrorEvents = _bodyWeightErrorEvents.asSharedFlow()
 
+    val disabledExerciseFamilies = settingsManager.disabledExerciseFamiliesFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
+    )
+
+    val filterLibraryByCategories = settingsManager.filterLibraryByCategoriesFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), true
+    )
+
+    private val _showCategoryErrorDialog = MutableStateFlow(false)
+    val showCategoryErrorDialog = _showCategoryErrorDialog.asStateFlow()
+
+    fun dismissCategoryErrorDialog() {
+        _showCategoryErrorDialog.value = false
+    }
+
+    fun setFilterLibraryByCategories(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setFilterLibraryByCategories(enabled)
+        }
+    }
+
+    val rewardsGrantedDays = settingsManager.rewardsGrantedDaysFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
+    )
+
     private val homeMetrics = combine(
         currentProgramDay,
         programCompletedDaysCount,
@@ -326,7 +351,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         flexibilityFocusAreas,
         exerciseDifficultyAdjustments,
         availableEquipment,
-        todayProgramDayState
+        todayProgramDayState,
+        disabledExerciseFamilies
     ) { values ->
         val metrics = values[0] as HomeMetrics
         val additionalPostureEnabled = values[1] as Boolean
@@ -338,9 +364,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         @Suppress("UNCHECKED_CAST")
         val availableEquipment = values[5] as Set<Equipment>
         val todayState = values[6] as ProgramDayState
+        @Suppress("UNCHECKED_CAST")
+        val disabledFamilies = values[7] as Set<String>
         HomeUiState(
             currentDay = metrics.currentDay,
-            workout = getWorkoutForDay(metrics.currentDay, difficultyAdjustments, trainingType, focusAreas, availableEquipment),
+            workout = getWorkoutForDay(metrics.currentDay, difficultyAdjustments, trainingType, focusAreas, availableEquipment, disabledFamilies),
             completedCount = metrics.completedCount,
             completedPostureCount = metrics.completedPostureCount,
             streak = metrics.streak,
@@ -371,7 +399,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         exerciseDifficultyAdjustments,
         flexibilityTrainingType,
         flexibilityFocusAreas,
-        availableEquipment
+        availableEquipment,
+        disabledExerciseFamilies
     ) { values ->
         val day = values[0] as Int?
         val sessionMode = values[1] as SessionMode
@@ -382,6 +411,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val focusAreas = values[4] as Set<ExerciseSubCategory>
         @Suppress("UNCHECKED_CAST")
         val availableEquipment = values[5] as Set<Equipment>
+        @Suppress("UNCHECKED_CAST")
+        val disabledFamilies = values[6] as Set<String>
         if (day == null) {
             WorkoutSessionUiState(
                 day = null,
@@ -393,9 +424,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             WorkoutSessionUiState(
                 day = day,
                 workout = if (sessionMode == SessionMode.POSTURE_MOBILITY) {
-                    getPostureMobilityWorkout(day, difficultyAdjustments, trainingType, focusAreas, availableEquipment)
+                    getPostureMobilityWorkout(day, difficultyAdjustments, trainingType, focusAreas, availableEquipment, disabledFamilies)
                 } else {
-                    getWorkoutForDay(day, difficultyAdjustments, trainingType, focusAreas, availableEquipment)
+                    getWorkoutForDay(day, difficultyAdjustments, trainingType, focusAreas, availableEquipment, disabledFamilies)
                 },
                 warmupExercises = if (sessionMode == SessionMode.POSTURE_MOBILITY) {
                     emptyList()
@@ -510,9 +541,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
         trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
         focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value,
-        availableEquipment: Set<Equipment> = this.availableEquipment.value
+        availableEquipment: Set<Equipment> = this.availableEquipment.value,
+        disabledFamilies: Set<String> = disabledExerciseFamilies.value
     ): Workout {
-        val workout = workoutGenerator.generateWorkout(day, trainingType, focusAreas, availableEquipment)
+        val workout = workoutGenerator.generateWorkout(day, trainingType, focusAreas, availableEquipment, disabledFamilies)
         return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments)) })
     }
 
@@ -521,24 +553,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
         trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
         focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value,
-        availableEquipment: Set<Equipment> = this.availableEquipment.value
+        availableEquipment: Set<Equipment> = this.availableEquipment.value,
+        disabledFamilies: Set<String> = disabledExerciseFamilies.value
     ): Workout {
-        val workout = workoutGenerator.generatePostureMobilityWorkout(day, trainingType, focusAreas, availableEquipment)
+        val workout = workoutGenerator.generatePostureMobilityWorkout(day, trainingType, focusAreas, availableEquipment, disabledFamilies)
         return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments)) })
     }
 
     fun getExerciseLibrary(
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
         availableEquipment: Set<Equipment> = this.availableEquipment.value
-    ) = workoutGenerator.getExerciseLibrary(availableEquipment).map {
-        enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+    ): List<Exercise> {
+        val baseList = workoutGenerator.getExerciseLibrary(availableEquipment)
+        val filteredList = if (filterLibraryByCategories.value) {
+            val disabled = disabledExerciseFamilies.value
+            baseList.filter { exercise ->
+                val families = com.monkfitness.app.data.model.exerciseToFamiliesMap[exercise.id].orEmpty()
+                families.isEmpty() || families.none { it.key in disabled }
+            }
+        } else {
+            baseList
+        }
+        return filteredList.map {
+            enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+        }
     }
 
     fun getPostureExercises(
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
         focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value
-    ) = workoutGenerator.getPostureExercises(focusAreas).map {
-        enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+    ): List<Exercise> {
+        val baseList = workoutGenerator.getPostureExercises(focusAreas)
+        val filteredList = if (filterLibraryByCategories.value) {
+            val disabled = disabledExerciseFamilies.value
+            baseList.filter { exercise ->
+                val families = com.monkfitness.app.data.model.exerciseToFamiliesMap[exercise.id].orEmpty()
+                families.isEmpty() || families.none { it.key in disabled }
+            }
+        } else {
+            baseList
+        }
+        return filteredList.map {
+            enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
+        }
     }
 
     fun getWarmupExercises(
@@ -590,6 +647,76 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             )
         }
+    }
+
+    private val _previewNutritionPlan = MutableStateFlow<NutritionPlan?>(null)
+    val previewNutritionPlan = _previewNutritionPlan.asStateFlow()
+
+    fun previewNextCycle(durationDays: Int) {
+        viewModelScope.launch {
+            val safeDuration = durationDays.coerceIn(1, 7)
+            val today = currentDate.value
+            val active = activeMealCycle.value
+            val cycleStartDate = active?.let { mealCycleEndDate(it).plusDays(1) } ?: today
+            val dummyCycleId = -999L
+            val preferredIngredientKeys = nutritionAvailableProducts.value
+            val validPreferredKeys = if (validateAvailableProductSelection(preferredIngredientKeys) == null) preferredIngredientKeys else emptySet()
+            val plan = generateNutritionPlan(
+                seed = cycleStartDate.toEpochDay().toInt(),
+                startDay = calculateProgramDay(parseDate(programStartDate.value, cycleStartDate), cycleStartDate),
+                daysCount = safeDuration,
+                weightKg = nutritionWeight.value.toIntOrNull(),
+                heightCm = nutritionHeight.value.toIntOrNull(),
+                excludedIngredientKeys = nutritionExcludedFoods.value,
+                preferredIngredientKeys = validPreferredKeys,
+                cycleId = dummyCycleId,
+                workoutTypeForDay = ::getWorkoutTypeForDay
+            )
+            _previewNutritionPlan.value = plan
+        }
+    }
+
+    fun savePreviewCycle() {
+        viewModelScope.launch {
+            val plan = _previewNutritionPlan.value ?: return@launch
+            val safeDuration = plan.days.size
+            val today = currentDate.value
+            val active = activeMealCycle.value
+            val pending = pendingMealCycle.value
+            val cycleStartDate = active?.let { mealCycleEndDate(it).plusDays(1) } ?: today
+            val baseCycle = pending?.copy(
+                startDate = cycleStartDate.toString(),
+                durationDays = safeDuration,
+                createdAt = System.currentTimeMillis(),
+                isCompleted = false,
+                autoGenerated = false
+            ) ?: MealCycle(
+                startDate = cycleStartDate.toString(),
+                durationDays = safeDuration,
+                createdAt = System.currentTimeMillis(),
+                isCompleted = false,
+                autoGenerated = false
+            )
+            val storedCycleId = repository.insertMealCycle(baseCycle)
+            val cycleId = if (storedCycleId == 0L) baseCycle.id else storedCycleId
+
+            val finalPlan = plan.copy(
+                cycleId = cycleId,
+                days = plan.days.map { day ->
+                    day.copy(
+                        meals = day.meals.map { it.copy(cycleId = cycleId) }
+                    )
+                }
+            )
+
+            repository.replaceCycleMeals(cycleId, finalPlan.toMealEntities(cycleId), finalPlan.toShoppingItemEntities(cycleId))
+            settingsManager.dismissNutritionWarningFor(null)
+            _previewNutritionPlan.value = null
+        }
+    }
+
+    fun clearPreviewCycle() {
+        _previewNutritionPlan.value = null
     }
 
     fun adjustExerciseDifficulty(exerciseId: String, delta: Int) {
@@ -773,6 +900,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun completeWorkout(day: Int) {
         viewModelScope.launch {
+            val rewardKey = "workout_$day"
+            if (rewardsGrantedDays.value.contains(rewardKey)) {
+                // Suppress rewards/completion updates for repeated workouts
+                return@launch
+            }
             val completedAt = System.currentTimeMillis()
             val progress = UserProgress(
                 day = day,
@@ -790,11 +922,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     completedAt = completedAt
                 )
             )
+            settingsManager.setRewardGranted(rewardKey)
         }
     }
 
     fun completeRecoveryDay(day: Int) {
         viewModelScope.launch {
+            val rewardKey = "recovery_$day"
+            if (rewardsGrantedDays.value.contains(rewardKey)) {
+                return@launch
+            }
             repository.upsertProgramDayState(
                 ProgramDayState(
                     programDay = day,
@@ -804,11 +941,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     completedAt = System.currentTimeMillis()
                 )
             )
+            settingsManager.setRewardGranted(rewardKey)
         }
     }
 
     fun completePostureWorkout(day: Int) {
         viewModelScope.launch {
+            val rewardKey = "posture_$day"
+            if (rewardsGrantedDays.value.contains(rewardKey)) {
+                return@launch
+            }
             val progress = PostureSessionProgress(
                 day = day,
                 isCompleted = true,
@@ -816,6 +958,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 focusArea = flexibilityFocusAreas.value.joinToString(",") { it.name }
             )
             repository.updatePostureProgress(progress)
+            settingsManager.setRewardGranted(rewardKey)
         }
     }
 
@@ -934,6 +1077,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val nutritionExcludedFoods = settingsManager.nutritionExcludedFoodsFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
     )
+
+    fun toggleExerciseFamily(familyKey: String) {
+        viewModelScope.launch {
+            val current = disabledExerciseFamilies.value
+            val allKeys = com.monkfitness.app.data.model.ExerciseCategoryFilter.entries.map { it.key }.toSet()
+            val currentlyEnabled = allKeys - current
+
+            val isCurrentlyEnabled = familyKey !in current
+            if (isCurrentlyEnabled) {
+                // If it is currently enabled and we want to disable it, check if it's the last remaining enabled category
+                if (currentlyEnabled.size <= 1) {
+                    _showCategoryErrorDialog.value = true
+                    return@launch
+                }
+            }
+
+            val next = if (familyKey in current) current - familyKey else current + familyKey
+            settingsManager.setDisabledExerciseFamilies(next)
+        }
+    }
+
+    fun enableAllInGroup(categoriesInGroup: List<String>) {
+        viewModelScope.launch {
+            val currentDisabled = disabledExerciseFamilies.value
+            val nextDisabled = currentDisabled - categoriesInGroup.toSet()
+            settingsManager.setDisabledExerciseFamilies(nextDisabled)
+        }
+    }
+
+    fun disableAllInGroup(categoriesInGroup: List<String>) {
+        viewModelScope.launch {
+            val currentDisabled = disabledExerciseFamilies.value
+            val allKeys = com.monkfitness.app.data.model.ExerciseCategoryFilter.entries.map { it.key }.toSet()
+            val currentlyEnabled = allKeys - currentDisabled
+
+            val toDisable = categoriesInGroup.filter { it in currentlyEnabled }
+            if (toDisable.isEmpty()) return@launch
+
+            if (currentlyEnabled.size - toDisable.size == 0) {
+                // Rule #5 violation: everything would be disabled!
+                // Keep the single last remaining enabled category across the entire app
+                val lastEnabled = currentlyEnabled.first()
+                val newDisabled = allKeys - setOf(lastEnabled)
+                settingsManager.setDisabledExerciseFamilies(newDisabled)
+                _showCategoryErrorDialog.value = true
+            } else {
+                val nextDisabled = currentDisabled + toDisable
+                settingsManager.setDisabledExerciseFamilies(nextDisabled)
+            }
+        }
+    }
 
     val nutritionAvailableProducts = settingsManager.nutritionAvailableProductsFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()

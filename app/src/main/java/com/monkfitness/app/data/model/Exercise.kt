@@ -123,3 +123,125 @@ fun Exercise.applyDifficultyAdjustment(adjustment: Int): Exercise {
         )
     }
 }
+
+enum class ExerciseCategoryFilter(val key: String, val displayName: String) {
+    // Training Styles
+    SHAOLIN("shaolin", "Shaolin"),
+    CALISTHENICS("calisthenics", "Calisthenics"),
+    FUNCTIONAL_FITNESS("functional_fitness", "Functional Fitness"),
+    BODYWEIGHT_STRENGTH("bodyweight_strength", "Bodyweight Strength"),
+    MOBILITY("mobility", "Mobility"),
+    STRETCHING("stretching", "Stretching"),
+
+    // Special Programs
+    HYPERLORDOSIS("hyperlordosis", "Hyperlordosis"),
+    POSTURE_CORRECTION("posture_correction", "Posture Correction"),
+    NECK("neck", "Neck"),
+    LOWER_BACK("lower_back", "Lower Back"),
+    SHOULDERS("shoulders", "Shoulders"),
+    KNEES("knees", "Knees"),
+    BALANCE("balance", "Balance"),
+    SENIOR("senior", "Senior"),
+    REHABILITATION("rehabilitation", "Rehabilitation")
+}
+
+data class ExerciseCategoryGroup(
+    val title: String,
+    val categories: List<ExerciseCategoryFilter>
+)
+
+val exerciseCategoryGroups = listOf(
+    ExerciseCategoryGroup(
+        title = "Training Styles",
+        categories = listOf(
+            ExerciseCategoryFilter.SHAOLIN,
+            ExerciseCategoryFilter.CALISTHENICS,
+            ExerciseCategoryFilter.FUNCTIONAL_FITNESS,
+            ExerciseCategoryFilter.BODYWEIGHT_STRENGTH,
+            ExerciseCategoryFilter.MOBILITY,
+            ExerciseCategoryFilter.STRETCHING
+        )
+    ),
+    ExerciseCategoryGroup(
+        title = "Special Programs",
+        categories = listOf(
+            ExerciseCategoryFilter.HYPERLORDOSIS,
+            ExerciseCategoryFilter.POSTURE_CORRECTION,
+            ExerciseCategoryFilter.NECK,
+            ExerciseCategoryFilter.LOWER_BACK,
+            ExerciseCategoryFilter.SHOULDERS,
+            ExerciseCategoryFilter.KNEES,
+            ExerciseCategoryFilter.BALANCE,
+            ExerciseCategoryFilter.SENIOR,
+            ExerciseCategoryFilter.REHABILITATION
+        )
+    )
+)
+
+val exerciseToFamiliesMap: Map<String, Set<ExerciseCategoryFilter>> = mapOf(
+    "pushups" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH, ExerciseCategoryFilter.FUNCTIONAL_FITNESS),
+    "pushups_wide" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "pushups_military" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "pushups_knee" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "decline_pushups" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "diamond_pushups" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "squats" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "squats_sumo" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "squats_jump" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "deep_squat" to setOf(ExerciseCategoryFilter.MOBILITY, ExerciseCategoryFilter.STRETCHING),
+    "pullups" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH, ExerciseCategoryFilter.POSTURE_CORRECTION),
+    "pullups_chin" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH, ExerciseCategoryFilter.POSTURE_CORRECTION),
+    "pullups_neutral" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH, ExerciseCategoryFilter.POSTURE_CORRECTION),
+    "pullups_wide" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH, ExerciseCategoryFilter.POSTURE_CORRECTION),
+    "hang" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH, ExerciseCategoryFilter.POSTURE_CORRECTION),
+    "plank" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "side_plank" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "lunges" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "lunges_reverse" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "lunges_side" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "step_ups" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "rows" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "glute_bridge" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.HYPERLORDOSIS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "dead_bug" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.HYPERLORDOSIS, ExerciseCategoryFilter.REHABILITATION, ExerciseCategoryFilter.LOWER_BACK),
+    "leg_raises" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.HYPERLORDOSIS, ExerciseCategoryFilter.REHABILITATION, ExerciseCategoryFilter.LOWER_BACK),
+    "pelvic_tilt" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.HYPERLORDOSIS, ExerciseCategoryFilter.REHABILITATION, ExerciseCategoryFilter.LOWER_BACK),
+    "couch_stretch" to setOf(ExerciseCategoryFilter.STRETCHING, ExerciseCategoryFilter.HYPERLORDOSIS),
+    "hip_flexor_stretch" to setOf(ExerciseCategoryFilter.STRETCHING, ExerciseCategoryFilter.HYPERLORDOSIS),
+    "cat_cow" to setOf(ExerciseCategoryFilter.REHABILITATION, ExerciseCategoryFilter.MOBILITY, ExerciseCategoryFilter.LOWER_BACK),
+    "cobra_stretch" to setOf(ExerciseCategoryFilter.STRETCHING, ExerciseCategoryFilter.REHABILITATION, ExerciseCategoryFilter.LOWER_BACK),
+    "bird_dog" to setOf(ExerciseCategoryFilter.MOBILITY, ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.REHABILITATION, ExerciseCategoryFilter.LOWER_BACK),
+    "bird_dog_reps" to setOf(ExerciseCategoryFilter.MOBILITY, ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.REHABILITATION, ExerciseCategoryFilter.LOWER_BACK),
+    "world_greatest_stretch" to setOf(ExerciseCategoryFilter.STRETCHING, ExerciseCategoryFilter.MOBILITY),
+    "thoracic_rotations" to setOf(ExerciseCategoryFilter.MOBILITY, ExerciseCategoryFilter.REHABILITATION, ExerciseCategoryFilter.LOWER_BACK),
+    "thoracic_extension" to setOf(ExerciseCategoryFilter.MOBILITY, ExerciseCategoryFilter.REHABILITATION, ExerciseCategoryFilter.LOWER_BACK),
+    "burpees" to setOf(ExerciseCategoryFilter.FUNCTIONAL_FITNESS, ExerciseCategoryFilter.CALISTHENICS),
+    "mountain_climbers" to setOf(ExerciseCategoryFilter.FUNCTIONAL_FITNESS, ExerciseCategoryFilter.CALISTHENICS),
+    "kettlebell_swing" to setOf(ExerciseCategoryFilter.FUNCTIONAL_FITNESS, ExerciseCategoryFilter.CALISTHENICS),
+    "face_pull" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.SHOULDERS),
+    "band_pull_aparts" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.SHOULDERS),
+    "y_t_raises" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.SHOULDERS),
+    "scapular_retraction_hold" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.SHOULDERS),
+    "reverse_snow_angels" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.SHOULDERS),
+    "scapular_pullups" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.SHOULDERS),
+    "wall_slides" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.SHOULDERS),
+    "shoulder_cars" to setOf(ExerciseCategoryFilter.MOBILITY, ExerciseCategoryFilter.STRETCHING, ExerciseCategoryFilter.SHOULDERS),
+    "lat_stretch" to setOf(ExerciseCategoryFilter.MOBILITY, ExerciseCategoryFilter.STRETCHING, ExerciseCategoryFilter.SHOULDERS),
+    "hip_cars" to setOf(ExerciseCategoryFilter.MOBILITY, ExerciseCategoryFilter.STRETCHING),
+    "ninety_ninety_hips" to setOf(ExerciseCategoryFilter.MOBILITY, ExerciseCategoryFilter.STRETCHING),
+    "piriformis_stretch" to setOf(ExerciseCategoryFilter.MOBILITY, ExerciseCategoryFilter.STRETCHING),
+    "ankle_mobility" to setOf(ExerciseCategoryFilter.MOBILITY, ExerciseCategoryFilter.STRETCHING, ExerciseCategoryFilter.KNEES),
+    "calf_stretch" to setOf(ExerciseCategoryFilter.MOBILITY, ExerciseCategoryFilter.STRETCHING, ExerciseCategoryFilter.KNEES),
+    "dips" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "pike_pushups" to setOf(ExerciseCategoryFilter.CALISTHENICS, ExerciseCategoryFilter.BODYWEIGHT_STRENGTH),
+    "wall_sit" to setOf(ExerciseCategoryFilter.BODYWEIGHT_STRENGTH, ExerciseCategoryFilter.CALISTHENICS),
+    "chin_tucks" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.REHABILITATION, ExerciseCategoryFilter.NECK),
+    "neck_circles" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.REHABILITATION, ExerciseCategoryFilter.NECK, ExerciseCategoryFilter.MOBILITY),
+    "jumping_jacks" to setOf(ExerciseCategoryFilter.FUNCTIONAL_FITNESS, ExerciseCategoryFilter.SHAOLIN),
+    "horse_stance" to setOf(ExerciseCategoryFilter.SHAOLIN, ExerciseCategoryFilter.BALANCE, ExerciseCategoryFilter.POSTURE_CORRECTION),
+    "superman" to setOf(ExerciseCategoryFilter.POSTURE_CORRECTION, ExerciseCategoryFilter.REHABILITATION, ExerciseCategoryFilter.LOWER_BACK),
+    "child_pose" to setOf(ExerciseCategoryFilter.STRETCHING, ExerciseCategoryFilter.REHABILITATION, ExerciseCategoryFilter.LOWER_BACK),
+    "arm_circles" to setOf(ExerciseCategoryFilter.SHAOLIN, ExerciseCategoryFilter.MOBILITY),
+    "hip_circles" to setOf(ExerciseCategoryFilter.SHAOLIN, ExerciseCategoryFilter.MOBILITY),
+    "leg_swings" to setOf(ExerciseCategoryFilter.SHAOLIN, ExerciseCategoryFilter.MOBILITY),
+    "hamstring_stretch" to setOf(ExerciseCategoryFilter.STRETCHING)
+)

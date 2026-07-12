@@ -21,6 +21,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
@@ -44,6 +46,32 @@ fun HomeScreen(
     val uiState by viewModel.homeUiState.collectAsState()
     val showProgramSummary by viewModel.showProgramSummary.collectAsState()
     val programStatistics by viewModel.programStatistics.collectAsState()
+    var showRepeatDialog by remember { mutableStateOf(false) }
+
+    if (showRepeatDialog) {
+        AlertDialog(
+            onDismissRequest = { showRepeatDialog = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRepeatDialog = false
+                        onStartWorkout(uiState.currentDay)
+                    }
+                ) {
+                    Text("Start Anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRepeatDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+            title = { Text("Repeat Workout") },
+            text = {
+                Text("Today's workout has already been completed. You may repeat it for practice, but no additional daily completion or reward points will be awarded.")
+            }
+        )
+    }
     val progressValues by remember(uiState.completedCount, uiState.completedPostureCount) {
         derivedStateOf {
             (uiState.completedCount.toFloat() / 56f) to (uiState.completedPostureCount.toFloat() / 56f)
@@ -170,7 +198,13 @@ fun HomeScreen(
 
         MonkButton(
             text = stringResource(R.string.start_workout),
-            onClick = { onStartWorkout(uiState.currentDay) }
+            onClick = {
+                if (uiState.todayProgramDayState.isCompleted) {
+                    showRepeatDialog = true
+                } else {
+                    onStartWorkout(uiState.currentDay)
+                }
+            }
         )
 
         if (uiState.additionalPostureTrainingEnabled) {

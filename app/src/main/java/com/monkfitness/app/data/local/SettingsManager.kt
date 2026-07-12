@@ -47,6 +47,47 @@ class SettingsManager(private val context: Context) {
         val PROGRAM_SUMMARY_DISMISSED = booleanPreferencesKey("program_summary_dismissed")
         val NUTRITION_WARNING_DISMISSED_FOR = stringPreferencesKey("nutrition_warning_dismissed_for")
         val SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION = booleanPreferencesKey("show_excluded_products_in_nutrition")
+        val DISABLED_EXERCISE_FAMILIES = stringSetPreferencesKey("disabled_exercise_families")
+        val REWARDS_GRANTED_DAYS = stringSetPreferencesKey("rewards_granted_days")
+        val FILTER_LIBRARY_BY_CATEGORIES = booleanPreferencesKey("filter_library_by_categories")
+    }
+
+    val filterLibraryByCategoriesFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[FILTER_LIBRARY_BY_CATEGORIES] ?: true
+    }
+
+    suspend fun setFilterLibraryByCategories(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[FILTER_LIBRARY_BY_CATEGORIES] = enabled
+        }
+    }
+
+    val rewardsGrantedDaysFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        preferences[REWARDS_GRANTED_DAYS].orEmpty()
+    }
+
+    suspend fun setRewardGranted(key: String) {
+        context.dataStore.edit { preferences ->
+            val current = preferences[REWARDS_GRANTED_DAYS].orEmpty()
+            preferences[REWARDS_GRANTED_DAYS] = current + key
+        }
+    }
+
+    val disabledExerciseFamiliesFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        val disabled = preferences[DISABLED_EXERCISE_FAMILIES].orEmpty()
+        val allKeys = com.monkfitness.app.data.model.ExerciseCategoryFilter.entries.map { it.key }.toSet()
+        val enabled = allKeys - disabled
+        if (enabled.isEmpty()) {
+            emptySet()
+        } else {
+            disabled
+        }
+    }
+
+    suspend fun setDisabledExerciseFamilies(families: Set<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[DISABLED_EXERCISE_FAMILIES] = families
+        }
     }
 
     val languageFlow: Flow<String> = context.dataStore.data.map { preferences ->

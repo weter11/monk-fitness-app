@@ -37,16 +37,23 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
+import kotlin.math.roundToInt
 import com.monkfitness.app.data.model.MealCycle
 import com.monkfitness.app.data.model.NutritionDayPlan
 import com.monkfitness.app.data.model.NutritionIngredientAmount
 import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.NutritionQuantityUnit
+import com.monkfitness.app.data.model.NutritionPlan
+import com.monkfitness.app.data.model.NutritionShoppingGroup
 import com.monkfitness.app.viewmodel.MainViewModel
 import kotlinx.coroutines.flow.collectLatest
 import java.time.LocalDate
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilterChip
 import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
@@ -73,6 +80,18 @@ fun NutritionScreen(
     val pendingCycle by viewModel.pendingMealCycle.collectAsState()
     val showExpirationWarning by viewModel.shouldShowNutritionExpirationWarning.collectAsState()
     var showAvailableProductsDialog by remember { mutableStateOf(false) }
+    val previewPlan by viewModel.previewNutritionPlan.collectAsState()
+
+    if (previewPlan != null) {
+        NutritionPreviewDialog(
+            previewPlan = previewPlan!!,
+            currentPlan = plan,
+            availableProducts = availableProducts,
+            onDismiss = viewModel::clearPreviewCycle,
+            onAccept = viewModel::savePreviewCycle,
+            onRangeSelect = viewModel::previewNextCycle
+        )
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.nutritionMessageEvents.collectLatest { messageRes ->
@@ -245,6 +264,15 @@ fun NutritionScreen(
                 }
                 OutlinedButton(onClick = { showAvailableProductsDialog = true }, modifier = Modifier.weight(1f)) {
                     Text(stringResource(R.string.nutrition_generate_from_products))
+                }
+            }
+
+            Row(modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { viewModel.previewNextCycle(cycleLength.coerceIn(1, 7)) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Preview Next Cycle")
                 }
             }
 
@@ -426,6 +454,271 @@ private fun AvailableProductsDialog(
                                     }
                                 )
                                 Text(text = stringResource(ingredient.nameRes), modifier = Modifier.padding(top = 12.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+fun NutritionPreviewDialog(
+    previewPlan: NutritionPlan,
+    currentPlan: NutritionPlan,
+    availableProducts: Set<String>,
+    onDismiss: () -> Unit,
+    onAccept: () -> Unit,
+    onRangeSelect: (Int) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(onClick = onAccept) {
+                Text("Accept Cycle")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Preview Next Cycle",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Time Range Toggle
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Select Preview Duration:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(1, 3, 7).forEach { days ->
+                            val isSelected = previewPlan.days.size == days
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { onRangeSelect(days) },
+                                label = { Text("$days Day${if (days > 1) "s" else ""}") }
+                            )
+                        }
+                    }
+                }
+
+                // Cycle Summary Card (as requested)
+                val totalRecipes = previewPlan.days.flatMap { it.meals }
+                val uniqueRecipesCount = totalRecipes.map { it.templateId }.distinct().size
+                val repeatedRecipesCount = totalRecipes.size - uniqueRecipesCount
+                val shoppingItems = previewPlan.shoppingList.values.flatten()
+                val availableCount = shoppingItems.count { it.ingredient.key in availableProducts }
+                val missingCount = shoppingItems.count { it.ingredient.key !in availableProducts }
+
+                // Variety Score calculation
+                val uniqueRatio = if (totalRecipes.isNotEmpty()) uniqueRecipesCount.toFloat() / totalRecipes.size else 0f
+                val varietyIndicator = when {
+                    uniqueRatio >= 0.8f -> "Excellent Variety"
+                    uniqueRatio >= 0.5f -> "Good Variety"
+                    else -> "Low Variety"
+                }
+                val varietyColor = when {
+                    uniqueRatio >= 0.8f -> MaterialTheme.colorScheme.primary
+                    uniqueRatio >= 0.5f -> MaterialTheme.colorScheme.secondary
+                    else -> MaterialTheme.colorScheme.error
+                }
+
+                // Shopping Indicator
+                val shoppingIndicator = if (missingCount == 0) "Ready to cook" else "Need shopping"
+                val shoppingIndicatorColor = if (missingCount == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Cycle Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Duration:", style = MaterialTheme.typography.bodyMedium)
+                            Text("${previewPlan.days.size} days", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Recipes:", style = MaterialTheme.typography.bodyMedium)
+                            Text("${totalRecipes.size}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Unique recipes:", style = MaterialTheme.typography.bodyMedium)
+                            Text("${uniqueRecipesCount}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Repeated recipes:", style = MaterialTheme.typography.bodyMedium)
+                            Text("${repeatedRecipesCount}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Products required:", style = MaterialTheme.typography.bodyMedium)
+                            Text("${shoppingItems.size}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Already available:", style = MaterialTheme.typography.bodyMedium)
+                            Text("$availableCount", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Need to buy:", style = MaterialTheme.typography.bodyMedium)
+                            Text("$missingCount", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Variety Score:", style = MaterialTheme.typography.bodyMedium)
+                            Text(varietyIndicator, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = varietyColor)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Shopping Status:", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                text = if (missingCount == 0) shoppingIndicator else "$shoppingIndicator ($missingCount missing)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = shoppingIndicatorColor
+                            )
+                        }
+
+                        // Optional comparison with current cycle
+                        if (currentPlan.days.isNotEmpty()) {
+                            val currentRecipes = currentPlan.days.flatMap { it.meals }
+                            val currentTemplates = currentRecipes.map { it.templateId }.toSet()
+                            val previewTemplates = totalRecipes.map { it.templateId }.toSet()
+
+                            val newRecipesCount = previewTemplates.count { it !in currentTemplates }
+                            val repeatedFromPrevCount = previewTemplates.count { it in currentTemplates }
+
+                            val currentIngredients = currentRecipes.flatMap { it.ingredients }.map { it.ingredient.key }.toSet()
+                            val previewIngredients = totalRecipes.flatMap { it.ingredients }.map { it.ingredient.key }.toSet()
+
+                            val newIngredientsCount = previewIngredients.count { it !in currentIngredients }
+
+                            val currentAvg = currentPlan.days.map { it.totalCalories }.average().roundToInt()
+                            val previewAvg = previewPlan.days.map { it.totalCalories }.average().roundToInt()
+
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)))
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Text("Comparison with Current Cycle", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("New recipes:", style = MaterialTheme.typography.bodySmall)
+                                Text("+$newRecipesCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Repeated from previous cycle:", style = MaterialTheme.typography.bodySmall)
+                                Text("$repeatedFromPrevCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("New ingredients introduced:", style = MaterialTheme.typography.bodySmall)
+                                Text("$newIngredientsCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Ingredients already stocked:", style = MaterialTheme.typography.bodySmall)
+                                Text("$availableCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Missing ingredients:", style = MaterialTheme.typography.bodySmall)
+                                Text("$missingCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Avg Daily Calories:", style = MaterialTheme.typography.bodySmall)
+                                Text("$previewAvg kcal (Current: $currentAvg kcal)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                // Daily Menu Section
+                Text("Daily Menu", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                previewPlan.days.forEach { day ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Day ${day.dayNumber}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(stringResource(day.dayType.labelRes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                            }
+                            Text("Target Calories: ${day.targetCalories} kcal", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+
+                            day.meals.forEach { meal ->
+                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                    Text(stringResource(meal.type.labelRes), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                    meal.ingredients.forEach { ingredientAmount ->
+                                        val quantity = when (ingredientAmount.ingredient.unit) {
+                                            NutritionQuantityUnit.GRAMS -> stringResource(R.string.nutrition_quantity_grams, ingredientAmount.amount)
+                                            NutritionQuantityUnit.MILLILITERS -> stringResource(R.string.nutrition_quantity_milliliters, ingredientAmount.amount)
+                                            NutritionQuantityUnit.PIECES -> stringResource(R.string.nutrition_quantity_pieces, ingredientAmount.amount)
+                                        }
+                                        Text(
+                                            text = "• ${stringResource(ingredientAmount.ingredient.nameRes)} — $quantity",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    // Recipe / Cooking instructions
+                                    Text("Instructions:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                    com.monkfitness.app.data.model.getTodayCookingInstructionResIds(meal).forEachIndexed { i, stepRes ->
+                                        Text("${i + 1}. ${stringResource(stepRes)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Required Products Section
+                Text("Required Products Preview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                NutritionShoppingGroup.entries.forEach { group ->
+                    val items = previewPlan.shoppingList[group].orEmpty()
+                    if (items.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(stringResource(group.titleRes), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                items.forEach { item ->
+                                    val isAvailable = item.ingredient.key in availableProducts
+                                    val color = if (isAvailable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                    val icon = if (isAvailable) "✓" else "⚠"
+                                    val quantity = when (item.ingredient.unit) {
+                                        NutritionQuantityUnit.GRAMS -> stringResource(R.string.nutrition_quantity_grams, item.totalAmount)
+                                        NutritionQuantityUnit.MILLILITERS -> stringResource(R.string.nutrition_quantity_milliliters, item.totalAmount)
+                                        NutritionQuantityUnit.PIECES -> stringResource(R.string.nutrition_quantity_pieces, item.totalAmount)
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("• ${stringResource(item.ingredient.nameRes)} — $quantity", style = MaterialTheme.typography.bodySmall)
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text(icon, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Bold)
+                                            Text(if (isAvailable) "Available" else "Missing", style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

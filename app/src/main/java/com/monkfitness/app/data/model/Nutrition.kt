@@ -8,13 +8,14 @@ import kotlin.math.roundToInt
 
 enum class NutritionMealType(
     val key: String,
-    @StringRes val labelRes: Int
+    @StringRes val labelRes: Int,
+    val orderIndex: Int
 ) {
-    BREAKFAST("breakfast", R.string.nutrition_breakfast),
-    LUNCH("lunch", R.string.nutrition_lunch),
-    DINNER("dinner", R.string.nutrition_dinner),
-    POST_WORKOUT("post_workout", R.string.nutrition_post_workout),
-    SNACK("snack", R.string.nutrition_snack)
+    BREAKFAST("breakfast", R.string.nutrition_breakfast, 1),
+    LUNCH("lunch", R.string.nutrition_lunch, 2),
+    DINNER("dinner", R.string.nutrition_dinner, 3),
+    POST_WORKOUT("post_workout", R.string.nutrition_post_workout, 4),
+    SNACK("snack", R.string.nutrition_snack, 5)
 }
 
 enum class MealType(@StringRes val labelRes: Int) {
@@ -889,7 +890,7 @@ fun mealEntitiesToNutritionPlan(cycleId: Long, meals: List<MealEntity>): Nutriti
                 week = first.week,
                 dayType = NutritionDayType.valueOf(first.dayType),
                 targetCalories = items.sumOf { it.calories },
-                meals = items.sortedBy { it.mealTypeKey }.map { meal ->
+                meals = items.map { meal ->
                     NutritionMeal(
                         templateId = meal.templateId,
                         type = NutritionMealType.entries.first { it.key == meal.mealTypeKey },
@@ -900,7 +901,7 @@ fun mealEntitiesToNutritionPlan(cycleId: Long, meals: List<MealEntity>): Nutriti
                         optional = meal.optional,
                         cycleId = cycleId
                     )
-                }
+                }.sortedBy { it.type.orderIndex }
             )
         }
     return NutritionPlan(days = days, cycleId = cycleId)
