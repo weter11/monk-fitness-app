@@ -236,6 +236,14 @@ class WorkoutGenerator {
 
     private val exercisesById = allExercises.associateBy { it.id }
 
+    private fun getEligibleExercises(disabledFamilies: Set<String>): List<Exercise> {
+        val eligible = allExercises.filter { exercise ->
+            val families = com.monkfitness.app.data.model.exerciseToFamiliesMap[exercise.id].orEmpty()
+            families.isEmpty() || families.none { it.key in disabledFamilies }
+        }
+        return eligible.ifEmpty { allExercises }
+    }
+
     fun getWorkoutType(day: Int): WorkoutType {
         val safeDay = if (day in 1..56) day else 1
         return when ((safeDay - 1) % 7) {
@@ -253,7 +261,8 @@ class WorkoutGenerator {
         day: Int,
         flexibilityTrainingType: FlexibilityTrainingType = FlexibilityTrainingType.BOTH,
         focusAreas: Set<ExerciseSubCategory> = setOf(ExerciseSubCategory.FULL_BODY),
-        availableEquipment: Set<Equipment> = emptySet()
+        availableEquipment: Set<Equipment> = emptySet(),
+        disabledFamilies: Set<String> = emptySet()
     ): Workout {
         val safeDay = if (day in 1..56) day else 1
         val week = ((safeDay - 1) / 7) + 1
@@ -263,7 +272,7 @@ class WorkoutGenerator {
         return Workout(
             id = safeDay,
             type = type,
-            exercises = getExercisesForType(type, phase, safeDay, flexibilityTrainingType, focusAreas, availableEquipment)
+            exercises = getExercisesForType(type, phase, safeDay, flexibilityTrainingType, focusAreas, availableEquipment, disabledFamilies)
         )
     }
 
@@ -271,7 +280,8 @@ class WorkoutGenerator {
         day: Int,
         flexibilityTrainingType: FlexibilityTrainingType = FlexibilityTrainingType.BOTH,
         focusAreas: Set<ExerciseSubCategory> = setOf(ExerciseSubCategory.FULL_BODY),
-        availableEquipment: Set<Equipment> = emptySet()
+        availableEquipment: Set<Equipment> = emptySet(),
+        disabledFamilies: Set<String> = emptySet()
     ): Workout {
         val safeDay = if (day in 1..56) day else 1
         val week = ((safeDay - 1) / 7) + 1
@@ -286,11 +296,13 @@ class WorkoutGenerator {
                     phase = phase,
                     daySeed = safeDay,
                     trainingType = flexibilityTrainingType,
-                    focusAreas = focusAreas
+                    focusAreas = focusAreas,
+                    disabledFamilies = disabledFamilies
                 ),
                 availableEquipment = availableEquipment,
                 phase = phase,
-                random = Random(safeDay * 10_000 + WorkoutType.POSTURE_MOBILITY.ordinal)
+                random = Random(safeDay * 10_000 + WorkoutType.POSTURE_MOBILITY.ordinal),
+                disabledFamilies = disabledFamilies
             )
         )
     }
@@ -301,7 +313,8 @@ class WorkoutGenerator {
         daySeed: Int,
         flexibilityTrainingType: FlexibilityTrainingType,
         focusAreas: Set<ExerciseSubCategory>,
-        availableEquipment: Set<Equipment>
+        availableEquipment: Set<Equipment>,
+        disabledFamilies: Set<String> = emptySet()
     ): List<Exercise> {
         val isHyperlordosisActive = ExerciseSubCategory.HYPERLORDOSIS in focusAreas
         return try {
@@ -323,11 +336,13 @@ class WorkoutGenerator {
                         phase = phase,
                         daySeed = daySeed,
                         trainingType = flexibilityTrainingType,
-                        focusAreas = focusAreas
+                        focusAreas = focusAreas,
+                        disabledFamilies = disabledFamilies
                     ),
                     availableEquipment = availableEquipment,
                     phase = phase,
-                    random = Random(daySeed * 10_000 + type.ordinal)
+                    random = Random(daySeed * 10_000 + type.ordinal),
+                    disabledFamilies = disabledFamilies
                 )
                 WorkoutType.FUNCTIONAL -> listOf(
                     subCategoryRule(
@@ -342,16 +357,18 @@ class WorkoutGenerator {
                         phase = phase,
                         daySeed = daySeed,
                         trainingType = flexibilityTrainingType,
-                        focusAreas = focusAreas
+                        focusAreas = focusAreas,
+                        disabledFamilies = disabledFamilies
                     ),
                     availableEquipment = availableEquipment,
                     phase = phase,
-                    random = Random(daySeed * 10_000 + type.ordinal)
+                    random = Random(daySeed * 10_000 + type.ordinal),
+                    disabledFamilies = disabledFamilies
                 )
                 WorkoutType.REST -> return emptyList()
             }
 
-            val rawExercises = selectExercises(selectionRules, phase, Random(daySeed * 1_000 + type.ordinal))
+            val rawExercises = selectExercises(selectionRules, phase, Random(daySeed * 1_000 + type.ordinal), disabledFamilies)
             val adaptedExercises = if (isHyperlordosisActive) {
                 rawExercises.map { exercise ->
                     if (exercise.id == "superman") {
@@ -369,7 +386,8 @@ class WorkoutGenerator {
                 exercises = adaptedExercises,
                 availableEquipment = availableEquipment,
                 phase = phase,
-                random = Random(daySeed * 10_000 + type.ordinal)
+                random = Random(daySeed * 10_000 + type.ordinal),
+                disabledFamilies = disabledFamilies
             )
         } catch (_: Exception) {
             emptyList()
@@ -381,7 +399,8 @@ class WorkoutGenerator {
         phase: Int,
         daySeed: Int,
         trainingType: FlexibilityTrainingType,
-        focusAreas: Set<ExerciseSubCategory>
+        focusAreas: Set<ExerciseSubCategory>,
+        disabledFamilies: Set<String> = emptySet()
     ): List<Exercise> {
         val normalizedFocusAreas = normalizeFlexibilityFocusAreas(focusAreas)
         val prioritizedAreas = buildFlexibilityAreaSequence(count, normalizedFocusAreas, daySeed)
@@ -394,7 +413,8 @@ class WorkoutGenerator {
                 trainingType = trainingType,
                 prioritizedFocusAreas = normalizedFocusAreas,
                 selectedIds = selectedIds,
-                random = Random(daySeed * 1_000 + index)
+                random = Random(daySeed * 1_000 + index),
+                disabledFamilies = disabledFamilies
             )
             selectedIds += exercise.id
             phasedExercise(exercise, phase)
@@ -449,9 +469,11 @@ class WorkoutGenerator {
         trainingType: FlexibilityTrainingType,
         prioritizedFocusAreas: List<ExerciseSubCategory>,
         selectedIds: Set<String>,
-        random: Random
+        random: Random,
+        disabledFamilies: Set<String> = emptySet()
     ): Exercise {
-        val candidates = allExercises.filter { exercise ->
+        val eligible = getEligibleExercises(disabledFamilies)
+        val candidates = eligible.filter { exercise ->
             exercise.id !in selectedIds && exercise.matchesTrainingType(trainingType)
         }
 
@@ -551,14 +573,15 @@ class WorkoutGenerator {
     private fun selectExercises(
         selectionRules: List<WorkoutSelectionRule>,
         phase: Int,
-        random: Random
+        random: Random,
+        disabledFamilies: Set<String> = emptySet()
     ): List<Exercise> {
         val selectedIds = mutableSetOf<String>()
 
         return buildList {
             selectionRules.forEach { rule ->
                 repeat(rule.count) {
-                    val exercise = pickExercise(rule, selectedIds, random)
+                    val exercise = pickExercise(rule, selectedIds, random, disabledFamilies)
                     selectedIds += exercise.id
                     add(phasedExercise(exercise, phase))
                 }
@@ -569,10 +592,12 @@ class WorkoutGenerator {
     private fun pickExercise(
         rule: WorkoutSelectionRule,
         selectedIds: Set<String>,
-        random: Random
+        random: Random,
+        disabledFamilies: Set<String> = emptySet()
     ): Exercise {
-        val preferredMatches = allExercises.filter { it.id !in selectedIds && rule.preferredMatch(it) }
-        val fallbackMatches = allExercises.filter { it.id !in selectedIds && rule.fallbackMatch(it) }
+        val eligible = getEligibleExercises(disabledFamilies)
+        val preferredMatches = eligible.filter { it.id !in selectedIds && rule.preferredMatch(it) }
+        val fallbackMatches = eligible.filter { it.id !in selectedIds && rule.fallbackMatch(it) }
 
         val candidates = preferredMatches.ifEmpty { fallbackMatches }
         return checkNotNull(candidates.randomOrNull(random)) { "No exercise matches selection rule" }
@@ -717,7 +742,8 @@ class WorkoutGenerator {
         exercises: List<Exercise>,
         availableEquipment: Set<Equipment>,
         phase: Int,
-        random: Random
+        random: Random,
+        disabledFamilies: Set<String> = emptySet()
     ): List<Exercise> {
         if (exercises.isEmpty()) return emptyList()
 
@@ -729,7 +755,7 @@ class WorkoutGenerator {
         exercises.forEach { exercise ->
             val resolved = when {
                 exercise.id !in selectedIds && exercise.isAccessibleWith(normalizedEquipment) -> exercise
-                else -> findReplacementExercise(exercise, selectedIds, normalizedEquipment, phase, random)
+                else -> findReplacementExercise(exercise, selectedIds, normalizedEquipment, phase, random, disabledFamilies)
             }
 
             if (resolved != null) {
@@ -741,7 +767,7 @@ class WorkoutGenerator {
         }
 
         unresolvedProfiles.forEach { exercise ->
-            val fallback = findBodyweightReplacement(exercise, selectedIds, phase, random) ?: return@forEach
+            val fallback = findBodyweightReplacement(exercise, selectedIds, phase, random, disabledFamilies) ?: return@forEach
             selectedIds += fallback.id
             resolvedExercises += fallback
         }
@@ -749,7 +775,7 @@ class WorkoutGenerator {
         return if (resolvedExercises.isNotEmpty()) {
             resolvedExercises
         } else {
-            buildBodyweightFallback(exercises, selectedIds, phase, random)
+            buildBodyweightFallback(exercises, selectedIds, phase, random, disabledFamilies)
         }
     }
 
@@ -758,9 +784,11 @@ class WorkoutGenerator {
         selectedIds: Set<String>,
         availableEquipment: Set<Equipment>,
         phase: Int,
-        random: Random
+        random: Random,
+        disabledFamilies: Set<String> = emptySet()
     ): Exercise? {
-        val accessibleCandidates = allExercises.filter { candidate ->
+        val eligible = getEligibleExercises(disabledFamilies)
+        val accessibleCandidates = eligible.filter { candidate ->
             candidate.id !in selectedIds && candidate.isAccessibleWith(availableEquipment)
         }
         val bodyweightCandidates = accessibleCandidates.filter { it.requiresNoEquipment() }
@@ -782,9 +810,11 @@ class WorkoutGenerator {
         target: Exercise,
         selectedIds: Set<String>,
         phase: Int,
-        random: Random
+        random: Random,
+        disabledFamilies: Set<String> = emptySet()
     ): Exercise? {
-        val bodyweightCandidates = allExercises.filter { candidate ->
+        val eligible = getEligibleExercises(disabledFamilies)
+        val bodyweightCandidates = eligible.filter { candidate ->
             candidate.id !in selectedIds && candidate.requiresNoEquipment()
         }
 
@@ -803,13 +833,14 @@ class WorkoutGenerator {
         exercises: List<Exercise>,
         selectedIds: Set<String>,
         phase: Int,
-        random: Random
+        random: Random,
+        disabledFamilies: Set<String> = emptySet()
     ): List<Exercise> {
         val mutableSelectedIds = selectedIds.toMutableSet()
         val fallback = mutableListOf<Exercise>()
 
         exercises.forEach { exercise ->
-            val replacement = findBodyweightReplacement(exercise, mutableSelectedIds, phase, random) ?: return@forEach
+            val replacement = findBodyweightReplacement(exercise, mutableSelectedIds, phase, random, disabledFamilies) ?: return@forEach
             mutableSelectedIds += replacement.id
             fallback += replacement
         }
@@ -818,7 +849,8 @@ class WorkoutGenerator {
             return fallback
         }
 
-        return allExercises
+        val eligible = getEligibleExercises(disabledFamilies)
+        return eligible
             .asSequence()
             .filter { it.requiresNoEquipment() }
             .filter { it.id !in mutableSelectedIds }

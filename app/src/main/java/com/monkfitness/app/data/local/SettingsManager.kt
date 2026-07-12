@@ -47,6 +47,29 @@ class SettingsManager(private val context: Context) {
         val PROGRAM_SUMMARY_DISMISSED = booleanPreferencesKey("program_summary_dismissed")
         val NUTRITION_WARNING_DISMISSED_FOR = stringPreferencesKey("nutrition_warning_dismissed_for")
         val SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION = booleanPreferencesKey("show_excluded_products_in_nutrition")
+        val DISABLED_EXERCISE_FAMILIES = stringSetPreferencesKey("disabled_exercise_families")
+        val REWARDS_GRANTED_DAYS = stringSetPreferencesKey("rewards_granted_days")
+    }
+
+    val rewardsGrantedDaysFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        preferences[REWARDS_GRANTED_DAYS].orEmpty()
+    }
+
+    suspend fun setRewardGranted(key: String) {
+        context.dataStore.edit { preferences ->
+            val current = preferences[REWARDS_GRANTED_DAYS].orEmpty()
+            preferences[REWARDS_GRANTED_DAYS] = current + key
+        }
+    }
+
+    val disabledExerciseFamiliesFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        preferences[DISABLED_EXERCISE_FAMILIES].orEmpty()
+    }
+
+    suspend fun setDisabledExerciseFamilies(families: Set<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[DISABLED_EXERCISE_FAMILIES] = families
+        }
     }
 
     val languageFlow: Flow<String> = context.dataStore.data.map { preferences ->

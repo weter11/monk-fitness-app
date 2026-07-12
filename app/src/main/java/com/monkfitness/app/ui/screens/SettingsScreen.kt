@@ -59,6 +59,7 @@ fun SettingsScreen(
     val nutritionCycleLength by viewModel.nutritionCycleLength.collectAsState()
     val showExcludedProductsInNutrition by viewModel.showExcludedProductsInNutrition.collectAsState()
     val libraryStats by viewModel.libraryStats.collectAsState()
+    val disabledExerciseFamilies by viewModel.disabledExerciseFamilies.collectAsState()
 
     Scaffold(
         topBar = {
@@ -196,9 +197,59 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            ExerciseFamiliesSelector(
+                disabledFamilies = disabledExerciseFamilies,
+                onToggle = viewModel::toggleExerciseFamily
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             LibraryStatisticsSection(stats = libraryStats)
 
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun ExerciseFamiliesSelector(
+    disabledFamilies: Set<String>,
+    onToggle: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(text = "Exercises", style = MaterialTheme.typography.titleLarge)
+        Text(
+            text = "Select which exercise families to include in your training plan. Search results and library remains fully accessible.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary
+        )
+        val families = com.monkfitness.app.data.model.ExerciseCategoryFilter.entries
+        families.chunked(2).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowItems.forEach { family ->
+                    val isChecked = family.key !in disabledFamilies
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = isChecked,
+                            onCheckedChange = { onToggle(family.key) }
+                        )
+                        Text(
+                            text = family.displayName,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
         }
     }
 }
