@@ -53,11 +53,14 @@ import com.monkfitness.app.util.withLocalizedSearchText
 import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
 import com.monkfitness.app.data.model.flexibilitySpecificFocusAreas
 import com.monkfitness.app.data.model.generateNutritionPlan
+import com.monkfitness.app.domain.constraint.WorkoutSettings
+import com.monkfitness.app.domain.constraint.SettingsConstraintResolver
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -89,6 +92,70 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: WorkoutRepository
     private val workoutGenerator = WorkoutGenerator()
     private val emptyWorkout = Workout(id = -1, type = com.monkfitness.app.data.model.WorkoutType.REST, exercises = emptyList())
+
+    private val settingsConstraintResolver = SettingsConstraintResolver()
+
+    private val _showAdjustedValidationMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val showAdjustedValidationMessage = _showAdjustedValidationMessage.asSharedFlow()
+
+    private val _showPreviewDialog = MutableStateFlow(false)
+    val showPreviewDialog = _showPreviewDialog.asStateFlow()
+
+    fun setShowPreviewDialog(show: Boolean) {
+        _showPreviewDialog.value = show
+    }
+
+    val categoryExerciseCounts: Map<String, Int> by lazy {
+        val all = workoutGenerator.getExerciseLibrary()
+        val counts = mutableMapOf<String, Int>()
+        com.monkfitness.app.data.model.ExerciseCategoryFilter.entries.forEach { filter ->
+            counts[filter.key] = 0
+        }
+        all.forEach { exercise ->
+            val filters = com.monkfitness.app.data.model.exerciseToFamiliesMap[exercise.id].orEmpty()
+            filters.forEach { filter ->
+                counts[filter.key] = (counts[filter.key] ?: 0) + 1
+            }
+        }
+        counts
+    }
+
+    suspend fun updateAndResolveSettings(
+        flexibilityTrainingType: FlexibilityTrainingType = this.flexibilityTrainingType.value,
+        flexibilityFocusAreas: Set<ExerciseSubCategory> = this.flexibilityFocusAreas.value,
+        availableEquipment: Set<Equipment> = this.availableEquipment.value,
+        disabledExerciseFamilies: Set<String> = this.disabledExerciseFamilies.value,
+        additionalPostureTrainingEnabled: Boolean = this.additionalPostureTrainingEnabled.value
+    ) {
+        val proposed = WorkoutSettings(
+            flexibilityTrainingType = flexibilityTrainingType,
+            flexibilityFocusAreas = flexibilityFocusAreas,
+            availableEquipment = availableEquipment,
+            disabledExerciseFamilies = disabledExerciseFamilies,
+            additionalPostureTrainingEnabled = additionalPostureTrainingEnabled
+        )
+        val result = settingsConstraintResolver.resolve(proposed)
+
+        if (result.adjustedSettings.flexibilityTrainingType != this.flexibilityTrainingType.value) {
+            settingsManager.setFlexibilityTrainingType(result.adjustedSettings.flexibilityTrainingType)
+        }
+        if (result.adjustedSettings.flexibilityFocusAreas != this.flexibilityFocusAreas.value) {
+            settingsManager.setFlexibilityFocusAreas(result.adjustedSettings.flexibilityFocusAreas)
+        }
+        if (result.adjustedSettings.availableEquipment != this.availableEquipment.value) {
+            settingsManager.setAvailableEquipment(result.adjustedSettings.availableEquipment)
+        }
+        if (result.adjustedSettings.disabledExerciseFamilies != this.disabledExerciseFamilies.value) {
+            settingsManager.setDisabledExerciseFamilies(result.adjustedSettings.disabledExerciseFamilies)
+        }
+        if (result.adjustedSettings.additionalPostureTrainingEnabled != this.additionalPostureTrainingEnabled.value) {
+            settingsManager.setAdditionalPostureTrainingEnabled(result.adjustedSettings.additionalPostureTrainingEnabled)
+        }
+
+        if (result.adjustmentsMade) {
+            _showAdjustedValidationMessage.emit("Some workout options were adjusted because they conflict with your current selection.")
+        }
+    }
 
     companion object {
         const val ROUTE_HOME = "home"
@@ -313,12 +380,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), true
     )
 
-    private val _showCategoryErrorDialog = MutableStateFlow(false)
-    val showCategoryErrorDialog = _showCategoryErrorDialog.asStateFlow()
-
-    fun dismissCategoryErrorDialog() {
-        _showCategoryErrorDialog.value = false
-    }
 
     fun setFilterLibraryByCategories(enabled: Boolean) {
         viewModelScope.launch {
@@ -511,6 +572,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             settingsManager.ensureProgramStartDate()
+            // Resolve constraints upon load
+            try {
+                val type = settingsManager.flexibilityTrainingTypeFlow.first()
+                val areas = settingsManager.flexibilityFocusAreasFlow.first()
+                val equip = settingsManager.availableEquipmentFlow.first()
+                val disabled = settingsManager.disabledExerciseFamiliesFlow.first()
+                val posture = settingsManager.additionalPostureTrainingEnabledFlow.first()
+                updateAndResolveSettings(
+                    flexibilityTrainingType = type,
+                    flexibilityFocusAreas = areas,
+                    availableEquipment = equip,
+                    disabledExerciseFamilies = disabled,
+                    additionalPostureTrainingEnabled = posture
+                )
+            } catch (_: Exception) {}
             refreshCalendarState()
         }
         viewModelScope.launch {
@@ -1023,13 +1099,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setAdditionalPostureTrainingEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            settingsManager.setAdditionalPostureTrainingEnabled(enabled)
+            updateAndResolveSettings(additionalPostureTrainingEnabled = enabled)
         }
     }
 
     fun setFlexibilityTrainingType(trainingType: FlexibilityTrainingType) {
         viewModelScope.launch {
-            settingsManager.setFlexibilityTrainingType(trainingType)
+            updateAndResolveSettings(flexibilityTrainingType = trainingType)
         }
     }
 
@@ -1040,13 +1116,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val next = if (equipment in current) current - equipment else current + equipment
 
         viewModelScope.launch {
-            settingsManager.setAvailableEquipment(next)
+            updateAndResolveSettings(availableEquipment = next)
         }
     }
 
     fun clearAvailableEquipment() {
         viewModelScope.launch {
-            settingsManager.setAvailableEquipment(emptySet())
+            updateAndResolveSettings(availableEquipment = emptySet())
         }
     }
 
@@ -1081,20 +1157,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleExerciseFamily(familyKey: String) {
         viewModelScope.launch {
             val current = disabledExerciseFamilies.value
-            val allKeys = com.monkfitness.app.data.model.ExerciseCategoryFilter.entries.map { it.key }.toSet()
-            val currentlyEnabled = allKeys - current
-
-            val isCurrentlyEnabled = familyKey !in current
-            if (isCurrentlyEnabled) {
-                // If it is currently enabled and we want to disable it, check if it's the last remaining enabled category
-                if (currentlyEnabled.size <= 1) {
-                    _showCategoryErrorDialog.value = true
-                    return@launch
-                }
-            }
-
             val next = if (familyKey in current) current - familyKey else current + familyKey
-            settingsManager.setDisabledExerciseFamilies(next)
+            updateAndResolveSettings(disabledExerciseFamilies = next)
         }
     }
 
@@ -1102,30 +1166,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val currentDisabled = disabledExerciseFamilies.value
             val nextDisabled = currentDisabled - categoriesInGroup.toSet()
-            settingsManager.setDisabledExerciseFamilies(nextDisabled)
+            updateAndResolveSettings(disabledExerciseFamilies = nextDisabled)
         }
     }
 
     fun disableAllInGroup(categoriesInGroup: List<String>) {
         viewModelScope.launch {
             val currentDisabled = disabledExerciseFamilies.value
-            val allKeys = com.monkfitness.app.data.model.ExerciseCategoryFilter.entries.map { it.key }.toSet()
-            val currentlyEnabled = allKeys - currentDisabled
-
-            val toDisable = categoriesInGroup.filter { it in currentlyEnabled }
-            if (toDisable.isEmpty()) return@launch
-
-            if (currentlyEnabled.size - toDisable.size == 0) {
-                // Rule #5 violation: everything would be disabled!
-                // Keep the single last remaining enabled category across the entire app
-                val lastEnabled = currentlyEnabled.first()
-                val newDisabled = allKeys - setOf(lastEnabled)
-                settingsManager.setDisabledExerciseFamilies(newDisabled)
-                _showCategoryErrorDialog.value = true
-            } else {
-                val nextDisabled = currentDisabled + toDisable
-                settingsManager.setDisabledExerciseFamilies(nextDisabled)
-            }
+            val nextDisabled = currentDisabled + categoriesInGroup.toSet()
+            updateAndResolveSettings(disabledExerciseFamilies = nextDisabled)
         }
     }
 
@@ -1316,7 +1365,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .toSet()
 
         viewModelScope.launch {
-            settingsManager.setFlexibilityFocusAreas(nextSelection)
+            updateAndResolveSettings(flexibilityFocusAreas = nextSelection)
         }
     }
 

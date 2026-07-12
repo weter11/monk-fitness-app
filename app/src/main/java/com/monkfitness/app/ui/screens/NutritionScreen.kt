@@ -41,6 +41,7 @@ import kotlin.math.roundToInt
 import com.monkfitness.app.data.model.MealCycle
 import com.monkfitness.app.data.model.NutritionDayPlan
 import com.monkfitness.app.data.model.NutritionIngredientAmount
+import com.monkfitness.app.data.model.MealType
 import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.NutritionQuantityUnit
 import com.monkfitness.app.data.model.NutritionPlan
@@ -81,15 +82,19 @@ fun NutritionScreen(
     val showExpirationWarning by viewModel.shouldShowNutritionExpirationWarning.collectAsState()
     var showAvailableProductsDialog by remember { mutableStateOf(false) }
     val previewPlan by viewModel.previewNutritionPlan.collectAsState()
+    val showPreviewDialog by viewModel.showPreviewDialog.collectAsState()
 
-    if (previewPlan != null) {
+    if (previewPlan != null && showPreviewDialog) {
         NutritionPreviewDialog(
             previewPlan = previewPlan!!,
             currentPlan = plan,
             availableProducts = availableProducts,
-            onDismiss = viewModel::clearPreviewCycle,
+            onDismiss = { viewModel.setShowPreviewDialog(false) },
+            onDiscard = viewModel::clearPreviewCycle,
             onAccept = viewModel::savePreviewCycle,
-            onRangeSelect = viewModel::previewNextCycle
+            onRangeSelect = viewModel::previewNextCycle,
+            activeCycle = activeCycle,
+            currentDate = viewModel.currentDate.value
         )
     }
 
@@ -264,6 +269,32 @@ fun NutritionScreen(
                 }
                 OutlinedButton(onClick = { showAvailableProductsDialog = true }, modifier = Modifier.weight(1f)) {
                     Text(stringResource(R.string.nutrition_generate_from_products))
+                }
+            }
+
+            if (previewPlan != null && !showPreviewDialog) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Pending Preview Active", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("An unsaved preview cycle is in memory.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { viewModel.setShowPreviewDialog(true) }) {
+                                Text("Resume")
+                            }
+                            OutlinedButton(onClick = viewModel::clearPreviewCycle) {
+                                Text("Discard")
+                            }
+                        }
+                    }
                 }
             }
 
@@ -463,39 +494,99 @@ private fun AvailableProductsDialog(
     )
 }
 
+// Deterministic macro calculations for preview differences
+val NutritionMeal.carbohydratesGrams: Int
+    get() = when (mealType) {
+        MealType.HIGH_CARB -> (calories * 0.60f / 4).roundToInt()
+        else -> (calories * 0.45f / 4).roundToInt()
+    }
+
+val NutritionMeal.fatGrams: Int
+    get() = when (mealType) {
+        MealType.HIGH_CARB -> (calories * 0.15f / 9).roundToInt()
+        else -> (calories * 0.25f / 9).roundToInt()
+    }
+
+val NutritionMeal.fiberGrams: Int
+    get() = when (mealType) {
+        MealType.HIGH_CARB -> (calories / 100f).roundToInt()
+        else -> (calories / 120f).roundToInt()
+    }
+
+val NutritionDayPlan.totalCarbsGrams: Int get() = meals.sumOf { it.carbohydratesGrams }
+val NutritionDayPlan.totalFatGrams: Int get() = meals.sumOf { it.fatGrams }
+val NutritionDayPlan.totalFiberGrams: Int get() = meals.sumOf { it.fiberGrams }
+
 @Composable
 fun NutritionPreviewDialog(
     previewPlan: NutritionPlan,
     currentPlan: NutritionPlan,
     availableProducts: Set<String>,
     onDismiss: () -> Unit,
+    onDiscard: () -> Unit,
     onAccept: () -> Unit,
-    onRangeSelect: (Int) -> Unit
+    onRangeSelect: (Int) -> Unit,
+    activeCycle: MealCycle?,
+    currentDate: java.time.LocalDate
 ) {
+    var showApplyConfirmation by remember { mutableStateOf(false) }
+
+    if (showApplyConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showApplyConfirmation = false },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showApplyConfirmation = false
+                        onAccept()
+                    }
+                ) {
+                    Text("Confirm Apply")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showApplyConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+            title = { Text("Confirm Nutrition Plan Update") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("This will:")
+                    Text("• replace your future nutrition plan", fontWeight = FontWeight.SemiBold)
+                    Text("• update the shopping list", fontWeight = FontWeight.SemiBold)
+                    Text("• preserve today's meals", fontWeight = FontWeight.SemiBold)
+                    Text("• activate the new cycle starting tomorrow", fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Are you sure you want to proceed?")
+                }
+            }
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(onClick = onAccept) {
-                Text("Accept Cycle")
+            Button(onClick = { showApplyConfirmation = true }) {
+                Text("Apply")
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text("Cancel")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onDiscard) {
+                    Text("Discard")
+                }
+                OutlinedButton(onClick = onDismiss) {
+                    Text("Hide")
+                }
             }
         },
         title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Preview Next Cycle",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            Text(
+                text = "Preview Next Cycle",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
         },
         text = {
             Column(
@@ -504,9 +595,37 @@ fun NutritionPreviewDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Time Range Toggle
+                // Compared Periods Information
+                val formatter = java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d")
+                val currentStartStr = try {
+                    activeCycle?.let { java.time.LocalDate.parse(it.startDate).format(formatter) } ?: "Today"
+                } catch (_: Exception) { "Today" }
+
+                val currentEndStr = try {
+                    activeCycle?.let { java.time.LocalDate.parse(it.startDate).plusDays(it.durationDays.toLong() - 1).format(formatter) } ?: "Sunday"
+                } catch (_: Exception) { "Sunday" }
+
+                val cycleStartDate = try {
+                    activeCycle?.let { java.time.LocalDate.parse(it.startDate).plusDays(it.durationDays.toLong()) } ?: currentDate
+                } catch (_: Exception) { currentDate }
+
+                val previewStartStr = cycleStartDate.format(formatter)
+                val previewEndStr = cycleStartDate.plusDays(previewPlan.days.size.toLong() - 1).format(formatter)
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Compared Periods", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("Current Plan: $currentStartStr → $currentEndStr", style = MaterialTheme.typography.bodySmall)
+                        Text("Preview: $previewStartStr → $previewEndStr", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Time Range Toggle / Generate New Preview
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Select Preview Duration:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text("Generate New Preview (Duration):", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -522,7 +641,7 @@ fun NutritionPreviewDialog(
                     }
                 }
 
-                // Cycle Summary Card (as requested)
+                // Cycle Summary Card
                 val totalRecipes = previewPlan.days.flatMap { it.meals }
                 val uniqueRecipesCount = totalRecipes.map { it.templateId }.distinct().size
                 val repeatedRecipesCount = totalRecipes.size - uniqueRecipesCount
@@ -596,7 +715,7 @@ fun NutritionPreviewDialog(
                             )
                         }
 
-                        // Optional comparison with current cycle
+                        // Detailed comparison with current cycle
                         if (currentPlan.days.isNotEmpty()) {
                             val currentRecipes = currentPlan.days.flatMap { it.meals }
                             val currentTemplates = currentRecipes.map { it.templateId }.toSet()
@@ -613,6 +732,25 @@ fun NutritionPreviewDialog(
                             val currentAvg = currentPlan.days.map { it.totalCalories }.average().roundToInt()
                             val previewAvg = previewPlan.days.map { it.totalCalories }.average().roundToInt()
 
+                            val currentProteinAvg = currentPlan.days.map { it.totalProteinGrams }.average().roundToInt()
+                            val previewProteinAvg = previewPlan.days.map { it.totalProteinGrams }.average().roundToInt()
+
+                            val currentCarbsAvg = currentPlan.days.map { it.totalCarbsGrams }.average().roundToInt()
+                            val previewCarbsAvg = previewPlan.days.map { it.totalCarbsGrams }.average().roundToInt()
+
+                            val currentFatAvg = currentPlan.days.map { it.totalFatGrams }.average().roundToInt()
+                            val previewFatAvg = previewPlan.days.map { it.totalFatGrams }.average().roundToInt()
+
+                            val currentFiberAvg = currentPlan.days.map { it.totalFiberGrams }.average().roundToInt()
+                            val previewFiberAvg = previewPlan.days.map { it.totalFiberGrams }.average().roundToInt()
+
+                            val calDiff = previewAvg - currentAvg
+                            val proteinDiff = previewProteinAvg - currentProteinAvg
+                            val carbsDiff = previewCarbsAvg - currentCarbsAvg
+                            val fatDiff = previewFatAvg - currentFatAvg
+                            val fiberDiff = previewFiberAvg - currentFiberAvg
+                            val shoppingDiff = shoppingItems.size - currentPlan.shoppingList.values.flatten().size
+
                             Spacer(modifier = Modifier.height(4.dp))
                             Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)))
                             Spacer(modifier = Modifier.height(4.dp))
@@ -624,7 +762,7 @@ fun NutritionPreviewDialog(
                                 Text("+$newRecipesCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Repeated from previous cycle:", style = MaterialTheme.typography.bodySmall)
+                                Text("Repeated from previous:", style = MaterialTheme.typography.bodySmall)
                                 Text("$repeatedFromPrevCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -632,16 +770,28 @@ fun NutritionPreviewDialog(
                                 Text("$newIngredientsCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Ingredients already stocked:", style = MaterialTheme.typography.bodySmall)
-                                Text("$availableCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                Text("Calories:", style = MaterialTheme.typography.bodySmall)
+                                Text("${if (calDiff >= 0) "+" else ""}$calDiff kcal", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Missing ingredients:", style = MaterialTheme.typography.bodySmall)
-                                Text("$missingCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                Text("Protein:", style = MaterialTheme.typography.bodySmall)
+                                Text("${if (proteinDiff >= 0) "+" else ""}$proteinDiff g", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Avg Daily Calories:", style = MaterialTheme.typography.bodySmall)
-                                Text("$previewAvg kcal (Current: $currentAvg kcal)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                Text("Carbohydrates:", style = MaterialTheme.typography.bodySmall)
+                                Text("${if (carbsDiff >= 0) "+" else ""}$carbsDiff g", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Fat:", style = MaterialTheme.typography.bodySmall)
+                                Text("${if (fatDiff >= 0) "+" else ""}$fatDiff g", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Fiber:", style = MaterialTheme.typography.bodySmall)
+                                Text("${if (fiberDiff >= 0) "+" else ""}$fiberDiff g", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Shopping items:", style = MaterialTheme.typography.bodySmall)
+                                Text("${if (shoppingDiff >= 0) "+" else ""}$shoppingDiff products", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -687,38 +837,75 @@ fun NutritionPreviewDialog(
                     }
                 }
 
-                // Required Products Section
-                Text("Required Products Preview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                NutritionShoppingGroup.entries.forEach { group ->
-                    val items = previewPlan.shoppingList[group].orEmpty()
-                    if (items.isNotEmpty()) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(stringResource(group.titleRes), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                items.forEach { item ->
-                                    val isAvailable = item.ingredient.key in availableProducts
-                                    val color = if (isAvailable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                                    val icon = if (isAvailable) "✓" else "⚠"
-                                    val quantity = when (item.ingredient.unit) {
-                                        NutritionQuantityUnit.GRAMS -> stringResource(R.string.nutrition_quantity_grams, item.totalAmount)
-                                        NutritionQuantityUnit.MILLILITERS -> stringResource(R.string.nutrition_quantity_milliliters, item.totalAmount)
-                                        NutritionQuantityUnit.PIECES -> stringResource(R.string.nutrition_quantity_pieces, item.totalAmount)
-                                    }
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("• ${stringResource(item.ingredient.nameRes)} — $quantity", style = MaterialTheme.typography.bodySmall)
-                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Text(icon, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Bold)
-                                            Text(if (isAvailable) "Available" else "Missing", style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
+                // Required Products / Shopping Preview Section (Split into Already Available, Need to Buy, and Optional Substitutions)
+                Text("Shopping List Preview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                val availableItems = shoppingItems.filter { it.ingredient.key in availableProducts }
+                val needToBuyItems = shoppingItems.filter { it.ingredient.key !in availableProducts }
+
+                val requiredKeys = totalRecipes.flatMap { it.ingredients }.map { it.ingredient.key }.toSet()
+                val optionalSubstitutions = mutableListOf<String>()
+                if ("chicken" in requiredKeys) optionalSubstitutions.add("Turkey instead of chicken")
+                if ("cottage_cheese" in requiredKeys) optionalSubstitutions.add("Greek yogurt instead of cottage cheese")
+                if ("tuna" in requiredKeys) optionalSubstitutions.add("Salmon instead of tuna")
+                if ("eggs" in requiredKeys) optionalSubstitutions.add("Tofu instead of eggs")
+                if ("banana" in requiredKeys) optionalSubstitutions.add("Berries instead of bananas")
+                if ("apple" in requiredKeys) optionalSubstitutions.add("Pears instead of apples")
+
+                // Section: Already Available
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Already available:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        if (availableItems.isEmpty()) {
+                            Text("None", style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            availableItems.forEach { item ->
+                                val quantity = when (item.ingredient.unit) {
+                                    NutritionQuantityUnit.GRAMS -> stringResource(R.string.nutrition_quantity_grams, item.totalAmount)
+                                    NutritionQuantityUnit.MILLILITERS -> stringResource(R.string.nutrition_quantity_milliliters, item.totalAmount)
+                                    NutritionQuantityUnit.PIECES -> stringResource(R.string.nutrition_quantity_pieces, item.totalAmount)
                                 }
+                                Text("✓ ${stringResource(item.ingredient.nameRes)} — $quantity", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+
+                // Section: Need to Buy
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Need to buy:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                        if (needToBuyItems.isEmpty()) {
+                            Text("None", style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            needToBuyItems.forEach { item ->
+                                val quantity = when (item.ingredient.unit) {
+                                    NutritionQuantityUnit.GRAMS -> stringResource(R.string.nutrition_quantity_grams, item.totalAmount)
+                                    NutritionQuantityUnit.MILLILITERS -> stringResource(R.string.nutrition_quantity_milliliters, item.totalAmount)
+                                    NutritionQuantityUnit.PIECES -> stringResource(R.string.nutrition_quantity_pieces, item.totalAmount)
+                                }
+                                Text("• ${stringResource(item.ingredient.nameRes)} — $quantity", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+
+                // Section: Optional Substitutions
+                if (optionalSubstitutions.isNotEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Optional substitutions:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                            optionalSubstitutions.forEach { substitution ->
+                                Text("• $substitution", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
