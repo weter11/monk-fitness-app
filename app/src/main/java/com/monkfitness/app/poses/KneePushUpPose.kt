@@ -11,7 +11,16 @@ class KneePushUpPose : BasePushUpPose() {
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
         durationSeconds = 2.5f, loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.EASE_IN_OUT,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
+        support = SupportDefinition(
+            pivot = PivotType.KNEES,
+            contacts = setOf(
+                SupportContact.LEFT_HAND,
+                SupportContact.RIGHT_HAND,
+                SupportContact.LEFT_KNEE,
+                SupportContact.RIGHT_KNEE
+            )
+        )
     )
 
     override fun build(context: PoseContext): SkeletonPose {
