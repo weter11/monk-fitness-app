@@ -11,7 +11,14 @@ class AirSquatPose : PoseBuilder {
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
         durationSeconds = 2.5f, loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.EASE_IN_OUT,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(
+                SupportContact.LEFT_FOOT,
+                SupportContact.RIGHT_FOOT
+            )
+        )
     )
 
     private var roots: List<SkeletonNode>? = null
