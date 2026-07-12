@@ -376,6 +376,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
     )
 
+    val estimatedExercisePoolSize = combine(
+        disabledExerciseFamilies,
+        availableEquipment
+    ) { disabled, available ->
+        val eligible = workoutGenerator.getExerciseLibrary(available).filter { exercise ->
+            val families = com.monkfitness.app.data.model.exerciseToFamiliesMap[exercise.id].orEmpty()
+            families.isEmpty() || families.none { it.key in disabled }
+        }
+        eligible.size
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
     val filterLibraryByCategories = settingsManager.filterLibraryByCategoriesFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), true
     )

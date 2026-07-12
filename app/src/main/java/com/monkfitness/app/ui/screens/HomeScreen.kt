@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.monkfitness.app.R
@@ -131,9 +132,17 @@ fun HomeScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "Practice mode available.",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "Practice Mode is Active",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.secondary
+                )
+                Text(
+                    text = "Repeating today's workout will not award additional points or daily rewards.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
         }

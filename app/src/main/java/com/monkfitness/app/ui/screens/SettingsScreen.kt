@@ -72,6 +72,7 @@ fun SettingsScreen(
     val libraryStats by viewModel.libraryStats.collectAsState()
     val disabledExerciseFamilies by viewModel.disabledExerciseFamilies.collectAsState()
     val filterLibraryByCategories by viewModel.filterLibraryByCategories.collectAsState()
+    val estimatedPoolSize by viewModel.estimatedExercisePoolSize.collectAsState()
 
     val adjustedMessageFlow = viewModel.showAdjustedValidationMessage
     LaunchedEffect(adjustedMessageFlow) {
@@ -165,7 +166,8 @@ fun SettingsScreen(
                     title = stringResource(R.string.flexibility_training_type_title) + " (Training Type)",
                     options = FlexibilityTrainingType.entries.toList(),
                     selectedOption = flexibilityTrainingType,
-                    onSelect = viewModel::setFlexibilityTrainingType
+                    onSelect = viewModel::setFlexibilityTrainingType,
+                    disabledFamilies = disabledExerciseFamilies
                 )
 
                 // Workout -> Focus Areas
@@ -229,7 +231,8 @@ fun SettingsScreen(
                     flexibilityTrainingType = flexibilityTrainingType,
                     selectedFlexibilityFocusAreas = selectedFlexibilityFocusAreas,
                     disabledFamilies = disabledExerciseFamilies,
-                    filterLibrary = filterLibraryByCategories
+                    filterLibrary = filterLibraryByCategories,
+                    estimatedPoolSize = estimatedPoolSize
                 )
             }
 
@@ -302,13 +305,13 @@ private fun CategoryGroupSelector(
                 }
 
                 val explanation = when (category.key) {
-                    "functional_fitness" -> if ("hyperlordosis" !in disabledFamilies) "HIIT Disabled because Hyperlordosis program is enabled." else null
+                    "functional_fitness" -> if ("hyperlordosis" !in disabledFamilies) "Disabled because \"Hyperlordosis\" is enabled." else null
                     "calisthenics" -> {
-                        if ("senior" !in disabledFamilies) "Disabled because Senior Friendly program is enabled."
-                        else if ("rehabilitation" !in disabledFamilies) "Disabled because Rehabilitation program is enabled."
+                        if ("senior" !in disabledFamilies) "Disabled because \"Senior Friendly\" is enabled."
+                        else if ("rehabilitation" !in disabledFamilies) "Disabled because \"Rehabilitation\" is enabled."
                         else null
                     }
-                    "shaolin" -> if ("senior" !in disabledFamilies) "Disabled because Senior Friendly program is enabled." else null
+                    "shaolin" -> if ("senior" !in disabledFamilies) "Disabled because \"Senior Friendly\" is enabled." else null
                     else -> null
                 }
 
@@ -340,7 +343,8 @@ private fun CurrentWorkoutConfigurationCard(
     flexibilityTrainingType: FlexibilityTrainingType,
     selectedFlexibilityFocusAreas: Set<ExerciseSubCategory>,
     disabledFamilies: Set<String>,
-    filterLibrary: Boolean
+    filterLibrary: Boolean,
+    estimatedPoolSize: Int
 ) {
     val context = LocalContext.current
     Card(
@@ -383,11 +387,11 @@ private fun CurrentWorkoutConfigurationCard(
                 Text(typeStr, style = MaterialTheme.typography.bodyMedium)
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Focus:", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Text("Focus Areas:", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                 Text(focusStr, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.End)
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Styles:", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Text("Training Styles:", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                 Text(activeStyles, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.End)
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -395,8 +399,12 @@ private fun CurrentWorkoutConfigurationCard(
                 Text(activePrograms, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.End)
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Exercise Filter:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text("Exercise Library filtering:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                 Text(filterStr, style = MaterialTheme.typography.bodyMedium)
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Estimated exercise pool size:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text("$estimatedPoolSize", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -500,17 +508,31 @@ private fun FocusAreaSelector(
     title: String,
     options: List<FlexibilityTrainingType>,
     selectedOption: FlexibilityTrainingType,
-    onSelect: (FlexibilityTrainingType) -> Unit
+    onSelect: (FlexibilityTrainingType) -> Unit,
+    disabledFamilies: Set<String>
 ) {
+    val postureEnabled = "posture_correction" !in disabledFamilies
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(text = title, style = MaterialTheme.typography.titleMedium)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { option ->
-                FilterChip(
-                    selected = option == selectedOption,
-                    onClick = { onSelect(option) },
-                    label = { Text(stringResource(option.labelRes)) }
-                )
+                val isDisabled = option == FlexibilityTrainingType.STRETCHING && postureEnabled
+                Column(horizontalAlignment = Alignment.Start) {
+                    FilterChip(
+                        selected = option == selectedOption && !isDisabled,
+                        onClick = { if (!isDisabled) onSelect(option) },
+                        enabled = !isDisabled,
+                        label = { Text(stringResource(option.labelRes)) }
+                    )
+                    if (isDisabled) {
+                        Text(
+                            text = "Disabled because \"Posture Correction\" is enabled.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                        )
+                    }
+                }
             }
         }
     }

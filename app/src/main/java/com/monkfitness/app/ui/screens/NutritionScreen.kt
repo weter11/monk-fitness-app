@@ -649,6 +649,33 @@ fun NutritionPreviewDialog(
                 val availableCount = shoppingItems.count { it.ingredient.key in availableProducts }
                 val missingCount = shoppingItems.count { it.ingredient.key !in availableProducts }
 
+                val currentRecipes = currentPlan.days.flatMap { it.meals }
+                val currentTemplates = currentRecipes.map { it.templateId }.toSet()
+                val previewTemplates = totalRecipes.map { it.templateId }.toSet()
+                val newRecipesCount = previewTemplates.count { it !in currentTemplates }
+                val reusedRecipesCount = previewTemplates.count { it in currentTemplates }
+
+                val needToBuyItems = shoppingItems.filter { it.ingredient.key !in availableProducts }
+                fun getEstimatedIngredientCost(key: String, amount: Int): Double {
+                    val pricePerUnit = when (key) {
+                        "chicken" -> 0.012 // per gram
+                        "rice" -> 0.003 // per gram
+                        "oats" -> 0.004 // per gram
+                        "potatoes" -> 0.002 // per gram
+                        "buckwheat" -> 0.004 // per gram
+                        "cottage_cheese" -> 0.008 // per gram
+                        "yogurt" -> 0.005 // per gram
+                        "nuts" -> 0.020 // per gram
+                        "tuna" -> 0.015 // per gram
+                        "eggs" -> 0.30 // per piece
+                        "banana" -> 0.50 // per piece
+                        "apple" -> 0.40 // per piece
+                        else -> 0.005
+                    }
+                    return pricePerUnit * amount
+                }
+                val estimatedCost = needToBuyItems.sumOf { getEstimatedIngredientCost(it.ingredient.key, it.totalAmount) }
+
                 // Variety Score calculation
                 val uniqueRatio = if (totalRecipes.isNotEmpty()) uniqueRecipesCount.toFloat() / totalRecipes.size else 0f
                 val varietyIndicator = when {
@@ -678,28 +705,28 @@ fun NutritionPreviewDialog(
                             Text("${previewPlan.days.size} days", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Recipes:", style = MaterialTheme.typography.bodyMedium)
+                            Text("Total Meals/Recipes:", style = MaterialTheme.typography.bodyMedium)
                             Text("${totalRecipes.size}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Unique recipes:", style = MaterialTheme.typography.bodyMedium)
-                            Text("${uniqueRecipesCount}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            Text("New recipes:", style = MaterialTheme.typography.bodyMedium)
+                            Text("${newRecipesCount}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Repeated recipes:", style = MaterialTheme.typography.bodyMedium)
-                            Text("${repeatedRecipesCount}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            Text("Reused recipes:", style = MaterialTheme.typography.bodyMedium)
+                            Text("${reusedRecipesCount}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Products required:", style = MaterialTheme.typography.bodyMedium)
                             Text("${shoppingItems.size}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Already available:", style = MaterialTheme.typography.bodyMedium)
-                            Text("$availableCount", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            Text("Ingredients already available vs. missing:", style = MaterialTheme.typography.bodyMedium)
+                            Text("$availableCount available / $missingCount missing", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Need to buy:", style = MaterialTheme.typography.bodyMedium)
-                            Text("$missingCount", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            Text("Estimated shopping cost:", style = MaterialTheme.typography.bodyMedium)
+                            Text("$${String.format("%.2f", estimatedCost)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Variety Score:", style = MaterialTheme.typography.bodyMedium)
@@ -841,7 +868,6 @@ fun NutritionPreviewDialog(
                 Text("Shopping List Preview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
                 val availableItems = shoppingItems.filter { it.ingredient.key in availableProducts }
-                val needToBuyItems = shoppingItems.filter { it.ingredient.key !in availableProducts }
 
                 val requiredKeys = totalRecipes.flatMap { it.ingredients }.map { it.ingredient.key }.toSet()
                 val optionalSubstitutions = mutableListOf<String>()
