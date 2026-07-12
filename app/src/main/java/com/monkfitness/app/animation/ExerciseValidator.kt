@@ -10,7 +10,9 @@ data class ValidatorConfig(
     val maxAccelerationThreshold: Float = 500f,
     val isStaticExercise: Boolean = false,
     val supportMargin: Float = 10f,
-    val expectedSupportJoints: Set<Joint> = emptySet()
+    val expectedSupportJoints: Set<Joint> = emptySet(),
+    val checkBilateralSymmetry: Boolean = false,
+    val checkHandShoulderAlignment: Boolean = false
 )
 
 /**
@@ -55,7 +57,9 @@ class ExerciseValidator(
             "POSITION_DISCONTINUITY",
             "VELOCITY_DISCONTINUITY",
             "ACCELERATION_SPIKE",
-            "STATIC_SUPPORT_POLYGON"
+            "STATIC_SUPPORT_POLYGON",
+            "BILATERAL_SYMMETRY",
+            "HAND_SHOULDER_ALIGNMENT"
         )
     }
 
@@ -98,6 +102,12 @@ class ExerciseValidator(
 
         // Rule 9: Body support polygon
         validateSupportPolygon(pose, environment, issues)
+
+        // Rule 11: Bilateral Symmetry
+        validateBilateralSymmetry(pose, issues)
+
+        // Rule 12: Hand Shoulder Alignment
+        validateHandShoulderAlignment(pose, issues)
 
         // Assemble report (allocations allowed here)
         val results = ArrayList<ValidationResult>(ALL_RULES.size)
@@ -449,6 +459,101 @@ class ExerciseValidator(
                     ))
                 }
             }
+        }
+    }
+
+    private fun getSignedPerpendicularDeviation2D(a: Vector3, b: Vector3, p: Vector3): Float {
+        val vx = b.x - a.x
+        val vy = b.y - a.y
+        val lenSq = vx * vx + vy * vy
+        if (lenSq < 1e-4f) return 0f
+        val cross = vx * (p.y - a.y) - vy * (p.x - a.x)
+        return cross / kotlin.math.sqrt(lenSq)
+    }
+
+    private fun validateBilateralSymmetry(pose: SkeletonPose, issues: MutableList<ValidationIssue>) {
+        if (!config.checkBilateralSymmetry) return
+
+        // Validate knees symmetry
+        val kneeF = pose.getJoint(Joint.KNEE_F)
+        val kneeB = pose.getJoint(Joint.KNEE_B)
+        val hipF = pose.getJoint(Joint.HIP_F)
+        val hipB = pose.getJoint(Joint.HIP_B)
+        val ankleF = pose.getJoint(Joint.ANKLE_F)
+        val ankleB = pose.getJoint(Joint.ANKLE_B)
+
+        val devF = getSignedPerpendicularDeviation2D(hipF, ankleF, kneeF)
+        val devB = getSignedPerpendicularDeviation2D(hipB, ankleB, kneeB)
+
+        // Check if both knees exist and deviate
+        if (kotlin.math.abs(devF) > 0.1f && kotlin.math.abs(devB) > 0.1f) {
+            if (devF * devB < 0f) {
+                issues.add(ValidationIssue(
+                    ruleId = "BILATERAL_SYMMETRY",
+                    message = "Knee bilateral symmetry violation: knees bend in opposite directions (devF=$devF, devB=$devB)",
+                    severity = ValidationSeverity.ERROR,
+                    joint = Joint.KNEE_B
+                ))
+            } else {
+                val diff = kotlin.math.abs(kotlin.math.abs(devF) - kotlin.math.abs(devB))
+                if (diff > 5f) { // 5 units of deviation tolerance
+                    issues.add(ValidationIssue(
+                        ruleId = "BILATERAL_SYMMETRY",
+                        message = "Knee bilateral symmetry violation: knee deviations differ in magnitude beyond tolerance (devF=$devF, devB=$devB, diff=$diff)",
+                        severity = ValidationSeverity.ERROR,
+                        joint = Joint.KNEE_B
+                    ))
+                }
+            }
+        }
+
+        // Validate elbows symmetry
+        val elbowA = pose.getJoint(Joint.ELBOW_A)
+        val elbowP = pose.getJoint(Joint.ELBOW_P)
+        val shoulderA = pose.getJoint(Joint.SHOULDER_A)
+        val shoulderP = pose.getJoint(Joint.SHOULDER_P)
+        val handA = pose.getJoint(Joint.HAND_A)
+        val handP = pose.getJoint(Joint.HAND_P)
+
+        val devA = getSignedPerpendicularDeviation2D(shoulderA, handA, elbowA)
+        val devP = getSignedPerpendicularDeviation2D(shoulderP, handP, elbowP)
+
+        if (kotlin.math.abs(devA) > 0.1f && kotlin.math.abs(devP) > 0.1f) {
+            if (devA * devP < 0f) {
+                issues.add(ValidationIssue(
+                    ruleId = "BILATERAL_SYMMETRY",
+                    message = "Elbow bilateral symmetry violation: elbows bend in opposite directions (devA=$devA, devP=$devP)",
+                    severity = ValidationSeverity.ERROR,
+                    joint = Joint.ELBOW_P
+                ))
+            } else {
+                val diff = kotlin.math.abs(kotlin.math.abs(devA) - kotlin.math.abs(devP))
+                if (diff > 5f) {
+                    issues.add(ValidationIssue(
+                        ruleId = "BILATERAL_SYMMETRY",
+                        message = "Elbow bilateral symmetry violation: elbow deviations differ in magnitude beyond tolerance (devA=$devA, devP=$devP, diff=$diff)",
+                        severity = ValidationSeverity.ERROR,
+                        joint = Joint.ELBOW_P
+                    ))
+                }
+            }
+        }
+    }
+
+    private fun validateHandShoulderAlignment(pose: SkeletonPose, issues: MutableList<ValidationIssue>) {
+        if (!config.checkHandShoulderAlignment) return
+        val shoulderA = pose.getJoint(Joint.SHOULDER_A)
+        val handA = pose.getJoint(Joint.HAND_A)
+
+        // Hands should not extend more than 5 units past shoulders in push-up position
+        val handForwardOffset = shoulderA.x - handA.x  // Positive = hand past shoulder
+        if (handForwardOffset < -5f || handForwardOffset > 15f) {
+            issues.add(ValidationIssue(
+                ruleId = "HAND_SHOULDER_ALIGNMENT",
+                message = "Hands not properly aligned beneath shoulders. Hand offset: $handForwardOffset",
+                severity = ValidationSeverity.ERROR,
+                joint = Joint.HAND_A
+            ))
         }
     }
 }

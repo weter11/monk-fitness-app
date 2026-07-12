@@ -27,6 +27,16 @@ class DeclinePushUpPose : BasePushUpPose() {
                     depth = 60f
                 )
             )
+        ),
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(
+                SupportContact.LEFT_HAND,
+                SupportContact.RIGHT_HAND,
+                SupportContact.LEFT_TOES,
+                SupportContact.RIGHT_TOES
+            ),
+            supportHeight = boxHeight
         )
     )
 
@@ -35,11 +45,14 @@ class DeclinePushUpPose : BasePushUpPose() {
         ensureHierarchy(def)
 
         val height = lerp(60f, 20f, context.progress)
-        val totalLegLen = def.shinLength + def.thighLength
+        val shinL = def.shinLength
+        val thighL = def.thighLength
+        val totalLegLen = shinL + thighL
+        val legTargetLen = totalLegLen * 0.97f // Slightly flexed to satisfy IK constraint and avoid locked-out leg issues
 
         val drivingHeight = (height - ankleHeight)
-        val theta = asin((drivingHeight / totalLegLen).coerceIn(-1f, 1f))
-        val ankleX = 60f + (totalLegLen * cos(theta))
+        val theta = asin((drivingHeight / legTargetLen).coerceIn(-1f, 1f))
+        val ankleX = 60f + (legTargetLen * cos(theta))
 
         ankleF!!.localPosition.set(ankleX, ankleHeight, -def.hipWidth)
         ankleF!!.localRotation.set(axisZ, -theta)
@@ -51,8 +64,12 @@ class DeclinePushUpPose : BasePushUpPose() {
         heelB!!.localPosition.set(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
         toeB!!.localPosition.set(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
 
-        kneeF!!.localPosition.set(-def.shinLength, 0f, 0f)
-        hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
+        // Precompute local knee flexion coordinates to satisfy the leg IK constraint of 98% maximum extension
+        val kX = (thighL * thighL - shinL * shinL - legTargetLen * legTargetLen) / (2f * legTargetLen)
+        val kY = -sqrt((shinL * shinL - kX * kX).coerceAtLeast(0f))
+
+        kneeF!!.localPosition.set(kX, kY, 0f)
+        hipF!!.localPosition.set(-legTargetLen - kX, -kY, 0f)
         pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
         chest!!.localPosition.set(-def.torsoLength, 0f, 0f)
 
@@ -61,8 +78,14 @@ class DeclinePushUpPose : BasePushUpPose() {
         head!!.localPosition.set(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
 
         hipB!!.localPosition.set(0f, 0f, def.hipWidth)
-        kneeB!!.localPosition.set(def.thighLength, 0f, 0f)
-        ankleB!!.localPosition.set(def.shinLength, 0f, 0f)
+        // B-leg: hip is the parent, ankle is the child — this is a DIFFERENT triangle
+        // traversal than the F-leg's (ankle-parent, hip-child), so it needs its own
+        // derivation, not a relabeling of the F-leg's kX/kY.
+        val bX = (thighL * thighL - shinL * shinL + legTargetLen * legTargetLen) / (2f * legTargetLen)
+        val bY = -sqrt((thighL * thighL - bX * bX).coerceAtLeast(0f))
+
+        kneeB!!.localPosition.set(bX, bY, 0f)
+        ankleB!!.localPosition.set(legTargetLen - bX, -bY, 0f)
 
         val rSize = roots!!.size
         for (i in 0 until rSize) {
@@ -74,10 +97,10 @@ class DeclinePushUpPose : BasePushUpPose() {
         val shoulderPW = rotAround(tempV1.set(0f, 0f, def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV3).add(chestW)
 
         val maxDrivingHeight = (60f - ankleHeight)
-        val maxTheta = asin((maxDrivingHeight / totalLegLen).coerceIn(-1f, 1f))
+        val maxTheta = asin((maxDrivingHeight / legTargetLen).coerceIn(-1f, 1f))
 
-        // Correcting Hand Target: Pulling target inward +5f guarantees elbows do not hyperextend at the peak height
-        val handAnchorX = 60f - def.torsoLength * cos(maxTheta) + 5f
+        // Correcting Hand Target: Placing handAnchorX perfectly aligned beneath shoulders
+        val handAnchorX = 60f - def.torsoLength * cos(maxTheta)
 
         val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * 1.5f)
         val targetHandP = targetHandPBuffer.set(handAnchorX, 0f, def.shoulderWidth * 1.5f)

@@ -53,20 +53,15 @@ fun rememberAnimationController(
                 LaunchedEffect(totalProgress) {
                     controller.side = if (totalProgress < 1f) Side.RIGHT else Side.LEFT
                     val p = if (totalProgress < 1f) totalProgress else totalProgress - 1f
-                    controller.progress = if (p < 0.5f) {
-                        val t = p * 2f
-                        t * t * (3 - 2 * t)
-                    } else {
-                        val t = (1f - p) * 2f
-                        t * t * (3 - 2 * t)
-                    }
+                    val t = if (p < 0.5f) p * 2f else (1f - p) * 2f
+                    controller.progress = MotionCurves.transform(metadata.motionCurve, t)
                 }
             } else {
                 val p by transition.animateFloat(
                     initialValue = 0f,
                     targetValue = 1f,
                     animationSpec = infiniteRepeatable(
-                        animation = tween(durationMillis = durationMs / 2, easing = FastOutSlowInEasing),
+                        animation = tween(durationMillis = durationMs / 2, easing = LinearEasing),
                         repeatMode = RepeatMode.Reverse
                     ),
                     label = "SimpleLoop"
@@ -78,11 +73,18 @@ fun rememberAnimationController(
             }
         }
         LoopMode.HOLD -> {
+            val inFraction = metadata.breathInFraction
+            val holdFraction = metadata.breathHoldFraction
+            val outFraction = metadata.breathOutFraction
+            val inEnd = inFraction
+            val holdEnd = inEnd + holdFraction
+            val outEnd = holdEnd + outFraction
+
             val breathTime by transition.animateFloat(
                 initialValue = 0f,
                 targetValue = 1f,
                 animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 8000, easing = LinearEasing),
+                    animation = tween(durationMillis = durationMs, easing = LinearEasing),
                     repeatMode = RepeatMode.Restart
                 ),
                 label = "BreathingCycle"
@@ -90,9 +92,15 @@ fun rememberAnimationController(
             LaunchedEffect(breathTime) {
                 controller.side = Side.RIGHT
                 controller.progress = when {
-                    breathTime < 0.40f -> smoothstep(breathTime / 0.40f)
-                    breathTime < 0.52f -> 1f
-                    breathTime < 0.92f -> 1f - smoothstep((breathTime - 0.52f) / 0.40f)
+                    breathTime < inEnd -> {
+                        val t = if (inEnd > 0f) breathTime / inEnd else 0f
+                        MotionCurves.transform(metadata.motionCurve, t)
+                    }
+                    breathTime < holdEnd -> 1f
+                    breathTime < outEnd -> {
+                        val t = if (outFraction > 0f) (breathTime - holdEnd) / outFraction else 0f
+                        1f - MotionCurves.transform(metadata.motionCurve, t)
+                    }
                     else -> 0f
                 }
             }
@@ -146,9 +154,4 @@ fun rememberAnimationController(
         PoseMetadata(loopMode = loopMode, durationSeconds = durationMs / 1000f),
         alternating
     )
-}
-
-private fun smoothstep(x: Float): Float {
-    val t = x.coerceIn(0f, 1f)
-    return t * t * (3 - 2 * t)
 }

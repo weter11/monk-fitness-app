@@ -88,7 +88,7 @@ data class IKConstraint(
 ) {
     companion object {
         val ArmConstraint = IKConstraint(30f, 0.95f)
-        val LegConstraint = IKConstraint(5f, 0.98f)
+        val LegConstraint = IKConstraint(30f, 0.98f)
     }
 }
 

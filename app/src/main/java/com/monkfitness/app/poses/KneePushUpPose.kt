@@ -11,7 +11,16 @@ class KneePushUpPose : BasePushUpPose() {
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
         durationSeconds = 2.5f, loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.EASE_IN_OUT,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
+        support = SupportDefinition(
+            pivot = PivotType.KNEES,
+            contacts = setOf(
+                SupportContact.LEFT_HAND,
+                SupportContact.RIGHT_HAND,
+                SupportContact.LEFT_KNEE,
+                SupportContact.RIGHT_KNEE
+            )
+        )
     )
 
     override fun build(context: PoseContext): SkeletonPose {
@@ -24,7 +33,8 @@ class KneePushUpPose : BasePushUpPose() {
         val drivingHeight = (height - kneeHeight).coerceAtLeast(0f)
         val theta = asin((drivingHeight / rigidBodyLen).coerceIn(-1f, 1f))
 
-        val kneeX = 60f + (rigidBodyLen * cos(theta))
+        // kneeX is defined relative to the pelvis at 60f (constant), aligning torso and arm coordinates perfectly with standard pushups
+        val kneeX = 60f + (def.thighLength * cos(theta))
         val shinPitch = (Math.PI / 4.0).toFloat() // Shins point 45 degrees up
 
         // 1. Root Anchoring
@@ -74,7 +84,7 @@ class KneePushUpPose : BasePushUpPose() {
         val maxTheta = asin((maxDrivingHeight / rigidBodyLen).coerceIn(-1f, 1f))
 
         // Corrected hand position to sit exactly beneath shoulders instead of floating past the head
-        val handAnchorX = 60f - def.torsoLength * cos(maxTheta) + 12f
+        val handAnchorX = 60f - def.torsoLength * cos(maxTheta)
 
         val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * 1.5f)
         val targetHandP = targetHandPBuffer.set(handAnchorX, 0f, def.shoulderWidth * 1.5f)
