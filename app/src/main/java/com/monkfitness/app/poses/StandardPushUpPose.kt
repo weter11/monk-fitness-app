@@ -47,8 +47,14 @@ class StandardPushUpPose : BasePushUpPose() {
         head!!.localPosition.set(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
 
         hipB!!.localPosition.set(0f, 0f, def.hipWidth)
-        kneeB!!.localPosition.set(legTargetLen + kX, -kY, 0f)
-        ankleB!!.localPosition.set(-kX, kY, 0f)
+        // B-leg: hip is the parent, ankle is the child — this is a DIFFERENT triangle
+        // traversal than the F-leg's (ankle-parent, hip-child), so it needs its own
+        // derivation, not a relabeling of the F-leg's kX/kY.
+        val bX = (thighL * thighL - shinL * shinL + legTargetLen * legTargetLen) / (2f * legTargetLen)
+        val bY = -sqrt((thighL * thighL - bX * bX).coerceAtLeast(0f))
+
+        kneeB!!.localPosition.set(bX, bY, 0f)
+        ankleB!!.localPosition.set(legTargetLen - bX, -bY, 0f)
 
         val rSize = roots!!.size
         for (i in 0 until rSize) {

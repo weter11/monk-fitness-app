@@ -20,6 +20,7 @@ class StandardPushUpPoseTest {
         val config = ValidatorConfig(
             allowFootGroundPenetration = false,
             isStaticExercise = false,
+            checkBilateralSymmetry = true,
             expectedSupportJoints = setOf(
                 Joint.HAND_A, Joint.HAND_P,
                 Joint.WRIST_A, Joint.WRIST_P,
@@ -90,12 +91,71 @@ class StandardPushUpPoseTest {
         assertTrue("Push-up pose has ${errors.size} validation errors!", errors.isEmpty())
     }
 
+    private fun getSignedPerpendicularDeviation2D(a: Vector3, b: Vector3, p: Vector3): Float {
+        val vx = b.x - a.x
+        val vy = b.y - a.y
+        val lenSq = vx * vx + vy * vy
+        if (lenSq < 1e-4f) return 0f
+        val cross = vx * (p.y - a.y) - vy * (p.x - a.x)
+        return cross / kotlin.math.sqrt(lenSq)
+    }
+
+    @Test
+    fun testLegBilateralSymmetryCorrectness() {
+        val poseBuilder = StandardPushUpPose()
+        val def = SkeletonDefinition.DEFAULT_ADULT
+        val finalizer = SkeletonPoseFinalizer(def)
+        val progressValues = arrayOf(0.0f, 0.25f, 0.5f, 0.75f, 1.0f)
+
+        println("=== LEG BILATERAL SYMMETRY VERIFICATION ===")
+        for (progress in progressValues) {
+            val context = PoseContext(
+                progress = progress,
+                side = Side.RIGHT,
+                definition = def,
+                deltaTime = 0.0166f,
+                cycleDuration = 2500f
+            )
+            val rawPose = poseBuilder.build(context)
+            val pose = finalizer.finalize(rawPose)
+
+            val hipF = pose.getJoint(Joint.HIP_F)
+            val kneeF = pose.getJoint(Joint.KNEE_F)
+            val ankleF = pose.getJoint(Joint.ANKLE_F)
+
+            val hipB = pose.getJoint(Joint.HIP_B)
+            val kneeB = pose.getJoint(Joint.KNEE_B)
+            val ankleB = pose.getJoint(Joint.ANKLE_B)
+
+            val devF = getSignedPerpendicularDeviation2D(hipF, ankleF, kneeF)
+            val devB = getSignedPerpendicularDeviation2D(hipB, ankleB, kneeB)
+
+            println(String.format("Progress %.2f:", progress))
+            println(String.format("  devF: %.6f, devB: %.6f", devF, devB))
+
+            // Assert they have the same sign
+            assertTrue(
+                "Knees bend in opposite directions at progress $progress! devF=$devF, devB=$devB",
+                devF * devB >= 0f || (kotlin.math.abs(devF) < 1e-3f && kotlin.math.abs(devB) < 1e-3f)
+            )
+
+            // Assert they are practically equal in magnitude (allow delta of 0.05 units)
+            assertEquals(
+                "Knee deviations differ in magnitude at progress $progress!",
+                kotlin.math.abs(devF),
+                kotlin.math.abs(devB),
+                0.05f
+            )
+        }
+        println("===========================================")
+    }
+
     @Test
     fun testPrintStandardPushUpCoordinates() {
         val poseBuilder = StandardPushUpPose()
         val def = SkeletonDefinition.DEFAULT_ADULT
         val finalizer = SkeletonPoseFinalizer(def)
-        val progressValues = arrayOf(0.0f, 0.5f, 1.0f)
+        val progressValues = arrayOf(0.0f, 0.25f, 0.5f, 0.75f, 1.0f)
 
         println("=== STANDARD PUSH-UP COORD COMPARISON ===")
         for (progress in progressValues) {
@@ -109,14 +169,28 @@ class StandardPushUpPoseTest {
             val rawPose = poseBuilder.build(context)
             val pose = finalizer.finalize(rawPose)
 
-            val hip = pose.getJoint(Joint.HIP_F)
-            val knee = pose.getJoint(Joint.KNEE_F)
-            val ankle = pose.getJoint(Joint.ANKLE_F)
+            val hipF = pose.getJoint(Joint.HIP_F)
+            val kneeF = pose.getJoint(Joint.KNEE_F)
+            val ankleF = pose.getJoint(Joint.ANKLE_F)
+
+            val hipB = pose.getJoint(Joint.HIP_B)
+            val kneeB = pose.getJoint(Joint.KNEE_B)
+            val ankleB = pose.getJoint(Joint.ANKLE_B)
+
+            val devF = getSignedPerpendicularDeviation2D(hipF, ankleF, kneeF)
+            val devB = getSignedPerpendicularDeviation2D(hipB, ankleB, kneeB)
 
             println(String.format("Progress %.2f:", progress))
-            println(String.format("  HIP_F  : (x=%.2f, y=%.2f, z=%.2f)", hip.x, hip.y, hip.z))
-            println(String.format("  KNEE_F : (x=%.2f, y=%.2f, z=%.2f)", knee.x, knee.y, knee.z))
-            println(String.format("  ANKLE_F: (x=%.2f, y=%.2f, z=%.2f)", ankle.x, ankle.y, ankle.z))
+            println(String.format("  Front Leg:"))
+            println(String.format("    HIP_F  : (x=%.4f, y=%.4f, z=%.4f)", hipF.x, hipF.y, hipF.z))
+            println(String.format("    KNEE_F : (x=%.4f, y=%.4f, z=%.4f)", kneeF.x, kneeF.y, kneeF.z))
+            println(String.format("    ANKLE_F: (x=%.4f, y=%.4f, z=%.4f)", ankleF.x, ankleF.y, ankleF.z))
+            println(String.format("    devF   : %.6f", devF))
+            println(String.format("  Back Leg:"))
+            println(String.format("    HIP_B  : (x=%.4f, y=%.4f, z=%.4f)", hipB.x, hipB.y, hipB.z))
+            println(String.format("    KNEE_B : (x=%.4f, y=%.4f, z=%.4f)", kneeB.x, kneeB.y, kneeB.z))
+            println(String.format("    ANKLE_B: (x=%.4f, y=%.4f, z=%.4f)", ankleB.x, ankleB.y, ankleB.z))
+            println(String.format("    devB   : %.6f", devB))
         }
         println("=========================================")
     }
