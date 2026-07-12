@@ -11,7 +11,8 @@ data class ValidatorConfig(
     val isStaticExercise: Boolean = false,
     val supportMargin: Float = 10f,
     val expectedSupportJoints: Set<Joint> = emptySet(),
-    val checkBilateralSymmetry: Boolean = false
+    val checkBilateralSymmetry: Boolean = false,
+    val checkHandShoulderAlignment: Boolean = false
 )
 
 /**
@@ -57,7 +58,8 @@ class ExerciseValidator(
             "VELOCITY_DISCONTINUITY",
             "ACCELERATION_SPIKE",
             "STATIC_SUPPORT_POLYGON",
-            "BILATERAL_SYMMETRY"
+            "BILATERAL_SYMMETRY",
+            "HAND_SHOULDER_ALIGNMENT"
         )
     }
 
@@ -103,6 +105,9 @@ class ExerciseValidator(
 
         // Rule 11: Bilateral Symmetry
         validateBilateralSymmetry(pose, issues)
+
+        // Rule 12: Hand Shoulder Alignment
+        validateHandShoulderAlignment(pose, issues)
 
         // Assemble report (allocations allowed here)
         val results = ArrayList<ValidationResult>(ALL_RULES.size)
@@ -532,6 +537,23 @@ class ExerciseValidator(
                     ))
                 }
             }
+        }
+    }
+
+    private fun validateHandShoulderAlignment(pose: SkeletonPose, issues: MutableList<ValidationIssue>) {
+        if (!config.checkHandShoulderAlignment) return
+        val shoulderA = pose.getJoint(Joint.SHOULDER_A)
+        val handA = pose.getJoint(Joint.HAND_A)
+
+        // Hands should not extend more than 5 units past shoulders in push-up position
+        val handForwardOffset = shoulderA.x - handA.x  // Positive = hand past shoulder
+        if (handForwardOffset < -5f || handForwardOffset > 15f) {
+            issues.add(ValidationIssue(
+                ruleId = "HAND_SHOULDER_ALIGNMENT",
+                message = "Hands not properly aligned beneath shoulders. Hand offset: $handForwardOffset",
+                severity = ValidationSeverity.ERROR,
+                joint = Joint.HAND_A
+            ))
         }
     }
 }

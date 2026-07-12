@@ -21,6 +21,7 @@ class StandardPushUpPoseTest {
             allowFootGroundPenetration = false,
             isStaticExercise = false,
             checkBilateralSymmetry = true,
+            checkHandShoulderAlignment = true,
             expectedSupportJoints = setOf(
                 Joint.HAND_A, Joint.HAND_P,
                 Joint.WRIST_A, Joint.WRIST_P,

@@ -19,6 +19,7 @@ class KneePushUpPoseTest {
             allowFootGroundPenetration = true,
             isStaticExercise = false,
             checkBilateralSymmetry = true,
+            checkHandShoulderAlignment = true,
             expectedSupportJoints = setOf(
                 Joint.HAND_A, Joint.HAND_P,
                 Joint.WRIST_A, Joint.WRIST_P,
@@ -173,6 +174,8 @@ class KneePushUpPoseTest {
             val devF = getSignedPerpendicularDeviation2D(hipF, ankleF, kneeF)
             val devB = getSignedPerpendicularDeviation2D(hipB, ankleB, kneeB)
 
+            val shoulderA = pose.getJoint(Joint.SHOULDER_A)
+            val handA = pose.getJoint(Joint.HAND_A)
             println(String.format("Progress %.2f:", progress))
             println(String.format("  Front Leg:"))
             println(String.format("    HIP_F  : (x=%.4f, y=%.4f, z=%.4f)", hipF.x, hipF.y, hipF.z))
@@ -184,6 +187,9 @@ class KneePushUpPoseTest {
             println(String.format("    KNEE_B : (x=%.4f, y=%.4f, z=%.4f)", kneeB.x, kneeB.y, kneeB.z))
             println(String.format("    ANKLE_B: (x=%.4f, y=%.4f, z=%.4f)", ankleB.x, ankleB.y, ankleB.z))
             println(String.format("    devB   : %.6f", devB))
+            println(String.format("  Arm A:"))
+            println(String.format("    SHOULDER_A: (x=%.4f, y=%.4f, z=%.4f)", shoulderA.x, shoulderA.y, shoulderA.z))
+            println(String.format("    HAND_A    : (x=%.4f, y=%.4f, z=%.4f)", handA.x, handA.y, handA.z))
         }
         println("=========================================")
     }
