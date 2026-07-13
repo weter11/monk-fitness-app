@@ -35,6 +35,11 @@ abstract class BasePose : PoseBuilder {
         hipB.localPosition.set(0f, 0f, hipWidth)
     }
 
+    protected fun buildShoulders(shoulderA: SkeletonNode, shoulderP: SkeletonNode, shoulderWidth: Float) {
+        shoulderA.localPosition.set(0f, 0f, -shoulderWidth)
+        shoulderP.localPosition.set(0f, 0f, shoulderWidth)
+    }
+
     protected fun buildRigidSegment(parent: SkeletonNode, child: SkeletonNode, offsetX: Float, offsetY: Float, offsetZ: Float) {
         child.localPosition.set(offsetX, offsetY, offsetZ)
     }
