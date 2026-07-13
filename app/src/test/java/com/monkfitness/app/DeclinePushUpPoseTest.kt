@@ -227,15 +227,15 @@ class DeclinePushUpPoseTest {
             val boxHeight = 40f
             val ankleHeight = boxHeight + 25f
 
-            val geometry = SupportMath.derivePushUpGeometry(
+            val solverResult = PushUpSolverResult()
+            PushUpGeometrySolver.solve(
+                definition = def,
+                support = poseBuilder.metadata.support,
+                gripWidthMultiplier = poseBuilder.gripWidthMultiplier,
                 progress = progress,
-                supportHeight = boxHeight,
-                legTargetLen = legTargetLen,
-                torsoLength = def.torsoLength,
-                pelvisOffsetTop = 35f,
-                pelvisOffsetBottom = 15f
+                result = solverResult
             )
-            val targetHandA = Vector3(geometry.handAnchorX, 0f, -def.shoulderWidth * 1.5f)
+            val targetHandA = Vector3(solverResult.handAnchorX, 0f, -def.shoulderWidth * 1.5f)
             val dMag = (targetHandA - shoulderAW).mag()
             val clampAmount = if (dMag < minDist) minDist - dMag else if (dMag > maxDist) dMag - maxDist else 0f
 

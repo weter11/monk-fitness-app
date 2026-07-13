@@ -14,14 +14,7 @@ class HangPose : BasePose() {
         motionCurve = MotionCurve.LINEAR,
         environment = EnvironmentDefinition(
             ground = GroundDefinition(visible = true, level = 0f),
-            props = listOf(BoxProp(center = Vector3(0f, 500f, 15f), width = 200f, height = 6f, depth = 6f)),
-            anchors = listOf(
-                EnvironmentAnchor(
-                    id = "pullup_bar",
-                    type = EnvironmentAnchorType.BAR,
-                    worldPosition = Vector3(0f, 500f, 0f)
-                )
-            )
+            props = listOf(BoxProp(center = Vector3(0f, 500f, 15f), width = 200f, height = 6f, depth = 6f))
         )
     )
 
@@ -35,8 +28,6 @@ class HangPose : BasePose() {
     private val legFBuffer = SkeletonMath.IKResult(); private val legBBuffer = SkeletonMath.IKResult()
     private val armABuffer = SkeletonMath.IKResult(); private val armPBuffer = SkeletonMath.IKResult()
 
-    private var cachedBarY = 500f
-
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
         pelvis = SkeletonNode(Joint.PELVIS); chest = pelvis!!.addChild(SkeletonNode(Joint.CHEST))
@@ -46,12 +37,6 @@ class HangPose : BasePose() {
         hipF = pelvis!!.addChild(SkeletonNode(Joint.HIP_F)); kneeF = hipF!!.addChild(SkeletonNode(Joint.KNEE_F)); ankleF = kneeF!!.addChild(SkeletonNode(Joint.ANKLE_F)); heelF = ankleF!!.addChild(SkeletonNode(Joint.HEEL_F)); toeF = ankleF!!.addChild(SkeletonNode(Joint.TOE_F))
         hipB = pelvis!!.addChild(SkeletonNode(Joint.HIP_B)); kneeB = hipB!!.addChild(SkeletonNode(Joint.KNEE_B)); ankleB = kneeB!!.addChild(SkeletonNode(Joint.ANKLE_B)); heelB = ankleB!!.addChild(SkeletonNode(Joint.HEEL_B)); toeB = ankleB!!.addChild(SkeletonNode(Joint.TOE_B))
         roots = listOf(pelvis!!)
-
-        val env = metadata.environment ?: EnvironmentDefinition()
-        val barAnchor = SupportMath.findAnchor(env, "pullup_bar")
-        if (barAnchor != null) {
-            cachedBarY = barAnchor.worldPosition.y
-        }
     }
 
     override fun build(context: PoseContext): SkeletonPose {
@@ -84,7 +69,7 @@ class HangPose : BasePose() {
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
         // Standard Overhand Grip
-        val barY = cachedBarY
+        val barY = 500f
         val gripWidth = def.shoulderWidth * 1.5f
 
         val targetHandA = Vector3(pelvisX, barY, -gripWidth)
