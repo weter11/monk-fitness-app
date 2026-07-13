@@ -8,7 +8,8 @@ data class SupportContact(
     val supportsWeight: Boolean = true,
     val fixedPosition: Boolean = true,
     val friction: Float = 1.0f,
-    val heightOffset: Float = 0f
+    val heightOffset: Float = 0f,
+    val anchorId: String? = null
 ) {
     companion object {
         @JvmField val LEFT_FOOT = SupportContact(SupportPoint.LEFT_FOOT)

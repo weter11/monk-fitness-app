@@ -166,4 +166,19 @@ object SupportMath {
     private fun getJointsForContact(point: SupportPoint): List<Joint> {
         return jointsForContactMap[point] ?: emptyList()
     }
+
+    fun findAnchor(environment: EnvironmentDefinition, id: String): EnvironmentAnchor? {
+        val size = environment.anchors.size
+        for (i in 0 until size) {
+            val anchor = environment.anchors[i]
+            if (anchor.id == id) {
+                return anchor
+            }
+        }
+        return null
+    }
+
+    fun getAnchorPosition(environment: EnvironmentDefinition, id: String, fallback: Vector3): Vector3 {
+        return findAnchor(environment, id)?.worldPosition ?: fallback
+    }
 }
