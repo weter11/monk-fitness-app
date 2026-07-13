@@ -23,6 +23,18 @@ class StandardPushUpPose : BasePushUpPose() {
                 SupportContact(SupportPoint.LEFT_TOES),
                 SupportContact(SupportPoint.RIGHT_TOES)
             )
-        )
+        ),
+        name = "Standard Push-Up",
+        pivotType = PivotType.FEET,
+        supportContacts = setOf(
+            SupportContact(SupportPoint.LEFT_HAND),
+            SupportContact(SupportPoint.RIGHT_HAND),
+            SupportContact(SupportPoint.LEFT_TOES),
+            SupportContact(SupportPoint.RIGHT_TOES)
+        ),
+        exerciseFamily = "push_up",
+        defaultGrip = "standard",
+        motionType = "symmetrical",
+        bodyOrientation = "prone"
     )
 }
