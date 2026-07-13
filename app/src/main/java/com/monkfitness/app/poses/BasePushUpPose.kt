@@ -27,6 +27,16 @@ abstract class BasePushUpPose : BasePose() {
     protected val targetHandABuffer = Vector3()
     protected val targetHandPBuffer = Vector3()
 
+    // Stylized planted-palm hand proportions for push-ups.
+    // These intentionally differ from the canonical open-hand HandDefinition: in a push-up the
+    // palm is flat on the ground and the fingers are tucked, so the palm and knuckles coincide
+    // (a short stub) and the fingertips sit at handFingertipOffset rather than the open-hand 22.
+    protected val handPalmOffset = 6f
+    protected val handFingertipOffset = 10f
+
+    // Head gaze direction for the prone push-up posture (read-only, shared across frames).
+    protected val pushUpHeadDirection = Vector3(-1f, 0.2f, 0f).normalize()
+
     protected fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
         val nodes = SkeletonFactory.createPushUpSkeleton()
@@ -66,8 +76,8 @@ abstract class BasePushUpPose : BasePose() {
         val shinL = def.shinLength
         val thighL = def.thighLength
 
-        // Target roughly 8 degrees of knee flexion for a visual and anatomically natural, barely-perceptible knee bend
-        val targetFlexionDegrees = 8f
+        // Target a small knee flexion for a visual and anatomically natural, barely-perceptible knee bend
+        val targetFlexionDegrees = PushUpGeometrySolver.TARGET_KNEE_FLEXION_DEGREES
         val limbResult = solveNearStraightLeg(shinL, thighL, targetFlexionDegrees)
         val legTargetLen = limbResult.d
 
@@ -87,17 +97,17 @@ abstract class BasePushUpPose : BasePose() {
         val isKneePivot = metadata.support.pivot == PivotType.KNEES
 
         if (isKneePivot) {
-            val shinPitch = (PI / 4.0).toFloat() // Shins point 45 degrees up
+            val shinPitch = PushUpGeometrySolver.SHIN_PITCH_ANGLE // Shins point 45 degrees up
 
             // 1. Root Anchoring
             ankleF!!.localPosition.set(ankleX, ankleHeightVal, -def.hipWidth)
             ankleF!!.localRotation.set(axisZ, shinPitch)
 
             val footDir = SkeletonMath.rotAround(tempV1.set(1f, -1f, 0f).normalize(), axisZ, -shinPitch, tempV2)
-            heelF!!.localPosition.set(footDir.x * -def.foot.footLength * 0.29f, footDir.y * -def.foot.footLength * 0.29f, footDir.z * -def.foot.footLength * 0.29f)
-            toeF!!.localPosition.set(footDir.x * def.foot.footLength * 0.71f, footDir.y * def.foot.footLength * 0.71f, footDir.z * def.foot.footLength * 0.71f)
-            heelB!!.localPosition.set(footDir.x * -def.foot.footLength * 0.29f, footDir.y * -def.foot.footLength * 0.29f, footDir.z * -def.foot.footLength * 0.29f)
-            toeB!!.localPosition.set(footDir.x * def.foot.footLength * 0.71f, footDir.y * def.foot.footLength * 0.71f, footDir.z * def.foot.footLength * 0.71f)
+            heelF!!.localPosition.set(footDir.x * -def.foot.footLength * def.foot.heelRatio, footDir.y * -def.foot.footLength * def.foot.heelRatio, footDir.z * -def.foot.footLength * def.foot.heelRatio)
+            toeF!!.localPosition.set(footDir.x * def.foot.footLength * def.foot.toeRatio, footDir.y * def.foot.footLength * def.foot.toeRatio, footDir.z * def.foot.footLength * def.foot.toeRatio)
+            heelB!!.localPosition.set(footDir.x * -def.foot.footLength * def.foot.heelRatio, footDir.y * -def.foot.footLength * def.foot.heelRatio, footDir.z * -def.foot.footLength * def.foot.heelRatio)
+            toeB!!.localPosition.set(footDir.x * def.foot.footLength * def.foot.toeRatio, footDir.y * def.foot.footLength * def.foot.toeRatio, footDir.z * def.foot.footLength * def.foot.toeRatio)
 
             // 2. Main Plank (Side F)
             kneeF!!.localPosition.set(-def.shinLength, 0f, 0f)
@@ -122,19 +132,16 @@ abstract class BasePushUpPose : BasePose() {
 
             val worldFootDir = tempV1.set(0f, -1f, 0f)
             val localFootDir = SkeletonMath.rotAround(worldFootDir, axisZ, theta, tempV2)
-            heelF!!.localPosition.set(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
-            toeF!!.localPosition.set(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
-            heelB!!.localPosition.set(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
-            toeB!!.localPosition.set(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
+            heelF!!.localPosition.set(localFootDir.x * -def.foot.footLength * def.foot.heelRatio, localFootDir.y * -def.foot.footLength * def.foot.heelRatio, localFootDir.z * -def.foot.footLength * def.foot.heelRatio)
+            toeF!!.localPosition.set(localFootDir.x * def.foot.footLength * def.foot.toeRatio, localFootDir.y * def.foot.footLength * def.foot.toeRatio, localFootDir.z * def.foot.footLength * def.foot.toeRatio)
+            heelB!!.localPosition.set(localFootDir.x * -def.foot.footLength * def.foot.heelRatio, localFootDir.y * -def.foot.footLength * def.foot.heelRatio, localFootDir.z * -def.foot.footLength * def.foot.heelRatio)
+            toeB!!.localPosition.set(localFootDir.x * def.foot.footLength * def.foot.toeRatio, localFootDir.y * def.foot.footLength * def.foot.toeRatio, localFootDir.z * def.foot.footLength * def.foot.toeRatio)
 
             // Precompute local knee flexion coordinates (F-leg: ankle is the parent, hip is child)
             val kX = -limbResult.x
             val kY = limbResult.y
 
             kneeF!!.localPosition.set(kX, kY, 0f)
-            if (this is WidePushUpPose) {
-                kneeF!!.localRotation.set(axisZ, 0f)
-            }
             hipF!!.localPosition.set(-legTargetLen - kX, -kY, 0f)
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
             buildTorso(pelvis!!, chest!!, def.torsoLength)
@@ -149,8 +156,7 @@ abstract class BasePushUpPose : BasePose() {
             ankleB!!.localPosition.set(legTargetLen - bX, -bY, 0f)
         }
 
-        val headDir = tempV1.set(-1f, 0.2f, 0f).normalize()
-        buildHead(neck!!, head!!, def.neckLength, headDir)
+        buildHead(neck!!, head!!, def.neckLength, pushUpHeadDirection)
 
         val rSize = roots!!.size
         for (i in 0 until rSize) {
@@ -172,10 +178,10 @@ abstract class BasePushUpPose : BasePose() {
         val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, theta, elbowP!!, handP!!, armPIK)
 
         handA!!.localRotation.set(axisZ, theta)
-        palmA!!.localPosition.set(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); knucklesA!!.localPosition.set(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); fingertipsA!!.localPosition.set(handDirA.x * 10f, handDirA.y * 10f, handDirA.z * 10f)
+        palmA!!.localPosition.set(handDirA.x * handPalmOffset, handDirA.y * handPalmOffset, handDirA.z * handPalmOffset); knucklesA!!.localPosition.set(handDirA.x * handPalmOffset, handDirA.y * handPalmOffset, handDirA.z * handPalmOffset); fingertipsA!!.localPosition.set(handDirA.x * handFingertipOffset, handDirA.y * handFingertipOffset, handDirA.z * handFingertipOffset)
 
         handP!!.localRotation.set(axisZ, theta)
-        palmP!!.localPosition.set(handDirP.x * 6f, handDirP.y * 6f, handDirP.z * 6f); knucklesP!!.localPosition.set(handDirP.x * 6f, handDirP.y * 6f, handDirP.z * 6f); fingertipsP!!.localPosition.set(handDirP.x * 10f, handDirP.y * 10f, handDirP.z * 10f)
+        palmP!!.localPosition.set(handDirP.x * handPalmOffset, handDirP.y * handPalmOffset, handDirP.z * handPalmOffset); knucklesP!!.localPosition.set(handDirP.x * handPalmOffset, handDirP.y * handPalmOffset, handDirP.z * handPalmOffset); fingertipsP!!.localPosition.set(handDirP.x * handFingertipOffset, handDirP.y * handFingertipOffset, handDirP.z * handFingertipOffset)
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
