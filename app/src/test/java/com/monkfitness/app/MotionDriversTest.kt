@@ -10,6 +10,83 @@ class MotionDriversTest {
     private val epsilon = 1e-4f
 
     @Test
+    fun testStatelessPureDrivers() {
+        // Test PositiveHalfSine and NegativeHalfSine
+        assertEquals(0f, MotionDrivers.PositiveHalfSine(0f), epsilon)
+        assertEquals(1f, MotionDrivers.PositiveHalfSine(0.25f), epsilon)
+        assertEquals(0f, MotionDrivers.PositiveHalfSine(0.5f), epsilon)
+        assertEquals(0f, MotionDrivers.PositiveHalfSine(0.75f), epsilon)
+
+        assertEquals(0f, MotionDrivers.NegativeHalfSine(0f), epsilon)
+        assertEquals(0f, MotionDrivers.NegativeHalfSine(0.25f), epsilon)
+        assertEquals(0f, MotionDrivers.NegativeHalfSine(0.5f), epsilon)
+        assertEquals(1f, MotionDrivers.NegativeHalfSine(0.75f), epsilon)
+
+        // Symmetry: LeftPhase and RightPhase map to Positive and Negative Half-Sine
+        assertEquals(MotionDrivers.PositiveHalfSine(0.25f), MotionDrivers.LeftPhase(0.25f), epsilon)
+        assertEquals(MotionDrivers.NegativeHalfSine(0.75f), MotionDrivers.RightPhase(0.75f), epsilon)
+
+        // AlternatingLeftRight and AlternatingRightLeft
+        assertEquals(MotionDrivers.PositiveHalfSine(0.25f), MotionDrivers.AlternatingLeftRight(0.25f), epsilon)
+        assertEquals(MotionDrivers.NegativeHalfSine(0.75f), MotionDrivers.AlternatingRightLeft(0.75f), epsilon)
+
+        // FullSine and Cosine
+        assertEquals(0f, MotionDrivers.FullSine(0f), epsilon)
+        assertEquals(1f, MotionDrivers.FullSine(0.25f), epsilon)
+        assertEquals(0f, MotionDrivers.FullSine(0.5f), epsilon)
+        assertEquals(-1f, MotionDrivers.FullSine(0.75f), epsilon)
+
+        assertEquals(1f, MotionDrivers.Cosine(0f), epsilon)
+        assertEquals(0f, MotionDrivers.Cosine(0.25f), epsilon)
+        assertEquals(-1f, MotionDrivers.Cosine(0.5f), epsilon)
+        assertEquals(0f, MotionDrivers.Cosine(0.75f), epsilon)
+
+        // WeightShift
+        assertEquals(0.5f, MotionDrivers.WeightShift(0f), epsilon)
+        assertEquals(1.0f, MotionDrivers.WeightShift(0.25f), epsilon)
+        assertEquals(0.5f, MotionDrivers.WeightShift(0.5f), epsilon)
+        assertEquals(0.0f, MotionDrivers.WeightShift(0.75f), epsilon)
+
+        // ForwardBack
+        assertEquals(1f, MotionDrivers.ForwardBack(0f), epsilon)
+        assertEquals(0f, MotionDrivers.ForwardBack(0.25f), epsilon)
+        assertEquals(-1f, MotionDrivers.ForwardBack(0.5f), epsilon)
+
+        // VerticalLift / PushPhase / PullPhase
+        assertEquals(0f, MotionDrivers.VerticalLift(0f), epsilon)
+        assertEquals(1f, MotionDrivers.VerticalLift(0.5f), epsilon)
+        assertEquals(0f, MotionDrivers.VerticalLift(1f), epsilon)
+
+        assertEquals(0f, MotionDrivers.PushPhase(0f), epsilon)
+        assertEquals(1f, MotionDrivers.PushPhase(0.5f), epsilon)
+
+        assertEquals(1f, MotionDrivers.PullPhase(0f), epsilon)
+        assertEquals(0f, MotionDrivers.PullPhase(0.5f), epsilon)
+
+        // Pulse and DoublePulse
+        assertEquals(0f, MotionDrivers.Pulse(0f), epsilon)
+        assertEquals(1f, MotionDrivers.Pulse(0.5f), epsilon)
+
+        assertEquals(0f, MotionDrivers.DoublePulse(0f), epsilon)
+        assertEquals(0f, MotionDrivers.DoublePulse(0.5f), epsilon)
+        assertEquals(0f, MotionDrivers.DoublePulse(1.0f), epsilon)
+        assertTrue(MotionDrivers.DoublePulse(0.25f) > 0.9f)
+        assertTrue(MotionDrivers.DoublePulse(0.75f) > 0.9f)
+
+        // ParabolicLift
+        assertEquals(0f, MotionDrivers.ParabolicLift(0f), epsilon)
+        assertEquals(1.0f, MotionDrivers.ParabolicLift(0.5f), epsilon)
+        assertEquals(0f, MotionDrivers.ParabolicLift(1f), epsilon)
+
+        // EaseInOut
+        assertEquals(0f, MotionDrivers.EaseInOut(0f), epsilon)
+        assertEquals(0.5f, MotionDrivers.EaseInOut(0.5f), epsilon)
+        assertEquals(1f, MotionDrivers.EaseInOut(1f), epsilon)
+        assertTrue(MotionDrivers.EaseInOut(-0.5f) == 0f)
+        assertTrue(MotionDrivers.EaseInOut(1.5f) == 1f)
+    }
+
+    @Test
     fun testAlternatingMotionDrivers() {
         // Test bounds and midpoint
         val start = MotionDrivers.alternating(0f)

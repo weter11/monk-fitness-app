@@ -11,31 +11,72 @@ import org.junit.Test
  * - SupportMath automatic lever length calculations.
  * - SupportMath support centroid calculations.
  * - SupportMath LeverModel calculations including offsets.
- *
- * Biomechanical Examples documented here:
- * 1. Standard Push-Up:
- *    - pivot = PivotType.FEET
- *    - contacts = setOf(SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND, SupportContact.LEFT_TOES, SupportContact.RIGHT_TOES)
- * 2. Knee Push-Up:
- *    - pivot = PivotType.KNEES
- *    - contacts = setOf(SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND, SupportContact.LEFT_KNEE, SupportContact.RIGHT_KNEE)
- * 3. Decline Push-Up:
- *    - pivot = PivotType.FEET
- *    - contacts = setOf(SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND, SupportContact.LEFT_TOES, SupportContact.RIGHT_TOES)
- *    - supportHeight = benchHeight (e.g. 30f)
- * 4. Plank:
- *    - pivot = PivotType.FEET
- *    - contacts = setOf(SupportContact.LEFT_FOREARM, SupportContact.RIGHT_FOREARM, SupportContact.LEFT_TOES, SupportContact.RIGHT_TOES)
- * 5. Lunge:
- *    - pivot = PivotType.FEET
- *    - contacts = setOf(SupportContact.LEFT_FOOT, SupportContact.RIGHT_FOOT)
- * 6. Bridge:
- *    - pivot = PivotType.FEET (or HIPS)
- *    - contacts = setOf(SupportContact.LEFT_FOOT, SupportContact.RIGHT_FOOT, SupportContact.HIPS)
  */
 class SupportMathTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
+
+    @Test
+    fun testSupportPointEnum() {
+        // Verify target values exist in SupportPoint
+        assertNotNull(SupportPoint.LEFT_FOOT)
+        assertNotNull(SupportPoint.RIGHT_FOOT)
+        assertNotNull(SupportPoint.LEFT_TOES)
+        assertNotNull(SupportPoint.RIGHT_TOES)
+        assertNotNull(SupportPoint.LEFT_KNEE)
+        assertNotNull(SupportPoint.RIGHT_KNEE)
+        assertNotNull(SupportPoint.LEFT_HAND)
+        assertNotNull(SupportPoint.RIGHT_HAND)
+        assertNotNull(SupportPoint.LEFT_ELBOW)
+        assertNotNull(SupportPoint.RIGHT_ELBOW)
+        assertNotNull(SupportPoint.LEFT_FOREARM)
+        assertNotNull(SupportPoint.RIGHT_FOREARM)
+        assertNotNull(SupportPoint.PELVIS)
+        assertNotNull(SupportPoint.BACK)
+        assertNotNull(SupportPoint.HIPS)
+        assertNotNull(SupportPoint.CUSTOM)
+    }
+
+    @Test
+    fun testPivotTypeEnum() {
+        assertNotNull(PivotType.FEET)
+        assertNotNull(PivotType.KNEES)
+        assertNotNull(PivotType.HANDS)
+        assertNotNull(PivotType.HIPS)
+        assertNotNull(PivotType.ELBOWS)
+        assertNotNull(PivotType.PELVIS)
+        assertNotNull(PivotType.CUSTOM)
+    }
+
+    @Test
+    fun testSupportContactDataClass() {
+        val contact = SupportContact(
+            point = SupportPoint.LEFT_HAND,
+            supportsWeight = true,
+            fixedPosition = false,
+            friction = 0.8f,
+            heightOffset = 5f
+        )
+        assertEquals(SupportPoint.LEFT_HAND, contact.point)
+        assertTrue(contact.supportsWeight)
+        assertFalse(contact.fixedPosition)
+        assertEquals(0.8f, contact.friction, 1e-4f)
+        assertEquals(5f, contact.heightOffset, 1e-4f)
+
+        // Test companion objects are non-null and correctly mapped
+        assertEquals(SupportPoint.LEFT_FOOT, SupportContact.LEFT_FOOT.point)
+        assertEquals(SupportPoint.RIGHT_FOOT, SupportContact.RIGHT_FOOT.point)
+        assertEquals(SupportPoint.LEFT_TOES, SupportContact.LEFT_TOES.point)
+        assertEquals(SupportPoint.RIGHT_TOES, SupportContact.RIGHT_TOES.point)
+        assertEquals(SupportPoint.LEFT_KNEE, SupportContact.LEFT_KNEE.point)
+        assertEquals(SupportPoint.RIGHT_KNEE, SupportContact.RIGHT_KNEE.point)
+        assertEquals(SupportPoint.LEFT_HAND, SupportContact.LEFT_HAND.point)
+        assertEquals(SupportPoint.RIGHT_HAND, SupportContact.RIGHT_HAND.point)
+        assertEquals(SupportPoint.LEFT_FOREARM, SupportContact.LEFT_FOREARM.point)
+        assertEquals(SupportPoint.RIGHT_FOREARM, SupportContact.RIGHT_FOREARM.point)
+        assertEquals(SupportPoint.HIPS, SupportContact.HIPS.point)
+        assertEquals(SupportPoint.CUSTOM, SupportContact.CUSTOM.point)
+    }
 
     @Test
     fun testLeverLengthComputation() {

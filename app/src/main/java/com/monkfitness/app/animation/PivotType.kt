@@ -8,6 +8,7 @@ package com.monkfitness.app.animation
  * - HANDS: Handstands
  * - HIPS: Glute bridges
  * - ELBOWS: Planks
+ * - PELVIS: Rigid lever defined at pelvis
  * - CUSTOM: User-defined
  */
 enum class PivotType {
@@ -16,5 +17,6 @@ enum class PivotType {
     HANDS,
     HIPS,
     ELBOWS,
+    PELVIS,
     CUSTOM
 }
