@@ -15,10 +15,10 @@ class KneePushUpPose : BasePushUpPose() {
         support = SupportDefinition(
             pivot = PivotType.KNEES,
             contacts = setOf(
-                SupportContact.LEFT_HAND,
-                SupportContact.RIGHT_HAND,
-                SupportContact.LEFT_KNEE,
-                SupportContact.RIGHT_KNEE
+                SupportContact(SupportPoint.LEFT_HAND),
+                SupportContact(SupportPoint.RIGHT_HAND),
+                SupportContact(SupportPoint.LEFT_KNEE),
+                SupportContact(SupportPoint.RIGHT_KNEE)
             )
         )
     )

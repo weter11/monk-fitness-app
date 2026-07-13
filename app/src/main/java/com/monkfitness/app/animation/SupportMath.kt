@@ -16,6 +16,26 @@ data class PushUpGeometry(
 
 object SupportMath {
 
+    private val jointsForContactMap: Map<SupportPoint, List<Joint>> = SupportPoint.values().associateWith { point ->
+        when (point) {
+            SupportPoint.LEFT_FOOT -> listOf(Joint.ANKLE_B)
+            SupportPoint.RIGHT_FOOT -> listOf(Joint.ANKLE_F)
+            SupportPoint.LEFT_TOES -> listOf(Joint.TOE_B)
+            SupportPoint.RIGHT_TOES -> listOf(Joint.TOE_F)
+            SupportPoint.LEFT_KNEE -> listOf(Joint.KNEE_B)
+            SupportPoint.RIGHT_KNEE -> listOf(Joint.KNEE_F)
+            SupportPoint.LEFT_HAND -> listOf(Joint.HAND_P)
+            SupportPoint.RIGHT_HAND -> listOf(Joint.HAND_A)
+            SupportPoint.LEFT_ELBOW -> listOf(Joint.ELBOW_P)
+            SupportPoint.RIGHT_ELBOW -> listOf(Joint.ELBOW_A)
+            SupportPoint.LEFT_FOREARM -> listOf(Joint.ELBOW_P, Joint.HAND_P)
+            SupportPoint.RIGHT_FOREARM -> listOf(Joint.ELBOW_A, Joint.HAND_A)
+            SupportPoint.HIPS, SupportPoint.PELVIS -> listOf(Joint.PELVIS)
+            SupportPoint.BACK -> listOf(Joint.PELVIS)
+            SupportPoint.CUSTOM -> listOf(Joint.PELVIS)
+        }
+    }
+
     /**
      * Consistently derives the required push-up geometry for any support height,
      * ensuring that changing the pivot height automatically updates all dependent values
@@ -80,7 +100,7 @@ object SupportMath {
         val sum = Vector3(0f, 0f, 0f)
         var count = 0
         for (contact in contacts) {
-            val joints = getJointsForContact(contact)
+            val joints = getJointsForContact(contact.point)
             for (joint in joints) {
                 sum.add(pose.getJoint(joint))
                 count++
@@ -114,7 +134,7 @@ object SupportMath {
                 val right = pose.getJoint(Joint.HAND_A)
                 Vector3((left.x + right.x) / 2f, (left.y + right.y) / 2f, (left.z + right.z) / 2f)
             }
-            PivotType.HIPS -> {
+            PivotType.HIPS, PivotType.PELVIS -> {
                 pose.getJoint(Joint.PELVIS).copy()
             }
             PivotType.ELBOWS -> {
@@ -143,20 +163,7 @@ object SupportMath {
         return LeverModel(len, pivotPos)
     }
 
-    private fun getJointsForContact(contact: SupportContact): List<Joint> {
-        return when (contact) {
-            SupportContact.LEFT_FOOT -> listOf(Joint.ANKLE_B)
-            SupportContact.RIGHT_FOOT -> listOf(Joint.ANKLE_F)
-            SupportContact.LEFT_TOES -> listOf(Joint.TOE_B)
-            SupportContact.RIGHT_TOES -> listOf(Joint.TOE_F)
-            SupportContact.LEFT_KNEE -> listOf(Joint.KNEE_B)
-            SupportContact.RIGHT_KNEE -> listOf(Joint.KNEE_F)
-            SupportContact.LEFT_HAND -> listOf(Joint.HAND_P)
-            SupportContact.RIGHT_HAND -> listOf(Joint.HAND_A)
-            SupportContact.LEFT_FOREARM -> listOf(Joint.ELBOW_P, Joint.HAND_P)
-            SupportContact.RIGHT_FOREARM -> listOf(Joint.ELBOW_A, Joint.HAND_A)
-            SupportContact.HIPS -> listOf(Joint.PELVIS)
-            SupportContact.CUSTOM -> listOf(Joint.PELVIS)
-        }
+    private fun getJointsForContact(point: SupportPoint): List<Joint> {
+        return jointsForContactMap[point] ?: emptyList()
     }
 }

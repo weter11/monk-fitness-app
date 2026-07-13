@@ -30,10 +30,10 @@ class DeclinePushUpPose : BasePushUpPose() {
         support = SupportDefinition(
             pivot = PivotType.FEET,
             contacts = setOf(
-                SupportContact.LEFT_HAND,
-                SupportContact.RIGHT_HAND,
-                SupportContact.LEFT_TOES,
-                SupportContact.RIGHT_TOES
+                SupportContact(SupportPoint.LEFT_HAND),
+                SupportContact(SupportPoint.RIGHT_HAND),
+                SupportContact(SupportPoint.LEFT_TOES),
+                SupportContact(SupportPoint.RIGHT_TOES)
             ),
             supportHeight = boxHeight
         )

@@ -1,26 +1,27 @@
 package com.monkfitness.app.animation
 
 /**
- * SupportContact represents specific body parts that support the body in an exercise.
- * Unlike PivotType, multiple contacts can exist simultaneously.
- * Examples:
- * - Standard Push-Up: LEFT_HAND, RIGHT_HAND, LEFT_TOES, RIGHT_TOES
- * - Knee Push-Up: LEFT_HAND, RIGHT_HAND, LEFT_KNEE, RIGHT_KNEE
- * - Plank: LEFT_FOREARM, RIGHT_FOREARM, LEFT_TOES, RIGHT_TOES
- * - Bridge: LEFT_FOOT, RIGHT_FOOT, HIPS
- * - Side Plank: LEFT_FOREARM, LEFT_FOOT
+ * SupportContact represents one contact with the environment.
  */
-enum class SupportContact {
-    LEFT_FOOT,
-    RIGHT_FOOT,
-    LEFT_TOES,
-    RIGHT_TOES,
-    LEFT_KNEE,
-    RIGHT_KNEE,
-    LEFT_HAND,
-    RIGHT_HAND,
-    LEFT_FOREARM,
-    RIGHT_FOREARM,
-    HIPS,
-    CUSTOM
+data class SupportContact(
+    val point: SupportPoint,
+    val supportsWeight: Boolean = true,
+    val fixedPosition: Boolean = true,
+    val friction: Float = 1.0f,
+    val heightOffset: Float = 0f
+) {
+    companion object {
+        @JvmField val LEFT_FOOT = SupportContact(SupportPoint.LEFT_FOOT)
+        @JvmField val RIGHT_FOOT = SupportContact(SupportPoint.RIGHT_FOOT)
+        @JvmField val LEFT_TOES = SupportContact(SupportPoint.LEFT_TOES)
+        @JvmField val RIGHT_TOES = SupportContact(SupportPoint.RIGHT_TOES)
+        @JvmField val LEFT_KNEE = SupportContact(SupportPoint.LEFT_KNEE)
+        @JvmField val RIGHT_KNEE = SupportContact(SupportPoint.RIGHT_KNEE)
+        @JvmField val LEFT_HAND = SupportContact(SupportPoint.LEFT_HAND)
+        @JvmField val RIGHT_HAND = SupportContact(SupportPoint.RIGHT_HAND)
+        @JvmField val LEFT_FOREARM = SupportContact(SupportPoint.LEFT_FOREARM)
+        @JvmField val RIGHT_FOREARM = SupportContact(SupportPoint.RIGHT_FOREARM)
+        @JvmField val HIPS = SupportContact(SupportPoint.HIPS)
+        @JvmField val CUSTOM = SupportContact(SupportPoint.CUSTOM)
+    }
 }
