@@ -453,7 +453,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _postureSelectedCategory,
         _postureSelectedSubCategory,
         _expandedFamilyIds,
-        availableEquipment
+        availableEquipment,
+        filterLibraryByCategories,
+        disabledExerciseFamilies
     ) { params ->
         val difficultyAdjustments = params[0] as Map<String, Int>
         val debouncedQuery = params[1] as String
@@ -461,8 +463,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val selectedSubCategory = params[3] as ExerciseSubCategory?
         val expandedFamilyIds = params[4] as Set<String>
         val availableEquipment = params[5] as Set<Equipment>
+        val filterByCategories = params[6] as Boolean
+        val disabledFamilies = params[7] as Set<String>
 
-        val exercises = getExerciseLibrary(difficultyAdjustments, availableEquipment)
+        val exercises = getExerciseLibrary(difficultyAdjustments, availableEquipment, filterByCategories, disabledFamilies)
         val searchFilteredExercises = if (debouncedQuery.isBlank()) {
             exercises
         } else {
@@ -562,14 +566,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getExerciseLibrary(
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
-        availableEquipment: Set<Equipment> = this.availableEquipment.value
+        availableEquipment: Set<Equipment> = this.availableEquipment.value,
+        filterByCategories: Boolean = filterLibraryByCategories.value,
+        disabledFamilies: Set<String> = disabledExerciseFamilies.value
     ): List<Exercise> {
         val baseList = workoutGenerator.getExerciseLibrary(availableEquipment)
-        val filteredList = if (filterLibraryByCategories.value) {
-            val disabled = disabledExerciseFamilies.value
+        val filteredList = if (filterByCategories) {
             baseList.filter { exercise ->
                 val families = com.monkfitness.app.data.model.exerciseToFamiliesMap[exercise.id].orEmpty()
-                families.isEmpty() || families.none { it.key in disabled }
+                families.isEmpty() || families.none { it.key in disabledFamilies }
             }
         } else {
             baseList
@@ -581,14 +586,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getPostureExercises(
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
-        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value
+        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value,
+        filterByCategories: Boolean = filterLibraryByCategories.value,
+        disabledFamilies: Set<String> = disabledExerciseFamilies.value
     ): List<Exercise> {
         val baseList = workoutGenerator.getPostureExercises(focusAreas)
-        val filteredList = if (filterLibraryByCategories.value) {
-            val disabled = disabledExerciseFamilies.value
+        val filteredList = if (filterByCategories) {
             baseList.filter { exercise ->
                 val families = com.monkfitness.app.data.model.exerciseToFamiliesMap[exercise.id].orEmpty()
-                families.isEmpty() || families.none { it.key in disabled }
+                families.isEmpty() || families.none { it.key in disabledFamilies }
             }
         } else {
             baseList
