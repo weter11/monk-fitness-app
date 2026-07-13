@@ -15,8 +15,8 @@ class AirSquatPose : PoseBuilder {
         support = SupportDefinition(
             pivot = PivotType.FEET,
             contacts = setOf(
-                SupportContact.LEFT_FOOT,
-                SupportContact.RIGHT_FOOT
+                SupportContact(SupportPoint.LEFT_FOOT),
+                SupportContact(SupportPoint.RIGHT_FOOT)
             )
         )
     )
@@ -58,9 +58,12 @@ class AirSquatPose : PoseBuilder {
         val standH = def.shinLength + def.thighLength + 25f
         val squatH = 65f // Parallel thigh depth
 
-        val pelvisY = lerp(standH, squatH, context.progress)
-        val pelvisX = lerp(0f, -25f, context.progress)
-        val leanAngle = lerp(0f, 0.45f, context.progress) // Torso leans forward
+        // Use stateless EaseInOut driver to smoothly guide squat transitions
+        val tSmooth = MotionDrivers.EaseInOut(context.progress)
+
+        val pelvisY = lerp(standH, squatH, tSmooth)
+        val pelvisX = lerp(0f, -25f, tSmooth)
+        val leanAngle = lerp(0f, 0.45f, tSmooth) // Torso leans forward
 
         pelvis!!.localPosition = Vector3(pelvisX, pelvisY, 0f)
         pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), -leanAngle)
@@ -91,9 +94,9 @@ class AirSquatPose : PoseBuilder {
         heelF!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeF!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
         heelB!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeB!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
 
-        // 2. ARM IK (Counterbalance extension)
-        val handTargetX = lerp(0f, 40f, context.progress)
-        val handTargetY = lerp(pelvisY + def.torsoLength, pelvisY + def.torsoLength - 10f, context.progress)
+        // 2. ARM IK (Counterbalance extension using parabolicLift for secondary lift wave if needed, or smooth transition)
+        val handTargetX = lerp(0f, 40f, tSmooth)
+        val handTargetY = lerp(pelvisY + def.torsoLength, pelvisY + def.torsoLength - 10f, tSmooth)
 
         val armAIK = solveIK(shoulderA!!.worldPosition, Vector3(handTargetX, handTargetY, -def.shoulderWidth * 1.2f), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, armABuffer)
         val armPIK = solveIK(shoulderP!!.worldPosition, Vector3(handTargetX, handTargetY, def.shoulderWidth * 1.2f), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, armPBuffer)

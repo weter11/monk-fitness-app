@@ -40,6 +40,9 @@ class StandardPushUpPose : BasePushUpPose() {
         val limbResult = SkeletonMath.solveNearStraightLimb(shinL, thighL, targetFlexionDegrees, legScratch)
         val legTargetLen = limbResult.d
 
+        // Integrate MotionDrivers stateless push phase primitive
+        val pushActive = MotionDrivers.PushPhase(context.progress)
+
         val solverGeometry = PushUpGeometrySolver.solve(
             definition = def,
             support = metadata.support,

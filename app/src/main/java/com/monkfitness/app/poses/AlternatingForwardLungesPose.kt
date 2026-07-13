@@ -43,10 +43,9 @@ class AlternatingForwardLungesPose : PoseBuilder {
         val def = context.definition
         ensureHierarchy(def)
 
-        // 1. Alternating Branchless Extraction
-        val cycle = context.progress * 2f * PI.toFloat()
-        val lungeR = max(0f, sin(cycle))  // Right leg (Side B) stepping forward
-        val lungeL = max(0f, -sin(cycle)) // Left leg (Side F) stepping forward
+        // 1. Alternating Branchless Extraction (Refactored to use MotionDrivers)
+        val lungeR = MotionDrivers.LeftPhase(context.progress)  // Right leg (Side B) stepping forward
+        val lungeL = MotionDrivers.RightPhase(context.progress) // Left leg (Side F) stepping forward
         val activeDrop = lungeR + lungeL  // 0 when standing, 1 at bottom of either lunge
 
         // 2. Core Mechanics
