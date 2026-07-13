@@ -22,7 +22,7 @@ class JumpSquatPose : BaseSquatPose() {
 
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.2f),
-        durationSeconds = 2.0f, loopMode = LoopMode.LOOP,
+        durationSeconds = 2.5f, loopMode = LoopMode.LOOP,
         // LINEAR preserves the internal ballistic sine wave without double-easing the physics clock.
         motionCurve = MotionCurve.LINEAR,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
