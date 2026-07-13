@@ -16,6 +16,15 @@ class MilitaryPushUpPose : BasePushUpPose() {
         durationSeconds = 2.5f,
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.EASE_IN_OUT,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(
+                SupportContact(SupportPoint.LEFT_HAND),
+                SupportContact(SupportPoint.RIGHT_HAND),
+                SupportContact(SupportPoint.LEFT_TOES),
+                SupportContact(SupportPoint.RIGHT_TOES)
+            )
+        )
     )
 }
