@@ -25,5 +25,12 @@ data class PoseMetadata(
     val breathInFraction: Float = 0.40f,
     val breathHoldFraction: Float = 0.12f,
     val breathOutFraction: Float = 0.40f,
-    val support: SupportDefinition = SupportDefinition(PivotType.FEET, emptySet())
+    val support: SupportDefinition = SupportDefinition(PivotType.FEET, emptySet()),
+    val name: String = "",
+    val pivotType: PivotType = PivotType.FEET,
+    val supportContacts: Set<SupportContact> = emptySet(),
+    val exerciseFamily: String = "",
+    val defaultGrip: String = "",
+    val motionType: String = "",
+    val bodyOrientation: String = ""
 )
