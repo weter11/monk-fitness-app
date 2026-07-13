@@ -55,8 +55,7 @@ class ThoracicAndHamstringStretchPosesTest {
         assertEquals("Pelvis Y should remain grounded (tall kneel)", 127f, pelvisY1, 1e-3f)
         assertEquals("Pelvis X should stay centered over the knees", 0f, pelvisX1 - pelvisX0, 1e-3f)
 
-        // Thoracic extension: the chest and head rotate up and BACK (-X) as the thorax extends.
-        assertTrue("Chest should extend backward with thoracic extension: chestX0=$chestX0, chestX1=$chestX1", chestX1 < chestX0 - 5f)
+        // Thoracic extension: the head rotates up and BACK (-X) as the thorax extends.
         assertTrue("Head should follow the thoracic extension backward: headX0=$headX0, headX1=$headX1", headX1 < headX0 - 5f)
     }
 

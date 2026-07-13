@@ -42,9 +42,9 @@ class QuadrupedThoracicRotationsPose : BaseThoracicPose() {
         pelvis!!.localRotation.set(axisZ, spinePitch)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        // Thoracic rotation about the spine (chest-local +Y). Negative twist lifts the
-        // active (-Z) shoulder up toward the sky; positive tucks it down/under.
-        val twist = lerp(0.35f, -1.35f, progress)
+        // Thoracic rotation about the spine (chest-local +Y). Negative twist tucks the
+        // active (-Z) shoulder down/under; positive lifts it up toward the sky.
+        val twist = lerp(-1.35f, 0.35f, progress)
         chest!!.localRotation.set(axisY, twist)
 
         buildHead(neck!!, head!!, def.neckLength, headDir)

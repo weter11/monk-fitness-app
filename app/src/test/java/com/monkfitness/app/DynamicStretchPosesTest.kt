@@ -59,6 +59,10 @@ class DynamicStretchPosesTest {
         assertNotNull(result0)
         val elbowAX0 = result0.getJoint(Joint.ELBOW_A).x
         val elbowAY0 = result0.getJoint(Joint.ELBOW_A).y
+        val shoulderAX0 = result0.getJoint(Joint.SHOULDER_A).x
+        val shoulderAY0 = result0.getJoint(Joint.SHOULDER_A).y
+        val handAX0 = result0.getJoint(Joint.HAND_A).x
+        val handAY0 = result0.getJoint(Joint.HAND_A).y
 
         val result1 = pose.build(context1)
         assertNotNull(result1)
