@@ -70,7 +70,7 @@ abstract class BaseSquatPose : BasePose() {
         pelvis!!.localRotation.set(axisZ, -leanAngle)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        neck!!.localPosition.set(0f, def.neckLength, 0f); head!!.localPosition.set(0f, 18f, 0f)
+        buildHead(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
         shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
@@ -84,8 +84,8 @@ abstract class BaseSquatPose : BasePose() {
         val legBIK = bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, tempV3.set(1f, 0f, 0.2f), def.legIKConstraint, leanAngle, kneeB!!, ankleB!!, legBBuffer)
 
         ankleF!!.localRotation.set(axisZ, leanAngle); ankleB!!.localRotation.set(axisZ, leanAngle)
-        heelF!!.localPosition.set(-def.foot.footLength * 0.29f, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * 0.71f, 0f, 0f)
-        heelB!!.localPosition.set(-def.foot.footLength * 0.29f, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * 0.71f, 0f, 0f)
+        heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        heelB!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
 
         // Arm counterbalance reach
         val handTargetX = SkeletonMath.lerp(0f, armLeanEnd * 40f, tProgress)
