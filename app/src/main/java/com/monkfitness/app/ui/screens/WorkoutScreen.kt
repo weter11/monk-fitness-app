@@ -373,13 +373,13 @@ fun ExerciseSession(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp),
+                .height(250.dp),
             contentAlignment = Alignment.Center
         ) {
             ExerciseHeroMedia(
                 exercise = exercise,
                 modifier = Modifier.fillMaxSize(),
-                height = 200.dp
+                height = 250.dp
             )
             IconButton(
                 onClick = onInfo,
