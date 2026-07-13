@@ -100,8 +100,7 @@ abstract class BaseHipFlexorPose : BasePose() {
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
         buildHead(neck!!, head!!, def.neckLength, uprightHeadDir)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
-        shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
-        shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
+        buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
     }
 
     /** Front leg IK via engine bakeIkLimb; returns the IK result (knee joint world pos) for the arms. */

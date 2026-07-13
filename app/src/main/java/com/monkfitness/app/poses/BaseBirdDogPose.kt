@@ -101,8 +101,7 @@ abstract class BaseBirdDogPose : BasePose() {
         buildHead(neck!!, head!!, def.neckLength, birdDogHeadDirection)
 
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
-        shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
-        shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
+        buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
     }
