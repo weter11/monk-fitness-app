@@ -1,7 +1,6 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.animation.SkeletonMath.solveIK
 import com.monkfitness.app.animation.SkeletonMath.lerp
 import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
@@ -67,10 +66,10 @@ class PikePushUpPose : BasePushUpPose() {
 
         val worldFootDir = tempV1.set(0f, -1f, 0f)
         val localFootDir = rotAround(worldFootDir, axisZ, -legPitch, tempV2)
-        heelF!!.localPosition.set(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
-        toeF!!.localPosition.set(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
-        heelB!!.localPosition.set(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
-        toeB!!.localPosition.set(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
+        heelF!!.localPosition.set(localFootDir.x * -def.foot.footLength * def.foot.heelRatio, localFootDir.y * -def.foot.footLength * def.foot.heelRatio, localFootDir.z * -def.foot.footLength * def.foot.heelRatio)
+        toeF!!.localPosition.set(localFootDir.x * def.foot.footLength * def.foot.toeRatio, localFootDir.y * def.foot.footLength * def.foot.toeRatio, localFootDir.z * def.foot.footLength * def.foot.toeRatio)
+        heelB!!.localPosition.set(localFootDir.x * -def.foot.footLength * def.foot.heelRatio, localFootDir.y * -def.foot.footLength * def.foot.heelRatio, localFootDir.z * -def.foot.footLength * def.foot.heelRatio)
+        toeB!!.localPosition.set(localFootDir.x * def.foot.footLength * def.foot.toeRatio, localFootDir.y * def.foot.footLength * def.foot.toeRatio, localFootDir.z * def.foot.footLength * def.foot.toeRatio)
 
         kneeF!!.localPosition.set(-def.shinLength, 0f, 0f)
         hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
@@ -88,8 +87,7 @@ class PikePushUpPose : BasePushUpPose() {
         ankleB!!.localPosition.set(def.shinLength, 0f, 0f)
 
         val headDir = tempV1.set(-1f, -0.6f, 0f).normalize()
-        neck!!.localPosition.set(headDir.x * def.neckLength, headDir.y * def.neckLength, headDir.z * def.neckLength)
-        head!!.localPosition.set(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
+        buildHead(neck!!, head!!, def.neckLength, headDir)
 
         val rSize = roots!!.size
         for (i in 0 until rSize) {
@@ -101,31 +99,28 @@ class PikePushUpPose : BasePushUpPose() {
         val shoulderPW = rotAround(tempV1.set(0f, 0f, def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV3).add(chestW)
 
         val handAnchorX = -25f
-        val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * 1.2f)
-        val targetHandP = targetHandPBuffer.set(handAnchorX, 0f, def.shoulderWidth * 1.2f)
+        val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * gripWidthMultiplier)
+        val targetHandP = targetHandPBuffer.set(handAnchorX, 0f, def.shoulderWidth * gripWidthMultiplier)
 
-        // Pole vectors (1, 1, ±2) perfectly orient the shoulder joints outwards
-        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleABuffer.set(1f, 1f, -2f), def.armIKConstraint, armAIK)
-        val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, polePBuffer.set(1f, 1f, 2f), def.armIKConstraint, armPIK)
-
+        // Pole vectors (1, 1, ±2) perfectly orient the shoulder joints outwards.
+        // bakeIkLimb owns the IK-solve + local-space bake orchestration used by the whole family.
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
-        rotAround(tempV1.set(armA.joint.x - shoulderAW.x, armA.joint.y - shoulderAW.y, armA.joint.z - shoulderAW.z), axisZ, -torsoGlobalPitch, elbowA!!.localPosition)
-        rotAround(tempV1.set(armA.end.x - armA.joint.x, armA.end.y - armA.joint.y, armA.end.z - armA.joint.z), axisZ, -torsoGlobalPitch, handA!!.localPosition)
+        bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleABuffer.set(1f, 1f, -2f), def.armIKConstraint, -torsoGlobalPitch, elbowA!!, handA!!, armAIK)
 
         shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
-        rotAround(tempV1.set(armP.joint.x - shoulderPW.x, armP.joint.y - shoulderPW.y, armP.joint.z - shoulderPW.z), axisZ, -torsoGlobalPitch, elbowP!!.localPosition)
-        rotAround(tempV1.set(armP.end.x - armP.joint.x, armP.end.y - armP.joint.y, armP.end.z - armP.joint.z), axisZ, -torsoGlobalPitch, handP!!.localPosition)
+        bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, polePBuffer.set(1f, 1f, 2f), def.armIKConstraint, -torsoGlobalPitch, elbowP!!, handP!!, armPIK)
 
         handA!!.localRotation.set(axisZ, -torsoGlobalPitch)
         val handDirA = tempV1.set(-1f, 0f, -0.1f).normalize()
-        palmA!!.localPosition.set(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); knucklesA!!.localPosition.set(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); fingertipsA!!.localPosition.set(handDirA.x * 10f, handDirA.y * 10f, handDirA.z * 10f)
+        palmA!!.localPosition.set(handDirA.x * handPalmOffset, handDirA.y * handPalmOffset, handDirA.z * handPalmOffset); knucklesA!!.localPosition.set(handDirA.x * handPalmOffset, handDirA.y * handPalmOffset, handDirA.z * handPalmOffset); fingertipsA!!.localPosition.set(handDirA.x * handFingertipOffset, handDirA.y * handFingertipOffset, handDirA.z * handFingertipOffset)
 
         handP!!.localRotation.set(axisZ, -torsoGlobalPitch)
         val handDirP = tempV1.set(-1f, 0f, 0.1f).normalize()
-        palmP!!.localPosition.set(handDirP.x * 6f, handDirP.y * 6f, handDirP.z * 6f); knucklesP!!.localPosition.set(handDirP.x * 6f, handDirP.y * 6f, handDirP.z * 6f); fingertipsP!!.localPosition.set(handDirP.x * 10f, handDirP.y * 10f, handDirP.z * 10f)
+        palmP!!.localPosition.set(handDirP.x * handPalmOffset, handDirP.y * handPalmOffset, handDirP.z * handPalmOffset); knucklesP!!.localPosition.set(handDirP.x * handPalmOffset, handDirP.y * handPalmOffset, handDirP.z * handPalmOffset); fingertipsP!!.localPosition.set(handDirP.x * handFingertipOffset, handDirP.y * handFingertipOffset, handDirP.z * handFingertipOffset)
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
+        jointsBuffer.maxIkClampAmount = maxOf(armAIK.clampAmount, armPIK.clampAmount)
         return jointsBuffer
     }
 }
