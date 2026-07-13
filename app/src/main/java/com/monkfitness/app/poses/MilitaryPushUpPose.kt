@@ -19,13 +19,26 @@ class MilitaryPushUpPose : BasePushUpPose() {
         val def = context.definition
         ensureHierarchy(def)
 
-        // Depth stops at 38f so the forearm and bicep have geometric room to fold back
-        val height = lerp(60f, 38f, context.progress)
-        val totalLegLen = def.shinLength + def.thighLength
-        val ankleHeight = 25f
-        val drivingHeight = (height - ankleHeight).coerceAtLeast(0f)
-        val theta = asin((drivingHeight / totalLegLen).coerceIn(-1f, 1f))
-        val ankleX = 60f + (totalLegLen * cos(theta))
+        val shinL = def.shinLength
+        val thighL = def.thighLength
+
+        // Target roughly 8 degrees of knee flexion for a visual and anatomically natural, barely-perceptible knee bend
+        val targetFlexionDegrees = 8f
+        val limbResult = SkeletonMath.solveNearStraightLimb(shinL, thighL, targetFlexionDegrees, legScratch)
+        val legTargetLen = limbResult.d
+
+        val solverGeometry = PushUpGeometrySolver.solve(
+            definition = def,
+            support = SupportDefinition(PivotType.FEET, emptySet(), 0f),
+            gripWidthMultiplier = 1.0f,
+            progress = context.progress,
+            result = geometryResult
+        )
+
+        val theta = solverGeometry.theta
+        val ankleX = solverGeometry.ankleX
+        val handAnchorX = solverGeometry.handAnchorX
+        val ankleHeight = solverGeometry.ankleHeight
 
         ankleF!!.localPosition.set(ankleX, ankleHeight, -def.hipWidth)
         ankleF!!.localRotation.set(axisZ, -theta)
@@ -37,16 +50,26 @@ class MilitaryPushUpPose : BasePushUpPose() {
         heelB!!.localPosition.set(localFootDir.x * -def.foot.footLength * 0.29f, localFootDir.y * -def.foot.footLength * 0.29f, localFootDir.z * -def.foot.footLength * 0.29f)
         toeB!!.localPosition.set(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
 
-        kneeF!!.localPosition.set(-def.shinLength, 0f, 0f)
-        hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
+        // Precompute local knee flexion coordinates
+        val kX = -limbResult.x
+        val kY = limbResult.y
+
+        kneeF!!.localPosition.set(kX, kY, 0f)
+        hipF!!.localPosition.set(-legTargetLen - kX, -kY, 0f)
         pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
         chest!!.localPosition.set(-def.torsoLength, 0f, 0f)
+
         val headDir = tempV1.set(-1f, 0.2f, 0f).normalize()
         neck!!.localPosition.set(headDir.x * def.neckLength, headDir.y * def.neckLength, headDir.z * def.neckLength)
         head!!.localPosition.set(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
+
         hipB!!.localPosition.set(0f, 0f, def.hipWidth)
-        kneeB!!.localPosition.set(def.thighLength, 0f, 0f)
-        ankleB!!.localPosition.set(def.shinLength, 0f, 0f)
+        val bXResult = SkeletonMath.solveNearStraightLimb(thighL, shinL, targetFlexionDegrees, legScratch)
+        val bX = bXResult.x
+        val bY = bXResult.y
+
+        kneeB!!.localPosition.set(bX, bY, 0f)
+        ankleB!!.localPosition.set(legTargetLen - bX, -bY, 0f)
 
         val rSize = roots!!.size
         for (i in 0 until rSize) {
@@ -57,14 +80,11 @@ class MilitaryPushUpPose : BasePushUpPose() {
         val shoulderAW = rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV2).add(chestW)
         val shoulderPW = rotAround(tempV1.set(0f, 0f, def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV3).add(chestW)
 
-        val maxDrivingHeight = (60f - ankleHeight).coerceAtLeast(0f)
-        val maxTheta = asin((maxDrivingHeight / totalLegLen).coerceIn(-1f, 1f))
-
         // Push hand anchor slightly forward (+5f) to force triceps engagement
-        val handAnchorX = 60f - def.torsoLength * cos(maxTheta) + 5f
+        val finalHandAnchorX = handAnchorX + 5f
 
-        val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * 1.0f)
-        val targetHandP = targetHandPBuffer.set(handAnchorX, 0f, def.shoulderWidth * 1.0f)
+        val targetHandA = targetHandABuffer.set(finalHandAnchorX, 0f, -def.shoulderWidth * 1.0f)
+        val targetHandP = targetHandPBuffer.set(finalHandAnchorX, 0f, def.shoulderWidth * 1.0f)
 
         val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleABuffer.set(1f, 0.2f, -0.1f), def.armIKConstraint, armAIK)
         val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, polePBuffer.set(1f, 0.2f, 0.1f), def.armIKConstraint, armPIK)
