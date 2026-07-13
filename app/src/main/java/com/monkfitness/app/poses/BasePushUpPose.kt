@@ -29,18 +29,34 @@ abstract class BasePushUpPose : BasePose() {
 
     protected fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
-        ankleF = SkeletonNode(Joint.ANKLE_F)
-        heelF = ankleF!!.addChild(SkeletonNode(Joint.HEEL_F)); toeF = ankleF!!.addChild(SkeletonNode(Joint.TOE_F))
-        kneeF = ankleF!!.addChild(SkeletonNode(Joint.KNEE_F)); hipF = kneeF!!.addChild(SkeletonNode(Joint.HIP_F))
-        pelvis = hipF!!.addChild(SkeletonNode(Joint.PELVIS)); chest = pelvis!!.addChild(SkeletonNode(Joint.CHEST))
-        neck = chest!!.addChild(SkeletonNode(Joint.NECK_END)); head = neck!!.addChild(SkeletonNode(Joint.HEAD_POS))
-
-        shoulderA = chest!!.addChild(SkeletonNode(Joint.SHOULDER_A)); elbowA = shoulderA!!.addChild(SkeletonNode(Joint.ELBOW_A)); handA = elbowA!!.addChild(SkeletonNode(Joint.HAND_A)); palmA = handA!!.addChild(SkeletonNode(Joint.PALM_A)); knucklesA = palmA!!.addChild(SkeletonNode(Joint.KNUCKLES_A)); fingertipsA = knucklesA!!.addChild(SkeletonNode(Joint.FINGERTIPS_A))
-        shoulderP = chest!!.addChild(SkeletonNode(Joint.SHOULDER_P)); elbowP = shoulderP!!.addChild(SkeletonNode(Joint.ELBOW_P)); handP = elbowP!!.addChild(SkeletonNode(Joint.HAND_P)); palmP = handP!!.addChild(SkeletonNode(Joint.PALM_P)); knucklesP = palmP!!.addChild(SkeletonNode(Joint.KNUCKLES_P)); fingertipsP = knucklesP!!.addChild(SkeletonNode(Joint.FINGERTIPS_P))
-
-        hipB = pelvis!!.addChild(SkeletonNode(Joint.HIP_B)); kneeB = hipB!!.addChild(SkeletonNode(Joint.KNEE_B)); ankleB = kneeB!!.addChild(SkeletonNode(Joint.ANKLE_B))
-        heelB = ankleB!!.addChild(SkeletonNode(Joint.HEEL_B)); toeB = ankleB!!.addChild(SkeletonNode(Joint.TOE_B))
-        roots = listOf(ankleF!!)
+        val nodes = SkeletonFactory.createPushUpSkeleton()
+        roots = nodes.roots
+        ankleF = nodes.ankleF
+        heelF = nodes.heelF
+        toeF = nodes.toeF
+        kneeF = nodes.kneeF
+        hipF = nodes.hipF
+        pelvis = nodes.pelvis
+        chest = nodes.chest
+        neck = nodes.neck
+        head = nodes.head
+        shoulderA = nodes.shoulderA
+        elbowA = nodes.elbowA
+        handA = nodes.handA
+        palmA = nodes.palmA
+        knucklesA = nodes.knucklesA
+        fingertipsA = nodes.fingertipsA
+        shoulderP = nodes.shoulderP
+        elbowP = nodes.elbowP
+        handP = nodes.handP
+        palmP = nodes.palmP
+        knucklesP = nodes.knucklesP
+        fingertipsP = nodes.fingertipsP
+        hipB = nodes.hipB
+        kneeB = nodes.kneeB
+        ankleB = nodes.ankleB
+        heelB = nodes.heelB
+        toeB = nodes.toeB
     }
 
     override fun build(context: PoseContext): SkeletonPose {
