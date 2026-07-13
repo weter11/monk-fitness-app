@@ -38,14 +38,26 @@ class ThoracicAndHamstringStretchPosesTest {
 
         val result0 = pose.build(context0)
         assertNotNull(result0)
+        val pelvisY0 = result0.getJoint(Joint.PELVIS).y
         val pelvisX0 = result0.getJoint(Joint.PELVIS).x
+        val chestX0 = result0.getJoint(Joint.CHEST).x
+        val headX0 = result0.getJoint(Joint.HEAD_POS).x
 
         val result1 = pose.build(context1)
         assertNotNull(result1)
+        val pelvisY1 = result1.getJoint(Joint.PELVIS).y
         val pelvisX1 = result1.getJoint(Joint.PELVIS).x
+        val chestX1 = result1.getJoint(Joint.CHEST).x
+        val headX1 = result1.getJoint(Joint.HEAD_POS).x
 
-        // Pelvis leans forward to counterbalance backward thoracic extension (towards +X)
-        assertTrue("Pelvis should shift forward to counterbalance back-bend: pelvisX0=$pelvisX0, pelvisX1=$pelvisX1", pelvisX1 > pelvisX0)
+        // Pelvis stays grounded and level in tall kneeling (no forward shift, no floating).
+        assertEquals("Pelvis Y should remain grounded (tall kneel)", 127f, pelvisY0, 1e-3f)
+        assertEquals("Pelvis Y should remain grounded (tall kneel)", 127f, pelvisY1, 1e-3f)
+        assertEquals("Pelvis X should stay centered over the knees", 0f, pelvisX1 - pelvisX0, 1e-3f)
+
+        // Thoracic extension: the chest and head rotate up and BACK (-X) as the thorax extends.
+        assertTrue("Chest should extend backward with thoracic extension: chestX0=$chestX0, chestX1=$chestX1", chestX1 < chestX0 - 5f)
+        assertTrue("Head should follow the thoracic extension backward: headX0=$headX0, headX1=$headX1", headX1 < headX0 - 5f)
     }
 
     @Test
