@@ -72,6 +72,31 @@ abstract class BasePose : PoseBuilder {
         return SkeletonMath.solveNearStraightLimb(shinLen, thighLen, targetFlexionDegrees, legScratch)
     }
 
+    protected fun bakeIkLimb(
+        rootWorldPos: Vector3,
+        targetWorldPos: Vector3,
+        length1: Float,
+        length2: Float,
+        pole: Vector3,
+        constraint: IKConstraint,
+        localRotationAngle: Float,
+        middleNode: SkeletonNode,
+        endNode: SkeletonNode,
+        ikBuffer: SkeletonMath.IKResult
+    ): SkeletonMath.IKResult {
+        val ikResult = SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, pole, constraint, ikBuffer)
+
+        // Local translation of the middle node relative to root (rotated backward)
+        tempV1.set(ikResult.joint).subtract(rootWorldPos)
+        SkeletonMath.rotAround(tempV1, axisZ, localRotationAngle, middleNode.localPosition)
+
+        // Local translation of the end node relative to middle (rotated backward)
+        tempV1.set(ikResult.end).subtract(ikResult.joint)
+        SkeletonMath.rotAround(tempV1, axisZ, localRotationAngle, endNode.localPosition)
+
+        return ikResult
+    }
+
     // Common Motion helpers (internally utilizing stateless MotionDrivers)
     protected fun phase(progress: Float): Float = progress
     protected fun downMotion(progress: Float): Float = MotionDrivers.PushPhase(progress)

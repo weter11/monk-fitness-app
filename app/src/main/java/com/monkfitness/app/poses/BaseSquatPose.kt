@@ -80,13 +80,8 @@ abstract class BaseSquatPose : BasePose() {
         val targetAnkleF = tempV1.set(0f, 25f, -def.hipWidth * 1.5f)
         val targetAnkleB = tempV2.set(0f, 25f, def.hipWidth * 1.5f)
 
-        val legFIK = solveLegIK(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, tempV3.set(1f, 0f, -0.2f), def.legIKConstraint, legFBuffer)
-        val legBIK = solveLegIK(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, tempV3.set(1f, 0f, 0.2f), def.legIKConstraint, legBBuffer)
-
-        SkeletonMath.rotAround(tempV3.set(legFIK.joint.x - hipF!!.worldPosition.x, legFIK.joint.y - hipF!!.worldPosition.y, legFIK.joint.z - hipF!!.worldPosition.z), axisZ, leanAngle, kneeF!!.localPosition)
-        SkeletonMath.rotAround(tempV3.set(legFIK.end.x - legFIK.joint.x, legFIK.end.y - legFIK.joint.y, legFIK.end.z - legFIK.joint.z), axisZ, leanAngle, ankleF!!.localPosition)
-        SkeletonMath.rotAround(tempV3.set(legBIK.joint.x - hipB!!.worldPosition.x, legBIK.joint.y - hipB!!.worldPosition.y, legBIK.joint.z - hipB!!.worldPosition.z), axisZ, leanAngle, kneeB!!.localPosition)
-        SkeletonMath.rotAround(tempV3.set(legBIK.end.x - legBIK.joint.x, legBIK.end.y - legBIK.joint.y, legBIK.end.z - legBIK.joint.z), axisZ, leanAngle, ankleB!!.localPosition)
+        val legFIK = bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, tempV3.set(1f, 0f, -0.2f), def.legIKConstraint, leanAngle, kneeF!!, ankleF!!, legFBuffer)
+        val legBIK = bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, tempV3.set(1f, 0f, 0.2f), def.legIKConstraint, leanAngle, kneeB!!, ankleB!!, legBBuffer)
 
         ankleF!!.localRotation.set(axisZ, leanAngle); ankleB!!.localRotation.set(axisZ, leanAngle)
         heelF!!.localPosition.set(-def.foot.footLength * 0.29f, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * 0.71f, 0f, 0f)
@@ -96,13 +91,8 @@ abstract class BaseSquatPose : BasePose() {
         val handTargetX = SkeletonMath.lerp(0f, armLeanEnd * 40f, tProgress)
         val handTargetY = SkeletonMath.lerp(pelvisY + def.torsoLength, pelvisY + def.torsoLength - 10f, tProgress)
 
-        val armAIK = solveArmIK(shoulderA!!.worldPosition, tempV1.set(handTargetX, handTargetY, -def.shoulderWidth * 1.2f), def.upperArmLength, def.forearmLength, tempV3.set(0f, -1f, -1f), def.armIKConstraint, armABuffer)
-        val armPIK = solveArmIK(shoulderP!!.worldPosition, tempV2.set(handTargetX, handTargetY, def.shoulderWidth * 1.2f), def.upperArmLength, def.forearmLength, tempV3.set(0f, -1f, 1f), def.armIKConstraint, armPBuffer)
-
-        SkeletonMath.rotAround(tempV3.set(armAIK.joint.x - shoulderA!!.worldPosition.x, armAIK.joint.y - shoulderA!!.worldPosition.y, armAIK.joint.z - shoulderA!!.worldPosition.z), axisZ, leanAngle, elbowA!!.localPosition)
-        SkeletonMath.rotAround(tempV3.set(armAIK.end.x - armAIK.joint.x, armAIK.end.y - armAIK.joint.y, armAIK.end.z - armAIK.joint.z), axisZ, leanAngle, handA!!.localPosition)
-        SkeletonMath.rotAround(tempV3.set(armPIK.joint.x - shoulderP!!.worldPosition.x, armPIK.joint.y - shoulderP!!.worldPosition.y, armPIK.joint.z - shoulderP!!.worldPosition.z), axisZ, leanAngle, elbowP!!.localPosition)
-        SkeletonMath.rotAround(tempV3.set(armPIK.end.x - armPIK.joint.x, armPIK.end.y - armPIK.joint.y, armPIK.end.z - armPIK.joint.z), axisZ, leanAngle, handP!!.localPosition)
+        val armAIK = bakeIkLimb(shoulderA!!.worldPosition, tempV1.set(handTargetX, handTargetY, -def.shoulderWidth * 1.2f), def.upperArmLength, def.forearmLength, tempV3.set(0f, -1f, -1f), def.armIKConstraint, leanAngle, elbowA!!, handA!!, armABuffer)
+        val armPIK = bakeIkLimb(shoulderP!!.worldPosition, tempV2.set(handTargetX, handTargetY, def.shoulderWidth * 1.2f), def.upperArmLength, def.forearmLength, tempV3.set(0f, -1f, 1f), def.armIKConstraint, leanAngle, elbowP!!, handP!!, armPBuffer)
 
         handA!!.localRotation.set(axisZ, leanAngle); handP!!.localRotation.set(axisZ, leanAngle)
         palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
