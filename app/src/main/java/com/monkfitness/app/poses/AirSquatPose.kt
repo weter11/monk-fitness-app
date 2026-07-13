@@ -10,7 +10,7 @@ class AirSquatPose : BaseSquatPose() {
     override val armLeanEnd = 1.0f // 1.0 * 40f = 40f reach
 
     override val metadata = PoseMetadata(
-        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
+        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.2f),
         durationSeconds = 2.5f, loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.EASE_IN_OUT,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),

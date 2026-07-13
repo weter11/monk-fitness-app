@@ -13,10 +13,17 @@ class SquatPose : BaseSquatPose() {
         camera = CameraDefinition(
             defaultYaw = 1.19f,
             defaultPitch = 0.22f,
-            defaultZoom = 1.3f
+            defaultZoom = 1.2f
         ),
         durationSeconds = 3.0f,
         loopMode = LoopMode.LOOP,
-        motionCurve = MotionCurve.SLOW_DOWN_FAST_UP
+        motionCurve = MotionCurve.SLOW_DOWN_FAST_UP,
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(
+                SupportContact(SupportPoint.LEFT_FOOT),
+                SupportContact(SupportPoint.RIGHT_FOOT)
+            )
+        )
     )
 }
