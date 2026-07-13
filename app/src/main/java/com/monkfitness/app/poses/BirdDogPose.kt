@@ -1,106 +1,80 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.animation.SkeletonMath.solveIK
-import com.monkfitness.app.animation.SkeletonMath.lerp
 
-class BirdDogPose : PoseBuilder {
+/**
+ * Single-diagonal Bird Dog rep. One diagonal (arm + opposite leg) extends and
+ * lowers on a sine loop; the active diagonal is chosen by [PoseContext.side].
+ *
+ * Migrated onto [BaseBirdDogPose] so it shares the family's tabletop anchoring,
+ * IK baking and extremity geometry instead of reimplementing them.
+ */
+class BirdDogPose : BaseBirdDogPose() {
+
     override val metadata = PoseMetadata(
-        camera = CameraDefinition(defaultYaw = 1.19f,
-        defaultPitch = 0.22f,
-        defaultZoom = 1.3f),
+        camera = birdDogCamera,
         durationSeconds = 3.0f,
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.SINE
     )
 
-    private val jointsBuffer = SkeletonPose()
-    private val armAIK = SkeletonMath.IKResult()
-    private val armPIK = SkeletonMath.IKResult()
-    private val legFIK = SkeletonMath.IKResult()
-    private val legBIK = SkeletonMath.IKResult()
-    private val tempV1 = Vector3()
-    private val tempV2 = Vector3()
-    private val tempV3 = Vector3()
-
     override fun build(context: PoseContext): SkeletonPose {
-        val progress = context.progress
-        val side = context.side
-        val definition = context.definition
+        val def = context.definition
+        ensureHierarchy(def)
+        anchorTabletop(def)
 
-        // Quadruped base
-        val pelvis = tempV1.set(50f, 45f, 0f)
-        val chest = tempV2.set(-definition.torsoLength, 0f, 0f).add(pelvis)
+        val baseHandX = basePelvisX + def.torsoLength
+        val baseHandY = 0f
+        val baseAnkleX = basePelvisX - def.shinLength
+        val baseAnkleY = 15f
 
-        val hipF = Vector3(0f, 0f, -definition.hipWidth).add(pelvis)
-        val hipB = Vector3(0f, 0f, definition.hipWidth).add(pelvis)
+        val extHandX = baseHandX + 140f
+        val extHandY = basePelvisY
+        val extAnkleX = basePelvisX - 190f
+        val extAnkleY = basePelvisY
 
-        val shoulderA = Vector3(0f, 0f, -definition.shoulderWidth).add(chest) // Right
-        val shoulderP = Vector3(0f, 0f, definition.shoulderWidth).add(chest) // Left
+        val ext = context.progress
+        val rightSide = context.side == Side.RIGHT
 
-        val ankleHeight = definition.foot.ankleHeight
-        // Target positions for "neutral" quadruped
-        val baseHandR = Vector3(0f, -45f, 0f).add(shoulderA)
-        val baseHandL = Vector3(0f, -45f, 0f).add(shoulderP)
-        val baseKneeR = Vector3(0f, -45f, 0f).add(hipF)
-        val baseKneeL = Vector3(0f, -45f, 0f).add(hipB)
+        // RIGHT side -> left arm (A) + right leg (B) extend; LEFT side -> right arm (P) + left leg (F).
+        val armExtA = if (rightSide) ext else 0f
+        val armExtP = if (rightSide) 0f else ext
+        val legExtF = if (rightSide) 0f else ext
+        val legExtB = if (rightSide) ext else 0f
 
-        val totalArmLen = definition.upperArmLength + definition.forearmLength
-        val totalLegLen = definition.thighLength + definition.shinLength
+        targetA.set(
+            SkeletonMath.lerp(baseHandX, extHandX, armExtA),
+            SkeletonMath.lerp(baseHandY, extHandY, armExtA),
+            -def.shoulderWidth
+        )
+        poleA.set(-1f, 0f, -0.5f)
+        bakeIkLimb(shoulderA!!.worldPosition, targetA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, inverseTorsoPitch, elbowA!!, handA!!, armABuffer)
 
-        // Extended positions
-        val extHand = if (side == Side.RIGHT) {
-            Vector3(-totalArmLen, 10f, 0f).add(shoulderP) // Left arm extends
-        } else {
-            Vector3(-totalArmLen, 10f, 0f).add(shoulderA) // Right arm extends
-        }
+        targetP.set(
+            SkeletonMath.lerp(baseHandX, extHandX, armExtP),
+            SkeletonMath.lerp(baseHandY, extHandY, armExtP),
+            def.shoulderWidth
+        )
+        poleP.set(-1f, 0f, 0.5f)
+        bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, inverseTorsoPitch, elbowP!!, handP!!, armPBuffer)
 
-        val extKnee = if (side == Side.RIGHT) {
-            Vector3(totalLegLen, 10f, 0f).add(hipF) // Right leg extends
-        } else {
-            Vector3(totalLegLen, 10f, 0f).add(hipB) // Left leg extends
-        }
+        targetF.set(
+            SkeletonMath.lerp(baseAnkleX, extAnkleX, legExtF),
+            SkeletonMath.lerp(baseAnkleY, extAnkleY, legExtF),
+            -def.hipWidth
+        )
+        poleF.set(0f, -1f, -0.5f)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, inverseTorsoPitch, kneeF!!, ankleF!!, legFBuffer)
 
-        // Lerp based on progress
-        val handR = if (side == Side.LEFT) lerp(baseHandR, extHand, progress, tempV3).copy() else baseHandR
-        val handL = if (side == Side.RIGHT) lerp(baseHandL, extHand, progress, tempV3).copy() else baseHandL
+        targetB.set(
+            SkeletonMath.lerp(baseAnkleX, extAnkleX, legExtB),
+            SkeletonMath.lerp(baseAnkleY, extAnkleY, legExtB),
+            def.hipWidth
+        )
+        poleB.set(1f, -1f, 0.5f)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, inverseTorsoPitch, kneeB!!, ankleB!!, legBBuffer)
 
-        val kneeR = if (side == Side.RIGHT) lerp(baseKneeR, extKnee, progress, tempV3).copy() else baseKneeR
-        val kneeL = if (side == Side.LEFT) lerp(baseKneeL, extKnee, progress, tempV3).copy() else baseKneeL
-
-        // Toe/Ankle positions
-        val toeF = Vector3(10f, -10f + ankleHeight, 0f).add(kneeR)
-        val toeB = Vector3(10f, -10f + ankleHeight, 0f).add(kneeL)
-
-        val armA = solveIK(shoulderA, handR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint, armAIK)
-        val armP = solveIK(shoulderP, handL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint, armPIK)
-
-        val legF = solveIK(hipF, toeF, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f), IKConstraint.LegConstraint, legFIK)
-        val legB = solveIK(hipB, toeB, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f), IKConstraint.LegConstraint, legBIK)
-
-        val headDir = tempV3.set(-1f, 0.1f, 0f).normalize().copy()
-        val neckEnd = Vector3(headDir.x, headDir.y, headDir.z).multiply(definition.neckLength).add(chest)
-        val headPos = headDir.multiply(definition.neckLength + 18f).add(chest)
-
-        jointsBuffer.setJoint(Joint.PELVIS, pelvis)
-        jointsBuffer.setJoint(Joint.HIP_F, hipF)
-        jointsBuffer.setJoint(Joint.HIP_B, hipB)
-        jointsBuffer.setJoint(Joint.KNEE_F, legF.joint)
-        jointsBuffer.setJoint(Joint.ANKLE_F, legF.end)
-        jointsBuffer.setJoint(Joint.TOE_F, toeF)
-        jointsBuffer.setJoint(Joint.KNEE_B, legB.joint)
-        jointsBuffer.setJoint(Joint.ANKLE_B, legB.end)
-        jointsBuffer.setJoint(Joint.TOE_B, toeB)
-        jointsBuffer.setJoint(Joint.CHEST, chest)
-        jointsBuffer.setJoint(Joint.SHOULDER_A, shoulderA)
-        jointsBuffer.setJoint(Joint.SHOULDER_P, shoulderP)
-        jointsBuffer.setJoint(Joint.ELBOW_A, armA.joint)
-        jointsBuffer.setJoint(Joint.HAND_A, armA.end)
-        jointsBuffer.setJoint(Joint.ELBOW_P, armP.joint)
-        jointsBuffer.setJoint(Joint.HAND_P, armP.end)
-        jointsBuffer.setJoint(Joint.NECK_END, neckEnd)
-        jointsBuffer.setJoint(Joint.HEAD_POS, headPos)
-
-        return jointsBuffer
+        applyBirdDogExtremities(def)
+        return finalizeBirdDogPose()
     }
 }
