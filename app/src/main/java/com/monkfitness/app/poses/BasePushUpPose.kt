@@ -29,18 +29,34 @@ abstract class BasePushUpPose : BasePose() {
 
     protected fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
-        ankleF = SkeletonNode(Joint.ANKLE_F)
-        heelF = ankleF!!.addChild(SkeletonNode(Joint.HEEL_F)); toeF = ankleF!!.addChild(SkeletonNode(Joint.TOE_F))
-        kneeF = ankleF!!.addChild(SkeletonNode(Joint.KNEE_F)); hipF = kneeF!!.addChild(SkeletonNode(Joint.HIP_F))
-        pelvis = hipF!!.addChild(SkeletonNode(Joint.PELVIS)); chest = pelvis!!.addChild(SkeletonNode(Joint.CHEST))
-        neck = chest!!.addChild(SkeletonNode(Joint.NECK_END)); head = neck!!.addChild(SkeletonNode(Joint.HEAD_POS))
-
-        shoulderA = chest!!.addChild(SkeletonNode(Joint.SHOULDER_A)); elbowA = shoulderA!!.addChild(SkeletonNode(Joint.ELBOW_A)); handA = elbowA!!.addChild(SkeletonNode(Joint.HAND_A)); palmA = handA!!.addChild(SkeletonNode(Joint.PALM_A)); knucklesA = palmA!!.addChild(SkeletonNode(Joint.KNUCKLES_A)); fingertipsA = knucklesA!!.addChild(SkeletonNode(Joint.FINGERTIPS_A))
-        shoulderP = chest!!.addChild(SkeletonNode(Joint.SHOULDER_P)); elbowP = shoulderP!!.addChild(SkeletonNode(Joint.ELBOW_P)); handP = elbowP!!.addChild(SkeletonNode(Joint.HAND_P)); palmP = handP!!.addChild(SkeletonNode(Joint.PALM_P)); knucklesP = palmP!!.addChild(SkeletonNode(Joint.KNUCKLES_P)); fingertipsP = knucklesP!!.addChild(SkeletonNode(Joint.FINGERTIPS_P))
-
-        hipB = pelvis!!.addChild(SkeletonNode(Joint.HIP_B)); kneeB = hipB!!.addChild(SkeletonNode(Joint.KNEE_B)); ankleB = kneeB!!.addChild(SkeletonNode(Joint.ANKLE_B))
-        heelB = ankleB!!.addChild(SkeletonNode(Joint.HEEL_B)); toeB = ankleB!!.addChild(SkeletonNode(Joint.TOE_B))
-        roots = listOf(ankleF!!)
+        val nodes = SkeletonFactory.createPushUpSkeleton()
+        roots = nodes.roots
+        ankleF = nodes.ankleF
+        heelF = nodes.heelF
+        toeF = nodes.toeF
+        kneeF = nodes.kneeF
+        hipF = nodes.hipF
+        pelvis = nodes.pelvis
+        chest = nodes.chest
+        neck = nodes.neck
+        head = nodes.head
+        shoulderA = nodes.shoulderA
+        elbowA = nodes.elbowA
+        handA = nodes.handA
+        palmA = nodes.palmA
+        knucklesA = nodes.knucklesA
+        fingertipsA = nodes.fingertipsA
+        shoulderP = nodes.shoulderP
+        elbowP = nodes.elbowP
+        handP = nodes.handP
+        palmP = nodes.palmP
+        knucklesP = nodes.knucklesP
+        fingertipsP = nodes.fingertipsP
+        hipB = nodes.hipB
+        kneeB = nodes.kneeB
+        ankleB = nodes.ankleB
+        heelB = nodes.heelB
+        toeB = nodes.toeB
     }
 
     override fun build(context: PoseContext): SkeletonPose {
@@ -149,16 +165,11 @@ abstract class BasePushUpPose : BasePose() {
         val targetHandA = targetHandABuffer.set(finalHandAnchorX, 0f, -def.shoulderWidth * gripWidthMultiplier)
         val targetHandP = targetHandPBuffer.set(finalHandAnchorX, 0f, def.shoulderWidth * gripWidthMultiplier)
 
-        val armA = solveArmIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, armAIK)
-        val armP = solveArmIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, armPIK)
-
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
-        SkeletonMath.rotAround(tempV1.set(armA.joint.x - shoulderAW.x, armA.joint.y - shoulderAW.y, armA.joint.z - shoulderAW.z), axisZ, theta, elbowA!!.localPosition)
-        SkeletonMath.rotAround(tempV1.set(armA.end.x - armA.joint.x, armA.end.y - armA.joint.y, armA.end.z - armA.joint.z), axisZ, theta, handA!!.localPosition)
+        val armA = bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, theta, elbowA!!, handA!!, armAIK)
 
         shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
-        SkeletonMath.rotAround(tempV1.set(armP.joint.x - shoulderPW.x, armP.joint.y - shoulderPW.y, armP.joint.z - shoulderPW.z), axisZ, theta, elbowP!!.localPosition)
-        SkeletonMath.rotAround(tempV1.set(armP.end.x - armP.joint.x, armP.end.y - armP.joint.y, armP.end.z - armP.joint.z), axisZ, theta, handP!!.localPosition)
+        val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, theta, elbowP!!, handP!!, armPIK)
 
         handA!!.localRotation.set(axisZ, theta)
         palmA!!.localPosition.set(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); knucklesA!!.localPosition.set(handDirA.x * 6f, handDirA.y * 6f, handDirA.z * 6f); fingertipsA!!.localPosition.set(handDirA.x * 10f, handDirA.y * 10f, handDirA.z * 10f)

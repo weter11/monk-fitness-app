@@ -7,7 +7,8 @@ data class GroundDefinition(
 
 data class EnvironmentDefinition(
     val ground: GroundDefinition = GroundDefinition(),
-    val props: List<EnvironmentProp> = emptyList()
+    val props: List<EnvironmentProp> = emptyList(),
+    val anchors: List<EnvironmentAnchor> = emptyList()
 )
 
 sealed interface EnvironmentProp

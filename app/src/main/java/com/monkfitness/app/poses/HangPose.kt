@@ -6,7 +6,7 @@ import com.monkfitness.app.animation.SkeletonMath.lerp
 import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
-class HangPose : PoseBuilder {
+class HangPose : BasePose() {
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.6f),
         durationSeconds = 4.0f, loopMode = LoopMode.LOOP,
@@ -25,7 +25,6 @@ class HangPose : PoseBuilder {
     private var hipF: SkeletonNode? = null; private var kneeF: SkeletonNode? = null; private var ankleF: SkeletonNode? = null; private var heelF: SkeletonNode? = null; private var toeF: SkeletonNode? = null
     private var hipB: SkeletonNode? = null; private var kneeB: SkeletonNode? = null; private var ankleB: SkeletonNode? = null; private var heelB: SkeletonNode? = null; private var toeB: SkeletonNode? = null
 
-    private val jointsBuffer = SkeletonPose()
     private val legFBuffer = SkeletonMath.IKResult(); private val legBBuffer = SkeletonMath.IKResult()
     private val armABuffer = SkeletonMath.IKResult(); private val armPBuffer = SkeletonMath.IKResult()
 
@@ -80,13 +79,8 @@ class HangPose : PoseBuilder {
         val poleArmA = Vector3(0f, -1f, -1f)
         val poleArmP = Vector3(0f, -1f, 1f)
 
-        val armA = solveIK(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, poleArmA, def.armIKConstraint, armABuffer)
-        val armP = solveIK(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, poleArmP, def.armIKConstraint, armPBuffer)
-
-        rotAround(Vector3(armA.joint.x - shoulderA!!.worldPosition.x, armA.joint.y - shoulderA!!.worldPosition.y, armA.joint.z - shoulderA!!.worldPosition.z), Vector3(0f, 0f, 1f), -torsoPitch, elbowA!!.localPosition)
-        rotAround(Vector3(armA.end.x - armA.joint.x, armA.end.y - armA.joint.y, armA.end.z - armA.joint.z), Vector3(0f, 0f, 1f), -torsoPitch, handA!!.localPosition)
-        rotAround(Vector3(armP.joint.x - shoulderP!!.worldPosition.x, armP.joint.y - shoulderP!!.worldPosition.y, armP.joint.z - shoulderP!!.worldPosition.z), Vector3(0f, 0f, 1f), -torsoPitch, elbowP!!.localPosition)
-        rotAround(Vector3(armP.end.x - armP.joint.x, armP.end.y - armP.joint.y, armP.end.z - armP.joint.z), Vector3(0f, 0f, 1f), -torsoPitch, handP!!.localPosition)
+        val armA = bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, poleArmA, def.armIKConstraint, -torsoPitch, elbowA!!, handA!!, armABuffer)
+        val armP = bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, poleArmP, def.armIKConstraint, -torsoPitch, elbowP!!, handP!!, armPBuffer)
 
         handA!!.localRotation.set(Vector3(0f, 0f, 1f), -torsoPitch - 1.57f); handP!!.localRotation.set(Vector3(0f, 0f, 1f), -torsoPitch - 1.57f)
         palmA!!.localPosition = Vector3(6f, 0f, 0f); knucklesA!!.localPosition = Vector3(6f, 0f, 0f); fingertipsA!!.localPosition = Vector3(10f, 0f, 0f)
@@ -98,13 +92,8 @@ class HangPose : PoseBuilder {
         val targetAnkleF = Vector3(pelvisX, ankleY, -def.hipWidth)
         val targetAnkleB = Vector3(pelvisX, ankleY, def.hipWidth)
 
-        val legFIK = solveIK(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, 0f), def.legIKConstraint, legFBuffer)
-        val legBIK = solveIK(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0f), def.legIKConstraint, legBBuffer)
-
-        rotAround(Vector3(legFIK.joint.x - hipF!!.worldPosition.x, legFIK.joint.y - hipF!!.worldPosition.y, legFIK.joint.z - hipF!!.worldPosition.z), Vector3(0f, 0f, 1f), -torsoPitch, kneeF!!.localPosition)
-        rotAround(Vector3(legFIK.end.x - legFIK.joint.x, legFIK.end.y - legFIK.joint.y, legFIK.end.z - legFIK.joint.z), Vector3(0f, 0f, 1f), -torsoPitch, ankleF!!.localPosition)
-        rotAround(Vector3(legBIK.joint.x - hipB!!.worldPosition.x, legBIK.joint.y - hipB!!.worldPosition.y, legBIK.joint.z - hipB!!.worldPosition.z), Vector3(0f, 0f, 1f), -torsoPitch, kneeB!!.localPosition)
-        rotAround(Vector3(legBIK.end.x - legBIK.joint.x, legBIK.end.y - legBIK.joint.y, legBIK.end.z - legBIK.joint.z), Vector3(0f, 0f, 1f), -torsoPitch, ankleB!!.localPosition)
+        val legFIK = bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, 0f), def.legIKConstraint, -torsoPitch, kneeF!!, ankleF!!, legFBuffer)
+        val legBIK = bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0f), def.legIKConstraint, -torsoPitch, kneeB!!, ankleB!!, legBBuffer)
 
         // Point toes straight to floor
         val plantarFlexion = 1.0f

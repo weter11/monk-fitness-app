@@ -38,6 +38,15 @@ object PushUpGeometrySolver {
     const val BASE_ANKLE_HEIGHT = 25f
     const val BASE_KNEE_HEIGHT = 15f
 
+    // Anatomical and legacy compatibility constants
+    const val KNEE_OFFSET_TOP_RATIO = 0.4018f     // Ratio of thigh length to derive the knee-pivot pelvis offset at top of rep
+    const val KNEE_OFFSET_BOTTOM_RATIO = 0.3125f  // Ratio of thigh length to derive the knee-pivot pelvis offset at bottom of rep
+    const val LEG_OFFSET_TOP_RATIO = 1f / 6f      // Ratio of leg target length to derive the feet-pivot pelvis offset at top of rep
+    const val LEG_OFFSET_BOTTOM_RATIO = 1f / 14f  // Ratio of leg target length to derive the feet-pivot pelvis offset at bottom of rep
+
+    const val TARGET_KNEE_FLEXION_DEGREES = 8f    // Small knee flexion to prevent joint lockout and satisfy leg constraints
+    const val SHIN_PITCH_ANGLE = (PI / 4.0).toFloat() // 45 degrees upward angle of shins to prevent ground foot penetration in knee-pivot
+
     fun solve(
         definition: SkeletonDefinition,
         support: SupportDefinition,
@@ -50,21 +59,21 @@ object PushUpGeometrySolver {
 
         val shinL = definition.shinLength
         val thighL = definition.thighLength
-        val targetFlexionDegrees = 8f
+        val targetFlexionDegrees = TARGET_KNEE_FLEXION_DEGREES
         val phi = targetFlexionDegrees * PI.toFloat() / 180f
         val legTargetLen = sqrt(shinL * shinL + thighL * thighL + 2f * shinL * thighL * cos(phi))
 
         // Derive pelvis offsets from leg proportions to eliminate magic numbers
         val pelvisOffsetTop = if (pivot == PivotType.KNEES) {
-            thighL * 0.4018f // Derived knee height offset
+            thighL * KNEE_OFFSET_TOP_RATIO
         } else {
-            legTargetLen / 6f // Derived: 1/6 leg length offset
+            legTargetLen * LEG_OFFSET_TOP_RATIO
         }
 
         val pelvisOffsetBottom = if (pivot == PivotType.KNEES) {
-            thighL * 0.3125f // Derived knee height offset
+            thighL * KNEE_OFFSET_BOTTOM_RATIO
         } else {
-            legTargetLen / 14f // Derived: 1/14 leg length offset
+            legTargetLen * LEG_OFFSET_BOTTOM_RATIO
         }
 
         // Linearly interpolate pelvis offset based on progress
@@ -90,7 +99,7 @@ object PushUpGeometrySolver {
             kneeHeight = BASE_KNEE_HEIGHT + supportElevation
             kneeX = PELVIS_ANCHOR_X + thighL * cos(theta)
 
-            val shinPitch = (PI / 4.0).toFloat()
+            val shinPitch = SHIN_PITCH_ANGLE
             ankleHeight = kneeHeight + shinL * sin(shinPitch)
             ankleX = kneeX + shinL * cos(shinPitch)
         } else {

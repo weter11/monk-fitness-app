@@ -7,13 +7,6 @@ import kotlin.math.*
  * Exposes methods to calculate effective support centroid, body lever length,
  * and the LeverModel without exercise-specific branching.
  */
-data class PushUpGeometry(
-    val pelvisHeight: Float,
-    val theta: Float,
-    val ankleX: Float,
-    val handAnchorX: Float
-)
-
 object SupportMath {
 
     private val jointsForContactMap: Map<SupportPoint, List<Joint>> = SupportPoint.values().associateWith { point ->
@@ -34,38 +27,6 @@ object SupportMath {
             SupportPoint.BACK -> listOf(Joint.PELVIS)
             SupportPoint.CUSTOM -> listOf(Joint.PELVIS)
         }
-    }
-
-    /**
-     * Consistently derives the required push-up geometry for any support height,
-     * ensuring that changing the pivot height automatically updates all dependent values
-     * (pelvis height, leg angle theta, ankle position, and hand anchor position)
-     * to keep the shoulder heights and arm distances physically reachable.
-     */
-    fun derivePushUpGeometry(
-        progress: Float,
-        supportHeight: Float,
-        legTargetLen: Float,
-        torsoLength: Float,
-        fixedPelvisX: Float = 60f,
-        pelvisOffsetTop: Float = 35f,
-        pelvisOffsetBottom: Float = 0f
-    ): PushUpGeometry {
-        val ankleHeight = 25f + supportHeight
-
-        // Pelvis height is derived as a relative offset above ankle height
-        val relativeHeight = pelvisOffsetTop + (pelvisOffsetBottom - pelvisOffsetTop) * progress
-        val pelvisHeight = ankleHeight + relativeHeight
-
-        val theta = asin((relativeHeight / legTargetLen).coerceIn(-1f, 1f))
-
-        // At the top of the rep (progress = 0.0), relative pelvis height is pelvisOffsetTop
-        val thetaTop = asin((pelvisOffsetTop / legTargetLen).coerceIn(-1f, 1f))
-
-        val handAnchorX = fixedPelvisX - torsoLength * cos(thetaTop)
-        val ankleX = fixedPelvisX + legTargetLen * cos(theta)
-
-        return PushUpGeometry(pelvisHeight, theta, ankleX, handAnchorX)
     }
 
     /**
