@@ -124,6 +124,42 @@ object SupportMath {
         return LeverModel(len, pivotPos)
     }
 
+    /**
+     * Resolves an anchor by its ID from the environment definition.
+     */
+    fun resolveAnchor(environment: EnvironmentDefinition, anchorId: String): EnvironmentAnchor? {
+        val anchors = environment.anchors
+        for (i in 0 until anchors.size) {
+            val anchor = anchors[i]
+            if (anchor.id == anchorId) {
+                return anchor
+            }
+        }
+        return null
+    }
+
+    /**
+     * Resolves the world position of an anchor by its ID, with a fallback Vector3.
+     */
+    fun resolveAnchorPosition(environment: EnvironmentDefinition, anchorId: String, fallback: Vector3): Vector3 {
+        val anchor = resolveAnchor(environment, anchorId)
+        return anchor?.worldPosition ?: fallback
+    }
+
+    /**
+     * Resolves an anchor by its type from the environment definition.
+     */
+    fun resolveAnchorByType(environment: EnvironmentDefinition, type: EnvironmentAnchorType): EnvironmentAnchor? {
+        val anchors = environment.anchors
+        for (i in 0 until anchors.size) {
+            val anchor = anchors[i]
+            if (anchor.type == type) {
+                return anchor
+            }
+        }
+        return null
+    }
+
     private fun getJointsForContact(point: SupportPoint): List<Joint> {
         return jointsForContactMap[point] ?: emptyList()
     }

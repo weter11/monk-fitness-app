@@ -5,6 +5,9 @@ data class GroundDefinition(
     val level: Float = 0f
 )
 
+/**
+ * EnvironmentDefinition describes the setup of the exercise environment.
+ */
 data class EnvironmentDefinition(
     val ground: GroundDefinition = GroundDefinition(),
     val props: List<EnvironmentProp> = emptyList(),

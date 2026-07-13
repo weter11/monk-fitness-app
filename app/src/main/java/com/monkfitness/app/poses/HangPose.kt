@@ -14,9 +14,26 @@ class HangPose : BasePose() {
         motionCurve = MotionCurve.LINEAR,
         environment = EnvironmentDefinition(
             ground = GroundDefinition(visible = true, level = 0f),
-            props = listOf(BoxProp(center = Vector3(0f, 500f, 15f), width = 200f, height = 6f, depth = 6f))
+            props = listOf(BoxProp(center = Vector3(0f, 500f, 15f), width = 200f, height = 6f, depth = 6f)),
+            anchors = listOf(
+                EnvironmentAnchor(
+                    id = "pullup_bar",
+                    type = EnvironmentAnchorType.BAR,
+                    worldPosition = Vector3(0f, 500f, 15f)
+                )
+            )
+        ),
+        support = SupportDefinition(
+            pivot = PivotType.HANDS,
+            contacts = setOf(
+                SupportContact(point = SupportPoint.LEFT_HAND, anchorId = "pullup_bar"),
+                SupportContact(point = SupportPoint.RIGHT_HAND, anchorId = "pullup_bar")
+            )
         )
     )
+
+    private var cachedBarPos: Vector3? = null
+    private var barY = 500f
 
     private var roots: List<SkeletonNode>? = null
     private var pelvis: SkeletonNode? = null; private var chest: SkeletonNode? = null; private var neck: SkeletonNode? = null; private var head: SkeletonNode? = null
@@ -30,6 +47,8 @@ class HangPose : BasePose() {
 
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
+        cachedBarPos = SupportMath.resolveAnchorPosition(metadata.environment, "pullup_bar", Vector3(0f, 500f, 15f))
+        barY = cachedBarPos!!.y
         pelvis = SkeletonNode(Joint.PELVIS); chest = pelvis!!.addChild(SkeletonNode(Joint.CHEST))
         neck = chest!!.addChild(SkeletonNode(Joint.NECK_END)); head = neck!!.addChild(SkeletonNode(Joint.HEAD_POS))
         shoulderA = chest!!.addChild(SkeletonNode(Joint.SHOULDER_A)); elbowA = shoulderA!!.addChild(SkeletonNode(Joint.ELBOW_A)); handA = elbowA!!.addChild(SkeletonNode(Joint.HAND_A)); palmA = handA!!.addChild(SkeletonNode(Joint.PALM_A)); knucklesA = palmA!!.addChild(SkeletonNode(Joint.KNUCKLES_A)); fingertipsA = knucklesA!!.addChild(SkeletonNode(Joint.FINGERTIPS_A))
@@ -69,7 +88,6 @@ class HangPose : BasePose() {
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
         // Standard Overhand Grip
-        val barY = 500f
         val gripWidth = def.shoulderWidth * 1.5f
 
         val targetHandA = Vector3(pelvisX, barY, -gripWidth)
