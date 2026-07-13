@@ -19,17 +19,26 @@ class WidePushUpPose : BasePushUpPose() {
         val def = context.definition
         ensureHierarchy(def)
 
-        // Wide drops closer to the floor
-        val height = lerp(60f, 18f, context.progress)
         val shinL = def.shinLength
         val thighL = def.thighLength
-        val totalLegLen = shinL + thighL
-        val legTargetLen = totalLegLen * 0.97f // Slightly flexed to satisfy IK constraint and avoid locked-out leg issues
 
-        val ankleHeight = 25f
-        val drivingHeight = (height - ankleHeight).coerceAtLeast(0f)
-        val theta = asin((drivingHeight / legTargetLen).coerceIn(-1f, 1f))
-        val ankleX = 60f + (legTargetLen * cos(theta))
+        // Target roughly 8 degrees of knee flexion for a visual and anatomically natural, barely-perceptible knee bend
+        val targetFlexionDegrees = 8f
+        val limbResult = SkeletonMath.solveNearStraightLimb(shinL, thighL, targetFlexionDegrees, legScratch)
+        val legTargetLen = limbResult.d
+
+        val solverGeometry = PushUpGeometrySolver.solve(
+            definition = def,
+            support = SupportDefinition(PivotType.FEET, emptySet(), 0f),
+            gripWidthMultiplier = 1.9f,
+            progress = context.progress,
+            result = geometryResult
+        )
+
+        val theta = solverGeometry.theta
+        val ankleX = solverGeometry.ankleX
+        val handAnchorX = solverGeometry.handAnchorX
+        val ankleHeight = solverGeometry.ankleHeight
 
         ankleF!!.localPosition.set(ankleX, ankleHeight, -def.hipWidth)
         ankleF!!.localRotation.set(axisZ, -theta)
@@ -42,10 +51,11 @@ class WidePushUpPose : BasePushUpPose() {
         toeB!!.localPosition.set(localFootDir.x * def.foot.footLength * 0.71f, localFootDir.y * def.foot.footLength * 0.71f, localFootDir.z * def.foot.footLength * 0.71f)
 
         // Precompute local knee flexion coordinates to satisfy the leg IK constraint of 98% maximum extension
-        val kX = (thighL * thighL - shinL * shinL - legTargetLen * legTargetLen) / (2f * legTargetLen)
-        val kY = -sqrt((shinL * shinL - kX * kX).coerceAtLeast(0f))
+        val kX = -limbResult.x
+        val kY = limbResult.y
 
         kneeF!!.localPosition.set(kX, kY, 0f)
+        kneeF!!.localRotation.set(axisZ, 0f)
         hipF!!.localPosition.set(-legTargetLen - kX, -kY, 0f)
         pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
         chest!!.localPosition.set(-def.torsoLength, 0f, 0f)
@@ -55,11 +65,10 @@ class WidePushUpPose : BasePushUpPose() {
         head!!.localPosition.set(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
 
         hipB!!.localPosition.set(0f, 0f, def.hipWidth)
-        // B-leg: hip is the parent, ankle is the child — this is a DIFFERENT triangle
-        // traversal than the F-leg's (ankle-parent, hip-child), so it needs its own
-        // derivation, not a relabeling of the F-leg's kX/kY.
-        val bX = (thighL * thighL - shinL * shinL + legTargetLen * legTargetLen) / (2f * legTargetLen)
-        val bY = -sqrt((thighL * thighL - bX * bX).coerceAtLeast(0f))
+        // B-leg: hip is the parent, ankle is the child
+        val bXResult = SkeletonMath.solveNearStraightLimb(thighL, shinL, targetFlexionDegrees, legScratch)
+        val bX = bXResult.x
+        val bY = bXResult.y
 
         kneeB!!.localPosition.set(bX, bY, 0f)
         ankleB!!.localPosition.set(legTargetLen - bX, -bY, 0f)
@@ -72,10 +81,6 @@ class WidePushUpPose : BasePushUpPose() {
         val chestW = chest!!.worldPosition
         val shoulderAW = rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV2).add(chestW)
         val shoulderPW = rotAround(tempV1.set(0f, 0f, def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV3).add(chestW)
-
-        val maxDrivingHeight = (60f - ankleHeight).coerceAtLeast(0f)
-        val maxTheta = asin((maxDrivingHeight / legTargetLen).coerceIn(-1f, 1f))
-        val handAnchorX = 60f - def.torsoLength * cos(maxTheta)
 
         val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * 1.9f)
         val targetHandP = targetHandPBuffer.set(handAnchorX, 0f, def.shoulderWidth * 1.9f)

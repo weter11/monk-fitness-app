@@ -19,21 +19,18 @@ class StandardPushUpPose : BasePushUpPose() {
         val limbResult = SkeletonMath.solveNearStraightLimb(shinL, thighL, targetFlexionDegrees, legScratch)
         val legTargetLen = limbResult.d
 
-        val geometry = SupportMath.derivePushUpGeometry(
+        val solverGeometry = PushUpGeometrySolver.solve(
+            definition = def,
+            support = SupportDefinition(PivotType.FEET, emptySet(), 0f),
+            gripWidthMultiplier = 1.5f,
             progress = context.progress,
-            supportHeight = 0f,
-            legTargetLen = legTargetLen,
-            torsoLength = def.torsoLength,
-            pelvisOffsetTop = 35f,
-            pelvisOffsetBottom = 15f
+            result = geometryResult
         )
 
-        val height = geometry.pelvisHeight
-        val theta = geometry.theta
-        val ankleX = geometry.ankleX
-        val handAnchorX = geometry.handAnchorX
-
-        val ankleHeight = 25f
+        val theta = solverGeometry.theta
+        val ankleX = solverGeometry.ankleX
+        val handAnchorX = solverGeometry.handAnchorX
+        val ankleHeight = solverGeometry.ankleHeight
 
         ankleF!!.localPosition.set(ankleX, ankleHeight, -def.hipWidth)
         ankleF!!.localRotation.set(axisZ, -theta)
@@ -59,9 +56,7 @@ class StandardPushUpPose : BasePushUpPose() {
         head!!.localPosition.set(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
 
         hipB!!.localPosition.set(0f, 0f, def.hipWidth)
-        // B-leg: hip is the parent, ankle is the child — this is a DIFFERENT triangle
-        // traversal than the F-leg's (ankle-parent, hip-child), so it needs its own
-        // derivation, not a relabeling of the F-leg's kX/kY.
+        // B-leg: hip is the parent, ankle is the child
         val bXResult = SkeletonMath.solveNearStraightLimb(thighL, shinL, targetFlexionDegrees, legScratch)
         val bX = bXResult.x
         val bY = bXResult.y

@@ -27,23 +27,22 @@ class KneePushUpPose : BasePushUpPose() {
         val def = context.definition
         ensureHierarchy(def)
 
-        val height = lerp(60f, 50f, context.progress)
-        val kneeHeight = 15f
+        val solverGeometry = PushUpGeometrySolver.solve(
+            definition = def,
+            support = metadata.support,
+            gripWidthMultiplier = 1.8f,
+            progress = context.progress,
+            result = geometryResult
+        )
 
-        // Verified numerically: The thigh-to-torso segment (rigidBodyLen) is built as one perfectly
-        // rigid straight offset with exactly 0.0f units of straight-line deviation, meaning the
-        // main plank renders dead straight. The shin is pitched at a fixed 45 degrees upward.
-        val rigidBodyLen = def.thighLength + def.torsoLength
-        val drivingHeight = (height - kneeHeight).coerceAtLeast(0f)
-        val theta = asin((drivingHeight / rigidBodyLen).coerceIn(-1f, 1f))
+        val theta = solverGeometry.theta
+        val ankleX = solverGeometry.ankleX
+        val handAnchorX = solverGeometry.handAnchorX
+        val ankleY = solverGeometry.ankleHeight
 
-        // kneeX is defined relative to the pelvis at 60f (constant), aligning torso and arm coordinates perfectly with standard pushups
-        val kneeX = 60f + (def.thighLength * cos(theta))
-        val shinPitch = (Math.PI / 4.0).toFloat() // Shins point 45 degrees up
+        val shinPitch = (PI / 4.0).toFloat() // Shins point 45 degrees up
 
         // 1. Root Anchoring
-        val ankleX = kneeX + def.shinLength * cos(shinPitch)
-        val ankleY = kneeHeight + def.shinLength * sin(shinPitch)
         ankleF!!.localPosition.set(ankleX, ankleY, -def.hipWidth)
         ankleF!!.localRotation.set(axisZ, shinPitch)
 
@@ -62,7 +61,6 @@ class KneePushUpPose : BasePushUpPose() {
         chest!!.localPosition.set(-def.torsoLength, 0f, 0f)
 
         // 3. Perfect Symmetry (Side B)
-        // Because Side B builds downwards from Pelvis, Thigh B local rotation is 0 (to inherit -theta).
         hipB!!.localPosition.set(0f, 0f, def.hipWidth)
         hipB!!.localRotation.set(axisZ, 0f)
 
@@ -83,12 +81,6 @@ class KneePushUpPose : BasePushUpPose() {
         val chestW = chest!!.worldPosition
         val shoulderAW = rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV2).add(chestW)
         val shoulderPW = rotAround(tempV1.set(0f, 0f, def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV3).add(chestW)
-
-        val maxDrivingHeight = (60f - kneeHeight).coerceAtLeast(0f)
-        val maxTheta = asin((maxDrivingHeight / rigidBodyLen).coerceIn(-1f, 1f))
-
-        // Corrected hand position to sit exactly beneath shoulders instead of floating past the head
-        val handAnchorX = 60f - def.torsoLength * cos(maxTheta)
 
         val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * 1.8f)
         val targetHandP = targetHandPBuffer.set(handAnchorX, 0f, def.shoulderWidth * 1.8f)
