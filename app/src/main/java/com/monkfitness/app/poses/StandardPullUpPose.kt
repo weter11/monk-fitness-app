@@ -14,9 +14,26 @@ class StandardPullUpPose : BasePose() {
         environment = EnvironmentDefinition(
             ground = GroundDefinition(visible = true, level = 0f),
             // The physical Pull-Up Bar rendered in the environment
-            props = listOf(BoxProp(center = Vector3(0f, 500f, 15f), width = 200f, height = 6f, depth = 6f))
+            props = listOf(BoxProp(center = Vector3(0f, 500f, 15f), width = 200f, height = 6f, depth = 6f)),
+            anchors = listOf(
+                EnvironmentAnchor(
+                    id = "pullup_bar",
+                    type = EnvironmentAnchorType.BAR,
+                    worldPosition = Vector3(0f, 500f, 15f)
+                )
+            )
+        ),
+        support = SupportDefinition(
+            pivot = PivotType.HANDS,
+            contacts = setOf(
+                SupportContact(point = SupportPoint.LEFT_HAND, anchorId = "pullup_bar"),
+                SupportContact(point = SupportPoint.RIGHT_HAND, anchorId = "pullup_bar")
+            )
         )
     )
+
+    private var cachedBarPos: Vector3? = null
+    private var barY = 500f
 
     private var roots: List<SkeletonNode>? = null
     private var pelvis: SkeletonNode? = null; private var chest: SkeletonNode? = null; private var neck: SkeletonNode? = null; private var head: SkeletonNode? = null
@@ -30,6 +47,8 @@ class StandardPullUpPose : BasePose() {
 
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
+        cachedBarPos = SupportMath.resolveAnchorPosition(metadata.environment, "pullup_bar", Vector3(0f, 500f, 15f))
+        barY = cachedBarPos!!.y
         pelvis = SkeletonNode(Joint.PELVIS); chest = pelvis!!.addChild(SkeletonNode(Joint.CHEST))
         neck = chest!!.addChild(SkeletonNode(Joint.NECK_END)); head = neck!!.addChild(SkeletonNode(Joint.HEAD_POS))
 
@@ -73,7 +92,6 @@ class StandardPullUpPose : BasePose() {
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
         // 2. Fixed Absolute Hand Anchors
-        val barY = 500f
         val gripWidth = def.shoulderWidth * 1.6f // Wide grip
 
         val targetHandA = Vector3(pelvisX, barY, -gripWidth)
