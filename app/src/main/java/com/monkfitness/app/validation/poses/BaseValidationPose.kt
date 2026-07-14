@@ -105,6 +105,11 @@ abstract class BaseValidationPose : PoseBuilder {
         } else {
             SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, pole, constraint, ikBuffer)
         }
+        // Single source of truth: automatically propagate the solver's clamp amount into the
+        // pose so reachability is detected without per-pose manual bookkeeping.
+        if (ikResult.clampAmount > jointsBuffer.maxIkClampAmount) {
+            jointsBuffer.maxIkClampAmount = ikResult.clampAmount
+        }
         // Store the limb offsets in the parent's true local frame (no hand-fed inverse-Z scalar).
         tempV1.set(ikResult.joint).subtract(rootWorldPos)
         SkeletonMath.toLocalDirection(tempV1, parentRotation, middleNode.localPosition)

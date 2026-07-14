@@ -102,10 +102,6 @@ abstract class BasePlankPose : BasePose() {
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
         jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
-        jointsBuffer.maxIkClampAmount = maxOf(
-            legFBuffer.clampAmount, legBBuffer.clampAmount,
-            armABuffer.clampAmount, armPBuffer.clampAmount
-        )
         return jointsBuffer
     }
 }

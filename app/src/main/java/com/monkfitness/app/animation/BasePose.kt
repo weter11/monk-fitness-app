@@ -137,6 +137,12 @@ abstract class BasePose : PoseBuilder {
             SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, pole, constraint, ikBuffer)
         }
 
+        // Single source of truth: automatically propagate the solver's clamp amount into the
+        // pose so reachability is detected without per-pose manual bookkeeping.
+        if (ikResult.clampAmount > jointsBuffer.maxIkClampAmount) {
+            jointsBuffer.maxIkClampAmount = ikResult.clampAmount
+        }
+
         // Store the limb offsets in the parent's true local frame so they survive the parent's
         // full 3D world rotation exactly — no hand-fed inverse-Z scalar.
         tempV1.set(ikResult.joint).subtract(rootWorldPos)
