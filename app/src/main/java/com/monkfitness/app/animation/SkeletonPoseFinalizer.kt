@@ -90,11 +90,15 @@ class SkeletonPoseFinalizer(
         val shVec = tempColZ.set(sAW).subtract(sPW)
         if (shVec.mag() < 1e-4f) return
         shVec.normalize()
-        // normal = lean x shoulderLine (chest-local +X)
-        val normal = tempColX.set(lean).cross(shVec)
-        if (normal.mag() < 1e-4f) return
-        normal.normalize()
-        // Re-orthogonalize: colZ = -shoulderLine, colX = lean x colZ (strictly orthonormal).
+        // Guard against a degenerate (collinear) spine/shoulder line.
+        tempColX.set(lean).cross(shVec)
+        if (tempColX.mag() < 1e-4f) return
+        // Build a proper RIGHT-HANDED orthonormal chest frame:
+        //   colY = lean (spine / up)
+        //   colZ = -(shoulderA - shoulderP)  (chest-forward, toward the passive shoulder)
+        //   colX = lean x colZ (lateral). This matches the FK-derived frame for the standard
+        //   hierarchy, so a neutral/sagittal trunk is unchanged and twist/side-bend are captured
+        //   (the chest frame is derived from the actual shoulder line, not a single authored axis).
         shVec.multiply(-1f)
         tempColX.set(lean).cross(shVec).normalize()
 
