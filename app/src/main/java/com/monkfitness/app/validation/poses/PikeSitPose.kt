@@ -4,6 +4,7 @@ import com.monkfitness.app.animation.CameraDefinition
 import com.monkfitness.app.animation.GroundDefinition
 import com.monkfitness.app.animation.PivotType
 import com.monkfitness.app.animation.SkeletonDefinition
+import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.SupportContact
 import com.monkfitness.app.animation.SupportDefinition
 import com.monkfitness.app.animation.SupportPoint

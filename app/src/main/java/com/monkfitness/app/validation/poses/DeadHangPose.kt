@@ -8,6 +8,7 @@ import com.monkfitness.app.animation.EnvironmentDefinition
 import com.monkfitness.app.animation.GroundDefinition
 import com.monkfitness.app.animation.PivotType
 import com.monkfitness.app.animation.SkeletonDefinition
+import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.SupportContact
 import com.monkfitness.app.animation.SupportDefinition
 import com.monkfitness.app.animation.SupportPoint
@@ -82,7 +83,7 @@ class DeadHangPose : BaseValidationPose() {
         bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, armPoleP, def.armIKConstraint, invChestZ, elbowP!!, handP!!, armPBuffer)
 
         // Overhand grip: hands rotate so palms face away from the bar.
-        val gripAngle = invChestZ - (PI / 2f)
+        val gripAngle = invChestZ - (PI.toFloat() / 2f)
         handA!!.localRotation.set(axisZ, gripAngle); handP!!.localRotation.set(axisZ, gripAngle)
         palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
         palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)

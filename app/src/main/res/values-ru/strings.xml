@@ -665,6 +665,7 @@
     <string name="nutrition_not_enough_protein_sources">Недостаточно источников белка</string>
     <string name="nutrition_not_enough_carbs">Добавьте больше углеводов</string>
     <string name="nutrition_add_more_fruits_vegetables">Добавьте больше овощей или фруктов</string>
+    <string name="developer_tools">Инструменты разработчика</string>
     <string name="library_statistics">Статистика библиотеки</string>
     <string name="stats_total_exercises">Всего упражнений</string>
     <string name="stats_total_families">Семейств упражнений</string>
@@ -674,6 +675,46 @@
     <string name="stats_animation_coverage">Покрытие анимациями</string>
     <string name="stats_animated_label">Анимировано:</string>
     <string name="stats_animated_format">%1$d / %2$d</string>
+
+    <string name="show_engineering_validation">Показывать категорию «Проверка движка»</string>
+    <string name="show_engineering_validation_desc">Инструмент разработчика. Открывает скрытую категорию «Проверка движка» с четырьмя статичными опорными позами для валидации движка анимации, IK и геометрии скелета.</string>
+    <string name="engineering_validation_category">Проверка движка</string>
+    <string name="engineering_validation_desc">Статичные опорные позы для проверки движка анимации, IK, геометрии скелета и рендеринга. Не являются упражнениями.</string>
+
+    <string name="validation_category_name">Проверка движка</string>
+    <string name="validation_category_desc">Статичные опорные позы для проверки движка / IK / скелета.</string>
+    <string name="validation_pose_badge">Проверочная поза</string>
+    <string name="validation_pose_not_found">Проверочная поза не найдена.</string>
+    <string name="validation_purpose_title">Что проверяется</string>
+    <string name="validation_technique_label">Заметки</string>
+
+    <string name="validation_middle_split_name">Продольный шпагат</string>
+    <string name="validation_middle_split_desc">Статичный шпагат на полу с симметрично разведёнными ногами и руками в стороны.</string>
+    <string name="validation_middle_split_tech">Замороженный кадр. Без анимации, дыхания и драйверов движения. Проверка центровки таза и зеркальной симметрии.</string>
+    <string name="validation_middle_split_p1">Центровка таза и симметрия бёдер</string>
+    <string name="validation_middle_split_p2">Ноги IK и длина рук</string>
+    <string name="validation_middle_split_p3">Симметрия плеч и зеркальность Л/П</string>
+
+    <string name="validation_pike_sit_name">Наклон вперёд сидя</string>
+    <string name="validation_pike_sit_desc">Сидячий наклон: ноги вперёд, корпус сложен над ними, руки тянутся к носкам.</string>
+    <string name="validation_pike_sit_tech">Замороженный кадр. Проверка положения таза и геометрии мышц задней поверхности бедра.</string>
+    <string name="validation_pike_sit_p1">Таз сидя и геометрия бицепса бедра</string>
+    <string name="validation_pike_sit_p2">Осанка позвоночника и сгибание плеча</string>
+    <string name="validation_pike_sit_p3">Длина рук и ориентация запястий</string>
+
+    <string name="validation_deep_overhead_squat_name">Глубокий присед с поднятыми руками</string>
+    <string name="validation_deep_overhead_squat_desc">Присед на полную глубину с поднятыми вверх руками, нагружающий почти все суставы.</string>
+    <string name="validation_deep_overhead_squat_tech">Замороженный кадр. Стресс-тест подвижности голеностопа, траектории коленей, глубины таза.</string>
+    <string name="validation_deep_overhead_squat_p1">Подвижность голеностопа, колени, глубина таза</string>
+    <string name="validation_deep_overhead_squat_p2">Грудное разгибание и плечи вверху</string>
+    <string name="validation_deep_overhead_squat_p3">Пропорции всего тела и симметрия</string>
+
+    <string name="validation_dead_hang_name">Вис на перекладине</string>
+    <string name="validation_dead_hang_desc">Вис на неподвижной перекладине с прямыми руками и телом под ней.</string>
+    <string name="validation_dead_hang_tech">Замороженный кадр. Кисти зафиксированы на якоре перекладины для проверки контактов и геометрии.</string>
+    <string name="validation_dead_hang_p1">Фиксированные контакты кистей и перекладина</string>
+    <string name="validation_dead_hang_p2">Геометрия виса и плечевой пояс</string>
+    <string name="validation_dead_hang_p3">Пропорции рук и ориентация запястий</string>
 
     <string name="ok">ОК</string>
 </resources>

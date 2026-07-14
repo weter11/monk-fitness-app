@@ -1,5 +1,6 @@
 package com.monkfitness.app.validation
 
+import com.monkfitness.app.R
 import com.monkfitness.app.animation.PoseBuilder
 import com.monkfitness.app.validation.poses.DeadHangPose
 import com.monkfitness.app.validation.poses.DeepOverheadSquatPose

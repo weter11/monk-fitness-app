@@ -10,7 +10,7 @@ import com.monkfitness.app.animation.MotionCurve
 import com.monkfitness.app.animation.PivotType
 import com.monkfitness.app.animation.PoseBuilder
 import com.monkfitness.app.animation.PoseContext
-import com.monkitness.app.animation.PoseMetadata
+import com.monkfitness.app.animation.PoseMetadata
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonFactory
 import com.monkfitness.app.animation.SkeletonMath
