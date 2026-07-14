@@ -33,26 +33,32 @@ class ConstraintSolverTest {
     }
 
     @Test
-    fun middleSplitRepositionsPelvisAndKeepsLegsStraightOnGround() {
+    fun middleSplitPelvisRestsOnGroundFeetStayPlanted() {
         val pose = finalized(MiddleSplitPose())
         assertFinite(pose, "MiddleSplit")
 
-        // Pelvis is derived from the contacts: it must rise so the straight legs can reach the
-        // wide foot targets (authored pelvisY was 14, which made the legs fold).
+        // Issue A fix: the global solver must NOT float the pelvis to fake straight legs. The
+        // pelvis is derived from the ground contacts and stays near the authored ground level
+        // (previously it was pushed up to ~210 into a floating "V").
         val pelvisY = pose.getJoint(Joint.PELVIS).y
-        assertTrue("pelvis should be raised to honor straight legs (was $pelvisY)", pelvisY > 150f)
+        assertTrue("pelvis must rest near the ground, not float (was $pelvisY)", pelvisY < 60f)
 
-        // Both legs are straight (distance hip -> ankle ~= full extension) and feet stay on ground.
-        val legLen = def.thighLength + def.shinLength
-        for (side in listOf(Joint.HIP_F to Joint.ANKLE_F, Joint.HIP_B to Joint.ANKLE_B)) {
-            val hip = pose.getJoint(side.first)
-            val ankle = pose.getJoint(side.second)
-            val d = kotlin.math.sqrt(
-                (hip.x - ankle.x).pow(2) + (hip.y - ankle.y).pow(2) + (hip.z - ankle.z).pow(2)
-            )
-            assertTrue("leg should be near straight extension ($d)", d > legLen * 0.95f)
-            assertTrue("ankle must not penetrate ground (${ankle.y})", ankle.y >= -1e-2f)
+        // Feet stay planted on the ground (no penetration) and splay wide.
+        for (joint in listOf(Joint.ANKLE_F, Joint.ANKLE_B, Joint.HEEL_F, Joint.HEEL_B, Joint.TOE_F, Joint.TOE_B)) {
+            assertTrue("$joint penetrates ground (${pose.getJoint(joint).y})", pose.getJoint(joint).y >= -1e-2f)
         }
+        val af = pose.getJoint(Joint.ANKLE_F)
+        val ab = pose.getJoint(Joint.ANKLE_B)
+        assertTrue("ankles should splay wide (z spread ${kotlin.math.abs(af.z - ab.z)})", kotlin.math.abs(af.z - ab.z) > 100f)
+
+        // The straight-limb target sits inside the proximal-bone length, so the solver re-bakes
+        // it as a non-degenerate limb: the knee must be a real joint, not collapsed onto the ankle.
+        val kf = pose.getJoint(Joint.KNEE_F)
+        val ankleF = pose.getJoint(Joint.ANKLE_F)
+        val kneeDist = kotlin.math.sqrt(
+            (kf.x - ankleF.x).pow(2) + (kf.y - ankleF.y).pow(2) + (kf.z - ankleF.z).pow(2)
+        )
+        assertTrue("knee must be a real joint, not collapsed onto ankle (dist $kneeDist)", kneeDist > 5f)
     }
 
     @Test
