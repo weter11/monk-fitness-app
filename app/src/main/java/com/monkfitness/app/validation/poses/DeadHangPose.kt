@@ -1,5 +1,6 @@
 package com.monkfitness.app.validation.poses
 
+import com.monkfitness.app.animation.BoxProp
 import com.monkfitness.app.animation.ContactConstraint
 import com.monkfitness.app.animation.CameraDefinition
 import com.monkfitness.app.animation.EnvironmentAnchor
