@@ -626,6 +626,53 @@ object SkeletonMath {
         return rotAround(worldDir, rotation.axis, -rotation.angle, out)
     }
 
+    // --- Shoulder-girdle (scapula) degrees of freedom -----------------------------
+    //
+    // The scapula is a real joint: elevation/depression (about the transverse X axis) and
+    // protraction/retraction (about the vertical Y axis) are genuine rotations, never a raw
+    // translation of the shoulder (BIOMECHANICS.md §4/§10). The pull-family expresses scapular
+    // activation as an intensity in shared, named units (depression 0..1, retraction 0..N);
+    // the constants below map that intensity to a rotation within the general human scapular
+    // range of motion. They are named and shared — not per-exercise magic numbers.
+    const val SCAPULA_DEPRESSION_TO_RAD = 0.0218f // ~1.25 deg per activation unit
+    const val SCAPULA_RETRECTION_TO_RAD = 0.035f  // ~2.0 deg per activation unit
+
+    // Scratch column buffers for composing the scapular rotation (no hot-path allocation).
+    private val scapColAX = Vector3(); private val scapColAY = Vector3(); private val scapColAZ = Vector3()
+    private val scapColBX = Vector3(); private val scapColBY = Vector3(); private val scapColBZ = Vector3()
+    private val scapColRX = Vector3(); private val scapColRY = Vector3(); private val scapColRZ = Vector3()
+    private val scapRotA = JointRotation(Vector3(1f, 0f, 0f), 0f)
+    private val scapRotB = JointRotation(Vector3(0f, 1f, 0f), 0f)
+
+    /**
+     * Composes the scapula's local rotation from elevation/depression and protraction/retraction
+     * activation. `depression`/`retraction` are the pull-family activation intensities (shared
+     * units); the result is a real [JointRotation] the FK traversal applies to the scapula, which
+     * in turn derives the shoulder (glenoid) position. `sideSign` is -1 for the left/active (-Z)
+     * girdle and +1 for the right/passive (+Z) girdle so that depression drops *both* shoulders
+     * symmetrically (the depression pivot is mirrored across the body's mid-line).
+     * Allocation-free: writes into [out].
+     */
+    fun buildScapularRotation(
+        retraction: Float,
+        depression: Float,
+        sideSign: Float,
+        out: JointRotation
+    ): JointRotation {
+        // R = Ry(retraction) * Rx(depression * sideSign): retraction rotates both blades
+        // medially about the vertical axis; depression pitches the girdle down on both sides
+        // via a mirrored transverse-axis rotation.
+        val ax = depression * SCAPULA_DEPRESSION_TO_RAD * sideSign
+        val ay = retraction * SCAPULA_RETRECTION_TO_RAD
+        scapRotA.axis.set(1f, 0f, 0f); scapRotA.angle = ax
+        scapRotB.axis.set(0f, 1f, 0f); scapRotB.angle = ay
+        rotationToMatrix(scapRotA, scapColAX, scapColAY, scapColAZ)
+        rotationToMatrix(scapRotB, scapColBX, scapColBY, scapColBZ)
+        multiplyMatrices(scapColBX, scapColBY, scapColBZ, scapColAX, scapColAY, scapColAZ, scapColRX, scapColRY, scapColRZ)
+        getRotationFromMatrix(scapColRX, scapColRY, scapColRZ, out)
+        return out
+    }
+
     /**
      * Angle (degrees) between two directions, allocation-free. Used by the angular
      * joint-limit validator and by any caller that needs the deviation of a proximal bone from

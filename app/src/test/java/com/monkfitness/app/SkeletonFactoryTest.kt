@@ -28,14 +28,18 @@ class SkeletonFactoryTest {
         assertEquals(nodes.chest, nodes.neck.parent)
         assertEquals(nodes.neck, nodes.head.parent)
 
-        assertEquals(nodes.chest, nodes.shoulderA.parent)
+        assertEquals(nodes.chest, nodes.clavicleA.parent)
+        assertEquals(nodes.clavicleA, nodes.scapulaA.parent)
+        assertEquals(nodes.scapulaA, nodes.shoulderA.parent)
         assertEquals(nodes.shoulderA, nodes.elbowA.parent)
         assertEquals(nodes.elbowA, nodes.handA.parent)
         assertEquals(nodes.handA, nodes.palmA.parent)
         assertEquals(nodes.palmA, nodes.knucklesA.parent)
         assertEquals(nodes.knucklesA, nodes.fingertipsA.parent)
 
-        assertEquals(nodes.chest, nodes.shoulderP.parent)
+        assertEquals(nodes.chest, nodes.clavicleP.parent)
+        assertEquals(nodes.clavicleP, nodes.scapulaP.parent)
+        assertEquals(nodes.scapulaP, nodes.shoulderP.parent)
         assertEquals(nodes.shoulderP, nodes.elbowP.parent)
         assertEquals(nodes.elbowP, nodes.handP.parent)
         assertEquals(nodes.handP, nodes.palmP.parent)
@@ -57,7 +61,7 @@ class SkeletonFactoryTest {
         // 3. Node count check
         val joints = mutableListOf<Joint>()
         collectTraversalOrder(nodes.roots[0], joints)
-        assertEquals(26, joints.size)
+        assertEquals(30, joints.size)
     }
 
     @Test
@@ -79,14 +83,18 @@ class SkeletonFactoryTest {
         assertEquals(nodes.chest, nodes.neck.parent)
         assertEquals(nodes.neck, nodes.head.parent)
 
-        assertEquals(nodes.chest, nodes.shoulderA.parent)
+        assertEquals(nodes.chest, nodes.clavicleA.parent)
+        assertEquals(nodes.clavicleA, nodes.scapulaA.parent)
+        assertEquals(nodes.scapulaA, nodes.shoulderA.parent)
         assertEquals(nodes.shoulderA, nodes.elbowA.parent)
         assertEquals(nodes.elbowA, nodes.handA.parent)
         assertEquals(nodes.handA, nodes.palmA.parent)
         assertEquals(nodes.palmA, nodes.knucklesA.parent)
         assertEquals(nodes.knucklesA, nodes.fingertipsA.parent)
 
-        assertEquals(nodes.chest, nodes.shoulderP.parent)
+        assertEquals(nodes.chest, nodes.clavicleP.parent)
+        assertEquals(nodes.clavicleP, nodes.scapulaP.parent)
+        assertEquals(nodes.scapulaP, nodes.shoulderP.parent)
         assertEquals(nodes.shoulderP, nodes.elbowP.parent)
         assertEquals(nodes.elbowP, nodes.handP.parent)
         assertEquals(nodes.handP, nodes.palmP.parent)
@@ -102,7 +110,7 @@ class SkeletonFactoryTest {
         // 3. Node count check
         val joints = mutableListOf<Joint>()
         collectTraversalOrder(nodes.roots[0], joints)
-        assertEquals(26, joints.size)
+        assertEquals(30, joints.size)
     }
 
     @Test
@@ -116,12 +124,16 @@ class SkeletonFactoryTest {
             Joint.CHEST,
             Joint.NECK_END,
             Joint.HEAD_POS,
+            Joint.CLAVICLE_A,
+            Joint.SCAPULA_A,
             Joint.SHOULDER_A,
             Joint.ELBOW_A,
             Joint.HAND_A,
             Joint.PALM_A,
             Joint.KNUCKLES_A,
             Joint.FINGERTIPS_A,
+            Joint.CLAVICLE_P,
+            Joint.SCAPULA_P,
             Joint.SHOULDER_P,
             Joint.ELBOW_P,
             Joint.HAND_P,
@@ -159,12 +171,16 @@ class SkeletonFactoryTest {
             Joint.CHEST,
             Joint.NECK_END,
             Joint.HEAD_POS,
+            Joint.CLAVICLE_A,
+            Joint.SCAPULA_A,
             Joint.SHOULDER_A,
             Joint.ELBOW_A,
             Joint.HAND_A,
             Joint.PALM_A,
             Joint.KNUCKLES_A,
             Joint.FINGERTIPS_A,
+            Joint.CLAVICLE_P,
+            Joint.SCAPULA_P,
             Joint.SHOULDER_P,
             Joint.ELBOW_P,
             Joint.HAND_P,

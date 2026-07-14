@@ -65,8 +65,8 @@ abstract class BaseVerticalPullPose : BasePose() {
 
     protected var roots: List<SkeletonNode>? = null
     protected var pelvis: SkeletonNode? = null; protected var chest: SkeletonNode? = null; protected var neck: SkeletonNode? = null; protected var head: SkeletonNode? = null
-    protected var shoulderA: SkeletonNode? = null; protected var elbowA: SkeletonNode? = null; protected var handA: SkeletonNode? = null; protected var palmA: SkeletonNode? = null; protected var knucklesA: SkeletonNode? = null; protected var fingertipsA: SkeletonNode? = null
-    protected var shoulderP: SkeletonNode? = null; protected var elbowP: SkeletonNode? = null; protected var handP: SkeletonNode? = null; protected var palmP: SkeletonNode? = null; protected var knucklesP: SkeletonNode? = null; protected var fingertipsP: SkeletonNode? = null
+    protected var clavicleA: SkeletonNode? = null; protected var scapulaA: SkeletonNode? = null; protected var shoulderA: SkeletonNode? = null; protected var elbowA: SkeletonNode? = null; protected var handA: SkeletonNode? = null; protected var palmA: SkeletonNode? = null; protected var knucklesA: SkeletonNode? = null; protected var fingertipsA: SkeletonNode? = null
+    protected var clavicleP: SkeletonNode? = null; protected var scapulaP: SkeletonNode? = null; protected var shoulderP: SkeletonNode? = null; protected var elbowP: SkeletonNode? = null; protected var handP: SkeletonNode? = null; protected var palmP: SkeletonNode? = null; protected var knucklesP: SkeletonNode? = null; protected var fingertipsP: SkeletonNode? = null
     protected var hipF: SkeletonNode? = null; protected var kneeF: SkeletonNode? = null; protected var ankleF: SkeletonNode? = null; protected var heelF: SkeletonNode? = null; protected var toeF: SkeletonNode? = null
     protected var hipB: SkeletonNode? = null; protected var kneeB: SkeletonNode? = null; protected var ankleB: SkeletonNode? = null; protected var heelB: SkeletonNode? = null; protected var toeB: SkeletonNode? = null
 
@@ -88,8 +88,8 @@ abstract class BaseVerticalPullPose : BasePose() {
         val nodes = SkeletonFactory.createStandardSkeleton()
         roots = nodes.roots
         pelvis = nodes.pelvis; chest = nodes.chest; neck = nodes.neck; head = nodes.head
-        shoulderA = nodes.shoulderA; elbowA = nodes.elbowA; handA = nodes.handA; palmA = nodes.palmA; knucklesA = nodes.knucklesA; fingertipsA = nodes.fingertipsA
-        shoulderP = nodes.shoulderP; elbowP = nodes.elbowP; handP = nodes.handP; palmP = nodes.palmP; knucklesP = nodes.knucklesP; fingertipsP = nodes.fingertipsP
+        clavicleA = nodes.clavicleA; scapulaA = nodes.scapulaA; shoulderA = nodes.shoulderA; elbowA = nodes.elbowA; handA = nodes.handA; palmA = nodes.palmA; knucklesA = nodes.knucklesA; fingertipsA = nodes.fingertipsA
+        clavicleP = nodes.clavicleP; scapulaP = nodes.scapulaP; shoulderP = nodes.shoulderP; elbowP = nodes.elbowP; handP = nodes.handP; palmP = nodes.palmP; knucklesP = nodes.knucklesP; fingertipsP = nodes.fingertipsP
         hipF = nodes.hipF; kneeF = nodes.kneeF; ankleF = nodes.ankleF; heelF = nodes.heelF; toeF = nodes.toeF
         hipB = nodes.hipB; kneeB = nodes.kneeB; ankleB = nodes.ankleB; heelB = nodes.heelB; toeB = nodes.toeB
     }
@@ -158,12 +158,16 @@ abstract class BaseVerticalPullPose : BasePose() {
         gaze.normalize()
         buildHead(neck!!, head!!, def.neckLength, gaze)
 
-        // Shoulders with scapular offset (medial retraction + slight depression).
-        // Depression drops the glenoid below the chest line (negative local Y),
-        // which is why the nominal reach is authored a touch under the IK max.
-        val halfW = def.shoulderWidth - retraction
-        shoulderA!!.localPosition.set(0f, -depression, -halfW)
-        shoulderP!!.localPosition.set(0f, -depression, halfW)
+        // Shoulder girdle: scapular depression + retraction are REAL scapula rotations
+        // (BIOMECHANICS.md §4/§10) — the shoulder (glenoid) position is *derived* from the
+        // scapula's local rotation, never translated by hand. `depression`/`retraction`
+        // drive the scapula; the IK root (shoulder) inherits the resulting frame.
+        SkeletonMath.buildScapularRotation(retraction, depression, -1f, scapulaA!!.localRotation)
+        SkeletonMath.buildScapularRotation(retraction, depression, 1f, scapulaP!!.localRotation)
+        // The shoulder rests at its anatomical offset from the (rotated) scapula; its live
+        // world position follows the scapula rotation automatically through FK.
+        shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
+        shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
 
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
@@ -176,8 +180,10 @@ abstract class BaseVerticalPullPose : BasePose() {
 
         targetA.set(0f, barY, -gZ)
         targetP.set(0f, barY, gZ)
-        bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, chest!!.worldRotation, elbowPoleA, def.armIKConstraint, elbowA!!, handA!!, armABuffer)
-        bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, chest!!.worldRotation, elbowPoleP, def.armIKConstraint, elbowP!!, handP!!, armPBuffer)
+        // Bake the arm in the SHOULDER's world frame: the IK root is the shoulder, whose frame
+        // now includes the scapula rotation, so the limb follows the girdle correctly.
+        bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, shoulderA!!.worldRotation, elbowPoleA, def.armIKConstraint, elbowA!!, handA!!, armABuffer)
+        bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, shoulderP!!.worldRotation, elbowPoleP, def.armIKConstraint, elbowP!!, handP!!, armPBuffer)
 
         applyGrip(invChestZ)
         palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)

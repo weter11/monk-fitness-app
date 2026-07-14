@@ -6,12 +6,16 @@ class SkeletonNodes(
     val chest: SkeletonNode,
     val neck: SkeletonNode,
     val head: SkeletonNode,
+    val clavicleA: SkeletonNode,
+    val scapulaA: SkeletonNode,
     val shoulderA: SkeletonNode,
     val elbowA: SkeletonNode,
     val handA: SkeletonNode,
     val palmA: SkeletonNode,
     val knucklesA: SkeletonNode,
     val fingertipsA: SkeletonNode,
+    val clavicleP: SkeletonNode,
+    val scapulaP: SkeletonNode,
     val shoulderP: SkeletonNode,
     val elbowP: SkeletonNode,
     val handP: SkeletonNode,
@@ -57,14 +61,22 @@ object SkeletonFactory {
         val neck = chest.addChild(SkeletonNode(Joint.NECK_END))
         val head = neck.addChild(SkeletonNode(Joint.HEAD_POS))
 
-        val shoulderA = chest.addChild(SkeletonNode(Joint.SHOULDER_A))
+        // Shoulder girdle: CHEST -> CLAVICLE -> SCAPULA -> SHOULDER. The scapula
+        // carries the real elevation/depression + protraction/retraction DOF; the
+        // shoulder (glenoid) is the IK root and derives its live position from the
+        // scapula rotation rather than a raw translation (BIOMECHANICS.md §4/§10).
+        val clavicleA = chest.addChild(SkeletonNode(Joint.CLAVICLE_A))
+        val scapulaA = clavicleA.addChild(SkeletonNode(Joint.SCAPULA_A))
+        val shoulderA = scapulaA.addChild(SkeletonNode(Joint.SHOULDER_A))
         val elbowA = shoulderA.addChild(SkeletonNode(Joint.ELBOW_A))
         val handA = elbowA.addChild(SkeletonNode(Joint.HAND_A))
         val palmA = handA.addChild(SkeletonNode(Joint.PALM_A))
         val knucklesA = palmA.addChild(SkeletonNode(Joint.KNUCKLES_A))
         val fingertipsA = knucklesA.addChild(SkeletonNode(Joint.FINGERTIPS_A))
 
-        val shoulderP = chest.addChild(SkeletonNode(Joint.SHOULDER_P))
+        val clavicleP = chest.addChild(SkeletonNode(Joint.CLAVICLE_P))
+        val scapulaP = clavicleP.addChild(SkeletonNode(Joint.SCAPULA_P))
+        val shoulderP = scapulaP.addChild(SkeletonNode(Joint.SHOULDER_P))
         val elbowP = shoulderP.addChild(SkeletonNode(Joint.ELBOW_P))
         val handP = elbowP.addChild(SkeletonNode(Joint.HAND_P))
         val palmP = handP.addChild(SkeletonNode(Joint.PALM_P))
@@ -89,12 +101,16 @@ object SkeletonFactory {
             chest = chest,
             neck = neck,
             head = head,
+            clavicleA = clavicleA,
+            scapulaA = scapulaA,
             shoulderA = shoulderA,
             elbowA = elbowA,
             handA = handA,
             palmA = palmA,
             knucklesA = knucklesA,
             fingertipsA = fingertipsA,
+            clavicleP = clavicleP,
+            scapulaP = scapulaP,
             shoulderP = shoulderP,
             elbowP = elbowP,
             handP = handP,
@@ -125,14 +141,18 @@ object SkeletonFactory {
         val neck = chest.addChild(SkeletonNode(Joint.NECK_END))
         val head = neck.addChild(SkeletonNode(Joint.HEAD_POS))
 
-        val shoulderA = chest.addChild(SkeletonNode(Joint.SHOULDER_A))
+        val clavicleA = chest.addChild(SkeletonNode(Joint.CLAVICLE_A))
+        val scapulaA = clavicleA.addChild(SkeletonNode(Joint.SCAPULA_A))
+        val shoulderA = scapulaA.addChild(SkeletonNode(Joint.SHOULDER_A))
         val elbowA = shoulderA.addChild(SkeletonNode(Joint.ELBOW_A))
         val handA = elbowA.addChild(SkeletonNode(Joint.HAND_A))
         val palmA = handA.addChild(SkeletonNode(Joint.PALM_A))
         val knucklesA = palmA.addChild(SkeletonNode(Joint.KNUCKLES_A))
         val fingertipsA = knucklesA.addChild(SkeletonNode(Joint.FINGERTIPS_A))
 
-        val shoulderP = chest.addChild(SkeletonNode(Joint.SHOULDER_P))
+        val clavicleP = chest.addChild(SkeletonNode(Joint.CLAVICLE_P))
+        val scapulaP = clavicleP.addChild(SkeletonNode(Joint.SCAPULA_P))
+        val shoulderP = scapulaP.addChild(SkeletonNode(Joint.SHOULDER_P))
         val elbowP = shoulderP.addChild(SkeletonNode(Joint.ELBOW_P))
         val handP = elbowP.addChild(SkeletonNode(Joint.HAND_P))
         val palmP = handP.addChild(SkeletonNode(Joint.PALM_P))
@@ -151,12 +171,16 @@ object SkeletonFactory {
             chest = chest,
             neck = neck,
             head = head,
+            clavicleA = clavicleA,
+            scapulaA = scapulaA,
             shoulderA = shoulderA,
             elbowA = elbowA,
             handA = handA,
             palmA = palmA,
             knucklesA = knucklesA,
             fingertipsA = fingertipsA,
+            clavicleP = clavicleP,
+            scapulaP = scapulaP,
             shoulderP = shoulderP,
             elbowP = elbowP,
             handP = handP,
