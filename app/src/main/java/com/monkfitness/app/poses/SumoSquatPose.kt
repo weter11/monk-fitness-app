@@ -15,9 +15,7 @@ class SumoSquatPose : BaseSquatPose() {
     private val armAPole = Vector3(0f, 0f, -1f)
     private val armPPole = Vector3(0f, 0f, 1f)
 
-    // Local scratch axes for the outward toe flare (rotated around global Y)
-    private val axisX = Vector3(1f, 0f, 0f)
-    private val axisY = Vector3(0f, 1f, 0f)
+    // Outward toe flare rotates around the global Y axis; axisX/axisY are provided by BasePose.
     private val legTargetF = Vector3()
     private val legTargetB = Vector3()
     private val armTargetA = Vector3()
