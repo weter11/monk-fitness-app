@@ -50,6 +50,7 @@ class SettingsManager(private val context: Context) {
         val DISABLED_EXERCISE_FAMILIES = stringSetPreferencesKey("disabled_exercise_families")
         val REWARDS_GRANTED_DAYS = stringSetPreferencesKey("rewards_granted_days")
         val FILTER_LIBRARY_BY_CATEGORIES = booleanPreferencesKey("filter_library_by_categories")
+        val SHOW_ENGINEERING_VALIDATION = booleanPreferencesKey("show_engineering_validation")
     }
 
     val filterLibraryByCategoriesFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
@@ -59,6 +60,17 @@ class SettingsManager(private val context: Context) {
     suspend fun setFilterLibraryByCategories(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[FILTER_LIBRARY_BY_CATEGORIES] = enabled
+        }
+    }
+
+    val showEngineeringValidationFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        // Hidden developer tool: OFF by default on every build.
+        preferences[SHOW_ENGINEERING_VALIDATION] ?: false
+    }
+
+    suspend fun setShowEngineeringValidation(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[SHOW_ENGINEERING_VALIDATION] = enabled
         }
     }
 
