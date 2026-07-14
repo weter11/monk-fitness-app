@@ -82,19 +82,63 @@ class Vector3(var x: Float = 0f, var y: Float = 0f, var z: Float = 0f) {
     override fun toString(): String = "Vector3(x=$x, y=$y, z=$z)"
 }
 
-data class IKConstraint(
-    val minimumFlexionAngle: Float,
-    val maximumExtensionRatio: Float
+/**
+ * General, shared angular limits for a two-bone limb chain, expressed in degrees.
+ *
+ * These describe anatomical *angular* ranges rather than the reach-distance band, so the
+ * engine can reject orientations the distance clamp could not (e.g. an over-folded knee or a
+ * hyperextended elbow) and so validation can mirror them. The values are named and shared —
+ * never per-exercise magic numbers.
+ *
+ * - `minFlexionDegrees` / `maxFlexionDegrees`: allowed interior angle at the middle joint
+ *   (elbow/knee). `minFlexionDegrees` corresponds to the historical most-folded flexion;
+ *   `maxFlexionDegrees` caps hyperextension (180° == perfectly straight limb).
+ * - `maxRootDeviationDegrees`: allowed deviation of the proximal bone (root -> middle) from
+ *   its anatomical neutral direction. A generous general bound; the solver clamps this only
+ *   when a neutral direction is supplied by the caller.
+ */
+data class AngularJointLimits(
+    val minFlexionDegrees: Float,
+    val maxFlexionDegrees: Float,
+    val maxRootDeviationDegrees: Float
 ) {
     companion object {
-        val ArmConstraint = IKConstraint(30f, 0.98f)
-        val LegConstraint = IKConstraint(30f, 0.98f)
+        // Named, shared bounds (no magic numbers). These are general human-range caps, not
+        // per-exercise values.
+        const val DEFAULT_MIN_FLEXION_DEGREES = 30f
+        const val DEFAULT_MAX_FLEXION_DEGREES = 180f
+        const val DEFAULT_MAX_ROOT_DEVIATION_DEGREES = 170f
+
+        val ArmAngularLimits = AngularJointLimits(
+            minFlexionDegrees = DEFAULT_MIN_FLEXION_DEGREES,
+            maxFlexionDegrees = DEFAULT_MAX_FLEXION_DEGREES,
+            maxRootDeviationDegrees = DEFAULT_MAX_ROOT_DEVIATION_DEGREES
+        )
+        val LegAngularLimits = AngularJointLimits(
+            minFlexionDegrees = DEFAULT_MIN_FLEXION_DEGREES,
+            maxFlexionDegrees = DEFAULT_MAX_FLEXION_DEGREES,
+            maxRootDeviationDegrees = DEFAULT_MAX_ROOT_DEVIATION_DEGREES
+        )
+    }
+}
+
+data class IKConstraint(
+    val minimumFlexionAngle: Float,
+    val maximumExtensionRatio: Float,
+    val angularLimits: AngularJointLimits = AngularJointLimits.ArmAngularLimits
+) {
+    companion object {
+        val ArmConstraint = IKConstraint(30f, 0.98f, AngularJointLimits.ArmAngularLimits)
+        val LegConstraint = IKConstraint(30f, 0.98f, AngularJointLimits.LegAngularLimits)
     }
 }
 
 object SkeletonMath {
     // Static scratch for transforming a frame-relative pole into world space inside solveIK.
     private val poleWorldScratch = Vector3()
+
+    private const val DEG2RAD = 3.1415927f / 180f
+    private const val RAD2DEG = 180f / 3.1415927f
 
     class NearStraightLimbResult(var x: Float = 0f, var y: Float = 0f, var d: Float = 0f)
 
@@ -189,7 +233,8 @@ object SkeletonMath {
         val end: Vector3 = Vector3(),
         var requestedDistance: Float = 0f,
         var clampedDistance: Float = 0f,
-        var clampAmount: Float = 0f
+        var clampAmount: Float = 0f,
+        var angularClampAmount: Float = 0f
     )
 
     /**
@@ -211,20 +256,45 @@ object SkeletonMath {
 
         val maxDist = (L1 + L2) * constraint.maximumExtensionRatio
 
-        val minCos = cos(constraint.minimumFlexionAngle * PI.toFloat() / 180f)
+        val minCos = cos(constraint.minimumFlexionAngle * DEG2RAD)
         val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
 
-        val dist = dMag.coerceIn(minDist, maxDist)
+        val limits = constraint.angularLimits
+
+        // 1) Distance band (reach limits).
+        var dist = dMag.coerceIn(minDist, maxDist)
+        val distanceClampAmount = when {
+            dMag < minDist -> minDist - dMag
+            dMag > maxDist -> dMag - maxDist
+            else -> 0f
+        }
+
+        // 2) Angular band on the middle joint interior angle. The distance band already bounds
+        //    the middle joint, but an explicit angular cap rejects orientations it could not
+        //    (e.g. a hyperextended elbow). Clamp the joint toward the limit by adjusting the
+        //    solved distance, staying inside the reach band.
+        var angularClampAmount = 0f
+        {
+            val denom = (2f * L1 * L2)
+            var cosT = ((L1 * L1 + L2 * L2 - dist * dist) / denom).coerceIn(-1f, 1f)
+            var theta = acos(cosT) * RAD2DEG
+            if (theta < limits.minFlexionDegrees) {
+                angularClampAmount = limits.minFlexionDegrees - theta
+                theta = limits.minFlexionDegrees
+                val newCos = cos(theta * DEG2RAD)
+                dist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * newCos).coerceIn(minDist, maxDist)
+            } else if (theta > limits.maxFlexionDegrees) {
+                angularClampAmount = theta - limits.maxFlexionDegrees
+                theta = limits.maxFlexionDegrees
+                val newCos = cos(theta * DEG2RAD)
+                dist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * newCos).coerceIn(minDist, maxDist)
+            }
+        }
 
         result.requestedDistance = dMag
         result.clampedDistance = dist
-        result.clampAmount = if (dMag < minDist) {
-            minDist - dMag
-        } else if (dMag > maxDist) {
-            dMag - maxDist
-        } else {
-            0f
-        }
+        result.clampAmount = max(distanceClampAmount, angularClampAmount)
+        result.angularClampAmount = angularClampAmount
 
         val dirX: Float; val dirY: Float; val dirZ: Float
         if (dMag > 1e-6f) {
@@ -348,6 +418,19 @@ object SkeletonMath {
      */
     fun toLocalDirection(worldDir: Vector3, rotation: JointRotation, out: Vector3): Vector3 {
         return rotAround(worldDir, rotation.axis, -rotation.angle, out)
+    }
+
+    /**
+     * Angle (degrees) between two directions, allocation-free. Used by the angular
+     * joint-limit validator and by any caller that needs the deviation of a proximal bone from
+     * its anatomical neutral direction (the root-joint cone in [AngularJointLimits]).
+     */
+    fun angleBetweenDegrees(a: Vector3, b: Vector3): Float {
+        val ma = a.mag()
+        val mb = b.mag()
+        if (ma < 1e-6f || mb < 1e-6f) return 0f
+        val dot = (a.x * b.x + a.y * b.y + a.z * b.z) / (ma * mb)
+        return acos(dot.coerceIn(-1f, 1f)) * RAD2DEG
     }
 
     /**
