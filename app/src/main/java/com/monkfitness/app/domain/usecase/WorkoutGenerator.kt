@@ -751,7 +751,15 @@ class WorkoutGenerator {
         availableEquipment: Set<Equipment> = emptySet()
     ): List<Exercise> {
         val normalizedEquipment = normalizeAvailableEquipment(availableEquipment)
-        return allExercises.filter { it.isAccessibleWith(normalizedEquipment) }
+        val base = allExercises.filter { it.isAccessibleWith(normalizedEquipment) }
+        // Engineering Validation is a developer tool: hidden unless explicitly
+        // enabled via DeveloperSettings. The browser/search ask that single
+        // source of truth; training systems never reach here.
+        return if (com.monkfitness.app.data.model.DeveloperSettings.showEngineeringValidation) {
+            base
+        } else {
+            base.filter { !it.isTestPose }
+        }
     }
 
     private fun filterExercisesForAvailableEquipment(

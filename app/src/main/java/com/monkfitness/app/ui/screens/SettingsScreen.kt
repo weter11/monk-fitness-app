@@ -189,6 +189,22 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            Text(text = stringResource(R.string.settings_developer), style = MaterialTheme.typography.titleLarge)
+            Text(
+                text = stringResource(R.string.show_engineering_validation_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            val devShowEngineering by com.monkfitness.app.data.model.DeveloperSettings.showEngineeringValidationFlow.collectAsState()
+            SettingSwitchRow(
+                title = stringResource(R.string.show_engineering_validation),
+                checked = devShowEngineering,
+                onCheckedChange = { com.monkfitness.app.data.model.DeveloperSettings.showEngineeringValidation = it }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             Text(text = stringResource(R.string.personalization), style = MaterialTheme.typography.titleLarge)
             Text(
                 text = stringResource(R.string.equipment_selection_desc),

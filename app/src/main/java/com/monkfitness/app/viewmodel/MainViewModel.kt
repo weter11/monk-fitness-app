@@ -455,7 +455,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _expandedFamilyIds,
         availableEquipment,
         filterLibraryByCategories,
-        disabledExerciseFamilies
+        disabledExerciseFamilies,
+        com.monkfitness.app.data.model.DeveloperSettings.showEngineeringValidationFlow
     ) { params ->
         val difficultyAdjustments = params[0] as Map<String, Int>
         val debouncedQuery = params[1] as String
@@ -465,6 +466,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val availableEquipment = params[5] as Set<Equipment>
         val filterByCategories = params[6] as Boolean
         val disabledFamilies = params[7] as Set<String>
+        @Suppress("UNUSED_VARIABLE") val devShowEngineering = params[8] as Boolean
 
         val exercises = getExerciseLibrary(difficultyAdjustments, availableEquipment, filterByCategories, disabledFamilies)
         val searchFilteredExercises = if (debouncedQuery.isBlank()) {

@@ -690,5 +690,9 @@
     <string name="stats_animated_label">Animated:</string>
     <string name="stats_animated_format">%1$d / %2$d</string>
 
+    <string name="settings_developer">Developer</string>
+    <string name="show_engineering_validation">Show Engineering Validation category</string>
+    <string name="show_engineering_validation_desc">Reveals the static biomechanics validation poses in the Exercises browser and Search. Off by default. These are engine reference poses, not training exercises.</string>
+
     <string name="ok">OK</string>
 </resources>
