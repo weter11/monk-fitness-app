@@ -9,9 +9,6 @@ class PikePushUpPose : BasePushUpPose() {
 
     override val gripWidthMultiplier = 1.2f
 
-    private val armAPoleLocal = Vector3()
-    private val armPPoleLocal = Vector3()
-
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
         durationSeconds = 2.5f, loopMode = LoopMode.LOOP,
