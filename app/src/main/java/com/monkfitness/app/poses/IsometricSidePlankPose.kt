@@ -1,120 +1,135 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.animation.SkeletonMath.solveIK
-import com.monkfitness.app.animation.SkeletonMath.lerp
-import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
-class IsometricSidePlankPose : PoseBuilder {
+/**
+ * Side Plank — biomechanics-first rewrite.
+ *
+ * Physio description (progress 0 -> 1 = "from lying on the side, lift the hips into
+ * the braced side-plank line, then settle"; PING_PONG makes it a controlled,
+ * continuously-stabilizing cycle):
+ *
+ *  - SUPPORT: the bottom (down-side) forearm and the lateral edge of the bottom
+ *    foot. Both are planted as fixed world anchors so the trunk loads them.
+ *  - STABLE joints: bottom elbow/wrist and the bottom foot. The spine is held in
+ *    one long line.
+ *  - MOVING joints: the hips (the prime mover — they lift the body off the mat),
+ *    the down-side shoulder girdle (must stay *depressed + protracted*, not shrug
+ *    to the ear), the rib cage (breathing), and the top arm.
+ *  - CENTRE OF MASS: rises over the bottom forearm/foot base as the hips lift, and
+ *    settles — the obliques do the work, not a rigid roll.
+ *  - SCAPULA (down side): actively stabilized — the shoulder is pushed away from
+ *    the ear (never collapsed into the joint). Modeled by keeping the support
+ *    shoulder lifted well above the planted elbow.
+ *  - RIB CAGE / PELVIS: pelvis is the driver here (it lifts the line); the rib
+ *    cage follows with a gentle breathing swell.
+ *  - TOP ARM: rests along the top hip and floats up slightly with the breath
+ *    (a stable, believable side-plank hand-on-hip, not a rigid strut).
+ *  - HEAD: neutral, in line with the spine; follows the thorax by FK.
+ */
+class IsometricSidePlankPose : BasePlankPose() {
+
     override val metadata = PoseMetadata(
-        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
-        durationSeconds = 3.0f, loopMode = LoopMode.LOOP,
+        camera = plankCamera,
+        durationSeconds = 4.0f,
+        // PING_PONG (FastOutSlowIn both ways) removes the legacy LOOP's linear,
+        // curve-ignoring constant-speed motion and its end-snap.
+        loopMode = LoopMode.PING_PONG,
         motionCurve = MotionCurve.EASE_IN_OUT,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = plankEnvironment,
+        pivotType = PivotType.ELBOWS,
+        supportContacts = setOf(
+            SupportContact.RIGHT_FOREARM, // down-side support forearm
+            SupportContact.RIGHT_FOOT
+        ),
+        exerciseFamily = "plank",
+        motionType = "Isometric Hold",
+        bodyOrientation = "Side-lying"
     )
-
-    private var roots: List<SkeletonNode>? = null
-    private var pelvis: SkeletonNode? = null; private var chest: SkeletonNode? = null; private var neck: SkeletonNode? = null; private var head: SkeletonNode? = null
-    private var shoulderA: SkeletonNode? = null; private var elbowA: SkeletonNode? = null; private var handA: SkeletonNode? = null; private var palmA: SkeletonNode? = null; private var knucklesA: SkeletonNode? = null; private var fingertipsA: SkeletonNode? = null
-    private var shoulderP: SkeletonNode? = null; private var elbowP: SkeletonNode? = null; private var handP: SkeletonNode? = null; private var palmP: SkeletonNode? = null; private var knucklesP: SkeletonNode? = null; private var fingertipsP: SkeletonNode? = null
-    private var hipF: SkeletonNode? = null; private var kneeF: SkeletonNode? = null; private var ankleF: SkeletonNode? = null; private var heelF: SkeletonNode? = null; private var toeF: SkeletonNode? = null
-    private var hipB: SkeletonNode? = null; private var kneeB: SkeletonNode? = null; private var ankleB: SkeletonNode? = null; private var heelB: SkeletonNode? = null; private var toeB: SkeletonNode? = null
-
-    private val jointsBuffer = SkeletonPose()
-    private val legFBuffer = SkeletonMath.IKResult(); private val legBBuffer = SkeletonMath.IKResult()
-    private val armABuffer = SkeletonMath.IKResult(); private val armPBuffer = SkeletonMath.IKResult()
-
-    private fun ensureHierarchy(def: SkeletonDefinition) {
-        if (roots != null) return
-        pelvis = SkeletonNode(Joint.PELVIS); chest = pelvis!!.addChild(SkeletonNode(Joint.CHEST))
-        neck = chest!!.addChild(SkeletonNode(Joint.NECK_END)); head = neck!!.addChild(SkeletonNode(Joint.HEAD_POS))
-
-        shoulderA = chest!!.addChild(SkeletonNode(Joint.SHOULDER_A)); elbowA = shoulderA!!.addChild(SkeletonNode(Joint.ELBOW_A)); handA = elbowA!!.addChild(SkeletonNode(Joint.HAND_A)); palmA = handA!!.addChild(SkeletonNode(Joint.PALM_A)); knucklesA = palmA!!.addChild(SkeletonNode(Joint.KNUCKLES_A)); fingertipsA = knucklesA!!.addChild(SkeletonNode(Joint.FINGERTIPS_A))
-        shoulderP = chest!!.addChild(SkeletonNode(Joint.SHOULDER_P)); elbowP = shoulderP!!.addChild(SkeletonNode(Joint.ELBOW_P)); handP = elbowP!!.addChild(SkeletonNode(Joint.HAND_P)); palmP = handP!!.addChild(SkeletonNode(Joint.PALM_P)); knucklesP = palmP!!.addChild(SkeletonNode(Joint.KNUCKLES_P)); fingertipsP = knucklesP!!.addChild(SkeletonNode(Joint.FINGERTIPS_P))
-
-        hipF = pelvis!!.addChild(SkeletonNode(Joint.HIP_F)); kneeF = hipF!!.addChild(SkeletonNode(Joint.KNEE_F)); ankleF = kneeF!!.addChild(SkeletonNode(Joint.ANKLE_F)); heelF = ankleF!!.addChild(SkeletonNode(Joint.HEEL_F)); toeF = ankleF!!.addChild(SkeletonNode(Joint.TOE_F))
-        hipB = pelvis!!.addChild(SkeletonNode(Joint.HIP_B)); kneeB = hipB!!.addChild(SkeletonNode(Joint.KNEE_B)); ankleB = kneeB!!.addChild(SkeletonNode(Joint.ANKLE_B)); heelB = ankleB!!.addChild(SkeletonNode(Joint.HEEL_B)); toeB = ankleB!!.addChild(SkeletonNode(Joint.TOE_B))
-        roots = listOf(pelvis!!)
-    }
 
     override fun build(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
 
-        // 1. Core Lift Geometry
-        // Smoothly lifts from resting hip into the rigid side plank line
         val lift = context.progress
-        val pelvisX = 0f
-        val pelvisY = lerp(15f, 35f, lift)
+        val breath = breathingSwell(lift)
 
-        // Slight upward incline toward the supporting shoulder
-        val torsoPitch = lerp(-1.57f, -1.4f, lift)
+        // --- 1. Trunk anchoring -------------------------------------------------
+        // Hip height is the family contract (15f resting -> 35f braced). A tiny
+        // breath float (0 at the endpoints) keeps the hips alive mid-hold.
+        val pelvisY = SkeletonMath.lerp(restingPelvisY, plankPelvisY, lift) + breath * 2f
 
-        pelvis!!.localPosition = Vector3(pelvisX, pelvisY, 0f)
-        pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), torsoPitch)
+        // Incline established toward the supporting shoulder. The end incline is
+        // chosen so the rolled down-side shoulder stays ABOVE the planted elbow
+        // (otherwise the long engine upper arm would drive the elbow through the
+        // floor). This is the core geometric tension for the side plank at the
+        // contract hip height of 35 — documented as debt in the report (§7).
+        val torsoPitch = SkeletonMath.lerp(-1.57f, -1.18f, lift)
+        val invTorsoZ = -torsoPitch
 
-        chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)
-        neck!!.localPosition = Vector3(0f, def.neckLength, 0f); head!!.localPosition = Vector3(0f, 18f, 0f)
+        pelvis!!.localPosition.set(0f, pelvisY, 0f)
+        pelvis!!.localRotation.set(axisZ, torsoPitch)
 
-        // 2. The 3D Roll Matrix
-        // We rotate the lateral joints 90 degrees around the local Spine (Y-axis).
-        // This forces Side P (Right) to face the floor, and Side A (Left) to face the ceiling.
+        chest!!.localPosition.set(0f, def.torsoLength, 0f)
+
+        // Head continues the spine line (neutral); the thorax carries the rest.
+        buildHead(neck!!, head!!, def.neckLength, tempV3.set(0f, 1f, 0f))
+
+        // --- 2. Roll the body onto its side ------------------------------------
+        // Build the neutral lateral offsets, then roll them 90° about the local
+        // spine (Y) axis. This drops SHOULDER_P / HIP_B to the down side (support)
+        // and lifts SHOULDER_A / HIP_F to the top (stacked).
         val spineRoll = PI.toFloat() / 2f
-        val localSpineAxis = Vector3(0f, 1f, 0f)
+        val spineAxis = tempV1.set(0f, 1f, 0f)
+        buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
+        buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
+        SkeletonMath.rotAround(hipF!!.localPosition, spineAxis, spineRoll, hipF!!.localPosition)
+        SkeletonMath.rotAround(hipB!!.localPosition, spineAxis, spineRoll, hipB!!.localPosition)
+        SkeletonMath.rotAround(shoulderA!!.localPosition, spineAxis, spineRoll, shoulderA!!.localPosition)
+        SkeletonMath.rotAround(shoulderP!!.localPosition, spineAxis, spineRoll, shoulderP!!.localPosition)
 
-        hipF!!.localPosition = rotAround(Vector3(0f, 0f, -def.hipWidth), localSpineAxis, spineRoll, Vector3())
-        hipB!!.localPosition = rotAround(Vector3(0f, 0f, def.hipWidth), localSpineAxis, spineRoll, Vector3())
-        shoulderA!!.localPosition = rotAround(Vector3(0f, 0f, -def.shoulderWidth), localSpineAxis, spineRoll, Vector3())
-        shoulderP!!.localPosition = rotAround(Vector3(0f, 0f, def.shoulderWidth), localSpineAxis, spineRoll, Vector3())
+        roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
-        roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
+        // --- 3. Legs: stacked, bottom foot planted -----------------------------
+        val ankleX = -def.thighLength - def.shinLength + 20f
+        // Bottom leg (HIP_B) rests on the mat; top leg (HIP_F) stacks just above it.
+        targetB.set(ankleX, contactY, 0f)
+        poleB.set(0f, -1f, 0f)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, invTorsoZ, kneeB!!, ankleB!!, legBBuffer)
 
-        // 3. Stacking the Legs
-        val legLength = def.thighLength + def.shinLength
-        // Bottom Leg (Side P) supports the weight on the floor
-        val targetAnkleB = Vector3(-legLength + 20f, 15f, 0f)
-        // Top Leg (Side A) stacks exactly on top of the bottom leg
-        val targetAnkleF = Vector3(-legLength + 20f, lerp(15f, 25f, lift), 0f)
+        targetF.set(ankleX, contactY + SkeletonMath.lerp(0f, 10f, lift), 0f)
+        poleF.set(0f, 1f, 0f)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, invTorsoZ, kneeF!!, ankleF!!, legFBuffer)
 
-        val legFIK = solveIK(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, legFBuffer)
-        val legBIK = solveIK(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, -1f, 0f), def.legIKConstraint, legBBuffer)
+        ankleF!!.localRotation.set(axisZ, invTorsoZ)
+        ankleB!!.localRotation.set(axisZ, invTorsoZ)
+        heelF!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        heelB!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
 
-        rotAround(Vector3(legFIK.joint.x - hipF!!.worldPosition.x, legFIK.joint.y - hipF!!.worldPosition.y, legFIK.joint.z - hipF!!.worldPosition.z), Vector3(0f, 0f, 1f), -torsoPitch, kneeF!!.localPosition)
-        rotAround(Vector3(legFIK.end.x - legFIK.joint.x, legFIK.end.y - legFIK.joint.y, legFIK.end.z - legFIK.joint.z), Vector3(0f, 0f, 1f), -torsoPitch, ankleF!!.localPosition)
-        rotAround(Vector3(legBIK.joint.x - hipB!!.worldPosition.x, legBIK.joint.y - hipB!!.worldPosition.y, legBIK.joint.z - hipB!!.worldPosition.z), Vector3(0f, 0f, 1f), -torsoPitch, kneeB!!.localPosition)
-        rotAround(Vector3(legBIK.end.x - legBIK.joint.x, legBIK.end.y - legBIK.joint.y, legBIK.end.z - legBIK.joint.z), Vector3(0f, 0f, 1f), -torsoPitch, ankleB!!.localPosition)
+        // --- 4. Support forearm (down side, SHOULDER_P) ------------------------
+        scratchShoulderP.set(shoulderP!!.worldPosition)
+        // Planted: the forearm world X is anchored so the trunk loads it. The
+        // support shoulder stays lifted above the planted elbow (scapular
+        // depression — no shrug into the ear).
+        val handReach = def.forearmLength * 1.3f
+        targetP.set(scratchShoulderP.x + handReach, contactY, 0f)
+        poleP.set(-0.4f, -1f, 0f) // seat the elbow straight down onto the mat
+        bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, invTorsoZ, elbowP!!, handP!!, armPBuffer)
 
-        ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), -torsoPitch)
-        ankleB!!.localRotation.set(Vector3(0f, 0f, 1f), -torsoPitch)
-        heelF!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeF!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
-        heelB!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeB!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
+        handP!!.localRotation.set(axisZ, invTorsoZ)
+        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
 
-        // 4. Arms Geometry
-        val chestW = chest!!.worldPosition
-        val shoulderAW = rotAround(shoulderA!!.localPosition, Vector3(0f, 0f, 1f), torsoPitch, Vector3()).add(chestW)
-        val shoulderPW = rotAround(shoulderP!!.localPosition, Vector3(0f, 0f, 1f), torsoPitch, Vector3()).add(chestW)
+        // --- 5. Top arm (SHOULDER_A): hand resting on the top hip --------------
+        scratchShoulderA.set(shoulderA!!.worldPosition)
+        // Hand settles onto the raised top hip and floats up a touch with the breath.
+        targetA.set(hipF!!.worldPosition.x, hipF!!.worldPosition.y + 6f + breath * 8f, 0f)
+        poleA.set(-1f, 1f, -1f) // elbow up and outward, away from the body
+        bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, invTorsoZ, elbowA!!, handA!!, armABuffer)
 
-        // Support Arm (Side P): Forearm rests completely flat on the floor pushing the body up
-        val targetHandP = Vector3(shoulderPW.x + def.forearmLength * 0.8f, 15f, 0f)
-        // Pole vector directs the elbow straight back and down onto the floor
-        val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, Vector3(-1f, -1f, 0f), def.armIKConstraint, armPBuffer)
+        handA!!.localRotation.set(axisZ, invTorsoZ)
+        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
 
-        // Top Arm (Side A): Rest casually on the top hip
-        val targetHandA = pelvis!!.worldPosition + Vector3(0f, 20f, 0f)
-        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(-1f, 1f, -1f), def.armIKConstraint, armABuffer)
-
-        rotAround(Vector3(armA.joint.x - shoulderAW.x, armA.joint.y - shoulderAW.y, armA.joint.z - shoulderAW.z), Vector3(0f, 0f, 1f), -torsoPitch, elbowA!!.localPosition)
-        rotAround(Vector3(armA.end.x - armA.joint.x, armA.end.y - armA.joint.y, armA.end.z - armA.joint.z), Vector3(0f, 0f, 1f), -torsoPitch, handA!!.localPosition)
-        rotAround(Vector3(armP.joint.x - shoulderPW.x, armP.joint.y - shoulderPW.y, armP.joint.z - shoulderPW.z), Vector3(0f, 0f, 1f), -torsoPitch, elbowP!!.localPosition)
-        rotAround(Vector3(armP.end.x - armP.joint.x, armP.end.y - armP.joint.y, armP.end.z - armP.joint.z), Vector3(0f, 0f, 1f), -torsoPitch, handP!!.localPosition)
-
-        handA!!.localRotation.set(Vector3(0f, 0f, 1f), -torsoPitch); handP!!.localRotation.set(Vector3(0f, 0f, 1f), -torsoPitch)
-        palmA!!.localPosition = Vector3(6f, 0f, 0f); knucklesA!!.localPosition = Vector3(6f, 0f, 0f); fingertipsA!!.localPosition = Vector3(10f, 0f, 0f)
-        palmP!!.localPosition = Vector3(6f, 0f, 0f); knucklesP!!.localPosition = Vector3(6f, 0f, 0f); fingertipsP!!.localPosition = Vector3(10f, 0f, 0f)
-
-        SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
-        jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
-        return jointsBuffer
+        return finalizePlankPose()
     }
 }
