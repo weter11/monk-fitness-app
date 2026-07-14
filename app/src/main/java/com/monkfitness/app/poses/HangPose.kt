@@ -1,6 +1,7 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
+import kotlin.math.*
 
 /**
  * Dead hang — biomechanics-first rewrite.
