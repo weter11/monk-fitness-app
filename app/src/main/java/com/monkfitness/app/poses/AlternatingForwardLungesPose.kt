@@ -2,17 +2,24 @@ package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
 
+/**
+ * Alternating Forward Lunge — a sagittal lunge where the **active foot steps
+ * forward** and becomes the support. The pelvis lowers as a consequence of the
+ * support-knee flexion (derived from [BaseLungePose.bottomHeight]), the COM shifts
+ * forward over the front foot, and the contralateral arm counter-swings.
+ *
+ * Timing: the internal stance/swing drivers make progress 0 / 0.5 / 1 identical
+ * (mid-stance standing), so a closed [LoopMode.LOOP] is continuous with no snap.
+ */
 class AlternatingForwardLungesPose : BaseLungePose() {
 
-    override val stepSize = 85f
-    override val stepDirection = 1f
-    override val lateralOffsetMultiplier = 0f
+    override val mode = LungeMode.FORWARD
 
     override val metadata = PoseMetadata(
-        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
-        durationSeconds = 4.0f, loopMode = LoopMode.LOOP,
-        // LINEAR curve ensures our internal sine wave governs the acceleration flawlessly
+        camera = lungeCamera,
+        durationSeconds = 4.0f,
+        loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = lungeEnvironment
     )
 }
