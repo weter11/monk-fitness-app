@@ -3,6 +3,8 @@ package com.monkfitness.app.validation.poses
 import com.monkfitness.app.animation.CameraDefinition
 import com.monkfitness.app.animation.EnvironmentDefinition
 import com.monkfitness.app.animation.ContactConstraint
+import com.monkfitness.app.animation.ConstraintSolver
+import com.monkfitness.app.animation.ContactSpec
 import com.monkfitness.app.animation.IKConstraint
 import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.JointRotation
