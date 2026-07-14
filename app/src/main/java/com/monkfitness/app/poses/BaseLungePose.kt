@@ -3,11 +3,34 @@ package com.monkfitness.app.poses
 import com.monkfitness.app.animation.*
 import kotlin.math.*
 
+/**
+ * BaseLungePose owns ONLY the genuine shared Lunges & Step-Ups plumbing.
+ *
+ * It deliberately encodes NO choreography. The chain of command for every family
+ * member is the inverse of the legacy rigid-translation model:
+ *
+ *   support foot (fixed) -> swing foot (trajectory) -> COM moves naturally ->
+ *   hip follows support -> pelvis follows hip -> chest follows pelvis -> head follows chest
+ *
+ * The pelvis is therefore a *consequence* of where the feet are, never the driver.
+ *
+ * What is genuinely shared and therefore lives here:
+ *  - Standard skeleton via [SkeletonFactory.createStandardSkeleton]
+ *  - Allocation-free IK buffers + scratch targets/poles
+ *  - [bakeLeg] / [bakeArm] helpers wrapping [BasePose.bakeIkLimb] with frame-relative
+ *    poles (stable in the pelvis / chest frame) plus foot + hand finalization
+ *  - A shared breathing / stabilisation micro-driver that is ZERO at the rep endpoints
+ *  - A shared COM helper that distributes the pelvis over the support base
+ *  - Shared ground camera + environment
+ *  - Shared finalization (FK flatten, wrist mirror, IK clamp reporting)
+ *
+ * Everything else — leg sequencing, weight transfer, stance, stride, arm swing,
+ * step mechanics and hip mechanics — is supplied by the concrete variant, because
+ * it is Lunges/Step-Ups *biomechanics*, not engine knowledge.
+ */
 abstract class BaseLungePose : BasePose() {
 
-    abstract val stepSize: Float
-    abstract val stepDirection: Float // 1f for forward lunge, -1f for reverse lunge, etc.
-    abstract val lateralOffsetMultiplier: Float // for lateral lunges
+    protected val footRestY = 25f
 
     protected var roots: List<SkeletonNode>? = null
     protected var pelvis: SkeletonNode? = null; protected var chest: SkeletonNode? = null; protected var neck: SkeletonNode? = null; protected var head: SkeletonNode? = null
@@ -16,95 +39,173 @@ abstract class BaseLungePose : BasePose() {
     protected var hipF: SkeletonNode? = null; protected var kneeF: SkeletonNode? = null; protected var ankleF: SkeletonNode? = null; protected var heelF: SkeletonNode? = null; protected var toeF: SkeletonNode? = null
     protected var hipB: SkeletonNode? = null; protected var kneeB: SkeletonNode? = null; protected var ankleB: SkeletonNode? = null; protected var heelB: SkeletonNode? = null; protected var toeB: SkeletonNode? = null
 
-    protected val legFBuffer = SkeletonMath.IKResult()
-    protected val legBBuffer = SkeletonMath.IKResult()
-    protected val armABuffer = SkeletonMath.IKResult()
-    protected val armPBuffer = SkeletonMath.IKResult()
+    protected val legFBuffer = SkeletonMath.IKResult(); protected val legBBuffer = SkeletonMath.IKResult()
+    protected val armABuffer = SkeletonMath.IKResult(); protected val armPBuffer = SkeletonMath.IKResult()
+
+    protected val targetA = Vector3(); protected val targetP = Vector3()
+    protected val targetF = Vector3(); protected val targetB = Vector3()
+
+    // Shared engine scaffolding
+    protected val lungeCamera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f)
+    protected val lungeEnvironment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
 
     protected fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
         val nodes = SkeletonFactory.createStandardSkeleton()
         roots = nodes.roots
-        pelvis = nodes.pelvis
-        chest = nodes.chest
-        neck = nodes.neck
-        head = nodes.head
-        shoulderA = nodes.shoulderA
-        elbowA = nodes.elbowA
-        handA = nodes.handA
-        palmA = nodes.palmA
-        knucklesA = nodes.knucklesA
-        fingertipsA = nodes.fingertipsA
-        shoulderP = nodes.shoulderP
-        elbowP = nodes.elbowP
-        handP = nodes.handP
-        palmP = nodes.palmP
-        knucklesP = nodes.knucklesP
-        fingertipsP = nodes.fingertipsP
-        hipF = nodes.hipF
-        kneeF = nodes.kneeF
-        ankleF = nodes.ankleF
-        heelF = nodes.heelF
-        toeF = nodes.toeF
-        hipB = nodes.hipB
-        kneeB = nodes.kneeB
-        ankleB = nodes.ankleB
-        heelB = nodes.heelB
-        toeB = nodes.toeB
+        pelvis = nodes.pelvis; chest = nodes.chest; neck = nodes.neck; head = nodes.head
+        shoulderA = nodes.shoulderA; elbowA = nodes.elbowA; handA = nodes.handA; palmA = nodes.palmA; knucklesA = nodes.knucklesA; fingertipsA = nodes.fingertipsA
+        shoulderP = nodes.shoulderP; elbowP = nodes.elbowP; handP = nodes.handP; palmP = nodes.palmP; knucklesP = nodes.knucklesP; fingertipsP = nodes.fingertipsP
+        hipF = nodes.hipF; kneeF = nodes.kneeF; ankleF = nodes.ankleF; heelF = nodes.heelF; toeF = nodes.toeF
+        hipB = nodes.hipB; kneeB = nodes.kneeB; ankleB = nodes.ankleB; heelB = nodes.heelB; toeB = nodes.toeB
     }
 
-    override fun build(context: PoseContext): SkeletonPose {
-        val def = context.definition
-        ensureHierarchy(def)
+    /**
+     * Endpoint-zero breathing / stabilisation wave. Zero at progress 0 and 1 so a
+     * PING_PONG or LOOP turnaround produces no snap.
+     */
+    protected fun breathWave(p: Float): Float = 0.5f - 0.5f * cos(p * 2f * PI.toFloat())
 
-        // Alternating Handled Automatically using MotionDrivers
-        val lungeR = MotionDrivers.LeftPhase(context.progress)
-        val lungeL = MotionDrivers.RightPhase(context.progress)
-        val activeDrop = lungeR + lungeL
+    /**
+     * Centre-of-mass X given the two foot X positions and the load fraction.
+     * The pelvis sits midway between the feet (balanced base) biased toward the
+     * loaded foot as the rep deepens.
+     */
+    protected fun comX(plantX: Float, swingX: Float, load: Float): Float =
+        (plantX + swingX) * 0.5f + (swingX - plantX) * 0.12f * load
 
-        val standH = def.thighLength + def.shinLength + 25f
-        val pelvisX = activeDrop * 40f * stepDirection
-        val pelvisY = standH - (activeDrop * 65f)
-        val leanAngle = activeDrop * 0.15f
+    protected fun smoothstep(edge0: Float, edge1: Float, x: Float): Float {
+        val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
+        return t * t * (3f - 2f * t)
+    }
 
-        pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, -leanAngle)
+    /**
+     * Bakes one leg from its hip to a world-space ankle target using a frame-relative
+     * pole (stable in the pelvis frame) and writes the heel/toe + ankle orientation.
+     * The knee/ankle are counter-rotated by the pelvis lean so the planted foot stays
+     * level with the ground while the torso pitches.
+     */
+    protected fun bakeLeg(
+        def: SkeletonDefinition,
+        hipWorld: Vector3,
+        targetAnkle: Vector3,
+        poleLocal: Vector3,
+        parentRotation: JointRotation,
+        knee: SkeletonNode,
+        ankle: SkeletonNode,
+        heel: SkeletonNode,
+        toe: SkeletonNode,
+        buffer: SkeletonMath.IKResult
+    ) {
+        val localAngle = -parentRotation.angle
+        bakeIkLimb(hipWorld, targetAnkle, def.thighLength, def.shinLength, poleLocal, parentRotation, def.legIKConstraint, localAngle, knee, ankle, buffer)
+        ankle.localRotation.set(axisZ, localAngle)
+        heel.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f)
+        toe.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+    }
+
+    /**
+     * Bakes one arm from its shoulder to a world-space hand target using a frame-relative
+     * pole (stable in the chest frame) and writes the hand/palm/knuckles/fingertips offsets.
+     */
+    protected fun bakeArm(
+        def: SkeletonDefinition,
+        shoulderWorld: Vector3,
+        targetHand: Vector3,
+        poleLocal: Vector3,
+        parentRotation: JointRotation,
+        elbow: SkeletonNode,
+        hand: SkeletonNode,
+        palm: SkeletonNode,
+        knuckles: SkeletonNode,
+        fingertips: SkeletonNode,
+        buffer: SkeletonMath.IKResult
+    ) {
+        val localAngle = -parentRotation.angle
+        bakeIkLimb(shoulderWorld, targetHand, def.upperArmLength, def.forearmLength, poleLocal, parentRotation, def.armIKConstraint, localAngle, elbow, hand, buffer)
+        hand.localRotation.set(axisZ, localAngle)
+        palm.localPosition.set(6f, 0f, 0f); knuckles.localPosition.set(6f, 0f, 0f); fingertips.localPosition.set(10f, 0f, 0f)
+    }
+
+    protected fun finishPose(): SkeletonPose {
+        SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
+        jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
+        jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
+        jointsBuffer.maxIkClampAmount = maxOf(
+            legFBuffer.clampAmount, legBBuffer.clampAmount,
+            armABuffer.clampAmount, armPBuffer.clampAmount
+        )
+        return jointsBuffer
+    }
+
+    /**
+     * Assembles the full skeleton from already-computed, per-frame, per-exercise
+     * targets. This is plumbing only — the *values* come from the concrete
+     * choreography. The support leg is the fixed/loaded leg; the swing leg follows
+     * its own trajectory.
+     */
+    protected fun assemble(
+        def: SkeletonDefinition,
+        plantAnkle: Vector3,
+        swingAnkle: Vector3,
+        plantUsesFrontHip: Boolean,
+        pelvisX: Float,
+        pelvisY: Float,
+        pelvisZ: Float,
+        pelvisAngle: Float,
+        chestPitch: Float,
+        armAmt: Float,
+        armPmt: Float,
+        poleFrontLocal: Vector3,
+        poleBackLocal: Vector3,
+        poleArmALocal: Vector3,
+        poleArmPLocal: Vector3
+    ): SkeletonPose {
+        pelvis!!.localPosition.set(pelvisX, pelvisY, pelvisZ)
+        pelvis!!.localRotation.set(axisZ, pelvisAngle)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        neck!!.localPosition.set(0f, def.neckLength, 0f); head!!.localPosition.set(0f, 18f, 0f)
+        chest!!.localRotation.set(axisZ, chestPitch)
+
+        // Head follows the thorax: counter-rotate the gaze so the head stays upright
+        // (eyes forward) while the torso leans.
+        val headTilt = pelvisAngle + chestPitch
+        val gaze = SkeletonMath.rotAround(Vector3(0f, 1f, 0f), axisZ, -headTilt, tempV3)
+        gaze.normalize()
+        buildHead(neck!!, head!!, def.neckLength, gaze)
+
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
-        shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
-        shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
+        buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
-        val targetAnkleB = tempV1.set(lungeR * stepSize * stepDirection, 25f, def.hipWidth + (lateralOffsetMultiplier * activeDrop * 20f))
-        val targetAnkleF = tempV2.set(lungeL * stepSize * stepDirection, 25f, -def.hipWidth - (lateralOffsetMultiplier * activeDrop * 20f))
+        // --- Legs: front hip uses the front pole, back hip uses the back pole ---
+        val parentRot = pelvis!!.worldRotation
+        bakeLeg(def, hipF!!.worldPosition, if (plantUsesFrontHip) plantAnkle else swingAnkle, poleFrontLocal, parentRot, kneeF!!, ankleF!!, heelF!!, toeF!!, legFBuffer)
+        bakeLeg(def, hipB!!.worldPosition, if (plantUsesFrontHip) swingAnkle else plantAnkle, poleBackLocal, parentRot, kneeB!!, ankleB!!, heelB!!, toeB!!, legBBuffer)
 
-        val legFIK = bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, tempV3.set(1f, -1f, -0.2f), def.legIKConstraint, leanAngle, kneeF!!, ankleF!!, legFBuffer)
-        val legBIK = bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, tempV3.set(1f, -1f, 0.2f), def.legIKConstraint, leanAngle, kneeB!!, ankleB!!, legBBuffer)
+        // --- Arms: counterbalance swing, solved after FK so shoulders are known ---
+        val shA = shoulderA!!.worldPosition
+        val shP = shoulderP!!.worldPosition
+        val baseHandY = minOf(shA.y, shP.y) - 95f
+        targetA.set(shA.x + armAmt, baseHandY + abs(armAmt) * 0.3f, -def.shoulderWidth * 1.1f)
+        targetP.set(shP.x + armPmt, baseHandY + abs(armPmt) * 0.3f, def.shoulderWidth * 1.1f)
 
-        val footPitchF = lungeR * 0.8f
-        val footPitchB = lungeL * 0.8f
+        val chestRot = chest!!.worldRotation
+        bakeArm(def, shA, targetA, poleArmALocal, chestRot, elbowA!!, handA!!, palmA!!, knucklesA!!, fingertipsA!!, armABuffer)
+        bakeArm(def, shP, targetP, poleArmPLocal, chestRot, elbowP!!, handP!!, palmP!!, knucklesP!!, fingertipsP!!, armPBuffer)
 
-        ankleF!!.localRotation.set(axisZ, leanAngle - footPitchF)
-        ankleB!!.localRotation.set(axisZ, leanAngle - footPitchB)
-        heelF!!.localPosition.set(-def.foot.footLength * 0.29f, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * 0.71f, 0f, 0f)
-        heelB!!.localPosition.set(-def.foot.footLength * 0.29f, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * 0.71f, 0f, 0f)
+        return finishPose()
+    }
 
-        val armSwing = lungeR - lungeL
-        val targetHandA = tempV1.set(pelvisX + (armSwing * 30f) + 10f, pelvisY + def.torsoLength - 20f + (abs(armSwing) * 10f), -def.shoulderWidth * 1.5f)
-        val targetHandP = tempV2.set(pelvisX + (-armSwing * 30f) + 10f, pelvisY + def.torsoLength - 20f + (abs(armSwing) * 10f), def.shoulderWidth * 1.5f)
+    companion object {
+        // Frame-relative poles (authored in the pelvis / chest local frame)
+        val POLE_LEG_FRONT = Vector3(0.6f, 1f, -0.15f)
+        val POLE_LEG_BACK = Vector3(0.6f, 1f, 0.15f)
+        val POLE_ARM_A = Vector3(0f, -1f, -1f)
+        val POLE_ARM_P = Vector3(0f, -1f, 1f)
 
-        val armA = bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, tempV3.set(0f, -1f, -1f), def.armIKConstraint, leanAngle, elbowA!!, handA!!, armABuffer)
-        val armP = bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, tempV3.set(0f, -1f, 1f), def.armIKConstraint, leanAngle, elbowP!!, handP!!, armPBuffer)
-
-        handA!!.localRotation.set(axisZ, leanAngle); handP!!.localRotation.set(axisZ, leanAngle)
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
-
-        SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
-        jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
-        return jointsBuffer
+        // Standing pelvis height (soft knees so the leg is never driven past full extension)
+        fun standingPelvisY(def: SkeletonDefinition): Float = def.thighLength + def.shinLength + 22f
     }
 }

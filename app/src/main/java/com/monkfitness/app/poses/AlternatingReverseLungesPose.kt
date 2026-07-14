@@ -1,135 +1,85 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.animation.SkeletonMath.solveIK
-import com.monkfitness.app.animation.SkeletonMath.lerp
-import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
-class AlternatingReverseLungesPose : PoseBuilder {
+/**
+ * Alternating Reverse Lunge.
+ *
+ * Biomechanics (driver = support leg):
+ *  - The FRONT foot is the fixed support anchor; it never slides.
+ *  - The swing foot lifts and travels BACKWARD along its own arc, landing behind.
+ *  - The hips shift back while the torso hinges FORWARD over the planted front foot
+ *    (distinct from the forward lunge, where the hips shift forward).
+ *  - Contralateral arm swing; left and right alternate every half-cycle.
+ */
+class AlternatingReverseLungesPose : BaseLungePose() {
+
     override val metadata = PoseMetadata(
-        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
-        durationSeconds = 4.0f, loopMode = LoopMode.LOOP,
-        motionCurve = MotionCurve.LINEAR,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        camera = lungeCamera,
+        durationSeconds = 4.0f,
+        loopMode = LoopMode.LOOP,
+        motionCurve = MotionCurve.EASE_IN_OUT,
+        environment = lungeEnvironment,
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(SupportContact.LEFT_FOOT, SupportContact.RIGHT_FOOT)
+        ),
+        exerciseFamily = "lunges",
+        motionType = "alternating_reverse_lunge"
     )
-
-    private var roots: List<SkeletonNode>? = null
-    private var pelvis: SkeletonNode? = null; private var chest: SkeletonNode? = null; private var neck: SkeletonNode? = null; private var head: SkeletonNode? = null
-    private var shoulderA: SkeletonNode? = null; private var elbowA: SkeletonNode? = null; private var handA: SkeletonNode? = null; private var palmA: SkeletonNode? = null; private var knucklesA: SkeletonNode? = null; private var fingertipsA: SkeletonNode? = null
-    private var shoulderP: SkeletonNode? = null; private var elbowP: SkeletonNode? = null; private var handP: SkeletonNode? = null; private var palmP: SkeletonNode? = null; private var knucklesP: SkeletonNode? = null; private var fingertipsP: SkeletonNode? = null
-    private var hipF: SkeletonNode? = null; private var kneeF: SkeletonNode? = null; private var ankleF: SkeletonNode? = null; private var heelF: SkeletonNode? = null; private var toeF: SkeletonNode? = null
-    private var hipB: SkeletonNode? = null; private var kneeB: SkeletonNode? = null; private var ankleB: SkeletonNode? = null; private var heelB: SkeletonNode? = null; private var toeB: SkeletonNode? = null
-
-    private val jointsBuffer = SkeletonPose()
-    private val legFBuffer = SkeletonMath.IKResult(); private val legBBuffer = SkeletonMath.IKResult()
-    private val armABuffer = SkeletonMath.IKResult(); private val armPBuffer = SkeletonMath.IKResult()
-
-    private fun ensureHierarchy(def: SkeletonDefinition) {
-        if (roots != null) return
-        val nodes = SkeletonFactory.createStandardSkeleton()
-        roots = nodes.roots
-        pelvis = nodes.pelvis
-        chest = nodes.chest
-        neck = nodes.neck
-        head = nodes.head
-        shoulderA = nodes.shoulderA
-        elbowA = nodes.elbowA
-        handA = nodes.handA
-        palmA = nodes.palmA
-        knucklesA = nodes.knucklesA
-        fingertipsA = nodes.fingertipsA
-        shoulderP = nodes.shoulderP
-        elbowP = nodes.elbowP
-        handP = nodes.handP
-        palmP = nodes.palmP
-        knucklesP = nodes.knucklesP
-        fingertipsP = nodes.fingertipsP
-        hipF = nodes.hipF
-        kneeF = nodes.kneeF
-        ankleF = nodes.ankleF
-        heelF = nodes.heelF
-        toeF = nodes.toeF
-        hipB = nodes.hipB
-        kneeB = nodes.kneeB
-        ankleB = nodes.ankleB
-        heelB = nodes.heelB
-        toeB = nodes.toeB
-    }
 
     override fun build(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
 
-        // 1. Alternating Branchless Extraction
-        val cycle = context.progress * 2f * PI.toFloat()
-        val lungeR = max(0f, sin(cycle))  // Right leg (Side B) stepping BACKWARD
-        val lungeL = max(0f, -sin(cycle)) // Left leg (Side F) stepping BACKWARD
-        val activeDrop = lungeR + lungeL
+        val standH = standingPelvisY(def)
+        val bottomH = footRestY + def.shinLength * 0.98f
+        val footSepZ = def.hipWidth * 1.15f
+        val stride = 86f
+        val leanMax = 0.32f
+        val liftHeight = 8f
+        val armAmp = 36f
 
-        // 2. Core Mechanics
-        val standH = def.thighLength + def.shinLength + 25f
-        // Pelvis shifts backward this time, keeping the front planted foot as the anchor
-        val pelvisX = activeDrop * -40f
-        val pelvisY = standH - (activeDrop * 65f)
-        // Torso leans slightly forward to stay over the front foot's center of mass
-        val leanAngle = activeDrop * 0.15f
+        val s = (1f - cos(context.progress * 4f * PI.toFloat())) * 0.5f
+        val swingIsFront = context.progress >= 0.5f
+        val plantUsesFrontHip = !swingIsFront
 
-        pelvis!!.localPosition = Vector3(pelvisX, pelvisY, 0f)
-        pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), -leanAngle)
+        val plantZ = if (plantUsesFrontHip) -footSepZ else footSepZ
+        val swingZ = if (swingIsFront) -footSepZ else footSepZ
 
-        chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)
-        neck!!.localPosition = Vector3(0f, def.neckLength, 0f); head!!.localPosition = Vector3(0f, 18f, 0f)
-        hipF!!.localPosition = Vector3(0f, 0f, -def.hipWidth)
-        hipB!!.localPosition = Vector3(0f, 0f, def.hipWidth)
-        shoulderA!!.localPosition = Vector3(0f, 0f, -def.shoulderWidth)
-        shoulderP!!.localPosition = Vector3(0f, 0f, def.shoulderWidth)
+        // Support foot fixed; swing foot travels BACKWARD (-X).
+        targetF.set(0f, footRestY, plantZ)
+        targetB.set(-stride * s, footRestY + liftHeight * 4f * s * (1f - s), swingZ)
 
-        roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
+        val plantAnkle = if (plantUsesFrontHip) targetF else targetB
+        val swingAnkle = if (plantUsesFrontHip) targetB else targetF
 
-        // 3. Leg Kinematics (Backward Step)
-        val stepSize = 85f
-        val targetAnkleB = Vector3(lungeR * -stepSize, 25f, def.hipWidth)
-        val targetAnkleF = Vector3(lungeL * -stepSize, 25f, -def.hipWidth)
+        // COM shifts backward (negative X) as the rep deepens.
+        val pelvisX = comX(0f, -stride * s, s)
+        val pelvisY = SkeletonMath.lerp(standH, bottomH, s)
+        val lean = SkeletonMath.lerp(0f, leanMax, s)
+        val pelvisAngle = -lean
 
-        val legFIK = solveIK(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, -1f, -0.2f), def.legIKConstraint, legFBuffer)
-        val legBIK = solveIK(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, -1f, 0.2f), def.legIKConstraint, legBBuffer)
+        val a = armAmp * s
+        val (armAmt, armPmt) = if (swingIsFront) Pair(-a, a) else Pair(a, -a)
 
-        rotAround(Vector3(legFIK.joint.x - hipF!!.worldPosition.x, legFIK.joint.y - hipF!!.worldPosition.y, legFIK.joint.z - hipF!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, kneeF!!.localPosition)
-        rotAround(Vector3(legFIK.end.x - legFIK.joint.x, legFIK.end.y - legFIK.joint.y, legFIK.end.z - legFIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, ankleF!!.localPosition)
-        rotAround(Vector3(legBIK.joint.x - hipB!!.worldPosition.x, legBIK.joint.y - hipB!!.worldPosition.y, legBIK.joint.z - hipB!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, kneeB!!.localPosition)
-        rotAround(Vector3(legBIK.end.x - legBIK.joint.x, legBIK.end.y - legBIK.joint.y, legBIK.end.z - legBIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, ankleB!!.localPosition)
-
-        // 4. Heel Lift (Plantar Flexion)
-        // In a reverse lunge, the STEPPING foot is the back foot, so it lifts on its own active cycle.
-        val footPitchF = lungeL * 0.8f
-        val footPitchB = lungeR * 0.8f
-
-        ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle - footPitchF)
-        ankleB!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle - footPitchB)
-        heelF!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeF!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
-        heelB!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeB!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
-
-        // 5. Contra-Lateral Arm Swing
-        val armSwing = lungeR - lungeL
-        // When Right steps back (lungeR), Left leg is working/forward. So Right Arm (Side P) swings forward!
-        val targetHandA = Vector3(pelvisX + (-armSwing * 30f) + 10f, pelvisY + def.torsoLength - 20f + (abs(armSwing) * 10f), -def.shoulderWidth * 1.5f)
-        val targetHandP = Vector3(pelvisX + (armSwing * 30f) + 10f, pelvisY + def.torsoLength - 20f + (abs(armSwing) * 10f), def.shoulderWidth * 1.5f)
-
-        val armA = solveIK(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, armABuffer)
-        val armP = solveIK(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, armPBuffer)
-
-        rotAround(Vector3(armA.joint.x - shoulderA!!.worldPosition.x, armA.joint.y - shoulderA!!.worldPosition.y, armA.joint.z - shoulderA!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, elbowA!!.localPosition)
-        rotAround(Vector3(armA.end.x - armA.joint.x, armA.end.y - armA.joint.y, armA.end.z - armA.joint.z), Vector3(0f, 0f, 1f), leanAngle, handA!!.localPosition)
-        rotAround(Vector3(armP.joint.x - shoulderP!!.worldPosition.x, armP.joint.y - shoulderP!!.worldPosition.y, armP.joint.z - shoulderP!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, elbowP!!.localPosition)
-        rotAround(Vector3(armP.end.x - armP.joint.x, armP.end.y - armP.joint.y, armP.end.z - armP.joint.z), Vector3(0f, 0f, 1f), leanAngle, handP!!.localPosition)
-
-        handA!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle); handP!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle)
-        palmA!!.localPosition = Vector3(6f, 0f, 0f); knucklesA!!.localPosition = Vector3(6f, 0f, 0f); fingertipsA!!.localPosition = Vector3(10f, 0f, 0f)
-        palmP!!.localPosition = Vector3(6f, 0f, 0f); knucklesP!!.localPosition = Vector3(6f, 0f, 0f); fingertipsP!!.localPosition = Vector3(10f, 0f, 0f)
-
-        SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
-        jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
-        return jointsBuffer
+        return assemble(
+            def = def,
+            plantAnkle = plantAnkle,
+            swingAnkle = swingAnkle,
+            plantUsesFrontHip = plantUsesFrontHip,
+            pelvisX = pelvisX,
+            pelvisY = pelvisY,
+            pelvisZ = 0f,
+            pelvisAngle = pelvisAngle,
+            chestPitch = 0f,
+            armAmt = armAmt,
+            armPmt = armPmt,
+            poleFrontLocal = POLE_LEG_FRONT,
+            poleBackLocal = POLE_LEG_BACK,
+            poleArmALocal = POLE_ARM_A,
+            poleArmPLocal = POLE_ARM_P
+        )
     }
 }
