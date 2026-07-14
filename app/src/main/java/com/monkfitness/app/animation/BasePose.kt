@@ -184,55 +184,6 @@ abstract class BasePose : PoseBuilder {
         return SkeletonMath.solveIK(hipW, targetAnkle, thighLen, shinLen, poleLocal, parentRotation, constraint, result)
     }
 
-    protected fun bakeIkLimb(
-        rootWorldPos: Vector3,
-        targetWorldPos: Vector3,
-        length1: Float,
-        length2: Float,
-        parentRotation: JointRotation,
-        poleLocal: Vector3,
-        constraint: IKConstraint,
-        middleNode: SkeletonNode,
-        endNode: SkeletonNode,
-        ikBuffer: SkeletonMath.IKResult
-    ): SkeletonMath.IKResult {
-        val worldPole = SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld)
-        return bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, parentRotation, middleNode, endNode, ikBuffer)
-    }
-
-    protected fun solveNearStraightLeg(
-        shinLen: Float,
-        thighLen: Float,
-        targetFlexionDegrees: Float
-    ): SkeletonMath.NearStraightLimbResult {
-        return SkeletonMath.solveNearStraightLimb(shinLen, thighLen, targetFlexionDegrees, legScratch)
-    }
-
-    protected fun bakeIkLimb(
-        rootWorldPos: Vector3,
-        targetWorldPos: Vector3,
-        length1: Float,
-        length2: Float,
-        pole: Vector3,
-        constraint: IKConstraint,
-        parentRotation: JointRotation,
-        middleNode: SkeletonNode,
-        endNode: SkeletonNode,
-        ikBuffer: SkeletonMath.IKResult
-    ): SkeletonMath.IKResult {
-        val ikResult = SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, pole, constraint, ikBuffer)
-
-        // Store the limb offsets in the parent's true local frame so they survive the parent's
-        // full 3D world rotation exactly — no hand-fed inverse-Z scalar.
-        tempV1.set(ikResult.joint).subtract(rootWorldPos)
-        SkeletonMath.toLocalDirection(tempV1, parentRotation, middleNode.localPosition)
-
-        tempV1.set(ikResult.end).subtract(ikResult.joint)
-        SkeletonMath.toLocalDirection(tempV1, parentRotation, endNode.localPosition)
-
-        return ikResult
-    }
-
     // Common Motion helpers (internally utilizing stateless MotionDrivers)
     protected fun phase(progress: Float): Float = progress
     protected fun downMotion(progress: Float): Float = MotionDrivers.PushPhase(progress)
