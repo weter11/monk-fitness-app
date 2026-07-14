@@ -104,10 +104,11 @@ abstract class BasePose : PoseBuilder {
         middleNode: SkeletonNode,
         endNode: SkeletonNode,
         ikBuffer: SkeletonMath.IKResult,
-        straight: Boolean = false
+        straight: Boolean = false,
+        contact: ContactConstraint? = null
     ): SkeletonMath.IKResult {
         val worldPole = SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld)
-        return bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, parentRotation, middleNode, endNode, ikBuffer, straight)
+        return bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, parentRotation, middleNode, endNode, ikBuffer, straight, contact)
     }
 
     protected fun solveNearStraightLeg(
@@ -129,12 +130,13 @@ abstract class BasePose : PoseBuilder {
         middleNode: SkeletonNode,
         endNode: SkeletonNode,
         ikBuffer: SkeletonMath.IKResult,
-        straight: Boolean = false
+        straight: Boolean = false,
+        contact: ContactConstraint? = null
     ): SkeletonMath.IKResult {
         val ikResult = if (straight) {
-            SkeletonMath.solveStraightLimb(rootWorldPos, targetWorldPos, length1, length2, constraint, ikBuffer)
+            SkeletonMath.solveStraightLimb(rootWorldPos, targetWorldPos, length1, length2, constraint, ikBuffer, contact)
         } else {
-            SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, pole, constraint, ikBuffer)
+            SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, pole, constraint, ikBuffer, contact)
         }
 
         // Single source of truth: automatically propagate the solver's clamp amount into the

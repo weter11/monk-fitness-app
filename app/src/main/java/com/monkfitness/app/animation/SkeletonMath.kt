@@ -133,6 +133,27 @@ data class IKConstraint(
     }
 }
 
+/**
+ * A fixed support contact the end-effector must respect. When an IK solve would
+ * drive a planted hand/foot through the support surface, the solver clamps the
+ * end joint *onto* the [normal]/[point] plane (projecting the target onto the
+ * surface) instead of along the free direction. This keeps a contact on the
+ * ground / bar / prop and prevents penetration, while still recording the
+ * reachability clamp.
+ *
+ * The plane is general data supplied by the caller (a ground plane, a bar-top
+ * plane, a prop surface) — never a single-pose magic constant.
+ */
+data class ContactConstraint(
+    val normal: Vector3,
+    val point: Vector3
+) {
+    companion object {
+        /** Horizontal ground plane at height [level]: normal (0,1,0), passing through (0,level,0). */
+        fun ground(level: Float) = ContactConstraint(Vector3(0f, 1f, 0f), Vector3(0f, level, 0f))
+    }
+}
+
 object SkeletonMath {
     // Static scratch for transforming a frame-relative pole into world space inside solveIK.
     private val poleWorldScratch = Vector3()
@@ -247,7 +268,8 @@ object SkeletonMath {
         L2: Float,
         pole: Vector3,
         constraint: IKConstraint,
-        result: IKResult = IKResult()
+        result: IKResult = IKResult(),
+        contact: ContactConstraint? = null
     ): IKResult {
         val dx = target.x - root.x
         val dy = target.y - root.y
@@ -303,9 +325,54 @@ object SkeletonMath {
             dirX = 1f; dirY = 0f; dirZ = 0f
         }
 
-        result.end.set(root.x + dirX * dist, root.y + dirY * dist, root.z + dirZ * dist)
+        val endX = root.x + dirX * dist
+        val endY = root.y + dirY * dist
+        val endZ = root.z + dirZ * dist
 
-        val a = (dist * dist + L1 * L1 - L2 * L2) / (2 * dist)
+        // 3) Contact awareness: if the (clamped) end penetrates the support plane, re-solve the
+        //    end *onto* the plane at the same reachable distance, directed toward the target's
+        //    surface projection. This keeps a planted hand/foot on the ground/bar instead of
+        //    driving it through, while the recorded clamp still surfaces unreachability (PR-10).
+        if (contact != null) {
+            val signed = (endX - contact.point.x) * contact.normal.x +
+                (endY - contact.point.y) * contact.normal.y +
+                (endZ - contact.point.z) * contact.normal.z
+            if (signed < 0f) {
+                resolveContactPlane(root, target, dist, pole, L1, L2, constraint, contact, result, straight = false)
+                return result
+            }
+        }
+
+        result.end.set(endX, endY, endZ)
+        solveTriangleJoint(root, result.end, pole, L1, L2, result.joint)
+        return result
+    }
+
+    /**
+     * Middle-joint position for a two-bone chain given a *fixed* end point: the standard
+     * triangle IK offset (perpendicular to the root→end axis, sized by the pole, at height
+     * `h` from the axis). Allocation-free: writes [outJoint].
+     */
+    private fun solveTriangleJoint(
+        root: Vector3,
+        end: Vector3,
+        pole: Vector3,
+        L1: Float,
+        L2: Float,
+        outJoint: Vector3
+    ) {
+        val dxe = end.x - root.x
+        val dye = end.y - root.y
+        val dze = end.z - root.z
+        val dMag = sqrt(dxe * dxe + dye * dye + dze * dze)
+        val dirX: Float; val dirY: Float; val dirZ: Float
+        if (dMag > 1e-6f) {
+            dirX = dxe / dMag; dirY = dye / dMag; dirZ = dze / dMag
+        } else {
+            dirX = 1f; dirY = 0f; dirZ = 0f
+        }
+
+        val a = (dMag * dMag + L1 * L1 - L2 * L2) / (2f * dMag)
         val h = sqrt(max(L1 * L1 - a * a, 0f))
 
         val pDotDir = pole.x * dirX + pole.y * dirY + pole.z * dirZ
@@ -329,13 +396,112 @@ object SkeletonMath {
             px /= pMag; py /= pMag; pz /= pMag
         }
 
-        result.joint.set(
+        outJoint.set(
             root.x + dirX * a + px * h,
             root.y + dirY * a + py * h,
             root.z + dirZ * a + pz * h
         )
+    }
 
-        return result
+    /**
+     * Middle-joint position for a straight limb given a fixed end point: the middle sits at
+     * exactly `L1` along the root→end direction (clamped so it never overshoots the end).
+     * Allocation-free: writes [outJoint].
+     */
+    private fun solveStraightMiddle(root: Vector3, end: Vector3, L1: Float, outJoint: Vector3) {
+        val dxe = end.x - root.x
+        val dye = end.y - root.y
+        val dze = end.z - root.z
+        val dMag = sqrt(dxe * dxe + dye * dye + dze * dze)
+        val dirX: Float; val dirY: Float; val dirZ: Float
+        if (dMag > 1e-6f) {
+            dirX = dxe / dMag; dirY = dye / dMag; dirZ = dze / dMag
+        } else {
+            dirX = 1f; dirY = 0f; dirZ = 0f
+        }
+        val middleDist = minOf(L1, dMag)
+        outJoint.set(
+            root.x + dirX * middleDist,
+            root.y + dirY * middleDist,
+            root.z + dirZ * middleDist
+        )
+    }
+
+    /**
+     * Re-solves the end joint onto the [contact] plane at the reachable [dist] from [root],
+     * directed toward the target's surface projection, then derives the middle joint (triangle
+     * or straight). Sliding the contact along the surface at the same radius keeps the end on
+     * the support surface (no penetration) at the closest reachable point to the authored
+     * target. Allocation-free: mutates [result].
+     */
+    private fun resolveContactPlane(
+        root: Vector3,
+        target: Vector3,
+        dist: Float,
+        pole: Vector3,
+        L1: Float,
+        L2: Float,
+        constraint: IKConstraint,
+        contact: ContactConstraint,
+        result: IKResult,
+        straight: Boolean
+    ) {
+        // Normalize the contact normal so caller-supplied planes are robust.
+        val nMag = sqrt(contact.normal.x * contact.normal.x + contact.normal.y * contact.normal.y + contact.normal.z * contact.normal.z)
+        val nx = if (nMag > 1e-6f) contact.normal.x / nMag else 0f
+        val ny = if (nMag > 1e-6f) contact.normal.y / nMag else 1f
+        val nz = if (nMag > 1e-6f) contact.normal.z / nMag else 0f
+
+        // Signed distance of the root from the plane, and its projection onto the plane.
+        val rx = root.x - contact.point.x
+        val ry = root.y - contact.point.y
+        val rz = root.z - contact.point.z
+        val drop = rx * nx + ry * ny + rz * nz
+        val rpx = root.x - drop * nx
+        val rpy = root.y - drop * ny
+        val rpz = root.z - drop * nz
+
+        // Projection of the authored target onto the plane.
+        val tx = target.x - contact.point.x
+        val ty = target.y - contact.point.y
+        val tz = target.z - contact.point.z
+        val tSigned = tx * nx + ty * ny + tz * nz
+        val tpx = target.x - tSigned * nx
+        val tpy = target.y - tSigned * ny
+        val tpz = target.z - tSigned * nz
+
+        // In-plane slide direction from the root projection toward the target projection.
+        var hx = tpx - rpx; var hy = tpy - rpy; var hz = tpz - rpz
+        val hMag = sqrt(hx * hx + hy * hy + hz * hz)
+        // Slide distance along the surface so the end stays exactly `dist` from the root.
+        val sPlane = sqrt(max(dist * dist - drop * drop, 0f))
+
+        if (hMag > 1e-4f) {
+            val inv = sPlane / hMag
+            hx *= inv; hy *= inv; hz *= inv
+        } else {
+            // Target is directly above/below the root's plane projection: choose any in-plane axis.
+            hx = 1f; hy = 0f; hz = 0f
+            val dotn = hx * nx + hy * ny + hz * nz
+            hx -= nx * dotn; hy -= ny * dotn; hz -= nz * dotn
+            val hm = sqrt(hx * hx + hy * hy + hz * hz)
+            if (hm > 1e-6f) {
+                hx = hx / hm * sPlane; hy = hy / hm * sPlane; hz = hz / hm * sPlane
+            } else {
+                hx = 0f; hy = 0f; hz = 0f
+            }
+        }
+
+        result.end.set(rpx + hx, rpy + hy, rpz + hz)
+        if (straight) {
+            solveStraightMiddle(root, result.end, L1, result.joint)
+        } else {
+            solveTriangleJoint(root, result.end, pole, L1, L2, result.joint)
+        }
+        val dex = result.end.x - root.x
+        val dey = result.end.y - root.y
+        val dez = result.end.z - root.z
+        result.clampedDistance = sqrt(dex * dex + dey * dey + dez * dez)
     }
 
     /**
@@ -355,7 +521,8 @@ object SkeletonMath {
         L1: Float,
         L2: Float,
         constraint: IKConstraint,
-        result: IKResult = IKResult()
+        result: IKResult = IKResult(),
+        contact: ContactConstraint? = null
     ): IKResult {
         val dx = target.x - root.x
         val dy = target.y - root.y
@@ -375,6 +542,28 @@ object SkeletonMath {
             dirX = 1f; dirY = 0f; dirZ = 0f
         }
 
+        result.requestedDistance = dMag
+        result.clampedDistance = dist
+        result.clampAmount = if (dMag < minDist) {
+            minDist - dMag
+        } else if (dMag > maxDist) {
+            dMag - maxDist
+        } else {
+            0f
+        }
+
+        // Contact awareness: a planted straight limb that would penetrate the support surface is
+        // re-solved onto the surface at the same reachable distance (see [resolveContactPlane]).
+        if (contact != null) {
+            val signed = (root.x + dirX * dist - contact.point.x) * contact.normal.x +
+                (root.y + dirY * dist - contact.point.y) * contact.normal.y +
+                (root.z + dirZ * dist - contact.point.z) * contact.normal.z
+            if (signed < 0f) {
+                resolveContactPlane(root, target, dist, Vector3(0f, 0f, 0f), L1, L2, constraint, contact, result, straight = true)
+                return result
+            }
+        }
+
         // Middle at exactly L1 along the aim direction (keeps the upper bone length exact);
         // never let it overshoot the clamped end.
         val middleDist = minOf(L1, dist)
@@ -388,15 +577,6 @@ object SkeletonMath {
             root.y + dirY * dist,
             root.z + dirZ * dist
         )
-        result.requestedDistance = dMag
-        result.clampedDistance = dist
-        result.clampAmount = if (dMag < minDist) {
-            minDist - dMag
-        } else if (dMag > maxDist) {
-            dMag - maxDist
-        } else {
-            0f
-        }
 
         return result
     }
@@ -447,10 +627,11 @@ object SkeletonMath {
         poleLocal: Vector3,
         parentRotation: JointRotation,
         constraint: IKConstraint,
-        result: IKResult = IKResult()
+        result: IKResult = IKResult(),
+        contact: ContactConstraint? = null
     ): IKResult {
         toWorldDirection(poleLocal, parentRotation, poleWorldScratch)
-        return solveIK(root, target, L1, L2, poleWorldScratch, constraint, result)
+        return solveIK(root, target, L1, L2, poleWorldScratch, constraint, result, contact)
     }
 
     // High-fidelity 3D Rotation Matrix utilities for zero-allocation FK propagation

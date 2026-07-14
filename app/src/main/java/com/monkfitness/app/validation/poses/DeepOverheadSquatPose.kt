@@ -1,6 +1,7 @@
 package com.monkfitness.app.validation.poses
 
 import com.monkfitness.app.animation.CameraDefinition
+import com.monkfitness.app.animation.ContactConstraint
 import com.monkfitness.app.animation.GroundDefinition
 import com.monkfitness.app.animation.PivotType
 import com.monkfitness.app.animation.SkeletonDefinition
@@ -53,8 +54,11 @@ class DeepOverheadSquatPose : BaseValidationPose() {
         val targetB = Vector3(10f, 0f, def.hipWidth * 1.6f)
         val legPoleF = Vector3(1f, 0f, -0.4f)
         val legPoleB = Vector3(1f, 0f, 0.4f)
-        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
-        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
+        // Feet are fixed ground contacts: clamp the IK end onto the ground plane so a compact
+        // target can't drive the ankle below level 0 (PR-03). The authored target is unchanged.
+        val groundContact = ContactConstraint.ground(0f)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, contact = groundContact)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, contact = groundContact)
 
         ankleF!!.localRotation.set(axisZ, leanAngle); ankleB!!.localRotation.set(axisZ, leanAngle)
         heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)

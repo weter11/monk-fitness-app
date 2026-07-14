@@ -1,6 +1,6 @@
 package com.monkfitness.app.validation.poses
 
-import com.monkfitness.app.animation.BoxProp
+import com.monkfitness.app.animation.ContactConstraint
 import com.monkfitness.app.animation.CameraDefinition
 import com.monkfitness.app.animation.EnvironmentAnchor
 import com.monkfitness.app.animation.EnvironmentAnchorType
@@ -79,8 +79,11 @@ class DeadHangPose : BaseValidationPose() {
         val armPoleA = Vector3(0f, -1f, 0f)
         val armPoleP = Vector3(0f, -1f, 0f)
         val invChestZ = -torsoPitch
-        bakeIkLimb(shoulderA!!.worldPosition, targetA, def.upperArmLength, def.forearmLength, armPoleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, straight = true)
-        bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, armPoleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, straight = true)
+        // Hands are fixed contacts on the bar: clamp the IK end onto the bar plane (normal +Y at
+        // barY) so the over-clamp can't drag the grip off the bar (PR-03). Target is unchanged.
+        val barContact = ContactConstraint(Vector3(0f, 1f, 0f), Vector3(0f, barY, 0f))
+        bakeIkLimb(shoulderA!!.worldPosition, targetA, def.upperArmLength, def.forearmLength, armPoleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, straight = true, contact = barContact)
+        bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, armPoleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, straight = true, contact = barContact)
 
         // Overhand grip: hands rotate so palms face away from the bar.
         val gripAngle = invChestZ - (PI.toFloat() / 2f)

@@ -1,6 +1,7 @@
 package com.monkfitness.app.validation.poses
 
 import com.monkfitness.app.animation.CameraDefinition
+import com.monkfitness.app.animation.ContactConstraint
 import com.monkfitness.app.animation.GroundDefinition
 import com.monkfitness.app.animation.PivotType
 import com.monkfitness.app.animation.SkeletonDefinition
@@ -51,8 +52,9 @@ class MiddleSplitPose : BaseValidationPose() {
         val targetB = Vector3(0f, 0f, spread)
         val legPoleF = Vector3(0.2f, 1f, -0.6f)
         val legPoleB = Vector3(0.2f, 1f, 0.6f)
-        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, straight = true)
-        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true)
+        val groundContact = ContactConstraint.ground(0f)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, straight = true, contact = groundContact)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true, contact = groundContact)
 
         ankleF!!.localRotation.set(axisZ, 0f); ankleB!!.localRotation.set(axisZ, 0f)
         heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
