@@ -311,9 +311,11 @@ class ExerciseValidator(
     }
 
     private fun validateIKConstraints(pose: SkeletonPose, def: SkeletonDefinition, issues: MutableList<ValidationIssue>) {
-        validateIKConstraint(pose, Joint.SHOULDER_A, Joint.ELBOW_A, Joint.HAND_A, def.upperArmLength, def.forearmLength, def.armIKConstraint, issues)
-        validateIKConstraint(pose, Joint.SHOULDER_P, Joint.ELBOW_P, Joint.HAND_P, def.upperArmLength, def.forearmLength, def.armIKConstraint, issues)
-        // For hand-derived straight leg poses, we validate up to 1.0 (100% of maximum physical extension), not the 0.98 solver-specific cap
+        // The 0.98 ratio is a solver-specific safety cap for dynamic motion, not a physical
+        // limit. The finalized pose is validated against the true anatomical maximum (1.0), so a
+        // deliberately straight limb (PR-11 full extension) is not falsely flagged as over-reach.
+        validateIKConstraint(pose, Joint.SHOULDER_A, Joint.ELBOW_A, Joint.HAND_A, def.upperArmLength, def.forearmLength, def.armIKConstraint, issues, overrideMaxRatio = 1.0f)
+        validateIKConstraint(pose, Joint.SHOULDER_P, Joint.ELBOW_P, Joint.HAND_P, def.upperArmLength, def.forearmLength, def.armIKConstraint, issues, overrideMaxRatio = 1.0f)
         validateIKConstraint(pose, Joint.HIP_F, Joint.KNEE_F, Joint.ANKLE_F, def.thighLength, def.shinLength, def.legIKConstraint, issues, overrideMaxRatio = 1.0f)
         validateIKConstraint(pose, Joint.HIP_B, Joint.KNEE_B, Joint.ANKLE_B, def.thighLength, def.shinLength, def.legIKConstraint, issues, overrideMaxRatio = 1.0f)
     }

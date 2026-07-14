@@ -125,8 +125,31 @@ data class AngularJointLimits(
 data class IKConstraint(
     val minimumFlexionAngle: Float,
     val maximumExtensionRatio: Float,
-    val angularLimits: AngularJointLimits = AngularJointLimits.ArmAngularLimits
+    val angularLimits: AngularJointLimits = AngularJointLimits.ArmAngularLimits,
+    /**
+     * PR-11 opt-in. When `false` (the default) a limb is capped at
+     * [maximumExtensionRatio]·(L1+L2) — the 0.98 safety band that keeps dynamic motion from
+     * ever snapping to a locked-out joint. When `true`, the effective cap becomes the true
+     * anatomical length (ratio 1.0), so a deliberately rigid reference limb (Dead Hang arms,
+     * Pike Sit / Middle Split legs, …) can be perfectly straight instead of a few percent bent.
+     * This is a policy flag only; it never changes bent-limb behaviour.
+     */
+    val allowFullExtension: Boolean = false
 ) {
+    /**
+     * The extension ratio the solver should actually honour: 1.0 when full extension is opted
+     * into, otherwise the default safety cap. Kept here so both [SkeletonMath.solveIK] and
+     * [SkeletonMath.solveStraightLimb] read a single source of truth.
+     */
+    val effectiveExtensionRatio: Float
+        get() = if (allowFullExtension) 1f else maximumExtensionRatio
+
+    /**
+     * Returns a copy of this constraint with full extension enabled (allocation-free when the
+     * flag is already set). Callers that want a truly straight reference limb opt in via this.
+     */
+    fun fullyExtended(): IKConstraint = if (allowFullExtension) this else copy(allowFullExtension = true)
+
     companion object {
         val ArmConstraint = IKConstraint(30f, 0.98f, AngularJointLimits.ArmAngularLimits)
         val LegConstraint = IKConstraint(30f, 0.98f, AngularJointLimits.LegAngularLimits)
@@ -276,7 +299,8 @@ object SkeletonMath {
         val dz = target.z - root.z
         val dMag = sqrt(dx * dx + dy * dy + dz * dz)
 
-        val maxDist = (L1 + L2) * constraint.maximumExtensionRatio
+        // PR-11: honour a true straight limb when the constraint opts into full extension.
+        val maxDist = (L1 + L2) * constraint.effectiveExtensionRatio
 
         val minCos = cos(constraint.minimumFlexionAngle * DEG2RAD)
         val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
@@ -509,9 +533,10 @@ object SkeletonMath {
      * collinear with `root -> target`, so the two-bone chain becomes a rigid straight
      * segment aimed at the target. The end is clamped into `[minDist, maxDist]` — the same
      * biological band [solveIK] uses — so an unreachable target still yields a valid straight
-     * limb (respecting [IKConstraint.maximumExtensionRatio], which PR-11 can raise to 1.0 for a
-     * truly straight reference). The middle sits at exactly `L1` along the aim direction, keeping
-     * the first bone length exact; the second bone spans the (clamped) remainder.
+     * limb (respecting [IKConstraint.effectiveExtensionRatio]; PR-11 lets a constraint opt into
+     * full extension so a limb can reach its true anatomical length instead of the 0.98 safety
+     * cap, giving a genuinely straight reference). The middle sits at exactly `L1` along the aim
+     * direction, keeping the first bone length exact; the second bone spans the (clamped) remainder.
      *
      * Allocation-free: writes into [result]; reuses no scratch beyond scalar locals.
      */
@@ -529,7 +554,8 @@ object SkeletonMath {
         val dz = target.z - root.z
         val dMag = sqrt(dx * dx + dy * dy + dz * dz)
 
-        val maxDist = (L1 + L2) * constraint.maximumExtensionRatio
+        // PR-11: honour a true straight limb when the constraint opts into full extension.
+        val maxDist = (L1 + L2) * constraint.effectiveExtensionRatio
         val minCos = cos(constraint.minimumFlexionAngle * PI.toFloat() / 180f)
         val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
 
