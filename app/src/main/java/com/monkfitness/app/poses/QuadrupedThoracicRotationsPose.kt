@@ -45,7 +45,7 @@ class QuadrupedThoracicRotationsPose : BaseThoracicPose() {
         // Thoracic rotation about the spine (chest-local +Y). Negative twist lifts the
         // active (-Z) shoulder up toward the sky; positive tucks it down/under.
         val twist = lerp(0.35f, -1.35f, progress)
-        chest!!.localRotation.set(axisY, twist)
+        buildChestTwist(chest!!, twist)
 
         buildHead(neck!!, head!!, def.neckLength, headDir)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)

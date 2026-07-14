@@ -47,7 +47,7 @@ class DynamicWorldsGreatestStretchPose : BaseThoracicPose() {
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
         // Thoracic rotation about the spine (chest-local +Y). Rib cage/neck/head/shoulders follow.
         val twist = lerp(-0.2f, 1.4f, progress)
-        chest!!.localRotation.set(axisY, twist)
+        buildChestTwist(chest!!, twist)
 
         buildHead(neck!!, head!!, def.neckLength, headDir)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
