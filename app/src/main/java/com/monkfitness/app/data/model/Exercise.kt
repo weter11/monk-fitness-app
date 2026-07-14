@@ -97,6 +97,14 @@ data class Exercise(
     val category: ExerciseCategory = ExerciseCategory.MOBILITY,
     val subCategory: ExerciseSubCategory = ExerciseSubCategory.FULL_BODY,
     val requiredEquipment: Set<Equipment> = emptySet(),
+    /**
+     * Marks an entry that is an engine validation reference pose rather than a
+     * trainable exercise. Test poses live in the catalog (so they appear in the
+     * exercise browser / search and open in the standard viewer) but are
+     * excluded from workout generation, recommendations, statistics,
+     * progression and achievements. See poses_for_tests / VALIDATION_REPORT.
+     */
+    val isTestPose: Boolean = false,
     val nameRu: String = "",
     val nameEn: String = "",
     val nameUk: String = "",

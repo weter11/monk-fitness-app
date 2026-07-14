@@ -135,14 +135,46 @@ wrists (grip orientation), scapular / clavicle behaviour, ankles/feet (relaxed).
    than adding a dedicated back-bend or humeral-rotation transform. The pose still
    stresses those joints; the subtlety of the rotation is a known simplification.
 
-4. **No animation metadata, and intentionally not registered as exercises.**
-   The poses carry only camera / environment / support definitions needed for
-   correct rendering. Per the architecture requirements ("No exercise
-   registration"), they are **not** added to the workout/exercise catalog, so
-   they never appear in generated workouts or exercise metadata. They surface in
-   the UI through the animation engine's pose registry — appended after the
-   existing poses in `AnimationRegistry` and `PoseRegistry`, grouped as the
-   dedicated **For Tests** family (`test_middle_split`, `test_pike_sit`,
-   `test_deep_overhead_squat`, `test_dead_hang`). An engineer opens them
-   directly by id; they render through the modern 3D engine exactly like every
-   other pose.
+ 4. **UI integration via a lightweight "Engineering Validation" family.**
+    The poses now appear in the exercise browser and search under a dedicated
+    `engineering_validation` family (added **last** to `WorkoutGenerator.families`,
+    so it sits after every normal family) and launch through the standard viewer
+    — the **same** rendering pipeline (`ExerciseAnimation` → `PoseRegistry` → the
+    modern 3D engine). No debug renderer, no alternate code path.
+
+    ## Architectural boundary: "exercise" vs "test pose"
+
+    The single source of truth is the `Exercise.isTestPose` flag (default
+    `false`). A test pose is a **normal catalog entry** created through the exact
+    same `baseTimerExercise(...)` builder as every other exercise, only with
+    `isTestPose = true` and `familyId = "engineering_validation"`. This keeps
+    registration logic DRY and future-proof: adding another validation pose (e.g.
+    `Standing Anatomical Pose`, `Single Leg Balance`, `Lunge Hold`, `Bridge Hold`,
+    `Handstand Alignment`) is just one more catalog line — no new registry, no new
+    UI branch.
+
+    Inclusion / exclusion is decided **only by consumers of the catalog**, not by
+    duplicating data:
+
+    | Consumer | Includes test poses? | Mechanism |
+    | --- | --- | --- |
+    | Exercise browser (`getExerciseLibrary`) | **Yes** | library = `allExercises` filtered by equipment only |
+    | Search | **Yes** | search operates on the library |
+    | Standard viewer (`findExerciseById`) | **Yes** | looks up in the library |
+    | Workout generation / replacements / random selection | **No** | `getEligibleExercises()` filters `!isTestPose` |
+    | Recommendations | **No** | routed through `getEligibleExercises()` |
+    | Library statistics (`getLibraryStats`) | **No** | counts `allExercises.filter { !isTestPose }` |
+    | Progression / achievements / completed exercises | **No** | derived from completed *workout* sessions, which can never contain test poses |
+
+    **Rule of thumb:** anything that *shows* a pose to a human developer goes
+    through `getExerciseLibrary` / `findExerciseById` (include). Anything that
+    *schedules or measures training* goes through `getEligibleExercises` or
+    `getLibraryStats` (exclude). If a new training consumer is added, it must
+    reuse `getEligibleExercises()` rather than reading `allExercises` directly,
+    otherwise test poses would leak into workouts.
+
+    The animation itself is shared with the rest of the app: the four poses are
+    still registered in `AnimationRegistry` / `PoseRegistry` under the same ids
+    (`test_middle_split`, `test_pike_sit`, `test_deep_overhead_squat`,
+    `test_dead_hang`) used by `animationId`, so the production engine renders them
+    unchanged.

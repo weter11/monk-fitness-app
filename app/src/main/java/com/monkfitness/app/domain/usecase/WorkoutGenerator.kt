@@ -54,7 +54,8 @@ class WorkoutGenerator {
         ExerciseFamily("jumping_jacks", R.string.family_jumping_jacks, R.string.family_jumping_jacks_desc),
         ExerciseFamily("horse_stance", R.string.family_horse_stance, R.string.family_horse_stance_desc),
         ExerciseFamily("superman", R.string.family_superman, R.string.family_superman_desc),
-        ExerciseFamily("child_pose", R.string.family_child_pose, R.string.family_child_pose_desc)
+        ExerciseFamily("child_pose", R.string.family_child_pose, R.string.family_child_pose_desc),
+        ExerciseFamily("engineering_validation", R.string.family_engineering_validation, R.string.family_engineering_validation_desc)
     )
 
     private val allExercises = listOf(
@@ -78,6 +79,16 @@ class WorkoutGenerator {
         baseRepExercise("pullups_neutral", "pullups", "pullup_neutral", R.string.ex_pullups_neutral, R.string.ex_pullups_desc, R.string.ex_pullups_tech, R.string.ex_pullups_steps, R.string.ex_pullups_mistakes, imageRes = R.drawable.pull_up, sets = 3, baseMinReps = 3, baseMaxReps = 5, phase4MinReps = 6, phase4MaxReps = 10, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS, requiredEquipment = setOf(Equipment.BAR)),
         baseRepExercise("pullups_wide", "pullups", "pullup_wide", R.string.ex_pullups_wide, R.string.ex_pullups_desc, R.string.ex_pullups_tech, R.string.ex_pullups_steps, R.string.ex_pullups_mistakes, imageRes = R.drawable.pull_up, sets = 3, baseMinReps = 2, baseMaxReps = 4, phase4MinReps = 5, phase4MaxReps = 8, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.SHOULDERS, requiredEquipment = setOf(Equipment.BAR)),
         baseTimerExercise("hang", "pullups", "dead_hang", R.string.ex_hang, R.string.ex_hang_desc, R.string.ex_hang_tech, imageRes = R.drawable.pull_up, sets = 3, baseDurationSeconds = 30, phase4DurationSeconds = 90, category = ExerciseCategory.POSTURE, subCategory = ExerciseSubCategory.SHOULDERS, requiredEquipment = setOf(Equipment.BAR)),
+
+        // --- Engineering Validation (static biomechanics reference poses) ---
+        // These are NOT exercises: they are flagged isTestPose = true so they are
+        // excluded from workout generation, recommendations, statistics and
+        // progression. They appear only in the exercise browser / search and open
+        // in the standard viewer for engine validation.
+        baseTimerExercise("test_middle_split", "engineering_validation", "test_middle_split", R.string.ex_test_middle_split, R.string.ex_test_middle_split_desc, R.string.ex_test_middle_split_tech, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 10, phase4DurationSeconds = 10, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.FULL_BODY, isTestPose = true),
+        baseTimerExercise("test_pike_sit", "engineering_validation", "test_pike_sit", R.string.ex_test_pike_sit, R.string.ex_test_pike_sit_desc, R.string.ex_test_pike_sit_tech, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 10, phase4DurationSeconds = 10, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.FULL_BODY, isTestPose = true),
+        baseTimerExercise("test_deep_overhead_squat", "engineering_validation", "test_deep_overhead_squat", R.string.ex_test_deep_overhead_squat, R.string.ex_test_deep_overhead_squat_desc, R.string.ex_test_deep_overhead_squat_tech, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 10, phase4DurationSeconds = 10, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.FULL_BODY, isTestPose = true),
+        baseTimerExercise("test_dead_hang", "engineering_validation", "test_dead_hang", R.string.ex_test_dead_hang, R.string.ex_test_dead_hang_desc, R.string.ex_test_dead_hang_tech, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 10, phase4DurationSeconds = 10, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.FULL_BODY, isTestPose = true),
 
         // Plank
         baseTimerExercise("plank", "plank", "plank_standard", R.string.ex_plank, R.string.ex_plank_desc, R.string.ex_plank_tech, R.string.ex_plank_steps, R.string.ex_plank_mistakes, imageRes = R.drawable.plank, sets = 3, baseDurationSeconds = 30, phase4DurationSeconds = 75, category = ExerciseCategory.STRENGTH, subCategory = ExerciseSubCategory.CORE),
@@ -237,11 +248,12 @@ class WorkoutGenerator {
     private val exercisesById = allExercises.associateBy { it.id }
 
     private fun getEligibleExercises(disabledFamilies: Set<String>): List<Exercise> {
-        val eligible = allExercises.filter { exercise ->
+        val production = allExercises.filter { !it.isTestPose }
+        val eligible = production.filter { exercise ->
             val families = com.monkfitness.app.data.model.exerciseToFamiliesMap[exercise.id].orEmpty()
             families.isEmpty() || families.none { it.key in disabledFamilies }
         }
-        return eligible.ifEmpty { allExercises }
+        return eligible.ifEmpty { production }
     }
 
     fun getWorkoutType(day: Int): WorkoutType {
@@ -650,7 +662,8 @@ class WorkoutGenerator {
         phase4MaxReps: Int,
         category: ExerciseCategory,
         subCategory: ExerciseSubCategory,
-        requiredEquipment: Set<Equipment> = emptySet()
+        requiredEquipment: Set<Equipment> = emptySet(),
+        isTestPose: Boolean = false
     ): Exercise {
         val currentMaxReps = baseMaxReps.coerceAtLeast(baseMinReps)
         return Exercise(
@@ -677,7 +690,8 @@ class WorkoutGenerator {
             isTimerBased = false,
             category = category,
             subCategory = subCategory,
-            requiredEquipment = normalizeRequiredEquipment(requiredEquipment)
+            requiredEquipment = normalizeRequiredEquipment(requiredEquipment),
+            isTestPose = isTestPose
         )
     }
 
@@ -696,7 +710,8 @@ class WorkoutGenerator {
         phase4DurationSeconds: Int,
         category: ExerciseCategory,
         subCategory: ExerciseSubCategory,
-        requiredEquipment: Set<Equipment> = emptySet()
+        requiredEquipment: Set<Equipment> = emptySet(),
+        isTestPose: Boolean = false
     ): Exercise {
         return Exercise(
             id = id,
@@ -722,7 +737,8 @@ class WorkoutGenerator {
             isTimerBased = true,
             category = category,
             subCategory = subCategory,
-            requiredEquipment = normalizeRequiredEquipment(requiredEquipment)
+            requiredEquipment = normalizeRequiredEquipment(requiredEquipment),
+            isTestPose = isTestPose
         )
     }
 
@@ -936,13 +952,14 @@ class WorkoutGenerator {
 
     fun getLibraryStats(): LibraryStats {
         val dedicatedAnimationIds = PoseRegistry.getDedicatedAnimationIds()
+        val production = allExercises.filter { !it.isTestPose }
         return LibraryStats(
-            totalExercises = allExercises.size,
+            totalExercises = production.size,
             totalFamilies = families.size,
-            totalCategories = allExercises.map { it.category }.distinct().size,
-            totalBodyRegions = allExercises.map { it.subCategory }.distinct().size,
+            totalCategories = production.map { it.category }.distinct().size,
+            totalBodyRegions = production.map { it.subCategory }.distinct().size,
             totalLanguages = 3, // EN, RU, UK
-            animatedExercisesCount = allExercises.count { it.animationId in dedicatedAnimationIds }
+            animatedExercisesCount = production.count { it.animationId in dedicatedAnimationIds }
         )
     }
 }

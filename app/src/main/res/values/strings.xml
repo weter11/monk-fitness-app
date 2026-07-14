@@ -194,6 +194,21 @@
     <string name="family_child_pose">Restorative Stretching</string>
     <string name="family_child_pose_desc">Gentle recovery poses for the back and hips.</string>
 
+    <string name="family_engineering_validation">Engineering Validation</string>
+    <string name="family_engineering_validation_desc">Static reference poses for validating the animation engine, IK solver, skeleton proportions and biomechanics. Development use only — not part of any workout.</string>
+    <string name="ex_test_middle_split">Middle Split</string>
+    <string name="ex_test_middle_split_desc">Maximum hip abduction, knees locked, strict T-pose. Validates pelvis symmetry, hip rotation, arm length and left/right symmetry.</string>
+    <string name="ex_test_middle_split_tech">Static engine reference pose. Not a training exercise.</string>
+    <string name="ex_test_pike_sit">Pike Sit</string>
+    <string name="ex_test_pike_sit_desc">Seated, legs together and forward, arms reached forward with palms inward. Validates posterior chain, spinal alignment and shoulder flexion.</string>
+    <string name="ex_test_pike_sit_tech">Static engine reference pose. Not a training exercise.</string>
+    <string name="ex_test_deep_overhead_squat">Deep Overhead Squat</string>
+    <string name="ex_test_deep_overhead_squat_desc">Full-depth squat with arms completely overhead. Validates ankle, knee, pelvis, thoracic and shoulder mobility plus whole-body balance.</string>
+    <string name="ex_test_deep_overhead_squat_tech">Static engine reference pose. Not a training exercise.</string>
+    <string name="ex_test_dead_hang">Dead Hang</string>
+    <string name="ex_test_dead_hang_desc">Both hands fixed to a pull-up bar, body hanging relaxed. Validates IK correctness, arm proportions, grip orientation and scapular behaviour.</string>
+    <string name="ex_test_dead_hang_tech">Static engine reference pose. Not a training exercise.</string>
+
     <string name="hyperlordosis_focus_title">Hyperlordosis Focus Active</string>
     <string name="hyperlordosis_focus_desc">This mode adds exercises that help improve pelvic control, hip mobility, glute activation and core stability.</string>
 

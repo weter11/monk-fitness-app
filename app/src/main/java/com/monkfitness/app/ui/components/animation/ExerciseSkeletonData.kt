@@ -255,7 +255,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     )
 
     register(
-        ids = setOf("squat_standard", "squat_sumo", "squat_jump", "lunge_forward", "lunge_reverse", "lunge_side", "step_up_standard", "wall_sit_hold", "deep_squat_hold", "ankle_mobility_standard", "hamstring_stretch_hold", "calf_stretch_hold"),
+        ids = setOf("squat_standard", "squat_sumo", "squat_jump", "lunge_forward", "lunge_reverse", "lunge_side", "step_up_standard", "wall_sit_hold", "deep_squat_hold", "ankle_mobility_standard", "hamstring_stretch_hold", "calf_stretch_hold", "test_middle_split", "test_pike_sit", "test_deep_overhead_squat"),
         animation = animation(
             1800,
             true,
@@ -306,7 +306,7 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     )
 
     register(
-        ids = setOf("pullup_standard", "chinup_standard", "pullup_neutral", "pullup_wide", "row_standard", "scapular_pullup_deadhang", "dead_hang"),
+        ids = setOf("pullup_standard", "chinup_standard", "pullup_neutral", "pullup_wide", "row_standard", "scapular_pullup_deadhang", "dead_hang", "test_dead_hang"),
         animation = animation(
             2200,
             false,
