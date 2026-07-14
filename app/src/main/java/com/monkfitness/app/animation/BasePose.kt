@@ -70,6 +70,84 @@ abstract class BasePose : PoseBuilder {
         return SkeletonMath.solveIK(hipW, targetAnkle, thighLen, shinLen, pole, constraint, result)
     }
 
+    // Straight / rigid-segment IK wrappers: a limb pinned collinear to its target.
+    protected fun solveStraightArmIK(
+        shoulderW: Vector3,
+        targetHand: Vector3,
+        upperArmLen: Float,
+        forearmLen: Float,
+        constraint: IKConstraint,
+        result: SkeletonMath.IKResult
+    ): SkeletonMath.IKResult {
+        return SkeletonMath.solveStraightLimb(shoulderW, targetHand, upperArmLen, forearmLen, constraint, result)
+    }
+
+    protected fun solveStraightLegIK(
+        hipW: Vector3,
+        targetAnkle: Vector3,
+        thighLen: Float,
+        shinLen: Float,
+        constraint: IKConstraint,
+        result: SkeletonMath.IKResult
+    ): SkeletonMath.IKResult {
+        return SkeletonMath.solveStraightLimb(hipW, targetAnkle, thighLen, shinLen, constraint, result)
+    }
+
+    protected fun bakeIkLimb(
+        rootWorldPos: Vector3,
+        targetWorldPos: Vector3,
+        length1: Float,
+        length2: Float,
+        parentRotation: JointRotation,
+        poleLocal: Vector3,
+        constraint: IKConstraint,
+        middleNode: SkeletonNode,
+        endNode: SkeletonNode,
+        ikBuffer: SkeletonMath.IKResult,
+        straight: Boolean = false
+    ): SkeletonMath.IKResult {
+        val worldPole = SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld)
+        return bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, parentRotation, middleNode, endNode, ikBuffer, straight)
+    }
+
+    protected fun solveNearStraightLeg(
+        shinLen: Float,
+        thighLen: Float,
+        targetFlexionDegrees: Float
+    ): SkeletonMath.NearStraightLimbResult {
+        return SkeletonMath.solveNearStraightLimb(shinLen, thighLen, targetFlexionDegrees, legScratch)
+    }
+
+    protected fun bakeIkLimb(
+        rootWorldPos: Vector3,
+        targetWorldPos: Vector3,
+        length1: Float,
+        length2: Float,
+        pole: Vector3,
+        constraint: IKConstraint,
+        parentRotation: JointRotation,
+        middleNode: SkeletonNode,
+        endNode: SkeletonNode,
+        ikBuffer: SkeletonMath.IKResult,
+        straight: Boolean = false
+    ): SkeletonMath.IKResult {
+        val ikResult = if (straight) {
+            SkeletonMath.solveStraightLimb(rootWorldPos, targetWorldPos, length1, length2, constraint, ikBuffer)
+        } else {
+            SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, pole, constraint, ikBuffer)
+        }
+
+        // Store the limb offsets in the parent's true local frame so they survive the parent's
+        // full 3D world rotation exactly — no hand-fed inverse-Z scalar.
+        tempV1.set(ikResult.joint).subtract(rootWorldPos)
+        SkeletonMath.toLocalDirection(tempV1, parentRotation, middleNode.localPosition)
+
+        tempV1.set(ikResult.end).subtract(ikResult.joint)
+        SkeletonMath.toLocalDirection(tempV1, parentRotation, endNode.localPosition)
+
+        return ikResult
+    }
+
     // --- Frame-relative IK overloads: the pole is authored in the limb-root's LOCAL frame
     //     (chest/pelvis) and is transformed into world space via the parent's current world
     //     rotation. The analytical solver is unchanged. ---

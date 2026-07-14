@@ -97,9 +97,14 @@ abstract class BaseValidationPose : PoseBuilder {
         parentRotation: JointRotation,
         middleNode: SkeletonNode,
         endNode: SkeletonNode,
-        ikBuffer: SkeletonMath.IKResult
+        ikBuffer: SkeletonMath.IKResult,
+        straight: Boolean = false
     ) {
-        val ikResult = SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, pole, constraint, ikBuffer)
+        val ikResult = if (straight) {
+            SkeletonMath.solveStraightLimb(rootWorldPos, targetWorldPos, length1, length2, constraint, ikBuffer)
+        } else {
+            SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, pole, constraint, ikBuffer)
+        }
         // Store the limb offsets in the parent's true local frame (no hand-fed inverse-Z scalar).
         tempV1.set(ikResult.joint).subtract(rootWorldPos)
         SkeletonMath.toLocalDirection(tempV1, parentRotation, middleNode.localPosition)
@@ -117,10 +122,11 @@ abstract class BaseValidationPose : PoseBuilder {
         constraint: IKConstraint,
         middleNode: SkeletonNode,
         endNode: SkeletonNode,
-        ikBuffer: SkeletonMath.IKResult
+        ikBuffer: SkeletonMath.IKResult,
+        straight: Boolean = false
     ) {
         val worldPole = SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld)
-        bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, parentRotation, middleNode, endNode, ikBuffer)
+        bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, parentRotation, middleNode, endNode, ikBuffer, straight)
     }
 
     protected fun solveNearStraightLeg(

@@ -79,8 +79,8 @@ class DeadHangPose : BaseValidationPose() {
         val armPoleA = Vector3(0f, -1f, 0f)
         val armPoleP = Vector3(0f, -1f, 0f)
         val invChestZ = -torsoPitch
-        bakeIkLimb(shoulderA!!.worldPosition, targetA, def.upperArmLength, def.forearmLength, armPoleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
-        bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, armPoleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
+        bakeIkLimb(shoulderA!!.worldPosition, targetA, def.upperArmLength, def.forearmLength, armPoleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, straight = true)
+        bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, armPoleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, straight = true)
 
         // Overhand grip: hands rotate so palms face away from the bar.
         val gripAngle = invChestZ - (PI.toFloat() / 2f)
@@ -96,8 +96,8 @@ class DeadHangPose : BaseValidationPose() {
         val targetB = Vector3(ankleX, ankleY, def.hipWidth * 0.9f)
         val legPoleF = Vector3(0.15f, 1f, 0f)
         val legPoleB = Vector3(0.15f, 1f, 0f)
-        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
-        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, straight = true)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true)
 
         ankleF!!.localRotation.set(axisZ, invTorsoZ); ankleB!!.localRotation.set(axisZ, invTorsoZ)
         heelF!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
