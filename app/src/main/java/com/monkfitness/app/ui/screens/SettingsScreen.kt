@@ -1,6 +1,7 @@
 package com.monkfitness.app.ui.screens
 
 import android.app.TimePickerDialog
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -26,14 +27,18 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Equipment
@@ -41,8 +46,12 @@ import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.model.LibraryStats
 import com.monkfitness.app.data.model.NutritionIngredient
+import com.monkfitness.app.data.model.ExerciseCategoryFilter
+import com.monkfitness.app.data.model.exerciseCategoryGroups
+import com.monkfitness.app.data.model.exerciseToFamiliesMap
 import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
 import com.monkfitness.app.viewmodel.MainViewModel
+import kotlinx.coroutines.flow.collectLatest
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,19 +72,13 @@ fun SettingsScreen(
     val libraryStats by viewModel.libraryStats.collectAsState()
     val disabledExerciseFamilies by viewModel.disabledExerciseFamilies.collectAsState()
     val filterLibraryByCategories by viewModel.filterLibraryByCategories.collectAsState()
-    val showCategoryErrorDialog by viewModel.showCategoryErrorDialog.collectAsState()
+    val estimatedPoolSize by viewModel.estimatedExercisePoolSize.collectAsState()
 
-    if (showCategoryErrorDialog) {
-        AlertDialog(
-            onDismissRequest = viewModel::dismissCategoryErrorDialog,
-            confirmButton = {
-                TextButton(onClick = viewModel::dismissCategoryErrorDialog) {
-                    Text(stringResource(R.string.ok))
-                }
-            },
-            title = { Text("At least one category must remain enabled") },
-            text = { Text("Please enable at least one exercise category to generate workouts.") }
-        )
+    val adjustedMessageFlow = viewModel.showAdjustedValidationMessage
+    LaunchedEffect(adjustedMessageFlow) {
+        adjustedMessageFlow.collectLatest { message ->
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     Scaffold(
@@ -99,132 +102,175 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Text(text = stringResource(R.string.notifications), style = MaterialTheme.typography.titleLarge)
+            // SECTION: General Settings (Notifications, Language, Feedback)
+            Text(text = "General Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
-            androidx.compose.material3.Button(
-                onClick = {
-                    val calendar = Calendar.getInstance()
-                    TimePickerDialog(
-                        context,
-                        { _, hour, minute -> viewModel.setNotificationTime(hour, minute) },
-                        calendar.get(Calendar.HOUR_OF_DAY),
-                        calendar.get(Calendar.MINUTE),
-                        true
-                    ).show()
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(text = stringResource(R.string.set_notification_time))
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(text = stringResource(R.string.notifications), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                androidx.compose.material3.Button(
+                    onClick = {
+                        val calendar = Calendar.getInstance()
+                        TimePickerDialog(
+                            context,
+                            { _, hour, minute -> viewModel.setNotificationTime(hour, minute) },
+                            calendar.get(Calendar.HOUR_OF_DAY),
+                            calendar.get(Calendar.MINUTE),
+                            true
+                        ).show()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(text = stringResource(R.string.set_notification_time))
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(text = stringResource(R.string.language), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.Button(onClick = { viewModel.setLanguage("en") }) {
+                        Text(stringResource(R.string.lang_en))
+                    }
+                    androidx.compose.material3.Button(onClick = { viewModel.setLanguage("ru") }) {
+                        Text(stringResource(R.string.lang_ru))
+                    }
+                    androidx.compose.material3.Button(onClick = { viewModel.setLanguage("uk") }) {
+                        Text(stringResource(R.string.lang_uk))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(text = stringResource(R.string.feedback), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                SettingSwitchRow(
+                    title = stringResource(R.string.timer_ticks),
+                    checked = timerTicksEnabled,
+                    onCheckedChange = viewModel::setTimerTicksEnabled
+                )
+                SettingSwitchRow(
+                    title = stringResource(R.string.vibration),
+                    checked = vibrationEnabled,
+                    onCheckedChange = viewModel::setVibrationEnabled
+                )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)))
 
-            Text(text = stringResource(R.string.language), style = MaterialTheme.typography.titleLarge)
+            // SECTION: WORKOUT
+            Text(text = "Workout Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                androidx.compose.material3.Button(onClick = { viewModel.setLanguage("en") }) {
-                    Text(stringResource(R.string.lang_en))
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Workout -> Training Type
+                FocusAreaSelector(
+                    title = stringResource(R.string.flexibility_training_type_title) + " (Training Type)",
+                    options = FlexibilityTrainingType.entries.toList(),
+                    selectedOption = flexibilityTrainingType,
+                    onSelect = viewModel::setFlexibilityTrainingType,
+                    disabledFamilies = disabledExerciseFamilies
+                )
+
+                // Workout -> Focus Areas
+                MultiSelectFocusAreaSelector(
+                    title = stringResource(R.string.flexibility_focus_areas_title) + " (Focus Areas)",
+                    options = flexibilityFocusAreaOptions,
+                    selectedOptions = selectedFlexibilityFocusAreas,
+                    onToggle = viewModel::toggleFlexibilityFocusArea
+                )
+
+                // Workout -> Training Styles & Special Programs (Separate categories into TWO groups)
+                val counts = viewModel.categoryExerciseCounts
+                exerciseCategoryGroups.forEach { group ->
+                    CategoryGroupSelector(
+                        title = group.title,
+                        categories = group.categories,
+                        disabledFamilies = disabledExerciseFamilies,
+                        onToggle = viewModel::toggleExerciseFamily,
+                        counts = counts
+                    )
                 }
-                androidx.compose.material3.Button(onClick = { viewModel.setLanguage("ru") }) {
-                    Text(stringResource(R.string.lang_ru))
+
+                // Workout -> Exercise Library
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(text = "Exercise Library", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                    SettingSwitchRow(
+                        title = "Show only selected exercise families",
+                        checked = filterLibraryByCategories,
+                        onCheckedChange = viewModel::setFilterLibraryByCategories
+                    )
+                    Text(
+                        text = "When enabled, search displays only the exercises from enabled categories. Otherwise, search displays the entire database.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "Available Equipment",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    MultiSelectEquipmentSelector(
+                        title = "",
+                        options = Equipment.entries.filterNot { it == Equipment.NONE },
+                        selectedOptions = userPreferences.availableEquipment,
+                        onToggle = viewModel::toggleAvailableEquipment,
+                        onClear = viewModel::clearAvailableEquipment
+                    )
+                    SettingSwitchRow(
+                        title = stringResource(R.string.enable_additional_posture_training),
+                        checked = additionalPostureTrainingEnabled,
+                        onCheckedChange = viewModel::setAdditionalPostureTrainingEnabled
+                    )
                 }
-                androidx.compose.material3.Button(onClick = { viewModel.setLanguage("uk") }) {
-                    Text(stringResource(R.string.lang_uk))
-                }
+
+                // Workout -> Preview Summary
+                CurrentWorkoutConfigurationCard(
+                    flexibilityTrainingType = flexibilityTrainingType,
+                    selectedFlexibilityFocusAreas = selectedFlexibilityFocusAreas,
+                    disabledFamilies = disabledExerciseFamilies,
+                    filterLibrary = filterLibraryByCategories,
+                    estimatedPoolSize = estimatedPoolSize
+                )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)))
 
-            Text(text = stringResource(R.string.feedback), style = MaterialTheme.typography.titleLarge)
+            // SECTION: NUTRITION (Workout settings should always appear before Nutrition)
+            Text(text = "Nutrition Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
 
-            SettingSwitchRow(
-                title = stringResource(R.string.timer_ticks),
-                checked = timerTicksEnabled,
-                onCheckedChange = viewModel::setTimerTicksEnabled
-            )
-            SettingSwitchRow(
-                title = stringResource(R.string.vibration),
-                checked = vibrationEnabled,
-                onCheckedChange = viewModel::setVibrationEnabled
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Nutrition -> Nutrition Preferences
+                FoodExclusionsSelector(
+                    title = "Nutrition Preferences",
+                    description = stringResource(R.string.nutrition_exclusions_desc),
+                    excludedFoods = userPreferences.excludedFoods,
+                    onToggle = viewModel::toggleNutritionExcludedFood,
+                    options = viewModel.nutritionExclusionOptions
+                )
 
-            Spacer(modifier = Modifier.height(24.dp))
+                // Nutrition -> Shopping
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(text = "Shopping", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SettingSwitchRow(
+                        title = stringResource(R.string.show_excluded_products_nutrition),
+                        checked = showExcludedProductsInNutrition,
+                        onCheckedChange = viewModel::setShowExcludedProductsInNutrition
+                    )
+                }
 
-            Text(text = stringResource(R.string.nutrition), style = MaterialTheme.typography.titleLarge)
-            NutritionCycleSelector(
-                selectedDays = nutritionCycleLength,
-                onSelect = viewModel::setNutritionCycleLength
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            SettingSwitchRow(
-                title = stringResource(R.string.show_excluded_products_nutrition),
-                checked = showExcludedProductsInNutrition,
-                onCheckedChange = viewModel::setShowExcludedProductsInNutrition
-            )
+                // Nutrition -> Meal Planning
+                NutritionCycleSelector(
+                    selectedDays = nutritionCycleLength,
+                    onSelect = viewModel::setNutritionCycleLength
+                )
+            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)))
 
-            Text(text = stringResource(R.string.mobility_and_posture), style = MaterialTheme.typography.titleLarge)
-            SettingSwitchRow(
-                title = stringResource(R.string.enable_additional_posture_training),
-                checked = additionalPostureTrainingEnabled,
-                onCheckedChange = viewModel::setAdditionalPostureTrainingEnabled
-            )
-
-            FocusAreaSelector(
-                title = stringResource(R.string.flexibility_training_type_title),
-                options = FlexibilityTrainingType.entries.toList(),
-                selectedOption = flexibilityTrainingType,
-                onSelect = viewModel::setFlexibilityTrainingType
-            )
-
-            MultiSelectFocusAreaSelector(
-                title = stringResource(R.string.flexibility_focus_areas_title),
-                options = flexibilityFocusAreaOptions,
-                selectedOptions = selectedFlexibilityFocusAreas,
-                onToggle = viewModel::toggleFlexibilityFocusArea
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(text = stringResource(R.string.personalization), style = MaterialTheme.typography.titleLarge)
-            Text(
-                text = stringResource(R.string.equipment_selection_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary
-            )
-
-            MultiSelectEquipmentSelector(
-                title = stringResource(R.string.equipment_selection),
-                options = Equipment.entries.filterNot { it == Equipment.NONE },
-                selectedOptions = userPreferences.availableEquipment,
-                onToggle = viewModel::toggleAvailableEquipment,
-                onClear = viewModel::clearAvailableEquipment
-            )
-
-            FoodExclusionsSelector(
-                title = stringResource(R.string.nutrition_exclusions),
-                description = stringResource(R.string.nutrition_exclusions_desc),
-                excludedFoods = userPreferences.excludedFoods,
-                onToggle = viewModel::toggleNutritionExcludedFood,
-                options = viewModel.nutritionExclusionOptions
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            ExerciseFamiliesSelector(
-                disabledFamilies = disabledExerciseFamilies,
-                filterLibrary = filterLibraryByCategories,
-                onToggleFilterLibrary = viewModel::setFilterLibraryByCategories,
-                onToggle = viewModel::toggleExerciseFamily,
-                onEnableAll = viewModel::enableAllInGroup,
-                onDisableAll = viewModel::disableAllInGroup
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
+            // SECTION: Library Statistics
             LibraryStatisticsSection(stats = libraryStats)
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -232,81 +278,133 @@ fun SettingsScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ExerciseFamiliesSelector(
+private fun CategoryGroupSelector(
+    title: String,
+    categories: List<ExerciseCategoryFilter>,
+    disabledFamilies: Set<String>,
+    onToggle: (String) -> Unit,
+    counts: Map<String, Int>
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            categories.forEach { category ->
+                val isChecked = category.key !in disabledFamilies
+
+                // Determine if it is disabled due to a constraint
+                val isConstraintDisabled = when (category.key) {
+                    "functional_fitness" -> "hyperlordosis" !in disabledFamilies
+                    "calisthenics" -> "senior" !in disabledFamilies || "rehabilitation" !in disabledFamilies
+                    "shaolin" -> "senior" !in disabledFamilies
+                    else -> false
+                }
+
+                val explanation = when (category.key) {
+                    "functional_fitness" -> if ("hyperlordosis" !in disabledFamilies) "Disabled because \"Hyperlordosis\" is enabled." else null
+                    "calisthenics" -> {
+                        if ("senior" !in disabledFamilies) "Disabled because \"Senior Friendly\" is enabled."
+                        else if ("rehabilitation" !in disabledFamilies) "Disabled because \"Rehabilitation\" is enabled."
+                        else null
+                    }
+                    "shaolin" -> if ("senior" !in disabledFamilies) "Disabled because \"Senior Friendly\" is enabled." else null
+                    else -> null
+                }
+
+                Column(horizontalAlignment = Alignment.Start) {
+                    FilterChip(
+                        selected = isChecked && !isConstraintDisabled,
+                        onClick = { if (!isConstraintDisabled) onToggle(category.key) },
+                        enabled = !isConstraintDisabled,
+                        label = {
+                            Text("${category.displayName} (${counts[category.key] ?: 0})")
+                        }
+                    )
+                    if (isConstraintDisabled && explanation != null) {
+                        Text(
+                            text = explanation,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CurrentWorkoutConfigurationCard(
+    flexibilityTrainingType: FlexibilityTrainingType,
+    selectedFlexibilityFocusAreas: Set<ExerciseSubCategory>,
     disabledFamilies: Set<String>,
     filterLibrary: Boolean,
-    onToggleFilterLibrary: (Boolean) -> Unit,
-    onToggle: (String) -> Unit,
-    onEnableAll: (List<String>) -> Unit,
-    onDisableAll: (List<String>) -> Unit
+    estimatedPoolSize: Int
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(text = "Exercises", style = MaterialTheme.typography.titleLarge)
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Current Workout Configuration",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
 
-        SettingSwitchRow(
-            title = "Show only exercises matching selected categories",
-            checked = filterLibrary,
-            onCheckedChange = onToggleFilterLibrary
-        )
-        Text(
-            text = "When enabled, the Exercise Library and Search only display exercises belonging to the selected categories.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
+            val typeStr = when (flexibilityTrainingType) {
+                FlexibilityTrainingType.STRETCHING -> "Stretching only"
+                FlexibilityTrainingType.POSTURE -> "Posture only"
+                FlexibilityTrainingType.BOTH -> "Both"
+            }
 
-        val groups = com.monkfitness.app.data.model.exerciseCategoryGroups
-        groups.forEach { group ->
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = group.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(
-                            onClick = { onEnableAll(group.categories.map { it.key }) },
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
-                        ) {
-                            Text("Enable All")
-                        }
-                        TextButton(
-                            onClick = { onDisableAll(group.categories.map { it.key }) },
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
-                        ) {
-                            Text("Disable All")
-                        }
-                    }
-                }
+            val focusStr = selectedFlexibilityFocusAreas.joinToString(", ") { context.getString(it.labelRes) }
 
-                group.categories.chunked(2).forEach { rowItems ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        rowItems.forEach { family ->
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = family.key !in disabledFamilies,
-                                    onCheckedChange = { onToggle(family.key) }
-                                )
-                                Text(
-                                    text = family.displayName,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        }
-                        if (rowItems.size == 1) {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
+            val activeStyles = exerciseCategoryGroups[0].categories
+                .filter { it.key !in disabledFamilies }
+                .joinToString(", ") { it.displayName }
+                .ifEmpty { "None" }
+
+            val activePrograms = exerciseCategoryGroups[1].categories
+                .filter { it.key !in disabledFamilies }
+                .joinToString(", ") { it.displayName }
+                .ifEmpty { "None" }
+
+            val filterStr = if (filterLibrary) "Enabled" else "Disabled"
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Training Type:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text(typeStr, style = MaterialTheme.typography.bodyMedium)
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Focus Areas:", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Text(focusStr, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.End)
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Training Styles:", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Text(activeStyles, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.End)
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Special Programs:", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Text(activePrograms, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.End)
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Exercise Library filtering:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text(filterStr, style = MaterialTheme.typography.bodyMedium)
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Estimated exercise pool size:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text("$estimatedPoolSize", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -410,17 +508,31 @@ private fun FocusAreaSelector(
     title: String,
     options: List<FlexibilityTrainingType>,
     selectedOption: FlexibilityTrainingType,
-    onSelect: (FlexibilityTrainingType) -> Unit
+    onSelect: (FlexibilityTrainingType) -> Unit,
+    disabledFamilies: Set<String>
 ) {
+    val postureEnabled = "posture_correction" !in disabledFamilies
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(text = title, style = MaterialTheme.typography.titleMedium)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { option ->
-                FilterChip(
-                    selected = option == selectedOption,
-                    onClick = { onSelect(option) },
-                    label = { Text(stringResource(option.labelRes)) }
-                )
+                val isDisabled = option == FlexibilityTrainingType.STRETCHING && postureEnabled
+                Column(horizontalAlignment = Alignment.Start) {
+                    FilterChip(
+                        selected = option == selectedOption && !isDisabled,
+                        onClick = { if (!isDisabled) onSelect(option) },
+                        enabled = !isDisabled,
+                        label = { Text(stringResource(option.labelRes)) }
+                    )
+                    if (isDisabled) {
+                        Text(
+                            text = "Disabled because \"Posture Correction\" is enabled.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -458,7 +570,9 @@ private fun MultiSelectEquipmentSelector(
     onClear: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text = title, style = MaterialTheme.typography.titleMedium)
+        if (title.isNotEmpty()) {
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
+        }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = selectedOptions.isEmpty(),
@@ -485,7 +599,7 @@ private fun FoodExclusionsSelector(
     options: List<NutritionIngredient>
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(text = title, style = MaterialTheme.typography.titleMedium)
+        Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(
             text = description,
             style = MaterialTheme.typography.bodyMedium,

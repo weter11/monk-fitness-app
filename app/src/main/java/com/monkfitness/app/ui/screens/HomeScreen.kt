@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.monkfitness.app.R
@@ -68,7 +69,7 @@ fun HomeScreen(
             },
             title = { Text("Repeat Workout") },
             text = {
-                Text("Today's workout has already been completed. You may repeat it for practice, but no additional daily completion or reward points will be awarded.")
+                Text("You have already completed today's workout.\n\nYou are welcome to repeat it for practice, but no additional daily rewards, points, or achievements will be granted.")
             }
         )
     }
@@ -115,6 +116,36 @@ fun HomeScreen(
                 }
             }
         )
+
+        if (uiState.todayProgramDayState.isCompleted) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "✓ Today's workout completed",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Practice Mode is Active",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Text(
+                    text = "Repeating today's workout will not award additional points or daily rewards.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+        }
     }
 
     Column(
