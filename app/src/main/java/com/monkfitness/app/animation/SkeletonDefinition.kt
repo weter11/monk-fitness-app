@@ -36,10 +36,10 @@ data class HumanSkeletonDefinition(
     override val shinLength: Float = 98f,
     override val footLength: Float = 35f,
     override val foot: FootDefinition = FootDefinition(footLength),
-    override val upperArmLength: Float = 64f,
-    override val forearmLength: Float = 82f,
+    override val upperArmLength: Float = 80f,
+    override val forearmLength: Float = 66f,
     override val hand: HandDefinition = HandDefinition(),
-    override val shoulderWidth: Float = 42f,
+    override val shoulderWidth: Float = 46f,
     override val hipWidth: Float = 22f,
     override val defaultCamera: CameraDefinition = CameraDefinition.DEFAULT,
 

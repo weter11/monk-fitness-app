@@ -26,6 +26,8 @@ abstract class BasePushUpPose : BasePose() {
 
     protected val targetHandABuffer = Vector3()
     protected val targetHandPBuffer = Vector3()
+    protected val armAPoleLocal = Vector3()
+    protected val armPPoleLocal = Vector3()
 
     // Stylized planted-palm hand proportions for push-ups.
     // These intentionally differ from the canonical open-hand HandDefinition: in a push-up the
@@ -171,11 +173,13 @@ abstract class BasePushUpPose : BasePose() {
         val targetHandA = targetHandABuffer.set(finalHandAnchorX, 0f, -def.shoulderWidth * gripWidthMultiplier)
         val targetHandP = targetHandPBuffer.set(finalHandAnchorX, 0f, def.shoulderWidth * gripWidthMultiplier)
 
+        SkeletonMath.toLocalDirection(poleA, chest!!.worldRotation, armAPoleLocal)
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
-        val armA = bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, theta, elbowA!!, handA!!, armAIK)
+        val armA = bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, armAPoleLocal, chest!!.worldRotation, def.armIKConstraint, theta, elbowA!!, handA!!, armAIK)
 
         shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
-        val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, theta, elbowP!!, handP!!, armPIK)
+        SkeletonMath.toLocalDirection(poleP, chest!!.worldRotation, armPPoleLocal)
+        val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleLocal, chest!!.worldRotation, def.armIKConstraint, theta, elbowP!!, handP!!, armPIK)
 
         handA!!.localRotation.set(axisZ, theta)
         palmA!!.localPosition.set(handDirA.x * handPalmOffset, handDirA.y * handPalmOffset, handDirA.z * handPalmOffset); knucklesA!!.localPosition.set(handDirA.x * handPalmOffset, handDirA.y * handPalmOffset, handDirA.z * handPalmOffset); fingertipsA!!.localPosition.set(handDirA.x * handFingertipOffset, handDirA.y * handFingertipOffset, handDirA.z * handFingertipOffset)

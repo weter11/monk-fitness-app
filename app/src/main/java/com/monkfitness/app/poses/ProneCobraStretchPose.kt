@@ -24,6 +24,7 @@ class ProneCobraStretchPose : PoseBuilder {
     private val jointsBuffer = SkeletonPose()
     private val legFBuffer = SkeletonMath.IKResult(); private val legBBuffer = SkeletonMath.IKResult()
     private val armABuffer = SkeletonMath.IKResult(); private val armPBuffer = SkeletonMath.IKResult()
+    private val armAPoleLocal = Vector3(); private val armPPoleLocal = Vector3()
 
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
@@ -100,8 +101,12 @@ class ProneCobraStretchPose : PoseBuilder {
         val targetHandP = Vector3(reachX, reachY, def.shoulderWidth * 1.5f)
 
         // Pole vectors orient elbows upward and outward to squeeze the shoulder blades
-        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, -1f), def.armIKConstraint, armABuffer)
-        val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, 1f), def.armIKConstraint, armPBuffer)
+        armAPoleLocal.set(0f, 1f, -1f)
+        SkeletonMath.toLocalDirection(armAPoleLocal, chest!!.worldRotation, armAPoleLocal)
+        val armA = solveIK(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, armAPoleLocal, chest!!.worldRotation, def.armIKConstraint, armABuffer)
+        armPPoleLocal.set(0f, 1f, 1f)
+        SkeletonMath.toLocalDirection(armPPoleLocal, chest!!.worldRotation, armPPoleLocal)
+        val armP = solveIK(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleLocal, chest!!.worldRotation, def.armIKConstraint, armPBuffer)
 
         rotAround(Vector3(armA.joint.x - shoulderAW.x, armA.joint.y - shoulderAW.y, armA.joint.z - shoulderAW.z), Vector3(0f, 0f, 1f), -torsoPitch, elbowA!!.localPosition)
         rotAround(Vector3(armA.end.x - armA.joint.x, armA.end.y - armA.joint.y, armA.end.z - armA.joint.z), Vector3(0f, 0f, 1f), -torsoPitch, handA!!.localPosition)
