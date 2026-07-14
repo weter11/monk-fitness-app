@@ -697,10 +697,10 @@
 
     <string name="validation_pike_sit_name">Нахил уперед сидячи</string>
     <string name="validation_pike_sit_desc">Сидячий нахил: ноги вперед, корпус складено над ними, руки тягнуться до носків.</string>
-    <string name="validation_pike_sit_tech">Заморожений кадр. Перевірка положення таза та геометрії м'язів задньої поверхні стегна.</string>
+    <string name="validation_pike_sit_tech">Заморожений кадр. Перевірка положення таза та геометрії м\'язів задньої поверхні стегна.</string>
     <string name="validation_pike_sit_p1">Таз сидячи та геометрія біцепса стегна</string>
     <string name="validation_pike_sit_p2">Постава хребта та згинання плеча</string>
-    <string name="validation_pike_sit_p3">Довжина рук та орієнтація зап'ясть</string>
+    <string name="validation_pike_sit_p3">Довжина рук та орієнтація зап\'ясть</string>
 
     <string name="validation_deep_overhead_squat_name">Глибокий присід із піднятими руками</string>
     <string name="validation_deep_overhead_squat_desc">Присід на повну глибину з піднятими вгору руками, що навантажує майже всі суглоби.</string>
@@ -714,7 +714,7 @@
     <string name="validation_dead_hang_tech">Заморожений кадр. Кисті зафіксовано на якорі перекладини для перевірки контактів та геометрії.</string>
     <string name="validation_dead_hang_p1">Фіксовані контакти кистей та перекладина</string>
     <string name="validation_dead_hang_p2">Геометрія вису та плечовий пояс</string>
-    <string name="validation_dead_hang_p3">Пропорції рук та орієнтація зап'ясть</string>
+    <string name="validation_dead_hang_p3">Пропорції рук та орієнтація зап\'ясть</string>
 
     <string name="ok">ОК</string>
 </resources>
