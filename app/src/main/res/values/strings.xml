@@ -665,6 +665,7 @@
     <string name="nutrition_not_enough_protein_sources">Not enough protein sources</string>
     <string name="nutrition_not_enough_carbs">Add more carbs</string>
     <string name="nutrition_add_more_fruits_vegetables">Add more vegetables/fruits</string>
+    <string name="developer_tools">Developer tools</string>
     <string name="library_statistics">Library Statistics</string>
     <string name="stats_total_exercises">Total exercises</string>
     <string name="stats_total_families">Total exercise families</string>
@@ -674,6 +675,47 @@
     <string name="stats_animation_coverage">Animation coverage</string>
     <string name="stats_animated_label">Animated:</string>
     <string name="stats_animated_format">%1$d / %2$d</string>
+
+    <!-- Engineering Validation subsystem (developer tools) -->
+    <string name="show_engineering_validation">Show Engineering Validation category</string>
+    <string name="show_engineering_validation_desc">Developer tool. Reveals a hidden \'Engineering Validation\' family with four static reference poses for validating the animation engine, IK and skeleton geometry.</string>
+    <string name="engineering_validation_category">Engineering Validation</string>
+    <string name="engineering_validation_desc">Static reference poses for validating the animation engine, IK, skeleton geometry and rendering. Not exercises.</string>
+
+    <string name="validation_category_name">Engineering Validation</string>
+    <string name="validation_category_desc">Static reference poses for engine / IK / skeleton validation.</string>
+    <string name="validation_pose_badge">Validation pose</string>
+    <string name="validation_pose_not_found">Validation pose not found.</string>
+    <string name="validation_purpose_title">What this validates</string>
+    <string name="validation_technique_label">Notes</string>
+
+    <string name="validation_middle_split_name">Middle Split</string>
+    <string name="validation_middle_split_desc">Static split on the floor with legs abducted symmetrically and arms extended to the sides.</string>
+    <string name="validation_middle_split_tech">Frozen snapshot. No animation, no breathing, no motion driver. Use to verify pelvis centering and left/right mirror symmetry.</string>
+    <string name="validation_middle_split_p1">Pelvis centering and hip symmetry</string>
+    <string name="validation_middle_split_p2">Leg IK and arm-length proportions</string>
+    <string name="validation_middle_split_p3">Shoulder symmetry and L/R mirror correctness</string>
+
+    <string name="validation_pike_sit_name">Pike Sit</string>
+    <string name="validation_pike_sit_desc">Seated pike with legs straight forward and torso folded over them, hands reaching for the toes.</string>
+    <string name="validation_pike_sit_tech">Frozen snapshot. Validates seated pelvis placement and hamstring geometry without any procedural motion.</string>
+    <string name="validation_pike_sit_p1">Seated pelvis and hamstring geometry</string>
+    <string name="validation_pike_sit_p2">Spine alignment and shoulder flexion</string>
+    <string name="validation_pike_sit_p3">Arm reach and wrist orientation</string>
+
+    <string name="validation_deep_overhead_squat_name">Deep Overhead Squat</string>
+    <string name="validation_deep_overhead_squat_desc">Full-depth squat with arms raised overhead, stressing nearly every joint at once.</string>
+    <string name="validation_deep_overhead_squat_tech">Frozen snapshot. Use to stress-test ankle mobility, knee tracking, pelvis depth and overhead shoulder range.</string>
+    <string name="validation_deep_overhead_squat_p1">Ankle mobility, knee tracking, pelvis depth</string>
+    <string name="validation_deep_overhead_squat_p2">Thoracic extension and overhead shoulders</string>
+    <string name="validation_deep_overhead_squat_p3">Whole-body proportions and symmetry</string>
+
+    <string name="validation_dead_hang_name">Dead Hang</string>
+    <string name="validation_dead_hang_desc">Hanging from a fixed bar with straight arms and the body suspended beneath.</string>
+    <string name="validation_dead_hang_tech">Frozen snapshot. Hands are locked to the bar anchor to verify fixed contacts, hanging geometry and bar alignment.</string>
+    <string name="validation_dead_hang_p1">Fixed hand contacts and bar alignment</string>
+    <string name="validation_dead_hang_p2">Hanging geometry and shoulder girdle</string>
+    <string name="validation_dead_hang_p3">Arm proportions and wrist orientation</string>
 
     <string name="ok">OK</string>
 </resources>

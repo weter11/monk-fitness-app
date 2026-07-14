@@ -33,13 +33,15 @@ import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.ui.components.ExerciseThumbnail
 import com.monkfitness.app.ui.components.exerciseSummaryText
+import com.monkfitness.app.validation.ValidationPose
 import com.monkfitness.app.viewmodel.MainViewModel
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PostureScreen(
     viewModel: MainViewModel,
-    onExerciseClick: (Exercise) -> Unit
+    onExerciseClick: (Exercise) -> Unit,
+    onValidationPoseClick: (ValidationPose) -> Unit = {}
 ) {
     val localContext = LocalContext.current
     val uiState by viewModel.postureUiState.collectAsState()
@@ -87,7 +89,7 @@ fun PostureScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        if (uiState.filteredExercises.isEmpty()) {
+        if (uiState.filteredExercises.isEmpty() && uiState.validationCategory == null) {
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 Text(
                     text = stringResource(R.string.no_exercises_match),
@@ -104,7 +106,8 @@ fun PostureScreen(
                 onExerciseClick = onExerciseClick,
                 onToggleFamily = viewModel::toggleFamilyExpanded,
                 listState = listState,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                onValidationPoseClick = onValidationPoseClick
             )
         }
     }
@@ -174,7 +177,8 @@ private fun PostureFamilyList(
     onExerciseClick: (Exercise) -> Unit,
     onToggleFamily: (String) -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onValidationPoseClick: (ValidationPose) -> Unit = {}
 ) {
     LazyColumn(
         state = listState,
@@ -201,6 +205,115 @@ private fun PostureFamilyList(
                         modifier = Modifier.padding(start = 16.dp)
                     )
                 }
+            }
+        }
+
+        // Engineering Validation — parallel subsystem rendered only when visible.
+        // Always appears at the very end of the Exercise library.
+        uiState.validationCategory?.let { category ->
+            item(key = "validation_family_${category.id}") {
+                ValidationFamilyHeader(category = category)
+            }
+            items(uiState.validationPoses, key = { it.id }) { pose ->
+                ValidationPoseItem(
+                    pose = pose,
+                    onClick = { onValidationPoseClick(pose) },
+                    modifier = Modifier.padding(start = 16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ValidationFamilyHeader(
+    category: com.monkfitness.app.validation.ValidationCategory
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(category.nameRes),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
+                )
+                Text(
+                    text = stringResource(category.descriptionRes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ValidationPoseItem(
+    pose: ValidationPose,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = stringResource(pose.nameRes),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 16.sp,
+                        lineHeight = 22.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = stringResource(R.string.validation_pose_badge),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            FilledTonalIconButton(
+                onClick = onClick,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = stringResource(R.string.label_description)
+                )
             }
         }
     }

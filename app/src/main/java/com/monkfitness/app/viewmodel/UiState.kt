@@ -8,6 +8,8 @@ import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.model.ProgramDayState
 import com.monkfitness.app.data.model.Workout
+import com.monkfitness.app.validation.ValidationCategory
+import com.monkfitness.app.validation.ValidationPose
 
 @Immutable
 data class HomeUiState(
@@ -38,5 +40,12 @@ data class PostureUiState(
     val filteredExercises: List<Exercise>,
     val families: List<ExerciseFamily>,
     val exercisesByFamily: Map<String, List<Exercise>>,
-    val expandedFamilyIds: Set<String>
+    val expandedFamilyIds: Set<String>,
+    /**
+     * Engineering Validation category. Null whenever the "Show Engineering Validation
+     * category" setting is OFF, or when it is filtered out — so the normal catalog,
+     * workout generation, statistics and search never see validation poses.
+     */
+    val validationCategory: ValidationCategory? = null,
+    val validationPoses: List<ValidationPose> = emptyList()
 )

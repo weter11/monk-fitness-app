@@ -64,6 +64,7 @@ fun SettingsScreen(
     val disabledExerciseFamilies by viewModel.disabledExerciseFamilies.collectAsState()
     val filterLibraryByCategories by viewModel.filterLibraryByCategories.collectAsState()
     val showCategoryErrorDialog by viewModel.showCategoryErrorDialog.collectAsState()
+    val showEngineeringValidation by viewModel.showEngineeringValidation.collectAsState()
 
     if (showCategoryErrorDialog) {
         AlertDialog(
@@ -166,6 +167,20 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            Text(text = stringResource(R.string.developer_tools), style = MaterialTheme.typography.titleLarge)
+            SettingSwitchRow(
+                title = stringResource(R.string.show_engineering_validation),
+                checked = showEngineeringValidation,
+                onCheckedChange = viewModel::setShowEngineeringValidation
+            )
+            Text(
+                text = stringResource(R.string.show_engineering_validation_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             Text(text = stringResource(R.string.mobility_and_posture), style = MaterialTheme.typography.titleLarge)
             SettingSwitchRow(
                 title = stringResource(R.string.enable_additional_posture_training),
@@ -220,7 +235,8 @@ fun SettingsScreen(
                 onToggleFilterLibrary = viewModel::setFilterLibraryByCategories,
                 onToggle = viewModel::toggleExerciseFamily,
                 onEnableAll = viewModel::enableAllInGroup,
-                onDisableAll = viewModel::disableAllInGroup
+                onDisableAll = viewModel::disableAllInGroup,
+                showEngineeringValidation = showEngineeringValidation
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -239,7 +255,8 @@ private fun ExerciseFamiliesSelector(
     onToggleFilterLibrary: (Boolean) -> Unit,
     onToggle: (String) -> Unit,
     onEnableAll: (List<String>) -> Unit,
-    onDisableAll: (List<String>) -> Unit
+    onDisableAll: (List<String>) -> Unit,
+    showEngineeringValidation: Boolean
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(text = "Exercises", style = MaterialTheme.typography.titleLarge)
@@ -306,6 +323,32 @@ private fun ExerciseFamiliesSelector(
                             Spacer(modifier = Modifier.weight(1f))
                         }
                     }
+                }
+            }
+        }
+
+        // Engineering Validation — only visible when the developer setting is ON. It
+        // participates in the same disabled-families filter as every other family.
+        if (showEngineeringValidation) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                Text(
+                    text = stringResource(R.string.engineering_validation_category),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = com.monkfitness.app.validation.ENGINEERING_VALIDATION_FAMILY_ID !in disabledFamilies,
+                        onCheckedChange = { onToggle(com.monkfitness.app.validation.ENGINEERING_VALIDATION_FAMILY_ID) }
+                    )
+                    Text(
+                        text = stringResource(R.string.engineering_validation_desc),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
         }

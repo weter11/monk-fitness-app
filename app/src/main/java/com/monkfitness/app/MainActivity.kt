@@ -32,6 +32,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.compose.runtime.key
 import androidx.navigation.navArgument
 import com.monkfitness.app.ui.screens.*
+import com.monkfitness.app.validation.ValidationPoseScreen
 import com.monkfitness.app.ui.theme.MonkFitnessTheme
 import com.monkfitness.app.viewmodel.MainViewModel
 import java.util.Locale
@@ -206,9 +207,15 @@ fun MainApp(viewModel: MainViewModel) {
                 ProgressScreen(viewModel)
             }
             composable(Screen.Posture.route) {
-                PostureScreen(viewModel) { exercise ->
-                    navController.navigate("exercise/${exercise.id}?isPosture=true")
-                }
+                PostureScreen(
+                    viewModel = viewModel,
+                    onExerciseClick = { exercise ->
+                        navController.navigate("exercise/${exercise.id}?isPosture=true")
+                    },
+                    onValidationPoseClick = { pose ->
+                        navController.navigate("validation/${pose.id}")
+                    }
+                )
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(viewModel, onBack = { navController.popBackStack() })
@@ -279,6 +286,17 @@ fun MainApp(viewModel: MainViewModel) {
                 ExerciseScreen(
                     exercise = exercise,
                     viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "validation/{poseId}",
+                arguments = listOf(navArgument("poseId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val poseId = backStackEntry.arguments?.getString("poseId") ?: ""
+                val pose = viewModel.findValidationPoseById(poseId)
+                ValidationPoseScreen(
+                    pose = pose,
                     onBack = { navController.popBackStack() }
                 )
             }

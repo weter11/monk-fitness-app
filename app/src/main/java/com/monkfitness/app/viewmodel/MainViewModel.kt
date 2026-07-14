@@ -2,6 +2,7 @@ package com.monkfitness.app.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.content.res.Configuration
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
@@ -44,6 +45,12 @@ import com.monkfitness.app.data.model.validateAvailableProductSelection
 import com.monkfitness.app.data.repository.WorkoutRepository
 import com.monkfitness.app.domain.usecase.TOTAL_PROGRAM_DAYS
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
+import com.monkfitness.app.validation.EngineeringValidationFilter
+import com.monkfitness.app.validation.ValidationCategory
+import com.monkfitness.app.validation.ValidationPose
+import com.monkfitness.app.validation.ValidationSettings
+import com.monkfitness.app.validation.ValidationPoseRegistry
+import com.monkfitness.app.util.normalize
 import com.monkfitness.app.domain.usecase.calculateProgramDay
 import com.monkfitness.app.domain.usecase.synchronizeProgramStates
 import com.monkfitness.app.ui.screens.WorkoutStep
@@ -313,6 +320,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), true
     )
 
+    val showEngineeringValidation = settingsManager.showEngineeringValidationFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ValidationSettings.DEFAULT_ENABLED
+    )
+
+    fun setShowEngineeringValidation(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setShowEngineeringValidation(enabled)
+        }
+    }
+
     private val _showCategoryErrorDialog = MutableStateFlow(false)
     val showCategoryErrorDialog = _showCategoryErrorDialog.asStateFlow()
 
@@ -455,7 +472,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _expandedFamilyIds,
         availableEquipment,
         filterLibraryByCategories,
-        disabledExerciseFamilies
+        disabledExerciseFamilies,
+        showEngineeringValidation
     ) { params ->
         val difficultyAdjustments = params[0] as Map<String, Int>
         val debouncedQuery = params[1] as String
@@ -465,6 +483,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val availableEquipment = params[5] as Set<Equipment>
         val filterByCategories = params[6] as Boolean
         val disabledFamilies = params[7] as Set<String>
+        val engineeringValidationEnabled = params[8] as Boolean
 
         val exercises = getExerciseLibrary(difficultyAdjustments, availableEquipment, filterByCategories, disabledFamilies)
         val searchFilteredExercises = if (debouncedQuery.isBlank()) {
@@ -489,6 +508,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         val exercisesByFamily = filteredExercises.groupBy { it.familyId }
 
+        // --- Engineering Validation: parallel subsystem, fully isolated from the catalog. ---
+        // Visible only when the developer setting is ON and not filtered out. The validation
+        // poses are NOT added to `filteredExercises`, so they never reach workouts, statistics
+        // or the normal exercise search indexing.
+        val validationCategory: ValidationCategory?
+        val validationPoses: List<ValidationPose>
+        if (EngineeringValidationFilter.isVisible(engineeringValidationEnabled, filterByCategories, disabledFamilies)) {
+            validationCategory = ValidationCategory()
+            validationPoses = if (debouncedQuery.isBlank()) {
+                ValidationPoseRegistry.poses
+            } else {
+                ValidationPoseRegistry.poses.filter { pose ->
+                    validationPoseMatchesQuery(pose, debouncedQuery)
+                }
+            }
+        } else {
+            validationCategory = null
+            validationPoses = emptyList()
+        }
+
         PostureUiState(
             selectedCategory = selectedCategory,
             selectedSubCategory = safeSelectedSubCategory,
@@ -496,7 +535,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             filteredExercises = filteredExercises,
             families = familiesInLibrary,
             exercisesByFamily = exercisesByFamily,
-            expandedFamilyIds = expandedFamilyIds
+            expandedFamilyIds = expandedFamilyIds,
+            validationCategory = validationCategory,
+            validationPoses = validationPoses
         )
     }.stateIn(
         viewModelScope,
@@ -625,6 +666,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return getExerciseLibrary(difficultyAdjustments, availableEquipment).find { it.id == exerciseId }
             ?: getPostureExercises(difficultyAdjustments, focusAreas).find { it.id == exerciseId }
             ?: getWarmupExercises(difficultyAdjustments).find { it.id == exerciseId }
+    }
+
+    /**
+     * Looks up a validation pose by id. This lives entirely in the validation subsystem and
+     * is deliberately separate from [findExerciseById] (which only searches the exercise catalog).
+     * A validation pose is never treated as an [Exercise].
+     */
+    fun findValidationPoseById(poseId: String): ValidationPose? {
+        if (poseId.isBlank()) return null
+        return ValidationPoseRegistry.get(poseId)
+    }
+
+    /**
+     * Case-insensitive, locale-aware search over validation pose names (en / ru / uk),
+     * mirroring the exercise library search semantics.
+     */
+    private fun validationPoseMatchesQuery(pose: ValidationPose, query: String): Boolean {
+        val q = normalize(query)
+        if (q.isEmpty()) return true
+        val app = getApplication<Application>()
+        return listOf("en", "ru", "uk").any { tag ->
+            val configuration = Configuration(app.resources.configuration)
+            configuration.setLocale(java.util.Locale.forLanguageTag(tag))
+            val name = app.createConfigurationContext(configuration).resources.getString(pose.nameRes)
+            normalize(name).contains(q)
+        }
     }
 
     fun getExerciseDifficultyAdjustment(exerciseId: String): Flow<Int> {
