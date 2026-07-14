@@ -90,8 +90,10 @@ class SkeletonPoseFinalizer(
         getNode(Joint.CHEST).addChild(getNode(Joint.NECK_END))
         getNode(Joint.NECK_END).addChild(getNode(Joint.HEAD_POS))
 
-        // Left Arm (Active)
-        getNode(Joint.CHEST).addChild(getNode(Joint.SHOULDER_A))
+        // Left Arm (Active): shoulder girdle chain CHEST -> CLAVICLE -> SCAPULA -> SHOULDER
+        getNode(Joint.CHEST).addChild(getNode(Joint.CLAVICLE_A))
+        getNode(Joint.CLAVICLE_A).addChild(getNode(Joint.SCAPULA_A))
+        getNode(Joint.SCAPULA_A).addChild(getNode(Joint.SHOULDER_A))
         getNode(Joint.SHOULDER_A).addChild(getNode(Joint.ELBOW_A))
         getNode(Joint.ELBOW_A).addChild(getNode(Joint.HAND_A))
         getNode(Joint.HAND_A).addChild(getNode(Joint.WRIST_A))
@@ -99,8 +101,10 @@ class SkeletonPoseFinalizer(
         getNode(Joint.PALM_A).addChild(getNode(Joint.KNUCKLES_A))
         getNode(Joint.KNUCKLES_A).addChild(getNode(Joint.FINGERTIPS_A))
 
-        // Right Arm (Passive)
-        getNode(Joint.CHEST).addChild(getNode(Joint.SHOULDER_P))
+        // Right Arm (Passive): shoulder girdle chain CHEST -> CLAVICLE -> SCAPULA -> SHOULDER
+        getNode(Joint.CHEST).addChild(getNode(Joint.CLAVICLE_P))
+        getNode(Joint.CLAVICLE_P).addChild(getNode(Joint.SCAPULA_P))
+        getNode(Joint.SCAPULA_P).addChild(getNode(Joint.SHOULDER_P))
         getNode(Joint.SHOULDER_P).addChild(getNode(Joint.ELBOW_P))
         getNode(Joint.ELBOW_P).addChild(getNode(Joint.HAND_P))
         getNode(Joint.HAND_P).addChild(getNode(Joint.WRIST_P))
@@ -157,6 +161,11 @@ class SkeletonPoseFinalizer(
                 }
                 Joint.SHOULDER_P -> {
                     node.localPosition.set(0f, 0f, definition.shoulderWidth)
+                }
+                Joint.CLAVICLE_A, Joint.CLAVICLE_P, Joint.SCAPULA_A, Joint.SCAPULA_P -> {
+                    // Girdle bones sit coincident with their parent in the legacy bridge; the
+                    // scapula derives the shoulder position via its own (identity here) rotation.
+                    node.localPosition.set(0f, 0f, 0f)
                 }
                 Joint.NECK_END -> {
                     node.localPosition.set(0f, definition.neckLength, 0f)
