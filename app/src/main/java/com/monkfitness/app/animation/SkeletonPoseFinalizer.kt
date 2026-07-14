@@ -223,6 +223,14 @@ class SkeletonPoseFinalizer(
      * Finalizes the 3D pose. Supports both modern rotation-driven custom hierarchies and legacy position-driven poses.
      */
     fun finalize(pose: SkeletonPose): SkeletonPose {
+        // PR-04: global contact-constraint / root-repositioning pass. Runs before the FK
+        // flatten so fixed support contacts are honored and the root/pelvis is derived from
+        // them rather than a fixed authored value. No-op when the pose registered no contacts
+        // (the common production case), so non-contact poses are untouched.
+        if (pose.roots.isNotEmpty() && pose.hasContacts()) {
+            ConstraintSolver.solve(pose, definition)
+        }
+
         outputPose.copyFrom(pose)
 
         if (pose.roots.isNotEmpty()) {

@@ -153,6 +153,29 @@ abstract class BasePose : PoseBuilder {
         tempV1.set(ikResult.end).subtract(ikResult.joint)
         SkeletonMath.toLocalDirection(tempV1, parentRotation, endNode.localPosition)
 
+        // PR-04: if this limb carries a fixed support contact, register it so the global
+        // constraint solver can reposition the root and re-bake the limb to honor the contact.
+        if (contact != null) {
+            val chain = ConstraintSolver.chainForEnd(endNode.joint)
+            if (chain != null) {
+                jointsBuffer.contacts.add(
+                    ContactSpec(
+                        endJoint = endNode.joint,
+                        rootJoint = chain.rootJoint,
+                        parentRotationJoint = chain.parentRotationJoint,
+                        middleJoint = chain.middleJoint,
+                        targetWorld = Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
+                        pole = Vector3(pole.x, pole.y, pole.z),
+                        length1 = length1,
+                        length2 = length2,
+                        constraint = constraint,
+                        straight = straight,
+                        contact = contact
+                    )
+                )
+            }
+        }
+
         return ikResult
     }
 

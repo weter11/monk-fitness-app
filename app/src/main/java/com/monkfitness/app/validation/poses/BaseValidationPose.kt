@@ -3,6 +3,8 @@ package com.monkfitness.app.validation.poses
 import com.monkfitness.app.animation.CameraDefinition
 import com.monkfitness.app.animation.EnvironmentDefinition
 import com.monkfitness.app.animation.ContactConstraint
+import com.monkfitness.app.animation.ConstraintSolver
+import com.monkfitness.app.animation.ContactSpec
 import com.monkfitness.app.animation.IKConstraint
 import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.JointRotation
@@ -131,6 +133,29 @@ abstract class BaseValidationPose : PoseBuilder {
         SkeletonMath.toLocalDirection(tempV1, parentRotation, middleNode.localPosition)
         tempV1.set(ikResult.end).subtract(ikResult.joint)
         SkeletonMath.toLocalDirection(tempV1, parentRotation, endNode.localPosition)
+
+        // PR-04: register the fixed support contact so the global constraint solver can
+        // reposition the root and re-bake the limb to honor it.
+        if (contact != null) {
+            val chain = ConstraintSolver.chainForEnd(endNode.joint)
+            if (chain != null) {
+                jointsBuffer.contacts.add(
+                    ContactSpec(
+                        endJoint = endNode.joint,
+                        rootJoint = chain.rootJoint,
+                        parentRotationJoint = chain.parentRotationJoint,
+                        middleJoint = chain.middleJoint,
+                        targetWorld = Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
+                        pole = Vector3(pole.x, pole.y, pole.z),
+                        length1 = length1,
+                        length2 = length2,
+                        constraint = constraint,
+                        straight = straight,
+                        contact = contact
+                    )
+                )
+            }
+        }
     }
 
     protected fun bakeIkLimb(
@@ -173,6 +198,10 @@ abstract class BaseValidationPose : PoseBuilder {
     protected abstract fun buildStatic(definition: SkeletonDefinition): SkeletonPose
 
     final override fun build(context: PoseContext): SkeletonPose {
+        // PR-04: a reused pose instance may be built more than once; clear any fixed-contact
+        // specs from a previous build before re-authoring, so the global solver never replays
+        // stale contacts.
+        jointsBuffer.contacts.clear()
         // Validation poses are frozen: animation progress / side / mirroring are ignored.
         return buildStatic(context.definition)
     }

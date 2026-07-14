@@ -9,8 +9,14 @@ class SkeletonPose(
     val rotations: Array<JointRotation> = Array(Joint.entries.size) { JointRotation() },
     var roots: List<SkeletonNode> = emptyList(),
     var isTransformsUpdated: Boolean = false,
-    var maxIkClampAmount: Float = 0f
+    var maxIkClampAmount: Float = 0f,
+    // Fixed support contacts registered by contact-bearing `bakeIkLimb` calls (PR-04). The
+    // global constraint solver consumes these to reposition the root so every contact holds.
+    val contacts: MutableList<ContactSpec> = mutableListOf()
 ) {
+
+    /** True when at least one fixed contact was registered and the constraint pass should run. */
+    fun hasContacts(): Boolean = contacts.isNotEmpty()
     fun getJoint(id: Joint): Vector3 = joints[id.index]
 
     fun setJoint(id: Joint, v: Vector3) {
@@ -31,6 +37,8 @@ class SkeletonPose(
         this.roots = other.roots
         this.isTransformsUpdated = other.isTransformsUpdated
         this.maxIkClampAmount = other.maxIkClampAmount
+        this.contacts.clear()
+        this.contacts.addAll(other.contacts)
     }
 
     companion object {
