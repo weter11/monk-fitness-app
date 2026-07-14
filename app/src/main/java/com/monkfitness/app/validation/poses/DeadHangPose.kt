@@ -82,9 +82,10 @@ class DeadHangPose : BaseValidationPose() {
         val invChestZ = -torsoPitch
         // Hands are fixed contacts on the bar: clamp the IK end onto the bar plane (normal +Y at
         // barY) so the over-clamp can't drag the grip off the bar (PR-03). Target is unchanged.
+        // Arms opt into full extension so they render perfectly straight (PR-11).
         val barContact = ContactConstraint(Vector3(0f, 1f, 0f), Vector3(0f, barY, 0f))
-        bakeIkLimb(shoulderA!!.worldPosition, targetA, def.upperArmLength, def.forearmLength, armPoleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, straight = true, contact = barContact)
-        bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, armPoleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, straight = true, contact = barContact)
+        bakeIkLimb(shoulderA!!.worldPosition, targetA, def.upperArmLength, def.forearmLength, armPoleA, armStraightConstraint(def), chest!!.worldRotation, elbowA!!, handA!!, armABuffer, straight = true, contact = barContact)
+        bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, armPoleP, armStraightConstraint(def), chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, straight = true, contact = barContact)
 
         // Overhand grip: hands rotate so palms face away from the bar.
         val gripAngle = invChestZ - (PI.toFloat() / 2f)
@@ -100,8 +101,8 @@ class DeadHangPose : BaseValidationPose() {
         val targetB = Vector3(ankleX, ankleY, def.hipWidth * 0.9f)
         val legPoleF = Vector3(0.15f, 1f, 0f)
         val legPoleB = Vector3(0.15f, 1f, 0f)
-        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, straight = true)
-        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, legStraightConstraint(def), pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, straight = true)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, legStraightConstraint(def), pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true)
 
         ankleF!!.localRotation.set(axisZ, invTorsoZ); ankleB!!.localRotation.set(axisZ, invTorsoZ)
         heelF!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)

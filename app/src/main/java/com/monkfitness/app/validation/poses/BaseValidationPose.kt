@@ -88,6 +88,20 @@ abstract class BaseValidationPose : PoseBuilder {
 
     // --- Shared IK helpers ---------------------------------------------------------
 
+    // PR-11: cached full-extension variants of the definition's IK constraints. Straight
+    // reference limbs opt into a true 1.0 extension ratio (instead of the 0.98 safety cap) so
+    // they render perfectly straight. Cached so repeated builds allocate nothing on the hot path.
+    private var armFullExtensionConstraint: IKConstraint? = null
+    private var legFullExtensionConstraint: IKConstraint? = null
+
+    /** Arm constraint opted into full extension for a genuinely straight reference arm. */
+    protected fun armStraightConstraint(def: SkeletonDefinition): IKConstraint =
+        armFullExtensionConstraint ?: def.armIKConstraint.fullyExtended().also { armFullExtensionConstraint = it }
+
+    /** Leg constraint opted into full extension for a genuinely straight reference leg. */
+    protected fun legStraightConstraint(def: SkeletonDefinition): IKConstraint =
+        legFullExtensionConstraint ?: def.legIKConstraint.fullyExtended().also { legFullExtensionConstraint = it }
+
     protected fun bakeIkLimb(
         rootWorldPos: Vector3,
         targetWorldPos: Vector3,
