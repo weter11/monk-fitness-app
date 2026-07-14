@@ -1,6 +1,7 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
+import kotlin.math.*
 
 /**
  * Step-Up (driven by support-leg extension, a different model from the lunges).

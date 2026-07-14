@@ -1,6 +1,7 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
+import kotlin.math.*
 
 /**
  * Alternating Lateral (Side) Lunge.
