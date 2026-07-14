@@ -37,8 +37,6 @@ import kotlin.math.*
  */
 abstract class BaseThoracicPose : BasePose() {
 
-    protected val axisY = Vector3(0f, 1f, 0f)
-
     /** Shared camera construction. Subclasses choose pitch/zoom for framing only (Phase 4). */
     protected fun thoracicCamera(pitch: Float, zoom: Float) = CameraDefinition(
         defaultYaw = 1.19f,

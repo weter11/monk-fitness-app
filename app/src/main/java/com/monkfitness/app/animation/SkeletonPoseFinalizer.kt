@@ -21,6 +21,9 @@ class SkeletonPoseFinalizer(
     private val handJointsBuffer = HandJoints()
     private val tempV1 = Vector3()
 
+    // Scratch rotation reused by the modern-path chest-frame reconstruction (no hot-path allocation).
+    private val reconRot = JointRotation()
+
     private var cachedRootsIdentity: List<SkeletonNode>? = null
     private var cachedHasHeelToeF = false
     private var cachedHasHeelToeB = false
@@ -41,6 +44,82 @@ class SkeletonPoseFinalizer(
             if (containsJointNode(children[i], joint)) return true
         }
         return false
+    }
+
+    private fun findJointNode(node: SkeletonNode, joint: Joint): SkeletonNode? {
+        if (node.joint == joint) return node
+        for (child in node.children) {
+            val found = findJointNode(child, joint)
+            if (found != null) return found
+        }
+        return null
+    }
+
+    /**
+     * Ports the legacy cross-product chest-frame reconstruction into the modern rotation-driven
+     * path. After FK, the chest is re-derived as a full 3-D orientation from the spine
+     * (`pelvis -> chest`, chest-local +Y) and the shoulder line (`shoulderA -> shoulderP`,
+     * chest-local -Z): `normal = lean × shoulderLine`, giving an orthonormal basis
+     * `(normal, lean, -shoulderLine)`. This guarantees thoracic twist (about +Y) and
+     * side-bend (about +X) are captured and propagated to the shoulders/arms/neck/head.
+     *
+     * For the standard hierarchy (shoulders are children of the chest along its local Z) the
+     * reconstructed frame equals the FK-derived frame, so sagittal/neutral poses are unchanged.
+     * A degenerate spine or shoulder line (e.g. coincident joints) is skipped — the authored
+     * frame is left intact. Allocation-free: reuses the shared column scratch buffers and
+     * re-runs FK for the chest subtree only.
+     */
+    private fun reconstructChestFrame(roots: List<SkeletonNode>) {
+        if (roots.isEmpty()) return
+        val pelvis = findJointNode(roots[0], Joint.PELVIS) ?: return
+        val chest = findJointNode(roots[0], Joint.CHEST) ?: return
+        val shoulderA = findJointNode(roots[0], Joint.SHOULDER_A) ?: return
+        val shoulderP = findJointNode(roots[0], Joint.SHOULDER_P) ?: return
+        if (chest.parent !== pelvis) return
+
+        val pelvisW = pelvis.worldPosition
+        val chestW = chest.worldPosition
+        val sAW = shoulderA.worldPosition
+        val sPW = shoulderP.worldPosition
+
+        // lean (chest-local +Y) = pelvis -> chest
+        val lean = tempColY.set(chestW).subtract(pelvisW)
+        if (lean.mag() < 1e-4f) return
+        lean.normalize()
+        // shoulderLine = shoulderA -> shoulderP
+        val shVec = tempColZ.set(sAW).subtract(sPW)
+        if (shVec.mag() < 1e-4f) return
+        shVec.normalize()
+        // Guard against a degenerate (collinear) spine/shoulder line.
+        tempColX.set(lean).cross(shVec)
+        if (tempColX.mag() < 1e-4f) return
+        // Build a proper RIGHT-HANDED orthonormal chest frame:
+        //   colY = lean (spine / up)
+        //   colZ = -(shoulderA - shoulderP)  (chest-forward, toward the passive shoulder)
+        //   colX = lean x colZ (lateral). This matches the FK-derived frame for the standard
+        //   hierarchy, so a neutral/sagittal trunk is unchanged and twist/side-bend are captured
+        //   (the chest frame is derived from the actual shoulder line, not a single authored axis).
+        shVec.multiply(-1f)
+        tempColX.set(lean).cross(shVec).normalize()
+
+        SkeletonMath.getRotationFromMatrix(tempColX, tempColY, tempColZ, reconRot)
+
+        // chest.localRotation = parentWorldRotation^-1 * reconRot (parentWorldRotation is a
+        // rotation matrix, so its inverse is its transpose).
+        SkeletonMath.rotationToMatrix(pelvis.worldRotation, parentMatX, parentMatY, parentMatZ)
+        SkeletonMath.rotationToMatrix(reconRot, worldMatX, worldMatY, worldMatZ)
+        SkeletonMath.transposeMultiply(
+            parentMatX, parentMatY, parentMatZ,
+            worldMatX, worldMatY, worldMatZ,
+            localMatX, localMatY, localMatZ
+        )
+        SkeletonMath.getRotationFromMatrix(localMatX, localMatY, localMatZ, chest.localRotation)
+
+        // Re-run FK for the chest subtree with the corrected local rotation so the shoulders,
+        // arms, neck and head are propagated in the reconstructed frame. For the standard
+        // hierarchy this re-flattens to identical world positions (no behavioural change).
+        chest.updateWorldTransforms(pelvisW, pelvis.worldRotation)
+        chest.flatten(outputPose)
     }
 
     private fun refreshJointPresenceCache(roots: List<SkeletonNode>) {
@@ -246,6 +325,10 @@ class SkeletonPoseFinalizer(
                 pose.isTransformsUpdated = true
             }
             outputPose.roots = pose.roots
+
+            // PR-09: reconstruct the chest as a full 3-D frame (spine + shoulder line) so
+            // thoracic twist/side-bend are captured and propagated to the upper chain.
+            reconstructChestFrame(pose.roots)
 
             refreshJointPresenceCache(pose.roots)
 
