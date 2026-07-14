@@ -1,587 +1,438 @@
 # ENGINE INVESTIGATION REPORT — Fundamental Biomechanical Limitations
 
-> Investigation only. No code, no constants, no targets, no pose logic were modified.
-> The four validation poses (Dead Hang, Deep Overhead Squat, Pike Sit, Middle Split)
-> are treated as fixed anatomical references per `VALIDATION.md`. Where a concrete
-> numerical claim is made, it was derived from the actual constants in
-> `SkeletonDefinition` (`HumanSkeletonDefinition`) and the four pose files.
+> **Scope / stance:** Investigation only. No code, constants, targets, or pose logic were
+> modified. The four validation poses (Dead Hang, Deep Overhead Squat, Pike Sit, Middle Split)
+> are treated as fixed anatomical references per `VALIDATION.md`. Numerical claims below were
+> derived directly from the *current* source (`SkeletonDefinition.DEFAULT_ADULT`,
+> `SkeletonMath`, `ConstraintSolver`, `SkeletonPoseFinalizer`, and the four pose files).
+
+---
+
+## 0. Context — the engine was heavily reworked
+
+The previous investigation (now stale) listed 11 issues. A large rework has since landed
+(the code references PR-03 … PR-11). Re-reading the current source, the following prior
+issues are now **resolved in code** and should be considered closed:
+
+| Prior issue | Status after rework | Evidence in current code |
+|---|---|---|
+| 1 — frame-relative baking used a hand-fed inverse-Z scalar | **Resolved (API)** | `bakeIkLimb` now converts world IK offsets with `toLocalDirection(parentRotation, …)`; `SkeletonPose.fromHierarchy` runs real FK. No scalar survives. |
+| 2 — no straight/rigid limb mode | **Resolved** | `SkeletonMath.solveStraightLimb`, `solveStraightArmIK`/`solveStraightLegIK`. |
+| 3 — IK clamp drove contacts through the floor | **Resolved** | `ContactConstraint` + `resolveContactPlane` inside `solveIK`/`solveStraightLimb`. |
+| 4 — no global constraint/root solve | **Partially resolved** | `ConstraintSolver` (PR-04) exists and runs between IK and FK. **But its model is pelvis-translation-only** — see Issue A. |
+| 5 — no scapular/clavicular DOF | **Resolved (skeleton)** | `CLAVICLE_*`/`SCAPULA_*` joints, `CHEST→CLAVICLE→SCAPULA→SHOULDER` chain, `SkeletonMath.buildScapularRotation`. **Introduces the coupling defect in Issue B.** |
+| 6 — no wrist articulation | **Partially resolved** | `adjustHandOrientation` now reads `pose.getJointRotation(handId)` and passes it to `HandDefinition.computeHandJoints`. **But it uses the node's *world* rotation** — see Issue C. |
+| 7 — no ankle/talocrural DOF | **Partially resolved** | `adjustFootOrientation` now reads `pose.getJointRotation(ankleId)` → `FootDefinition.computeHeelToe`. **Same world-frame defect as Issue C.** |
+| 8 — no angular joint limits | **Resolved** | `AngularJointLimits`, angular clamp in `solveIK`, `validateAngularJointLimits`. |
+| 9 — trunk frame 1-DOF | **Resolved** | `buildChestOrientation` (3-D) + `reconstructChestFrame` (derives chest frame from spine + shoulder line). |
+| 10 — reachability detection dead | **Resolved** | `bakeIkLimb` auto-propagates `clampAmount` into `pose.maxIkClampAmount`; `ValidatorConfig.ENGINEERING_VALIDATION` enables `IK_TARGET_UNREACHABLE`. |
+| 11 — 0.98 max-extension ceiling | **Resolved** | `IKConstraint.allowFullExtension` / `fullyExtended()` / `effectiveExtensionRatio`; `armStraightConstraint`/`legStraightConstraint` in `BaseValidationPose`. |
+
+**Conclusion:** the rework is effective. Dead Hang, Deep Overhead Squat, and Pike Sit are now
+reproducible by the engine to within the authored targets. **Middle Split still fails
+catastrophically**, and there are latent correctness defects in the new scapula/global-solve
+machinery. The remaining *architectural* limitations are documented below.
+
+---
 
 ## Reference numbers (from `SkeletonDefinition.DEFAULT_ADULT`)
 
 ```
 torso = 120   neck = 18   thigh = 112   shin = 98   foot = 35
-upperArm = 80 forearm = 66 shoulderWidth = 46 hipWidth = 22
-IKConstraint: minFlexion = 30°  maxExtensionRatio = 0.98
+upperArm = 80   forearm = 66   shoulderWidth = 46   hipWidth = 22
+Arm chain L1+L2 = 146   Leg chain L1+L2 = 210
+Arm min-fold distance ≈ 40.1   Leg min-fold distance ≈ 56.4
+ANKLE/HAND are the only end-joints the global solver knows how to pin (ConstraintSolver.chainForEnd).
 ```
 
-Arm chain: `L1+L2 = 146` → reachable `[40.1 .. 143.1]` (min/max from the solver).
-Leg chain: `L1+L2 = 210` → reachable `[56.0 .. 205.8]`.
+---
 
-Measured hip→ankle / shoulder→hand distances (engine units):
+## Issue A — Global solver is pelvis-translation-only; it solves "point-reach", not "posture"
 
-| Pose | Arm A | Arm P | Leg F | Leg B | Verdict |
-|------|-------|-------|-------|-------|---------|
-| Dead Hang | – | – | 200.8 | 200.8 | reachable (torso angle 0) |
-| Deep Overhead Squat | 143.0 | 143.0 | **48.0** ⚠ (under-clamp 8.1 → foot y ≈ −5) | **48.0** ⚠ | legs unreachable + ground penetration |
-| Pike Sit | 132.8 | 132.8 | **209.0** ⚠ (over-clamp 3.2) | **209.0** ⚠ | legs not perfectly straight; arms mis-baked (~120°) |
-| Middle Split | **46.0** | **46.0** | **58.9** | **58.9** | both limbs forced into near-max fold, not extended |
+**Title:** The contact-constraint layer can only translate the root; it cannot reconcile a fixed
+contact with the *intended posture*, so it produces anatomically impossible skeletons.
+
+**Description**
+`ConstraintSolver.solve` (PR-04) is a damped Jacobi relaxation that, each iteration, moves
+**only `pelvis.localPosition`** so that every registered contact's end-effector reaches its
+target at a biologically valid distance. It has exactly one degree of freedom (root
+translation) and treats every contact as a **hard 3-D point to reach**. It cannot rotate the
+pelvis, move the chest, or choose an *alternate inverse* (e.g. "the foot is a point on a
+surface; derive the leg direction from it" vs "force the hip→foot distance to equal limb
+length and move the root").
+
+Consequences observed against the references:
+
+- **Middle Split** (`MiddleSplitPose`): feet contacts at `(0,0,∓79.2)`, legs `straight=true`.
+  Hip→foot requested distance is `≈58.9` (because `spread = hipWidth*3.6 = 79.2` is far
+  shorter than the leg length `210`). Because `dist < L1 (112)` and the limb is straight, the
+  solver's `desired = maxReach (210)` and it **pushes the pelvis up to y≈210** so that
+  hip→foot ≈ 210. The result is a floating "V" with the pelvis suspended in mid-air — not a
+  middle split, where the pelvis rests on the ground and the legs splay horizontally. This is
+  the textbook "one pose can only be satisfied by breaking another": *straight legs* +
+  *feet at the authored spread* are jointly impossible with a grounded pelvis, and the solver
+  picks the wrong one (lift the root).
+- **Deep Overhead Squat / Pike Sit**: feet are authored *closer to the hips than the leg
+  length allows without maximal fold* (Deep Squat hip→foot ≈ 48 < 56.4 min-fold; Pike legs are
+  intentionally straight so they survive). For the squat the only response the solver can make
+  is to keep the foot pinned and fold the knee to the minimum — which is a tuck, not a stance.
+  The solver *prevents penetration* (PR-03) but cannot instead lower the pelvis or re-angle the
+  leg, because its only knob is root translation and the foot is a fixed point.
+
+**Root cause**
+The global layer models the problem as "move the root until each contact point is reachable,"
+rather than as a constrained posture problem ("honor the contact as a surface/anchor *and*
+respect the intended limb configuration, redistributing error across the whole chain"). A
+single translation DOF cannot satisfy coupled requirements that need a different root
+orientation or other joints to absorb the error.
+
+**Affected engine components**
+`ConstraintSolver` (the whole relaxation), `bakeIkLimb` contact registration,
+`SkeletonPoseFinalizer.finalize` (the hook point), `ContactSpec`.
+
+**Affected exercises**
+Everything that couples a planted support with a posture: squats, lunges, pistols, splits,
+pikes, planks, bridges, good-mornings, single-leg stands.
+
+**Affected validation poses**
+**Middle Split** (floating pelvis — the clearest reproduction failure), Deep Overhead Squat
+(tuck instead of stance), Pike Sit (legs survive only because authored straight).
+
+**Severity:** HIGH (deepest remaining limitation; it is why a whole class of references still
+cannot be reproduced exactly).
+
+**Possible architectural solutions**
+- Treat a contact as a *surface/anchor constraint*, not a point to reach: pin the end-effector
+  on the support and solve the *proximal chain* so the limb direction (and hence the implied
+  root placement) is derived from the contact, rather than forcing distance = limb length.
+- Give the solver more DOF: optionally re-orient the pelvis and/or nudge the chest, still
+  deterministically and allocation-free, so error is distributed instead of dumped into a
+  single translation.
+- Add a "resolve posture" pass that, given fixed contacts, solves for the remaining free joints
+  (hip/knee/ankle angles) to best match the authored shape, instead of only moving the root.
+
+**Estimated complexity:** High.
+
+**Fix location:** Engine (a new/different global layer; poses would only declare contacts).
 
 ---
 
-## Issue 1 — Frame-relative limb baking trusts a hand-fed inverse-Z scalar instead of the real parent world transform
+## Issue B — Arm IK/strike frame is keyed to `CHEST`, but the arm root now sits under `SCAPULA`
+
+**Title:** The limb-baking and global-solve machinery still believe the chest is the arm's
+parent frame, but the arm IK root (`SHOULDER`) is now three hierarchy levels deep
+(`CHEST→CLAVICLE→SCAPULA→SHOULDER`).
 
 **Description**
-`bakeIkLimb` (in `SkeletonMath`/`BasePose`/`BaseValidationPose`) reconstructs the
-middle/end nodes' `localPosition` by rotating the world-space IK offset by a caller
-supplied `localRotationAngle` about the fixed `axisZ` (0,0,1). For the stored
-`localPosition` to survive the subsequent FK pass (`SkeletonNode.updateWorldTransforms`
-rotates every `localPosition` by the **parent's world rotation**), `localRotationAngle`
-must equal *the negative of the parent's true world-rotation angle*. The value is never
-read from the parent node; it is a manual scalar the caller must keep in sync by hand.
+`bakeIkLimb` stores the middle/end offsets in the frame supplied as `parentRotation`. For arms
+the IK root is the **shoulder** world position; the offsets must therefore be expressed in the
+**scapula's** world frame (the shoulder carries no rotation, so `shoulder.worldRotation ==
+scapula.worldRotation`). Two inconsistencies exist:
 
-This only works when (a) the parent's world rotation is a pure Z rotation and (b) the
-caller passes exactly its negative. The production `BaseVerticalPullPose` does the
-summation by hand (`invChestZ = -(torsoPitch + chestFlex)`), but the validation poses
-do not:
+1. **Validation poses pass `chest.worldRotation`** as the arm `parentRotation`
+   (`DeadHangPose`, `DeepOverheadSquatPose`, `PikeSitPose`, `MiddleSplitPose`). This is
+   *coincidentally* correct only because those poses leave the clavicle/scapula at identity.
+   The production `BaseVerticalPullPose` already had to work around this by passing
+   `shoulderA!!.worldRotation` explicitly — proving the API forces callers to know the exact
+   ancestor frame.
+2. **`ConstraintSolver.chainForEnd` hardcodes `parentRotationJoint = CHEST`** for
+   `HAND_A`/`HAND_P`. Any arm contact re-baked through the global solver therefore uses the
+   *chest* world rotation as the elbow/hand frame, while FK applies the shoulder offset in the
+   *scapula* frame. When the scapula is rotated (which is exactly what PR-05's
+   `buildScapularRotation` does — `BaseVerticalPullPose` sets `scapulaA.localRotation` to a real
+   depression/retraction rotation), `CHEST.worldRotation ≠ SCAPULA.worldRotation`, so the
+   re-baked elbow/hand are mis-placed by the chest↔scapula rotation difference.
 
-- **Dead Hang / Middle Split**: torso angle = 0 ⇒ correct only by coincidence.
-- **Deep Overhead Squat**: arms pass `leanAngle*0.4` (chest *local* rotation) while the
-  chest world angle is `-leanAngle + leanAngle*0.4 = -0.6·leanAngle`; correct inverse is
-  `+0.6·leanAngle`. Error ≈ `0.2·leanAngle ≈ 0.10 rad (5.7°)` of arm mis-placement.
-- **Pike Sit**: arms pass `-fold*0.6 = -0.57`, but the chest world angle is
-  `-fold - fold*0.6 = -1.52`; correct inverse is `+1.52`. The reconstructed arm is
-  rotated by `R_parent · localRot = rotZ(-1.52)·rotZ(-0.57) = rotZ(-2.09)` instead of
-  `rotZ(0)` — **≈120° of error**, i.e. the reaching arms are placed wildly wrong.
+This is a direct **conflict between the new scapula feature (PR-05) and the baking/global-solve
+machinery**: the girdle can move the shoulder, but the limb bake and the contact re-bake still
+assume the chest is the arm's parent.
 
 **Root cause**
-The limb-baking API conflates "parent-local rotation" with "parent-world rotation" and
-exposes a fragile scalar. The correct inverse transform is available (the parent
-node's `worldRotation`, a full 3D axis-angle) but is not used. The mechanism also
-silently breaks for any non-Z parent rotation (twist about Y, side-bend about X).
+The baking/solver code keys the arm's parent frame to a fixed joint name (`CHEST`) rather than
+deriving it from the actual hierarchy node that is the IK root's parent. Adding the girdle
+broke that assumption but the call sites and `chainForEnd` were not updated.
 
 **Affected engine components**
-`SkeletonMath.solveIK` (rotation-driven overloads), `BasePose.bakeIkLimb`,
-`BaseValidationPose.bakeIkLimb`, `SkeletonNode.updateWorldTransforms` (FK assumes the
-stored `localPosition` is already in the parent frame).
+`BasePose.bakeIkLimb`, `BaseValidationPose.bakeIkLimb`, `ConstraintSolver.chainForEnd` (and the
+re-bake that uses `parentRotationJoint`), `SkeletonFactory` (the girdle chain).
 
 **Affected exercises**
-All IK-baked limbs; most visible wherever the trunk is leant (squats, hinges, pikes,
-good-mornings, overhead work, deadlifts).
+All upper-body pulls/presses where the scapula is activated *and* the hands are registered
+contacts (or re-baked by the global solver): pull-ups/chin-ups with scapular drive, planche,
+handstand press, bar hangs that also use the solver. (Currently masked because the vertical-pull
+family does **not** register arm contacts, so the solver's arm path is dormant — but it is a
+latent, correctness-breaking bug the moment it is used.)
 
 **Affected validation poses**
-Deep Overhead Squat (arm error ~5.7°), Pike Sit (arm error ~120° — catastrophic),
-Dead Hang & Middle Split (correct only because torso angle happens to be 0).
+Dead Hang, Middle Split, Deep Overhead Squat, Pike Sit — all bake arms with `chest.worldRotation`;
+correct today only because their scapulae are identity. The moment any of them activates the
+scapula (or the solver's arm path is exercised), they would mis-bake.
 
-**Severity**: HIGH (catastrophic for Pike Sit; latent everywhere a trunk lean exists).
+**Severity:** HIGH (breaks the scapula feature's correctness guarantee and is a latent global-solve
+defect; the modern form of the old Issue 1, now deeper because of the 3-level girdle).
 
 **Possible architectural solutions**
-- Make `bakeIkLimb` accept the parent `SkeletonNode` (or its `worldRotation`) and derive
-  the inverse transform from the *actual* world rotation (full 3D, not Z-only). Remove
-  the scalar entirely.
-- Better: after solving in world space, write the middle/end nodes' world positions and
-  let a single `worldToLocal` pass (using the real parent world transform) compute
-  `localPosition`. This removes the caller's obligation to track frame angles.
+- Change `bakeIkLimb`/`solveArmIK` to accept the **IK root node** (`SHOULDER`) and derive the
+  parent frame from `rootNode.parent.worldRotation` automatically, removing the caller's
+  obligation to name the correct ancestor.
+- Update `ConstraintSolver.chainForEnd` so the arm chain's `parentRotationJoint` is `SCAPULA_*`
+  (or, better, look it up from the actual hierarchy rather than a hardcoded name).
 
-**Estimated complexity**: Medium.
+**Estimated complexity:** Medium.
 
-**Fix location**: Engine (the scalar is engine API; correcting it fixes every caller,
-including the validation poses, automatically).
+**Fix location:** Engine (API + `ConstraintSolver` mapping).
 
 ---
 
-## Issue 2 — No straight / rigid-segment limb mode: 2-bone IK folds the joint whenever the end-effector is inside the reachable sphere
+## Issue C — Wrist/ankle completion uses the node's *world* rotation, double-counting the parent frame
+
+**Title:** The new wrist/ankle "articulation" rotates the (already world-space) forearm/shank
+direction by the joint's *world* rotation, so when the trunk is tilted the grip/foot orientation
+is wrong.
 
 **Description**
-The only limb primitive is the analytical 2-bone IK (`solveIK`), which always solves a
-*triangle* and therefore always bends the middle joint. When the authored target is
-closer to the root than `L1+L2` (anything but a fully straight limb), the knee/elbow
-bends. A "straight limb" is only the boundary case `dist = (L1+L2)·ratio`; the engine
-has no primitive that pins a limb straight to an arbitrary reachable target.
+`SkeletonPoseFinalizer.adjustHandOrientation` does:
+```
+val wristRotation = pose.getJointRotation(handId)   // HAND node's WORLD rotation
+handDef.computeHandJoints(wrist, tempDir /* forearm dir, world */, wristRotation, …)
+```
+and `computeHandJoints` rotates `tempDir` by `wristRotation`. But `getJointRotation(handId)`
+returns the hand node's **world** rotation, which includes every ancestor frame (elbow, scapula,
+chest, pelvis). The forearm direction `tempDir` is already a **world** vector. Rotating a world
+direction by a world rotation therefore re-applies the trunk/elbow frame on top of the
+already-framed forearm direction — a double count.
 
-Consequences in the references:
-- **Middle Split**: hip→ankle = 58.9 and shoulder→hand = 46.0, both just above the
-  fold minima (56.0 / 40.1). The engine produces *maximally folded* legs and arms — the
-  opposite of the intended spread-eagle straight split.
-- **Pike Sit**: leg target 209.0 > 205.8 ⇒ over-clamped 3.2 ⇒ legs cannot be perfectly
-  straight (forced ~2% bend).
-- **Dead Hang**: arms 140.9 (96.5% extension) and legs 200.8 (95.6%) ⇒ always a few %
-  bent even though the reference is a dead-straight hang.
-- **Deep Overhead Squat**: arms 143.0 ≈ max 143.1 ⇒ at the clamp boundary.
+The same pattern exists in `adjustFootOrientation` (`ankleRotation =
+pose.getJointRotation(ankleId)`, a world rotation, applied to the shank-derived neutral foot
+direction).
 
-`SkeletonMath.solveNearStraightLimb` exists but is not wired into the baking path used
-by either the validation poses or (`bakeIkLimb`), so the straight case is never reliably
-reached.
+For a vertical/neutral trunk this is invisible (world frame ≈ identity). But:
+- **Pike Sit** folds the chest ≈ −0.57 rad and sets `handA.localRotation = −fold*0.6 ≈ −0.34`;
+  the hand's *world* rotation is `chest(−0.57) ∘ grip(−0.34) ≈ −0.91`, so the completed hand is
+  rotated ~0.57 rad more than the authored grip — the palm/fingertip orientation is wrong.
+- **Deep Overhead Squat** leans the pelvis and chest; the same over-rotation affects the grip.
+- Any hip-hinge / good-morning / bird-dog with a tilted trunk mis-orients the foot.
 
-**Root cause**
-The limb model is "triangle IK only." There is no notion of a rigid, fully-extended
-segment aimed at a target; extension is expressed indirectly through the distance clamp.
-
-**Affected engine components**
-`SkeletonMath.solveIK`, `IKConstraint` (maxExtensionRatio is the only straightness knob),
-`bakeIkLimb` / `solveNearStraightLeg` (under-used), `SkeletonPoseFinalizer` (no
-straight-limb completion).
-
-**Affected exercises**
-Every straight-limb configuration: dead hangs, planks, pikes, splits, straight-leg
-raises, supports, hollow holds, superman.
-
-**Affected validation poses**
-Middle Split (legs + arms folded), Pike Sit (legs over-clamped), Dead Hang (limbs not
-straight), Deep Overhead Squat (arms at clamp).
-
-**Severity**: HIGH (Middle Split literally cannot be reproduced as a straight split).
-
-**Possible architectural solutions**
-- Add a first-class "straight limb" solve: given root, target, total length, and plane
-  hint, emit a collinear two-segment chain (respecting a true 1.0 extension when
-  anatomically valid) and route it through `bakeIkLimb`.
-- Generalize `solveNearStraightLimb` into the shared limb path so straightness is a
-  deliberate mode, not an accidental boundary.
-
-**Estimated complexity**: Medium.
-
-**Fix location**: Engine.
-
----
-
-## Issue 3 — IK clamp is blind to fixed contacts / ground: clamped end-effector can penetrate the floor
-
-**Description**
-`solveIK` clamps the solved distance into `[minDist, maxDist]` and places the end joint
-along the *original direction vector*. When the target is inside the reachable sphere
-(under-clamp), the clamped point lands *closer to the root than requested*, i.e. further
-along the same direction — which can be **below ground** or inside a wall/prop.
-
-Concrete failure in **Deep Overhead Squat**: hip→ankle requested distance 48.0 <
-minDist 56.0 ⇒ clamped to 56.0 along direction `(0.729, −0.625, −0.275)`. Clamped
-ankle = `hip + 56·dir ≈ (15.8, −5.0, −37.4)` ⇒ **y = −5 < ground level 0** ⇒ foot
-penetrates the floor. The validator only *detects* this after the fact
-(`FOOT_GROUND_PENETRATION`); the engine never prevented it.
+The wrist/ankle rotation should be composed in the **forearm/shank frame** (relative to the
+segment), not in world space.
 
 **Root cause**
-The clamp is a local 1-D distance projection with no knowledge of the support
-environment. "Keep this contact on the ground/bar" is a constraint the solver does not
-see.
+The completion stage reads the joint's *world* rotation and applies it to a *world* direction,
+conflating "rotate relative to the parent segment" with "rotate in world space." The node has no
+independent wrist/ankle basis separate from the segment it hangs off.
 
 **Affected engine components**
-`SkeletonMath.solveIK` (clamp block), `IKConstraint`, `ExerciseValidator`
-(`validateFeetGroundPenetration`, `validateSupportPolygon` — read-only), `BasePose` /
-`BaseValidationPose` (call sites).
+`SkeletonPoseFinalizer.adjustHandOrientation`, `adjustFootOrientation`,
+`HandDefinition.computeHandJoints` (orientation overload), `FootDefinition.computeHeelToe`
+(orientation overload).
 
 **Affected exercises**
-Any deep/compact posture where a planted foot or hand target is nearer the joint than
-the fold minimum: deep squats, deep lunges, pistol squats, deep pikes, compact sits.
+All grips/pronation/supination and any dorsi/plantar-flexed or inverted/everted foot, whenever
+the trunk/parent frame is non-identity: dead hang (overhand), pull-ups, rows, planks, squats,
+lunges, calf raises.
 
 **Affected validation poses**
-Deep Overhead Squat (foot below ground), and indirectly any split/pike whose target is
-inside the sphere.
+Pike Sit (grip over-rotated by the fold), Deep Overhead Squat (grip + foot over-rotated by the
+lean), Dead Hang (correct only because the trunk is vertical), Middle Split (correct only
+because the trunk is vertical).
 
-**Severity**: HIGH (produces an anatomically impossible, validator-failing result).
-
-**Possible architectural solutions**
-- Treat a fixed support contact as a hard constraint: if the end joint is a support
-  contact, clamp in the plane of the support surface (project onto ground/prop) rather
-  than along the free direction.
-- Add a "pin to contact" post-step that re-solves the proximal chain (see Issue 4) so
-  the contact stays put while the rest of the body accommodates.
-
-**Estimated complexity**: High (requires the contact-aware solve from Issue 4).
-
-**Fix location**: Engine.
-
----
-
-## Issue 4 — No global constraint solver / no root (pelvis) repositioning to satisfy fixed contacts + posture simultaneously
-
-**Description**
-The engine is *purely local*: for each limb it runs 2-bone IK from a root to a target,
-then runs FK up the tree. There is no stage that adjusts the pelvis/root (or other
-upstream joints) so that several *coupled* requirements hold at once — e.g. "both feet
-planted at their authored targets AND the legs straight AND the pelvis at a believable
-height." When the authored geometry is inconsistent, the local solver just clamps and
-produces a defect (penetration, folded limbs, floating contacts) rather than redistributing
-the error upstream.
-
-This is the unifying root cause behind Issues 2 and 3 in the references:
-- Deep Overhead Squat: feet cannot be both at their targets and reachable → foot sinks.
-- Middle Split: legs cannot be both straight and at their targets → legs fold.
-- Pike Sit: legs cannot be both straight and at their targets → over-clamp bend.
-
-**Root cause**
-Architectural: the solve pipeline has no global/relaxation or contact-constraint layer.
-`SkeletonFactory` offers alternate *topologies* (re-rooting) but no *constraint
-propagation*.
-
-**Affected engine components**
-Whole solve pipeline: `SkeletonFactory`, `BasePose`/`BaseValidationPose` orchestration,
-`SkeletonMath` (local only), `SkeletonPoseFinalizer` (FK only), `ExerciseValidator`
-(can only report, never solve).
-
-**Affected exercises**
-Everything that couples a fixed support with a posture: squats, lunges, pistols,
-splits, pikes, planks, bridges, good-mornings, single-leg stands.
-
-**Affected validation poses**
-Deep Overhead Squat, Middle Split, Pike Sit (all three couple planted feet with a limb
-posture the local solver cannot honor).
-
-**Severity**: HIGH (this is the deepest limitation; it is why clean reproduction of the
-references is currently impossible).
+**Severity:** MEDIUM (visible orientation error in folded/leaning poses; the "articulation" is
+only correct for neutral trunks).
 
 **Possible architectural solutions**
-- Introduce a contact-constraint layer between IK and FK: gather fixed `SupportContact`
-  points, solve the proximal chain(s) so contacts are preserved, and only then derive the
-  dependent joints. A small relaxation/iterative pass (still deterministic, allocation-free)
-  over root position + limb solves would resolve most inconsistencies.
-- Optionally expose an explicit "solve root to satisfy contacts" primitive so poses
-  declare *what must stay fixed* and the engine decides *where the pelvis goes*.
-
-**Estimated complexity**: High.
-
-**Fix location**: Engine (conceptually a new layer; poses would only declare contacts,
-not micro-manage the root).
-
----
-
-## Issue 5 — No scapular / clavicular degrees of freedom: the shoulder is a single point
-
-**Description**
-The shoulder girdle is modeled as a single `SHOULDER_*` point rigidly offset from the
-chest. There is no clavicle and no scapula node, and no scapular DOF. Consequently
-"scapula drives pulling" (`BIOMECHANICS.md` §4) and "thoracic follows the shoulder
-girdle" (§5) cannot be expressed as real joint motion.
-
-Today the only way to suggest scapular movement is to **translate the shoulder point**
-(e.g. `BaseVerticalPullPose` drops/retracts the shoulder by `-depression` and
-`halfW = shoulderWidth − retraction`). Per `BIOMECHANICS.md` §10 / `CODING_RULES.md` §3
-("Do not compensate for engine bugs", "never translate the pelvis/shoulder to fake a
-shape"), this is exactly the kind of compensation the architecture forbids — but the
-engine offers no legitimate alternative.
-
-**Root cause**
-`SkeletonFactory` joint set has no `CLAVICLE`/`SCAPULA`; `SkeletonMath` has no girdle DOF;
-FK treats the shoulder as a leaf whose position is a fixed offset from the chest.
-
-**Affected engine components**
-`SkeletonFactory.createStandardSkeleton` (missing joints), `Joint` enum (no girdle
-members), `SkeletonMath`, `BasePose`/`BaseVerticalPullPose` (compensatory translation).
-
-**Affected exercises**
-All pulling (pull-up, chin-up, scapular pull-up, dead hang, face pull, lat stretch,
-rows) and any press where scapular setting matters.
-
-**Affected validation poses**
-Dead Hang (shoulder girdle / scapular depression-retraction absent — the reference
-explicitly lists "shoulder girdle" as validated).
-
-**Severity**: MEDIUM–HIGH (blocks a core biomechanical principle; currently masked by a
-compensation that the rules forbid).
-
-**Possible architectural solutions**
-- Add `CLAVICLE_*` and `SCAPULA_*` nodes between chest and shoulder with their own DOF
-  (elevation/depression, protraction/retraction, upward/downward rotation).
-- Drive the pull from scapular retraction/depression first, then shoulder, then elbow —
-  matching `BIOMECHANICS.md` §4.
-
-**Estimated complexity**: High (new joints + DOF + FK + integration into every upper-body
-pose family).
-
-**Fix location**: Engine (the girdle must exist as real anatomy before poses can stop
-translating the shoulder).
-
----
-
-## Issue 6 — No wrist articulation: hand/palm/fingers are derived purely from forearm direction
-
-**Description**
-`SkeletonPoseFinalizer.adjustHandOrientation` computes the wrist/palm/knuckle/fingertip
-positions from a *single direction* = `normalize(hand − elbow)` via
-`HandDefinition.computeHandJoints`. It never reads `hand.localRotation`. Any wrist
-rotation the pose authors (e.g. Dead Hang's overhand `gripAngle = invChestZ − π/2`) is
-**silently ignored** for the completed hand; only the forearm line is honored.
-
-**Root cause**
-The finalizer treats the hand as a rigid extension of the forearm with zero independent
-DOF; `HandDefinition.computeHandJoints` takes only `(wrist, direction)`.
-
-**Affected engine components**
-`SkeletonPoseFinalizer.adjustHandOrientation`, `HandDefinition.computeHandJoints`,
-`WRIST_*` node handling.
-
-**Affected exercises**
-All grips and wrist positions: dead hang (overhand/underhand), pull-ups, rows, planks
-(forearm vs palm), face pulls, any pronation/supination.
-
-**Affected validation poses**
-Dead Hang (overhand grip not represented in the completed hand).
-
-**Severity**: MEDIUM.
-
-**Possible architectural solutions**
-- Promote the wrist to a real joint: derive palm/knuckle/fingertip orientation from
-  `hand.localRotation` (composed with the forearm direction), so grip/pronation/supination
-  are honored.
-- `HandDefinition.computeHandJoints` should accept an orientation frame, not a single
+- Build the hand/foot basis from the segment direction **plus a perpendicular derived from the
+  parent frame**, then apply the joint's *local* rotation (relative to the segment) — not the
+  world rotation.
+- Store and consume the wrist/ankle rotation *relative to the forearm/shank*, e.g. derive it
+  from `node.worldRotation ∘ inverse(parent.worldRotation)` before composing with the segment
   direction.
 
-**Estimated complexity**: Medium.
+**Estimated complexity:** Medium.
 
-**Fix location**: Engine.
-
----
-
-## Issue 7 — No independent ankle / talocrural / subtalar DOF: foot orientation derived solely from shank direction
-
-**Description**
-`SkeletonPoseFinalizer.adjustFootOrientation` builds heel/toe from a single forward
-direction derived from the shank (`ankle − knee`), then applies only a *pitch clamp*.
-`ankle.localRotation` (authored by poses, e.g. Dead Hang / Pike Sit set it) is ignored.
-The foot therefore cannot deviate from the shank line except through the pitch limit;
-dorsi/plantar-flexion, inversion/eversion, and toe/heel lift are not independently
-expressible.
-
-**Root cause**
-Same pattern as the wrist: the foot is treated as a rigid continuation of the shank
-with no joint of its own in the completion stage.
-
-**Affected engine components**
-`SkeletonPoseFinalizer.adjustFootOrientation`, `FootDefinition.computeHeelToe`.
-
-**Affected exercises**
-Squats, lunges, pistols, calf raises, dorsiflexion-demanding poses, any foot that must
-stay flat while the shank is angled.
-
-**Affected validation poses**
-Deep Overhead Squat (ankle mobility is the whole point), Pike Sit, Middle Split, Dead
-Hang (legs).
-
-**Severity**: MEDIUM.
-
-**Possible architectural solutions**
-- Model the ankle as a real joint whose rotation composes with the shank direction to
-  produce the foot frame; allow dorsi/plantar-flexion and inversion/eversion within
-  anatomical limits.
-- `FootDefinition.computeHeelToe` should consume an orientation frame.
-
-**Estimated complexity**: Medium.
-
-**Fix location**: Engine.
+**Fix location:** Engine (finalizer + `HandDefinition`/`FootDefinition` orientation overloads).
 
 ---
 
-## Issue 8 — No angular joint limits; only distance-based IK clamps exist
+## Issue D — ConstraintSolver only knows how to pin `ANKLE_*` and `HAND_*` contacts
+
+**Title:** The only end-joints the global solver can re-bake are ankles and hands; forearms,
+knees, hips, head, etc. cannot be honored as fixed contacts.
 
 **Description**
-The engine's only notion of a joint limit is the IK distance clamp
-(`minDist`/`maxDist` from `minimumFlexionAngle`/`maximumExtensionRatio`). There are **no
-angular limits** for shoulder, hip, elbow, knee, spine, or wrist. Any target whose
-distance falls inside `[minDist, maxDist]` is accepted, even if it implies an
-anatomically impossible *angle* — e.g. a hyper-rotated hip, a 200° elbow, or a spine
-flexed far past end range. The validator has no angular rule to catch this
-(`validateIKConstraints` only re-checks the same distance band).
+`ConstraintSolver.chainForEnd` returns `null` for every joint except `ANKLE_F/B` and `HAND_A/P`.
+`bakeIkLimb` therefore silently skips contact registration for any other support point, and the
+solver can never reposition the root to honor, e.g., a forearm plank, a kneeling thruster, or a
+head-stand. Those contacts are declared in `PoseMetadata`/`SupportContact` but the engine has
+no machinery to *enforce* them globally.
 
 **Root cause**
-Joint limits were equated with the 2-bone reach band; per-axis rotation limits were
-never modeled.
+The chain map was written for the four reference poses (which only plant feet/hands) and was
+never generalized.
 
 **Affected engine components**
-`SkeletonMath.solveIK`, `IKConstraint`, `ExerciseValidator.validateIKConstraints`,
-`SkeletonFactory` (no limit metadata).
+`ConstraintSolver.chainForEnd`, `ConstraintSolver.solve` (early-out on null chain),
+`bakeIkLimb` (contact registration guard).
 
 **Affected exercises**
-Any extreme range: deep splits, extreme rotations, dislocation-like configurations the
-distance clamp still permits.
+Plank / forearm plank, kneeling variations, head-stands, seated poses resting on the hips, any
+pose whose support polygon includes a non-ankle/non-hand point.
 
 **Affected validation poses**
-Latent in all four (none currently trip it, but the capability to author an impossible
-angle without detection exists).
+None of the four (they only plant feet/hands), so this is a latent limitation for other families.
 
-**Severity**: MEDIUM.
+**Severity:** MEDIUM (latent; blocks an entire class of supported poses from using the global layer).
 
 **Possible architectural solutions**
-- Add per-joint angular limits (flexion/extension/abduction/rotation cones) consumed by
-  `solveIK` and by a new validator rule.
-- Encode limits in `SkeletonDefinition`/`IKConstraint` as general rules, not
-  one-off constants.
+- Extend `chainForEnd` (or derive it from the skeleton topology generically) to cover knees,
+  forearms, hips, head, and custom contacts, each with its correct proximal `rootJoint` and
+  `parentRotationJoint`.
 
-**Estimated complexity**: High (defines a limit vocabulary + solver enforcement +
-validator rule).
+**Estimated complexity:** Medium.
 
-**Fix location**: Engine.
+**Fix location:** Engine.
 
 ---
 
-## Issue 9 — Trunk frame is 1-DOF (forward/back lean only) on the modern rotation-driven path
+## Issue E — Single rigid torso: one spine joint, no independent lumbar/thoracic or pelvis-tilt
+
+**Title:** The trunk is one bone (`PELVIS→CHEST`) with a single bend; the pelvis and thorax
+cannot articulate independently, and there is no rib-cage separate from the chest node.
 
 **Description**
-On the modern path the chest is authored with a single `axisZ` (lateral-axis) local
-rotation, capturing only sagittal lean. There is no thoracic **twist** (about Y) or
-**side-bend** (about X). The cross-product chest-frame derivation that *does* capture a
-full 3D orientation (`lean × shoulderLine → normal`) exists **only in the legacy
-`setupTransforms` path**, not in the modern `finalize` path.
+The hierarchy has exactly one spine joint (the `PELVIS→CHEST` link). Relative chest/pelvis
+rotation is possible (so a squat can lean the chest while the pelvis tilts), but there is **no
+separate lumbar vs thoracic segment** and **no pelvis that tilts independently of the chest
+about its own joint**. Biomechanical patterns that rely on "pelvis tilts, chest stays upright"
+(a hip hinge / good morning / deadlift) or "thoracic extends while lumbar stays" (cat-cow,
+thoracic opener) cannot be expressed as real joint motion — only as a single overall trunk bend.
+
+This is a structural limit distinct from the (now resolved) "trunk is 1-DOF" issue: the trunk
+can now twist/side-bend, but it is still **one rigid segment** between pelvis and chest.
 
 **Root cause**
-The modern path stores whatever `localRotation` the pose sets (always `axisZ`), and the
-finalizer does not reconstruct a 3D chest frame for it.
+`SkeletonFactory.createStandardSkeleton` models the spine as a single `PELVIS→CHEST` bone; no
+`LUMBAR`/`THORACIC`/`SACRUM` joints exist.
 
 **Affected engine components**
-`SkeletonFactory` (chest authored on Z only), `SkeletonPoseFinalizer.finalize` (modern
-branch skips chest-frame reconstruction), `BasePose` (no twist/side-bend helpers).
+`SkeletonFactory`, `Joint` enum, `SkeletonPoseFinalizer.reconstructChestFrame` (derives one chest
+frame), `BasePose` body helpers.
 
 **Affected exercises**
-Rotation/twist patterns (Russian twist, woodchop, thoracic rotations, cable twists),
-side-bends, any asymmetric thorax.
+Hip hinges, good mornings, deadlifts, bird-dog (independent pelvic vs thoracic control), cat-cow,
+thoracic openers, any pattern where lumbar and thoracic motion differ.
 
 **Affected validation poses**
-None of the four (they are all sagittal/neutral), so this is a latent limitation rather
-than a current reproduction failure.
+None of the four (all use a single overall trunk lean), so this is latent for these references but
+blocks a broad family.
 
-**Severity**: MEDIUM.
+**Severity:** MEDIUM (latent for the four references; real limitation for hip-hinge/biomechanical
+families the constitution explicitly calls out in `BIOMECHANICS.md` §2/§6).
 
 **Possible architectural solutions**
-- Author/derive the chest as a full 3D orientation (axis-angle or matrix) on both paths.
-- Port the legacy cross-product chest-frame reconstruction into the modern finalizer so
-  thoracic twist/side-bend is representable.
+- Add a `LUMBAR` (or `THORACIC`) intermediate joint between pelvis and chest so the spine has two
+  real segments with independent DOF; let `reconstructChestFrame` compose both.
 
-**Estimated complexity**: Medium.
+**Estimated complexity:** High (new joints + FK + integration into every trunk-authoring helper).
 
-**Fix location**: Engine.
+**Fix location:** Engine.
 
 ---
 
-## Issue 10 — Reachability / clamp detection is effectively dead for validation poses
+## Issue F — `reconstructChestFrame` overwrites the authored chest rotation and assumes a symmetric thorax
+
+**Title:** The modern-path chest-frame reconstruction derives a single orthonormal frame from the
+mean shoulder line and overwrites whatever chest rotation the pose authored; it cannot represent
+an asymmetric (one-shoulder-dropped) thorax.
 
 **Description**
-`ExerciseValidator.validateIkTargetReachability` only fires when
-`pose.maxIkClampAmount > 0.1`, and that field is **never written** by the validation
-poses (`BaseValidationPose.finalizePose` copies nothing into it). Even in production it
-is set by manual bookkeeping in each pose. So an unreachable target (e.g. the Deep
-Overhead Squat under-clamp of 8.1) is never surfaced by this rule, and the only signal
-is the downstream ground-penetration / bone-length failure.
+`SkeletonPoseFinalizer.reconstructChestFrame` recomputes `chest.localRotation` from
+`(pelvis→chest)` lean and `(shoulderA→shoulderP)` line, then re-runs FK for the chest subtree.
+This **does** correctly *preserve* twist/side-bend that is already present in the world positions
+of the shoulders (so old Issue 9 is genuinely resolved), but:
+
+- It **discards any chest orientation authored independently of the shoulder line** (e.g. a chest
+  rotation set directly that is not reflected in the shoulder positions).
+- It derives a **single symmetric frame** from the *mean* shoulder line, so an asymmetric upper
+  body (one shoulder depressed/rotated more than the other — common in pressing and in compensatory
+  loading) cannot be represented; the reconstruction forces symmetry.
+
+For the four symmetric references this is harmless, but it is a limitation for asymmetric
+upper-body poses.
 
 **Root cause**
-The clamp amount computed inside `SkeletonMath.solveIK` (`IKResult.clampAmount`) is not
-automatically propagated into `SkeletonPose.maxIkClampAmount`; it relies on each caller
-to remember.
+The reconstruction builds one orthonormal basis from the global shoulder line rather than tracking
+per-side scapular frames (which would also resolve Issue B's scapula-frame problem).
 
 **Affected engine components**
-`SkeletonPose.maxIkClampAmount`, `ExerciseValidator.validateIkTargetReachability`,
-`BaseValidationPose.finalizePose`, all `bakeIkLimb` call sites.
+`SkeletonPoseFinalizer.reconstructChestFrame`, `SkeletonFactory` (no per-side scapular frame
+exposed to the chest derivation).
 
 **Affected exercises**
-All (detection gap, not a visual defect).
+Asymmetric presses, one-arm rows, any pose with unequal shoulder/scapular setting.
 
 **Affected validation poses**
-All four (the reachability rule cannot catch their clamps).
+None of the four (all symmetric), so latent.
 
-**Severity**: LOW–MEDIUM (detection/observability gap that hides Issues 2–4).
-
-**Possible architectural solutions**
-- Have `bakeIkLimb`/`solveIK` write `clampAmount` into the pose automatically, so
-  reachability is always observable.
-- Make `checkIkTargetReachability` on by default for validation runs.
-
-**Estimated complexity**: Low.
-
-**Fix location**: Engine.
-
----
-
-## Issue 11 — maxExtensionRatio = 0.98 means no limb can ever be perfectly straight
-
-**Description**
-`IKConstraint.ArmConstraint`/`LegConstraint` cap extension at `0.98·(L1+L2)`. By design
-no limb reaches full length, so every reference that demands a dead-straight limb is
-reproduced with a few % residual bend (Dead Hang arms ≈ 96.5% extension; legs ≈ 95.6%).
-This is intentional per `ENGINE.md` §7, but it directly prevents the four static
-references from being *exactly* reproduced.
-
-**Root cause**
-A global "never lock straight" policy with no escape for poses that legitimately want a
-true straight segment.
-
-**Affected engine components**
-`IKConstraint`, `SkeletonMath.solveIK` (clamp to maxDist).
-
-**Affected exercises**
-All straight-limb holds (hangs, planks, pikes, splits, straight-leg raises).
-
-**Affected validation poses**
-Dead Hang, Pike Sit, Middle Split, Deep Overhead Squat (every "straight" limb).
-
-**Severity**: LOW (by design, but it is a hard ceiling on static-reference fidelity).
+**Severity:** LOW–MEDIUM.
 
 **Possible architectural solutions**
-- Allow `maxExtensionRatio = 1.0` (or a dedicated straight mode) for poses that opt in,
-  while keeping the 0.98 default for dynamic safety.
+- Derive the chest frame from the *scapula* frames (which already carry per-side rotation via
+  PR-05) rather than from the mean shoulder line; this also fixes Issue B's frame source.
 
-**Estimated complexity**: Low.
+**Estimated complexity:** Medium.
 
-**Fix location**: Engine (policy, not a per-pose hack).
+**Fix location:** Engine.
 
 ---
 
 # Prioritized Roadmap (highest → lowest architectural impact)
 
-1. **Issue 4 — No global constraint / root-repositioning layer.**
-   The deepest limitation. Until the engine can satisfy "fixed contacts + posture"
-   together, references like Deep Overhead Squat, Middle Split, and Pike Sit cannot be
-   reproduced. Fixing this also resolves most of Issues 2 and 3. *(Engine, High.)*
+1. **Issue A — Global solver is pelvis-translation-only (point-reach, not posture).**
+   The deepest remaining limitation and the reason Middle Split still cannot be reproduced
+   (floating pelvis). Fixing it also improves Deep Overhead Squat / Pike Sit fidelity.
+   *(Engine, High.)*
 
-2. **Issue 1 — Fragile frame-relative limb baking (hand-fed inverse-Z scalar).**
-   Core limb path; catastrophic (≈120°) mis-placement in Pike Sit, silent error
-   elsewhere. Should be derived from the real parent world transform. *(Engine, Medium.)*
-
-3. **Issue 2 — No straight/rigid-segment limb mode (IK always folds).**
-   Directly prevents Middle Split from being straight and bends every "straight" reference.
+2. **Issue B — Arm frame keyed to `CHEST` vs the `SCAPULA`-parented shoulder.**
+   Latent correctness-breaking conflict between the new scapula feature and the baking/global-solve
+   machinery; the modern form of the old Issue 1, now deeper due to the 3-level girdle.
    *(Engine, Medium.)*
 
-4. **Issue 3 — IK clamp ignores ground/contacts → penetration.**
-   Concrete, validator-failing failure in Deep Overhead Squat (foot below ground).
-   Subsumed by Issue 4's contact layer but worth its own track. *(Engine, High.)*
+3. **Issue C — Wrist/ankle completion uses world rotation (double-counts parent frame).**
+   Grip/foot orientation is wrong whenever the trunk is tilted. *(Engine, Medium.)*
 
-5. **Issue 5 — No scapular/clavicular DOF (shoulder is a point).**
-   Blocks the "scapula drives pulling" principle; currently masked by a forbidden
-   shoulder-translation compensation. *(Engine, High.)*
+4. **Issue D — Solver only pins `ANKLE_*`/`HAND_*` contacts.**
+   Whole classes of supported poses (forearm/knee/hip/head) cannot use the global layer.
+   *(Engine, Medium.)*
 
-6. **Issue 9 — Trunk frame is 1-DOF (no twist/side-bend) on the modern path.**
-   Limits thoracic expression; latent for the four references but blocks rotation
-   families. *(Engine, Medium.)*
+5. **Issue E — Single rigid torso (no independent lumbar/thoracic, no separate pelvis-tilt).**
+   Blocks hip-hinge / good-morning / bird-dog families the constitution calls out.
+   *(Engine, High.)*
 
-7. **Issue 8 — No angular joint limits (distance clamps only).**
-   Engine can author impossible angles undetected. *(Engine, High.)*
-
-8. **Issue 6 — No wrist articulation.**
-   Grip/pronation/supination (e.g. Dead Hang overhand) not represented. *(Engine, Medium.)*
-
-9. **Issue 7 — No independent ankle/talocrural DOF.**
-   Foot cannot deviate from shank line except via pitch clamp. *(Engine, Medium.)*
-
-10. **Issue 10 — Reachability detection dead for validation poses.**
-    Clamp amount not propagated; hides Issues 2–4. *(Engine, Low.)*
-
-11. **Issue 11 — 0.98 max extension ⇒ no perfectly straight limb.**
-    Hard ceiling on static-reference fidelity. *(Engine, Low.)*
+6. **Issue F — `reconstructChestFrame` overwrites authored chest rotation; symmetric-only.**
+   Limits asymmetric upper-body poses. *(Engine, Medium.)*
 
 ---
 
 ## Summary
 
-The engine cannot cleanly reproduce the four reference poses because of **architectural**
-gaps, not pose errors:
+The heavy engine rework resolved the prior report's Issues 1–11 (straight limbs, contact
+penetration, scapula, wrist/ankle DOF, angular limits, 3-D chest frame, reachability detection,
+full-extension opt-in). **Dead Hang, Deep Overhead Squat, and Pike Sit are now reproducible by the
+engine to within their authored targets.**
 
-- **Deep Overhead Squat** fails hardest: its feet are unreachable for the authored leg
-  length, the IK clamp drives the ankle below ground, and its arms are mis-baked by the
-  fragile frame-angle scalar.
-- **Pike Sit** fails catastrophically on arm placement (≈120° baking error) and its legs
-  over-clamp (cannot be perfectly straight).
-- **Middle Split** cannot be straight at all: both limbs are forced into near-max fold
-  because the authored targets sit just outside the fold minima.
-- **Dead Hang** is the closest to reproducible, but its limbs are still a few % bent and
-  its overhand grip is dropped by the wrist-completion stage.
+Two findings dominate the current state:
 
-The single highest-leverage fix is a **contact-aware global solve layer (Issue 4)** that
-repositions the root/pelvis and honors fixed supports, supported by a **correct
-frame-relative baking path (Issue 1)** and a **first-class straight-limb mode (Issue 2)**.
-Shoulder girdle (5), wrist (6), ankle (7), trunk 3-DOF (9), and angular limits (8) are
-the next tier of anatomical fidelity, all engine-side.
+- **Middle Split still fails** because the global `ConstraintSolver` (Issue A) can only translate
+  the pelvis and treats each contact as a point to reach; to honor "straight legs + feet at the
+  authored spread" it lifts the pelvis into the air instead of resting it on the ground. This is
+  the highest-leverage remaining fix.
+- **The new scapula/girdle feature is not yet wired consistently into the limb-baking and
+  global-solve frame (Issue B):** arms are still baked against the `CHEST` frame, which is only
+  correct while the scapula is identity. The moment scapular activation is combined with arm
+  contacts (exactly what PR-05 enables), the bake and the solver's arm re-bake become wrong.
+
+Issues C–F are secondary but real: wrist/ankle orientation double-counts the parent frame when
+the trunk is tilted (C), the solver cannot pin non-hand/foot contacts (D), the torso is still a
+single rigid segment (E), and the chest-frame reconstruction is symmetric-only (F).
+
+No code was changed. This report is the roadmap for the next phase of engine development.
