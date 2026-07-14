@@ -45,7 +45,8 @@ class AlternatingBirdDogPose : BaseBirdDogPose() {
             SkeletonMath.lerp(0f, -1f, rightExt),
             0.5f
         )
-        bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, inverseTorsoPitch, elbowP!!, handP!!, armPBuffer)
+        SkeletonMath.toLocalDirection(poleP, chest!!.worldRotation, poleP)
+        bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, poleP, chest!!.worldRotation, def.armIKConstraint, inverseTorsoPitch, elbowP!!, handP!!, armPBuffer)
 
         // Left arm (SHOULDER_A) + Right leg (HIP_B) extend with leftExt
         targetA.set(
@@ -58,7 +59,8 @@ class AlternatingBirdDogPose : BaseBirdDogPose() {
             SkeletonMath.lerp(0f, -1f, leftExt),
             -0.5f
         )
-        bakeIkLimb(shoulderA!!.worldPosition, targetA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, inverseTorsoPitch, elbowA!!, handA!!, armABuffer)
+        SkeletonMath.toLocalDirection(poleA, chest!!.worldRotation, poleA)
+        bakeIkLimb(shoulderA!!.worldPosition, targetA, def.upperArmLength, def.forearmLength, poleA, chest!!.worldRotation, def.armIKConstraint, inverseTorsoPitch, elbowA!!, handA!!, armABuffer)
 
         targetF.set(
             SkeletonMath.lerp(baseAnkleX, extAnkleX, rightExt),

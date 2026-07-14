@@ -9,9 +9,6 @@ class PikePushUpPose : BasePushUpPose() {
 
     override val gripWidthMultiplier = 1.2f
 
-    private val poleABuffer = Vector3()
-    private val polePBuffer = Vector3()
-
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
         durationSeconds = 2.5f, loopMode = LoopMode.LOOP,
@@ -114,10 +111,14 @@ class PikePushUpPose : BasePushUpPose() {
         // Pole vectors (1, 1, ±2) perfectly orient the shoulder joints outwards.
         // bakeIkLimb owns the IK-solve + local-space bake orchestration used by the whole family.
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
-        bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleABuffer.set(1f, 1f, -2f), def.armIKConstraint, -torsoGlobalPitch, elbowA!!, handA!!, armAIK)
+        armAPoleLocal.set(1f, 1f, -2f)
+        SkeletonMath.toLocalDirection(armAPoleLocal, chest!!.worldRotation, armAPoleLocal)
+        bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, armAPoleLocal, chest!!.worldRotation, def.armIKConstraint, -torsoGlobalPitch, elbowA!!, handA!!, armAIK)
 
         shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
-        bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, polePBuffer.set(1f, 1f, 2f), def.armIKConstraint, -torsoGlobalPitch, elbowP!!, handP!!, armPIK)
+        armPPoleLocal.set(1f, 1f, 2f)
+        SkeletonMath.toLocalDirection(armPPoleLocal, chest!!.worldRotation, armPPoleLocal)
+        bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleLocal, chest!!.worldRotation, def.armIKConstraint, -torsoGlobalPitch, elbowP!!, handP!!, armPIK)
 
         handA!!.localRotation.set(axisZ, -torsoGlobalPitch)
         val handDirA = tempV1.set(-1f, 0f, -0.1f).normalize()

@@ -87,12 +87,15 @@ data class IKConstraint(
     val maximumExtensionRatio: Float
 ) {
     companion object {
-        val ArmConstraint = IKConstraint(30f, 0.95f)
+        val ArmConstraint = IKConstraint(30f, 0.98f)
         val LegConstraint = IKConstraint(30f, 0.98f)
     }
 }
 
 object SkeletonMath {
+    // Static scratch for transforming a frame-relative pole into world space inside solveIK.
+    private val poleWorldScratch = Vector3()
+
     class NearStraightLimbResult(var x: Float = 0f, var y: Float = 0f, var d: Float = 0f)
 
     /**
@@ -263,6 +266,45 @@ object SkeletonMath {
         )
 
         return result
+    }
+
+    /**
+     * Rotates a direction authored in a parent's LOCAL frame into world space using the
+     * parent's current [JointRotation]. Reuses [rotAround] (the same axis-angle convention the
+     * Forward-Kinematics traversal uses) so a pole written in the chest/pelvis frame follows
+     * the body exactly as it rotates. Allocation-free: writes into [out].
+     */
+    fun toWorldDirection(localDir: Vector3, rotation: JointRotation, out: Vector3): Vector3 {
+        return rotAround(localDir, rotation.axis, rotation.angle, out)
+    }
+
+    /**
+     * Inverse of [toWorldDirection]: rotates a world-space direction into the parent's LOCAL
+     * frame. Used to convert a legacy world-space pole into the local frame at authoring time.
+     * Allocation-free: writes into [out].
+     */
+    fun toLocalDirection(worldDir: Vector3, rotation: JointRotation, out: Vector3): Vector3 {
+        return rotAround(worldDir, rotation.axis, -rotation.angle, out)
+    }
+
+    /**
+     * Frame-relative IK overload. The pole is authored in the limb-root's LOCAL frame and is
+     * transformed into world space with [parentRotation] before solving. The analytical solver
+     * itself is unchanged. This keeps the elbow direction stable as the parent frame rotates
+     * (e.g. a twisting thorax), eliminating pole-vector flips and uneven arm motion.
+     */
+    fun solveIK(
+        root: Vector3,
+        target: Vector3,
+        L1: Float,
+        L2: Float,
+        poleLocal: Vector3,
+        parentRotation: JointRotation,
+        constraint: IKConstraint,
+        result: IKResult = IKResult()
+    ): IKResult {
+        toWorldDirection(poleLocal, parentRotation, poleWorldScratch)
+        return solveIK(root, target, L1, L2, poleWorldScratch, constraint, result)
     }
 
     // High-fidelity 3D Rotation Matrix utilities for zero-allocation FK propagation
