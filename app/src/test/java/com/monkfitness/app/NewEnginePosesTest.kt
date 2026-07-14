@@ -258,5 +258,25 @@ class NewEnginePosesTest {
         val lungeSideConfig = PoseRegistry.getPoseConfig("lunge_side")
         assertNotNull("lunge_side should be registered", lungeSideConfig)
         assertTrue(lungeSideConfig!!.builder is AlternatingSideLungesPose)
+
+        val walkingConfig = PoseRegistry.getPoseConfig("lunge_walking")
+        assertNotNull("lunge_walking should be registered", walkingConfig)
+        assertTrue(walkingConfig!!.builder is WalkingLungePose)
+
+        val splitConfig = PoseRegistry.getPoseConfig("lunge_split_squat")
+        assertNotNull("lunge_split_squat should be registered", splitConfig)
+        assertTrue(splitConfig!!.builder is StaticSplitSquatPose)
+
+        val bulgarianConfig = PoseRegistry.getPoseConfig("lunge_bulgarian")
+        assertNotNull("lunge_bulgarian should be registered", bulgarianConfig)
+        assertTrue(bulgarianConfig!!.builder is BulgarianSplitSquatPose)
+
+        val curtsyConfig = PoseRegistry.getPoseConfig("lunge_curtsy")
+        assertNotNull("lunge_curtsy should be registered", curtsyConfig)
+        assertTrue(curtsyConfig!!.builder is CurtsyLungePose)
+
+        val stepUpHighConfig = PoseRegistry.getPoseConfig("step_up_high")
+        assertNotNull("step_up_high should be registered", stepUpHighConfig)
+        assertTrue(stepUpHighConfig!!.builder is HighStepUpPose)
     }
 }

@@ -1,36 +1,28 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import kotlin.math.*
 
 /**
- * Step-Up — support-leg-driven, on the shared BaseLungePose.
- *
- * The support (front) foot is FIXED on top of the step for the entire rep; the body rises because
- * the support leg extends (the pelvis lifts with `u`), and the rear foot naturally leaves the floor
- * as it steps up and back down. No floating, no teleport, no rigid translation: every frame the
- * pelvis height is a direct function of the support-leg extension, and the swing foot only translates
- * while it is lifted (never while grounded), so there is zero foot slide.
- *
- * The foot/leg/arm trajectories are preserved from the previously validated implementation so the
- * StepUpPoseTest invariants (score >= 95, foot slide < 0.5, no ground penetration, limb asymmetry)
- * remain satisfied.
+ * High Step-Up — a taller step than [StepUpPose], sharing the exact support-leg-driven model and
+ * the rear-foot trajectory (via BaseLungePose.stepBackFoot). The support foot is FIXED on top of a
+ * 24-unit step; the body rises because that leg extends and the rear foot leaves the floor only
+ * while lifted. No floating: the support foot rests exactly on the step surface.
  */
-class StepUpPose : BaseLungePose() {
+class HighStepUpPose : BaseLungePose() {
 
     override val metadata = PoseMetadata(
         camera = lungeCamera,
-        durationSeconds = 3.0f,
+        durationSeconds = 3.4f,
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.EASE_IN_OUT,
         environment = EnvironmentDefinition(
             ground = GroundDefinition(visible = true, level = 0f),
             props = listOf(
                 StepProp(
-                    center = Vector3(15f, 6.0f, 0f),
-                    width = 40f,
-                    height = 12f,
-                    depth = 40f
+                    center = Vector3(15f, 12f, 0f),
+                    width = 44f,
+                    height = 24f,
+                    depth = 44f
                 )
             )
         )
@@ -43,11 +35,10 @@ class StepUpPose : BaseLungePose() {
         val prog = context.progress
         val u = (1f - cos(prog * 2f * PI.toFloat())) * 0.5f
 
-        val pelvisY = SkeletonMath.lerp(208f, 222f, u)
+        val pelvisY = SkeletonMath.lerp(210f, 230f, u)
         val pelvisX = SkeletonMath.lerp(-5f, 15f, u)
         val leanAngle = SkeletonMath.lerp(0.04f, 0.18f, sin(prog * PI.toFloat())) * (1f - u)
 
-        // Spine (legacy anchoring preserved exactly so head framing is unchanged).
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
         pelvis!!.localRotation.set(axisZ, -leanAngle)
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
@@ -56,16 +47,12 @@ class StepUpPose : BaseLungePose() {
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
-        // Support (front) foot FIXED on the step.
-        targetF.set(20f, 22f, -def.hipWidth * 1.5f)
-
-        // Swing (rear) foot steps up and down — horizontal travel only while lifted, so it
-        // never slides while grounded (shared trajectory owned by BaseLungePose).
+        // Support (front) foot FIXED on top of the 24-unit step (step surface at y = 24).
+        targetF.set(20f, 24f, -def.hipWidth * 1.5f)
         stepBackFoot(prog, def.hipWidth * 1.5f, targetB)
 
         bakeLegs(def, leanAngle, targetF, targetB)
 
-        // Natural balance arm swing (legacy trajectory preserved).
         val handTargetX = SkeletonMath.lerp(-10f, 20f, u)
         val handTargetY = pelvisY + def.torsoLength - 50f
         targetA.set(handTargetX, handTargetY, -def.shoulderWidth * 1.2f)
@@ -74,7 +61,6 @@ class StepUpPose : BaseLungePose() {
         bakeIkLimb(shoulderA!!.worldPosition, targetA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, leanAngle, elbowA!!, handA!!, armABuffer)
         bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, leanAngle, elbowP!!, handP!!, armPBuffer)
 
-        // Both feet flat on their surfaces; heel/toe via FootDefinition ratios.
         applyExtremities(def, leanAngle, 0f, 0f)
 
         return finalizeLunge()
