@@ -57,7 +57,12 @@ object PoseRegistry {
         "lunge_forward" to false,
         "lunge_reverse" to false,
         "lunge_side" to false,
-        "step_up_standard" to false
+        "lunge_walking" to false,
+        "lunge_split_squat" to false,
+        "lunge_bulgarian" to false,
+        "lunge_curtsy" to false,
+        "step_up_standard" to false,
+        "step_up_high" to false
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? {
