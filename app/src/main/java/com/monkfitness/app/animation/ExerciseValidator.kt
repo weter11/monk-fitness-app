@@ -14,7 +14,18 @@ data class ValidatorConfig(
     val checkBilateralSymmetry: Boolean = false,
     val checkHandShoulderAlignment: Boolean = false,
     val checkIkTargetReachability: Boolean = false
-)
+) {
+    companion object {
+        /**
+         * Config used when validating the engineering reference poses. Unlike normal product
+         * validation, this turns on IK reachability detection so unreachable (clamped) targets
+         * surface as [IK_TARGET_UNREACHABLE] instead of being silently ignored.
+         */
+        val ENGINEERING_VALIDATION = ValidatorConfig(
+            checkIkTargetReachability = true
+        )
+    }
+}
 
 /**
  * ExerciseValidator performs automated, read-only biomechanical validation

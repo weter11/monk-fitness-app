@@ -269,6 +269,69 @@ object SkeletonMath {
     }
 
     /**
+     * Analytical straight / rigid-segment limb solve. Places the middle and end joints
+     * collinear with `root -> target`, so the two-bone chain becomes a rigid straight
+     * segment aimed at the target. The end is clamped into `[minDist, maxDist]` — the same
+     * biological band [solveIK] uses — so an unreachable target still yields a valid straight
+     * limb (respecting [IKConstraint.maximumExtensionRatio], which PR-11 can raise to 1.0 for a
+     * truly straight reference). The middle sits at exactly `L1` along the aim direction, keeping
+     * the first bone length exact; the second bone spans the (clamped) remainder.
+     *
+     * Allocation-free: writes into [result]; reuses no scratch beyond scalar locals.
+     */
+    fun solveStraightLimb(
+        root: Vector3,
+        target: Vector3,
+        L1: Float,
+        L2: Float,
+        constraint: IKConstraint,
+        result: IKResult = IKResult()
+    ): IKResult {
+        val dx = target.x - root.x
+        val dy = target.y - root.y
+        val dz = target.z - root.z
+        val dMag = sqrt(dx * dx + dy * dy + dz * dz)
+
+        val maxDist = (L1 + L2) * constraint.maximumExtensionRatio
+        val minCos = cos(constraint.minimumFlexionAngle * PI.toFloat() / 180f)
+        val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
+
+        val dist = dMag.coerceIn(minDist, maxDist)
+
+        val dirX: Float; val dirY: Float; val dirZ: Float
+        if (dMag > 1e-6f) {
+            dirX = dx / dMag; dirY = dy / dMag; dirZ = dz / dMag
+        } else {
+            dirX = 1f; dirY = 0f; dirZ = 0f
+        }
+
+        // Middle at exactly L1 along the aim direction (keeps the upper bone length exact);
+        // never let it overshoot the clamped end.
+        val middleDist = minOf(L1, dist)
+        result.joint.set(
+            root.x + dirX * middleDist,
+            root.y + dirY * middleDist,
+            root.z + dirZ * middleDist
+        )
+        result.end.set(
+            root.x + dirX * dist,
+            root.y + dirY * dist,
+            root.z + dirZ * dist
+        )
+        result.requestedDistance = dMag
+        result.clampedDistance = dist
+        result.clampAmount = if (dMag < minDist) {
+            minDist - dMag
+        } else if (dMag > maxDist) {
+            dMag - maxDist
+        } else {
+            0f
+        }
+
+        return result
+    }
+
+    /**
      * Rotates a direction authored in a parent's LOCAL frame into world space using the
      * parent's current [JointRotation]. Reuses [rotAround] (the same axis-angle convention the
      * Forward-Kinematics traversal uses) so a pole written in the chest/pelvis frame follows

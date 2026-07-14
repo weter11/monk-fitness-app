@@ -56,8 +56,8 @@ class PikeSitPose : BaseValidationPose() {
         val targetB = Vector3(footX, 0f, def.hipWidth * 0.9f)
         val legPoleF = Vector3(0.3f, 1f, -0.2f)
         val legPoleB = Vector3(0.3f, 1f, 0.2f)
-        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
-        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, straight = true)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true)
 
         ankleF!!.localRotation.set(axisZ, -fold); ankleB!!.localRotation.set(axisZ, -fold)
         heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
