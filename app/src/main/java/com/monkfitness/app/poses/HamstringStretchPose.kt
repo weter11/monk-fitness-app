@@ -92,12 +92,12 @@ class HamstringStretchPose : BasePose() {
         // 2. Asymmetric Leg Geometry
         // Leg F (Front Leg): Stretched perfectly straight forward
         val targetAnkleF = Vector3(pelvisX + def.thighLength + def.shinLength - 5f, 15f, -def.hipWidth)
-        bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, torsoPitch, kneeF!!, ankleF!!, legFBuffer)
+        bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
 
         // Leg B (Tucked Leg): Ankle pulled close to groin, knee falls outwards (Side Z)
         val targetAnkleB = Vector3(pelvisX + 35f, 15f, def.hipWidth * 0.5f)
         // Pole vector heavily points to +Z to force the knee outwards in a seated butterfly fold
-        bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, 0f, 2f), def.legIKConstraint, torsoPitch, kneeB!!, ankleB!!, legBBuffer)
+        bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, 0f, 2f), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         // Front foot points to sky, back foot lays flat sideways
         ankleF!!.localRotation.set(axisZ, torsoPitch - 1.57f)
@@ -121,8 +121,8 @@ class HamstringStretchPose : BasePose() {
         val targetHandP = Vector3(handTargetX, handTargetY, def.shoulderWidth * 0.8f)
 
         // Pole vectors flare elbows slightly outward and upward
-        bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, -1f), def.armIKConstraint, -torsoPitch, elbowA!!, handA!!, armABuffer)
-        bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, 1f), def.armIKConstraint, -torsoPitch, elbowP!!, handP!!, armPBuffer)
+        bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         handA!!.localRotation.set(axisZ, -torsoPitch)
         handP!!.localRotation.set(axisZ, -torsoPitch)

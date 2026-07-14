@@ -80,8 +80,8 @@ abstract class BaseSquatPose : BasePose() {
         val targetAnkleF = tempV1.set(0f, 25f, -def.hipWidth * 1.5f)
         val targetAnkleB = tempV2.set(0f, 25f, def.hipWidth * 1.5f)
 
-        val legFIK = bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, tempV3.set(1f, 0f, -0.2f), def.legIKConstraint, leanAngle, kneeF!!, ankleF!!, legFBuffer)
-        val legBIK = bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, tempV3.set(1f, 0f, 0.2f), def.legIKConstraint, leanAngle, kneeB!!, ankleB!!, legBBuffer)
+        val legFIK = bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, tempV3.set(1f, 0f, -0.2f), def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
+        val legBIK = bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, tempV3.set(1f, 0f, 0.2f), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         ankleF!!.localRotation.set(axisZ, leanAngle); ankleB!!.localRotation.set(axisZ, leanAngle)
         heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
@@ -91,8 +91,8 @@ abstract class BaseSquatPose : BasePose() {
         val handTargetX = SkeletonMath.lerp(0f, armLeanEnd * 40f, tProgress)
         val handTargetY = SkeletonMath.lerp(pelvisY + def.torsoLength, pelvisY + def.torsoLength - 10f, tProgress)
 
-        val armAIK = bakeIkLimb(shoulderA!!.worldPosition, tempV1.set(handTargetX, handTargetY, -def.shoulderWidth * 1.2f), def.upperArmLength, def.forearmLength, tempV3.set(0f, -1f, -1f), def.armIKConstraint, leanAngle, elbowA!!, handA!!, armABuffer)
-        val armPIK = bakeIkLimb(shoulderP!!.worldPosition, tempV2.set(handTargetX, handTargetY, def.shoulderWidth * 1.2f), def.upperArmLength, def.forearmLength, tempV3.set(0f, -1f, 1f), def.armIKConstraint, leanAngle, elbowP!!, handP!!, armPBuffer)
+        val armAIK = bakeIkLimb(shoulderA!!.worldPosition, tempV1.set(handTargetX, handTargetY, -def.shoulderWidth * 1.2f), def.upperArmLength, def.forearmLength, tempV3.set(0f, -1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
+        val armPIK = bakeIkLimb(shoulderP!!.worldPosition, tempV2.set(handTargetX, handTargetY, def.shoulderWidth * 1.2f), def.upperArmLength, def.forearmLength, tempV3.set(0f, -1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         handA!!.localRotation.set(axisZ, leanAngle); handP!!.localRotation.set(axisZ, leanAngle)
         palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)

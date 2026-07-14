@@ -83,8 +83,8 @@ class JumpSquatPose : BaseSquatPose() {
         legTargetB.set(0f, 25f + footLift, def.hipWidth * 1.5f)
 
         // Solve IK to force legs to reach the computed ankle targets
-        bakeIkLimb(hipF!!.worldPosition, legTargetF, def.thighLength, def.shinLength, legFPole, def.legIKConstraint, leanAngle, kneeF!!, ankleF!!, legFBuffer)
-        bakeIkLimb(hipB!!.worldPosition, legTargetB, def.thighLength, def.shinLength, legBPole, def.legIKConstraint, leanAngle, kneeB!!, ankleB!!, legBBuffer)
+        bakeIkLimb(hipF!!.worldPosition, legTargetF, def.thighLength, def.shinLength, legFPole, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
+        bakeIkLimb(hipB!!.worldPosition, legTargetB, def.thighLength, def.shinLength, legBPole, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         // 3. Plantar Flexion (Toes point down during flight)
         val footPitch = flightFactor * 0.6f
@@ -103,8 +103,8 @@ class JumpSquatPose : BaseSquatPose() {
         armTargetA.set(handTargetX, handTargetY, -def.shoulderWidth * 1.5f)
         armTargetP.set(handTargetX, handTargetY, def.shoulderWidth * 1.5f)
 
-        bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armAPole, def.armIKConstraint, leanAngle, elbowA!!, handA!!, armABuffer)
-        bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPPole, def.armIKConstraint, leanAngle, elbowP!!, handP!!, armPBuffer)
+        bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armAPole, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPPole, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         // Slight wrist flick backward during jump apex to match momentum
         handA!!.localRotation.set(axisZ, leanAngle + (flightFactor * 0.3f))

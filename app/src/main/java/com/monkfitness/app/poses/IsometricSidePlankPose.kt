@@ -96,11 +96,11 @@ class IsometricSidePlankPose : BasePlankPose() {
         // Bottom leg (HIP_B) rests on the mat; top leg (HIP_F) stacks just above it.
         targetB.set(ankleX, contactY, 0f)
         poleB.set(0f, -1f, 0f)
-        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, invTorsoZ, kneeB!!, ankleB!!, legBBuffer)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         targetF.set(ankleX, contactY + SkeletonMath.lerp(0f, 10f, lift), 0f)
         poleF.set(0f, 1f, 0f)
-        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, invTorsoZ, kneeF!!, ankleF!!, legFBuffer)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
 
         ankleF!!.localRotation.set(axisZ, invTorsoZ)
         ankleB!!.localRotation.set(axisZ, invTorsoZ)
@@ -115,7 +115,7 @@ class IsometricSidePlankPose : BasePlankPose() {
         val handReach = def.forearmLength * 1.3f
         targetP.set(scratchShoulderP.x + handReach, contactY, 0f)
         poleP.set(-0.4f, -1f, 0f) // seat the elbow straight down onto the mat
-        bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, invTorsoZ, elbowP!!, handP!!, armPBuffer)
+        bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         handP!!.localRotation.set(axisZ, invTorsoZ)
         palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
@@ -125,7 +125,7 @@ class IsometricSidePlankPose : BasePlankPose() {
         // Hand settles onto the raised top hip and floats up a touch with the breath.
         targetA.set(hipF!!.worldPosition.x, hipF!!.worldPosition.y + 6f + breath * 8f, 0f)
         poleA.set(-1f, 1f, -1f) // elbow up and outward, away from the body
-        bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, invTorsoZ, elbowA!!, handA!!, armABuffer)
+        bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
 
         handA!!.localRotation.set(axisZ, invTorsoZ)
         palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)

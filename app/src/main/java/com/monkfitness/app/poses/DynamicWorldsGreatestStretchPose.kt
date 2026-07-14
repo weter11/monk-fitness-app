@@ -59,8 +59,8 @@ class DynamicWorldsGreatestStretchPose : BaseThoracicPose() {
         targetF.set(pelvisX + 95f, 15f, -def.hipWidth)
         targetB.set(pelvisX - 120f, 15f, def.hipWidth)
         poleF.set(1f, 0.2f, -0.2f); poleB.set(0.1f, -1f, 0.2f)
-        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, -spinePitch, kneeF!!, ankleF!!, legFBuffer)
-        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, -spinePitch, kneeB!!, ankleB!!, legBBuffer)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         // Feet: front foot flat (toe forward), back foot plantar-flexed (toe down).
         val footPitchB = 0.6f

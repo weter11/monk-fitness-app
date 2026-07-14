@@ -110,11 +110,11 @@ class StaticForearmPlankPose : BasePlankPose() {
 
         targetF.set(ankleX, ankleY, -def.hipWidth)
         poleF.set(0f, 1f, 0f) // residual knee bend points up, never sagging through the floor
-        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, invTorsoZ, kneeF!!, ankleF!!, legFBuffer)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
 
         targetB.set(ankleX, ankleY, def.hipWidth)
         poleB.set(0f, 1f, 0f)
-        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, invTorsoZ, kneeB!!, ankleB!!, legBBuffer)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         // Plantar-flex onto the balls of the feet: heels lift, toes press the mat.
         // Toe offset is behind the ankle (-x), so a POSITIVE world rotation tips the
@@ -143,11 +143,11 @@ class StaticForearmPlankPose : BasePlankPose() {
 
         targetA.set(handPlantAX, contactY, -handZ)
         poleA.set(-0.5f, -1f, -0.3f) // seat the elbow down/back and slightly outward onto the mat
-        bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, invChestZ, elbowA!!, handA!!, armABuffer)
+        bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
 
         targetP.set(handPlantPX, contactY, handZ)
         poleP.set(-0.5f, -1f, 0.3f)
-        bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, invChestZ, elbowP!!, handP!!, armPBuffer)
+        bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         // Hands lie flat on the mat, fingers forward (open-hand family offsets 6/6/10).
         handA!!.localRotation.set(axisZ, invChestZ)

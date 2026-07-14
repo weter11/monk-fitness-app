@@ -176,8 +176,8 @@ abstract class BaseVerticalPullPose : BasePose() {
 
         targetA.set(0f, barY, -gZ)
         targetP.set(0f, barY, gZ)
-        bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, elbowPoleA, chest!!.worldRotation, def.armIKConstraint, invChestZ, elbowA!!, handA!!, armABuffer)
-        bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, elbowPoleP, chest!!.worldRotation, def.armIKConstraint, invChestZ, elbowP!!, handP!!, armPBuffer)
+        bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, chest!!.worldRotation, elbowPoleA, def.armIKConstraint, elbowA!!, handA!!, armABuffer)
+        bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, chest!!.worldRotation, elbowPoleP, def.armIKConstraint, elbowP!!, handP!!, armPBuffer)
 
         applyGrip(invChestZ)
         palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
@@ -189,11 +189,11 @@ abstract class BaseVerticalPullPose : BasePose() {
         val ankleY = pelvisY - 200f + breath * 3f - rep * 10f
         targetF.set(ankleX, ankleY, -def.hipWidth * 0.9f)
         poleF.set(0.15f, 1f, 0f)
-        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, pelvis!!.worldRotation, def.legIKConstraint, invTorsoZ, kneeF!!, ankleF!!, legFBuffer)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, pelvis!!.worldRotation, poleF, def.legIKConstraint, kneeF!!, ankleF!!, legFBuffer)
 
         targetB.set(ankleX, ankleY, def.hipWidth * 0.9f)
         poleB.set(0.15f, 1f, 0f)
-        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, pelvis!!.worldRotation, def.legIKConstraint, invTorsoZ, kneeB!!, ankleB!!, legBBuffer)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, pelvis!!.worldRotation, poleB, def.legIKConstraint, kneeB!!, ankleB!!, legBBuffer)
 
         ankleF!!.localRotation.set(axisZ, invTorsoZ - plantarFlexion)
         ankleB!!.localRotation.set(axisZ, invTorsoZ - plantarFlexion)
