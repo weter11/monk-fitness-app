@@ -101,6 +101,10 @@ pikes, planks, bridges, good-mornings, single-leg stands.
 **Severity:** HIGH (deepest remaining limitation; it is why a whole class of references still
 cannot be reproduced exactly).
 
+
+**Current Production Impact:** None. Currently reachable only through the four
+Validation Poses - no production pose registers a `contact` in `bakeIkLimb` yet,
+so `ConstraintSolver.solve()` is a no-op for the shipped exercise catalog.
 **Possible architectural solutions**
 - Treat a contact as a *surface/anchor constraint*, not a point to reach: pin the end-effector
   on the support and solve the *proximal chain* so the limb direction (and hence the implied
@@ -171,6 +175,10 @@ scapula (or the solver's arm path is exercised), they would mis-bake.
 **Severity:** HIGH (breaks the scapula feature's correctness guarantee and is a latent global-solve
 defect; the modern form of the old Issue 1, now deeper because of the 3-level girdle).
 
+
+**Current Production Impact:** None. Currently reachable only through the four
+Validation Poses - no production pose registers a `contact` in `bakeIkLimb` yet,
+so `ConstraintSolver.solve()` is a no-op for the shipped exercise catalog.
 **Possible architectural solutions**
 - Change `bakeIkLimb`/`solveArmIK` to accept the **IK root node** (`SHOULDER`) and derive the
   parent frame from `rootNode.parent.worldRotation` automatically, removing the caller's
@@ -207,10 +215,31 @@ pose.getJointRotation(ankleId)`, a world rotation, applied to the shank-derived 
 direction).
 
 For a vertical/neutral trunk this is invisible (world frame ≈ identity). But:
-- **Pike Sit** folds the chest ≈ −0.57 rad and sets `handA.localRotation = −fold*0.6 ≈ −0.34`;
-  the hand's *world* rotation is `chest(−0.57) ∘ grip(−0.34) ≈ −0.91`, so the completed hand is
-  rotated ~0.57 rad more than the authored grip — the palm/fingertip orientation is wrong.
+- **Pike Sit** (corrected - traced through the real hierarchy). `PikeSitPose` sets `fold = 0.95f`,
+  so `pelvis.localRotation = -fold = -0.95` (pelvis is the root, so this is also its world
+  rotation), `chest.localRotation = -fold*0.6f = -0.57` (relative to pelvis), and
+  `handA.localRotation = -fold*0.6f = -0.57` (set explicitly on the hand node). The arm chain is
+  `PELVIS -> CHEST -> CLAVICLE_A -> SCAPULA_A -> SHOULDER_A -> ELBOW_A -> HAND_A`; `CLAVICLE_A`,
+  `SCAPULA_A`, `SHOULDER_A`, and `ELBOW_A` are never given a rotation in this pose, so they stay at
+  identity and pass the rotation through unchanged. World rotations therefore accumulate as:
+- `pelvis.worldRotation = -0.95`
+- `chest.worldRotation  = -0.95 + (-0.57)       = -1.52`
+- `elbow.worldRotation  = -1.52` (clavicle/scapula/shoulder/elbow add 0)
+- `handA.worldRotation = -1.52 + (-0.57)        = -2.09 rad (~ -119.7 deg)`
+  `adjustHandOrientation` feeds `getJointRotation(HAND_A)` (= the *world* rotation, -2.09) into
+  `computeHandJoints` against the already-world forearm direction. The grip the pose *authored* is
+  the hand's rotation **relative to its parent** (`handA.localRotation = -0.57`); the code instead
+  applies the full world rotation, so the completed hand is over-rotated by
+  `world - local = -2.09 - (-0.57) = -1.52 rad (~ -87.1 deg)` more than intended. The previous
+  write-up claimed ~0.57 rad from a chain that (a) mis-stated `handA.localRotation` as `-0.34`
+  (an arithmetic slip for `-fold*0.6`; `0.95 * 0.6 = 0.57`, not `0.34`) and (b) omitted the
+  pelvis rotation entirely, writing `chest(-0.57) ^ grip(-0.34) ~= -0.91`.
 - **Deep Overhead Squat** leans the pelvis and chest; the same over-rotation affects the grip.
+  Traced: `pelvis.localRotation = -leanAngle = -0.5`, `chest.localRotation = leanAngle*0.4 = 0.2`,
+  `handA.localRotation = leanAngle*0.4 = 0.2`. Hand world rotation = `-0.5 + 0.2 + 0.2 = -0.1`; the
+  authored relative grip is `0.2`, so the over-rotation is `-0.1 - 0.2 = -0.3 rad (~ -17.2 deg)`.
+  Smaller than Pike Sit (chest and grip contributions partially cancel) but still a real,
+  trunk-tilt-driven error.
 - Any hip-hinge / good-morning / bird-dog with a tilted trunk mis-orients the foot.
 
 The wrist/ankle rotation should be composed in the **forearm/shank frame** (relative to the
@@ -236,8 +265,13 @@ Pike Sit (grip over-rotated by the fold), Deep Overhead Squat (grip + foot over-
 lean), Dead Hang (correct only because the trunk is vertical), Middle Split (correct only
 because the trunk is vertical).
 
-**Severity:** MEDIUM (visible orientation error in folded/leaning poses; the "articulation" is
-only correct for neutral trunks).
+**Severity:** HIGH (corrected). The earlier write-up estimated the Pike Sit over-rotation at
+~0.57 rad from a mis-traced, mis-computed chain; the real error is **~1.52 rad (~ 87 deg)**,
+because the entire trunk rotation (`pelvis -0.95` + `chest -0.57` = `-1.52`) is double-counted on
+top of the already-world forearm direction, not just the chest's `-0.57`. That reorients the
+palm/fingertips by an amount large enough to be unmistakably wrong in any folded/leaning pose, and
+it is live for every pose whose trunk/parent frame is non-identity (not merely neutral trunks).
+Bumped from the earlier MEDIUM on the strength of the corrected number.
 
 **Possible architectural solutions**
 - Build the hand/foot basis from the segment direction **plus a perpendicular derived from the
@@ -282,6 +316,10 @@ None of the four (they only plant feet/hands), so this is a latent limitation fo
 
 **Severity:** MEDIUM (latent; blocks an entire class of supported poses from using the global layer).
 
+
+**Current Production Impact:** None. Currently reachable only through the four
+Validation Poses - no production pose registers a `contact` in `bakeIkLimb` yet,
+so `ConstraintSolver.solve()` is a no-op for the shipped exercise catalog.
 **Possible architectural solutions**
 - Extend `chainForEnd` (or derive it from the skeleton topology generically) to cover knees,
   forearms, hips, head, and custom contacts, each with its correct proximal `rootJoint` and
@@ -328,6 +366,14 @@ blocks a broad family.
 **Severity:** MEDIUM (latent for the four references; real limitation for hip-hinge/biomechanical
 families the constitution explicitly calls out in `BIOMECHANICS.md` §2/§6).
 
+
+**Current Production Impact:** Not gated behind contact registration - this is a structural
+property of the shipped skeleton, so it is **live for the whole production catalog**, not a no-op.
+Every exercise is built on the single `PELVIS -> CHEST` segment, so any production hip-hinge /
+good-morning / deadlift / bird-dog / cat-cow that needs lumbar and thoracic motion to differ is
+forced into one overall trunk bend. The four *references* do not expose it (they use a single
+symmetric lean), which is why it reads as "latent" - but it is not dormant in production the way
+the contact-gated issues (A/B/D) are.
 **Possible architectural solutions**
 - Add a `LUMBAR` (or `THORACIC`) intermediate joint between pelvis and chest so the spine has two
   real segments with independent DOF; let `reconstructChestFrame` compose both.
@@ -375,6 +421,13 @@ None of the four (all symmetric), so latent.
 
 **Severity:** LOW–MEDIUM.
 
+
+**Current Production Impact:** Live for every rotation-driven pose, including production.
+`reconstructChestFrame` runs **unconditionally** inside `SkeletonPoseFinalizer.finalize()` on the
+modern path (it is not behind `pose.hasContacts()`), so any asymmetric upper-body production
+exercise - one-arm row, asymmetric press, compensatory single-side loading - gets force-symmetrized
+by the mean-shoulder-line reconstruction. The four references are symmetric, so the defect is
+latent for them, but it is active for the broader catalog (unlike the contact-gated A/B/D issues).
 **Possible architectural solutions**
 - Derive the chest frame from the *scapula* frames (which already carry per-side rotation via
   PR-05) rather than from the mean shoulder line; this also fixes Issue B's frame source.
@@ -385,6 +438,116 @@ None of the four (all symmetric), so latent.
 
 ---
 
+## Performance Analysis - `ConstraintSolver`
+
+Derived by reading `animation/ConstraintSolver.kt` (PR-04) as it currently stands; no numbers are
+estimated. The "zero allocations during animation" bar is taken from the engine architecture review
+(`ENGINE.md` section 5), not from a vague "looks efficient" judgment.
+
+### Iteration count
+The relaxation is a **fixed upper bound** on a damped Jacobi loop, not adaptive to convergence or
+contact count in its bound:
+
+```kotlin
+private const val MAX_ITERATIONS = 16
+...
+for (iter in 0 until MAX_ITERATIONS) {
+    ...
+    if (!moved) break
+}
+```
+
+So it runs **at most 16 iterations**, and **breaks early** (`if (!moved) break`) as soon as a pass
+produces no root correction. For the current validation poses - whose contacts are reachable as
+authored - `moved` is false on the first pass, so the solver terminates after a **single**
+iteration. The 16 cap only matters when an unreachable contact forces repeated root nudging.
+
+### Allocations inside the iteration loop
+All mutable state used per-iteration is **pre-allocated as `object` fields**, not constructed in
+the loop:
+
+```kotlin
+private val zero = Vector3()
+private val identity = JointRotation()
+private val delta = Vector3()
+private val away = Vector3()
+private val dir = Vector3()
+private val rootWorld = Vector3()
+private val ikResult = SkeletonMath.IKResult()
+private val nodeMap = Array<SkeletonNode?>(Joint.entries.size) { null }
+// ... pelvis-tilt scratch (tiltDelta, authoredPelvisRot, *MatX/Y/Z, imbA/imbB) ...
+```
+
+Walking one iteration:
+1. FK - `root.updateWorldTransforms(zero, identity)` uses each node's own scratch
+   (`pX/pY/pZ/lX/...`), no allocation.
+2. Reachability pass - only scalar math (`mag()`, `cos()`, `sqrt()`) against `rootWorld`/`away`/
+   `delta`/`dir`; no object construction.
+3. `applyPelvisTilt` / `signedImbalance` (only when `moved`) - compose matrices into the
+   pre-allocated `*MatX/Y/Z` scratch; no allocation.
+4. Re-bake - `SkeletonMath.solveIK` / `solveStraightLimb` are handed the **shared** `ikResult`
+   (`SkeletonMath.IKResult()`) and write into `result.joint` / `result.end` (pre-allocated
+   `Vector3`s inside `IKResult`); `toLocalDirection` writes into `middle.localPosition` /
+   `end.localPosition`. No `Vector3(...)`, no `IKResult(...)`, no collections are built.
+
+The trailing `SkeletonPose.fromHierarchy(roots, pose)` is called **once per `solve()`**, not per
+iteration, and it too is allocation-free (it reuses `ZERO_VECTOR`/`IDENTITY_ROTATION` and writes
+into the supplied pose). **Conclusion:** the hot loop is allocation-free and meets the project's
+zero-allocation-during-animation goal. There is no per-iteration `Vector3`/collection churn to flag.
+
+### Asymptotic complexity in number of contacts
+Both the reachability pass and the re-bake pass iterate the registered contacts **once each** per
+iteration; there is **no per-contact-pair interaction** (no nested loop over contacts, no all-pairs
+distance/conflict check). The FK pass at the top of each iteration is over the **fixed node set**
+(~40 nodes), independent of how many contacts are registered.
+
+- per iteration ~= `O(FK) + O(contacts) + O(contacts)` = `O(N_nodes + contacts)`
+- total ~= `O(MAX_ITERATIONS x (N_nodes + contacts))`
+
+So it is **`O(iterations x contacts)` - strictly linear in the contact count**, with no quadratic
+term. The loop structure that proves it:
+
+```kotlin
+for (iter in 0 until MAX_ITERATIONS) {
+    for (root in roots) root.updateWorldTransforms(...)       // O(N_nodes), once per iteration
+    for (spec in contacts) { ... reachability delta ... }      // O(contacts)
+    if (moved) { ... pelvis.localPosition.add(delta) ... }
+    if (moved && hasGroundContact) applyPelvisTilt(...)         // O(contacts) internally
+    for (spec in contacts) { ... solveIK/solveStraightLimb ... } // O(contacts)
+    if (!moved) break
+}
+```
+
+### Scaling to 4 / 8 / 16 simultaneous contacts
+Because the cost is linear in contacts and the FK pass is a constant (~40 nodes) independent of
+contact count, scaling is dominated by "2 IK solves per contact per iteration." Each
+`solveIK`/`solveStraightLimb` is fixed work (a couple of `sqrt`s, a triangle/straight solve, a
+`toLocalDirection`) - no allocation, no loop - call it `K` ops (tens of flops).
+
+Rough operation estimate at the **16-iteration worst case** (real runs break earlier for reachable
+contacts):
+
+| contacts | per-iteration cost     | full 16-iteration `solve()`       |
+|----------|-----------------------|-----------------------------------|
+| 4        | `40 + 2*4*K`          | `16 * (40 + 8K)`  ~= `640 + 128K` |
+| 8        | `40 + 2*8*K`          | `16 * (40 + 16K)` ~= `640 + 256K` |
+| 16       | `40 + 2*16*K`         | `16 * (40 + 32K)` ~= `640 + 512K` |
+
+Going 4 -> 16 contacts (4x the contacts) multiplies the total work by ~4x - **linear, not
+super-linear**. The constant FK term (640) is fixed regardless of contact count, so at higher
+contact counts the re-bake term dominates and scaling tracks the contact count exactly. Even at 16
+contacts the whole `solve()` is a few thousand fixed-constant operations, trivially within a frame
+budget, and for the common reachable case it collapses to **one** FK + one re-bake pass
+(~ `40 + 32K` ops).
+
+### Verdict
+**No genuine performance concern.** The solver is allocation-free in its hot loop (it clears the
+project's zero-allocation bar, not merely "reasonable"), scales `O(iterations x contacts)` with no
+quadratic interaction term, and typically converges in a single iteration for reachable contacts.
+The only minor observation (not a problem) is that every iteration re-runs a full FK over all nodes
+even though only the root/contact subtree changed; a localized FK would shave the constant but does
+not change the linear-in-contacts scaling and is unnecessary at the contact counts the four
+references (and foreseeable production poses) use.
 # Prioritized Roadmap (highest → lowest architectural impact)
 
 1. **Issue A — Global solver is pelvis-translation-only (point-reach, not posture).**
