@@ -18,7 +18,6 @@ class SkeletonPoseFinalizer(
     private val tempDir = Vector3()
     private val tempForwardHint = Vector3()
     private val tempFootDir = Vector3()
-    private val tempHorizontalDir = Vector3()
     private val handJointsBuffer = HandJoints()
     private val tempV1 = Vector3()
 
@@ -330,19 +329,13 @@ class SkeletonPoseFinalizer(
         }
         tempFootDir.normalize()
 
-        val pitch = atan2(tempFootDir.y, sqrt(tempFootDir.x * tempFootDir.x + tempFootDir.z * tempFootDir.z))
-        val clampedPitch = pitch.coerceIn(definition.foot.minPitch, definition.foot.maxPitch)
-
-        if (abs(pitch - clampedPitch) > 1e-3) {
-            tempHorizontalDir.set(tempFootDir.x, 0f, tempFootDir.z).normalize()
-            tempFootDir.set(
-                tempHorizontalDir.x * cos(clampedPitch),
-                sin(clampedPitch),
-                tempHorizontalDir.z * cos(clampedPitch)
-            )
-        }
+        // Promote the ankle to a real joint: computeHeelToe composes the authored ankle
+        // orientation with this neutral (shank-perpendicular) foot direction and keeps the
+        // pitch clamp as a bound on the resulting direction. Identity rotation leaves the
+        // neutral direction unchanged, so flat-foot rendering is preserved.
+        val ankleRotation = pose.getJointRotation(ankleId)
 
         val foot = definition.foot
-        foot.computeHeelToe(ankle, tempFootDir, pose.getJoint(heelId), pose.getJoint(toeId))
+        foot.computeHeelToe(ankle, tempFootDir, ankleRotation, pose.getJoint(heelId), pose.getJoint(toeId))
     }
 }
