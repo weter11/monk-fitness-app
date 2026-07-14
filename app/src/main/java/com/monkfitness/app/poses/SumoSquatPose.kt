@@ -65,8 +65,8 @@ class SumoSquatPose : BaseSquatPose() {
         legTargetB.set(0f, 25f, def.hipWidth * 2.8f)
 
         // Wide track pole vectors
-        bakeIkLimb(hipF!!.worldPosition, legTargetF, def.thighLength, def.shinLength, legFPole, def.legIKConstraint, leanAngle, kneeF!!, ankleF!!, legFBuffer)
-        bakeIkLimb(hipB!!.worldPosition, legTargetB, def.thighLength, def.shinLength, legBPole, def.legIKConstraint, leanAngle, kneeB!!, ankleB!!, legBBuffer)
+        bakeIkLimb(hipF!!.worldPosition, legTargetF, def.thighLength, def.shinLength, legFPole, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
+        bakeIkLimb(hipB!!.worldPosition, legTargetB, def.thighLength, def.shinLength, legBPole, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         ankleF!!.localRotation.set(axisZ, leanAngle)
         ankleB!!.localRotation.set(axisZ, leanAngle)
@@ -86,8 +86,8 @@ class SumoSquatPose : BaseSquatPose() {
         armTargetA.set(handTargetX, handTargetY, -10f)
         armTargetP.set(handTargetX, handTargetY, 10f)
 
-        bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armAPole, def.armIKConstraint, leanAngle, elbowA!!, handA!!, armABuffer)
-        bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPPole, def.armIKConstraint, leanAngle, elbowP!!, handP!!, armPBuffer)
+        bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armAPole, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPPole, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         handA!!.localRotation.set(axisZ, leanAngle)
         handP!!.localRotation.set(axisZ, leanAngle)

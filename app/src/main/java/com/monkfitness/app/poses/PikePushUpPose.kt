@@ -113,12 +113,12 @@ class PikePushUpPose : BasePushUpPose() {
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
         armAPoleLocal.set(1f, 1f, -2f)
         SkeletonMath.toLocalDirection(armAPoleLocal, chest!!.worldRotation, armAPoleLocal)
-        bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, armAPoleLocal, chest!!.worldRotation, def.armIKConstraint, -torsoGlobalPitch, elbowA!!, handA!!, armAIK)
+        bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, chest!!.worldRotation, armAPoleLocal, def.armIKConstraint, elbowA!!, handA!!, armAIK)
 
         shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
         armPPoleLocal.set(1f, 1f, 2f)
         SkeletonMath.toLocalDirection(armPPoleLocal, chest!!.worldRotation, armPPoleLocal)
-        bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleLocal, chest!!.worldRotation, def.armIKConstraint, -torsoGlobalPitch, elbowP!!, handP!!, armPIK)
+        bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, chest!!.worldRotation, armPPoleLocal, def.armIKConstraint, elbowP!!, handP!!, armPIK)
 
         handA!!.localRotation.set(axisZ, -torsoGlobalPitch)
         val handDirA = tempV1.set(-1f, 0f, -0.1f).normalize()

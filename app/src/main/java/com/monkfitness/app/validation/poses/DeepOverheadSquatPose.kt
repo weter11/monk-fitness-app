@@ -53,8 +53,8 @@ class DeepOverheadSquatPose : BaseValidationPose() {
         val targetB = Vector3(10f, 0f, def.hipWidth * 1.6f)
         val legPoleF = Vector3(1f, 0f, -0.4f)
         val legPoleB = Vector3(1f, 0f, 0.4f)
-        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, def.legIKConstraint, leanAngle, kneeF!!, ankleF!!, legFBuffer)
-        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, def.legIKConstraint, leanAngle, kneeB!!, ankleB!!, legBBuffer)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         ankleF!!.localRotation.set(axisZ, leanAngle); ankleB!!.localRotation.set(axisZ, leanAngle)
         heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
@@ -67,8 +67,8 @@ class DeepOverheadSquatPose : BaseValidationPose() {
         val armTargetP = Vector3(-5f, reachUp, def.shoulderWidth * 0.5f)
         val armPoleA = Vector3(0f, -0.6f, -1f)
         val armPoleP = Vector3(0f, -0.6f, 1f)
-        bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armPoleA, def.armIKConstraint, leanAngle * 0.4f, elbowA!!, handA!!, armABuffer)
-        bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPoleP, def.armIKConstraint, leanAngle * 0.4f, elbowP!!, handP!!, armPBuffer)
+        bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armPoleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPoleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         handA!!.localRotation.set(axisZ, leanAngle * 0.4f); handP!!.localRotation.set(axisZ, leanAngle * 0.4f)
         palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)

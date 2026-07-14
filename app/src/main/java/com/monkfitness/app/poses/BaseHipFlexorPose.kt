@@ -107,7 +107,7 @@ abstract class BaseHipFlexorPose : BasePose() {
     protected fun solveFrontLeg(def: SkeletonDefinition): SkeletonMath.IKResult {
         return bakeIkLimb(
             hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength,
-            frontLegPole, def.legIKConstraint, leanAngle, kneeF!!, ankleF!!, legFBuffer
+            frontLegPole, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer
         )
     }
 
@@ -116,10 +116,10 @@ abstract class BaseHipFlexorPose : BasePose() {
         handTarget.set(kneeJointWorld.x - 10f, kneeJointWorld.y + 15f, 0f)
 
         handTarget.z = -def.shoulderWidth * 0.8f
-        bakeIkLimb(shoulderA!!.worldPosition, handTarget, def.upperArmLength, def.forearmLength, armAPole, def.armIKConstraint, leanAngle, elbowA!!, handA!!, armABuffer)
+        bakeIkLimb(shoulderA!!.worldPosition, handTarget, def.upperArmLength, def.forearmLength, armAPole, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
 
         handTarget.z = def.shoulderWidth * 0.8f
-        bakeIkLimb(shoulderP!!.worldPosition, handTarget, def.upperArmLength, def.forearmLength, armPPole, def.armIKConstraint, leanAngle, elbowP!!, handP!!, armPBuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, handTarget, def.upperArmLength, def.forearmLength, armPPole, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         handA!!.localRotation.set(axisZ, leanAngle)
         handP!!.localRotation.set(axisZ, leanAngle)

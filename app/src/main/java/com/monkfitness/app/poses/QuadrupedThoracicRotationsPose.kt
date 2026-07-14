@@ -57,8 +57,8 @@ class QuadrupedThoracicRotationsPose : BaseThoracicPose() {
         targetF.set(basePelvisX - def.shinLength, 15f, -def.hipWidth)
         targetB.set(basePelvisX - def.shinLength, 15f, def.hipWidth)
         poleF.set(0f, -1f, -0.5f); poleB.set(0f, -1f, 0.5f)
-        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, -spinePitch, kneeF!!, ankleF!!, legFBuffer)
-        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, -spinePitch, kneeB!!, ankleB!!, legBBuffer)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         val chestW = chest!!.worldPosition
 

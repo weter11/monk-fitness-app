@@ -98,7 +98,7 @@ abstract class BaseLungePose : BasePose() {
         buffer: SkeletonMath.IKResult
     ) {
         val localAngle = -parentRotation.angle
-        bakeIkLimb(hipWorld, targetAnkle, def.thighLength, def.shinLength, poleLocal, parentRotation, def.legIKConstraint, localAngle, knee, ankle, buffer)
+        bakeIkLimb(hipWorld, targetAnkle, def.thighLength, def.shinLength, parentRotation, poleLocal, def.legIKConstraint, knee, ankle, buffer)
         ankle.localRotation.set(axisZ, localAngle)
         heel.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f)
         toe.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
@@ -122,7 +122,7 @@ abstract class BaseLungePose : BasePose() {
         buffer: SkeletonMath.IKResult
     ) {
         val localAngle = -parentRotation.angle
-        bakeIkLimb(shoulderWorld, targetHand, def.upperArmLength, def.forearmLength, poleLocal, parentRotation, def.armIKConstraint, localAngle, elbow, hand, buffer)
+        bakeIkLimb(shoulderWorld, targetHand, def.upperArmLength, def.forearmLength, parentRotation, poleLocal, def.armIKConstraint, elbow, hand, buffer)
         hand.localRotation.set(axisZ, localAngle)
         palm.localPosition.set(6f, 0f, 0f); knuckles.localPosition.set(6f, 0f, 0f); fingertips.localPosition.set(10f, 0f, 0f)
     }

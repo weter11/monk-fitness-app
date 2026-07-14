@@ -97,8 +97,8 @@ class ProneCobraStretchPose : BasePose() {
         val targetAnkleF = Vector3(targetAnkleX, 15f, -def.hipWidth)
         val targetAnkleB = Vector3(targetAnkleX, 15f, def.hipWidth)
 
-        bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, -torsoPitch, kneeF!!, ankleF!!, legFBuffer)
-        bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, -torsoPitch, kneeB!!, ankleB!!, legBBuffer)
+        bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
+        bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         ankleF!!.localRotation.set(axisZ, -torsoPitch)
         ankleB!!.localRotation.set(axisZ, -torsoPitch)
@@ -117,8 +117,8 @@ class ProneCobraStretchPose : BasePose() {
         val targetHandP = Vector3(reachX, reachY, def.shoulderWidth * 1.5f)
 
         // Pole vectors orient elbows upward and outward to squeeze the shoulder blades
-        bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, -1f), def.armIKConstraint, -torsoPitch, elbowA!!, handA!!, armABuffer)
-        bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, 1f), def.armIKConstraint, -torsoPitch, elbowP!!, handP!!, armPBuffer)
+        bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         // Hands parallel to the floor, palms facing down
         handA!!.localRotation.set(axisZ, -torsoPitch)
