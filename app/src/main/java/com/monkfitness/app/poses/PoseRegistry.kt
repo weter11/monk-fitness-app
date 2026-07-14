@@ -57,7 +57,13 @@ object PoseRegistry {
         "lunge_forward" to false,
         "lunge_reverse" to false,
         "lunge_side" to false,
-        "step_up_standard" to false
+        "step_up_standard" to false,
+
+        // --- Static Biomechanics Validation Suite ("for tests" family) ---
+        "test_middle_split" to false,
+        "test_pike_sit" to false,
+        "test_deep_overhead_squat" to false,
+        "test_dead_hang" to false
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? {

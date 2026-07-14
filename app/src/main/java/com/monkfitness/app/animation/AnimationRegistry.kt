@@ -1,6 +1,7 @@
 package com.monkfitness.app.animation
 
 import com.monkfitness.app.poses.*
+import com.monkfitness.app.poses_for_tests.*
 
 object AnimationRegistry {
     private val registry = mutableMapOf<String, PoseBuilder>()
@@ -55,6 +56,15 @@ object AnimationRegistry {
         register("reverse_snow_angel_prone", ReverseSnowAngelPose())
         register("scapular_pullup_deadhang", ScapularPullUpPose())
         register("lat_stretch_hold", LatStretchPose())
+
+        // --- Static Biomechanics Validation Suite ("for tests" family) ---
+        // Engineering reference poses used exclusively to validate the animation
+        // engine, IK solver, skeleton proportions and overall biomechanics.
+        // These are static snapshots with no animation driver.
+        register("test_middle_split", MiddleSplitPose())
+        register("test_pike_sit", PikeSitPose())
+        register("test_deep_overhead_squat", DeepOverheadSquatPose())
+        register("test_dead_hang", DeadHangPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {
