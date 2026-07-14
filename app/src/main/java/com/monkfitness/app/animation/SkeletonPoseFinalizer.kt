@@ -288,8 +288,13 @@ class SkeletonPoseFinalizer(
 
         tempDir.set(wrist).subtract(elbow).normalize()
 
+        // Promote the wrist to a real joint: compose the authored wrist orientation with
+        // the forearm direction so grips (pronation / supination / wrist flexion) are
+        // honored by the completed hand. Identity rotation leaves the result unchanged.
+        val wristRotation = pose.getJointRotation(handId)
+
         val handDef = definition.hand
-        handDef.computeHandJoints(wrist, tempDir, handJointsBuffer)
+        handDef.computeHandJoints(wrist, tempDir, wristRotation, handJointsBuffer)
 
         pose.getJoint(palmId).set(handJointsBuffer.palm)
         pose.getJoint(knucklesId).set(handJointsBuffer.knuckles)
