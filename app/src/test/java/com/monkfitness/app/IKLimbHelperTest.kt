@@ -2,6 +2,7 @@ package com.monkfitness.app
 
 import com.monkfitness.app.animation.*
 import com.monkfitness.app.poses.*
+import com.monkfitness.app.validation.poses.*
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -163,6 +164,93 @@ class IKLimbHelperTest {
         val dot = v1.dot(v2) / (m1 * m2)
         val theta = kotlin.math.acos(dot.coerceIn(-1f, 1f)) * 180f / kotlin.math.PI.toFloat()
         assertTrue("middle joint angle $theta should be <= 150 (cap)", theta <= 150f + 1e-2f)
+    }
+
+    @Test
+    fun testSolveIKContactStaysOnGroundPlane() {
+        val def = SkeletonDefinition.DEFAULT_ADULT
+        val constraint = IKConstraint.LegConstraint
+        // Hip 30 above ground; target on the ground but closer than the fold minimum, so an
+        // unconstrained clamp would drive the ankle below ground (the PR-03 failure).
+        val root = Vector3(0f, 30f, 0f)
+        val target = Vector3(40f, 0f, 0f)
+        val ground = ContactConstraint.ground(0f)
+
+        val result = SkeletonMath.solveIK(root, target, def.thighLength, def.shinLength, Vector3(1f, 0f, 0f), constraint, contact = ground)
+
+        // The end must stay on (or above) the support surface, exactly on the plane here.
+        assertTrue("contact end must not penetrate the ground (y=${result.end.y})", result.end.y >= -1e-4f)
+        assertEquals("contact end should be projected onto the ground plane", 0f, result.end.y, 1e-3f)
+
+        // And the reach distance is still clamped within the biological band.
+        val maxDist = (def.thighLength + def.shinLength) * constraint.maximumExtensionRatio
+        val minCos = kotlin.math.cos(constraint.minimumFlexionAngle * kotlin.math.PI.toFloat() / 180f)
+        val minDist = kotlin.math.sqrt(def.thighLength * def.thighLength + def.shinLength * def.shinLength - 2f * def.thighLength * def.shinLength * minCos)
+        val d = kotlin.math.sqrt(
+            (result.end.x - root.x).pow(2) + (result.end.y - root.y).pow(2) + (result.end.z - root.z).pow(2)
+        )
+        assertTrue("reach distance $d outside band [$minDist, $maxDist]", d in minDist - 1e-2f..maxDist + 1e-2f)
+        // The clamp is still recorded (the authored target is genuinely unreachable).
+        assertTrue("clamp should be recorded for the under-reach", result.clampAmount > 0f)
+    }
+
+    @Test
+    fun testDeepOverheadSquatFeetRestOnGround() {
+        val def = SkeletonDefinition.DEFAULT_ADULT
+        val pose = DeepOverheadSquatPose()
+        val context = PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)
+        val skeleton = pose.build(context)
+
+        // The IK end (ankle) and the completed foot (heel/toe) must not penetrate the ground.
+        val feet = listOf(
+            Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F,
+            Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B
+        )
+        for (joint in feet) {
+            val y = skeleton.getJoint(joint).y
+            assertTrue("Foot joint $joint penetrates the ground (y=$y)", y >= -1e-3f)
+        }
+
+        // The engine's ground-contact clamp keeps the foot on the surface: the validator's
+        // foot-ground-penetration rule must pass.
+        val validator = ExerciseValidator(ValidatorConfig.ENGINEERING_VALIDATION)
+        val report = validator.validate(skeleton, def, pose.metadata.environment, Camera(), 1000f, 1000f)
+        val ground = report.results.first { it.ruleId == "FOOT_GROUND_PENETRATION" }
+        assertTrue("FOOT_GROUND_PENETRATION should pass after contact-aware clamp", ground.isValid)
+    }
+
+    @Test
+    fun testDeadHangHandsStayOnBar() {
+        val def = SkeletonDefinition.DEFAULT_ADULT
+        val pose = DeadHangPose()
+        val context = PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)
+        val skeleton = pose.build(context)
+
+        // Hands are fixed contacts on the bar (y = 500): the contact-aware clamp must keep the
+        // grip on the bar plane, not let the over-clamp drag it below.
+        val handA = skeleton.getJoint(Joint.HAND_A)
+        val handP = skeleton.getJoint(Joint.HAND_P)
+        assertEquals("left hand should stay on the bar plane", 500f, handA.y, 1.0f)
+        assertEquals("right hand should stay on the bar plane", 500f, handP.y, 1.0f)
+    }
+
+    @Test
+    fun testValidationPosesNoAnkleBelowGround() {
+        val def = SkeletonDefinition.DEFAULT_ADULT
+        val context = PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)
+        val poses = listOf(
+            DeepOverheadSquatPose(),
+            PikeSitPose(),
+            MiddleSplitPose(),
+            DeadHangPose()
+        )
+        for (pose in poses) {
+            val skeleton = pose.build(context)
+            for (joint in listOf(Joint.ANKLE_F, Joint.ANKLE_B)) {
+                val y = skeleton.getJoint(joint).y
+                assertTrue("${pose.javaClass.simpleName} ankle $joint below ground (y=$y)", y >= -1e-3f)
+            }
+        }
     }
 }
 }

@@ -2,6 +2,7 @@ package com.monkfitness.app.validation.poses
 
 import com.monkfitness.app.animation.CameraDefinition
 import com.monkfitness.app.animation.EnvironmentDefinition
+import com.monkfitness.app.animation.ContactConstraint
 import com.monkfitness.app.animation.IKConstraint
 import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.JointRotation
@@ -98,12 +99,13 @@ abstract class BaseValidationPose : PoseBuilder {
         middleNode: SkeletonNode,
         endNode: SkeletonNode,
         ikBuffer: SkeletonMath.IKResult,
-        straight: Boolean = false
+        straight: Boolean = false,
+        contact: ContactConstraint? = null
     ) {
         val ikResult = if (straight) {
-            SkeletonMath.solveStraightLimb(rootWorldPos, targetWorldPos, length1, length2, constraint, ikBuffer)
+            SkeletonMath.solveStraightLimb(rootWorldPos, targetWorldPos, length1, length2, constraint, ikBuffer, contact)
         } else {
-            SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, pole, constraint, ikBuffer)
+            SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, pole, constraint, ikBuffer, contact)
         }
         // Single source of truth: automatically propagate the solver's clamp amount into the
         // pose so reachability is detected without per-pose manual bookkeeping.
@@ -128,10 +130,11 @@ abstract class BaseValidationPose : PoseBuilder {
         middleNode: SkeletonNode,
         endNode: SkeletonNode,
         ikBuffer: SkeletonMath.IKResult,
-        straight: Boolean = false
+        straight: Boolean = false,
+        contact: ContactConstraint? = null
     ) {
         val worldPole = SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld)
-        bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, parentRotation, middleNode, endNode, ikBuffer, straight)
+        bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, parentRotation, middleNode, endNode, ikBuffer, straight, contact)
     }
 
     protected fun solveNearStraightLeg(
