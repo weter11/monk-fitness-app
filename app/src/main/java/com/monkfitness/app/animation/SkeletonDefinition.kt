@@ -21,6 +21,13 @@ interface SkeletonDefinition {
     val armIKConstraint: IKConstraint
     val legIKConstraint: IKConstraint
 
+    // Angular joint-limit vocabulary (shared, general — never per-exercise magic numbers).
+    // Carried by the definition so the solver and validator read a single source of truth.
+    val armAngularLimits: AngularJointLimits
+        get() = armIKConstraint.angularLimits
+    val legAngularLimits: AngularJointLimits
+        get() = legIKConstraint.angularLimits
+
     companion object {
         val DEFAULT_ADULT: SkeletonDefinition = HumanSkeletonDefinition()
     }

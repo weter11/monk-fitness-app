@@ -131,7 +131,6 @@ class IKLimbHelperTest {
         // Verify StandardPullUpPose compiles, runs, and finalizes correctly with bakeIkLimb helper
         val pullupPose = StandardPullUpPose().build(context)
         val finalizedPullup = finalizer.finalize(pullupPose)
-
         assertNotNull(finalizedPullup)
         assertTrue(finalizedPullup.isTransformsUpdated)
 
@@ -141,4 +140,29 @@ class IKLimbHelperTest {
         assertTrue(elbowA.x.isFinite())
         assertTrue(kneeF.x.isFinite())
     }
+
+    @Test
+    fun testSolveIKAngularLimitClampsHyperextension() {
+        val def = SkeletonDefinition.DEFAULT_ADULT
+        // A tight flexion cap that forbids a fully straight (180°) limb.
+        val constraint = IKConstraint(30f, 0.98f, AngularJointLimits(15f, 150f, 170f))
+        // Target at full reach: the unconstrained middle-joint interior angle would be ~180°.
+        val root = Vector3(0f, 0f, 0f)
+        val target = Vector3(def.upperArmLength + def.forearmLength, 0f, 0f)
+        val pole = Vector3(0f, 1f, 0f)
+
+        val result = SkeletonMath.solveIK(root, target, def.upperArmLength, def.forearmLength, pole, constraint)
+
+        assertTrue("angular clamp should be recorded for a hyperextended target", result.angularClampAmount > 0f)
+
+        // The resulting middle-joint interior angle must respect the 150° cap.
+        val mid = result.joint
+        val v1 = Vector3(root.x - mid.x, root.y - mid.y, root.z - mid.z)
+        val v2 = Vector3(target.x - mid.x, target.y - mid.y, target.z - mid.z)
+        val m1 = v1.mag(); val m2 = v2.mag()
+        val dot = v1.dot(v2) / (m1 * m2)
+        val theta = kotlin.math.acos(dot.coerceIn(-1f, 1f)) * 180f / kotlin.math.PI.toFloat()
+        assertTrue("middle joint angle $theta should be <= 150 (cap)", theta <= 150f + 1e-2f)
+    }
+}
 }

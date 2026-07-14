@@ -13,16 +13,19 @@ data class ValidatorConfig(
     val expectedSupportJoints: Set<Joint> = emptySet(),
     val checkBilateralSymmetry: Boolean = false,
     val checkHandShoulderAlignment: Boolean = false,
-    val checkIkTargetReachability: Boolean = false
+    val checkIkTargetReachability: Boolean = false,
+    val checkAngularJointLimits: Boolean = false
 ) {
     companion object {
         /**
          * Config used when validating the engineering reference poses. Unlike normal product
          * validation, this turns on IK reachability detection so unreachable (clamped) targets
-         * surface as [IK_TARGET_UNREACHABLE] instead of being silently ignored.
+         * surface as [IK_TARGET_UNREACHABLE] instead of being silently ignored, and enables the
+         * angular joint-limit rule ([ANGULAR_JOINT_LIMIT]) so impossible joint angles surface.
          */
         val ENGINEERING_VALIDATION = ValidatorConfig(
-            checkIkTargetReachability = true
+            checkIkTargetReachability = true,
+            checkAngularJointLimits = true
         )
     }
 }
@@ -72,7 +75,8 @@ class ExerciseValidator(
             "STATIC_SUPPORT_POLYGON",
             "BILATERAL_SYMMETRY",
             "HAND_SHOULDER_ALIGNMENT",
-            "IK_TARGET_UNREACHABLE"
+            "IK_TARGET_UNREACHABLE",
+            "ANGULAR_JOINT_LIMIT"
         )
     }
 
@@ -124,6 +128,9 @@ class ExerciseValidator(
 
         // Rule 13: IK Target Reachability (unreachable checks)
         validateIkTargetReachability(pose, issues)
+
+        // Rule 14: Angular joint limits (beyond the reach-distance band)
+        validateAngularJointLimits(pose, definition, issues)
 
         // Assemble report (allocations allowed here)
         val results = ArrayList<ValidationResult>(ALL_RULES.size)
@@ -585,6 +592,62 @@ class ExerciseValidator(
                 message = "IK target is physically unreachable: requested distance was clamped by ${pose.maxIkClampAmount} units.",
                 severity = ValidationSeverity.ERROR,
                 joint = Joint.HAND_A
+            ))
+        }
+    }
+
+    private fun validateAngularJointLimits(pose: SkeletonPose, def: SkeletonDefinition, issues: MutableList<ValidationIssue>) {
+        if (!config.checkAngularJointLimits) return
+        // Mirror the solver's angular band on the middle joint (elbow/knee) interior angle.
+        // Uses the shared, general limits carried by the skeleton definition — never
+        // per-exercise magic numbers.
+        validateAngularJointLimit(pose, Joint.SHOULDER_A, Joint.ELBOW_A, Joint.HAND_A, def.armAngularLimits, issues)
+        validateAngularJointLimit(pose, Joint.SHOULDER_P, Joint.ELBOW_P, Joint.HAND_P, def.armAngularLimits, issues)
+        validateAngularJointLimit(pose, Joint.HIP_F, Joint.KNEE_F, Joint.ANKLE_F, def.legAngularLimits, issues)
+        validateAngularJointLimit(pose, Joint.HIP_B, Joint.KNEE_B, Joint.ANKLE_B, def.legAngularLimits, issues)
+    }
+
+    private fun validateAngularJointLimit(
+        pose: SkeletonPose,
+        startJoint: Joint,
+        midJoint: Joint,
+        endJoint: Joint,
+        limits: AngularJointLimits,
+        issues: MutableList<ValidationIssue>
+    ) {
+        val pStart = pose.getJoint(startJoint)
+        val pMid = pose.getJoint(midJoint)
+        val pEnd = pose.getJoint(endJoint)
+
+        val v1x = pStart.x - pMid.x
+        val v1y = pStart.y - pMid.y
+        val v1z = pStart.z - pMid.z
+        val v2x = pEnd.x - pMid.x
+        val v2y = pEnd.y - pMid.y
+        val v2z = pEnd.z - pMid.z
+
+        val m1 = kotlin.math.sqrt(v1x * v1x + v1y * v1y + v1z * v1z)
+        val m2 = kotlin.math.sqrt(v2x * v2x + v2y * v2y + v2z * v2z)
+        if (m1 < 1e-6f || m2 < 1e-6f) return
+
+        val dot = (v1x * v2x + v1y * v2y + v1z * v2z) / (m1 * m2)
+        val theta = kotlin.math.acos(dot.coerceIn(-1f, 1f)) * 180f / kotlin.math.PI.toFloat()
+
+        // 0.1° tolerance mirrors IK_CONSTRAINT_LIMIT so a limb sitting exactly on the band is
+        // not flagged.
+        if (theta < limits.minFlexionDegrees - 0.1f) {
+            issues.add(ValidationIssue(
+                ruleId = "ANGULAR_JOINT_LIMIT",
+                message = "Middle joint ${midJoint.name} flexion angle $theta° is below the allowed minimum ${limits.minFlexionDegrees}°",
+                severity = ValidationSeverity.ERROR,
+                joint = midJoint
+            ))
+        } else if (theta > limits.maxFlexionDegrees + 0.1f) {
+            issues.add(ValidationIssue(
+                ruleId = "ANGULAR_JOINT_LIMIT",
+                message = "Middle joint ${midJoint.name} flexion angle $theta° exceeds the allowed maximum ${limits.maxFlexionDegrees}°",
+                severity = ValidationSeverity.ERROR,
+                joint = midJoint
             ))
         }
     }

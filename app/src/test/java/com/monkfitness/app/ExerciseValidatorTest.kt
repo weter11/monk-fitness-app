@@ -177,6 +177,31 @@ class ExerciseValidatorTest {
     }
 
     @Test
+    fun testRule14AngularJointLimits() {
+        // Default limits are permissive (max flexion 180°): a normal pose is within range.
+        val validator = ExerciseValidator(ValidatorConfig(checkAngularJointLimits = true))
+        val pose = createValidBasePose(defaultDefinition)
+        val report = validator.validate(pose, defaultDefinition, defaultEnv, defaultCamera, 1000f, 1000f)
+        val angularResults = report.results.first { it.ruleId == "ANGULAR_JOINT_LIMIT" }
+        assertTrue(angularResults.isValid)
+
+        // A tightened arm limit should flag a straight (180°) right elbow.
+        val tightDef = HumanSkeletonDefinition(
+            armIKConstraint = IKConstraint(30f, 0.98f, AngularJointLimits(15f, 160f, 170f))
+        )
+        // Straighten the right arm: shoulder -> elbow -> hand collinear, correct bone lengths.
+        pose.getJoint(Joint.SHOULDER_P).set(0f, 330f, defaultDefinition.shoulderWidth)
+        pose.getJoint(Joint.ELBOW_P).set(0f, 330f - defaultDefinition.upperArmLength, defaultDefinition.shoulderWidth)
+        pose.getJoint(Joint.WRIST_P).set(0f, 330f - defaultDefinition.upperArmLength - defaultDefinition.forearmLength, defaultDefinition.shoulderWidth)
+        pose.getJoint(Joint.HAND_P).set(0f, 330f - defaultDefinition.upperArmLength - defaultDefinition.forearmLength, defaultDefinition.shoulderWidth)
+
+        val reportTight = validator.validate(pose, tightDef, defaultEnv, defaultCamera, 1000f, 1000f)
+        val angularTight = reportTight.results.first { it.ruleId == "ANGULAR_JOINT_LIMIT" }
+        assertFalse(angularTight.isValid)
+        assertTrue(angularTight.issues.any { it.joint == Joint.ELBOW_P })
+    }
+
+    @Test
     fun testRule7and8and10Dynamics() {
         val validator = ExerciseValidator()
         val pose1 = createValidBasePose(defaultDefinition)
