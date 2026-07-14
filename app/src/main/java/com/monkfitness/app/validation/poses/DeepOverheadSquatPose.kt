@@ -48,9 +48,11 @@ class DeepOverheadSquatPose : BaseValidationPose() {
 
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
-        // Deep squat: feet forward (+x), knees driven forward and out.
-        val targetF = Vector3(10f, 0f, -def.hipWidth * 1.6f)
-        val targetB = Vector3(10f, 0f, def.hipWidth * 1.6f)
+        // Deep squat: feet forward (+x), knees driven forward and out. The foot target sits
+        // above the ground so the foot detail stays on/above the floor, and is placed far enough
+        // forward that it is within the biological IK reach (>= minimum flexion distance).
+        val targetF = Vector3(30f, 25f, -def.hipWidth * 1.6f)
+        val targetB = Vector3(30f, 25f, def.hipWidth * 1.6f)
         val legPoleF = Vector3(1f, 0f, -0.4f)
         val legPoleB = Vector3(1f, 0f, 0.4f)
         bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, def.legIKConstraint, leanAngle, kneeF!!, ankleF!!, legFBuffer)
@@ -73,6 +75,8 @@ class DeepOverheadSquatPose : BaseValidationPose() {
         handA!!.localRotation.set(axisZ, leanAngle * 0.4f); handP!!.localRotation.set(axisZ, leanAngle * 0.4f)
         palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
         palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
+
+        jointsBuffer.maxIkClampAmount = maxOf(legFBuffer.clampAmount, legBBuffer.clampAmount, armABuffer.clampAmount, armPBuffer.clampAmount)
 
         return finalizePose()
     }
