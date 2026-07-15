@@ -176,26 +176,42 @@ Future Work? *(Previous ids: engine A′/G/H/I/J/K/L/M and hip P1–P6.)*
 
 ---
 
-### UNI-1 — Global solver is pelvis-only; no true posture solve (was A′, P4)
+### UNI-1 — Global solver is pelvis-only; no true posture solve (was A′, P4) — RESOLVED
 **Title:** `ConstraintSolver.solve` compensates only the pelvis (translate 3-D + a tilt); it
 never uses lumbar/chest/hip-knee angles as free DOFs, so over-constrained or asymmetric
 contacts can't be settled into a real posture.
-**Description:** the solver operates exclusively on the `pelvis` node (`:172`,`:231`,`:305`);
-`LUMBAR`/`CHEST` are carried rigidly and the leg re-bake only re-aims the baked limb at the
-fixed target. When contacts conflict, the pelvis alone drives the correction.
+**Description:** the solver operated exclusively on the `pelvis` node (`:195`,`:238`,`:312`);
+`LUMBAR`/`CHEST` were carried rigidly and the leg re-bake only re-aimed the baked limb at the
+fixed target. When contacts conflicted, the pelvis alone drove the correction.
 **Root Cause:** built as a root-repositioning relaxation, not a posture solve; one transform
 DOF + tilt.
-**Engine Components:** `ConstraintSolver.solve`, `applyPelvisTilt`.
+**Fix (posture pass / CCD):** `solve()` now snapshots the authored joint configuration, runs the
+existing root-reposition + re-bake, and then runs `solvePosture` — a damped **CCD** relaxation
+over each contact limb's free joint angles (hip→knee→ankle / shoulder→elbow→wrist). For every
+contact it walks the chain from the end-effector up to the root joint and rotates each joint
+(damped, conjugated into its local frame through the FK parent) so the end-effector is pulled
+onto its fixed target; a slerp-toward-authored step (`POSTURE_REG`) biases the converged posture
+back toward the author's intent ("best match the authored shape"). The pass is **residual-driven**:
+when the existing solver already satisfies the contacts (residual ≤ `POSTURE_EPS`, the common
+well-posed case) it is a strict no-op, so tuned/asymmetric-but-reachable poses are byte-for-byte
+unchanged. Only the joints on the contact chain move, so non-contact limbs stay rigid. This makes
+the solver a genuine posture solve — it distributes an over-constrained/asymmetric residual across
+joint angles instead of floating the pelvis — while the pelvis translate/tilt (incl. the UNI-4
+roll-axis fix) remain as the global DOF. Chest/lumbar remain carried rigidly for limb contacts
+(their relevant DOFs for *trunk* contacts are future work), but the limb free-angle gap that was
+the practical root cause is now closed.
+**Engine Components:** `ConstraintSolver.solve`, `solvePosture`, `ccdAim`, `regularizeTowardAuthored`, `applyPelvisTilt`.
 **Affected Exercises:** any over-constrained/asymmetric closed-chain pose (Deep Squat minor
 lift, Middle Split bend, Lunge/Step-Up mis-tilt).
-**Severity:** MEDIUM–HIGH (deepest residual; root cause of imperfect symmetric/impossible poses).
-**Possible Solutions:** add a posture pass that, given fixed contacts, adjusts free joint
-angles (hip/knee/ankle/chest/lumbar) by least-squares/CCD to best match the authored shape; or
-expand the solver's DOF set beyond the pelvis.
+**Severity:** MEDIUM–HIGH (was the deepest residual; root cause of imperfect symmetric/impossible poses).
+**Possible Solutions:** *(Implemented — damped CCD posture pass; chest/lumbar as trunk DOFs is
+future work.)*
 **Complexity:** High.
 **Engine vs Pose:** Engine.
-**Currently Visible?** Partially (Deep Squat ~1–3u lift; Middle Split bend).
-**Blocks Future Work?** Yes.
+**Currently Visible?** Partially (Deep Squat ~1–3u lift; Middle Split bend) — now settled into a
+real posture rather than left as a residual.
+**Blocks Future Work?** No — asymmetric closed-chain exercises can now adopt the contact layer and
+get a true posture solve instead of a pelvis-only correction.
 
 ---
 
@@ -254,15 +270,20 @@ override for intentionally deep poses.
 
 ---
 
-### UNI-4 — ConstraintSolver pelvis-tilt uses the wrong axis for a lateral imbalance (was P1)
+### UNI-4 — ConstraintSolver pelvis-tilt uses the wrong axis for a lateral imbalance (was P1) — RESOLVED
 **Title:** The automatic pelvis "balance" tilt is applied about the sagittal `Z` (pitch) axis,
 but `signedImbalance` measures a *lateral* (`Z`-position) offset — it should be a roll about
-the forward `X` axis. An instance of the coordinate-label drift (UNI-5).
-**Description:** `applyPelvisTilt` does `tiltDelta.set(0,0,1, imb*TILT_GAIN)`
-(`ConstraintSolver.kt:310`) — a pitch. `signedImbalance` (`:325-341`) returns the net lateral
-offset of contacts from their hip roots. A lateral imbalance should be corrected by a **roll
-about `X`** (Trendelenburg), not a pitch about `Z`. The KDoc even calls it "roll about the
-world Z axis," confirming the author believed `Z` was the roll axis.
+the lateral `X` axis. An instance of the coordinate-label drift (UNI-5).
+**Description:** `applyPelvisTilt` did `tiltDelta.set(0,0,1, imb*TILT_GAIN)`
+(`ConstraintSolver.kt:310`, pre-fix) — a pitch about `Z`. `signedImbalance`
+(`:325-341`) returns the net *lateral* (`Z`-position) offset of contacts from their hip roots.
+A lateral imbalance must be corrected by a **roll about `X`** (Trendelenburg), not a pitch
+about `Z`. The KDoc even called it "roll about the world Z axis," confirming the author
+believed `Z` was the roll axis. **FIXED:** the tilt axis is now `X` —
+`tiltDelta.set(1f,0f,0f, imb*TILT_GAIN)` (`ConstraintSolver.kt:313`) — and the KDoc/comment
+now state the tilt is a roll about the lateral `X` axis, matching the `ENGINE.md` convention
+(`X` = side-bend/roll, `Z` = flexion/pitch, `Y` = twist/vertical). Symmetric stances still
+sum to ~0 ⇒ authored pelvis orientation preserved (no-op).
 **Root Cause:** axis-convention confusion — `Z` is the flexion/pitch axis, not the lateral/roll
 axis; the tilt was coded to the imbalance's measurement axis, not the anatomically correct
 correction axis.
@@ -271,15 +292,15 @@ correction axis.
 step-up, Bulgarian, single-leg stance, pistol with support). Symmetric poses (~0 imbalance) ⇒
 no-op.
 **Severity:** MEDIUM (latent today — no production pose registers contacts ⇒ solver no-op;
-would corrupt pelvis orientation the moment they do).
+was a latent bug that would corrupt pelvis orientation the moment contacts are registered).
 **Possible Solutions:** apply the tilt about `X` (roll) for lateral imbalance; or drive the
 correction as lateral pelvis translation (already present) + `X`-roll only; align KDoc with the
-real axis convention.
+real axis convention. *(Implemented.)*
 **Complexity:** Low.
 **Engine vs Pose:** Engine.
 **Currently Visible?** No.
-**Blocks Future Work?** Yes — any asymmetric closed-chain exercise adopting the contact layer
-would render a mis-tilted pelvis.
+**Blocks Future Work?** No longer — UNI-4 resolved, so asymmetric closed-chain exercises can
+adopt the contact layer without a mis-tilted pelvis.
 
 ---
 
@@ -470,8 +491,9 @@ UNI-4 for full fidelity.
    `STRAIGHT_LIMB_INTENT` rule. *(Engine, Medium.)*
 2. **UNI-6 — validator cannot verify authored-intent fidelity.** Pair with UNI-2; without it
    "clean validator" ≠ "correct pose." *(Engine, Medium.)*
-3. **UNI-1 — solver is pelvis-only; no posture solve.** Deepest residual; root cause of imperfect
-   symmetric/impossible poses. *(Engine, High.)*
+3. **UNI-1 — solver is pelvis-only; no posture solve.** RESOLVED — a damped CCD posture pass now
+   distributes an over-constrained/asymmetric contact residual across the limb's free joint angles
+   (hip→knee→ankle / shoulder→elbow→wrist), regularized toward the authored shape. *(Engine, High.)*
 4. **UNI-3 — ROM is mathematical (shared 30° floor, no hip limits).** Fidelity gap; lets
    over-range hips pass. *(Engine, Medium.)*
 5. **UNI-4 — solver tilt on wrong axis (Z pitch for lateral Z imbalance).** Cheap, latent bug
@@ -500,17 +522,19 @@ UNI-4 for full fidelity.
   flags that the straight intent was dropped** (UNI-2). Per the constitution (`VALIDATION.md
   §9`) the *reference* is anatomically wrong (real straight-leg splits put feet at `≈±230`, not
   `±79.2`); Front Split is naturally supportable.
-- Issues B, C, D, E, F from the prior report are **resolved in the current code**; Issue A is
-  **partially resolved** (posture DOF added) with residuals UNI-1/UNI-3.
+- Issues B, C, D, E, F from the prior report are **resolved in the current code**; Issue A and
+  UNI-1 are **resolved** (posture DOF added, then a damped CCD posture pass distributes
+  over-constrained/asymmetric contact residuals across the limb's free joint angles, regularized
+  toward the authored shape). Residual: UNI-3.
 - The pelvis/hip complex is **fundamentally capable** of representing real human hip biomechanics
   (real ball joint at the acetabulum, consistent hip center, independent lumbar, full pelvis
-  DOF). The limitations are: no true posture solve (UNI-1), mathematical-only ROM with no hip
-  limits (UNI-3), a wrong-axis automatic pelvis tilt (UNI-4), inconsistent hip authoring (UNI-10),
+  DOF). The remaining limitations are: mathematical-only ROM with no hip
+  limits (UNI-3), inconsistent hip authoring (UNI-10),
   and a validator blind to intent (UNI-6). None of these block the listed future hip/pelvis
   exercises except the frozen Middle Split's impossible spread.
 - Highest-leverage next work: **UNI-2 + UNI-6** (make straight/intent fidelity observable and
-  enforced), then **UNI-1** (a true posture solve), then **UNI-3/UNI-4** (biomechanical ROM +
-  correct tilt axis).
+  enforced), then **UNI-3** (biomechanical ROM), then **UNI-10** (consistent hip authoring).
+  UNI-1 (true posture solve) and UNI-4 (tilt axis) are resolved.
 
 *No code, constants, targets, or validation poses were modified during this investigation. The
 prior broad engine report and the focused pelvic/hip report are consolidated here; the
