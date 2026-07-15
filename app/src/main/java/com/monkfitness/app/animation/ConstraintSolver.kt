@@ -8,10 +8,14 @@ import kotlin.math.*
  * constraint solver needs to re-solve that limb after the root (pelvis) has been
  * repositioned, without the pose having to micro-manage the root.
  *
- * `endJoint` is the contact end-effector (ANKLE_* / HAND_*). The proximal chain is
- * reconstructed from the fixed skeleton topology: the IK root is the joint whose world
- * position seeds the solve (`rootJoint`: HIP_* / SHOULDER_*), and the parent frame whose
- * rotation the offsets are authored in is `parentRotationJoint` (PELVIS / CHEST).
+ * `endJoint` is the contact end-effector. The proximal chain is reconstructed from the fixed
+ * skeleton topology via [chainForEnd]: the IK root is the joint whose world position seeds the
+ * solve (`rootJoint`), the middle joint of the 2-bone chain is `middleJoint`, and the parent
+ * frame whose rotation the offsets are authored in is `parentRotationJoint`. The solver now
+ * supports any planted body part — ankles, hands, knees (kneeling), elbows/forearms (planks),
+ * hips (seated), head (head-stand) and the toe/heel ends of the foot — not just ANKLE_* / HAND_*.
+ * For the single-bone contacts (knee/elbow/hip/head/toe/heel) `middleJoint == endJoint` and the
+ * re-bake treats the segment as one rigid bone.
  */
 class ContactSpec(
     val endJoint: Joint,
@@ -98,12 +102,49 @@ object ConstraintSolver {
      * Maps a contact end-effector to its proximal chain in the fixed skeleton topology.
      * Returns null for joints that are not a supported contact limb (the solver then simply
      * skips registration at bake time).
+     *
+     * Every contact is expressed as a 2-bone chain `(rootJoint -> middleJoint -> endJoint)`.
+     * The original scope only covered the two true 2-bone limbs (legs: HIP->KNEE->ANKLE and
+     * arms: SHOULDER->ELBOW->HAND). Issue D extends this to every other planted body part:
+     * knees, elbows/forearms, hips, head, and the toe/heel ends of the foot. For those the
+     * contact joint is the *end* of a single bone (the thigh, forearm, neck, foot, …), so the
+     * chain is modelled as a degenerate 2-bone limb with `middleJoint == endJoint` — the
+     * re-bake treats it as a rigid one-bone segment (see [solve]). `parentRotationJoint` is
+     * the frame in which that segment's offset is authored (the bone's actual parent, which
+     * for an identity-rotation link equals the historically-used pelvis/scapula frame, so the
+     * existing legs/arms entries are unchanged in meaning).
      */
     fun chainForEnd(end: Joint): ContactChain? = when (end) {
+        // --- Legs: 2-bone limb HIP -> KNEE -> ANKLE (unchanged) ---
         Joint.ANKLE_F -> ContactChain(Joint.HIP_F, Joint.PELVIS, Joint.KNEE_F)
         Joint.ANKLE_B -> ContactChain(Joint.HIP_B, Joint.PELVIS, Joint.KNEE_B)
+        // Kneeling: the knee is the end of the thigh (1-bone). middle == end.
+        Joint.KNEE_F -> ContactChain(Joint.HIP_F, Joint.PELVIS, Joint.KNEE_F)
+        Joint.KNEE_B -> ContactChain(Joint.HIP_B, Joint.PELVIS, Joint.KNEE_B)
+
+        // --- Arms: 2-bone limb SHOULDER -> ELBOW -> HAND (unchanged) ---
         Joint.HAND_A -> ContactChain(Joint.SHOULDER_A, Joint.SCAPULA_A, Joint.ELBOW_A)
         Joint.HAND_P -> ContactChain(Joint.SHOULDER_P, Joint.SCAPULA_P, Joint.ELBOW_P)
+        // Forearm / elbow plank: the elbow is the end of the forearm (1-bone). middle == end.
+        Joint.ELBOW_A -> ContactChain(Joint.SHOULDER_A, Joint.SCAPULA_A, Joint.ELBOW_A)
+        Joint.ELBOW_P -> ContactChain(Joint.SHOULDER_P, Joint.SCAPULA_P, Joint.ELBOW_P)
+
+        // --- Hips: seated / kneeling on the pelvis side. The hip is the end of the (identity)
+        //     pelvis->hip offset (1-bone), framed in the pelvis. middle == end. ---
+        Joint.HIP_F -> ContactChain(Joint.PELVIS, Joint.PELVIS, Joint.HIP_F)
+        Joint.HIP_B -> ContactChain(Joint.PELVIS, Joint.PELVIS, Joint.HIP_B)
+
+        // --- Head: head-stand. The head is the end of the (identity) chest->neck->head chain,
+        //     modelled as a 1-bone neck segment framed in the chest. middle == end. ---
+        Joint.HEAD_POS -> ContactChain(Joint.CHEST, Joint.CHEST, Joint.HEAD_POS)
+
+        // --- Feet ends: toe / heel stands. The toe/heel is the end of the foot (1-bone,
+        //     ANKLE -> TOE/HEEL), framed in the ankle. middle == end. ---
+        Joint.TOE_F -> ContactChain(Joint.ANKLE_F, Joint.ANKLE_F, Joint.TOE_F)
+        Joint.TOE_B -> ContactChain(Joint.ANKLE_B, Joint.ANKLE_B, Joint.TOE_B)
+        Joint.HEEL_F -> ContactChain(Joint.ANKLE_F, Joint.ANKLE_F, Joint.HEEL_F)
+        Joint.HEEL_B -> ContactChain(Joint.ANKLE_B, Joint.ANKLE_B, Joint.HEEL_B)
+
         else -> null
     }
 
@@ -236,8 +277,14 @@ object ConstraintSolver {
 
                 dir.set(ikResult.joint).subtract(rootWorld)
                 SkeletonMath.toLocalDirection(dir, parentRot, middle.localPosition)
-                dir.set(ikResult.end).subtract(ikResult.joint)
-                SkeletonMath.toLocalDirection(dir, parentRot, end.localPosition)
+                // A 1-bone (degenerate) contact limb has `middle == end` (e.g. a kneeling knee,
+                // a planted elbow, a head-stand). Its IK result collapses to a single segment
+                // (joint == end == target), so the second offset would be zero and would wipe
+                // the bone length. Skip it: the segment is already written above.
+                if (middle !== end) {
+                    dir.set(ikResult.end).subtract(ikResult.joint)
+                    SkeletonMath.toLocalDirection(dir, parentRot, end.localPosition)
+                }
             }
 
             if (!moved) break
@@ -284,7 +331,10 @@ object ConstraintSolver {
             ground = true
             val root = nodeMap[spec.rootJoint.index] ?: continue
             val lateral = spec.targetWorld.z - root.worldPosition.z
-            val sign = if (spec.endJoint == Joint.ANKLE_B || spec.endJoint == Joint.HAND_P) 1f else -1f
+            // Passive side (+Z) joints are `_B`/`_P`; active side (-Z) are `_F`/`_A`.
+            // Central joints (head) contribute ~0 lateral offset and are harmless either way.
+            val name = spec.endJoint.name
+            val sign = if (name.endsWith("_B") || name.endsWith("_P")) 1f else -1f
             sum += sign * lateral
         }
         return if (ground) sum else null

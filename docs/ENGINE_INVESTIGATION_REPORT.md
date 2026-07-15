@@ -303,47 +303,70 @@ segment (unchanged for neutral trunks).
 
 ---
 
-## Issue D — ConstraintSolver only knows how to pin `ANKLE_*` and `HAND_*` contacts
+## Issue D — ConstraintSolver only knows how to pin `ANKLE_*` and `HAND_*` contacts — RESOLVED IN CODE
 
-**Title:** The only end-joints the global solver can re-bake are ankles and hands; forearms,
-knees, hips, head, etc. cannot be honored as fixed contacts.
+**Title:** The only end-joints the global solver could re-bake were ankles and hands; forearms,
+knees, hips, head, etc. could not be honored as fixed contacts. This is now fixed: `chainForEnd`
+maps every planted body part to its proximal chain, and the re-bake handles the resulting
+single-bone (degenerate) limbs.
 
 **Description**
-`ConstraintSolver.chainForEnd` returns `null` for every joint except `ANKLE_F/B` and `HAND_A/P`.
-`bakeIkLimb` therefore silently skips contact registration for any other support point, and the
-solver can never reposition the root to honor, e.g., a forearm plank, a kneeling thruster, or a
-head-stand. Those contacts are declared in `PoseMetadata`/`SupportContact` but the engine has
+`ConstraintSolver.chainForEnd` returned `null` for every joint except `ANKLE_F/B` and `HAND_A/P`.
+`bakeIkLimb` therefore silently skipped contact registration for any other support point, and the
+solver could never reposition the root to honor, e.g., a forearm plank, a kneeling thruster, or a
+head-stand. Those contacts are declared in `PoseMetadata`/`SupportContact` but the engine had
 no machinery to *enforce* them globally.
 
 **Root cause**
 The chain map was written for the four reference poses (which only plant feet/hands) and was
 never generalized.
 
-**Affected engine components**
-`ConstraintSolver.chainForEnd`, `ConstraintSolver.solve` (early-out on null chain),
-`bakeIkLimb` (contact registration guard).
+**Severity:** RESOLVED IN CODE (was MEDIUM). `chainForEnd` now returns a `ContactChain` for every
+plausible contact end-joint, and `ConstraintSolver.solve` re-bakes the resulting limbs correctly:
 
-**Affected exercises**
+- The two genuine 2-bone limbs are unchanged: `ANKLE_*` (root `HIP_*`, parent `PELVIS`) and
+  `HAND_*` (root `SHOULDER_*`, parent `SCAPULA_*`), middle `KNEE_*`/`ELBOW_*`.
+- Single-bone contacts are modelled as a degenerate 2-bone limb with `middleJoint == endJoint`:
+  `KNEE_*` (thigh, root `HIP_*`), `ELBOW_*` (forearm, root `SHOULDER_*`), `HIP_*` (root
+  `PELVIS`), `HEAD_POS` (neck, root `CHEST`), and `TOE_*`/`HEEL_*` (foot, root `ANKLE_*`). Each
+  uses the bone's true parent frame as `parentRotationJoint`, which for the identity-rotation
+  links equals the historical pelvis/scapula frame, so existing legs/arms entries are
+  byte-for-byte unchanged in meaning.
+- The re-bake skips the second (zero) offset write when `middle === end`, so a 1-bone limb keeps
+  its real bone length instead of collapsing to a point.
+- `signedImbalance` now derives the lateral side sign from the joint name (`_B`/`_P` = passive
+  +Z, `_F`/`_A` = active −Z) instead of hard-coding `ANKLE_B`/`HAND_P`, so the pelvis-tilt
+  posture DOF stays correct for the new contacts.
+
+A pose registers one of these by baking the relevant limb with a `ContactConstraint` (e.g. a
+kneeling pose bakes `hip → kneeTarget` with `length1 = thigh`, `length2 = 0` and a ground
+contact); `bakeIkLimb` already forwards the end joint to `chainForEnd` and the solver honors it.
+
+**Fix evidence (current source)**
+- `ConstraintSolver.chainForEnd` maps `ANKLE_*`/`HAND_*`/`KNEE_*`/`ELBOW_*`/`HIP_*`/`HEAD_POS`/
+  `TOE_*`/`HEEL_*` to their proximal `ContactChain`.
+- `ConstraintSolver.solve` guards the degenerate 1-bone write (`if (middle !== end)`).
+- `ConstraintSolver.signedImbalance` generalizes the side sign via joint name suffix.
+
+**Affected exercises** (now enabled through the global layer)
 Plank / forearm plank, kneeling variations, head-stands, seated poses resting on the hips, any
 pose whose support polygon includes a non-ankle/non-hand point.
 
 **Affected validation poses**
-None of the four (they only plant feet/hands), so this is a latent limitation for other families.
+None of the four (they only plant feet/hands), so this was a latent limitation for other families.
 
-**Severity:** MEDIUM (latent; blocks an entire class of supported poses from using the global layer).
+**Current Production Impact:** None. No production pose registers a `contact` in `bakeIkLimb` yet,
+so `ConstraintSolver.solve()` remains a no-op for the shipped exercise catalog — but the engine
+now *can* honor any of the above contacts the moment a pose registers one.
 
-
-**Current Production Impact:** None. Currently reachable only through the four
-Validation Poses - no production pose registers a `contact` in `bakeIkLimb` yet,
-so `ConstraintSolver.solve()` is a no-op for the shipped exercise catalog.
-**Possible architectural solutions**
-- Extend `chainForEnd` (or derive it from the skeleton topology generically) to cover knees,
-  forearms, hips, head, and custom contacts, each with its correct proximal `rootJoint` and
-  `parentRotationJoint`.
+**Possible architectural solutions** (reference only; the chosen fix is the generalized
+`chainForEnd` + 1-bone re-bake)
+- Derive `chainForEnd` from the skeleton topology generically (walk the parent chain to the limb
+  root) instead of enumerating joints.
 
 **Estimated complexity:** Medium.
 
-**Fix location:** Engine.
+**Fix location:** Engine (`ConstraintSolver`).
 
 ---
 
@@ -581,9 +604,10 @@ references (and foreseeable production poses) use.
     parent segment frame, so grip/foot orientation is correct even when the trunk is tilted.
     *(Engine, Medium.)*
 
-4. **Issue D — Solver only pins `ANKLE_*`/`HAND_*` contacts.**
-   Whole classes of supported poses (forearm/knee/hip/head) cannot use the global layer.
-   *(Engine, Medium.)*
+ 4. ~~Issue D — Solver only pins `ANKLE_*`/`HAND_*` contacts.~~
+    **RESOLVED IN CODE.** `chainForEnd` now maps every planted body part (knees, elbows/forearms,
+    hips, head, toe/heel ends) to its proximal chain, and the re-bake honors the resulting
+    1-bone limbs — so forearm/knee/hip/head poses can use the global layer. *(Engine, Medium.)*
 
 5. **Issue E — Single rigid torso (no independent lumbar/thoracic, no separate pelvis-tilt).**
    Blocks hip-hinge / good-morning / bird-dog families the constitution calls out.
@@ -612,9 +636,11 @@ Two findings dominate the current state:
   correct while the scapula is identity. The moment scapular activation is combined with arm
   contacts (exactly what PR-05 enables), the bake and the solver's arm re-bake become wrong.
 
-Issues D–F are secondary but real: the solver cannot pin non-hand/foot contacts (D), the torso
-is still a single rigid segment (E), and the chest-frame reconstruction is symmetric-only (F).
-Issue C (wrist/ankle double-counting the parent frame when the trunk is tilted) has been resolved
-in code.
+Issues E–F are secondary but real: the torso is still a single rigid segment (E), and the
+chest-frame reconstruction is symmetric-only (F). Issue C (wrist/ankle double-counting the parent
+frame when the trunk is tilted) and Issue D (solver only pins `ANKLE_*`/`HAND_*` contacts) have
+both been resolved in code.
 
-No code was changed. This report is the roadmap for the next phase of engine development.
+This report was originally an investigation-only snapshot. Issues C and D have since been fixed in
+code — see their sections for fix evidence. The remaining open items (A, B, E, F) are the roadmap
+for the next phase of engine development.
