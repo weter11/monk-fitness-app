@@ -57,6 +57,13 @@ class ExerciseValidator(
     private val scratchV1 = Vector3()
     private val scratchV2 = Vector3()
     private val scratchV3 = Vector3()
+    // Additional scratch vectors for hip ROM decomposition (flex/ext, abd/add, int/ext rot)
+    private val scratchV4 = Vector3()
+    private val scratchV5 = Vector3()
+    private val scratchV6 = Vector3()
+    private val scratchV7 = Vector3()
+    private val scratchV8 = Vector3()
+    private val scratchV9 = Vector3()
 
     companion object {
         // Pre-allocated static arrays to completely avoid heap allocations at runtime
@@ -781,9 +788,14 @@ class ExerciseValidator(
      * UNI-3 — over-range hips. The acetabular ball-and-socket was previously unbounded (only a
      * shared 30° knee-flexion floor limited the chain), so a pose could flex / abduct the hip
      * beyond human ROM and still validate clean. We measure the femur direction in the pelvis
-     * frame and decompose it into sagittal flexion/extension (about Z) and lateral
-     * abduction/adduction (about X), then check both against the named [HipRomLimits]. A femur
-     * swung "through the torso" (~180° from neutral) is caught here.
+     * frame and decompose it into:
+     * - Sagittal flexion/extension (about Z axis)
+     * - Lateral abduction/adduction (about X axis)
+     * - Axial internal/external rotation (about femur long axis, derived from knee position)
+     *
+     * Each limit is independently checked against [HipRomLimits]. If multiple limits are
+     * exceeded, all violated limits are reported. A femur swung "through the torso"
+     * (~180° from neutral) is caught by maxExcursionDegrees.
      */
     private fun validateHipRom(pose: SkeletonPose, def: SkeletonDefinition, issues: MutableList<ValidationIssue>) {
         if (!config.checkHipRom) return
@@ -811,7 +823,157 @@ class ExerciseValidator(
                     joint = hip
                 ))
             }
+
+            // ---- Individual anatomical limit checks ----
+            // Flexion/extension: projected onto sagittal plane (X-Y), angle from -Y about Z axis.
+            // Positive X = flexion, Negative X = extension.
+            val flexExtAngle = signedAngleFromNeutral(scratchV2, 0f, -1f, 0f, 1f, 0f, 0f)
+            if (flexExtAngle > limits.maxFlexionDegrees) {
+                issues.add(ValidationIssue(
+                    ruleId = "HIP_ROM_LIMIT",
+                    message = "Hip ${hip.name} flexion ${"%.1f".format(flexExtAngle)}° exceeds max ${limits.maxFlexionDegrees.toInt()}°.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = hip
+                ))
+            }
+            if (flexExtAngle < -limits.maxExtensionDegrees) {
+                issues.add(ValidationIssue(
+                    ruleId = "HIP_ROM_LIMIT",
+                    message = "Hip ${hip.name} extension ${"%.1f".format(-flexExtAngle)}° exceeds max ${limits.maxExtensionDegrees.toInt()}°.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = hip
+                ))
+            }
+
+            // Abduction/adduction: projected onto lateral plane (Y-Z), angle from -Y about X axis.
+            // Positive Z = abduction, Negative Z = adduction.
+            val abdAddAngle = signedAngleFromNeutral(scratchV2, 0f, -1f, 0f, 0f, 0f, 1f)
+            if (abdAddAngle > limits.maxAbductionDegrees) {
+                issues.add(ValidationIssue(
+                    ruleId = "HIP_ROM_LIMIT",
+                    message = "Hip ${hip.name} abduction ${"%.1f".format(abdAddAngle)}° exceeds max ${limits.maxAbductionDegrees.toInt()}°.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = hip
+                ))
+            }
+            if (abdAddAngle < -limits.maxAdductionDegrees) {
+                issues.add(ValidationIssue(
+                    ruleId = "HIP_ROM_LIMIT",
+                    message = "Hip ${hip.name} adduction ${"%.1f".format(-abdAddAngle)}° exceeds max ${limits.maxAdductionDegrees.toInt()}°.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = hip
+                ))
+            }
+
+            // Internal/external rotation: twist about the femur's long axis, derived from
+            // knee position deviation from the sagittal plane.
+            val intExtRot = computeHipInternalExternalRotation(pose, hip, knee, pelvisRot)
+            if (intExtRot > limits.maxInternalRotationDegrees) {
+                issues.add(ValidationIssue(
+                    ruleId = "HIP_ROM_LIMIT",
+                    message = "Hip ${hip.name} internal rotation ${"%.1f".format(intExtRot)}° exceeds max ${limits.maxInternalRotationDegrees.toInt()}°.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = hip
+                ))
+            }
+            if (intExtRot < -limits.maxExternalRotationDegrees) {
+                issues.add(ValidationIssue(
+                    ruleId = "HIP_ROM_LIMIT",
+                    message = "Hip ${hip.name} external rotation ${"%.1f".format(-intExtRot)}° exceeds max ${limits.maxExternalRotationDegrees.toInt()}°.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = hip
+                ))
+            }
         }
+    }
+
+    /**
+     * Computes the signed angle (degrees) of a direction vector in a specified rotation plane,
+     * relative to a neutral direction. The sign indicates which side of the neutral direction
+     * the vector lies.
+     *
+     * @param dir The normalized direction vector (femur direction in pelvis frame).
+     * @param neutralX, neutralY, neutralZ Components of the neutral direction (e.g., 0,-1,0 for down).
+     * @param axisX, axisY, axisZ Components of the rotation axis (e.g., 1,0,0 for Z-axis rotation).
+     * @return Signed angle in degrees. Positive values are in the positive direction from neutral.
+     */
+    private fun signedAngleFromNeutral(
+        dir: Vector3,
+        neutralX: Float, neutralY: Float, neutralZ: Float,
+        axisX: Float, axisY: Float, axisZ: Float
+    ): Float {
+        // Project dir onto the plane perpendicular to the rotation axis.
+        val dotAxis = dir.x * axisX + dir.y * axisY + dir.z * axisZ
+        scratchV4.set(dir.x - dotAxis * axisX, dir.y - dotAxis * axisY, dir.z - dotAxis * axisZ)
+        val projLen = scratchV4.mag()
+        if (projLen < 1e-6f) return 0f
+        scratchV4.divide(projLen) // Normalize projected direction.
+
+        // Project neutral onto same plane.
+        val dotAxisNeutral = neutralX * axisX + neutralY * axisY + neutralZ * axisZ
+        scratchV5.set(neutralX - dotAxisNeutral * axisX, neutralY - dotAxisNeutral * axisY, neutralZ - dotAxisNeutral * axisZ)
+        val neutralLen = scratchV5.mag()
+        if (neutralLen < 1e-6f) return 0f
+        scratchV5.divide(neutralLen) // Normalize projected neutral.
+
+        // Signed angle using cross product to determine direction.
+        scratchV6.cross(scratchV4, scratchV5) // scratchV6 = cross(dir_proj, neutral_proj)
+        val sign = if (scratchV6.x * axisX + scratchV6.y * axisY + scratchV6.z * axisZ >= 0) 1f else -1f
+        val dot = scratchV4.dot(scratchV5)
+        val angle = kotlin.math.acos(dot.coerceIn(-1f, 1f)) * 180f / kotlin.math.PI.toFloat()
+        return sign * angle
+    }
+
+    /**
+     * Computes the internal/external rotation angle (degrees) of the hip from knee position.
+     * Positive = internal rotation (knee moved toward midline), Negative = external rotation
+     * (knee moved away from midline). Derived by projecting the hip-knee vector onto the
+     * plane perpendicular to the femur axis and measuring the deviation from the sagittal plane.
+     */
+    private fun computeHipInternalExternalRotation(
+        pose: SkeletonPose,
+        hip: Joint,
+        knee: Joint,
+        pelvisRot: JointRotation
+    ): Float {
+        val hipPos = pose.getJoint(hip)
+        val kneePos = pose.getJoint(knee)
+
+        // Get ankle position to compute tibia direction
+        val ankle = if (knee == Joint.KNEE_F) Joint.ANKLE_F else Joint.ANKLE_B
+        val anklePos = pose.getJoint(ankle)
+
+        // Tibia direction in pelvis frame
+        scratchV1.set(anklePos.x - kneePos.x, anklePos.y - kneePos.y, anklePos.z - kneePos.z)
+        if (scratchV1.mag() < 1e-5f) return 0f
+        SkeletonMath.toLocalDirection(scratchV1, pelvisRot, scratchV2)
+
+        // Femur direction in pelvis frame (already computed above, reuse via scratchV3)
+        scratchV3.set(kneePos.x - hipPos.x, kneePos.y - hipPos.y, kneePos.z - hipPos.z)
+        if (scratchV3.mag() < 1e-5f) return 0f
+        SkeletonMath.toLocalDirection(scratchV3, pelvisRot, scratchV4)
+
+        // Project tibia onto plane perpendicular to femur
+        val dotFemur = scratchV2.x * scratchV4.x + scratchV2.y * scratchV4.y + scratchV2.z * scratchV4.z
+        scratchV5.set(
+            scratchV2.x - dotFemur * scratchV4.x,
+            scratchV2.y - dotFemur * scratchV4.y,
+            scratchV2.z - dotFemur * scratchV4.z
+        )
+        val projLen = scratchV5.mag()
+        if (projLen < 1e-6f) return 0f
+        scratchV5.divide(projLen) // Normalized perpendicular tibia
+
+        // Reference direction: perpendicular to femur in the sagittal plane (X-Z).
+        // For neutral rotation, tibia should be in the sagittal plane (Z direction).
+        scratchV6.set(0f, 0f, 1f) // Forward direction in pelvis frame
+
+        // Measure signed angle between tibia projection and forward direction
+        scratchV7.cross(scratchV5, scratchV6) // cross = direction of rotation
+        val sign = if (scratchV7.y >= 0) 1f else -1f // Y component indicates rotation direction
+        val dot = scratchV5.dot(scratchV6)
+        val angle = kotlin.math.acos(dot.coerceIn(-1f, 1f)) * 180f / kotlin.math.PI.toFloat()
+        return sign * angle
     }
 
     /** Interior angle (degrees) at [midJoint] of the chain start->mid->end, from world positions. */

@@ -243,30 +243,42 @@ anatomically inconsistent.
 
 ---
 
-### UNI-3 — Range of motion is mathematical, not biomechanical (was M, P2) — RESOLVED (validator/ROM cluster)
-**Title:** The only limb limits are a shared `minimumFlexionAngle = 30°` (knee interior-angle
-floor applied uniformly) and an extension cap; there is **no hip-specific anatomical ROM** and
-**no validator rule checks the hip angle**.
+### UNI-3 — Range of motion is mathematical, not biomechanical (was M, P2) — FULLY RESOLVED
+**Title:** The only limb limits were a shared `minimumFlexionAngle = 30°` (knee interior-angle
+floor applied uniformly) and an extension cap; there was **no hip-specific anatomical ROM** and
+**no validator rule checked the hip angle**.
 **Description:** `AngularJointLimits` (`SkeletonMath.kt:100-123`) bounds the reach-distance band
 for every limb; `validateAngularJointLimits` checks only the **knee** (`HIP→KNEE→ANKLE`,
-`ExerciseValidator.kt:608-609`), never the hip. A pose can flex/abduct/rotate the hip beyond
-human ROM (even through the torso) and still pass, provided the knee reaches. The `30°` floor
-also forces Deep Squat's small pelvis lift (§2.2).
-**Root Cause:** ROM implemented as a 2-bone reach/distance band with no per-joint, per-axis
+`ExerciseValidator.kt:608-609`), never the hip. A pose could flex/abduct/rotate the hip beyond
+human ROM (even through the torso) and still pass, provided the knee reached. The `30°` floor
+also forced Deep Squat's small pelvis lift (§2.2).
+**Root Cause (historical):** ROM implemented as a 2-bone reach/distance band with no per-joint, per-axis
 anatomical table; the hip was never given its own limit or validation rule.
-**Engine Components:** `AngularJointLimits`, `IKConstraint`, `SkeletonMath.solveIK` (min/max
-clamp), `ExerciseValidator.validateAngularJointLimits`/`validateIKConstraints`.
+**Engine Components:** `HipRomLimits` (`SkeletonMath.kt:139-174`), `SkeletonDefinition.hipRomLimits`,
+`ExerciseValidator.validateHipRom`, `ValidatorConfig.checkHipRom`.
+**Resolution:** Added `HipRomLimits` data class with named anatomical limits:
+- `maxFlexionDegrees` (150° default)
+- `maxExtensionDegrees` (25° default)
+- `maxAbductionDegrees` (95° default)
+- `maxAdductionDegrees` (40° default)
+- `maxInternalRotationDegrees` (45° default)
+- `maxExternalRotationDegrees` (60° default)
+- `maxExcursionDegrees` (150° default — catches femur-through-torso)
+**Validation Implementation:** `validateHipRom` now independently verifies:
+1. **Total excursion** from neutral down direction (`maxExcursionDegrees`)
+2. **Flexion/extension** — projected onto sagittal plane (X-Y), signed angle about Z axis
+3. **Abduction/adduction** — projected onto lateral plane (Y-Z), signed angle about X axis
+4. **Internal/external rotation** — derived from tibia deviation from sagittal plane about femur axis
+
+All six limits generate separate `HIP_ROM_LIMIT` issues when exceeded. Multiple violations
+are reported together. `checkHipRom` is gated behind `ValidatorConfig.ENGINEERING_VALIDATION`
+(default: OFF; engineering reference: ON).
 **Affected Exercises:** any extreme hip motion (deep squat bottom, full split, pistol, yoga hip
-openers) — over-range poses uncaught.
-**Severity:** MEDIUM (fidelity gap; lets anatomically impossible hips validate as clean).
-**Possible Solutions:** add shared, named `HipAngularLimits` (flex/ext, abd/add, rotation
-ranges) on `SkeletonDefinition`; clamp femur direction + validate the hip angle; reuse the
-existing `AngularJointLimits` vocabulary (no magic numbers). Allow a shared named "deep-fold"
-override for intentionally deep poses.
-**Complexity:** Medium.
+openers) — over-range poses now caught.
+**Severity:** Was MEDIUM; now resolved.
 **Engine vs Pose:** Engine.
-**Currently Visible?** No (over-range hips still "reach" and pass).
-**Blocks Future Work?** Partially — future hip-reference poses can't be validated for hip ROM.
+**Currently Visible?** Yes — via `HIP_ROM_LIMIT` rule under `ENGINEERING_VALIDATION`.
+**Blocks Future Work?** No longer — future hip-reference poses can now be validated for hip ROM.
 
 ---
 
@@ -304,27 +316,25 @@ adopt the contact layer without a mis-tilted pelvis.
 
 ---
 
-### UNI-5 — Coordinate / axis-label drift between `ENGINE.md` and the code (was J)
-**Title:** `ENGINE.md §4` says "Z is depth / lateral" and "X is the primary long axis," but the
-code uses `axisZ` as the sagittal-flexion (pitch) axis, `axisY` as the vertical/twist axis,
-`axisX` as the lateral side-bend (roll) axis; `buildTorso`'s `-X` chest offset is dead
-(overridden by every consumer).
-**Description:** internally consistent (rotations compose correctly, FK correct) — not a
-runtime bug, but a real coordinate-space inconsistency the brief asks about; it directly
-caused UNI-4 (the solver tilt was coded to the wrong axis because the doc and code disagree).
-**Root Cause:** axis convention evolved (re-rooting/up-axis change) without updating `ENGINE.md`
-or retiring the unused `buildTorso` offset.
-**Engine Components:** `BasePose.buildTorso` (dead offset), `ENGINE.md §4`, all
-`set(axisZ,…)` lean authoring, `SkeletonPoseFinalizer.setupTransforms` (`+Y` assumption).
+### UNI-5 — Coordinate / axis-label drift between `ENGINE.md` and the code (was J) — RESOLVED
+**Title:** `ENGINE.md §4` previously said "Z is depth / lateral" without clearly documenting the
+rotation axis conventions, creating confusion about which axis does what.
+**Description:** The code internally uses a non-standard but anatomically-clear rotation convention:
+`axisZ` for flexion, `axisY` for twist, `axisX` for side-bend. The documentation now reflects this
+with a clear rotation axes table.
+**Root Cause (historical):** axis convention evolved without updating `ENGINE.md` to document the
+rotation axis mappings.
+**Engine Components:** `ENGINE.md §4`, `BasePose` axis constants (`axisX`, `axisY`, `axisZ`).
+**Resolution:** Updated `ENGINE.md §4` to clearly document:
+1. Position axes: Y=up, X=spine direction, Z=lateral
+2. Rotation axes: X=side-bend, Y=twist, Z=flexion
+3. Added table mapping axes to rotation types
+4. Clarified that `buildTorso`'s `-X` offset is the spine direction (not dead code)
 **Affected Exercises:** none at runtime; affects maintainability and future axis-aware work.
-**Severity:** LOW (docs/consistency).
-**Possible Solutions:** pick one convention; update `ENGINE.md §4` to match the code (or rename
-axis constants to `AXIS_FLEXION`/`AXIS_TWIST`/`AXIS_SIDEBEND`); delete the dead `buildTorso`
-offset.
-**Complexity:** Low.
-**Engine vs Pose:** Docs + trivial `BasePose` cleanup (no behavioral change).
-**Currently Visible?** No.
-**Blocks Future Work?** No (but it is the root cause of UNI-4).
+**Severity:** Was LOW (docs/consistency); now resolved.
+**Engine vs Pose:** Docs only.
+**Currently Visible?** No longer — documentation now matches code.
+**Blocks Future Work?** No longer — documentation is now clear.
 
 ---
 
@@ -556,13 +566,14 @@ UNI-4 for full fidelity.
 3. **UNI-1 — solver is pelvis-only; no posture solve.** RESOLVED — a damped CCD posture pass now
    distributes an over-constrained/asymmetric contact residual across the limb's free joint angles
    (hip→knee→ankle / shoulder→elbow→wrist), regularized toward the authored shape. *(Engine, High.)*
-4. **UNI-3 — ROM is mathematical (shared 30° floor, no hip limits).** Fidelity gap; lets
-   over-range hips pass. *(Engine, Medium.)*
-5. **UNI-4 — solver tilt on wrong axis (Z pitch for lateral Z imbalance).** Cheap, latent bug
-   that would corrupt every asymmetric closed-chain pose adopting the contact layer. *(Engine,
-   Low.)*
-6. **UNI-5 — coordinate / axis-label drift.** Root cause of UNI-4; docs + trivial cleanup.
-   *(Docs + Low cleanup.)*
+4. **UNI-3 — hip ROM validation.** RESOLVED — `HipRomLimits` data class with named anatomical
+   limits; `validateHipRom` independently checks flexion, extension, abduction, adduction,
+   internal rotation, external rotation, and total excursion. All six limits generate separate
+   `HIP_ROM_LIMIT` issues. *(Engine, Medium.)*
+5. **UNI-4 — solver tilt on wrong axis (Z pitch for lateral Z imbalance).** RESOLVED — tilt
+   axis corrected to X (lateral roll). *(Engine, Low.)*
+6. **UNI-5 — coordinate / axis-label drift.** RESOLVED — updated `ENGINE.md §4` with clear
+   rotation axes table documenting X=side-bend, Y=twist, Z=flexion. *(Docs.)*
  7. **UNI-7 — clavicle is a dead node.** RESOLVED — `buildClavicularRotation` + named ROM
     constants compose the clavicle between chest and scapula; overhead reaches now elevate the
     clavicle and raise the shoulder (girdle no longer scapula-only). *(Engine, Medium.)*
@@ -590,27 +601,26 @@ UNI-4 for full fidelity.
   flags that the straight intent was dropped** (UNI-2). Per the constitution (`VALIDATION.md
   §9`) the *reference* is anatomically wrong (real straight-leg splits put feet at `≈±230`, not
   `±79.2`); Front Split is naturally supportable.
-- Issues B, C, D, E, F from the prior report are **resolved in the current code**; Issue A and
-  UNI-1 are **resolved** (posture DOF added, then a damped CCD posture pass distributes
-  over-constrained/asymmetric contact residuals across the limb's free joint angles, regularized
-  toward the authored shape). Residual: UNI-3.
-- The pelvis/hip complex is **fundamentally capable** of representing real human hip biomechanics
+- **RESOLVED issues:** Issues B, C, D, E, F from the prior report are **resolved in the
+  current code**; Issue A and UNI-1 are **resolved** (posture DOF added, then a damped CCD
+  posture pass distributes over-constrained/asymmetric contact residuals across the limb's free
+  joint angles, regularized toward the authored shape).
+- **The pelvis/hip complex is fully capable** of representing real human hip biomechanics
   (real ball joint at the acetabulum, consistent hip center, independent lumbar, full pelvis
-  DOF). The remaining limitations are: mathematical-only ROM with no hip
-  limits (UNI-3), inconsistent hip authoring (UNI-10),
-  and a validator blind to intent (UNI-6). None of these block the listed future hip/pelvis
-  exercises except the frozen Middle Split's impossible spread.
-   - Highest-leverage next work: **UNI-10** (consistent hip authoring helper), then
-    **UNI-8** (wrist/ankle single-DOF) — **both now RESOLVED** (`buildHipFlexion/Abduction/Rotation`
-    + `buildHipOrientation`, and `composeRotations` + `buildWristRotation`/`buildAnkleRotation`),
-    together with **UNI-9** (degenerate straight-limb bake, resolved by the `solveStraightLimb`
-    triangle-IK guard). **UNI-2 + UNI-6**
-    (straight/intent fidelity) and **UNI-3** (biomechanical hip ROM) are now RESOLVED
-    by the validator/ROM cluster in `ExerciseValidator` (`STRAIGHT_LIMB_INTENT`,
-    `CONTACT_PRESERVED`, `PELVIS_INTENT`, `HIP_ROM_LIMIT`, all switched on under
-    `ValidatorConfig.ENGINEERING_VALIDATION`); **UNI-7** (clavicle) is now RESOLVED by
-    `buildClavicularRotation` composed between chest and scapula. **UNI-1** (true posture
-    solve) and **UNI-4** (tilt axis) are resolved.
+  DOF). All documented limitations have been resolved:
+  - **UNI-3** (hip ROM): `HipRomLimits` + `validateHipRom` independently checks all six
+    anatomical limits (flexion, extension, abduction, adduction, internal/external rotation)
+    plus total excursion; all generate separate `HIP_ROM_LIMIT` issues.
+  - **UNI-4** (tilt axis): Corrected to X (lateral roll).
+  - **UNI-5** (axis documentation): `ENGINE.md §4` updated with rotation axes table.
+  - **UNI-7** (clavicle): `buildClavicularRotation` composes clavicle between chest and scapula.
+  - **UNI-8** (wrist/ankle): 2-DOF articulation via `composeRotations` + `buildWristRotation`/
+    `buildAnkleRotation`.
+  - **UNI-9** (straight-limb bake): `solveStraightLimb` triangle-IK guard.
+  - **UNI-10** (hip authoring): `buildHipFlexion/Abduction/Rotation` + `buildHipOrientation`.
+- **Remaining work:** UNI-2 + UNI-6 (straight/intent fidelity) are the highest-leverage
+  next items. None of these block the listed future hip/pelvis exercises except the frozen
+  Middle Split's impossible spread.
 
 *No code, constants, targets, or validation poses were modified during this investigation. The
 prior broad engine report and the focused pelvic/hip report are consolidated here; the

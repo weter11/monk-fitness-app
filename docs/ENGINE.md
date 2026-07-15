@@ -139,10 +139,26 @@ symmetry, hand–shoulder alignment, and IK target reachability. It produces a
   uses ~centimetre-scale magnitudes, e.g. torso ≈ 120, thigh ≈ 112).
 - **Y is up.** Ground level is a Y value (`GroundDefinition.level`, default 0).
   "Below ground" means `y < level`.
-- **Z is depth / lateral.** The two sides of the body are separated along Z
+- **X is the primary long axis (spine direction).** In the pelvis frame, the
+  chest is positioned at `-X` relative to the pelvis (`buildTorso`). This is the
+  anatomical "forward" direction for the spine.
+- **Z is lateral.** The two sides of the body are separated along Z
   (shoulders at `±shoulderWidth`, hips at `±hipWidth`).
-- **X is the primary long axis of the current frame.** Its world meaning
-  depends on the node's frame — this is why authoring happens in local space.
+
+### Rotation Axes
+
+The engine uses a non-standard rotation convention for anatomical clarity:
+
+| Axis | Rotation Type | Description |
+|------|--------------|-------------|
+| X | Roll / Side-bend | Chest/hip side bending (left/right lean) |
+| Y | Twist / Vertical | Chest/hip twisting about the spine axis |
+| Z | Flexion / Pitch | Chest/hip forward/backward bending (squat, lean) |
+
+This matches the actual usage in `buildChestOrientation`, `buildHipOrientation`, etc.:
+- `axisZ` = flexion (Z rotation = pitch-like)
+- `axisY` = twist (Y rotation = yaw-like)
+- `axisX` = side-bend (X rotation = roll-like)
 
 ### Joint naming: A/P and F/B
 The skeleton is a single-plane silhouette with a near and a far limb per pair:
