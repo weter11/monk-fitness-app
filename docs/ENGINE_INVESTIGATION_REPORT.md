@@ -31,8 +31,8 @@ The previous investigation listed 11 issues then 6 (A–F). A large rework has l
 | 3 — IK clamp drove contacts through the floor | **Resolved** | `ContactConstraint` + `resolveContactPlane`. |
 | 4 — no global constraint/root solve | **Partially resolved** | `ConstraintSolver` exists (posture-based since `dd5bc32`), pelvis-tilt DOF added; still pelvis-only (UNI-1). |
 | 5 — no scapular/clavicular DOF | **Resolved** | `CLAVICLE_*`/`SCAPULA_*` joints + `CHEST→CLAVICLE→SCAPULA→SHOULDER`; `buildScapularRotation` + `buildClavicularRotation`; clavicle now a real, driven girdle node (UNI-7). |
-| 6 — no wrist/ankle articulation | **Partially resolved** | `relativeRotation` resolves wrist/ankle relative to parent segment (Issue C). **Still single-DOF (UNI-8).** |
-| 7 — no ankle/talocrural DOF | **Partially resolved** | same relative-frame path; single-DOF (UNI-8). |
+| 6 — no wrist/ankle articulation | **Resolved** | `relativeRotation` resolves wrist/ankle relative to parent segment (Issue C); 2-DOF composition now available (`buildWristRotation`/`buildAnkleRotation`, UNI-8). |
+| 7 — no ankle/talocrural DOF | **Resolved** | same relative-frame path; 2-DOF ankle (dorsi/plantar-flexion + inversion/eversion) via `buildAnkleRotation` (UNI-8). |
 | 8 — no angular joint limits | **Resolved** | `AngularJointLimits`, angular clamp in `solveIK`, `validateAngularJointLimits`. |
 | 9 — trunk frame 1-DOF | **Resolved** | `buildChestOrientation` (3-D) + `reconstructChestFrame`. |
 | 10 — reachability detection dead | **Resolved** | `bakeIkLimb` auto-propagates `clampAmount`; `IK_TARGET_UNREACHABLE` enabled under `ENGINEERING_VALIDATION`. |
@@ -439,6 +439,15 @@ accept the composed rotation.
 **Engine vs Pose:** Engine.
 **Currently Visible?** No.
 **Blocks Future Work?** No (latent expressiveness gap).
+**Status:** *RESOLVED.* Added a shared `SkeletonMath.composeRotations(a, b, out)` primitive
+(matrix-multiply of the two axis-angle rotations, reusing the existing FK matrix utilities — no
+quaternion type, allocation-free) and named 2-DOF builders `buildWristRotation(flexion, deviation)`
+and `buildAnkleRotation(dorsiflexion, inversion)` that compose the two anatomical axes into one
+exact rotation instead of one axis dropping the other. `HandDefinition.computeHandJoints` and
+`FootDefinition.computeHeelToe` gained composed-rotation overloads accepting a primary + secondary
+`JointRotation`; `BasePose.buildWristArticulation` / `buildAnkleArticulation` expose the authoring
+API (mirroring the scapula/clavicle DOF pattern). Identity rotations reproduce the prior single-axis
+completion exactly (zero regression). Covered by `WristAnkleHipArticulationTest`.
 
 ---
 
@@ -467,6 +476,14 @@ pre-flight in the finalizer for degenerate segments.
 **Engine vs Pose:** Engine.
 **Currently Visible?** No (solver repairs it).
 **Blocks Future Work?** No (latent).
+**Status:** *RESOLVED.* `SkeletonMath.solveStraightLimb` now guards the `dist < L1` degeneracy at
+bake time: instead of writing `middle == end == target` (a zero-length second bone), it falls back
+to the same triangle IK the `ConstraintSolver` would apply (`solveTriangleJoint` with a zero pole →
+stable world-down bend plane), so **both** bone lengths are preserved without depending on the
+global solver running. The reachable case (`dist ≥ L1`) is unchanged (still a straight limb). This
+removes the hidden coupling that made a contact-less straight limb fail `BONE_LENGTH`. Covered by
+`WristAnkleHipArticulationTest` (too-close target keeps both bone lengths; reachable target stays
+straight).
 
 ---
 
@@ -493,6 +510,15 @@ constants.
 **Engine vs Pose:** Engine (authoring API).
 **Currently Visible?** No.
 **Blocks Future Work?** No (workable via raw `hip.localRotation`).
+**Status:** *RESOLVED.* Added a first-class hip-authoring API mirroring
+`buildChestOrientation`/`buildScapularRotation`: `SkeletonMath.buildHipRotation(flexion, abduction,
+rotation, sideSign)` composes the three ball-joint DOFs into one exact `JointRotation`, and
+`BasePose` exposes `buildHipFlexion` (sagittal, Z), `buildHipAbduction` (frontal, Y, side-mirrored),
+`buildHipRotation` (femoral internal/external about the long X axis — **separated from the IK pole**,
+which only selects the knee-bend plane) and the composed `buildHipOrientation`. `hip.localRotation`
+is documented as the acetabular ball joint; the shared ROM vocabulary is `HipRomLimits` with
+enforcement left to the validator's `HIP_ROM_LIMIT` rule (no double-clamping, no per-pose magic
+numbers). Covered by `WristAnkleHipArticulationTest`.
 
 ---
 
@@ -540,10 +566,15 @@ UNI-4 for full fidelity.
  7. **UNI-7 — clavicle is a dead node.** RESOLVED — `buildClavicularRotation` + named ROM
     constants compose the clavicle between chest and scapula; overhead reaches now elevate the
     clavicle and raise the shoulder (girdle no longer scapula-only). *(Engine, Medium.)*
-8. **UNI-10 — hip authoring inconsistency / no helper.** Expressive gap. *(Engine, Low–Medium.)*
-9. **UNI-9 — degenerate straight-limb bake before the solver.** Latent landmine for contact-less
-   straight limbs. *(Engine, Low.)*
-10. **UNI-8 — wrist/ankle single-DOF.** Latent expressiveness gap. *(Engine, Medium.)*
+8. **UNI-10 — hip authoring inconsistency / no helper.** RESOLVED — `buildHipFlexion/Abduction/
+   Rotation` + composed `buildHipOrientation` (via `SkeletonMath.buildHipRotation`) give the hip a
+   first-class authoring API; femoral axial rotation is separated from the IK pole. *(Engine, Low–Medium.)*
+9. **UNI-9 — degenerate straight-limb bake before the solver.** RESOLVED — `solveStraightLimb`
+   guards the `dist < L1` degeneracy with a triangle-IK fallback, preserving both bone lengths at
+   bake time. *(Engine, Low.)*
+10. **UNI-8 — wrist/ankle single-DOF.** RESOLVED — `composeRotations` + `buildWristRotation`/
+    `buildAnkleRotation` and composed completion overloads give the wrist/ankle real 2-DOF
+    articulation. *(Engine, Medium.)*
 11. **UNI-11 — hip center consistent.** Verified correct; no action.
 12. **UNI-12 — future-exercise supportability.** Reference/summary; not a defect.
 
@@ -570,7 +601,10 @@ UNI-4 for full fidelity.
   and a validator blind to intent (UNI-6). None of these block the listed future hip/pelvis
   exercises except the frozen Middle Split's impossible spread.
    - Highest-leverage next work: **UNI-10** (consistent hip authoring helper), then
-    **UNI-8** (wrist/ankle single-DOF). **UNI-2 + UNI-6**
+    **UNI-8** (wrist/ankle single-DOF) — **both now RESOLVED** (`buildHipFlexion/Abduction/Rotation`
+    + `buildHipOrientation`, and `composeRotations` + `buildWristRotation`/`buildAnkleRotation`),
+    together with **UNI-9** (degenerate straight-limb bake, resolved by the `solveStraightLimb`
+    triangle-IK guard). **UNI-2 + UNI-6**
     (straight/intent fidelity) and **UNI-3** (biomechanical hip ROM) are now RESOLVED
     by the validator/ROM cluster in `ExerciseValidator` (`STRAIGHT_LIMB_INTENT`,
     `CONTACT_PRESERVED`, `PELVIS_INTENT`, `HIP_ROM_LIMIT`, all switched on under
