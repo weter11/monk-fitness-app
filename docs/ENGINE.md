@@ -143,6 +143,34 @@ symmetry, hand–shoulder alignment, and IK target reachability. It produces a
   (shoulders at `±shoulderWidth`, hips at `±hipWidth`).
 - **X is the primary long axis of the current frame.** Its world meaning
   depends on the node's frame — this is why authoring happens in local space.
+  For the standing/upright root the spine long axis is authored up **+Y** (most
+  poses set `chest.localPosition = (0, torsoLength, 0)`); for a re-rooted
+  horizontal frame (the plank/push-up chain) the same long axis is **-X**
+  (`buildTorso` sets `chest.localPosition = (-torsoLength, 0, 0)`). Both are the
+  *same* anatomical "up the spine" direction expressed in different local
+  frames — `buildTorso`'s offset is **live**, not dead: the push-up family
+  relies on it.
+
+### Rotation-axis convention (anatomical planes)
+
+Local `JointRotation`s use a single, consistent mapping of the three anatomical
+planes to the local axes. This is the source of truth for every authoring
+helper (`buildChestOrientation`, `buildHipRotation`, the lumbar helpers) and for
+`ConstraintSolver`'s balance tilt:
+
+| Local axis | Anatomical rotation                     | Examples |
+| ---------- | --------------------------------------- | -------- |
+| **Z**      | sagittal **flexion / extension** (pitch, "lean") | `buildChestOrientation(lean=…)` `Rz`; `buildHipFlexion` (`hip.localRotation` about Z); pelvis lean |
+| **Y**      | transverse **twist / rotation** (vertical spine axis) | `buildChestTwist` / `buildChestOrientation(twist=…)` `Ry`; `buildHipAbduction` (hip about Y, side-mirrored) |
+| **X**      | frontal **side-bend / roll** (lateral) | `buildChestSideBend` / `buildChestOrientation(sideBend=…)` `Rx`; femoral internal/external rotation (`buildHipRotation` about X); `ConstraintSolver` Trendelenburg roll |
+
+Composition order for the composed helpers is `R = Rz · Ry · Rx`
+(flexion, then twist, then side-bend). Note the plane→axis mapping is **not**
+`X=pitch/Y=yaw/Z=roll`: because the up axis is **+Y**, the sagittal (flexion)
+axis is **Z** and the lateral (roll) axis is **X**. Coding a "balance roll" or a
+new plane-aware correction to the wrong axis (e.g. a lateral imbalance corrected
+by a `Z` pitch instead of an `X` roll) was the original cause of the
+now-fixed `ConstraintSolver` tilt bug.
 
 ### Joint naming: A/P and F/B
 The skeleton is a single-plane silhouette with a near and a far limb per pair:
