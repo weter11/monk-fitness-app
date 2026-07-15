@@ -14,18 +14,31 @@ data class ValidatorConfig(
     val checkBilateralSymmetry: Boolean = false,
     val checkHandShoulderAlignment: Boolean = false,
     val checkIkTargetReachability: Boolean = false,
-    val checkAngularJointLimits: Boolean = false
+    val checkAngularJointLimits: Boolean = false,
+    // UNI-2 / UNI-6 — authored-intent fidelity. Off by default (product validation only checks
+    // physical invariants); the engineering reference config switches them on.
+    val checkStraightLimbIntent: Boolean = false,
+    val checkContactPreservation: Boolean = false,
+    val checkPelvisIntent: Boolean = false,
+    // UNI-3 — biomechanical hip ROM. Off by default; the engineering reference config switches it on.
+    val checkHipRom: Boolean = false
 ) {
     companion object {
         /**
          * Config used when validating the engineering reference poses. Unlike normal product
          * validation, this turns on IK reachability detection so unreachable (clamped) targets
-         * surface as [IK_TARGET_UNREACHABLE] instead of being silently ignored, and enables the
-         * angular joint-limit rule ([ANGULAR_JOINT_LIMIT]) so impossible joint angles surface.
+         * surface as [IK_TARGET_UNREACHABLE] instead of being silently ignored, enables the
+         * angular joint-limit rule ([ANGULAR_JOINT_LIMIT]) so impossible joint angles surface,
+         * and switches on the intended-shape / ROM cluster (UNI-2/UNI-3/UNI-6): straight-limb
+         * intent, contact preservation, pelvis-intent, and over-range hip ROM.
          */
         val ENGINEERING_VALIDATION = ValidatorConfig(
             checkIkTargetReachability = true,
-            checkAngularJointLimits = true
+            checkAngularJointLimits = true,
+            checkStraightLimbIntent = true,
+            checkContactPreservation = true,
+            checkPelvisIntent = true,
+            checkHipRom = true
         )
     }
 }
@@ -39,6 +52,11 @@ class ExerciseValidator(
     val config: ValidatorConfig = ValidatorConfig()
 ) {
     private val scratchHeadPoint = ProjectedPoint()
+
+    // Scratch vectors for the UNI-2/UNI-3/UNI-6 intent + ROM rules (no hot-path allocation).
+    private val scratchV1 = Vector3()
+    private val scratchV2 = Vector3()
+    private val scratchV3 = Vector3()
 
     companion object {
         // Pre-allocated static arrays to completely avoid heap allocations at runtime
@@ -76,7 +94,11 @@ class ExerciseValidator(
             "BILATERAL_SYMMETRY",
             "HAND_SHOULDER_ALIGNMENT",
             "IK_TARGET_UNREACHABLE",
-            "ANGULAR_JOINT_LIMIT"
+            "ANGULAR_JOINT_LIMIT",
+            "STRAIGHT_LIMB_INTENT",
+            "CONTACT_PRESERVED",
+            "PELVIS_INTENT",
+            "HIP_ROM_LIMIT"
         )
     }
 
@@ -131,6 +153,18 @@ class ExerciseValidator(
 
         // Rule 14: Angular joint limits (beyond the reach-distance band)
         validateAngularJointLimits(pose, definition, issues)
+
+        // UNI-2 / UNI-6 — authored-intent fidelity cluster.
+        // Rule 15: a limb authored straight=true must actually come out straight; otherwise the
+        // solver silently dropped the intent (e.g. Middle Split's grounded-pelvis straight legs).
+        validateStraightLimbIntent(pose, issues)
+        // Rule 16: each registered contact's end-effector must land on its authored anchor.
+        validateContactPreservation(pose, issues)
+        // Rule 17: the global solver must not displace the root beyond the intended tolerance.
+        validatePelvisIntent(pose, issues)
+
+        // UNI-3 — biomechanical hip ROM: the acetabular joint must stay within human range.
+        validateHipRom(pose, definition, issues)
 
         // Assemble report (allocations allowed here)
         val results = ArrayList<ValidationResult>(ALL_RULES.size)
@@ -652,5 +686,145 @@ class ExerciseValidator(
                 joint = midJoint
             ))
         }
+    }
+
+    // ---- UNI-2 / UNI-6: authored-intent fidelity cluster ----
+
+    // A limb authored straight must resolve within this many degrees of a perfectly straight
+    // (180°) joint. Inside this band we treat the straight intent as honoured.
+    private val STRAIGHT_LIMB_TOLERANCE_DEGREES = 175f
+    // An end-effector may land this far (units) from its authored anchor before we flag it.
+    private val CONTACT_PRESERVATION_TOLERANCE = 8f
+    // The global solver may displace the root this far (units / degrees) before we flag it.
+    private val PELVIS_TRANSLATION_TOLERANCE = 30f
+    private val PELVIS_ROTATION_TOLERANCE = 20f
+
+    /**
+     * UNI-2 — straight-intent fidelity. A limb authored `straight=true` must actually come out
+     * straight; otherwise the solver silently dropped the intent (e.g. Middle Split's
+     * grounded-pelvis straight legs, which are geometrically impossible and resolve bent). The
+     * intent rides on [ContactSpec.straight]; for every straight contact we measure the resolved
+     * middle-joint interior angle and flag when it falls outside the straight band.
+     */
+    private fun validateStraightLimbIntent(pose: SkeletonPose, issues: MutableList<ValidationIssue>) {
+        if (!config.checkStraightLimbIntent) return
+        for (i in 0 until pose.contacts.size) {
+            val spec = pose.contacts[i]
+            if (!spec.straight) continue
+            // Single-bone contacts (knee/elbow/head on one rigid segment) have no bend angle.
+            if (spec.middleJoint == spec.endJoint) continue
+            val theta = limbMiddleAngleDegrees(pose, spec.rootJoint, spec.middleJoint, spec.endJoint)
+            if (theta < STRAIGHT_LIMB_TOLERANCE_DEGREES) {
+                issues.add(ValidationIssue(
+                    ruleId = "STRAIGHT_LIMB_INTENT",
+                    message = "Limb ${spec.rootJoint.name}->${spec.middleJoint.name}->${spec.endJoint.name} was authored straight but resolved bent (joint angle ${"%.1f".format(theta)}° < ${STRAIGHT_LIMB_TOLERANCE_DEGREES.toInt()}°); straight intent silently dropped.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = spec.middleJoint
+                ))
+            }
+        }
+    }
+
+    /**
+     * UNI-6 — contact preservation. Each registered fixed contact owns an authored anchor
+     * ([ContactSpec.targetWorld]); the end-effector must land on it (within tolerance). A gross
+     * miss means the global solver did not honour the contact it was handed.
+     */
+    private fun validateContactPreservation(pose: SkeletonPose, issues: MutableList<ValidationIssue>) {
+        if (!config.checkContactPreservation) return
+        for (i in 0 until pose.contacts.size) {
+            val spec = pose.contacts[i]
+            val end = pose.getJoint(spec.endJoint)
+            val dx = end.x - spec.targetWorld.x
+            val dy = end.y - spec.targetWorld.y
+            val dz = end.z - spec.targetWorld.z
+            val dist = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+            if (dist > CONTACT_PRESERVATION_TOLERANCE) {
+                issues.add(ValidationIssue(
+                    ruleId = "CONTACT_PRESERVED",
+                    message = "Contact on ${spec.endJoint.name} landed ${"%.1f".format(dist)}u from its authored anchor (tolerance ${CONTACT_PRESERVATION_TOLERANCE.toInt()}u); end-effector did not preserve the intended contact.",
+                    severity = ValidationSeverity.WARNING,
+                    joint = spec.endJoint
+                ))
+            }
+        }
+    }
+
+    /**
+     * UNI-6 — pelvis intent. The global solver may translate/tilt the root to satisfy contacts,
+     * but an unexpectedly large displacement means it fought the authored pose rather than
+     * honouring it. Surfaces how far the solver moved the root from its authored transform.
+     */
+    private fun validatePelvisIntent(pose: SkeletonPose, issues: MutableList<ValidationIssue>) {
+        if (!config.checkPelvisIntent) return
+        if (pose.rootTranslationDelta > PELVIS_TRANSLATION_TOLERANCE) {
+            issues.add(ValidationIssue(
+                ruleId = "PELVIS_INTENT",
+                message = "Global solver displaced the root/pelvis by ${"%.1f".format(pose.rootTranslationDelta)}u (tolerance ${PELVIS_TRANSLATION_TOLERANCE.toInt()}u) from its authored position.",
+                severity = ValidationSeverity.WARNING,
+                joint = Joint.PELVIS
+            ))
+        }
+        if (pose.rootRotationDelta > PELVIS_ROTATION_TOLERANCE) {
+            issues.add(ValidationIssue(
+                ruleId = "PELVIS_INTENT",
+                message = "Global solver rotated the root/pelvis by ${"%.1f".format(pose.rootRotationDelta)}° (tolerance ${PELVIS_ROTATION_TOLERANCE.toInt()}°) from its authored orientation.",
+                severity = ValidationSeverity.WARNING,
+                joint = Joint.PELVIS
+            ))
+        }
+    }
+
+    // ---- UNI-3: biomechanical hip ROM ----
+
+    /**
+     * UNI-3 — over-range hips. The acetabular ball-and-socket was previously unbounded (only a
+     * shared 30° knee-flexion floor limited the chain), so a pose could flex / abduct the hip
+     * beyond human ROM and still validate clean. We measure the femur direction in the pelvis
+     * frame and decompose it into sagittal flexion/extension (about Z) and lateral
+     * abduction/adduction (about X), then check both against the named [HipRomLimits]. A femur
+     * swung "through the torso" (~180° from neutral) is caught here.
+     */
+    private fun validateHipRom(pose: SkeletonPose, def: SkeletonDefinition, issues: MutableList<ValidationIssue>) {
+        if (!config.checkHipRom) return
+        val limits = def.hipRomLimits
+        val pelvisRot = pose.getJointRotation(Joint.PELVIS)
+        // Neutral femur points straight down in the pelvis frame: (0,-1,0).
+        for (i in 0 until 2) {
+            val hip = if (i == 0) Joint.HIP_F else Joint.HIP_B
+            val knee = if (i == 0) Joint.KNEE_F else Joint.KNEE_B
+            val hipPos = pose.getJoint(hip)
+            val kneePos = pose.getJoint(knee)
+            scratchV1.set(kneePos.x - hipPos.x, kneePos.y - hipPos.y, kneePos.z - hipPos.z)
+            if (scratchV1.mag() < 1e-5f) continue
+            // Femur direction expressed in the pelvis' local frame (pelvis local == world at root).
+            SkeletonMath.toLocalDirection(scratchV1, pelvisRot, scratchV2)
+            // Total excursion from the neutral down direction. Axis-label-agnostic so a valid
+            // extreme pose (deep squat / pike / full split, ~90-120°) passes while an over-range
+            // hip (femur through the torso, ~180°) is caught.
+            val excursion = SkeletonMath.angleBetweenDegrees(scratchV2, scratchV3.set(0f, -1f, 0f))
+            if (excursion > limits.maxExcursionDegrees) {
+                issues.add(ValidationIssue(
+                    ruleId = "HIP_ROM_LIMIT",
+                    message = "Hip ${hip.name} femur deviates ${"%.1f".format(excursion)}° from neutral (max anatomical excursion ${limits.maxExcursionDegrees.toInt()}°); hip range of motion exceeded.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = hip
+                ))
+            }
+        }
+    }
+
+    /** Interior angle (degrees) at [midJoint] of the chain start->mid->end, from world positions. */
+    private fun limbMiddleAngleDegrees(pose: SkeletonPose, start: Joint, mid: Joint, end: Joint): Float {
+        val pStart = pose.getJoint(start)
+        val pMid = pose.getJoint(mid)
+        val pEnd = pose.getJoint(end)
+        val v1x = pStart.x - pMid.x; val v1y = pStart.y - pMid.y; val v1z = pStart.z - pMid.z
+        val v2x = pEnd.x - pMid.x; val v2y = pEnd.y - pMid.y; val v2z = pEnd.z - pMid.z
+        val m1 = kotlin.math.sqrt(v1x * v1x + v1y * v1y + v1z * v1z)
+        val m2 = kotlin.math.sqrt(v2x * v2x + v2y * v2y + v2z * v2z)
+        if (m1 < 1e-6f || m2 < 1e-6f) return 180f
+        val dot = (v1x * v2x + v1y * v2y + v1z * v2z) / (m1 * m2)
+        return kotlin.math.acos(dot.coerceIn(-1f, 1f)) * 180f / kotlin.math.PI.toFloat()
     }
 }

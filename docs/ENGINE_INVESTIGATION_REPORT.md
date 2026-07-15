@@ -215,7 +215,7 @@ get a true posture solve instead of a pelvis-only correction.
 
 ---
 
-### UNI-2 — `straight=true` intent silently dropped; Middle Split reference is impossible (was G, P6)
+### UNI-2 — `straight=true` intent silently dropped; Middle Split reference is impossible (was G, P6) — RESOLVED (validator/ROM cluster)
 **Title:** When a limb is authored `straight=true` but the target is `< L1`, the engine silently
 produces a **bent** limb and **no validator rule flags it**; the Middle Split reference is
 geometrically impossible (straight limbs + grounded pelvis + feet at `≈3×` hip-width).
@@ -243,7 +243,7 @@ anatomically inconsistent.
 
 ---
 
-### UNI-3 — Range of motion is mathematical, not biomechanical (was M, P2)
+### UNI-3 — Range of motion is mathematical, not biomechanical (was M, P2) — RESOLVED (validator/ROM cluster)
 **Title:** The only limb limits are a shared `minimumFlexionAngle = 30°` (knee interior-angle
 floor applied uniformly) and an extension cap; there is **no hip-specific anatomical ROM** and
 **no validator rule checks the hip angle**.
@@ -328,7 +328,7 @@ offset.
 
 ---
 
-### UNI-6 — Validator cannot verify authored-intent fidelity (was K)
+### UNI-6 — Validator cannot verify authored-intent fidelity (was K) — RESOLVED (validator/ROM cluster)
 **Title:** The validator checks *physical* invariants (bone length, ground penetration, joint
 limits, symmetry) but has **no rule that the finalized skeleton matches the pose's authored
 intent** (straight limbs, grounded pelvis, contacts actually honored). Corrective passes
@@ -532,9 +532,13 @@ UNI-4 for full fidelity.
   limits (UNI-3), inconsistent hip authoring (UNI-10),
   and a validator blind to intent (UNI-6). None of these block the listed future hip/pelvis
   exercises except the frozen Middle Split's impossible spread.
-- Highest-leverage next work: **UNI-2 + UNI-6** (make straight/intent fidelity observable and
-  enforced), then **UNI-3** (biomechanical ROM), then **UNI-10** (consistent hip authoring).
-  UNI-1 (true posture solve) and UNI-4 (tilt axis) are resolved.
+- Highest-leverage next work: **UNI-10** (consistent hip authoring helper), then
+  **UNI-7** (clavicle) / **UNI-8** (wrist/ankle single-DOF). **UNI-2 + UNI-6**
+  (straight/intent fidelity) and **UNI-3** (biomechanical hip ROM) are now RESOLVED
+  by the validator/ROM cluster in `ExerciseValidator` (`STRAIGHT_LIMB_INTENT`,
+  `CONTACT_PRESERVED`, `PELVIS_INTENT`, `HIP_ROM_LIMIT`, all switched on under
+  `ValidatorConfig.ENGINEERING_VALIDATION`). **UNI-1** (true posture solve) and
+  **UNI-4** (tilt axis) are resolved.
 
 *No code, constants, targets, or validation poses were modified during this investigation. The
 prior broad engine report and the focused pelvic/hip report are consolidated here; the

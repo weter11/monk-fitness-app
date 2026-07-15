@@ -10,6 +10,10 @@ class SkeletonPose(
     var roots: List<SkeletonNode> = emptyList(),
     var isTransformsUpdated: Boolean = false,
     var maxIkClampAmount: Float = 0f,
+    // UNI-6 — how far the global solver displaced the root from its authored transform, so the
+    // PELVIS_INTENT rule can surface unexpected root motion. Zero for non-contact (no-op) poses.
+    var rootTranslationDelta: Float = 0f,
+    var rootRotationDelta: Float = 0f,
     // Fixed support contacts registered by contact-bearing `bakeIkLimb` calls (PR-04). The
     // global constraint solver consumes these to reposition the root so every contact holds.
     val contacts: MutableList<ContactSpec> = mutableListOf()
@@ -37,6 +41,8 @@ class SkeletonPose(
         this.roots = other.roots
         this.isTransformsUpdated = other.isTransformsUpdated
         this.maxIkClampAmount = other.maxIkClampAmount
+        this.rootTranslationDelta = other.rootTranslationDelta
+        this.rootRotationDelta = other.rootRotationDelta
         this.contacts.clear()
         this.contacts.addAll(other.contacts)
     }
