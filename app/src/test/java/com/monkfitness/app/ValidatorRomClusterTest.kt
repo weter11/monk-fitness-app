@@ -112,6 +112,118 @@ class ValidatorRomClusterTest {
         assertTrue(rule.isValid)
     }
 
+    // ---- UNI-3: individual anatomical hip-ROM limits (independently enforced) ----
+
+    private val limits = SkeletonDefinition.DEFAULT_ADULT.hipRomLimits
+
+    /** Places the front femur (hip -> knee) along a pelvis-local unit direction (straight leg). */
+    private fun setFrontFemur(pose: SkeletonPose, dx: Float, dy: Float, dz: Float) {
+        val hip = pose.getJoint(Joint.HIP_F)
+        val m = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+        pose.setJoint(
+            Joint.KNEE_F,
+            Vector3(hip.x + dx / m * def.thighLength, hip.y + dy / m * def.thighLength, hip.z + dz / m * def.thighLength)
+        )
+        // Keep the shin colinear with the femur (straight leg -> no axial twist observed).
+        val knee = pose.getJoint(Joint.KNEE_F)
+        pose.setJoint(
+            Joint.ANKLE_F,
+            Vector3(knee.x + dx / m * def.shinLength, knee.y + dy / m * def.shinLength, knee.z + dz / m * def.shinLength)
+        )
+    }
+
+    private fun hipReport(pose: SkeletonPose) =
+        ExerciseValidator(ValidatorConfig(checkHipRom = true))
+            .validate(pose, def, env, camera, 1000f, 1000f)
+            .results.first { it.ruleId == "HIP_ROM_LIMIT" }
+
+    @Test
+    fun hipRomCleanForModeratelyFlexedAndAbductedHip() {
+        // A hip that is simultaneously flexed forward and abducted out to the side, both within
+        // anatomical range, must stay clean — the two planes must not leak into each other.
+        val pose = basePose()
+        val flex = Math.toRadians(70.0)   // 70° flexion (< 150 cap)
+        val abd = Math.toRadians(50.0)    // 50° abduction (< 95 cap), front leg toward -Z
+        val dx = (kotlin.math.sin(flex) * kotlin.math.cos(abd)).toFloat()
+        val dy = -(kotlin.math.cos(flex) * kotlin.math.cos(abd)).toFloat()
+        val dz = -kotlin.math.sin(abd).toFloat()
+        setFrontFemur(pose, dx, dy, dz)
+        assertTrue("a moderately flexed + abducted hip is within ROM", hipReport(pose).isValid)
+    }
+
+    @Test
+    fun hipRomFlaggedWhenOverExtended() {
+        val pose = basePose()
+        // Femur swung backward (-X) past the (small) extension cap; sin(elevation) = fx.
+        val a = Math.toRadians((limits.maxExtensionDegrees + 20f).toDouble())
+        setFrontFemur(pose, -kotlin.math.sin(a).toFloat(), -kotlin.math.cos(a).toFloat(), 0f)
+        val rule = hipReport(pose)
+        assertFalse("over-extended hip must be flagged", rule.isValid)
+        assertTrue(rule.issues.any { it.message.contains("extension") && it.joint == Joint.HIP_F })
+    }
+
+    @Test
+    fun hipRomFlaggedWhenOverAdducted() {
+        val pose = basePose()
+        // Front hip adducts toward +Z (across the mid-line) past the adduction cap.
+        val a = Math.toRadians((limits.maxAdductionDegrees + 20f).toDouble())
+        setFrontFemur(pose, 0f, -kotlin.math.cos(a).toFloat(), kotlin.math.sin(a).toFloat())
+        val rule = hipReport(pose)
+        assertFalse("over-adducted hip must be flagged", rule.isValid)
+        assertTrue(rule.issues.any { it.message.contains("adduction") && it.joint == Joint.HIP_F })
+    }
+
+    @Test
+    fun hipRomReportsEveryViolatedLimitAtOnce() {
+        val pose = basePose()
+        // Simultaneously over-extend (-X, backward) and over-adduct (+Z, across mid-line): two
+        // independent single-plane limits exceeded at once. Both must be reported. Keep the two
+        // elevation components small enough that dx²+dz² < 1 (a valid unit direction).
+        val ea = Math.toRadians((limits.maxExtensionDegrees + 8f).toDouble())   // ~33° extension
+        val aa = Math.toRadians((limits.maxAdductionDegrees + 8f).toDouble())   // ~48° adduction
+        val dx = -(kotlin.math.sin(ea)).toFloat()
+        val dz = (kotlin.math.sin(aa)).toFloat()
+        val dy = -kotlin.math.sqrt((1.0 - dx * dx.toDouble() - dz * dz.toDouble()).coerceAtLeast(0.0)).toFloat()
+        setFrontFemur(pose, dx, dy, dz)
+        val rule = hipReport(pose)
+        assertFalse(rule.isValid)
+        assertTrue("extension violation must be reported", rule.issues.any { it.message.contains("extension") })
+        assertTrue("adduction violation must be reported", rule.issues.any { it.message.contains("adduction") })
+    }
+
+    @Test
+    fun hipRomFlaggedWhenOverInternallyRotated() {
+        val pose = basePose()
+        // Author femoral internal rotation about the femur's long (local X) axis past the cap.
+        // Front leg: abductionSign = -1, so a negative raw twist about +X reads as internal rotation.
+        val twist = Math.toRadians((limits.maxInternalRotationDegrees + 20f).toDouble()).toFloat()
+        pose.setJointRotation(Joint.HIP_F, JointRotation(Vector3(1f, 0f, 0f), -twist))
+        val rule = hipReport(pose)
+        assertFalse("over-internally-rotated hip must be flagged", rule.isValid)
+        assertTrue(rule.issues.any { it.message.contains("internal rotation") && it.joint == Joint.HIP_F })
+    }
+
+    @Test
+    fun hipRomFlaggedWhenOverExternallyRotated() {
+        val pose = basePose()
+        // Author femoral external rotation about +X past the (larger) external-rotation cap.
+        val twist = Math.toRadians((limits.maxExternalRotationDegrees + 20f).toDouble()).toFloat()
+        pose.setJointRotation(Joint.HIP_F, JointRotation(Vector3(1f, 0f, 0f), twist))
+        val rule = hipReport(pose)
+        assertFalse("over-externally-rotated hip must be flagged", rule.isValid)
+        assertTrue(rule.issues.any { it.message.contains("external rotation") && it.joint == Joint.HIP_F })
+    }
+
+    @Test
+    fun hipRomCleanForPureFlexionRotationSwing() {
+        // A hip flexed about Z (pure swing, no twist) must report 0 femoral rotation.
+        val pose = basePose()
+        setFrontFemur(pose, kotlin.math.sin(Math.toRadians(60.0)).toFloat(), -kotlin.math.cos(Math.toRadians(60.0)).toFloat(), 0f)
+        pose.setJointRotation(Joint.HIP_F, JointRotation(Vector3(0f, 0f, 1f), Math.toRadians(60.0).toFloat()))
+        val rule = hipReport(pose)
+        assertTrue("pure flexion swing must not read as femoral rotation", rule.isValid)
+    }
+
     @Test
     fun pelvisIntentWarnsOnLargeDisplacement() {
         val pose = basePose()

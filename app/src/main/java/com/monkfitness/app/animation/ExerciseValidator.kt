@@ -779,11 +779,35 @@ class ExerciseValidator(
 
     /**
      * UNI-3 — over-range hips. The acetabular ball-and-socket was previously unbounded (only a
-     * shared 30° knee-flexion floor limited the chain), so a pose could flex / abduct the hip
-     * beyond human ROM and still validate clean. We measure the femur direction in the pelvis
-     * frame and decompose it into sagittal flexion/extension (about Z) and lateral
-     * abduction/adduction (about X), then check both against the named [HipRomLimits]. A femur
-     * swung "through the torso" (~180° from neutral) is caught here.
+     * shared 30° knee-flexion floor limited the chain), so a pose could flex / extend / abduct /
+     * adduct / rotate the hip beyond human ROM and still validate clean.
+     *
+     * We measure the femur direction in the pelvis frame and check it, independently, against
+     * every named bound in [HipRomLimits] (see that type's doc — pelvis-local X = anterior,
+     * Y = up, Z = lateral; neutral femur points straight down, (0,-1,0)). Every violated limit is
+     * reported (they are checked one after another, not `else`-chained), so a pose that breaks
+     * several planes at once surfaces all of them:
+     *
+     *  - total excursion ([HipRomLimits.maxExcursionDegrees]) — the axis-label-agnostic hard cap
+     *    that catches a femur swung "through the torso" (~180°) and backstops any combined
+     *    over-range that the generous per-plane caps (flexion 150°, abduction 95°) would let by;
+     *  - sagittal flexion (+X) / extension (-X)              — elevation toward / behind anterior;
+     *  - frontal  abduction (away from mid-line) / adduction — elevation lateral / across mid-line;
+     *  - axial    internal / external rotation               — twist about the femur's long axis.
+     *
+     * Flexion/extension and abduction/adduction are measured as the femur's signed *elevation*
+     * out of the orthogonal anatomical plane (sagittal elevation for flexion, frontal elevation
+     * for abduction). This keeps the two planes independent — a leg that is simultaneously flexed
+     * and abducted (deep squat, wide split) does not have one plane's motion leak into the other —
+     * so valid combined extremes stay clean while a genuine single-plane over-range (e.g. a hip
+     * extended past 25° or adducted past 40°) is caught. The axial internal/external rotation is
+     * the twist component of the authored `hip.localRotation` (the real acetabular ball joint,
+     * UNI-10) isolated about the femur's long axis, so a purely flexed/abducted leg reports 0°
+     * twist (no false positives).
+     *
+     * [HipRomLimits] is the single source of truth for every bound — no per-pose magic numbers —
+     * and the whole rule stays gated behind `config.checkHipRom`, which only the engineering
+     * reference config enables.
      */
     private fun validateHipRom(pose: SkeletonPose, def: SkeletonDefinition, issues: MutableList<ValidationIssue>) {
         if (!config.checkHipRom) return
@@ -793,16 +817,27 @@ class ExerciseValidator(
         for (i in 0 until 2) {
             val hip = if (i == 0) Joint.HIP_F else Joint.HIP_B
             val knee = if (i == 0) Joint.KNEE_F else Joint.KNEE_B
+            // Front hip sits at -Z, back hip at +Z; abduction (away from the mid-line) is toward
+            // -Z for the front leg and +Z for the back leg. This mirror sign keeps abduction
+            // positive and adduction negative for both legs.
+            val abductionSign = if (i == 0) -1f else 1f
             val hipPos = pose.getJoint(hip)
             val kneePos = pose.getJoint(knee)
             scratchV1.set(kneePos.x - hipPos.x, kneePos.y - hipPos.y, kneePos.z - hipPos.z)
             if (scratchV1.mag() < 1e-5f) continue
             // Femur direction expressed in the pelvis' local frame (pelvis local == world at root).
             SkeletonMath.toLocalDirection(scratchV1, pelvisRot, scratchV2)
-            // Total excursion from the neutral down direction. Axis-label-agnostic so a valid
-            // extreme pose (deep squat / pike / full split, ~90-120°) passes while an over-range
+            val femurLocal = scratchV2
+            val fMag = femurLocal.mag()
+            if (fMag < 1e-5f) continue
+            val fx = femurLocal.x / fMag
+            val fy = femurLocal.y / fMag
+            val fz = femurLocal.z / fMag
+
+            // (1) Total excursion from the neutral down direction. Axis-label-agnostic so a valid
+            // extreme pose (deep squat / pike / full split, ~90-136°) passes while an over-range
             // hip (femur through the torso, ~180°) is caught.
-            val excursion = SkeletonMath.angleBetweenDegrees(scratchV2, scratchV3.set(0f, -1f, 0f))
+            val excursion = SkeletonMath.angleBetweenDegrees(femurLocal, scratchV3.set(0f, -1f, 0f))
             if (excursion > limits.maxExcursionDegrees) {
                 issues.add(ValidationIssue(
                     ruleId = "HIP_ROM_LIMIT",
@@ -811,7 +846,91 @@ class ExerciseValidator(
                     joint = hip
                 ))
             }
+
+            // (2) Sagittal elevation: how far the femur tilts toward anterior (+X, flexion) or
+            // behind (-X, extension), independent of any lateral spread. sin(sagittal) = fx.
+            val sagittal = Math.toDegrees(kotlin.math.asin(fx.coerceIn(-1f, 1f).toDouble())).toFloat()
+            if (sagittal > limits.maxFlexionDegrees) {
+                issues.add(ValidationIssue(
+                    ruleId = "HIP_ROM_LIMIT",
+                    message = "Hip ${hip.name} flexion ${"%.1f".format(sagittal)}° exceeds max anatomical flexion ${limits.maxFlexionDegrees.toInt()}°.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = hip
+                ))
+            }
+            if (-sagittal > limits.maxExtensionDegrees) {
+                issues.add(ValidationIssue(
+                    ruleId = "HIP_ROM_LIMIT",
+                    message = "Hip ${hip.name} extension ${"%.1f".format(-sagittal)}° exceeds max anatomical extension ${limits.maxExtensionDegrees.toInt()}°.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = hip
+                ))
+            }
+
+            // (3) Frontal elevation: how far the femur tilts away from the mid-line (abduction) or
+            // across it (adduction), independent of any flexion. sin(frontal) = fz * abductionSign.
+            val frontal = Math.toDegrees(kotlin.math.asin((fz * abductionSign).coerceIn(-1f, 1f).toDouble())).toFloat()
+            if (frontal > limits.maxAbductionDegrees) {
+                issues.add(ValidationIssue(
+                    ruleId = "HIP_ROM_LIMIT",
+                    message = "Hip ${hip.name} abduction ${"%.1f".format(frontal)}° exceeds max anatomical abduction ${limits.maxAbductionDegrees.toInt()}°.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = hip
+                ))
+            }
+            if (-frontal > limits.maxAdductionDegrees) {
+                issues.add(ValidationIssue(
+                    ruleId = "HIP_ROM_LIMIT",
+                    message = "Hip ${hip.name} adduction ${"%.1f".format(-frontal)}° exceeds max anatomical adduction ${limits.maxAdductionDegrees.toInt()}°.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = hip
+                ))
+            }
+
+            // (4) Axial (internal / external) rotation about the femur's own long axis. This is the
+            // twist component of the authored hip rotation (`hip.localRotation` — the real
+            // acetabular ball joint, UNI-10) isolated by a swing-twist decomposition about the
+            // femur's long (local X) axis, so a leg that is only flexed/abducted (pure swing)
+            // reports 0° and never trips a false rotation violation. `abductionSign` mirrors the
+            // twist across the body mid-line so internal/external stay consistent for both legs.
+            val axial = femoralTwistDegrees(pose.getJointRotation(hip)) * abductionSign
+            if (axial > limits.maxInternalRotationDegrees) {
+                issues.add(ValidationIssue(
+                    ruleId = "HIP_ROM_LIMIT",
+                    message = "Hip ${hip.name} internal rotation ${"%.1f".format(axial)}° exceeds max anatomical internal rotation ${limits.maxInternalRotationDegrees.toInt()}°.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = hip
+                ))
+            }
+            if (-axial > limits.maxExternalRotationDegrees) {
+                issues.add(ValidationIssue(
+                    ruleId = "HIP_ROM_LIMIT",
+                    message = "Hip ${hip.name} external rotation ${"%.1f".format(-axial)}° exceeds max anatomical external rotation ${limits.maxExternalRotationDegrees.toInt()}°.",
+                    severity = ValidationSeverity.ERROR,
+                    joint = hip
+                ))
+            }
         }
+    }
+
+    /**
+     * Signed femoral axial-rotation angle (degrees): the twist component of the hip's authored
+     * local rotation about the femur's long (local X) axis, isolated by a swing-twist
+     * decomposition. Flexion (about Z) and abduction (about Y) are pure swing and contribute 0°,
+     * so only genuine internal/external rotation authored via `hip.localRotation`
+     * (`SkeletonMath.buildHipRotation(rotation = …)`) is measured. Positive follows the right-hand
+     * rule about +X; the caller mirrors it per side. Allocation-free.
+     */
+    private fun femoralTwistDegrees(hipRotation: JointRotation): Float {
+        val axis = hipRotation.axis
+        val axisMag = kotlin.math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z)
+        if (axisMag < 1e-6f) return 0f
+        // Quaternion (w, x·s) of the rotation, then swing-twist twist angle about X = 2·atan2(qx, qw).
+        val half = hipRotation.angle * 0.5f
+        val s = kotlin.math.sin(half)
+        val qw = kotlin.math.cos(half)
+        val qx = axis.x / axisMag * s
+        return Math.toDegrees((2f * kotlin.math.atan2(qx, qw)).toDouble()).toFloat()
     }
 
     /** Interior angle (degrees) at [midJoint] of the chain start->mid->end, from world positions. */
