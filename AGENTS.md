@@ -52,10 +52,30 @@
   (compose vs `chest.parent` = lumbar), `BasePose.kt` (`buildLumbarFlexion`/`buildSpineCurve`),
   `BaseThoracicPose.kt` (`lumbar`), tests `SkeletonFactoryTest`,
   `ProceduralAnimationPerformanceRefactorTest`, new `LumbarThoracicSpineTest` (3 pos-based, green).
-- **Known pre-existing bug (Issue F territory, do NOT change here):**
-  `reconstructChestFrame` uses single-arg `Vector3.cross(v)` which returns a NEW vector and
-  does NOT mutate `tempColX` → chest world-rotation angle wrong even when neutral. Positions
-  are unaffected, so Issue E leaves chest world-rotation behavior untouched.
+- Touched the same `reconstructChestFrame` (later fully fixed by Issue F — see below).
+
+## Issue F — chest-frame reconstruction overwrites authored rotation + symmetric-thorax assumption (DONE)
+
+- Root cause: `SkeletonPoseFinalizer.reconstructChestFrame` recomputed `chest.localRotation` from
+  geometry (spine dir + shoulder line) and **overwrote** whatever the pose author built via
+  `buildChestTwist` / `buildChestOrientation` / explicit `chest.localRotation.set(...)` (plank
+  flex, lunge pitch, thoracic twist, validation poses). It also derived the forward axis purely
+  from the shoulder line, forcing a **symmetric-thorax** assumption onto authored poses.
+- The single-arg `Vector3.cross(v)` (SkeletonMath.kt:74) allocates a NEW vector and never mutates
+  the scratch buffer, so `tempColX.set(lean).cross(shVec)` was a no-op on `tempColX` → degenerate
+  matrix (colX == colY) → wrong chest world rotation even when neutral (e.g. push-up plank got a
+  ~30° off frame; correct reconstruction == the FK frame).
+- Fix (in `SkeletonPoseFinalizer.reconstructChestFrame`):
+  - **Early-return when `chest.localRotation.angle != 0`** — authored thoracic rotation is the
+    single source of truth; FK already propagated it to shoulders/arms/neck/head, and the
+    already-flattened world transforms are left intact. This removes the overwrite + the
+    symmetric-thorax assumption for any authored pose.
+  - **Identity-chest fallback** (push-up-style trunk oriented by pelvis/legs): keep the
+    geometry reconstruction but use the two-arg `cross(dst)` overload so the orthonormal frame is
+    written into `tempColX`. For a symmetric thorax this equals the FK frame (zero regression);
+    the degenerate-matrix bug is gone.
+- Net effect restores pre-PR-09 correct behavior in both cases; authored chests are no longer
+  clobbered. New `ChestFrameIssueFTest.kt` covers twist-preserved / flex-preserved / fallback-aligns.
 
 ## Git
 
