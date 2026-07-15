@@ -1,0 +1,6 @@
+{
+  "instructions": [
+    // Rule instructing the agent to isolate and ignore unused code
+    "Your objective is to enforce strict repository context boundaries. Whenever asked to optimize workspace context or analyze repo usage, you must map the file tree, determine which files and directories are completely unreferenced (e.g., dead code, unused assets, unrelated sub-modules, legacy backups), and dynamically write or append those exact patterns into the `.kilocodeignore` file to minimize token bloat."
+  ]
+}
