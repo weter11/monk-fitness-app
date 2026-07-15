@@ -243,7 +243,7 @@ anatomically inconsistent.
 
 ---
 
-### UNI-3 — Range of motion is mathematical, not biomechanical (was M, P2) — RESOLVED (validator/ROM cluster)
+### UNI-3 — Range of motion is mathematical, not biomechanical (was M, P2) — RESOLVED (per-axis hip ROM enforced)
 **Title:** The only limb limits are a shared `minimumFlexionAngle = 30°` (knee interior-angle
 floor applied uniformly) and an extension cap; there is **no hip-specific anatomical ROM** and
 **no validator rule checks the hip angle**.
@@ -267,6 +267,27 @@ override for intentionally deep poses.
 **Engine vs Pose:** Engine.
 **Currently Visible?** No (over-range hips still "reach" and pass).
 **Blocks Future Work?** Partially — future hip-reference poses can't be validated for hip ROM.
+**Status:** *RESOLVED — fully.* `HipRomLimits` (shared, named — flexion/extension, abduction/
+adduction, internal/external rotation, plus a total-excursion cap) lives on `SkeletonDefinition`
+and `validateHipRom` (`ExerciseValidator.HIP_ROM_LIMIT`) now enforces **every** bound
+independently, not just the total excursion. For each hip the femur direction is taken in the
+pelvis frame and checked against all named limits: sagittal *elevation* gives flexion (+X) /
+extension (-X); frontal *elevation* gives abduction (away from mid-line) / adduction; and the
+axial internal/external rotation is the twist component of the authored `hip.localRotation`
+(the real acetabular ball joint, UNI-10) isolated by a swing-twist decomposition about the
+femur's long axis. The two elevation planes are measured orthogonally so a leg that is
+simultaneously flexed *and* abducted (deep squat, wide split) does not leak one plane's motion
+into the other — valid combined extremes stay clean while a genuine single-plane over-range
+(hip extended past 25°, adducted past 40°, or over-rotated) is caught. **All violated limits are
+reported at once** (checks are not `else`-chained), and the total-excursion cap remains the
+axis-label-agnostic backstop for the generous flexion/abduction planes. `HipRomLimits` is the
+single source of truth (no per-pose magic numbers); the rule stays **off by default** and gated
+behind `config.checkHipRom`, switched on only by `ValidatorConfig.ENGINEERING_VALIDATION`. No
+production pose was modified. Covered by `ValidatorRomClusterTest` (per-axis over-extension,
+over-adduction, over-internal/external rotation, multi-limit reporting, and clean-pass for
+moderate combined flexion+abduction, pure-swing flexion, and the Deep Squat / Pike Sit / Dead
+Hang references + the Middle Split, whose hip ROM stays within range even though its straight
+intent is dropped).
 
 ---
 
@@ -556,8 +577,10 @@ UNI-4 for full fidelity.
 3. **UNI-1 — solver is pelvis-only; no posture solve.** RESOLVED — a damped CCD posture pass now
    distributes an over-constrained/asymmetric contact residual across the limb's free joint angles
    (hip→knee→ankle / shoulder→elbow→wrist), regularized toward the authored shape. *(Engine, High.)*
-4. **UNI-3 — ROM is mathematical (shared 30° floor, no hip limits).** Fidelity gap; lets
-   over-range hips pass. *(Engine, Medium.)*
+4. **UNI-3 — ROM is mathematical (shared 30° floor, no hip limits).** RESOLVED — `HipRomLimits`
+   + `validateHipRom` now enforce every anatomical plane independently (flexion/extension,
+   abduction/adduction, internal/external rotation) on top of the total-excursion backstop,
+   reporting all violated limits at once; off by default, engineering-config only. *(Engine, Medium.)*
 5. **UNI-4 — solver tilt on wrong axis (Z pitch for lateral Z imbalance).** Cheap, latent bug
    that would corrupt every asymmetric closed-chain pose adopting the contact layer. *(Engine,
    Low.)*
@@ -608,7 +631,10 @@ UNI-4 for full fidelity.
     (straight/intent fidelity) and **UNI-3** (biomechanical hip ROM) are now RESOLVED
     by the validator/ROM cluster in `ExerciseValidator` (`STRAIGHT_LIMB_INTENT`,
     `CONTACT_PRESERVED`, `PELVIS_INTENT`, `HIP_ROM_LIMIT`, all switched on under
-    `ValidatorConfig.ENGINEERING_VALIDATION`); **UNI-7** (clavicle) is now RESOLVED by
+    `ValidatorConfig.ENGINEERING_VALIDATION`). `HIP_ROM_LIMIT` now enforces **all six** named
+    anatomical limits independently (flexion, extension, abduction, adduction, internal and
+    external rotation) plus the total-excursion backstop, reporting every violated limit at
+    once — no longer excursion-only. **UNI-7** (clavicle) is now RESOLVED by
     `buildClavicularRotation` composed between chest and scapula. **UNI-1** (true posture
     solve) and **UNI-4** (tilt axis) are resolved.
 
