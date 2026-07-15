@@ -13,7 +13,7 @@ import kotlin.math.*
  * solve (`rootJoint`), the middle joint of the 2-bone chain is `middleJoint`, and the parent
  * frame whose rotation the offsets are authored in is `parentRotationJoint`. The solver now
  * supports any planted body part — ankles, hands, knees (kneeling), elbows/forearms (planks),
- * hips (seated), head (head-stand) and the toe/heel ends of the foot — not just ANKLE_*/HAND_*.
+ * hips (seated), head (head-stand) and the toe/heel ends of the foot — not just ANKLE_* / HAND_*.
  * For the single-bone contacts (knee/elbow/hip/head/toe/heel) `middleJoint == endJoint` and the
  * re-bake treats the segment as one rigid bone.
  */
