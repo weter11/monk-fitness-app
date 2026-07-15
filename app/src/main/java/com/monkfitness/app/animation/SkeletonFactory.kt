@@ -3,6 +3,7 @@ package com.monkfitness.app.animation
 class SkeletonNodes(
     val roots: List<SkeletonNode>,
     val pelvis: SkeletonNode,
+    val lumbar: SkeletonNode,
     val chest: SkeletonNode,
     val neck: SkeletonNode,
     val head: SkeletonNode,
@@ -57,7 +58,12 @@ object SkeletonFactory {
 
     fun createStandardSkeleton(): SkeletonNodes {
         val pelvis = SkeletonNode(Joint.PELVIS)
-        val chest = pelvis.addChild(SkeletonNode(Joint.CHEST))
+        // Two-segment spine: PELVIS -> LUMBAR -> CHEST. LUMBAR defaults to a pass-through
+        // (coincident with the pelvis, identity rotation), so with no authored lumbar motion
+        // the chest resolves to the exact same world transform as the old single PELVIS->CHEST
+        // link (Issue E). Authoring a lumbar rotation gives the lower spine independent DOF.
+        val lumbar = pelvis.addChild(SkeletonNode(Joint.LUMBAR))
+        val chest = lumbar.addChild(SkeletonNode(Joint.CHEST))
         val neck = chest.addChild(SkeletonNode(Joint.NECK_END))
         val head = neck.addChild(SkeletonNode(Joint.HEAD_POS))
 
@@ -98,6 +104,7 @@ object SkeletonFactory {
         return SkeletonNodes(
             roots = listOf(pelvis),
             pelvis = pelvis,
+            lumbar = lumbar,
             chest = chest,
             neck = neck,
             head = head,
@@ -137,7 +144,9 @@ object SkeletonFactory {
         val kneeF = ankleF.addChild(SkeletonNode(Joint.KNEE_F))
         val hipF = kneeF.addChild(SkeletonNode(Joint.HIP_F))
         val pelvis = hipF.addChild(SkeletonNode(Joint.PELVIS))
-        val chest = pelvis.addChild(SkeletonNode(Joint.CHEST))
+        // Two-segment spine (see createStandardSkeleton): LUMBAR is a pass-through by default.
+        val lumbar = pelvis.addChild(SkeletonNode(Joint.LUMBAR))
+        val chest = lumbar.addChild(SkeletonNode(Joint.CHEST))
         val neck = chest.addChild(SkeletonNode(Joint.NECK_END))
         val head = neck.addChild(SkeletonNode(Joint.HEAD_POS))
 
@@ -168,6 +177,7 @@ object SkeletonFactory {
         return SkeletonNodes(
             roots = listOf(ankleF),
             pelvis = pelvis,
+            lumbar = lumbar,
             chest = chest,
             neck = neck,
             head = head,

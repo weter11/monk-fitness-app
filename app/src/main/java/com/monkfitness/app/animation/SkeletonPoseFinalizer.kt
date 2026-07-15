@@ -80,14 +80,21 @@ class SkeletonPoseFinalizer(
         val chest = findJointNode(roots[0], Joint.CHEST) ?: return
         val shoulderA = findJointNode(roots[0], Joint.SHOULDER_A) ?: return
         val shoulderP = findJointNode(roots[0], Joint.SHOULDER_P) ?: return
-        if (chest.parent !== pelvis) return
+        // The chest's parent is the segment the reconstructed absolute frame is expressed
+        // relative to. For the two-segment spine this is the LUMBAR (PELVIS -> LUMBAR -> CHEST);
+        // for an inline single-segment hierarchy it is the PELVIS itself. Composing against the
+        // actual parent means an authored lower-spine (lumbar/pelvis-tilt) rotation is combined
+        // with the thoracic frame instead of being discarded (Issue E). When the lumbar is a
+        // pass-through (identity, coincident with the pelvis) this is identical to the old
+        // PELVIS-relative reconstruction, so single-bend poses are unchanged.
+        val chestParent = chest.parent ?: return
 
         val pelvisW = pelvis.worldPosition
         val chestW = chest.worldPosition
         val sAW = shoulderA.worldPosition
         val sPW = shoulderP.worldPosition
 
-        // lean (chest-local +Y) = pelvis -> chest
+        // lean (chest-local +Y) = pelvis -> chest (the full two-segment spine direction)
         val lean = tempColY.set(chestW).subtract(pelvisW)
         if (lean.mag() < 1e-4f) return
         lean.normalize()
@@ -109,9 +116,10 @@ class SkeletonPoseFinalizer(
 
         SkeletonMath.getRotationFromMatrix(tempColX, tempColY, tempColZ, reconRot)
 
-        // chest.localRotation = parentWorldRotation^-1 * reconRot (parentWorldRotation is a
-        // rotation matrix, so its inverse is its transpose).
-        SkeletonMath.rotationToMatrix(pelvis.worldRotation, parentMatX, parentMatY, parentMatZ)
+        // chest.localRotation = parentWorldRotation^-1 * reconRot, where parentWorldRotation is
+        // the chest's PARENT (lumbar in the standard spine, pelvis inline). A rotation matrix's
+        // inverse is its transpose.
+        SkeletonMath.rotationToMatrix(chestParent.worldRotation, parentMatX, parentMatY, parentMatZ)
         SkeletonMath.rotationToMatrix(reconRot, worldMatX, worldMatY, worldMatZ)
         SkeletonMath.transposeMultiply(
             parentMatX, parentMatY, parentMatZ,
@@ -121,9 +129,10 @@ class SkeletonPoseFinalizer(
         SkeletonMath.getRotationFromMatrix(localMatX, localMatY, localMatZ, chest.localRotation)
 
         // Re-run FK for the chest subtree with the corrected local rotation so the shoulders,
-        // arms, neck and head are propagated in the reconstructed frame. For the standard
-        // hierarchy this re-flattens to identical world positions (no behavioural change).
-        chest.updateWorldTransforms(pelvisW, pelvis.worldRotation)
+        // arms, neck and head are propagated in the reconstructed frame. Anchored at the chest's
+        // parent so the lower-spine segment stays the driver. For the standard hierarchy with a
+        // pass-through lumbar this re-flattens to identical world positions (no behavioural change).
+        chest.updateWorldTransforms(chestParent.worldPosition, chestParent.worldRotation)
         chest.flatten(outputPose)
     }
 

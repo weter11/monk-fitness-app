@@ -11,11 +11,11 @@ class ProceduralAnimationPerformanceRefactorTest {
     @Test
     fun testJointIndicesAreUniqueAndStable() {
         val indices = Joint.values().map { it.index }
-        assertEquals("Should have exactly 32 unique indices", 32, indices.distinct().size)
+        assertEquals("Should have exactly 33 unique indices", 33, indices.distinct().size)
 
-        // Check that they correspond to 0..31
-        val expectedRange = (0..31).toList()
-        assertEquals("Indices must be a contiguous range from 0 to 31", expectedRange, indices.sorted())
+        // Check that they correspond to 0..32
+        val expectedRange = (0..32).toList()
+        assertEquals("Indices must be a contiguous range from 0 to 32", expectedRange, indices.sorted())
     }
 
     @Test

@@ -24,7 +24,8 @@ class SkeletonFactoryTest {
         assertNull(nodes.pelvis.parent)
 
         // 2. Parent checks
-        assertEquals(nodes.pelvis, nodes.chest.parent)
+        assertEquals(nodes.pelvis, nodes.lumbar.parent)
+        assertEquals(nodes.lumbar, nodes.chest.parent)
         assertEquals(nodes.chest, nodes.neck.parent)
         assertEquals(nodes.neck, nodes.head.parent)
 
@@ -61,7 +62,7 @@ class SkeletonFactoryTest {
         // 3. Node count check
         val joints = mutableListOf<Joint>()
         collectTraversalOrder(nodes.roots[0], joints)
-        assertEquals(30, joints.size)
+        assertEquals(31, joints.size)
     }
 
     @Test
@@ -79,7 +80,8 @@ class SkeletonFactoryTest {
         assertEquals(nodes.ankleF, nodes.kneeF.parent)
         assertEquals(nodes.kneeF, nodes.hipF.parent)
         assertEquals(nodes.hipF, nodes.pelvis.parent)
-        assertEquals(nodes.pelvis, nodes.chest.parent)
+        assertEquals(nodes.pelvis, nodes.lumbar.parent)
+        assertEquals(nodes.lumbar, nodes.chest.parent)
         assertEquals(nodes.chest, nodes.neck.parent)
         assertEquals(nodes.neck, nodes.head.parent)
 
@@ -110,7 +112,7 @@ class SkeletonFactoryTest {
         // 3. Node count check
         val joints = mutableListOf<Joint>()
         collectTraversalOrder(nodes.roots[0], joints)
-        assertEquals(30, joints.size)
+        assertEquals(31, joints.size)
     }
 
     @Test
@@ -121,6 +123,7 @@ class SkeletonFactoryTest {
 
         val expectedOrder = listOf(
             Joint.PELVIS,
+            Joint.LUMBAR,
             Joint.CHEST,
             Joint.NECK_END,
             Joint.HEAD_POS,
@@ -168,6 +171,7 @@ class SkeletonFactoryTest {
             Joint.KNEE_F,
             Joint.HIP_F,
             Joint.PELVIS,
+            Joint.LUMBAR,
             Joint.CHEST,
             Joint.NECK_END,
             Joint.HEAD_POS,

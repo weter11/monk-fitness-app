@@ -32,5 +32,11 @@ enum class Joint(val index: Int) {
     KNUCKLES_P(24),
     FINGERTIPS_P(25),
     NECK_END(26),
-    HEAD_POS(27)
+    HEAD_POS(27),
+    // Lower-spine segment between PELVIS and CHEST. The spine is modelled as two real
+    // segments (PELVIS -> LUMBAR -> CHEST) so lumbar/pelvis-tilt and thoracic motion can
+    // differ (hip hinge, good morning, cat-cow, thoracic opener). Defaults to a
+    // pass-through (coincident with the pelvis, identity rotation) so existing single-bend
+    // poses are byte-for-byte unchanged (Issue E).
+    LUMBAR(32)
 }
