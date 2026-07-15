@@ -306,8 +306,11 @@ object ConstraintSolver {
         val imb = signedImbalance(contacts, pelvis) ?: return
         if (abs(imb) <= 1e-3f) return
 
-        // Small roll about the world Z axis to balance the contacts, damped so it converges.
-        tiltDelta.set(0f, 0f, 1f, imb * TILT_GAIN)
+        // Small roll about the world X axis (lateral side-bend / Trendelenburg) to balance a
+        // lateral contact imbalance, damped so it converges. A lateral (Z-position) imbalance is
+        // corrected by a roll about the body's lateral/side-bend X axis — NOT a pitch about Z,
+        // which would tilt the trunk forward/back instead of dropping the passive hip (UNI-4).
+        tiltDelta.set(1f, 0f, 0f, imb * TILT_GAIN)
 
         // pelvis.localRotation = authoredPelvisRot * tiltDelta  (preserves deliberate lean).
         SkeletonMath.rotationToMatrix(authoredPelvisRot, pelvisMatX, pelvisMatY, pelvisMatZ)

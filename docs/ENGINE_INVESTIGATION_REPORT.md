@@ -254,15 +254,20 @@ override for intentionally deep poses.
 
 ---
 
-### UNI-4 — ConstraintSolver pelvis-tilt uses the wrong axis for a lateral imbalance (was P1)
+### UNI-4 — ConstraintSolver pelvis-tilt uses the wrong axis for a lateral imbalance (was P1) — RESOLVED
 **Title:** The automatic pelvis "balance" tilt is applied about the sagittal `Z` (pitch) axis,
 but `signedImbalance` measures a *lateral* (`Z`-position) offset — it should be a roll about
-the forward `X` axis. An instance of the coordinate-label drift (UNI-5).
-**Description:** `applyPelvisTilt` does `tiltDelta.set(0,0,1, imb*TILT_GAIN)`
-(`ConstraintSolver.kt:310`) — a pitch. `signedImbalance` (`:325-341`) returns the net lateral
-offset of contacts from their hip roots. A lateral imbalance should be corrected by a **roll
-about `X`** (Trendelenburg), not a pitch about `Z`. The KDoc even calls it "roll about the
-world Z axis," confirming the author believed `Z` was the roll axis.
+the lateral `X` axis. An instance of the coordinate-label drift (UNI-5).
+**Description:** `applyPelvisTilt` did `tiltDelta.set(0,0,1, imb*TILT_GAIN)`
+(`ConstraintSolver.kt:310`, pre-fix) — a pitch about `Z`. `signedImbalance`
+(`:325-341`) returns the net *lateral* (`Z`-position) offset of contacts from their hip roots.
+A lateral imbalance must be corrected by a **roll about `X`** (Trendelenburg), not a pitch
+about `Z`. The KDoc even called it "roll about the world Z axis," confirming the author
+believed `Z` was the roll axis. **FIXED:** the tilt axis is now `X` —
+`tiltDelta.set(1f,0f,0f, imb*TILT_GAIN)` (`ConstraintSolver.kt:313`) — and the KDoc/comment
+now state the tilt is a roll about the lateral `X` axis, matching the `ENGINE.md` convention
+(`X` = side-bend/roll, `Z` = flexion/pitch, `Y` = twist/vertical). Symmetric stances still
+sum to ~0 ⇒ authored pelvis orientation preserved (no-op).
 **Root Cause:** axis-convention confusion — `Z` is the flexion/pitch axis, not the lateral/roll
 axis; the tilt was coded to the imbalance's measurement axis, not the anatomically correct
 correction axis.
@@ -271,15 +276,15 @@ correction axis.
 step-up, Bulgarian, single-leg stance, pistol with support). Symmetric poses (~0 imbalance) ⇒
 no-op.
 **Severity:** MEDIUM (latent today — no production pose registers contacts ⇒ solver no-op;
-would corrupt pelvis orientation the moment they do).
+was a latent bug that would corrupt pelvis orientation the moment contacts are registered).
 **Possible Solutions:** apply the tilt about `X` (roll) for lateral imbalance; or drive the
 correction as lateral pelvis translation (already present) + `X`-roll only; align KDoc with the
-real axis convention.
+real axis convention. *(Implemented.)*
 **Complexity:** Low.
 **Engine vs Pose:** Engine.
 **Currently Visible?** No.
-**Blocks Future Work?** Yes — any asymmetric closed-chain exercise adopting the contact layer
-would render a mis-tilted pelvis.
+**Blocks Future Work?** No longer — UNI-4 resolved, so asymmetric closed-chain exercises can
+adopt the contact layer without a mis-tilted pelvis.
 
 ---
 
