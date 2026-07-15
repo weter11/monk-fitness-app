@@ -20,12 +20,13 @@ class SkeletonProjector {
 
     /**
      * Rendering-only visual offset for the ground plane, expressed as a fraction of the
-     * visible scene (screen) height. Moves the rendered floor/grid/shadows DOWN on screen
-     * (positive Y) without touching camera, zoom, viewport, pose coordinates, or world space.
-     * Introduced after the viewport enlargement pushed the floor too high into the frame.
+     * visible scene (screen) height. Shifts the rendered floor/grid/shadows DOWN on screen
+     * for positive values (up for negative) without touching camera, zoom, viewport, pose
+     * coordinates, or world space. The viewport enlargement originally pushed the floor too
+     * high into the frame; tuned to +7% (i.e. lifted 7% of scene height above the original).
      */
     companion object {
-        const val GROUND_VISUAL_OFFSET_FRACTION = 0.20f
+        const val GROUND_VISUAL_OFFSET_FRACTION = -0.07f
     }
 
     fun project(
