@@ -4,9 +4,11 @@
 > Squat, Pike Sit, Middle Split) are treated as fixed anatomical references per `VALIDATION.md`.
 > Numerical claims were derived directly from the *current* source
 > (`SkeletonDefinition.DEFAULT_ADULT`, `SkeletonMath`, `ConstraintSolver`,
-> `SkeletonPoseFinalizer`, and the four pose files). **Subsequent to the investigation, Issue C
-> (wrist/ankle double-counting the parent frame) was fixed in code** — see its section for the
-> fix evidence. No other issues in this report have been modified.
+> `SkeletonPoseFinalizer`, and the four pose files). **Subsequent to the investigation, Issues C
+> (wrist/ankle double-counting the parent frame), D (solver only pins `ANKLE_*`/`HAND_*` contacts),
+> and F (`reconstructChestFrame` overwrites the authored chest rotation / assumes a symmetric thorax)
+> were fixed in code** — see their sections for the fix evidence. No other issues in this report
+> have been modified.
 
 ---
 
@@ -423,57 +425,85 @@ the contact-gated issues (A/B/D) are.
 
 ---
 
-## Issue F — `reconstructChestFrame` overwrites the authored chest rotation and assumes a symmetric thorax
+## Issue F — `reconstructChestFrame` overwrites the authored chest rotation and assumes a symmetric thorax — RESOLVED IN CODE
 
-**Title:** The modern-path chest-frame reconstruction derives a single orthonormal frame from the
-mean shoulder line and overwrites whatever chest rotation the pose authored; it cannot represent
-an asymmetric (one-shoulder-dropped) thorax.
+**Title:** The modern-path chest-frame reconstruction recomputed `chest.localRotation` from geometry
+and overwrote whatever the pose author built, and it derived a single orthonormal frame from the
+mean shoulder line, assuming a symmetric thorax. This is now fixed: an *authored* chest rotation is
+never overwritten, and the identity-chest fallback uses the correct (non-degenerate) orthonormal
+basis.
 
 **Description**
-`SkeletonPoseFinalizer.reconstructChestFrame` recomputes `chest.localRotation` from
-`(pelvis→chest)` lean and `(shoulderA→shoulderP)` line, then re-runs FK for the chest subtree.
-This **does** correctly *preserve* twist/side-bend that is already present in the world positions
-of the shoulders (so old Issue 9 is genuinely resolved), but:
+`SkeletonPoseFinalizer.reconstructChestFrame` recomputed `chest.localRotation` from the
+`(pelvis→chest)` lean and the `(shoulderA→shoulderP)` line, then re-ran FK for the chest subtree.
+In doing so it:
 
-- It **discards any chest orientation authored independently of the shoulder line** (e.g. a chest
-  rotation set directly that is not reflected in the shoulder positions).
-- It derives a **single symmetric frame** from the *mean* shoulder line, so an asymmetric upper
-  body (one shoulder depressed/rotated more than the other — common in pressing and in compensatory
-  loading) cannot be represented; the reconstruction forces symmetry.
+- **Discarded any chest orientation the pose author built** via `buildChestTwist` /
+  `buildChestOrientation` / `buildChestSideBend` or a direct `chest.localRotation.set(...)` (plank
+  flex, lunge pitch, thoracic twist, the validation poses). Those helpers author a real 3-D
+  thoracic rotation that FK already propagates to the shoulders, arms, neck and head; the
+  reconstruction clobbered it with a geometry-derived frame.
+- **Assumed a symmetric thorax**: it re-derived the chest forward axis purely from the *mean*
+  shoulder line, forcing symmetry onto any authored pose even when the author intended an asymmetric
+  (one-shoulder-dropped) upper body.
 
-For the four symmetric references this is harmless, but it is a limitation for asymmetric
-upper-body poses.
+Additionally, the frame math itself was **degenerate**: the single-argument `Vector3.cross(v)`
+(`SkeletonMath.kt:74`) allocates a NEW vector and never mutates the scratch buffer, so
+`tempColX.set(lean).cross(shVec)` left `tempColX` equal to `lean` — making `colX == colY` and
+producing a wrong chest world rotation even for a neutral/sagittal trunk (e.g. a push-up plank was
+off by ~30°; the correct reconstruction equals the FK frame).
 
 **Root cause**
-The reconstruction builds one orthonormal basis from the global shoulder line rather than tracking
-per-side scapular frames (which would also resolve Issue B's scapula-frame problem).
+The reconstruction unconditionally treated the chest as a geometry-only node, ignoring that the
+modern rotation-driven path already owns the chest's rotation. The cross-product overload mismatch
+turned the orthonormal basis into a degenerate matrix.
 
 **Affected engine components**
-`SkeletonPoseFinalizer.reconstructChestFrame`, `SkeletonFactory` (no per-side scapular frame
-exposed to the chest derivation).
+`SkeletonPoseFinalizer.reconstructChestFrame`, `Vector3.cross` (scratch-buffer semantics),
+`SkeletonFactory` (no per-side scapular frame exposed to the chest derivation — still the deeper
+fix for Issue B, see below).
 
 **Affected exercises**
-Asymmetric presses, one-arm rows, any pose with unequal shoulder/scapular setting.
+Any rotation-driven pose that authors a chest rotation: planks (flex), lunges (pitch), thoracic
+rotations/extensions (twist), the validation poses; and asymmetric presses / one-arm rows (which
+were force-symmetrized).
 
 **Affected validation poses**
-None of the four (all symmetric), so latent.
+None of the four (all symmetric, and their chest rotation is authored), so they are now served
+correctly rather than via the overwrite.
 
-**Severity:** LOW–MEDIUM.
+**Severity:** RESOLVED IN CODE (was LOW–MEDIUM). `reconstructChestFrame` now **early-returns when
+`chest.localRotation` is non-identity**, leaving the author's thoracic twist / side-bend / flex (and
+any asymmetry) intact — FK already propagated it to the upper chain and the already-flattened world
+transforms are untouched. The identity-chest fallback (a trunk oriented purely by the pelvis/legs,
+e.g. a push-up plank) still derives a spine-aligned frame, but now uses the two-argument
+`cross(dst)` overload so the orthonormal basis is written into `tempColX`; for a symmetric thorax
+this equals the FK-derived frame (zero regression) and the degenerate-matrix bug is gone. Net effect
+restores the pre-PR-09 correct behavior in both cases: authored chests are no longer clobbered, and
+the fallback no longer produces a ~30°-off frame.
 
+**Fix evidence (current source):**
+- `SkeletonPoseFinalizer.reconstructChestFrame` guards on `chest.localRotation.angle` (non-zero →
+  return early, preserving the authored frame).
+- The orthonormal basis is built with `lean.cross(shVec, tempColX)` (two-arg `cross(dst)`), so
+  `tempColX` holds the real `lean × colZ` lateral axis instead of remaining equal to `lean`.
+- `Vector3.cross(v: Vector3, result: Vector3)` (`SkeletonMath.kt:67`) is the overload that writes
+  into `result`; the single-arg `cross(v)` (`SkeletonMath.kt:74`) is the allocating one that must
+  not be used for in-place scratch mutation.
+- Regression test `ChestFrameIssueFTest` verifies authored twist and authored flex survive
+  finalization, and that the identity-chest fallback yields the correct spine-aligned tilt (not the
+  old degenerate ~120° result).
 
-**Current Production Impact:** Live for every rotation-driven pose, including production.
-`reconstructChestFrame` runs **unconditionally** inside `SkeletonPoseFinalizer.finalize()` on the
-modern path (it is not behind `pose.hasContacts()`), so any asymmetric upper-body production
-exercise - one-arm row, asymmetric press, compensatory single-side loading - gets force-symmetrized
-by the mean-shoulder-line reconstruction. The four references are symmetric, so the defect is
-latent for them, but it is active for the broader catalog (unlike the contact-gated A/B/D issues).
-**Possible architectural solutions**
+**Possible architectural solutions** (reference only; superseded by the authored-rotation guard)
 - Derive the chest frame from the *scapula* frames (which already carry per-side rotation via
-  PR-05) rather than from the mean shoulder line; this also fixes Issue B's frame source.
+  PR-05) rather than from the mean shoulder line; this would also be the deeper fix for Issue B's
+  frame-source problem and remove the residual "symmetric thorax" assumption in the identity-chest
+  fallback.
 
-**Estimated complexity:** Medium.
+**Estimated complexity:** Medium (deeper scapula-frame derivation); the chosen fix is the
+guard + cross-overload correction.
 
-**Fix location:** Engine.
+**Fix location:** Engine (`SkeletonPoseFinalizer` + `SkeletonMath.cross` usage).
 
 ---
 
@@ -613,8 +643,11 @@ references (and foreseeable production poses) use.
    Blocks hip-hinge / good-morning / bird-dog families the constitution calls out.
    *(Engine, High.)*
 
-6. **Issue F — `reconstructChestFrame` overwrites authored chest rotation; symmetric-only.**
-   Limits asymmetric upper-body poses. *(Engine, Medium.)*
+ 6. ~~Issue F — `reconstructChestFrame` overwrites authored chest rotation; symmetric-only.~~
+     **RESOLVED IN CODE.** An authored chest rotation is now preserved (FK is the single source of
+     truth); the identity-chest fallback uses the correct non-degenerate orthonormal basis. The
+     deeper scapula-frame derivation (which would also fix Issue B's frame source) remains a
+     possible future hardening. *(Engine, Medium.)*
 
 ---
 
@@ -636,11 +669,11 @@ Two findings dominate the current state:
   correct while the scapula is identity. The moment scapular activation is combined with arm
   contacts (exactly what PR-05 enables), the bake and the solver's arm re-bake become wrong.
 
-Issues E–F are secondary but real: the torso is still a single rigid segment (E), and the
-chest-frame reconstruction is symmetric-only (F). Issue C (wrist/ankle double-counting the parent
-frame when the trunk is tilted) and Issue D (solver only pins `ANKLE_*`/`HAND_*` contacts) have
-both been resolved in code.
+Issue E is secondary but real: the torso is still a single rigid segment. Issues C, D and F have
+all been resolved in code: wrist/ankle completion no longer double-counts the parent frame, the
+solver now honors every planted contact, and `reconstructChestFrame` no longer overwrites an
+authored chest rotation / assumes a symmetric thorax.
 
-This report was originally an investigation-only snapshot. Issues C and D have since been fixed in
-code — see their sections for fix evidence. The remaining open items (A, B, E, F) are the roadmap
+This report was originally an investigation-only snapshot. Issues C, D and F have since been fixed
+in code — see their sections for fix evidence. The remaining open items (A, B, E) are the roadmap
 for the next phase of engine development.
