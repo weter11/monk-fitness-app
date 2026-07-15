@@ -61,18 +61,25 @@ class SkeletonPoseFinalizer(
     }
 
     /**
-     * Ports the legacy cross-product chest-frame reconstruction into the modern rotation-driven
-     * path. After FK, the chest is re-derived as a full 3-D orientation from the spine
-     * (`pelvis -> chest`, chest-local +Y) and the shoulder line (`shoulderA -> shoulderP`,
-     * chest-local -Z): `normal = lean × shoulderLine`, giving an orthonormal basis
-     * `(normal, lean, -shoulderLine)`. This guarantees thoracic twist (about +Y) and
-     * side-bend (about +X) are captured and propagated to the shoulders/arms/neck/head.
+     * Fallback chest-frame reconstruction for the modern rotation-driven path.
      *
-     * For the standard hierarchy (shoulders are children of the chest along its local Z) the
-     * reconstructed frame equals the FK-derived frame, so sagittal/neutral poses are unchanged.
-     * A degenerate spine or shoulder line (e.g. coincident joints) is skipped — the authored
-     * frame is left intact. Allocation-free: reuses the shared column scratch buffers and
-     * re-runs FK for the chest subtree only.
+     * When the pose author has NOT explicitly authored a chest rotation (the chest's `localRotation`
+     * is identity), the chest world orientation cannot be trusted from FK alone for a non-upright
+     * trunk (e.g. a push-up plank oriented by the pelvis/legs), so the chest is re-derived as a full
+     * 3-D orientation from the spine (`pelvis -> chest`, chest-local +Y) and the shoulder line
+     * (`shoulderA -> shoulderP`, chest-local -Z): `colX = lean × colZ`, giving an orthonormal basis
+     * `(colX, lean, -shoulderLine)`. For a symmetric thorax this equals the FK-derived frame, so a
+     * sagittal/neutral trunk is unchanged. A degenerate spine or shoulder line is skipped.
+     *
+     * Issue F: an *authored* chest rotation is never overwritten. The rotation-driven path already
+     * propagates the author's thoracic twist / side-bend / flex (and any asymmetry) to the
+     * shoulders, arms, neck and head via FK, so deriving the frame from a symmetric shoulder line
+     * would discard that intent and force a symmetric-thorax assumption. When `chest.localRotation`
+     * is non-identity the function returns early, leaving the authored frame (and the already-
+     * flattened world transforms) intact.
+     *
+     * Allocation-free: reuses the shared column scratch buffers and re-runs FK for the chest subtree
+     * only.
      */
     private fun reconstructChestFrame(roots: List<SkeletonNode>) {
         if (roots.isEmpty()) return
@@ -89,6 +96,22 @@ class SkeletonPoseFinalizer(
         // PELVIS-relative reconstruction, so single-bend poses are unchanged.
         val chestParent = chest.parent ?: return
 
+        // Issue F: do NOT overwrite an explicitly authored chest rotation. The modern
+        // rotation-driven path already computes the chest's world orientation from its
+        // `localRotation` via FK and propagates it to the shoulders, arms, neck and head. The
+        // geometric reconstruction below is only a fallback for chests whose rotation was NOT
+        // authored (identity) — e.g. a trunk oriented purely by the pelvis/legs (push-up plank).
+        //
+        // Overwriting an authored rotation would (a) discard the thoracic twist / side-bend /
+        // flex the pose author built (`buildChestTwist`, `buildChestOrientation`, the explicit
+        // `chest.localRotation.set(...)` calls), and (b) force a symmetric-thorax assumption onto
+        // the pose by re-deriving the forward axis from the shoulder line. When the author has
+        // expressed intent, that intent is the single source of truth, so leave `chest.localRotation`
+        // (and the already-flattened world transforms) untouched.
+        if (chest.localRotation.angle > 1e-4f || chest.localRotation.angle < -1e-4f) {
+            return
+        }
+
         val pelvisW = pelvis.worldPosition
         val chestW = chest.worldPosition
         val sAW = shoulderA.worldPosition
@@ -102,17 +125,18 @@ class SkeletonPoseFinalizer(
         val shVec = tempColZ.set(sAW).subtract(sPW)
         if (shVec.mag() < 1e-4f) return
         shVec.normalize()
-        // Guard against a degenerate (collinear) spine/shoulder line.
-        tempColX.set(lean).cross(shVec)
-        if (tempColX.mag() < 1e-4f) return
         // Build a proper RIGHT-HANDED orthonormal chest frame:
         //   colY = lean (spine / up)
         //   colZ = -(shoulderA - shoulderP)  (chest-forward, toward the passive shoulder)
         //   colX = lean x colZ (lateral). This matches the FK-derived frame for the standard
-        //   hierarchy, so a neutral/sagittal trunk is unchanged and twist/side-bend are captured
-        //   (the chest frame is derived from the actual shoulder line, not a single authored axis).
+        //   hierarchy, so a neutral/sagittal trunk is unchanged.
+        // NOTE: use the two-argument `cross(dst)` overload so the result is written into the
+        // scratch buffer. The single-argument overload (`Vector3.cross(v)`) allocates a NEW
+        // vector and leaves `tempColX` untouched, which previously produced a degenerate
+        // matrix (colX == colY) and a wrong chest world rotation (Issue F).
         shVec.multiply(-1f)
-        tempColX.set(lean).cross(shVec).normalize()
+        if (lean.cross(shVec, tempColX).mag() < 1e-4f) return
+        tempColX.normalize()
 
         SkeletonMath.getRotationFromMatrix(tempColX, tempColY, tempColZ, reconRot)
 
@@ -340,8 +364,9 @@ class SkeletonPoseFinalizer(
             }
             outputPose.roots = pose.roots
 
-            // PR-09: reconstruct the chest as a full 3-D frame (spine + shoulder line) so
-            // thoracic twist/side-bend are captured and propagated to the upper chain.
+            // Issue F: derive the chest frame only when the author left it unauthored (identity);
+            // an authored chest rotation (thoracic twist / side-bend / flex, possibly asymmetric)
+            // is already propagated to the upper chain by FK and must not be overwritten.
             reconstructChestFrame(pose.roots)
 
             refreshJointPresenceCache(pose.roots)
