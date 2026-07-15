@@ -1,0 +1,40 @@
+# Kilo Code ignore — keep large build output & vendored packages out of the
+# model's context to save tokens. Mirrors .gitignore where relevant.
+
+# --- Build output ---
+build/
+app/build/
+*/build/
+bin/
+gen/
+out/
+captures/
+.cxx/
+.externalNativeBuild/
+
+# --- Gradle / local toolchain (provisioned in-workspace) ---
+.gradle/
+.gradle-home/
+.gradle-dist/
+.kotlin/
+
+# --- Android SDK / vendored package directories ---
+android-sdk/
+node_modules/
+.m2/
+**/.cache/
+
+# --- Generated / binary artifacts ---
+*.class
+*.dex
+*.apk
+*.ap_
+*.aar
+*.jar
+*.hprof
+*.log
+
+# --- Certs / local env scaffolding ---
+proxy-ca.pem
+custom-cacerts
+local.properties
