@@ -106,6 +106,16 @@ abstract class BaseVerticalPullPose : BasePose() {
     protected open fun forwardArcAt(rep: Float): Float = 0f
     protected open fun scapularRetractionAt(rep: Float): Float = SkeletonMath.lerp(0f, 4f, rep)
     protected open fun scapularDepressionAt(rep: Float): Float = SkeletonMath.lerp(0f, 1f, rep)
+
+    // Clavicular (proximal girdle) activation. The clavicle sits between the chest and the
+    // scapula (CHEST -> CLAVICLE -> SCAPULA -> SHOULDER) and contributes elevation,
+    // protraction and axial rotation on top of the scapula, raising the shoulder (glenoid)
+    // on overhead reaches (UNI-7). Defaults to 0 so the references keep the girdle near
+    // neutral (matching the scapula, which they also leave near neutral); production
+    // overhead variants opt in via these overrides.
+    protected open fun clavicularElevationAt(rep: Float): Float = 0f
+    protected open fun clavicularProtractionAt(rep: Float): Float = 0f
+    protected open fun clavicularAxialAt(rep: Float): Float = 0f
     protected open fun breathWave(lift: Float): Float = sin(lift * PI.toFloat())
     protected open val plantarFlexion: Float = 0.6f
 
@@ -164,6 +174,24 @@ abstract class BaseVerticalPullPose : BasePose() {
         // drive the scapula; the IK root (shoulder) inherits the resulting frame.
         SkeletonMath.buildScapularRotation(retraction, depression, -1f, scapulaA!!.localRotation)
         SkeletonMath.buildScapularRotation(retraction, depression, 1f, scapulaP!!.localRotation)
+        // Clavicle (UNI-7): proximal girdle node, composed between chest and scapula so the
+        // shoulder (glenoid) inherits BOTH girdle joints. Driven by the same rep activation as
+        // the scapula; defaults to 0 so references stay near-neutral, production pull-ups opt
+        // in via the clavicular*At overrides.
+        buildClavicularRotation(
+            clavicleA!!,
+            clavicularElevationAt(rep),
+            clavicularProtractionAt(rep),
+            clavicularAxialAt(rep),
+            -1f
+        )
+        buildClavicularRotation(
+            clavicleP!!,
+            clavicularElevationAt(rep),
+            clavicularProtractionAt(rep),
+            clavicularAxialAt(rep),
+            1f
+        )
         // The shoulder rests at its anatomical offset from the (rotated) scapula; its live
         // world position follows the scapula rotation automatically through FK.
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)

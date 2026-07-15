@@ -724,6 +724,70 @@ object SkeletonMath {
         return out
     }
 
+    // --- Shoulder-girdle (clavicle) degrees of freedom -----------------------------
+    //
+    // The clavicle is the PROXIMAL member of the shoulder girdle (CHEST -> CLAVICLE ->
+    // SCAPULA -> SHOULDER). It carries genuine rotations at the SC (sternoclavicular) and
+    // AC (acromioclavicular) joints: elevation/depression (about the transverse X axis),
+    // protraction/retraction (about the vertical Y axis) and axial rotation about its own
+    // long (sagittal Z) axis. Previously the clavicle was a rigid pass-through (UNI-7):
+    // only the scapula was driven, so overhead reaching under-drove shoulder height. This
+    // helper gives the clavicle a real, named-ROM DOF mirroring [buildScapularRotation];
+    // activation is expressed in shared units and the constants map it into the general
+    // human clavicular range of motion. Named and shared — not per-exercise magic numbers.
+    const val CLAVICLE_ELEVATION_TO_RAD = 0.5236f    // ~30 deg per elevation unit
+    const val CLAVICLE_PROTRACTION_TO_RAD = 0.2618f // ~15 deg per protraction unit
+    const val CLAVICLE_AXIAL_TO_RAD = 0.1745f       // ~10 deg per axial-rotation unit
+
+    // Scratch column buffers for composing the clavicular rotation (no hot-path allocation).
+    private val clavColAX = Vector3(); private val clavColAY = Vector3(); private val clavColAZ = Vector3()
+    private val clavColBX = Vector3(); private val clavColBY = Vector3(); private val clavColBZ = Vector3()
+    private val clavColCX = Vector3(); private val clavColCY = Vector3(); private val clavColCZ = Vector3()
+    private val clavColRX = Vector3(); private val clavColRY = Vector3(); private val clavColRZ = Vector3()
+    private val clavRotX = JointRotation(Vector3(1f, 0f, 0f), 0f)
+    private val clavRotY = JointRotation(Vector3(0f, 1f, 0f), 0f)
+    private val clavRotZ = JointRotation(Vector3(0f, 0f, 1f), 0f)
+
+    /**
+     * Composes the clavicle's local rotation from elevation/depression, protraction/retraction
+     * and axial-rotation activation. `elevation`/`protraction`/`axialRotation` are shared-unit
+     * activation intensities (named ROM constants below map them to radians); the result is a
+     * real [JointRotation] the FK traversal applies to the clavicle, which sits *between* the
+     * chest and the scapula and therefore lifts and carries the whole shoulder (glenoid) on
+     * overhead reaches. `sideSign` is -1 for the left/active (-Z) girdle and +1 for the
+     * right/passive (+Z) girdle so that elevation raises *both* shoulders symmetrically (the
+     * elevation pivot is mirrored across the body's mid-line). Composition:
+     * `R = Ry(protraction) · Rx(-elevation · sideSign) · Rz(axialRotation)`
+     * (the negated elevation term makes a positive `elevation` raise the shoulder, the mirror
+     * of scapular depression, which lowers it).
+     * Allocation-free: writes into [out]. Mirrors [buildScapularRotation].
+     */
+    fun buildClavicularRotation(
+        elevation: Float,
+        protraction: Float,
+        axialRotation: Float,
+        sideSign: Float,
+        out: JointRotation
+    ): JointRotation {
+        // R = Ry(protraction) * Rx(elevation * sideSign) * Rz(axialRotation)
+        // Elevation raises the shoulder (symmetric via mirrored transverse-axis rotation);
+        // protraction carries the clavicle forward/back about the vertical; axial rotation
+        // twists the clavicle about its own long axis (the AC-joint component).
+        val ax = -elevation * CLAVICLE_ELEVATION_TO_RAD * sideSign
+        val ay = protraction * CLAVICLE_PROTRACTION_TO_RAD
+        val az = axialRotation * CLAVICLE_AXIAL_TO_RAD
+        clavRotX.axis.set(1f, 0f, 0f); clavRotX.angle = ax
+        clavRotY.axis.set(0f, 1f, 0f); clavRotY.angle = ay
+        clavRotZ.axis.set(0f, 0f, 1f); clavRotZ.angle = az
+        rotationToMatrix(clavRotX, clavColAX, clavColAY, clavColAZ)
+        rotationToMatrix(clavRotY, clavColBX, clavColBY, clavColBZ)
+        rotationToMatrix(clavRotZ, clavColCX, clavColCY, clavColCZ)
+        multiplyMatrices(clavColBX, clavColBY, clavColBZ, clavColAX, clavColAY, clavColAZ, clavColRX, clavColRY, clavColRZ)
+        multiplyMatrices(clavColRX, clavColRY, clavColRZ, clavColCX, clavColCY, clavColCZ, clavColAX, clavColAY, clavColAZ)
+        getRotationFromMatrix(clavColAX, clavColAY, clavColAZ, out)
+        return out
+    }
+
     /**
      * Angle (degrees) between two directions, allocation-free. Used by the angular
      * joint-limit validator and by any caller that needs the deviation of a proximal bone from

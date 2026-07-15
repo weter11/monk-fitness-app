@@ -105,6 +105,25 @@ abstract class BasePose : PoseBuilder {
     }
 
     /**
+     * Authors a **clavicular** rotation on the proximal shoulder-girdle node, between the
+     * chest and the scapula (CHEST -> CLAVICLE -> SCAPULA -> SHOULDER). Elevation/depression
+     * (transverse X), protraction/retraction (vertical Y) and axial rotation (long Z) are real
+     * joint rotations that lift and carry the whole shoulder (glenoid) on overhead reaches —
+     * closing the clavicle-is-a-dead-node gap (UNI-7). Writes the composed rotation into the
+     * clavicle's [SkeletonNode.localRotation]; FK propagates it to the scapula and shoulder.
+     * [sideSign] mirrors elevation across the body mid-line (-1 left/active, +1 right/passive).
+     */
+    protected fun buildClavicularRotation(
+        clavicle: SkeletonNode,
+        elevation: Float,
+        protraction: Float,
+        axialRotation: Float,
+        sideSign: Float
+    ) {
+        SkeletonMath.buildClavicularRotation(elevation, protraction, axialRotation, sideSign, clavicle.localRotation)
+    }
+
+    /**
      * Authors a **lower-spine (lumbar / pelvis-tilt)** rotation on the LUMBAR segment of the
      * two-segment spine (PELVIS -> LUMBAR -> CHEST). Because the lumbar sits below the chest,
      * FK carries the whole thorax + shoulder girdle + arms with it, and
