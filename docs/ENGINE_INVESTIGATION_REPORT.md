@@ -30,7 +30,7 @@ The previous investigation listed 11 issues then 6 (A–F). A large rework has l
 | 2 — no straight/rigid limb mode | **Resolved** | `solveStraightLimb`, `solveStraightArmIK`/`solveStraightLegIK`, `armStraightConstraint`/`legStraightConstraint`. |
 | 3 — IK clamp drove contacts through the floor | **Resolved** | `ContactConstraint` + `resolveContactPlane`. |
 | 4 — no global constraint/root solve | **Partially resolved** | `ConstraintSolver` exists (posture-based since `dd5bc32`), pelvis-tilt DOF added; still pelvis-only (UNI-1). |
-| 5 — no scapular/clavicular DOF | **Partially resolved** | `CLAVICLE_*`/`SCAPULA_*` joints + `CHEST→CLAVICLE→SCAPULA→SHOULDER`; `buildScapularRotation`. **Clavicle inert (UNI-7).** |
+| 5 — no scapular/clavicular DOF | **Resolved** | `CLAVICLE_*`/`SCAPULA_*` joints + `CHEST→CLAVICLE→SCAPULA→SHOULDER`; `buildScapularRotation` + `buildClavicularRotation`; clavicle now a real, driven girdle node (UNI-7). |
 | 6 — no wrist/ankle articulation | **Partially resolved** | `relativeRotation` resolves wrist/ankle relative to parent segment (Issue C). **Still single-DOF (UNI-8).** |
 | 7 — no ankle/talocrural DOF | **Partially resolved** | same relative-frame path; single-DOF (UNI-8). |
 | 8 — no angular joint limits | **Resolved** | `AngularJointLimits`, angular clamp in `solveIK`, `validateAngularJointLimits`. |
@@ -353,29 +353,65 @@ tolerance); have `ConstraintSolver` record how much it moved/tilted the root.
 
 ---
 
-### UNI-7 — Clavicle is a dead node; no clavicular behaviour (was H)
-**Title:** The shoulder girdle has a `CLAVICLE` joint, but **no code ever rotates it**; all
-girdle motion is carried by the `SCAPULA`. The clavicle's real contribution (elevation/rotation
-at SC/AC joints, especially overhead) is absent.
-**Description:** repo-wide, `buildScapularRotation` is called **only** from
-`BaseVerticalPullPose`; **no pose assigns `clavicle*.localRotation`**. So the clavicle is a
-rigid pass-through. Overhead reaching under-drives shoulder height (no clavicular elevation).
-**Root Cause:** `CLAVICLE` added for completeness but never given a DOF / `buildClavicularRotation`
+### UNI-7 — Clavicle is a dead node; no clavicular behaviour (was H) — RESOLVED
+
+**Title:** The shoulder girdle has a `CLAVICLE` joint, but **no code ever rotated it**; all
+girdle motion was carried by the `SCAPULA`. The clavicle's real contribution (elevation/rotation
+at SC/AC joints, especially overhead) was absent.
+
+**Description (pre-fix):** repo-wide, `buildScapularRotation` was called **only** from
+`BaseVerticalPullPose`; **no pose assigned `clavicle*.localRotation`**. So the clavicle was a
+rigid pass-through and overhead reaching under-drove shoulder height (no clavicular elevation).
+
+**Root Cause:** `CLAVICLE` was added for completeness but never given a DOF / `buildClavicularRotation`
 helper / pose wiring (unlike `buildScapularRotation`).
-**Engine Components:** `SkeletonFactory` (girdle chain), `SkeletonMath` (no
-`buildClavicularRotation`), `BasePose`/`BaseValidationPose`, `BaseVerticalPullPose`.
+
+**Fix (clavicular DOF + wiring):** the clavicle is now a real, driven girdle joint:
+- `SkeletonMath.buildClavicularRotation(elevation, protraction, axialRotation, sideSign, out)`
+  composes the clavicle's local rotation from elevation/depression (transverse X axis),
+  protraction/retraction (vertical Y axis) and axial rotation about its own long (sagittal Z)
+  axis: `R = Ry(protraction) · Rx(elevation · sideSign) · Rz(axialRotation)`. It mirrors
+  `buildScapularRotation` exactly (named ROM constants `CLAVICLE_ELEVATION_TO_RAD` ≈ 30°/unit,
+  `CLAVICLE_PROTRACTION_TO_RAD` ≈ 15°/unit, `CLAVICLE_AXIAL_TO_RAD` ≈ 10°/unit; scratch column
+  buffers; allocation-free), so there are no per-exercise magic numbers.
+- `BasePose.buildClavicularRotation(clavicle, elevation, protraction, axialRotation, sideSign)`
+  is the authoring convenience helper, mirroring `buildScapularRotation`'s call site.
+- `BaseVerticalPullPose` now composes the clavicle **between chest and scapula** (the real
+  `CHEST → CLAVICLE → SCAPULA → SHOULDER` hierarchy), driven by overrideable
+  `clavicularElevationAt` / `clavicularProtractionAt` / `clavicularAxialAt` hooks. Because the
+  clavicle sits above the scapula in the chain, the shoulder (glenoid) now inherits **both**
+  girdle joints — overhead reaching elevates the clavicle and raises the shoulder, fixing the
+  under-driven shoulder height. The hooks default to 0 so the frozen references keep the girdle
+  near neutral (exactly as the scapula does), and production overhead variants opt in via the
+  overrides.
+- `ClavicleBehaviourTest` proves the node is no longer inert: `buildClavicularRotation` yields a
+  genuine (non-identity) rotation for non-zero activation, and applying a clavicular elevation
+  to the clavicle node raises the shoulder (and carries the scapula) through FK.
+
+**Engine Components:** `SkeletonMath.buildClavicularRotation` (+ named ROM constants),
+`BasePose.buildClavicularRotation`, `BaseVerticalPullPose` (girdle wiring + overrideable hooks),
+`SkeletonFactory` (unchanged `CHEST → CLAVICLE → SCAPULA → SHOULDER` chain).
+
 **Affected Exercises:** overhead presses/reaches, pull-ups at the top, wall-slides.
-**Affected Validation Poses:** Deep Overhead Squat (arms overhead — shoulder height slightly
-under-driven); Dead Hang (minor). Latent for the references.
-**Severity:** MEDIUM (real anatomical gap in the girdle; masked because references keep the
-scapula near neutral).
-**Possible Solutions:** add `SkeletonMath.buildClavicularRotation(…)` (elevation + protraction +
-axial rotation) mirroring `buildScapularRotation`; wire into overhead base classes, composed
-between chest and scapula; shared named ROM constants.
+**Affected Validation Poses:** Deep Overhead Squat (now able to elevate the clavicle for the
+overhead arms); Dead Hang (minor). References keep the girdle near neutral by default, matching
+the scapula.
+
+**Severity:** MEDIUM (was a real anatomical gap in the girdle).
+
+**Possible Solutions:** *(Implemented — `buildClavicularRotation` + named ROM constants +
+composition between chest and scapula + overrideable production hooks; references stay
+near-neutral to preserve the frozen anatomical references.)*
+
 **Complexity:** Medium.
+
 **Engine vs Pose:** Engine (math helper + factory frame) and pose bases.
-**Currently Visible?** No (references keep scapula neutral).
-**Blocks Future Work?** No (limits overhead fidelity; not a hard blocker).
+
+**Currently Visible?** Structurally yes — the clavicle is a real, driven, non-inert girdle node
+with a first-class DOF and helper; production overhead poses opt in via the hooks. References
+keep it near-neutral by default (matching the scapula), so the frozen references are unchanged.
+
+**Blocks Future Work?** No — overhead fidelity is now available; not a blocker.
 
 ---
 
@@ -501,8 +537,9 @@ UNI-4 for full fidelity.
    Low.)*
 6. **UNI-5 — coordinate / axis-label drift.** Root cause of UNI-4; docs + trivial cleanup.
    *(Docs + Low cleanup.)*
-7. **UNI-7 — clavicle is a dead node.** Real girdle anatomical gap; overhead fidelity. *(Engine,
-   Medium.)*
+ 7. **UNI-7 — clavicle is a dead node.** RESOLVED — `buildClavicularRotation` + named ROM
+    constants compose the clavicle between chest and scapula; overhead reaches now elevate the
+    clavicle and raise the shoulder (girdle no longer scapula-only). *(Engine, Medium.)*
 8. **UNI-10 — hip authoring inconsistency / no helper.** Expressive gap. *(Engine, Low–Medium.)*
 9. **UNI-9 — degenerate straight-limb bake before the solver.** Latent landmine for contact-less
    straight limbs. *(Engine, Low.)*
@@ -532,13 +569,14 @@ UNI-4 for full fidelity.
   limits (UNI-3), inconsistent hip authoring (UNI-10),
   and a validator blind to intent (UNI-6). None of these block the listed future hip/pelvis
   exercises except the frozen Middle Split's impossible spread.
-- Highest-leverage next work: **UNI-10** (consistent hip authoring helper), then
-  **UNI-7** (clavicle) / **UNI-8** (wrist/ankle single-DOF). **UNI-2 + UNI-6**
-  (straight/intent fidelity) and **UNI-3** (biomechanical hip ROM) are now RESOLVED
-  by the validator/ROM cluster in `ExerciseValidator` (`STRAIGHT_LIMB_INTENT`,
-  `CONTACT_PRESERVED`, `PELVIS_INTENT`, `HIP_ROM_LIMIT`, all switched on under
-  `ValidatorConfig.ENGINEERING_VALIDATION`). **UNI-1** (true posture solve) and
-  **UNI-4** (tilt axis) are resolved.
+   - Highest-leverage next work: **UNI-10** (consistent hip authoring helper), then
+    **UNI-8** (wrist/ankle single-DOF). **UNI-2 + UNI-6**
+    (straight/intent fidelity) and **UNI-3** (biomechanical hip ROM) are now RESOLVED
+    by the validator/ROM cluster in `ExerciseValidator` (`STRAIGHT_LIMB_INTENT`,
+    `CONTACT_PRESERVED`, `PELVIS_INTENT`, `HIP_ROM_LIMIT`, all switched on under
+    `ValidatorConfig.ENGINEERING_VALIDATION`); **UNI-7** (clavicle) is now RESOLVED by
+    `buildClavicularRotation` composed between chest and scapula. **UNI-1** (true posture
+    solve) and **UNI-4** (tilt axis) are resolved.
 
 *No code, constants, targets, or validation poses were modified during this investigation. The
 prior broad engine report and the focused pelvic/hip report are consolidated here; the
