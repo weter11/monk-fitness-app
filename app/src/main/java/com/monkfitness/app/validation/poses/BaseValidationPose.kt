@@ -129,10 +129,11 @@ abstract class BaseValidationPose : PoseBuilder {
             jointsBuffer.maxIkClampAmount = ikResult.clampAmount
         }
         // Store the limb offsets in the parent's true local frame (no hand-fed inverse-Z scalar).
+        val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
         tempV1.set(ikResult.joint).subtract(rootWorldPos)
-        SkeletonMath.toLocalDirection(tempV1, parentRotation, middleNode.localPosition)
+        SkeletonMath.toLocalDirection(tempV1, parentRot, middleNode.localPosition)
         tempV1.set(ikResult.end).subtract(ikResult.joint)
-        SkeletonMath.toLocalDirection(tempV1, parentRotation, endNode.localPosition)
+        SkeletonMath.toLocalDirection(tempV1, parentRot, endNode.localPosition)
 
         // PR-04: register the fixed support contact so the global constraint solver can
         // reposition the root and re-bake the limb to honor it.
@@ -172,8 +173,9 @@ abstract class BaseValidationPose : PoseBuilder {
         straight: Boolean = false,
         contact: ContactConstraint? = null
     ) {
-        val worldPole = SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld)
-        bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, parentRotation, middleNode, endNode, ikBuffer, straight, contact)
+        val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
+        val worldPole = SkeletonMath.toWorldDirection(poleLocal, parentRot, tempPoleWorld)
+        bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, parentRot, middleNode, endNode, ikBuffer, straight, contact)
     }
 
     protected fun solveNearStraightLeg(

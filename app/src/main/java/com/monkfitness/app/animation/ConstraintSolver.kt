@@ -102,8 +102,8 @@ object ConstraintSolver {
     fun chainForEnd(end: Joint): ContactChain? = when (end) {
         Joint.ANKLE_F -> ContactChain(Joint.HIP_F, Joint.PELVIS, Joint.KNEE_F)
         Joint.ANKLE_B -> ContactChain(Joint.HIP_B, Joint.PELVIS, Joint.KNEE_B)
-        Joint.HAND_A -> ContactChain(Joint.SHOULDER_A, Joint.CHEST, Joint.ELBOW_A)
-        Joint.HAND_P -> ContactChain(Joint.SHOULDER_P, Joint.CHEST, Joint.ELBOW_P)
+        Joint.HAND_A -> ContactChain(Joint.SHOULDER_A, Joint.SCAPULA_A, Joint.ELBOW_A)
+        Joint.HAND_P -> ContactChain(Joint.SHOULDER_P, Joint.SCAPULA_P, Joint.ELBOW_P)
         else -> null
     }
 

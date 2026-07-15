@@ -166,8 +166,9 @@ abstract class BasePose : PoseBuilder {
         straight: Boolean = false,
         contact: ContactConstraint? = null
     ): SkeletonMath.IKResult {
-        val worldPole = SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld)
-        return bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, parentRotation, middleNode, endNode, ikBuffer, straight, contact)
+        val parentRot = middleNode.parent?.worldRotation ?: parentRotation
+        val worldPole = SkeletonMath.toWorldDirection(poleLocal, parentRot, tempPoleWorld)
+        return bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, parentRot, middleNode, endNode, ikBuffer, straight, contact)
     }
 
     protected fun solveNearStraightLeg(
@@ -192,6 +193,7 @@ abstract class BasePose : PoseBuilder {
         straight: Boolean = false,
         contact: ContactConstraint? = null
     ): SkeletonMath.IKResult {
+        val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
         val ikResult = if (straight) {
             SkeletonMath.solveStraightLimb(rootWorldPos, targetWorldPos, length1, length2, constraint, ikBuffer, contact)
         } else {
@@ -207,10 +209,10 @@ abstract class BasePose : PoseBuilder {
         // Store the limb offsets in the parent's true local frame so they survive the parent's
         // full 3D world rotation exactly — no hand-fed inverse-Z scalar.
         tempV1.set(ikResult.joint).subtract(rootWorldPos)
-        SkeletonMath.toLocalDirection(tempV1, parentRotation, middleNode.localPosition)
+        SkeletonMath.toLocalDirection(tempV1, parentRot, middleNode.localPosition)
 
         tempV1.set(ikResult.end).subtract(ikResult.joint)
-        SkeletonMath.toLocalDirection(tempV1, parentRotation, endNode.localPosition)
+        SkeletonMath.toLocalDirection(tempV1, parentRot, endNode.localPosition)
 
         // PR-04: if this limb carries a fixed support contact, register it so the global
         // constraint solver can reposition the root and re-bake the limb to honor the contact.
