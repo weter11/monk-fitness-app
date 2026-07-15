@@ -1,7 +1,17 @@
-# Kilo Code ignore — keep large build output & vendored packages out of the
-# model's context to save tokens. Mirrors .gitignore where relevant.
+# .kilocodeignore — context boundary for the Kilo agent.
+# Goal: keep ONLY what we actively work on in context (Kotlin engine/app
+# source, build config, and docs). Everything else is excluded to save tokens.
+#
+# Kept intentionally (NOT ignored):
+#   app/src/main/java/**, app/src/test/java/**   -> Kotlin source we edit
+#   app/src/main/res/values*/**                  -> string resources
+#   *.gradle.kts, gradle.properties, gradle/libs.versions.toml, settings
+#   docs/**                                       -> ENGINE/VALIDATION specs we use
+#   README.md, kilo.jsonc, .gitignore, .kilocodeignore
 
-# --- Build output ---
+# ---------------------------------------------------------------------------
+# Build output (generated)
+# ---------------------------------------------------------------------------
 build/
 app/build/
 */build/
@@ -12,29 +22,59 @@ captures/
 .cxx/
 .externalNativeBuild/
 
-# --- Gradle / local toolchain (provisioned in-workspace) ---
+# ---------------------------------------------------------------------------
+# Gradle / in-workspace toolchain & package directories
+# ---------------------------------------------------------------------------
 .gradle/
 .gradle-home/
 .gradle-dist/
 .kotlin/
-
-# --- Android SDK / vendored package directories ---
 android-sdk/
 node_modules/
 .m2/
 **/.cache/
 
-# --- Generated / binary artifacts ---
+# ---------------------------------------------------------------------------
+# Binary / generated / large non-text assets (not useful as text context)
+# ---------------------------------------------------------------------------
 *.class
 *.dex
 *.apk
-*.ap_
 *.aar
+*.ap_
 *.jar
+*.keystore
 *.hprof
 *.log
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.tflite
+*.so
 
-# --- Certs / local env scaffolding ---
+# Android art assets (vector XML / launcher icons) — not needed for engine work
+app/src/main/res/drawable/
+app/src/main/res/drawable-*/
+app/src/main/res/mipmap/
+app/src/main/res/mipmap-*/
+
+# ---------------------------------------------------------------------------
+# Historical migration reports at repo root (superseded by docs/)
+# ---------------------------------------------------------------------------
+BIRD_DOG_FAMILY_MIGRATION_REPORT.md
+COBRA_STRETCH_FAMILY_MIGRATION_REPORT.md
+HAMSTRING_FAMILY_MIGRATION_REPORT.md
+HIP_FLEXOR_FAMILY_MIGRATION_REPORT.md
+LUNGES_STEPUPS_FAMILY_MIGRATION_REPORT.md
+THORACIC_FAMILY_MIGRATION_REPORT.md
+VERTICAL_PULL_FAMILY_MIGRATION_REPORT.md
+
+# ---------------------------------------------------------------------------
+# Env / CI scaffolding not needed in context
+# ---------------------------------------------------------------------------
+.github/
+LICENSE
 proxy-ca.pem
 custom-cacerts
 local.properties
