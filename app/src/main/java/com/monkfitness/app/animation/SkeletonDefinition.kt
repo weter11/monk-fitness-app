@@ -28,6 +28,11 @@ interface SkeletonDefinition {
     val legAngularLimits: AngularJointLimits
         get() = legIKConstraint.angularLimits
 
+    // Hip (acetabular ball-and-socket) range of motion. Named, shared human-range caps — the
+    // single source of truth for UNI-3's over-range-hip detection (validator + optional clamp).
+    val hipRomLimits: HipRomLimits
+        get() = HipRomLimits.DEFAULT
+
     companion object {
         val DEFAULT_ADULT: SkeletonDefinition = HumanSkeletonDefinition()
     }
@@ -51,7 +56,8 @@ data class HumanSkeletonDefinition(
     override val defaultCamera: CameraDefinition = CameraDefinition.DEFAULT,
 
     override val armIKConstraint: IKConstraint = IKConstraint.ArmConstraint,
-    override val legIKConstraint: IKConstraint = IKConstraint.LegConstraint
+    override val legIKConstraint: IKConstraint = IKConstraint.LegConstraint,
+    override val hipRomLimits: HipRomLimits = HipRomLimits.DEFAULT
 ) : SkeletonDefinition
 
 // For backward compatibility during migration

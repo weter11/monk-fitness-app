@@ -122,6 +122,57 @@ data class AngularJointLimits(
     }
 }
 
+/**
+ * Named, shared anatomical range-of-motion (ROM) limits for the hip — a genuine 3-DOF
+ * ball-and-socket at the acetabulum (UNI-3). Unlike the knee/elbow middle-joint band, the hip
+ * was previously unbounded (only a shared 30° knee-flexion floor limited the chain), so a pose
+ * could flex / abduct / rotate the hip beyond human ROM and still validate as clean. These
+ * named degrees are the single source of truth read by both the validator (`HIP_ROM_LIMIT`
+ * rule) and (optionally) the constraint solver's femur-direction clamp. No per-exercise magic
+ * numbers.
+ *
+ * Flexion / extension are measured about the sagittal (Z) axis from the neutral down direction;
+ * abduction / adduction about the lateral (X) axis; internal / external rotation about the
+ * femur's long axis. Generous human-range caps: a full split (~90° abduction) and a deep squat
+ * (~120° flexion) pass, while a femur swung "through the torso" (~180°) is caught.
+ */
+data class HipRomLimits(
+    val maxFlexionDegrees: Float,
+    val maxExtensionDegrees: Float,
+    val maxAbductionDegrees: Float,
+    val maxAdductionDegrees: Float,
+    val maxInternalRotationDegrees: Float,
+    val maxExternalRotationDegrees: Float,
+    /**
+     * Maximum total excursion of the femur from its neutral (straight-down) direction. A single,
+     * axis-label-agnostic cap that reliably catches an over-range hip (e.g. a femur swung "through
+     * the torso", ~180°) without false-positives on valid extreme-but-anatomical poses. The
+     * per-axis fields above remain the shared vocabulary for finer, future per-plane checks; the
+     * validator's over-range detector uses this total-excursion bound.
+     */
+    val maxExcursionDegrees: Float
+) {
+    companion object {
+        const val DEFAULT_MAX_FLEXION = 150f
+        const val DEFAULT_MAX_EXTENSION = 25f
+        const val DEFAULT_MAX_ABDUCTION = 95f
+        const val DEFAULT_MAX_ADDUCTION = 40f
+        const val DEFAULT_MAX_INTERNAL_ROTATION = 45f
+        const val DEFAULT_MAX_EXTERNAL_ROTATION = 60f
+        const val DEFAULT_MAX_EXCURSION = 150f
+
+        val DEFAULT = HipRomLimits(
+            maxFlexionDegrees = DEFAULT_MAX_FLEXION,
+            maxExtensionDegrees = DEFAULT_MAX_EXTENSION,
+            maxAbductionDegrees = DEFAULT_MAX_ABDUCTION,
+            maxAdductionDegrees = DEFAULT_MAX_ADDUCTION,
+            maxInternalRotationDegrees = DEFAULT_MAX_INTERNAL_ROTATION,
+            maxExternalRotationDegrees = DEFAULT_MAX_EXTERNAL_ROTATION,
+            maxExcursionDegrees = DEFAULT_MAX_EXCURSION
+        )
+    }
+}
+
 data class IKConstraint(
     val minimumFlexionAngle: Float,
     val maximumExtensionRatio: Float,

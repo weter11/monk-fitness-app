@@ -92,6 +92,8 @@ object ConstraintSolver {
     // orientation is preserved verbatim (a strict no-op for correct poses).
     private val tiltDelta = JointRotation()
     private val authoredPelvisRot = JointRotation()
+    private val authoredPelvisPos = Vector3()
+    private val rootDeltaRot = JointRotation()
     private val pelvisMatX = Vector3(); private val pelvisMatY = Vector3(); private val pelvisMatZ = Vector3()
     private val tiltMatX = Vector3(); private val tiltMatY = Vector3(); private val tiltMatZ = Vector3()
     private val outMatX = Vector3(); private val outMatY = Vector3(); private val outMatZ = Vector3()
@@ -196,6 +198,10 @@ object ConstraintSolver {
         // Preserve the authored pelvis orientation so the solver only ever *adds* a posture
         // correction, never wipes a deliberate lean (e.g. Deep Overhead Squat's folded pelvis).
         authoredPelvisRot.copyFrom(pelvis.localRotation)
+        authoredPelvisPos.copyFrom(pelvis.localPosition)
+        // UNI-6 — reset the recorded root-displacement deltas; they are recomputed below.
+        pose.rootTranslationDelta = 0f
+        pose.rootRotationDelta = 0f
 
         // UNI-1: snapshot the authored joint configuration (the "goal shape") before any solver
         // mutation, so the posture pass can regularize its CCD solution back toward the authored
@@ -331,6 +337,19 @@ object ConstraintSolver {
         // or floating the pelvis. For well-posed poses the residual is already ~0, so this pass is
         // a strict no-op (the authored pose is preserved verbatim).
         solvePosture(contacts)
+
+        // UNI-6 — record how far the solver displaced the root from its authored transform so the
+        // PELVIS_INTENT rule can surface unexpected root motion.
+        val dxp = pelvis.localPosition.x - authoredPelvisPos.x
+        val dyp = pelvis.localPosition.y - authoredPelvisPos.y
+        val dzp = pelvis.localPosition.z - authoredPelvisPos.z
+        pose.rootTranslationDelta = kotlin.math.sqrt(dxp * dxp + dyp * dyp + dzp * dzp)
+        // Relative rotation R_rel = R_authored^-1 * R_current; its angle is the root turn.
+        SkeletonMath.rotationToMatrix(authoredPelvisRot, pelvisMatX, pelvisMatY, pelvisMatZ)
+        SkeletonMath.rotationToMatrix(pelvis.localRotation, tiltMatX, tiltMatY, tiltMatZ)
+        SkeletonMath.transposeMultiply(pelvisMatX, pelvisMatY, pelvisMatZ, tiltMatX, tiltMatY, tiltMatZ, outMatX, outMatY, outMatZ)
+        SkeletonMath.getRotationFromMatrix(outMatX, outMatY, outMatZ, rootDeltaRot)
+        pose.rootRotationDelta = kotlin.math.abs(rootDeltaRot.angle)
 
         // Final FK + flatten so the finalized pose reflects the solved root placement.
         SkeletonPose.fromHierarchy(roots, pose)
