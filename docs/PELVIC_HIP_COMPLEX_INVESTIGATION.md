@@ -1,5 +1,17 @@
-# PELVIC / HIP COMPLEX INVESTIGATION
+# PELVIC / HIP COMPLEX INVESTIGATION — focused deep-dive
 
+> **Companion to the unified report.** This file is the **pelvis/hip-focused 14-question
+> deep-dive**. The consolidated, de-duplicated issue register and the single prioritized
+> roadmap now live in **`docs/ENGINE_INVESTIGATION_REPORT.md` (unified & corrected)**. For a
+> future hip-specific PR, use this Q&A plus the mapped issues below; do not duplicate the
+> roadmap here.
+>
+> **Mapping (this file's `P*` → unified `UNI-*`):**
+> `P1` → UNI-4 (solver tilt wrong axis) · `P2` → UNI-3 (mathematical ROM / no hip limits) ·
+> `P3` → UNI-10 (hip authoring inconsistency) · `P4` → UNI-1 (solver pelvis-only) ·
+> `P5` → UNI-11 (hip center consistent — verified correct) · `P6` → UNI-2 (Middle Split is a
+> reference error; engine correct).
+>
 > **Scope / stance:** pure architectural investigation of the Pelvic / Hip Complex.
 > **No engine code, poses, or constants were modified.** Every claim below is derived
 > from the **current** repository (`git` HEAD, branch `session/agent_b795bd6c-…`),
