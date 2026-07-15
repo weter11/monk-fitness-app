@@ -304,7 +304,7 @@ adopt the contact layer without a mis-tilted pelvis.
 
 ---
 
-### UNI-5 — Coordinate / axis-label drift between `ENGINE.md` and the code (was J)
+### UNI-5 — Coordinate / axis-label drift between `ENGINE.md` and the code (was J) — RESOLVED (docs)
 **Title:** `ENGINE.md §4` says "Z is depth / lateral" and "X is the primary long axis," but the
 code uses `axisZ` as the sagittal-flexion (pitch) axis, `axisY` as the vertical/twist axis,
 `axisX` as the lateral side-bend (roll) axis; `buildTorso`'s `-X` chest offset is dead
@@ -325,6 +325,18 @@ offset.
 **Engine vs Pose:** Docs + trivial `BasePose` cleanup (no behavioral change).
 **Currently Visible?** No.
 **Blocks Future Work?** No (but it is the root cause of UNI-4).
+**Status:** *RESOLVED — docs.* `ENGINE.md §4` now documents the actual convention: positions
+keep **Y up / Z lateral / X long-axis**, and a new **rotation-axis convention** table records
+the plane→axis mapping the code has always used — **Z = sagittal flexion/lean (pitch)**,
+**Y = transverse twist/rotation**, **X = frontal side-bend/roll (lateral)** — with the
+composed order `R = Rz·Ry·Rx` and an explicit warning that the sagittal axis is `Z` (not `X`),
+the exact confusion that caused the UNI-4 tilt bug. **Correction to the original finding:**
+`buildTorso`'s `-X` chest offset is **not** dead — the push-up/plank family (`BasePushUpPose`,
+both feet- and knees-pivot branches) authors its whole chain in a re-rooted horizontal frame
+and relies on that offset for the spine long axis; `ENGINE.md §4` now explains that `+Y` (most
+upright poses) and `-X` (push-ups) are the same anatomical "up the spine" direction in
+different local frames. It was therefore left intact (deleting it would change push-up geometry,
+which is out of scope for a docs cleanup). No code, constants, or poses were modified.
 
 ---
 
@@ -561,8 +573,10 @@ UNI-4 for full fidelity.
 5. **UNI-4 — solver tilt on wrong axis (Z pitch for lateral Z imbalance).** Cheap, latent bug
    that would corrupt every asymmetric closed-chain pose adopting the contact layer. *(Engine,
    Low.)*
-6. **UNI-5 — coordinate / axis-label drift.** Root cause of UNI-4; docs + trivial cleanup.
-   *(Docs + Low cleanup.)*
+6. **UNI-5 — coordinate / axis-label drift.** RESOLVED (docs) — `ENGINE.md §4` now documents the
+   real rotation-axis convention (Z = flexion/pitch, Y = twist, X = side-bend/roll, `R = Rz·Ry·Rx`),
+   the root cause of UNI-4. The `buildTorso` `-X` offset was found **live** (push-up family relies
+   on it), not dead, and was left intact. *(Docs only, no behavioral change.)*
  7. **UNI-7 — clavicle is a dead node.** RESOLVED — `buildClavicularRotation` + named ROM
     constants compose the clavicle between chest and scapula; overhead reaches now elevate the
     clavicle and raise the shoulder (girdle no longer scapula-only). *(Engine, Medium.)*
