@@ -1,10 +1,12 @@
 # ENGINE INVESTIGATION REPORT — Fundamental Biomechanical Limitations
 
-> **Scope / stance:** Investigation only. No code, constants, targets, or pose logic were
-> modified. The four validation poses (Dead Hang, Deep Overhead Squat, Pike Sit, Middle Split)
-> are treated as fixed anatomical references per `VALIDATION.md`. Numerical claims below were
-> derived directly from the *current* source (`SkeletonDefinition.DEFAULT_ADULT`,
-> `SkeletonMath`, `ConstraintSolver`, `SkeletonPoseFinalizer`, and the four pose files).
+> **Scope / stance:** Investigation report. The four validation poses (Dead Hang, Deep Overhead
+> Squat, Pike Sit, Middle Split) are treated as fixed anatomical references per `VALIDATION.md`.
+> Numerical claims were derived directly from the *current* source
+> (`SkeletonDefinition.DEFAULT_ADULT`, `SkeletonMath`, `ConstraintSolver`,
+> `SkeletonPoseFinalizer`, and the four pose files). **Subsequent to the investigation, Issue C
+> (wrist/ankle double-counting the parent frame) was fixed in code** — see its section for the
+> fix evidence. No other issues in this report have been modified.
 
 ---
 
@@ -192,11 +194,13 @@ so `ConstraintSolver.solve()` is a no-op for the shipped exercise catalog.
 
 ---
 
-## Issue C — Wrist/ankle completion uses the node's *world* rotation, double-counting the parent frame
+## Issue C — Wrist/ankle completion uses the node's *world* rotation, double-counting the parent frame — RESOLVED IN CODE
 
-**Title:** The new wrist/ankle "articulation" rotates the (already world-space) forearm/shank
-direction by the joint's *world* rotation, so when the trunk is tilted the grip/foot orientation
-is wrong.
+**Title:** The new wrist/ankle "articulation" rotated the (already world-space) forearm/shank
+direction by the joint's *world* rotation, so when the trunk was tilted the grip/foot orientation
+was wrong. This is now fixed: the completion stage resolves the joint's rotation *relative to its
+parent segment frame* before applying it to the already-world segment direction, so the trunk
+frame is no longer double-counted.
 
 **Description**
 `SkeletonPoseFinalizer.adjustHandOrientation` does:
@@ -265,15 +269,27 @@ Pike Sit (grip over-rotated by the fold), Deep Overhead Squat (grip + foot over-
 lean), Dead Hang (correct only because the trunk is vertical), Middle Split (correct only
 because the trunk is vertical).
 
-**Severity:** HIGH (corrected). The earlier write-up estimated the Pike Sit over-rotation at
-~0.57 rad from a mis-traced, mis-computed chain; the real error is **~1.52 rad (~ 87 deg)**,
-because the entire trunk rotation (`pelvis -0.95` + `chest -0.57` = `-1.52`) is double-counted on
-top of the already-world forearm direction, not just the chest's `-0.57`. That reorients the
-palm/fingertips by an amount large enough to be unmistakably wrong in any folded/leaning pose, and
-it is live for every pose whose trunk/parent frame is non-identity (not merely neutral trunks).
-Bumped from the earlier MEDIUM on the strength of the corrected number.
+**Severity:** RESOLVED IN CODE (was HIGH). The completion stage double-counted the parent frame
+by applying the joint's *world* rotation to an already-world segment direction. The fix resolves
+the wrist/ankle rotation *relative to its parent segment frame* (`node.worldRotation ∘
+inverse(parent.worldRotation)`) before composing it with the segment direction, so the trunk frame
+is no longer re-applied. For a folded/leaning pose the Pike Sit over-rotation of **~1.52 rad
+(~87 deg)** is eliminated and the completed grip/foot direction matches the anatomically correct
+one exactly. The legacy (position-driven) compatibility path has no wrist/ankle articulation
+separate from the segment, so it now passes identity and extends the hand/foot rigidly along the
+segment (unchanged for neutral trunks).
 
-**Possible architectural solutions**
+**Fix evidence (current source):**
+- `SkeletonPoseFinalizer.relativeRotation` derives the joint's rotation relative to its parent
+  segment frame (`inverse(parentRotation) ∘ worldRotation`) using the same
+  `rotationToMatrix`/`transposeMultiply`/`getRotationFromMatrix` utilities already used by
+  `reconstructChestFrame`.
+- `adjustHandOrientation` now resolves `HAND_*` relative to `ELBOW_*` (the forearm frame) and
+  passes that to `HandDefinition.computeHandJoints`; `adjustFootOrientation` resolves `ANKLE_*`
+  relative to `KNEE_*` (the shank frame) and passes that to `FootDefinition.computeHeelToe`.
+- The legacy branch passes `IDENTITY_ROTATION` (no double-count).
+
+**Possible architectural solutions** (reference only; the chosen fix is the relative-to-parent-frame one)
 - Build the hand/foot basis from the segment direction **plus a perpendicular derived from the
   parent frame**, then apply the joint's *local* rotation (relative to the segment) — not the
   world rotation.
@@ -560,8 +576,10 @@ references (and foreseeable production poses) use.
    machinery; the modern form of the old Issue 1, now deeper due to the 3-level girdle.
    *(Engine, Medium.)*
 
-3. **Issue C — Wrist/ankle completion uses world rotation (double-counts parent frame).**
-   Grip/foot orientation is wrong whenever the trunk is tilted. *(Engine, Medium.)*
+ 3. ~~Issue C — Wrist/ankle completion uses world rotation (double-counts parent frame).~~
+    **RESOLVED IN CODE.** Wrist/ankle completion now resolves the joint rotation relative to its
+    parent segment frame, so grip/foot orientation is correct even when the trunk is tilted.
+    *(Engine, Medium.)*
 
 4. **Issue D — Solver only pins `ANKLE_*`/`HAND_*` contacts.**
    Whole classes of supported poses (forearm/knee/hip/head) cannot use the global layer.
@@ -594,8 +612,9 @@ Two findings dominate the current state:
   correct while the scapula is identity. The moment scapular activation is combined with arm
   contacts (exactly what PR-05 enables), the bake and the solver's arm re-bake become wrong.
 
-Issues C–F are secondary but real: wrist/ankle orientation double-counts the parent frame when
-the trunk is tilted (C), the solver cannot pin non-hand/foot contacts (D), the torso is still a
-single rigid segment (E), and the chest-frame reconstruction is symmetric-only (F).
+Issues D–F are secondary but real: the solver cannot pin non-hand/foot contacts (D), the torso
+is still a single rigid segment (E), and the chest-frame reconstruction is symmetric-only (F).
+Issue C (wrist/ankle double-counting the parent frame when the trunk is tilted) has been resolved
+in code.
 
 No code was changed. This report is the roadmap for the next phase of engine development.
