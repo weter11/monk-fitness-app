@@ -27,3 +27,11 @@ proguard-project.txt
 project.properties
 *.log
 .DS_Store
+
+# In-workspace toolchain & env scaffolding (never commit)
+.gradle-home/
+.gradle-dist/
+android-sdk/
+proxy-ca.pem
+custom-cacerts
+git-proxy-ca.pem

@@ -53,6 +53,7 @@ abstract class BaseThoracicPose : BasePose() {
 
     protected var roots: List<SkeletonNode>? = null
     protected var pelvis: SkeletonNode? = null; protected var chest: SkeletonNode? = null; protected var neck: SkeletonNode? = null; protected var head: SkeletonNode? = null
+    protected var lumbar: SkeletonNode? = null
     protected var shoulderA: SkeletonNode? = null; protected var elbowA: SkeletonNode? = null; protected var handA: SkeletonNode? = null; protected var palmA: SkeletonNode? = null; protected var knucklesA: SkeletonNode? = null; protected var fingertipsA: SkeletonNode? = null
     protected var shoulderP: SkeletonNode? = null; protected var elbowP: SkeletonNode? = null; protected var handP: SkeletonNode? = null; protected var palmP: SkeletonNode? = null; protected var knucklesP: SkeletonNode? = null; protected var fingertipsP: SkeletonNode? = null
     protected var hipF: SkeletonNode? = null; protected var kneeF: SkeletonNode? = null; protected var ankleF: SkeletonNode? = null; protected var heelF: SkeletonNode? = null; protected var toeF: SkeletonNode? = null
@@ -74,6 +75,7 @@ abstract class BaseThoracicPose : BasePose() {
         val nodes = SkeletonFactory.createStandardSkeleton()
         roots = nodes.roots
         pelvis = nodes.pelvis
+        lumbar = nodes.lumbar
         chest = nodes.chest
         neck = nodes.neck
         head = nodes.head

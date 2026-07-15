@@ -104,6 +104,40 @@ abstract class BasePose : PoseBuilder {
         child.localPosition.set(offsetX, offsetY, offsetZ)
     }
 
+    /**
+     * Authors a **lower-spine (lumbar / pelvis-tilt)** rotation on the LUMBAR segment of the
+     * two-segment spine (PELVIS -> LUMBAR -> CHEST). Because the lumbar sits below the chest,
+     * FK carries the whole thorax + shoulder girdle + arms with it, and
+     * `SkeletonPoseFinalizer.reconstructChestFrame` composes this lower-spine rotation with the
+     * thoracic frame — so patterns where the pelvis/lumbar and thorax move differently
+     * (hip hinge, good morning, deadlift, cat-cow, thoracic opener) become real joint motion
+     * instead of one overall trunk bend (Issue E).
+     *
+     * The lumbar defaults to a pass-through (identity), so leaving it unset reproduces the old
+     * single PELVIS->CHEST bend exactly. Common axes: local +Z sagittal flexion/extension,
+     * +Y axial rotation, +X lateral (side) bend.
+     */
+    protected fun buildLumbarFlexion(lumbar: SkeletonNode, flexionRad: Float, axis: Vector3 = axisZ) {
+        lumbar.localRotation.set(axis, flexionRad)
+    }
+
+    /**
+     * Authors a **two-segment spine curve**: a lower-spine (lumbar) rotation and a thoracic
+     * (chest) rotation about the same [axis], letting the two segments differ. Passing equal
+     * values reproduces a single overall bend split across the spine; passing e.g. a lumbar of
+     * zero with a thoracic value expresses "thoracic extends while the lumbar stays" (Issue E).
+     */
+    protected fun buildSpineCurve(
+        lumbar: SkeletonNode,
+        chest: SkeletonNode,
+        lumbarRad: Float,
+        thoracicRad: Float,
+        axis: Vector3 = axisZ
+    ) {
+        lumbar.localRotation.set(axis, lumbarRad)
+        chest.localRotation.set(axis, thoracicRad)
+    }
+
     // Common IK helpers (wrappers around the actual IK solver to avoid code duplication)
     protected fun solveArmIK(
         shoulderW: Vector3,
