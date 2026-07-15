@@ -53,7 +53,8 @@ fun SkeletonRenderer(
             width = width,
             height = height,
             buffer = skeletonBuffer,
-            groundLevel = environment.ground.level
+            groundLevel = environment.ground.level,
+            groundVisualOffsetY = height * SkeletonProjector.GROUND_VISUAL_OFFSET_FRACTION
         )
 
         // Rendering Pipeline:

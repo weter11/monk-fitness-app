@@ -18,6 +18,16 @@ class SkeletonProjector {
 
     private val shadowJoints = arrayOf(Joint.TOE_F, Joint.TOE_B, Joint.HEEL_F, Joint.HEEL_B, Joint.HAND_P)
 
+    /**
+     * Rendering-only visual offset for the ground plane, expressed as a fraction of the
+     * visible scene (screen) height. Moves the rendered floor/grid/shadows DOWN on screen
+     * (positive Y) without touching camera, zoom, viewport, pose coordinates, or world space.
+     * Introduced after the viewport enlargement pushed the floor too high into the frame.
+     */
+    companion object {
+        const val GROUND_VISUAL_OFFSET_FRACTION = 0.20f
+    }
+
     fun project(
         pose: SkeletonPose,
         camera: Camera,
@@ -25,7 +35,8 @@ class SkeletonProjector {
         width: Float,
         height: Float,
         buffer: ProjectedSkeleton,
-        groundLevel: Float = 0f
+        groundLevel: Float = 0f,
+        groundVisualOffsetY: Float = 0f
     ) {
         val style = engine.style
 
@@ -59,7 +70,7 @@ class SkeletonProjector {
         updateTorsoFaces(pose, camera, style, width, height, buffer)
 
         // 5. Ground
-        updateGround(pose, camera, width, height, buffer, groundLevel)
+        updateGround(pose, camera, width, height, buffer, groundLevel, groundVisualOffsetY)
 
         // 6. Depth Range
         var dMin = Float.MAX_VALUE
@@ -119,19 +130,24 @@ class SkeletonProjector {
         width: Float,
         height: Float,
         buffer: ProjectedSkeleton,
-        groundLevel: Float
+        groundLevel: Float,
+        groundVisualOffsetY: Float = 0f
     ) {
         var lineIdx = 0
         for (x in -260..260 step 65) {
             if (lineIdx >= buffer.gridLines.size) break
             camera.project(tempV.set(x.toFloat(), groundLevel, -170f), width, height, buffer.gridLines[lineIdx].p1)
             camera.project(tempV.set(x.toFloat(), groundLevel, 170f), width, height, buffer.gridLines[lineIdx].p2)
+            buffer.gridLines[lineIdx].p1.y += groundVisualOffsetY
+            buffer.gridLines[lineIdx].p2.y += groundVisualOffsetY
             lineIdx++
         }
         for (z in -170..170 step 65) {
             if (lineIdx >= buffer.gridLines.size) break
             camera.project(tempV.set(-260f, groundLevel, z.toFloat()), width, height, buffer.gridLines[lineIdx].p1)
             camera.project(tempV.set(260f, groundLevel, z.toFloat()), width, height, buffer.gridLines[lineIdx].p2)
+            buffer.gridLines[lineIdx].p1.y += groundVisualOffsetY
+            buffer.gridLines[lineIdx].p2.y += groundVisualOffsetY
             lineIdx++
         }
         buffer.gridLineCount = lineIdx
@@ -140,6 +156,7 @@ class SkeletonProjector {
             val id = shadowJoints[i]
             val pt = pose.getJoint(id)
             camera.project(tempV.set(pt.x, groundLevel, pt.z), width, height, buffer.shadowPoints[i])
+            buffer.shadowPoints[i].y += groundVisualOffsetY
         }
     }
 }

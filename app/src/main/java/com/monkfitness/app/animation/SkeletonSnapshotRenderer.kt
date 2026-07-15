@@ -80,7 +80,8 @@ class SkeletonSnapshotRenderer(
             width = width.toFloat(),
             height = height.toFloat(),
             buffer = skeletonBuffer,
-            groundLevel = environment.ground.level
+            groundLevel = environment.ground.level,
+            groundVisualOffsetY = height.toFloat() * SkeletonProjector.GROUND_VISUAL_OFFSET_FRACTION
         )
 
         // 1. Draw Background (None)
