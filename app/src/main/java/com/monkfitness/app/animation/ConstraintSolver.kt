@@ -98,6 +98,29 @@ object ConstraintSolver {
     private val imbA = Vector3(); private val imbB = Vector3()
     private const val TILT_GAIN = 0.01f
 
+    // Posture-pass (UNI-1) CCD scratch — reused shared matrix/rotation buffers (no hot-path
+    // allocation). The posture pass is a *true* solve: it distributes an unreachable/asymmetric
+    // contact residual across the limb's free joint angles (hip→knee→ankle / shoulder→elbow→
+    // wrist) instead of dumping everything into the pelvis translation/tilt alone.
+    private var activeRoots: List<SkeletonNode> = emptyList()
+    private val authoredRotBuf = Array(Joint.entries.size) { JointRotation() }
+    private val ccdDelta = JointRotation()
+    private val ccdA = Vector3(); private val ccdB = Vector3()
+    private val ccdPX = Vector3(); private val ccdPY = Vector3(); private val ccdPZ = Vector3()
+    private val ccdDX = Vector3(); private val ccdDY = Vector3(); private val ccdDZ = Vector3()
+    private val ccdMX = Vector3(); private val ccdMY = Vector3(); private val ccdMZ = Vector3()
+    private val ccdOpX = Vector3(); private val ccdOpY = Vector3(); private val ccdOpZ = Vector3()
+    private val ccdOldX = Vector3(); private val ccdOldY = Vector3(); private val ccdOldZ = Vector3()
+    private val ccdNewX = Vector3(); private val ccdNewY = Vector3(); private val ccdNewZ = Vector3()
+    private const val POSTURE_MAX_ITERS = 12
+    private const val POSTURE_EPS = 1e-3f
+    private const val POSTURE_DAMP = 0.5f
+    // How strongly each CCD step is pulled back toward the authored joint angle (shape
+    // regularization). Small so reachable contacts are still honoured; non-zero so an
+    // over-constrained residual is shared into the *closest* authored posture, not an arbitrary
+    // one (UNI-1: "best match the authored shape").
+    private const val POSTURE_REG = 0.1f
+
     /**
      * Maps a contact end-effector to its proximal chain in the fixed skeleton topology.
      * Returns null for joints that are not a supported contact limb (the solver then simply
@@ -173,6 +196,15 @@ object ConstraintSolver {
         // Preserve the authored pelvis orientation so the solver only ever *adds* a posture
         // correction, never wipes a deliberate lean (e.g. Deep Overhead Squat's folded pelvis).
         authoredPelvisRot.copyFrom(pelvis.localRotation)
+
+        // UNI-1: snapshot the authored joint configuration (the "goal shape") before any solver
+        // mutation, so the posture pass can regularize its CCD solution back toward the authored
+        // posture (it only bends joints as far as the contacts force it to).
+        activeRoots = roots
+        for (i in nodeMap.indices) {
+            val n = nodeMap[i]
+            if (n != null) authoredRotBuf[i].copyFrom(n.localRotation)
+        }
 
         // Are any contacts anchored to a horizontal support (ground)? That is what enables the
         // pelvis-tilt posture DOF: feet planted on the floor can be honored by tilting the trunk
@@ -290,8 +322,125 @@ object ConstraintSolver {
             if (!moved) break
         }
 
+        // UNI-1 — true posture pass. The loop above is a root-reposition relaxation (translate +
+        // tilt the pelvis, then re-bake each contact limb toward its target). When contacts are
+        // over-constrained or asymmetric the pelvis alone cannot settle them, so the residual is
+        // now distributed across the *free joint angles* of each contact limb via damped CCD. This
+        // is a genuine posture solve: it honours the contacts and keeps the configuration as close
+        // to the authored shape as the contacts allow, instead of leaving the residual uncorrected
+        // or floating the pelvis. For well-posed poses the residual is already ~0, so this pass is
+        // a strict no-op (the authored pose is preserved verbatim).
+        solvePosture(contacts)
+
         // Final FK + flatten so the finalized pose reflects the solved root placement.
         SkeletonPose.fromHierarchy(roots, pose)
+    }
+
+    /**
+     * UNI-1 — CCD posture relaxation. For every contact, walks the kinematic chain from the
+     * end-effector up to its root joint and rotates each free joint (damped) so the end-effector
+     * is pulled onto its fixed target. Because it starts from the authored configuration and only
+     * moves joints as far as the contact forces, the converged posture is the closest reachable
+     * shape to the author's intent — a real posture solve, not a pelvis-only correction.
+     *
+     * Allocation-free: reuses the shared [ccdDelta]/matrix scratch. Deterministic. No-op when the
+     * contacts are already satisfied (residual ≤ [POSTURE_EPS]), so non-over-constrained poses are
+     * untouched. Only the joints on the contact chain move, so non-contact limbs stay rigid.
+     */
+    private fun solvePosture(contacts: List<ContactSpec>) {
+        for (iter in 0 until POSTURE_MAX_ITERS) {
+            // World transforms for the current configuration.
+            for (root in activeRoots) root.updateWorldTransforms(zero, identity)
+
+            var maxResidual = 0f
+            for (spec in contacts) {
+                val end = nodeMap[spec.endJoint.index] ?: continue
+                val root = nodeMap[spec.rootJoint.index] ?: continue
+                val ex = spec.targetWorld.x - end.worldPosition.x
+                val ey = spec.targetWorld.y - end.worldPosition.y
+                val ez = spec.targetWorld.z - end.worldPosition.z
+                val res = sqrt(ex * ex + ey * ey + ez * ez)
+                if (res > maxResidual) maxResidual = res
+                if (res <= POSTURE_EPS) continue
+
+                // CCD: from the end-effector upward to the root joint, rotate each joint to aim the
+                // end-effector at the target, re-evaluating FK after every joint so the next joint
+                // sees the updated end-effector position.
+                var node: SkeletonNode? = end
+                while (node != null) {
+                    ccdAim(node, end, spec.targetWorld)
+                    for (r in activeRoots) r.updateWorldTransforms(zero, identity)
+                    if (node === root) break
+                    node = node.parent
+                }
+            }
+
+            if (maxResidual <= POSTURE_EPS) break
+        }
+    }
+
+    /**
+     * Rotates [node] (damped) so that the end-effector [end] is pulled toward [target]. The
+     * correction is a world-space shortest-arc rotation from `node→end` onto `node→target`,
+     * applied to [node]'s *local* rotation by conjugating with the parent frame (so it composes
+     * correctly through the FK chain). Honours [POSTURE_DAMP] for stable convergence.
+     */
+    private fun ccdAim(node: SkeletonNode, end: SkeletonNode, target: Vector3) {
+        ccdA.set(end.worldPosition).subtract(node.worldPosition)
+        ccdB.set(target).subtract(node.worldPosition)
+        if (ccdA.mag() < 1e-5f || ccdB.mag() < 1e-5f) return
+
+        // World-space delta aligning the current end direction onto the target direction.
+        SkeletonMath.getRotationToAlign(ccdA, ccdB, ccdDX, ccdDelta)
+        ccdDelta.angle *= POSTURE_DAMP
+        if (abs(ccdDelta.angle) < 1e-4f) return
+
+        // Parent world rotation P (identity for the body root), its matrix (ccdPX..Z), and the
+        // delta matrix (ccdDX..Z). New local L' = (P^-1 ∘ Delta ∘ P) ∘ L.
+        val parent = node.parent
+        if (parent == null) {
+            ccdPX.set(1f, 0f, 0f); ccdPY.set(0f, 1f, 0f); ccdPZ.set(0f, 0f, 1f)
+        } else {
+            SkeletonMath.rotationToMatrix(parent.worldRotation, ccdPX, ccdPY, ccdPZ)
+        }
+        SkeletonMath.rotationToMatrix(ccdDelta, ccdDX, ccdDY, ccdDZ)
+
+        // M = P^T ∘ Delta  (P^T is the inverse of a rotation matrix).
+        SkeletonMath.transposeMultiply(ccdPX, ccdPY, ccdPZ, ccdDX, ccdDY, ccdDZ, ccdMX, ccdMY, ccdMZ)
+        // MoP = M ∘ P = P^T ∘ Delta ∘ P
+        SkeletonMath.multiplyMatrices(ccdMX, ccdMY, ccdMZ, ccdPX, ccdPY, ccdPZ, ccdOpX, ccdOpY, ccdOpZ)
+        // L' = MoP ∘ L
+        SkeletonMath.rotationToMatrix(node.localRotation, ccdOldX, ccdOldY, ccdOldZ)
+        SkeletonMath.multiplyMatrices(ccdOpX, ccdOpY, ccdOpZ, ccdOldX, ccdOldY, ccdOldZ, ccdNewX, ccdNewY, ccdNewZ)
+        SkeletonMath.getRotationFromMatrix(ccdNewX, ccdNewY, ccdNewZ, node.localRotation)
+
+        // UNI-1 shape regularization: nudge the joint back toward its authored angle by
+        // [POSTURE_REG] so the converged posture is the closest reachable shape to the author's
+        // intent (a slerp(current, authored, POSTURE_REG)). For well-posed contacts the residual
+        // is ~0 and this pass never runs, so authored poses are preserved verbatim.
+        regularizeTowardAuthored(node)
+    }
+
+    /**
+     * Slerps [node]'s current local rotation a fraction [POSTURE_REG] of the way back toward its
+     * authored value (captured in [authoredRotBuf]). Allocation-free: reuses the shared matrix
+     * scratch. `current' = current ∘ (current⁻¹ ∘ authored)^POSTURE_REG`.
+     */
+    private fun regularizeTowardAuthored(node: SkeletonNode) {
+        val auth = authoredRotBuf[node.joint.index]
+        // cur matrix
+        SkeletonMath.rotationToMatrix(node.localRotation, ccdOldX, ccdOldY, ccdOldZ)
+        // auth matrix
+        SkeletonMath.rotationToMatrix(auth, ccdPX, ccdPY, ccdPZ)
+        // R = cur⁻¹ ∘ auth = transpose(cur) ∘ auth
+        SkeletonMath.transposeMultiply(ccdOldX, ccdOldY, ccdOldZ, ccdPX, ccdPY, ccdPZ, ccdMX, ccdMY, ccdMZ)
+        SkeletonMath.getRotationFromMatrix(ccdMX, ccdMY, ccdMZ, ccdDelta)
+        if (abs(ccdDelta.angle) < 1e-4f) return
+        ccdDelta.angle *= POSTURE_REG
+        // Re-derive R's matrix from the scaled angle, then current' = cur ∘ R.
+        SkeletonMath.rotationToMatrix(ccdDelta, ccdDX, ccdDY, ccdDZ)
+        SkeletonMath.multiplyMatrices(ccdOldX, ccdOldY, ccdOldZ, ccdDX, ccdDY, ccdDZ, ccdNewX, ccdNewY, ccdNewZ)
+        SkeletonMath.getRotationFromMatrix(ccdNewX, ccdNewY, ccdNewZ, node.localRotation)
     }
 
     /**
