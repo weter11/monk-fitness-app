@@ -232,6 +232,10 @@ object SkeletonMath {
     // Static scratch for transforming a frame-relative pole into world space inside solveIK.
     private val poleWorldScratch = Vector3()
 
+    // Zero pole reused by the UNI-9 degenerate-straight-limb fallback: a zero-magnitude pole makes
+    // [solveTriangleJoint] pick its stable world-down bend plane (never allocates per solve).
+    private val straightDegeneratePole = Vector3(0f, 0f, 0f)
+
     private const val DEG2RAD = 3.1415927f / 180f
     private const val RAD2DEG = 180f / 3.1415927f
 
@@ -643,6 +647,26 @@ object SkeletonMath {
 
         // Middle at exactly L1 along the aim direction (keeps the upper bone length exact);
         // never let it overshoot the clamped end.
+        //
+        // UNI-9: when the (clamped) reach is shorter than the upper bone (`dist < L1`) a straight
+        // limb is geometrically impossible without collapsing the second bone to zero length —
+        // the old `middleDist = min(L1, dist)` wrote `middle == end == target`, a degenerate
+        // zero-length shin/forearm that only survived because the global ConstraintSolver later
+        // re-baked it via triangle IK. If that solver was skipped (no contact registered) the pose
+        // shipped a zero-length segment and failed BONE_LENGTH. Fall back to a valid bent limb here
+        // (the same triangle solve the ConstraintSolver would apply) so both bone lengths are
+        // preserved at bake time, removing the hidden dependency on the solver. A zero pole selects
+        // the solver's stable world-down bend plane.
+        if (dist < L1) {
+            result.end.set(
+                root.x + dirX * dist,
+                root.y + dirY * dist,
+                root.z + dirZ * dist
+            )
+            solveTriangleJoint(root, result.end, straightDegeneratePole, L1, L2, result.joint)
+            return result
+        }
+
         val middleDist = minOf(L1, dist)
         result.joint.set(
             root.x + dirX * middleDist,
@@ -785,6 +809,105 @@ object SkeletonMath {
         multiplyMatrices(clavColBX, clavColBY, clavColBZ, clavColAX, clavColAY, clavColAZ, clavColRX, clavColRY, clavColRZ)
         multiplyMatrices(clavColRX, clavColRY, clavColRZ, clavColCX, clavColCY, clavColCZ, clavColAX, clavColAY, clavColAZ)
         getRotationFromMatrix(clavColAX, clavColAY, clavColAZ, out)
+        return out
+    }
+
+    // --- General axis-angle composition -------------------------------------------
+    //
+    // Composes two [JointRotation]s into a single equivalent rotation `out = a ∘ b`
+    // (apply `b` first, then `a`) by multiplying their rotation matrices with the existing
+    // matrix utilities — no duplicated rotation math, no quaternion type. This is the shared
+    // primitive that lets a joint carry more than one degree of freedom in one exact rotation
+    // (e.g. a 2-DOF wrist/ankle, UNI-8). Allocation-free: writes into [out].
+    private val composeAX = Vector3(); private val composeAY = Vector3(); private val composeAZ = Vector3()
+    private val composeBX = Vector3(); private val composeBY = Vector3(); private val composeBZ = Vector3()
+    private val composeRX = Vector3(); private val composeRY = Vector3(); private val composeRZ = Vector3()
+
+    fun composeRotations(a: JointRotation, b: JointRotation, out: JointRotation): JointRotation {
+        rotationToMatrix(a, composeAX, composeAY, composeAZ)
+        rotationToMatrix(b, composeBX, composeBY, composeBZ)
+        multiplyMatrices(composeAX, composeAY, composeAZ, composeBX, composeBY, composeBZ, composeRX, composeRY, composeRZ)
+        getRotationFromMatrix(composeRX, composeRY, composeRZ, out)
+        return out
+    }
+
+    // --- Wrist and ankle: 2-DOF combined articulation (UNI-8) ---------------------
+    //
+    // The real wrist and ankle are not single-axis hinges: the wrist combines flexion/extension
+    // with radial/ulnar deviation, and the ankle combines dorsi/plantar-flexion with
+    // inversion/eversion. Previously the hand/foot completion took a single axis-angle
+    // [JointRotation], so an author could express one of those axes but never *combine* two
+    // (dorsiflexion **and** inversion, or wrist flexion **and** deviation) — the second DOF
+    // silently overwrote the first. These helpers compose the two anatomical DOFs into one exact
+    // rotation (via [composeRotations]) that FK propagates and the finalizer honours through the
+    // existing single-rotation completion path, mirroring how [buildScapularRotation] /
+    // [buildClavicularRotation] gave the shoulder girdle real DOFs.
+    //
+    // Axes follow the shared skeleton frame (sagittal motion about Z, the convention every pose
+    // uses for pitch/lean): flexion/dorsiflexion about the mediolateral Z axis; wrist deviation
+    // about the antero-posterior Y axis; ankle inversion/eversion about the long X axis. Angles
+    // are radians — the caller supplies anatomical values, so there are no per-pose magic numbers.
+    private val wristRotFlex = JointRotation(Vector3(0f, 0f, 1f), 0f)
+    private val wristRotDev = JointRotation(Vector3(0f, 1f, 0f), 0f)
+    private val ankleRotFlex = JointRotation(Vector3(0f, 0f, 1f), 0f)
+    private val ankleRotInv = JointRotation(Vector3(1f, 0f, 0f), 0f)
+
+    /**
+     * Composes the wrist's 2-DOF local rotation from [flexion] (flexion/extension about the
+     * mediolateral Z axis) and [deviation] (radial/ulnar deviation about the antero-posterior Y
+     * axis): `R = Rz(flexion) · Ry(deviation)`. The two combine exactly instead of one axis
+     * dropping the other. Allocation-free: writes into [out].
+     */
+    fun buildWristRotation(flexion: Float, deviation: Float, out: JointRotation): JointRotation {
+        wristRotFlex.axis.set(0f, 0f, 1f); wristRotFlex.angle = flexion
+        wristRotDev.axis.set(0f, 1f, 0f); wristRotDev.angle = deviation
+        return composeRotations(wristRotFlex, wristRotDev, out)
+    }
+
+    /**
+     * Composes the ankle's 2-DOF local rotation from [dorsiflexion] (dorsi/plantar-flexion about
+     * the mediolateral Z axis) and [inversion] (inversion/eversion about the long X axis):
+     * `R = Rz(dorsiflexion) · Rx(inversion)`. The two combine exactly instead of one axis
+     * dropping the other. Allocation-free: writes into [out].
+     */
+    fun buildAnkleRotation(dorsiflexion: Float, inversion: Float, out: JointRotation): JointRotation {
+        ankleRotFlex.axis.set(0f, 0f, 1f); ankleRotFlex.angle = dorsiflexion
+        ankleRotInv.axis.set(1f, 0f, 0f); ankleRotInv.angle = inversion
+        return composeRotations(ankleRotFlex, ankleRotInv, out)
+    }
+
+    // --- Hip: 3-DOF ball-and-socket authoring (UNI-10) ----------------------------
+    //
+    // The hip is a genuine ball-and-socket at the acetabulum. Poses previously expressed hip
+    // motion inconsistently (raw `hip.localRotation` in some poses, IK-implied femur in others)
+    // and femoral internal/external rotation was entangled with the IK pole. This composer gives
+    // the hip a first-class, named authoring path mirroring [buildChestOrientation]: flexion/
+    // extension in the sagittal plane about the mediolateral Z axis; abduction/adduction in the
+    // frontal plane about the antero-posterior Y axis; internal/external rotation about the femur's
+    // long X axis (kept separate from the IK pole, which only selects the knee-bend plane).
+    // [sideSign] mirrors abduction and axial rotation across the body mid-line (-1 left, +1 right)
+    // so a positive value spreads/rotates both legs symmetrically. The anatomical ROM vocabulary
+    // lives in [HipRomLimits] (shared, named — no per-pose magic numbers); this helper composes
+    // the authored angles and leaves ROM enforcement to the validator's `HIP_ROM_LIMIT` rule.
+    // Composition: `R = Rz(flexion) · Ry(abduction · sideSign) · Rx(rotation · sideSign)`.
+    // Allocation-free: writes into [out].
+    private val hipRotFlex = JointRotation(Vector3(0f, 0f, 1f), 0f)
+    private val hipRotAbd = JointRotation(Vector3(0f, 1f, 0f), 0f)
+    private val hipRotAxial = JointRotation(Vector3(1f, 0f, 0f), 0f)
+
+    fun buildHipRotation(
+        flexion: Float,
+        abduction: Float,
+        rotation: Float,
+        sideSign: Float,
+        out: JointRotation
+    ): JointRotation {
+        hipRotFlex.axis.set(0f, 0f, 1f); hipRotFlex.angle = flexion
+        hipRotAbd.axis.set(0f, 1f, 0f); hipRotAbd.angle = abduction * sideSign
+        hipRotAxial.axis.set(1f, 0f, 0f); hipRotAxial.angle = rotation * sideSign
+        // R = (Rz(flexion) · Ry(abduction · sideSign)) · Rx(rotation · sideSign).
+        composeRotations(hipRotFlex, hipRotAbd, out)
+        composeRotations(out, hipRotAxial, out)
         return out
     }
 

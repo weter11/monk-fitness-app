@@ -157,6 +157,72 @@ abstract class BasePose : PoseBuilder {
         chest.localRotation.set(axis, thoracicRad)
     }
 
+    /**
+     * Authors a **2-DOF wrist** articulation on the hand node (UNI-8): flexion/extension composed
+     * with radial/ulnar deviation into one exact local rotation the FK traversal propagates and the
+     * hand completion honours. Combining the two axes is now first-class instead of one silently
+     * overwriting the other. Leaving both at zero keeps the wrist at identity (rigid extension of
+     * the forearm). Delegates to [SkeletonMath.buildWristRotation] (no duplicated rotation math).
+     */
+    protected fun buildWristArticulation(hand: SkeletonNode, flexion: Float, deviation: Float) {
+        SkeletonMath.buildWristRotation(flexion, deviation, hand.localRotation)
+    }
+
+    /**
+     * Authors a **2-DOF ankle** articulation on the ankle node (UNI-8): dorsi/plantar-flexion
+     * composed with inversion/eversion into one exact local rotation. Combining the two axes is
+     * now first-class instead of one silently overwriting the other. Leaving both at zero keeps the
+     * ankle at identity (flat foot). Delegates to [SkeletonMath.buildAnkleRotation].
+     */
+    protected fun buildAnkleArticulation(ankle: SkeletonNode, dorsiflexion: Float, inversion: Float) {
+        SkeletonMath.buildAnkleRotation(dorsiflexion, inversion, ankle.localRotation)
+    }
+
+    /**
+     * Authors hip **flexion/extension** (sagittal plane, about the mediolateral Z axis) on a hip
+     * ball-joint node (UNI-10). This is the acetabular ball joint; FK carries the whole leg with it.
+     * The single, documented authoring path replaces ad-hoc raw `hip.localRotation` writes.
+     */
+    protected fun buildHipFlexion(hip: SkeletonNode, flexionRad: Float) {
+        hip.localRotation.set(axisZ, flexionRad)
+    }
+
+    /**
+     * Authors hip **abduction/adduction** (frontal plane, about the antero-posterior Y axis) on a
+     * hip ball-joint node (UNI-10). [sideSign] (-1 left / +1 right) mirrors the motion across the
+     * mid-line so a positive value abducts (spreads) both legs symmetrically.
+     */
+    protected fun buildHipAbduction(hip: SkeletonNode, abductionRad: Float, sideSign: Float) {
+        hip.localRotation.set(axisY, abductionRad * sideSign)
+    }
+
+    /**
+     * Authors hip **internal/external (femoral axial) rotation** about the femur's long X axis on
+     * a hip ball-joint node (UNI-10). This is the acetabular ball joint's axial DOF, kept *separate*
+     * from the IK pole (which only selects the knee-bend plane). [sideSign] (-1 left / +1 right)
+     * mirrors the twist across the mid-line.
+     */
+    protected fun buildHipRotation(hip: SkeletonNode, rotationRad: Float, sideSign: Float) {
+        hip.localRotation.set(axisX, rotationRad * sideSign)
+    }
+
+    /**
+     * Authors a **full 3-DOF hip** orientation by composing flexion, abduction and femoral axial
+     * rotation into a single exact [JointRotation] (UNI-10), mirroring [buildChestOrientation].
+     * Any subset may be zero. [sideSign] (-1 left / +1 right) mirrors abduction and axial rotation.
+     * Delegates to [SkeletonMath.buildHipRotation] (no duplicated rotation math). ROM vocabulary is
+     * [HipRomLimits]; enforcement stays in the validator's `HIP_ROM_LIMIT` rule.
+     */
+    protected fun buildHipOrientation(
+        hip: SkeletonNode,
+        flexionRad: Float,
+        abductionRad: Float,
+        rotationRad: Float,
+        sideSign: Float
+    ) {
+        SkeletonMath.buildHipRotation(flexionRad, abductionRad, rotationRad, sideSign, hip.localRotation)
+    }
+
     // Common IK helpers (wrappers around the actual IK solver to avoid code duplication)
     protected fun solveArmIK(
         shoulderW: Vector3,
