@@ -1,7 +1,7 @@
 package com.monkfitness.app
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.poses.PoseContext
+import com.monkfitness.app.poses.*
 import com.monkfitness.app.validation.poses.*
 import org.junit.Assert.*
 import org.junit.Test

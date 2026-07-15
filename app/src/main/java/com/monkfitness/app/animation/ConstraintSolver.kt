@@ -198,7 +198,7 @@ object ConstraintSolver {
         // Preserve the authored pelvis orientation so the solver only ever *adds* a posture
         // correction, never wipes a deliberate lean (e.g. Deep Overhead Squat's folded pelvis).
         authoredPelvisRot.copyFrom(pelvis.localRotation)
-        authoredPelvisPos.copyFrom(pelvis.localPosition)
+        authoredPelvisPos.set(pelvis.localPosition)
         // UNI-6 — reset the recorded root-displacement deltas; they are recomputed below.
         pose.rootTranslationDelta = 0f
         pose.rootRotationDelta = 0f
