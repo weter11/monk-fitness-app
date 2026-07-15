@@ -34,3 +34,4 @@ project.properties
 android-sdk/
 proxy-ca.pem
 custom-cacerts
+git-proxy-ca.pem
