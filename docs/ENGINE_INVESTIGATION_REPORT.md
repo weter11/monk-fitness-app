@@ -31,8 +31,8 @@ The previous investigation listed 11 issues then 6 (A–F). A large rework has l
 | 3 — IK clamp drove contacts through the floor | **Resolved** | `ContactConstraint` + `resolveContactPlane`. |
 | 4 — no global constraint/root solve | **Partially resolved** | `ConstraintSolver` exists (posture-based since `dd5bc32`), pelvis-tilt DOF added; still pelvis-only (UNI-1). |
 | 5 — no scapular/clavicular DOF | **Resolved** | `CLAVICLE_*`/`SCAPULA_*` joints + `CHEST→CLAVICLE→SCAPULA→SHOULDER`; `buildScapularRotation` + `buildClavicularRotation`; clavicle now a real, driven girdle node (UNI-7). |
-| 6 — no wrist/ankle articulation | **Partially resolved** | `relativeRotation` resolves wrist/ankle relative to parent segment (Issue C). **Still single-DOF (UNI-8).** |
-| 7 — no ankle/talocrural DOF | **Partially resolved** | same relative-frame path; single-DOF (UNI-8). |
+| 6 — no wrist/ankle articulation | **Resolved** | `relativeRotation` resolves wrist/ankle relative to parent segment (Issue C) + 2-DOF via composed second `JointRotation` in the finalizer (UNI-8). |
+| 7 — no ankle/talocrural DOF | **Resolved** | `relativeRotation` + 2-DOF composed second `JointRotation` (UNI-8) now gives the ankle an independent second axis. |
 | 8 — no angular joint limits | **Resolved** | `AngularJointLimits`, angular clamp in `solveIK`, `validateAngularJointLimits`. |
 | 9 — trunk frame 1-DOF | **Resolved** | `buildChestOrientation` (3-D) + `reconstructChestFrame`. |
 | 10 — reachability detection dead | **Resolved** | `bakeIkLimb` auto-propagates `clampAmount`; `IK_TARGET_UNREACHABLE` enabled under `ENGINEERING_VALIDATION`. |
@@ -415,30 +415,73 @@ keep it near-neutral by default (matching the scapula), so the frozen references
 
 ---
 
-### UNI-8 — Wrist and ankle are single-DOF; no combined articulation (was I)
+### UNI-8 — Wrist and ankle are single-DOF; no combined articulation (was I) — RESOLVED
 **Title:** Hand/foot completion applies a **single axis-angle** wrist/ankle rotation. Real wrist
 is 2-DOF (flexion/extension + radial/ulnar deviation, + forearm pronation/supination); ankle is
-a hinge + inversion/eversion. The engine represents only one combined rotation.
-**Description:** `HandDefinition.computeHandJoints(dir, wristRotation)` and
-`FootDefinition.computeHeelToe(ankle, neutralForward, ankleRotation)` each take one
+a hinge + inversion/eversion. The engine represented only one combined rotation.
+
+**Description (pre-fix):** `HandDefinition.computeHandJoints(dir, wristRotation)` and
+`FootDefinition.computeHeelToe(ankle, neutralForward, ankleRotation)` each took one
 `JointRotation`. After the Issue C fix the rotation is correctly *relative to the parent
 segment*, but still a single rotation — pronation **and** radial deviation, or dorsiflexion
-**and** inversion, can't be combined.
+**and** inversion, couldn't be combined.
+
 **Root Cause:** wrist/ankle promoted to "real joints" but modeled with a single axis-angle
 matching the `JointRotation` primitive; no 2-DOF joint representation.
-**Engine Components:** `HandDefinition`, `FootDefinition`,
-`SkeletonPoseFinalizer.adjustHandOrientation`/`adjustFootOrientation`, `JointRotation`.
+
+**Fix (2-DOF wrist/ankle via a composed second rotation):** a second, independent
+wrist/ankle rotation is now composed with the primary one, so two axes are honored instead of
+collapsing into a single axis-angle:
+- `SkeletonMath.composeRotations(r1, r2, out)` combines two axis-angle `JointRotation`s into one
+  effective rotation (matrix multiply; allocation-free, scratch column buffers). This is the
+  "composed in the finalizer" mechanism from the issue's possible solutions — without changing
+  the `JointRotation` primitive (which the whole FK/IK engine depends on), so the change is
+  local and low-risk.
+- `HandDefinition.computeHandJoints` and `FootDefinition.computeHeelToe` gained 2-rotation
+  overloads that compose the primary + secondary rotation and apply the result to the hand/foot
+  direction. The single-rotation overloads are retained and are behavior-identical when the
+  secondary is identity (so 1-DOF grips/feet are unchanged).
+- `SkeletonPose` now carries a `secondaryRotations: MutableMap<Joint, JointRotation>` (with
+  `getSecondaryRotation`/`setSecondaryRotation` accessors and `copyFrom` propagation) — the
+  storage for the second DOF, separate from the primary `localRotation`.
+- `SkeletonPoseFinalizer.adjustHandOrientation`/`adjustFootOrientation` read the pose's
+  secondary wrist/ankle rotation (`outputPose.getSecondaryRotation(...)`) and pass it as the
+  second argument to the 2-rotation overloads; the primary is still derived from the
+  `relativeRotation` of the joint vs. its parent segment. An identity secondary ⇒ exactly the
+  previous single-DOF rendering, so all current poses (which never set a secondary) are
+  byte-for-byte unchanged.
+- `BasePose.setSecondaryJointRotation(joint, rotation)` is the authoring convenience for
+  production grips/feet (e.g. radial deviation on top of a neutral/hammer grip, inversion on top
+  of a pointed foot); it writes into the pose's `secondaryRotations` map.
+- `WristAnkleTwoDofTest` proves the 2-DOF support: `composeRotations` combines two axes; the
+  2-rotation `computeHandJoints`/`computeHeelToe` produce a hand/foot pose distinct from either
+  single rotation (and identical to the single-DOF result when the secondary is identity); and
+  the secondary rotation round-trips through `SkeletonPose` + `copyFrom`.
+
+**Engine Components:** `SkeletonMath.composeRotations`, `HandDefinition`/`FootDefinition`
+(2-rotation overloads), `SkeletonPose.secondaryRotations` (+ accessors/`copyFrom`),
+`SkeletonPoseFinalizer.adjustHandOrientation`/`adjustFootOrientation`, `BasePose.setSecondaryJointRotation`.
+
 **Affected Exercises:** hammer/neutral grips, supinated curls, inverted/everted landings,
-pointed/flexed foot.
-**Affected Validation Poses:** none at runtime (references need only one wrist/ankle axis).
-**Severity:** LOW–MEDIUM (correct for the four references; limits expressive grips/feet).
-**Possible Solutions:** extend `JointRotation` to 2-DOF (or quaternion), or add a second
-wrist/ankle `JointRotation` composed in the finalizer; have `computeHandJoints`/`computeHeelToe`
-accept the composed rotation.
+pointed/flexed foot — now able to express a second independent wrist/ankle axis.
+**Affected Validation Poses:** none at runtime (references need only one wrist/ankle axis;
+they render identically because no secondary is set).
+
+**Severity:** LOW–MEDIUM (was correct for the four references; limits expressive grips/feet).
+
+**Possible Solutions:** *(Implemented — second `JointRotation` composed in the finalizer via
+`composeRotations`, kept as a separate `secondaryRotations` channel so the `JointRotation`
+primitive and FK/IK are untouched; single-DOF poses unchanged when no secondary is set.)*
+
 **Complexity:** Medium.
+
 **Engine vs Pose:** Engine.
-**Currently Visible?** No.
-**Blocks Future Work?** No (latent expressiveness gap).
+
+**Currently Visible?** Structurally yes — the wrist/ankle now support an independent second
+rotation composed with the primary; production grips/feet opt in via `setSecondaryJointRotation`.
+References remain single-DOF (no secondary set), so they are unchanged.
+
+**Blocks Future Work?** No (latent expressiveness gap closed).
 
 ---
 
@@ -543,7 +586,9 @@ UNI-4 for full fidelity.
 8. **UNI-10 — hip authoring inconsistency / no helper.** Expressive gap. *(Engine, Low–Medium.)*
 9. **UNI-9 — degenerate straight-limb bake before the solver.** Latent landmine for contact-less
    straight limbs. *(Engine, Low.)*
-10. **UNI-8 — wrist/ankle single-DOF.** Latent expressiveness gap. *(Engine, Medium.)*
+ 10. **UNI-8 — wrist/ankle single-DOF.** RESOLVED — a second, composed `JointRotation` (via
+    `composeRotations`) gives the wrist/ankle an independent second axis in the finalizer;
+    single-DOF poses unchanged when no secondary is set. *(Engine, Medium.)*
 11. **UNI-11 — hip center consistent.** Verified correct; no action.
 12. **UNI-12 — future-exercise supportability.** Reference/summary; not a defect.
 
@@ -569,14 +614,15 @@ UNI-4 for full fidelity.
   limits (UNI-3), inconsistent hip authoring (UNI-10),
   and a validator blind to intent (UNI-6). None of these block the listed future hip/pelvis
   exercises except the frozen Middle Split's impossible spread.
-   - Highest-leverage next work: **UNI-10** (consistent hip authoring helper), then
-    **UNI-8** (wrist/ankle single-DOF). **UNI-2 + UNI-6**
-    (straight/intent fidelity) and **UNI-3** (biomechanical hip ROM) are now RESOLVED
-    by the validator/ROM cluster in `ExerciseValidator` (`STRAIGHT_LIMB_INTENT`,
-    `CONTACT_PRESERVED`, `PELVIS_INTENT`, `HIP_ROM_LIMIT`, all switched on under
-    `ValidatorConfig.ENGINEERING_VALIDATION`); **UNI-7** (clavicle) is now RESOLVED by
-    `buildClavicularRotation` composed between chest and scapula. **UNI-1** (true posture
-    solve) and **UNI-4** (tilt axis) are resolved.
+     - Highest-leverage next work: **UNI-10** (consistent hip authoring helper), then
+     **UNI-9** (degenerate straight-limb bake). **UNI-2 + UNI-6**
+     (straight/intent fidelity) and **UNI-3** (biomechanical hip ROM) are now RESOLVED
+     by the validator/ROM cluster in `ExerciseValidator` (`STRAIGHT_LIMB_INTENT`,
+     `CONTACT_PRESERVED`, `PELVIS_INTENT`, `HIP_ROM_LIMIT`, all switched on under
+     `ValidatorConfig.ENGINEERING_VALIDATION`); **UNI-7** (clavicle) is now RESOLVED by
+     `buildClavicularRotation` composed between chest and scapula, and **UNI-8** (wrist/ankle
+     2-DOF) is now RESOLVED by the composed second `JointRotation` in the finalizer. **UNI-1**
+     (true posture solve) and **UNI-4** (tilt axis) are resolved.
 
 *No code, constants, targets, or validation poses were modified during this investigation. The
 prior broad engine report and the focused pelvic/hip report are consolidated here; the

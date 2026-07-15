@@ -788,6 +788,32 @@ object SkeletonMath {
         return out
     }
 
+    // --- Compose two joint rotations into one (2-DOF support) ------------------
+    //
+    // The wrist/ankle were promoted to real joints but modelled with a single
+    // axis-angle (UNI-8): a real wrist combines flexion/extension + radial/ulnar
+    // deviation (+ forearm pronation/supination); a real ankle combines dorsi/
+    // plantar-flexion + inversion/eversion. This helper composes a *primary* and a
+    // *secondary* [JointRotation] into one effective rotation the hand/foot geometry
+    // consumes, so the two axes are honored independently instead of collapsing
+    // into a single combined axis-angle. Allocation-free: scratch column buffers.
+    private val compM1X = Vector3(); private val compM1Y = Vector3(); private val compM1Z = Vector3()
+    private val compM2X = Vector3(); private val compM2Y = Vector3(); private val compM2Z = Vector3()
+    private val compRX = Vector3(); private val compRY = Vector3(); private val compRZ = Vector3()
+
+    /**
+     * Composes [r1] then [r2] into a single effective [JointRotation] (the combined
+     * articulation of a 2-DOF wrist/ankle joint), writing into [out].
+     * Allocation-free. `out = r1 ∘ r2` in matrix terms (applying [r2] first, then [r1]).
+     */
+    fun composeRotations(r1: JointRotation, r2: JointRotation, out: JointRotation): JointRotation {
+        rotationToMatrix(r1, compM1X, compM1Y, compM1Z)
+        rotationToMatrix(r2, compM2X, compM2Y, compM2Z)
+        multiplyMatrices(compM1X, compM1Y, compM1Z, compM2X, compM2Y, compM2Z, compRX, compRY, compRZ)
+        getRotationFromMatrix(compRX, compRY, compRZ, out)
+        return out
+    }
+
     /**
      * Angle (degrees) between two directions, allocation-free. Used by the angular
      * joint-limit validator and by any caller that needs the deviation of a proximal bone from

@@ -105,6 +105,18 @@ abstract class BasePose : PoseBuilder {
     }
 
     /**
+     * Authors a **secondary wrist/ankle rotation** (the second DOF of a 2-DOF joint) for the
+     * given joint, stored on the pose so the finalizer can compose it with the primary
+     * `localRotation` (UNI-8). Use this for the axis the single `localRotation` primitive
+     * can't carry on its own — e.g. radial/ulnar deviation on top of wrist pronation, or
+     * inversion/eversion on top of ankle dorsi/plantar-flexion. Omitting it (the default)
+     * leaves the joint single-DOF. The secondary is expressed in the same joint frame as the
+     * primary (relative to the parent segment), so the finalizer composes them directly.
+     */
+    protected fun setSecondaryJointRotation(joint: Joint, rotation: JointRotation) {
+        jointsBuffer.setSecondaryRotation(joint, rotation)
+    }
+    /**
      * Authors a **clavicular** rotation on the proximal shoulder-girdle node, between the
      * chest and the scapula (CHEST -> CLAVICLE -> SCAPULA -> SHOULDER). Elevation/depression
      * (transverse X), protraction/retraction (vertical Y) and axial rotation (long Z) are real

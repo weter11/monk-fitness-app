@@ -54,6 +54,38 @@ data class FootDefinition(
         writeHeelToe(ankle, scratchDir, outHeel, outToe)
     }
 
+    // Scratch rotation for the 2-DOF (UNI-8) overload below.
+    private val scratchRot = JointRotation()
+
+    /**
+     * 2-DOF overload (UNI-8): honors a *secondary* ankle articulation on top of
+     * the primary [ankleRotation] (e.g. dorsi/plantar-flexion + inversion/
+     * eversion — no longer collapsed into a single axis-angle). The two rotations
+     * are composed into one effective orientation via [SkeletonMath.composeRotations]
+     * and applied to the neutral foot direction; the pitch clamp still bounds the
+     * resulting direction. When [ankleRotation2] is the identity rotation the
+     * result is identical to the single-rotation overload, so flat-foot rendering
+     * is preserved.
+     *
+     * Allocation-free: writes into [scratchDir]/[scratchRot] and the outputs.
+     */
+    fun computeHeelToe(
+        ankle: Vector3,
+        neutralForward: Vector3,
+        ankleRotation: JointRotation,
+        ankleRotation2: JointRotation,
+        outHeel: Vector3,
+        outToe: Vector3
+    ) {
+        // Compose the authored ankle orientation with the neutral foot direction.
+        SkeletonMath.composeRotations(ankleRotation, ankleRotation2, scratchRot)
+        SkeletonMath.rotAround(neutralForward, scratchRot.axis, scratchRot.angle, scratchDir)
+        scratchDir.normalize()
+        // Pitch clamp remains a bound on the resulting foot direction, not the sole DOF.
+        applyPitchClamp(scratchDir)
+        writeHeelToe(ankle, scratchDir, outHeel, outToe)
+    }
+
     private fun writeHeelToe(ankle: Vector3, dir: Vector3, outHeel: Vector3, outToe: Vector3) {
         outHeel.set(dir).multiply(-(footLength * heelRatio)).add(ankle)
         outToe.set(dir).multiply(footLength * toeRatio).add(ankle)

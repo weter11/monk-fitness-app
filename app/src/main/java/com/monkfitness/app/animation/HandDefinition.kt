@@ -49,6 +49,33 @@ data class HandDefinition(
         writeJoints(wrist, scratchDir, result)
     }
 
+    // Scratch rotation for the 2-DOF (UNI-8) overload below.
+    private val scratchRot = JointRotation()
+
+    /**
+     * 2-DOF overload (UNI-8): honors a *secondary* wrist articulation on top of
+     * the primary [wristRotation] (e.g. forearm pronation/supination + radial/
+     * ulnar deviation, or wrist flexion + deviation — no longer collapsed into a
+     * single axis-angle). The two rotations are composed into one effective
+     * orientation via [SkeletonMath.composeRotations] and applied to the forearm
+     * [direction]. When [wristRotation2] is the identity rotation the result is
+     * identical to the single-rotation overload, so 1-DOF grips are unchanged.
+     *
+     * Allocation-free: writes into [scratchDir]/[scratchRot] and [result].
+     */
+    fun computeHandJoints(
+        wrist: Vector3,
+        direction: Vector3,
+        wristRotation: JointRotation,
+        wristRotation2: JointRotation,
+        result: HandJoints
+    ) {
+        SkeletonMath.composeRotations(wristRotation, wristRotation2, scratchRot)
+        SkeletonMath.rotAround(direction, scratchRot.axis, scratchRot.angle, scratchDir)
+        scratchDir.normalize()
+        writeJoints(wrist, scratchDir, result)
+    }
+
     private fun writeJoints(wrist: Vector3, dir: Vector3, result: HandJoints) {
         result.wrist.set(wrist)
         result.palm.set(dir).multiply(palmLength * 0.5f).add(wrist)

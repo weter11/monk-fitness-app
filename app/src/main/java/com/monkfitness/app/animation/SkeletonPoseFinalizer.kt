@@ -374,25 +374,29 @@ class SkeletonPoseFinalizer(
             if (!cachedHasHeelToeF) {
                 adjustFootOrientation(
                     outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F,
-                    relativeRotation(outputPose.getJointRotation(Joint.ANKLE_F), outputPose.getJointRotation(Joint.KNEE_F), relAnkle)
+                    relativeRotation(outputPose.getJointRotation(Joint.ANKLE_F), outputPose.getJointRotation(Joint.KNEE_F), relAnkle),
+                    outputPose.getSecondaryRotation(Joint.ANKLE_F)
                 )
             }
             if (!cachedHasHeelToeB) {
                 adjustFootOrientation(
                     outputPose, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B,
-                    relativeRotation(outputPose.getJointRotation(Joint.ANKLE_B), outputPose.getJointRotation(Joint.KNEE_B), relAnkle)
+                    relativeRotation(outputPose.getJointRotation(Joint.ANKLE_B), outputPose.getJointRotation(Joint.KNEE_B), relAnkle),
+                    outputPose.getSecondaryRotation(Joint.ANKLE_B)
                 )
             }
             if (!cachedHasHandDetailA) {
                 adjustHandOrientation(
                     outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A,
-                    relativeRotation(outputPose.getJointRotation(Joint.HAND_A), outputPose.getJointRotation(Joint.ELBOW_A), relWrist)
+                    relativeRotation(outputPose.getJointRotation(Joint.HAND_A), outputPose.getJointRotation(Joint.ELBOW_A), relWrist),
+                    outputPose.getSecondaryRotation(Joint.HAND_A)
                 )
             }
             if (!cachedHasHandDetailP) {
                 adjustHandOrientation(
                     outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P,
-                    relativeRotation(outputPose.getJointRotation(Joint.HAND_P), outputPose.getJointRotation(Joint.ELBOW_P), relWrist)
+                    relativeRotation(outputPose.getJointRotation(Joint.HAND_P), outputPose.getJointRotation(Joint.ELBOW_P), relWrist),
+                    outputPose.getSecondaryRotation(Joint.HAND_P)
                 )
             }
         } else {
@@ -447,7 +451,8 @@ class SkeletonPoseFinalizer(
         palmId: Joint,
         knucklesId: Joint,
         fingertipsId: Joint,
-        wristRotation: JointRotation
+        wristRotation: JointRotation,
+        wristRotation2: JointRotation = IDENTITY_ROTATION
     ) {
         val elbow = pose.getJoint(elbowId)
         val hand = pose.getJoint(handId)
@@ -457,14 +462,13 @@ class SkeletonPoseFinalizer(
 
         tempDir.set(wrist).subtract(elbow).normalize()
 
-        // Promote the wrist to a real joint: compose the authored wrist orientation with
-        // the forearm direction so grips (pronation / supination / wrist flexion) are
-        // honored by the completed hand. The passed [wristRotation] is the hand's rotation
-        // *relative to the forearm (elbow) frame* (not its world rotation), so applying it to
-        // the already-world forearm direction does not double-count the trunk/parent frame
-        // (Issue C). Identity rotation leaves the result unchanged.
+        // Promote the wrist to a real 2-DOF joint (UNI-8): the primary [wristRotation]
+        // (grip / pronation / wrist flexion, relative to the forearm frame) is composed
+        // with a secondary articulation [wristRotation2] (e.g. radial/ulnar deviation) so
+        // two independent axes are honored instead of collapsing into one axis-angle.
+        // Identity [wristRotation2] leaves the 1-DOF result unchanged.
         val handDef = definition.hand
-        handDef.computeHandJoints(wrist, tempDir, wristRotation, handJointsBuffer)
+        handDef.computeHandJoints(wrist, tempDir, wristRotation, wristRotation2, handJointsBuffer)
 
         pose.getJoint(palmId).set(handJointsBuffer.palm)
         pose.getJoint(knucklesId).set(handJointsBuffer.knuckles)
@@ -477,7 +481,8 @@ class SkeletonPoseFinalizer(
         ankleId: Joint,
         heelId: Joint,
         toeId: Joint,
-        ankleRotation: JointRotation
+        ankleRotation: JointRotation,
+        ankleRotation2: JointRotation = IDENTITY_ROTATION
     ) {
         val knee = pose.getJoint(kneeId)
         val ankle = pose.getJoint(ankleId)
@@ -501,14 +506,12 @@ class SkeletonPoseFinalizer(
         }
         tempFootDir.normalize()
 
-        // Promote the ankle to a real joint: computeHeelToe composes the authored ankle
-        // orientation with this neutral (shank-perpendicular) foot direction and keeps the
-        // pitch clamp as a bound on the resulting direction. The passed [ankleRotation] is
-        // the ankle's rotation *relative to the shank (knee) frame* (not its world rotation),
-        // so applying it to the already-world foot direction does not double-count the
-        // trunk/parent frame (Issue C). Identity rotation leaves the neutral direction
-        // unchanged, so flat-foot rendering is preserved.
+        // Promote the ankle to a real 2-DOF joint (UNI-8): the primary [ankleRotation]
+        // (dorsi/plantar-flexion, relative to the shank frame) is composed with a secondary
+        // articulation [ankleRotation2] (e.g. inversion/eversion) so two independent axes are
+        // honored instead of collapsing into one axis-angle. Identity [ankleRotation2] leaves
+        // the 1-DOF result unchanged; the pitch clamp still bounds the resulting direction.
         val foot = definition.foot
-        foot.computeHeelToe(ankle, tempFootDir, ankleRotation, pose.getJoint(heelId), pose.getJoint(toeId))
+        foot.computeHeelToe(ankle, tempFootDir, ankleRotation, ankleRotation2, pose.getJoint(heelId), pose.getJoint(toeId))
     }
 }
