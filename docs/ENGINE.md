@@ -246,22 +246,29 @@ frame-relative poles.**
 
 ## 8. Joint Hierarchy
 
-The canonical tree is pelvis-rooted:
+The canonical tree is pelvis-rooted. The spine is modeled as two real segments
+(`PELVIS → LUMBAR → CHEST`, Issue E) so lumbar and thoracic motion can differ; the
+clavicle and scapula are first-class girdle joints (UNI-7) so the
+thorax-follows-shoulder-girdle principle reads correctly:
 
 ```
 PELVIS
-├── CHEST
-│   ├── NECK_END ── HEAD_POS
-│   ├── SHOULDER_A ── ELBOW_A ── HAND_A ── (WRIST_A) ── PALM_A ── KNUCKLES_A ── FINGERTIPS_A
-│   └── SHOULDER_P ── ELBOW_P ── HAND_P ── (WRIST_P) ── PALM_P ── KNUCKLES_P ── FINGERTIPS_P
+├── LUMBAR                         (lower-spine segment; pass-through by default)
+│   └── CHEST
+│       ├── NECK_END ── HEAD_POS
+│       ├── CLAVICLE_A ── SCAPULA_A ── SHOULDER_A
+│       │     └── ELBOW_A ── HAND_A ── WRIST_A ── PALM_A ── KNUCKLES_A ── FINGERTIPS_A
+│       └── CLAVICLE_P ── SCAPULA_P ── SHOULDER_P
+│             └── ELBOW_P ── HAND_P ── WRIST_P ── PALM_P ── KNUCKLES_P ── FINGERTIPS_P
 ├── HIP_F ── KNEE_F ── ANKLE_F ── {HEEL_F, TOE_F}
 └── HIP_B ── KNEE_B ── ANKLE_B ── {HEEL_B, TOE_B}
 ```
 
 Alternative topologies (e.g. the push-up skeleton) re-parent the same joints so
-a fixed contact becomes the root. The **set of joints is fixed** (`Joint`
-enum); only the **parenting** changes between topologies. Hands and feet have
-sub-segments (palm/knuckles/fingertips, heel/toe) that the finalizer completes.
+a fixed contact becomes the root. The **set of joints is fixed** at 33 contiguous
+entries (`Joint.kt`, `entries.size = 33`, indices `0..32`); only the **parenting**
+changes between topologies. Hands and feet have sub-segments
+(palm/knuckles/fingertips, heel/toe) that the finalizer completes.
 
 ---
 
