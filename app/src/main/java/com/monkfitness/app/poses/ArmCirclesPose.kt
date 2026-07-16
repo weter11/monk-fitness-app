@@ -100,10 +100,7 @@ class ArmCirclesPose : PoseBuilder {
         kneeB!!.localPosition.set(legBIK.joint).subtract(hipB!!.worldPosition)
         ankleB!!.localPosition.set(legBIK.end).subtract(legBIK.joint)
 
-        heelF!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f)
-        toeF!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
-        heelB!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f)
-        toeB!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
+        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         // 2. Arm circles kinematics
         // Circular motion of hands in sagittal plane centered on shoulder joint.
@@ -126,8 +123,7 @@ class ArmCirclesPose : PoseBuilder {
         elbowP!!.localPosition.set(armPIK.joint).subtract(shoulderP!!.worldPosition)
         handP!!.localPosition.set(armPIK.end).subtract(armPIK.joint)
 
-        palmA!!.localPosition = Vector3(6f, 0f, 0f); knucklesA!!.localPosition = Vector3(6f, 0f, 0f); fingertipsA!!.localPosition = Vector3(10f, 0f, 0f)
-        palmP!!.localPosition = Vector3(6f, 0f, 0f); knucklesP!!.localPosition = Vector3(6f, 0f, 0f); fingertipsP!!.localPosition = Vector3(10f, 0f, 0f)
+        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))

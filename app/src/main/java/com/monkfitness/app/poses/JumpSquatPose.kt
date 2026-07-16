@@ -90,9 +90,7 @@ class JumpSquatPose : BaseSquatPose() {
         val footPitch = flightFactor * 0.6f
         ankleF!!.localRotation.set(axisZ, leanAngle - footPitch)
         ankleB!!.localRotation.set(axisZ, leanAngle - footPitch)
-
-        heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        heelB!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        // W1: engine now derives heel/toe from the shank + this plantar-flexed ankle.
 
         // 4. Arm Ballistics
         // Arms are driven smoothly by the inverse of the rawSin wave.
@@ -109,9 +107,7 @@ class JumpSquatPose : BaseSquatPose() {
         // Slight wrist flick backward during jump apex to match momentum
         handA!!.localRotation.set(axisZ, leanAngle + (flightFactor * 0.3f))
         handP!!.localRotation.set(axisZ, leanAngle + (flightFactor * 0.3f))
-
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
+        // W1: engine now derives palm/knuckles/fingertips from the forearm + this wrist flick.
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))

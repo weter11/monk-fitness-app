@@ -121,23 +121,19 @@ abstract class BaseHipFlexorPose : BasePose() {
         handTarget.z = def.shoulderWidth * 0.8f
         bakeIkLimb(shoulderP!!.worldPosition, handTarget, def.upperArmLength, def.forearmLength, armPPole, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
-        handA!!.localRotation.set(axisZ, leanAngle)
-        handP!!.localRotation.set(axisZ, leanAngle)
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
+        // W1: engine now derives hand orientation (removed wrist tilt counter-rotation + 6/6/10 offsets).
     }
 
     /** Front foot flat on the floor. */
     protected fun applyFrontFoot(def: SkeletonDefinition) {
-        worldFootDir.set(0f, -1f, 0f)
-        SkeletonMath.rotAround(worldFootDir, axisZ, leanAngle, localFoot)
-        heelF!!.localPosition.set(localFoot).multiply(-def.foot.footLength * def.foot.heelRatio)
-        toeF!!.localPosition.set(localFoot).multiply(def.foot.footLength * def.foot.toeRatio)
-        ankleF!!.localRotation.set(axisZ, leanAngle)
+        // W1: engine now derives heel/toe + foot orientation from the shank + neutral ankle.
     }
 
     /** Back foot orientation, parameterized by its world direction (up the wall or flat backward). */
     protected fun applyBackFoot(worldDir: Vector3, def: SkeletonDefinition) {
+        // Explicit override: the back foot points along an intentional direction (toes up the wall
+        // for the couch stretch, flat backward for the half-kneeling stretch) that the engine's
+        // perpendicular-to-shank derivation cannot express; opt the feet out of auto-derivation.
         worldFootDir.set(worldDir)
         SkeletonMath.rotAround(worldFootDir, axisZ, leanAngle, localFoot)
         heelB!!.localPosition.set(localFoot).multiply(-def.foot.footLength * def.foot.heelRatio)
@@ -146,6 +142,7 @@ abstract class BaseHipFlexorPose : BasePose() {
     }
 
     protected fun finalizeHipFlexorPose(): SkeletonPose {
+        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_B)
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
         jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))

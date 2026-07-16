@@ -187,6 +187,15 @@ abstract class BasePushUpPose : BasePose() {
         handP!!.localRotation.set(axisZ, theta)
         palmP!!.localPosition.set(handDirP.x * handPalmOffset, handDirP.y * handPalmOffset, handDirP.z * handPalmOffset); knucklesP!!.localPosition.set(handDirP.x * handPalmOffset, handDirP.y * handPalmOffset, handDirP.z * handPalmOffset); fingertipsP!!.localPosition.set(handDirP.x * handFingertipOffset, handDirP.y * handFingertipOffset, handDirP.z * handFingertipOffset)
 
+        // Explicit override: the push-up's planted foot (flat on the mat, counter-rotated to the
+        // plank pitch) and flat palm are precisely authored geometry the engine's perpendicular-to-
+        // limb derivation does not reproduce; opt all four extremities out of auto-derivation so the
+        // authored heel/toe and palm/knuckles/fingertips are preserved verbatim.
+        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_F)
+        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_B)
+        overrideExtremityOrientation(jointsBuffer, Extremity.HAND_A)
+        overrideExtremityOrientation(jointsBuffer, Extremity.HAND_P)
+
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer

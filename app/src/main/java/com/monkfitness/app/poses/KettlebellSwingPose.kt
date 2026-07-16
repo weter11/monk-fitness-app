@@ -84,9 +84,17 @@ class KettlebellSwingPose : PoseBuilder {
         rotAround(Vector3(legBIK.joint.x - hipB!!.worldPosition.x, legBIK.joint.y - hipB!!.worldPosition.y, legBIK.joint.z - hipB!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, kneeB!!.localPosition)
         rotAround(Vector3(legBIK.end.x - legBIK.joint.x, legBIK.end.y - legBIK.joint.y, legBIK.end.z - legBIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, ankleB!!.localPosition)
 
-        ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle); ankleB!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle)
+        // Explicit override: the planted foot must stay flat on the floor despite the forward-leaning
+        // torso, so the shank is not vertical enough for the engine's perpendicular-to-shank derivation
+        // to land the foot flat. Keep the authored flat-foot orientation (ankle cancels inherited
+        // torso tilt; heel/toe laid out along world +X) and opt the feet out of auto-derivation.
+        ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle)
+        ankleB!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle)
         heelF!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeF!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
         heelB!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeB!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
+        jointsBuffer.overrideExtremityOrientation(Extremity.FOOT_F)
+        jointsBuffer.overrideExtremityOrientation(Extremity.FOOT_B)
+
 
         // 3. ARM TARGETS (Explosive kettlebell swing forward and backward)
         val targetHandX = lerp(-35f, 40f, u)
@@ -100,9 +108,7 @@ class KettlebellSwingPose : PoseBuilder {
         rotAround(Vector3(armPIK.joint.x - shoulderP!!.worldPosition.x, armPIK.joint.y - shoulderP!!.worldPosition.y, armPIK.joint.z - shoulderP!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, elbowP!!.localPosition)
         rotAround(Vector3(armPIK.end.x - armPIK.joint.x, armPIK.end.y - armPIK.joint.y, armPIK.end.z - armPIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, handP!!.localPosition)
 
-        handA!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle); handP!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle)
-        palmA!!.localPosition = Vector3(6f, 0f, 0f); knucklesA!!.localPosition = Vector3(6f, 0f, 0f); fingertipsA!!.localPosition = Vector3(10f, 0f, 0f)
-        palmP!!.localPosition = Vector3(6f, 0f, 0f); knucklesP!!.localPosition = Vector3(6f, 0f, 0f); fingertipsP!!.localPosition = Vector3(10f, 0f, 0f)
+        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))

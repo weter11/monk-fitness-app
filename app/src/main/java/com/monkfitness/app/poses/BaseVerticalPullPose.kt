@@ -202,7 +202,6 @@ abstract class BaseVerticalPullPose : BasePose() {
 
         // --- 2. FIXED hands on the bar (constant targets, never translated) ----
         // The hand world targets are authored constants; the body moves relative to them.
-        val invChestZ = -(torsoPitch + chestFlex)
         scratchShoulderA.set(shoulderA!!.worldPosition)
         scratchShoulderP.set(shoulderP!!.worldPosition)
 
@@ -213,12 +212,13 @@ abstract class BaseVerticalPullPose : BasePose() {
         bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, shoulderA!!.worldRotation, elbowPoleA, def.armIKConstraint, elbowA!!, handA!!, armABuffer)
         bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, shoulderP!!.worldRotation, elbowPoleP, def.armIKConstraint, elbowP!!, handP!!, armPBuffer)
 
-        applyGrip(invChestZ)
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
+        // W1: the intentional grip is authored without the old inherited-tilt cancellation; the
+        // engine removes torso/chest tilt relative to the forearm, so pass 0 and keep only the grip
+        // style component (see applyGrip).
+        applyGrip(0f)
+        // W1: engine now derives palm/knuckles/fingertips from the forearm + this wrist articulation.
 
         // --- 3. Legs: hanging pendulum with their own subtle life ----------
-        val invTorsoZ = -torsoPitch
         val ankleX = comX - 18f - breath * 4f + rep * 8f
         val ankleY = pelvisY - 200f + breath * 3f - rep * 10f
         targetF.set(ankleX, ankleY, -def.hipWidth * 0.9f)
@@ -229,10 +229,9 @@ abstract class BaseVerticalPullPose : BasePose() {
         poleB.set(0.15f, 1f, 0f)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, pelvis!!.worldRotation, poleB, def.legIKConstraint, kneeB!!, ankleB!!, legBBuffer)
 
-        ankleF!!.localRotation.set(axisZ, invTorsoZ - plantarFlexion)
-        ankleB!!.localRotation.set(axisZ, invTorsoZ - plantarFlexion)
-        heelF!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        heelB!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        ankleF!!.localRotation.set(axisZ, -plantarFlexion)
+        ankleB!!.localRotation.set(axisZ, -plantarFlexion)
+        // W1: engine now derives heel/toe (removed tilt counter-rotation; plantar flexion retained).
 
         return finalizeVerticalPullPose()
     }

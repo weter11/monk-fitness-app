@@ -79,10 +79,7 @@ class QuadrupedThoracicRotationsPose : BaseThoracicPose() {
 
         // Extremities
         applyThoracicHands()
-        ankleF!!.localRotation.set(axisZ, -spinePitch)
-        ankleB!!.localRotation.set(axisZ, -spinePitch)
-        heelF!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        heelB!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        // W1: engine now derives foot/hand orientation (removed tilt counter-rotation + endpoints).
 
         return finalizeThoracicPose()
     }

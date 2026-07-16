@@ -69,8 +69,7 @@ class ThoracicExtensionPose : BaseThoracicPose() {
         // Feet flat on the floor, toes pointing back (no plantar flexion, no sky-pointing).
         ankleF!!.localRotation.set(axisZ, 0f)
         ankleB!!.localRotation.set(axisZ, 0f)
-        heelF!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        heelB!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        // W1: engine now derives heel/toe from the (vertical) shank + neutral ankle.
 
         // Arms: hands behind the head, elbows flared outward/up to open the chest.
         val neckW = neck!!.worldPosition

@@ -69,13 +69,17 @@ class SumoSquatPose : BaseSquatPose() {
         ankleF!!.localRotation.set(axisZ, leanAngle)
         ankleB!!.localRotation.set(axisZ, leanAngle)
 
-        // 45-degree outward toe flare (rotated around global Y-axis)
+        // 45-degree outward toe flare (rotated around global Y-axis) — an intentional sumo-stance
+        // foot orientation the engine's perpendicular-to-shin derivation cannot express; opt the
+        // feet out of auto-derivation and keep the authored flare + flat heel/toe.
         SkeletonMath.rotAround(axisX, axisY, -0.785f, leftToeDir)
         SkeletonMath.rotAround(axisX, axisY, 0.785f, rightToeDir)
         heelF!!.localPosition.set(leftToeDir.x * -def.foot.footLength * def.foot.heelRatio, 0f, leftToeDir.z * -def.foot.footLength * def.foot.heelRatio)
         toeF!!.localPosition.set(leftToeDir.x * def.foot.footLength * def.foot.toeRatio, 0f, leftToeDir.z * def.foot.footLength * def.foot.toeRatio)
         heelB!!.localPosition.set(rightToeDir.x * -def.foot.footLength * def.foot.heelRatio, 0f, rightToeDir.z * -def.foot.footLength * def.foot.heelRatio)
         toeB!!.localPosition.set(rightToeDir.x * def.foot.footLength * def.foot.toeRatio, 0f, rightToeDir.z * def.foot.footLength * def.foot.toeRatio)
+        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_F)
+        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_B)
 
         // Arms drop vertically toward crotch
         val handTargetX = pelvisX + 10f
@@ -87,10 +91,7 @@ class SumoSquatPose : BaseSquatPose() {
         bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armAPole, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
         bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPPole, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
-        handA!!.localRotation.set(axisZ, leanAngle)
-        handP!!.localRotation.set(axisZ, leanAngle)
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
+        // W1: engine now derives hand orientation (removed wrist tilt counter-rotation + 6/6/10 offsets).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))

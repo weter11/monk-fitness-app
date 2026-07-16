@@ -102,12 +102,16 @@ class IsometricSidePlankPose : BasePlankPose() {
         poleF.set(0f, 1f, 0f)
         bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
 
+        // Explicit override: in a side plank the stacked/planted feet are an intentional orientation
+        // the engine's derivation cannot reproduce from the side-rolled shank; opt the feet out of
+        // auto-derivation and keep the authored flat-foot orientation.
         ankleF!!.localRotation.set(axisZ, invTorsoZ)
         ankleB!!.localRotation.set(axisZ, invTorsoZ)
         heelF!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
         heelB!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_F)
+        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_B)
 
-        // --- 4. Support forearm (down side, SHOULDER_P) ------------------------
         scratchShoulderP.set(shoulderP!!.worldPosition)
         // Planted: the forearm world X is anchored so the trunk loads it. The
         // support shoulder stays lifted above the planted elbow (scapular
@@ -117,8 +121,10 @@ class IsometricSidePlankPose : BasePlankPose() {
         poleP.set(-0.4f, -1f, 0f) // seat the elbow straight down onto the mat
         bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
+        // Explicit override: the support forearm lies flat on the mat; opt hands out of auto-derivation.
         handP!!.localRotation.set(axisZ, invTorsoZ)
         palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
+        overrideExtremityOrientation(jointsBuffer, Extremity.HAND_P)
 
         // --- 5. Top arm (SHOULDER_A): hand resting on the top hip --------------
         scratchShoulderA.set(shoulderA!!.worldPosition)
@@ -127,8 +133,10 @@ class IsometricSidePlankPose : BasePlankPose() {
         poleA.set(-1f, 1f, -1f) // elbow up and outward, away from the body
         bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
 
+        // Explicit override: the top hand rests on the hip; opt it out of auto-derivation.
         handA!!.localRotation.set(axisZ, invTorsoZ)
         palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
+        overrideExtremityOrientation(jointsBuffer, Extremity.HAND_A)
 
         return finalizePlankPose()
     }
