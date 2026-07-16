@@ -111,7 +111,8 @@ abstract class BasePushUpPose : BasePose() {
 
             // 3. Perfect Symmetry (Side B)
             hipB!!.localPosition.set(0f, 0f, def.hipWidth)
-            hipB!!.localRotation.set(axisZ, 0f)
+            // Phase 6 (W15/G7): symmetry reset via the documented helper (no-op flexion).
+            buildHipFlexion(hipB!!, 0f)
 
             // Shin B must counter-rotate the -theta to match the 45 degree upward pitch
             kneeB!!.localPosition.set(def.thighLength, 0f, 0f)

@@ -25,7 +25,7 @@ These are the legacy engine-compensation leaks removed by the W1 audit and the t
 
 ### A4. Raw hip writes (W15/G7)
 - `hipF.localRotation.set(...)`, `hipB.localRotation.set(...)` with computed angles.
-- **Owner instead:** `buildHipOrientation(flexion, abduction, rotation, sideSign)`.
+- **Owner instead:** `buildHipOrientation(flexion, abduction, rotation, sideSign)` for full 3-DOF, or `buildHipFlexion(hip, flexionRad)` when only Z-axis flexion is authored (Phase 6 / W15/G7).
 
 ### A5. Manual extremity endpoint authoring (W2/W3 — resolved by W1)
 - `heel*/toe*.localPosition.set(...)`, `palm*/knuckles*/fingertips*.localPosition.set(...)`.
