@@ -407,45 +407,7 @@ differs.
 
 ---
 
-## 8. Modern Features (UNI-1 … UNI-10)
-
-These are the unification milestones that turned the engine from per-pose hacks into
-a coherent, anatomically-driven system. Listed without excessive detail.
-
-- **UNI-1 — Posture relaxation & authored-shape regularization.** `ConstraintSolver`
-  gained true damped CCD that distributes over-constraint into free joints and
-  regularizes toward the authored shape, so planted contacts no longer float the
-  pelvis.
-- **UNI-2 — Straight-limb authored intent.** A `straight = true` limb must resolve
-  visually straight (≥ ~175°); enforced by validation (`STRAIGHT_LIMB_INTENT`).
-- **UNI-3 — Bounded hip ROM.** The hip became a real 3-DOF ball-and-socket with
-  acetabular limits (`HipRomLimits`), previously unbounded; mirrored by
-  `HIP_ROM_LIMIT` validation.
-- **UNI-4 — Correct pelvis-tilt axis.** Balance tilt uses a **lateral roll about X**
-  for left/right imbalance, not a pitch about Z (which leaned the trunk
-  forward/back). This fixed the original `ConstraintSolver` tilt bug.
-- **UNI-6 — Root-displacement intent.** The solver records `rootTranslationDelta` /
-  `rootRotationDelta`; validation checks the pelvis stayed within intent tolerance
-  and that contacts were preserved (`PELVIS_INTENT`, `CONTACT_PRESERVED`).
-- **UNI-7 — Real clavicle.** The clavicle became a first-class proximal girdle joint
-  (elevation / protraction / axial) via `buildClavicularRotation`, instead of a dead
-  pass-through.
-- **UNI-8 — 2-DOF wrist & ankle.** Wrist (flexion + deviation) and ankle
-  (dorsi/plantar + inversion/eversion) articulations **combine** instead of
-  overwriting, via `buildWristArticulation` / `buildAnkleArticulation`.
-- **UNI-9 — Degenerate straight-limb fallback.** `solveStraightLimb` bends instead
-  of collapsing to a zero-length bone when the target is inside `L1`.
-- **UNI-10 — First-class 3-DOF hip authoring.** `buildHipOrientation` / `buildHipRotation`
-  mirror `buildChestOrientation` for the hip; femoral axial rotation is kept separate
-  from the IK pole.
-
-> (UNI-5 is referenced as a PR marker in the history but is not separately labeled
-> in the shipping code; the descriptive UNI milestones that ship are UNI-1, -2, -3,
-> -4, -6, -7, -8, -9, -10.)
-
----
-
-## 9. Engine Characteristics
+## 8. Engine Characteristics
 
 Measurable / enforceable properties of the engine:
 
