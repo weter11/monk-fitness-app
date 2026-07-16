@@ -107,12 +107,12 @@ class PikePushUpPose : BasePushUpPose() {
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
         armAPoleLocal.set(1f, 1f, -2f)
         SkeletonMath.toLocalDirection(armAPoleLocal, chest!!.worldRotation, armAPoleLocal)
-        bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, chest!!.worldRotation, armAPoleLocal, def.armIKConstraint, elbowA!!, handA!!, armAIK)
+        bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, SkeletonMath.toWorldDirection(armAPoleLocal, chest!!.worldRotation, Vector3()), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK)
 
         shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
         armPPoleLocal.set(1f, 1f, 2f)
         SkeletonMath.toLocalDirection(armPPoleLocal, chest!!.worldRotation, armPPoleLocal)
-        bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, chest!!.worldRotation, armPPoleLocal, def.armIKConstraint, elbowP!!, handP!!, armPIK)
+        bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, SkeletonMath.toWorldDirection(armPPoleLocal, chest!!.worldRotation, Vector3()), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
         handA!!.localRotation.set(axisZ, -torsoGlobalPitch)
         // W1: engine now derives hand orientation (removed tilt counter-rotation + 6/6/10 offsets).
