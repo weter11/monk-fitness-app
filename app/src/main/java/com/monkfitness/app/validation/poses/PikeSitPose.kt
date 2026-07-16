@@ -48,6 +48,14 @@ class PikeSitPose : BaseValidationPose() {
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 
+        // Shoulder girdle: as the chest folds forward, the clavicles/scapulae protract so the
+        // shoulders travel forward over the knees (audit §2.3 — the validation base previously
+        // left the girdle a rigid pass-through).
+        buildClavicularRotation(clavicleA!!, elevation = 0f, protraction = 0.6f, axialRotation = 0f, sideSign = -1f)
+        buildClavicularRotation(clavicleP!!, elevation = 0f, protraction = 0.6f, axialRotation = 0f, sideSign = 1f)
+        buildScapularRotation(scapulaA!!, retraction = 0f, depression = 0f, sideSign = -1f)
+        buildScapularRotation(scapulaP!!, retraction = 0f, depression = 0f, sideSign = 1f)
+
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
         // Legs straight forward (+x), knees locked, feet on the floor.
@@ -69,11 +77,20 @@ class PikeSitPose : BaseValidationPose() {
         heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
         heelB!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
 
-        // Arms reach forward to grasp the toes (shoulder flexion + arm reach).
-        val handX = footX - def.forearmLength * 0.4f
-        val handY = 8f
-        val armTargetA = Vector3(handX, handY, -def.hipWidth * 0.9f)
-        val armTargetP = Vector3(handX, handY, def.hipWidth * 0.9f)
+        // Arms reach forward to grasp the toes. The target is measured from the *actual folded
+        // shoulder* (audit §2.1: the previous target was ~252u from the shoulder — unreachable
+        // for a 146u arm — so the solver clamped it and broke bone lengths). We aim the hand at
+        // the toes but never farther than the reachable band, so the arm stays a valid (slightly
+        // bent) reach instead of an over-clamped limb.
+        val footTargetF = Vector3(footX, 8f, -def.hipWidth * 0.9f)
+        val footTargetB = Vector3(footX, 8f, def.hipWidth * 0.9f)
+        val armReachF = tempV1.set(footTargetF).subtract(shoulderA!!.worldPosition)
+        val armReachB = tempV2.set(footTargetB).subtract(shoulderP!!.worldPosition)
+        val maxReach = (def.upperArmLength + def.forearmLength) * 0.92f
+        if (armReachF.mag() > maxReach) armReachF.normalize().multiply(maxReach)
+        if (armReachB.mag() > maxReach) armReachB.normalize().multiply(maxReach)
+        val armTargetA = Vector3(shoulderA!!.worldPosition.x + armReachF.x, shoulderA!!.worldPosition.y + armReachF.y, shoulderA!!.worldPosition.z + armReachF.z)
+        val armTargetP = Vector3(shoulderP!!.worldPosition.x + armReachB.x, shoulderP!!.worldPosition.y + armReachB.y, shoulderP!!.worldPosition.z + armReachB.z)
         val armPoleA = Vector3(1f, 0.4f, -0.3f)
         val armPoleP = Vector3(1f, 0.4f, 0.3f)
         bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armPoleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)

@@ -36,12 +36,17 @@ class DeepOverheadSquatPose : BaseValidationPose() {
 
         val pelvisY = 30f
         val leanAngle = 0.5f
-        pelvis!!.localPosition.set(-25f, pelvisY, 0f)
+        // Hips track over the feet (audit §3.2): the previous x=-25 pushed the hip far behind the
+        // foot target, reading as "sitting back". Center the pelvis on the midline so the femur
+        // travels straight down into the squat.
+        pelvis!!.localPosition.set(0f, pelvisY, 0f)
         pelvis!!.localRotation.set(axisZ, -leanAngle)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        // Thoracic extension: chest lifts slightly upright relative to the folded pelvis.
-        chest!!.localRotation.set(axisZ, leanAngle * 0.4f)
+        // Coherent trunk lean (audit §3.1): a deep squat is one leaned trunk, not an opposed
+        // pelvis/chest kink. The chest follows the pelvis forward (a touch less, so the upper
+        // back stays long) rather than lifting against it.
+        chest!!.localRotation.set(axisZ, -leanAngle * 0.3f)
 
         buildHead(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)

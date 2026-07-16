@@ -72,6 +72,11 @@ class DeadHangPose : BaseValidationPose() {
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 
+        // Shoulder girdle: a dead hang depresses the scapulae (shoulders pulled down away from
+        // the ears, audit §4.3). The previous pose left the girdle a rigid pass-through.
+        buildScapularRotation(scapulaA!!, retraction = 0f, depression = 1f, sideSign = -1f)
+        buildScapularRotation(scapulaP!!, retraction = 0f, depression = 1f, sideSign = 1f)
+
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
         // FIXED hands on the bar (constant world targets; the body hangs from them).
@@ -87,8 +92,11 @@ class DeadHangPose : BaseValidationPose() {
         bakeIkLimb(shoulderA!!.worldPosition, targetA, def.upperArmLength, def.forearmLength, armPoleA, armStraightConstraint(def), chest!!.worldRotation, elbowA!!, handA!!, armABuffer, straight = true, contact = barContact)
         bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, armPoleP, armStraightConstraint(def), chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, straight = true, contact = barContact)
 
-        // Overhand grip: hands rotate so palms face away from the bar.
-        val gripAngle = invChestZ - (PI.toFloat() / 2f)
+        // Overhand grip: fingers wrap up and over the top of the bar. A +90° wrist rotation
+        // turns the rigid hand's forward axis (+X) upward (+Y) so the fingertips curl over the
+        // bar (audit §4.2 — the previous -90° splayed the hand sideways). The palm thus faces
+        // forward away from the body, the correct overhand hang.
+        val gripAngle = invChestZ + (PI.toFloat() / 2f)
         handA!!.localRotation.set(axisZ, gripAngle); handP!!.localRotation.set(axisZ, gripAngle)
         palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
         palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
@@ -105,8 +113,11 @@ class DeadHangPose : BaseValidationPose() {
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, legStraightConstraint(def), pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true)
 
         ankleF!!.localRotation.set(axisZ, invTorsoZ); ankleB!!.localRotation.set(axisZ, invTorsoZ)
-        heelF!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        heelB!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        // Consistent heel/toe sign with the standing poses (audit §4.6): heel forward (+X),
+        // toe further forward (+X) — the previous pose negated the toe/heel so the feet pointed
+        // slightly back relative to every other reference.
+        heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        heelB!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
 
         return finalizePose()
     }
