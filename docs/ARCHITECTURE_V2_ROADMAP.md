@@ -46,10 +46,12 @@
 - **Risk:** Medium. **Complete when:** zero poses dual-write pelvis+chest as independent angles (verified: the 3 sites now use one `buildSpineCurve` call).
 
 ## Phase 6 — Hip 3-DOF via helper; retire raw hip writes (W15/G7)
-- **Goal:** route hip via `buildHipOrientation`; delete PikePushUp raw `hipB` counter-rotation + BasePushUp no-op.
+- **Goal:** route hip via `buildHipOrientation` / `buildHipFlexion`; delete raw `hipB.localRotation.set`.
 - **Rationale:** G7 — manual relative-rotation.
-- **Prereq:** Phase 4. **Files:** `BasePose.kt` (helpers exist), `PikePushUpPose.kt`, `BasePushUpPose.kt`. **APIs:** delete raw `hip*.localRotation.set`.
-- **Validation:** hip-angle + limb-symmetry assertions. **Risk:** Low (2 sites). **Complete when:** zero raw hip writes; helpers sole path.
+- **Prereq:** Phase 4. **Files:** `BasePose.kt` (helpers exist — `buildHipFlexion` used here), `PikePushUpPose.kt` (computed `hipB` flexion `legPitch - torsoGlobalPitch`), `BasePushUpPose.kt` (identity `hipB` symmetry reset).
+- **APIs:** replaced both raw `set(axisZ, …)` with `buildHipFlexion(hipB!!, …)` (the precise Z-axis flexion helper; full 3-DOF `buildHipOrientation` not needed — only flexion is authored). Roadmap "2 sites" confirmed accurate on re-audit.
+- **Validation:** rotation-equivalent by construction (`buildHipFlexion` writes `hip.localRotation.set(axisZ, flexionRad)`, identical to the removed `set`s). **hip-angle + limb-symmetry tests in CI.**
+- **Risk:** Low. **Complete when:** zero raw hip writes; helpers sole path (verified: 0 raw `hip*.localRotation.set` remain across poses + base classes).
 
 ## Phase 7 — Girdle unification + gaze-as-target (W16/G6, W17, F8)
 - **Goal:** PikePushUp shoulders via `buildShoulders`+FK; `BaseThoracic.rotAround` → Finalizer conversion; gaze as `headTarget`.

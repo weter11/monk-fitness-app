@@ -80,7 +80,8 @@ class PikePushUpPose : BasePushUpPose() {
         // 1. Correcting the Right-Side (Side B) Floating Leg Asymmetry
         // By subtracting the torso pitch, we isolate and enforce the exact same global leg pitch on both sides.
         hipB!!.localPosition.set(0f, 0f, def.hipWidth)
-        hipB!!.localRotation.set(axisZ, legPitch - torsoGlobalPitch)
+        // Phase 6 (W15/G7): route hip through the documented helper.
+        buildHipFlexion(hipB!!, legPitch - torsoGlobalPitch)
         kneeB!!.localPosition.set(def.thighLength, 0f, 0f)
         kneeB!!.localRotation.set(axisZ, 0f)
         ankleB!!.localPosition.set(def.shinLength, 0f, 0f)
