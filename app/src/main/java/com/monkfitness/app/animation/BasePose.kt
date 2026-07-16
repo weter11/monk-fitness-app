@@ -454,6 +454,29 @@ abstract class BasePose : PoseBuilder {
     protected fun alternating(progress: Float): AlternatingMotion = MotionDrivers.alternating(progress)
     protected fun parabolicFootLift(t: Float): Float = MotionDrivers.ParabolicLift(t)
 
+    /**
+     * Phase 2 (F2/F7) — declares the coarse posture intent the [ConstraintSolver] should honour
+     * (seeding the root/pelvis height) and the contact-conflict precedence order. This is the
+     * pose-side half of moving root ownership into the engine: instead of hand-computing `pelvisY`/
+     * `pelvisX`, the pose names the posture (SEATED_NEAR_FLOOR / HANGING_UNDER_BAR / STANDING /
+     * CUSTOM) and lets the solver derive the exact pelvis; when the solver owns posture
+     * ([EngineFlags.SOLVER_OWNS_POSTURE]) the seed replaces the authored root arithmetic.
+     *
+     * [precedence] lists contact end-joint names in priority order (index 0 wins); an empty list
+     * means all contacts are equal. [tolerance] scopes how strictly the solver must honour the
+     * intent before the PELVIS_INTENT rule flags a residual.
+     */
+    protected fun declarePosture(
+        pose: SkeletonPose,
+        kind: PostureIntent.Kind,
+        tolerance: Float = 0f,
+        precedence: List<Joint> = emptyList()
+    ) {
+        pose.postureIntent = PostureIntent(kind, tolerance)
+        pose.contactPrecedence.clear()
+        for (j in precedence) pose.contactPrecedence.add(j.name)
+    }
+
     // Common Support helpers building SupportContact collections allocation-free
     protected fun leftFoot(): SupportContact = SupportContact.LEFT_FOOT
     protected fun rightFoot(): SupportContact = SupportContact.RIGHT_FOOT

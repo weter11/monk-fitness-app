@@ -169,6 +169,16 @@ The existing `ConstraintSolver.solve` already repositions the root (translate + 
 
 This makes F1's "no-move guarantee" a hard, testable invariant rather than a convention.
 
+**Implemented (Phase 3):** `SkeletonPoseFinalizer.reconstructChestFrame` snapshots every
+Solver-settled contact end-effector (`buildContactSnapshot`) before mutating `chest.localRotation`,
+reconstructs the frame, then calls `enforceContactNoMove`, which asserts each end-effector is
+unchanged within `EPS = 1e-3f` (B5 step 2). If the reconstruction displaced a contact, the chest
+frame is rolled back to the Solver-settled identity (the path only fires for identity chests) and
+`rootTranslationDelta` is flagged (B5 step 3). The Issue F authored-chest early-return (step 4)
+takes precedence. Both the guard and `preConvertPoles()` are gated by
+`EngineFlags.FINALIZER_OWNS_CONVERSION` (default false), so the legacy finalize path is byte-
+identical until the global flip. Covered by `ChestFrameNoMoveTest` (B6).
+
 ---
 
 ## B6. Per-phase test mapping + tolerances (Gap 6)

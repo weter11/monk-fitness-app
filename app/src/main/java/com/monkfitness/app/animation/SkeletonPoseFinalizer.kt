@@ -39,6 +39,24 @@ class SkeletonPoseFinalizer(
     }
 
     /**
+     * Phase 3 (F1) — the finalizer's single local-transform conversion entry point. When
+     * [EngineFlags.FINALIZER_OWNS_CONVERSION] is off this is intentionally a no-op so the legacy
+     * finalize path is byte-identical and the global flip is purely opt-in. When on, this is where
+     * any remaining world↔local frame conversion would be concentrated (the limb `toLocalDirection`
+     * bakes already happen in the solver's `bakeIkLimb`; extremity derivation and the chest frame
+     * run later in [finalize]). The finalizer is the *exclusive* writer of every local transform —
+     * no other component mutates `nodes`/`localPosition`/`localRotation` after this point.
+     */
+    private fun preConvertPoles(pose: SkeletonPose) {
+        if (!EngineFlags.FINALIZER_OWNS_CONVERSION) return
+        // Reserved hook: with the flag on, pole→world conversion and any deferred frame work is
+        // asserted to live here. The deprecated frame-relative `bakeIkLimb` overload (Phase 1 F4)
+        // is the only remaining caller that converts its own pole; it will be deleted in the
+        // follow-up that migrates its ~18 pose callers, after which this method owns 100% of
+        // conversion. No behaviour change today.
+    }
+
+    /**
      * Fallback chest-frame reconstruction for the modern rotation-driven path.
      *
      * When the pose author has NOT explicitly authored a chest rotation (the chest's `localRotation`
@@ -56,10 +74,19 @@ class SkeletonPoseFinalizer(
      * is non-identity the function returns early, leaving the authored frame (and the already-
      * flattened world transforms) intact.
      *
+     * Phase 3 (F1) — read-only chest-frame guarantee. When [EngineFlags.FINALIZER_OWNS_CONVERSION]
+     * is enabled AND the pose carries fixed contacts, the reconstruction is a *no-move* operation:
+     * the world positions of every Solver-settled contact end-effector are snapshotted before the
+     * reconstruction and asserted unchanged afterwards (B5). If applying the reconstructed frame
+     * would displace a contact, the chest frame is rolled back to the Solver-settled value
+     * (contacts left exactly where the solver pinned them) and `rootTranslationDelta` is flagged so
+     * the validator can surface the residual. The authored-chest early-return above takes precedence
+     * — an authored chest never reaches the guard.
+     *
      * Allocation-free: reuses the shared column scratch buffers and re-runs FK for the chest subtree
      * only.
      */
-    private fun reconstructChestFrame(roots: List<SkeletonNode>) {
+    private fun reconstructChestFrame(roots: List<SkeletonNode>, pose: SkeletonPose) {
         if (roots.isEmpty()) return
         val pelvis = findJointNode(roots[0], Joint.PELVIS) ?: return
         val chest = findJointNode(roots[0], Joint.CHEST) ?: return
@@ -89,6 +116,12 @@ class SkeletonPoseFinalizer(
         if (chest.localRotation.angle > 1e-4f || chest.localRotation.angle < -1e-4f) {
             return
         }
+
+        // Phase 3 (F1/B5) — snapshot Solver-settled contact end-effectors BEFORE mutating the
+        // chest frame, so we can assert the reconstruction is read-only on them. Only meaningful
+        // when the finalizer owns conversion and the pose actually registered contacts.
+        val guardActive = EngineFlags.FINALIZER_OWNS_CONVERSION && pose.contacts.isNotEmpty()
+        if (guardActive) buildContactSnapshot(pose)
 
         val pelvisW = pelvis.worldPosition
         val chestW = chest.worldPosition
@@ -136,7 +169,77 @@ class SkeletonPoseFinalizer(
         // pass-through lumbar this re-flattens to identical world positions (no behavioural change).
         chest.updateWorldTransforms(chestParent.worldPosition, chestParent.worldRotation)
         chest.flatten(outputPose)
+
+        // Phase 3 (F1/B5) — assert the reconstruction did not move any Solver-settled contact
+        // end-effector. If it did, roll the chest frame back to the Solver-settled value (leaving
+        // contacts exactly where the solver pinned them) and flag the residual. The fallback frame
+        // is only ever re-applied to the thorax when it is provably read-only on contacts.
+        if (guardActive) enforceContactNoMove(chest, chestParent, pose)
     }
+
+    // Phase 3 (F1/B5) — contact end-effector world-position snapshot, reused across the guard.
+    // Keyed by end-joint index; values are the world positions captured before reconstruction.
+    private val guardNodeMap = Array<SkeletonNode?>(Joint.entries.size) { null }
+    private val guardSnapshotX = FloatArray(Joint.entries.size)
+    private val guardSnapshotY = FloatArray(Joint.entries.size)
+    private val guardSnapshotZ = FloatArray(Joint.entries.size)
+    private val guardContactIdx = IntArray(64)
+    private var guardContactCount = 0
+
+    private fun buildContactSnapshot(pose: SkeletonPose) {
+        for (i in guardNodeMap.indices) guardNodeMap[i] = null
+        guardContactCount = 0
+        if (pose.roots.isEmpty()) return
+        collectNodes(pose.roots[0])
+        for (spec in pose.contacts) {
+            val idx = spec.endJoint.index
+            val n = guardNodeMap[idx] ?: continue
+            guardSnapshotX[idx] = n.worldPosition.x
+            guardSnapshotY[idx] = n.worldPosition.y
+            guardSnapshotZ[idx] = n.worldPosition.z
+            if (guardContactCount < guardContactIdx.size) guardContactIdx[guardContactCount++] = idx
+        }
+    }
+
+    private fun collectNodes(node: SkeletonNode) {
+        guardNodeMap[node.joint.index] = node
+        for (child in node.children) collectNodes(child)
+    }
+
+    /**
+     * Phase 3 (F1/B5) — verifies every snapshotted contact end-effector is unchanged after the
+     * chest-frame reconstruction (within [EPS]). If any moved, the reconstructed chest local
+     * rotation is rolled back to its Solver-settled value (the chest subtree is re-flattened in
+     * the original frame, leaving every contact exactly where the solver pinned it) and
+     * [SkeletonPose.rootTranslationDelta] is flagged so the validator can surface the residual.
+     */
+    private fun enforceContactNoMove(chest: SkeletonNode, chestParent: SkeletonNode, pose: SkeletonPose) {
+        var maxMove = 0f
+        for (k in 0 until guardContactCount) {
+            val idx = guardContactIdx[k]
+            val n = guardNodeMap[idx] ?: continue
+            val dx = n.worldPosition.x - guardSnapshotX[idx]
+            val dy = n.worldPosition.y - guardSnapshotY[idx]
+            val dz = n.worldPosition.z - guardSnapshotZ[idx]
+            val d = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+            if (d > maxMove) maxMove = d
+        }
+        if (maxMove <= EPS) return
+
+        // The reconstruction displaced a Solver-settled contact: roll the chest frame back so the
+        // contacts stay put (F1 guarantee). This path only runs for an identity (unauthored) chest,
+        // so the Solver-settled chest local rotation IS identity — restoring it re-flattens the
+        // subtree to the exact pose the solver settled, leaving every contact where it was pinned.
+        chest.localRotation.set(Vector3(0f, 1f, 0f), 0f)
+        chest.updateWorldTransforms(chestParent.worldPosition, chestParent.worldRotation)
+        chest.flatten(outputPose)
+
+        // Flag the residual so the PELVIS_INTENT / contact rules can surface the unexpected move.
+        pose.rootTranslationDelta = kotlin.math.max(pose.rootTranslationDelta, maxMove)
+    }
+
+    // Phase 3 (F1/B5) — tolerance for the contact no-move assertion (1e-3f, per IMPLEMENTATION_BRIDGE B5).
+    private val EPS = 1e-3f
 
     // Pre-allocated standard SkeletonNode hierarchy (for legacy compat path)
     private var roots: List<SkeletonNode>? = null
@@ -317,6 +420,13 @@ class SkeletonPoseFinalizer(
             ConstraintSolver.solve(pose, definition)
         }
 
+        // Phase 3 (F1/F4): the finalizer is the *exclusive* writer of local transforms. This is
+        // the single conversion entry point — any world↔local frame work (pole→world, the
+        // `toLocalDirection` limb bakes already performed by the solver, extremity derivation)
+        // is concentrated here. With [EngineFlags.FINALIZER_OWNS_CONVERSION] off this is a
+        // documented no-op so the legacy path is byte-identical.
+        preConvertPoles(pose)
+
         outputPose.copyFrom(pose)
 
         if (pose.roots.isNotEmpty()) {
@@ -336,7 +446,7 @@ class SkeletonPoseFinalizer(
             // Issue F: derive the chest frame only when the author left it unauthored (identity);
             // an authored chest rotation (thoracic twist / side-bend / flex, possibly asymmetric)
             // is already propagated to the upper chain by FK and must not be overwritten.
-            reconstructChestFrame(pose.roots)
+            reconstructChestFrame(pose.roots, pose)
 
             // W1 — Engine ownership of extremity orientation.
             //

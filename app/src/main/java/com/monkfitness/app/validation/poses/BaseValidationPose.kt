@@ -14,6 +14,7 @@ import com.monkfitness.app.animation.PivotType
 import com.monkfitness.app.animation.PoseBuilder
 import com.monkfitness.app.animation.PoseContext
 import com.monkfitness.app.animation.PoseMetadata
+import com.monkfitness.app.animation.PostureIntent
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonFactory
 import com.monkfitness.app.animation.SkeletonMath
@@ -291,6 +292,26 @@ abstract class BaseValidationPose : PoseBuilder {
         thighLen: Float,
         targetFlexionDegrees: Float
     ) = SkeletonMath.solveNearStraightLimb(shinLen, thighLen, targetFlexionDegrees, legScratch)
+
+    /**
+     * Phase 2 (F2/F7) — declares the coarse posture intent the [ConstraintSolver] should honour
+     * (seeding the root/pelvis height) and the contact-conflict precedence order. Mirrors the
+     * production [com.monkfitness.app.animation.BasePose.declarePosture]; writes onto this pose's
+     * [jointsBuffer]. Validation poses are diagnostic instruments and are NOT retuned, so this is
+     * opt-in: a validation pose calls it only when it wants the engine-owned root seed.
+     *
+     * [precedence] lists contact end-joint names in priority order (index 0 wins); an empty list
+     * means all contacts are equal.
+     */
+    protected fun declarePosture(
+        kind: PostureIntent.Kind,
+        tolerance: Float = 0f,
+        precedence: List<Joint> = emptyList()
+    ) {
+        jointsBuffer.postureIntent = PostureIntent(kind, tolerance)
+        jointsBuffer.contactPrecedence.clear()
+        for (j in precedence) jointsBuffer.contactPrecedence.add(j.name)
+    }
 
     // --- Finalization (mirrors production poses; produces a rotation-driven snapshot) --
 
