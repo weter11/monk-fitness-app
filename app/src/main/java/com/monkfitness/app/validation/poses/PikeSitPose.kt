@@ -20,7 +20,7 @@ import com.monkfitness.app.animation.Vector3
 class PikeSitPose : BaseValidationPose() {
 
     override val metadata = staticMetadata(
-        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.28f, defaultZoom = 1.3f),
+        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.629f, defaultZoom = 1.3f),
         support = SupportDefinition(
             pivot = PivotType.FEET,
             contacts = setOf(
