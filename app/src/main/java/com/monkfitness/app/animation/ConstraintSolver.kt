@@ -202,6 +202,10 @@ object ConstraintSolver {
         // UNI-6 — reset the recorded root-displacement deltas; they are recomputed below.
         pose.rootTranslationDelta = 0f
         pose.rootRotationDelta = 0f
+        // Phase 1 (F5): the solver is a secondary writer of the bone-length stamp; re-arm it
+        // optimistically and AND each contact limb's re-bake below (the primary write happens in
+        // bakeIkLimb at authoring time; this keeps the stamp coherent after the solver moves the root).
+        pose.boneLengthsVerified = true
 
         // UNI-1: snapshot the authored joint configuration (the "goal shape") before any solver
         // mutation, so the posture pass can regularize its CCD solution back toward the authored
@@ -311,6 +315,11 @@ object ConstraintSolver {
                         rootWorld, spec.targetWorld, spec.length1, spec.length2,
                         spec.pole, spec.constraint, ikResult, spec.contact
                     )
+                }
+
+                // Phase 1 (F5): the re-baked contact limb must preserve both bone lengths too.
+                if (!SkeletonMath.bonesExact(rootWorld, ikResult.joint, ikResult.end, spec.length1, spec.length2)) {
+                    pose.boneLengthsVerified = false
                 }
 
                 dir.set(ikResult.joint).subtract(rootWorld)
