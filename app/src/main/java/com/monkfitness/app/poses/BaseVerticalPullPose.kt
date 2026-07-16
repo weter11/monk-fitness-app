@@ -236,16 +236,16 @@ abstract class BaseVerticalPullPose : BasePose() {
         return finalizeVerticalPullPose()
     }
 
-    private fun applyGrip(invChestZ: Float) {
-        val angle = invChestZ - HALF_PI
+    private fun applyGrip(chestTilt: Float) {
+        val angle = chestTilt - HALF_PI
         when (gripStyle) {
             GripStyle.OVERHAND -> {
                 handA!!.localRotation.set(axisZ, angle)
                 handP!!.localRotation.set(axisZ, angle)
             }
             GripStyle.UNDERHAND -> {
-                handA!!.localRotation.set(axisZ, invChestZ + HALF_PI)
-                handP!!.localRotation.set(axisZ, invChestZ + HALF_PI)
+                handA!!.localRotation.set(axisZ, chestTilt + HALF_PI)
+                handP!!.localRotation.set(axisZ, chestTilt + HALF_PI)
             }
             GripStyle.NEUTRAL -> {
                 handA!!.localRotation.set(neutralAxisA, angle)

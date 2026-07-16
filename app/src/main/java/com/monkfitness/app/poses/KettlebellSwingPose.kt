@@ -90,8 +90,8 @@ class KettlebellSwingPose : PoseBuilder {
         // torso tilt; heel/toe laid out along world +X) and opt the feet out of auto-derivation.
         ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle)
         ankleB!!.localRotation.set(Vector3(0f, 0f, 1f), leanAngle)
-        heelF!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeF!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
-        heelB!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f); toeB!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
+        heelF!!.localPosition = Vector3(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition = Vector3(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        heelB!!.localPosition = Vector3(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition = Vector3(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
         jointsBuffer.overrideExtremityOrientation(Extremity.FOOT_F)
         jointsBuffer.overrideExtremityOrientation(Extremity.FOOT_B)
 

@@ -121,9 +121,9 @@ class HamstringStretchPose : BasePose() {
         bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
         bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
-        handA!!.localRotation.set(axisZ, -torsoPitch)
-        handP!!.localRotation.set(axisZ, -torsoPitch)
-        // W1: engine now derives hand orientation (removed 6/6/10 offsets).
+        // W1: engine now derives hand orientation, cancelling the inherited chest tilt automatically
+        // (removed the -torsoPitch wrist tilt-counter-rotation + the 6/6/10 offsets). A neutral wrist
+        // lays the hand flat along the forearm for the forward reach.
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))

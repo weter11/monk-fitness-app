@@ -69,13 +69,9 @@ class PikeSitPose : BaseValidationPose() {
         bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, legStraightConstraint(def), pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, straight = true, contact = groundContact)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, legStraightConstraint(def), pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true, contact = groundContact)
 
-        // Flat foot: the folded pelvis (rotation -fold) propagates down the leg to the ankle,
-        // so the foot inherits the trunk's forward tilt. The previous ankle rotation of -fold
-        // *doubled* that tilt and drove the toe ~23 units through the floor. Counter-rotating by
-        // +fold cancels the inherited fold, laying the foot flat on the ground (heel ≈ toe ≈ 0).
-        ankleF!!.localRotation.set(axisZ, fold); ankleB!!.localRotation.set(axisZ, fold)
-        heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        heelB!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        // Flat foot: the engine derives heel/toe from the shank (knee→ankle) + the neutral ankle
+        // articulation, cancelling the inherited fold automatically and laying the foot flat on the
+        // ground (heel ≈ toe ≈ 0). No manual endpoint authoring, no +fold tilt counter-rotation.
 
         // Arms reach forward to grasp the toes. The target is measured from the *actual folded
         // shoulder* (audit §2.1: the previous target was ~252u from the shoulder — unreachable
@@ -96,9 +92,9 @@ class PikeSitPose : BaseValidationPose() {
         bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armPoleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
         bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPoleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
-        handA!!.localRotation.set(axisZ, -fold * 0.6f); handP!!.localRotation.set(axisZ, -fold * 0.6f)
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
+        // The engine derives palm/knuckles/fingertips from the forearm + the neutral wrist
+        // articulation, cancelling the inherited chest tilt automatically — no manual hand
+        // endpoint authoring, no -fold*0.6f tilt counter-rotation.
 
         return finalizePose()
     }
