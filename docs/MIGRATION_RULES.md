@@ -40,6 +40,7 @@ These are the legacy engine-compensation leaks removed by the W1 audit and the t
 ### A7. Head-gaze counter-rotation (W17)
 - `rotAround(UP, axisZ, -(pelvisAngle+chestPitch))` or any sum-of-leans gaze.
 - **Owner instead:** declare `headTarget` (world gaze vector); engine resolves neck/head.
+- **BLOCKER (Phase 7):** the engine `headTarget` → neck/head resolver does not yet exist in this repo. `BaseLungePose:165` and `BaseVerticalPullPose:168` still hand-counter-rotate the gaze; they are a known open leak pending the engine resolver (F8 engine work, out of pose-PR scope).
 
 ### A8. Frame-conversion in poses (W7)
 - Passing `parentRotation` / local-frame pole to IK; `toLocalDirection`/`toWorldDirection` calls in pose code.
