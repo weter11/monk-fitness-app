@@ -42,7 +42,7 @@ class DeadHangPose : BaseValidationPose() {
     )
 
     override val metadata = staticMetadata(
-        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.5f),
+        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.569f, defaultZoom = 1.5f),
         environment = verticalPullEnvironment,
         support = SupportDefinition(
             pivot = PivotType.HANDS,

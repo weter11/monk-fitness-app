@@ -20,7 +20,7 @@ import com.monkfitness.app.animation.Vector3
 class PikeSitPose : BaseValidationPose() {
 
     override val metadata = staticMetadata(
-        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.28f, defaultZoom = 1.3f),
+        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.629f, defaultZoom = 1.3f),
         support = SupportDefinition(
             pivot = PivotType.FEET,
             contacts = setOf(
@@ -33,7 +33,7 @@ class PikeSitPose : BaseValidationPose() {
     override fun buildStatic(def: SkeletonDefinition): SkeletonPose {
         ensureHierarchy(def)
 
-        val pelvisY = 40f
+        val pelvisY = 14f
         // Fold the torso forward over the extended legs (+x is forward).
         val fold = 0.95f
         pelvis!!.localPosition.set(0f, pelvisY, 0f)
@@ -61,7 +61,11 @@ class PikeSitPose : BaseValidationPose() {
         bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, legStraightConstraint(def), pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, straight = true, contact = groundContact)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, legStraightConstraint(def), pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true, contact = groundContact)
 
-        ankleF!!.localRotation.set(axisZ, -fold); ankleB!!.localRotation.set(axisZ, -fold)
+        // Flat foot: the folded pelvis (rotation -fold) propagates down the leg to the ankle,
+        // so the foot inherits the trunk's forward tilt. The previous ankle rotation of -fold
+        // *doubled* that tilt and drove the toe ~23 units through the floor. Counter-rotating by
+        // +fold cancels the inherited fold, laying the foot flat on the ground (heel ≈ toe ≈ 0).
+        ankleF!!.localRotation.set(axisZ, fold); ankleB!!.localRotation.set(axisZ, fold)
         heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
         heelB!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
 

@@ -21,7 +21,7 @@ import com.monkfitness.app.animation.Vector3
 class DeepOverheadSquatPose : BaseValidationPose() {
 
     override val metadata = staticMetadata(
-        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.2f),
+        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.569f, defaultZoom = 1.2f),
         support = SupportDefinition(
             pivot = PivotType.FEET,
             contacts = setOf(
