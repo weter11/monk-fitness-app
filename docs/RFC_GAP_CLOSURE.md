@@ -21,7 +21,7 @@ rollout, rollback, risk, testing, invariants.
 
 - **`bakeIkLimb` overloads** (`BasePose.kt:316` and `:343`):
   - World overload `bakeIkLimb(rootWorldPos, targetWorldPos, L1, L2, pole: Vector3 (world), constraint, parentRot, middle, end, ikBuffer, straight, contact)` — **kept**.
-  - Frame-relative overload `bakeIkLimb(rootWorldPos, targetWorldPos, L1, L2, parentRotation, poleLocal, constraint, middle, end, ikBuffer, straight, contact)` — converts `poleLocal→worldPole` via `toWorldDirection(poleLocal, parentRot)` then delegates to the world overload. **Deprecated; ~18 callers** (roadmap Phase 1 note) — grep counts 64 `bakeIkLimb(` call sites total across poses (mix of both overloads + the `BoneMath`/legacy variants; the frame-relative one's exact caller count is enumerated in §6).
+  - Frame-relative overload `bakeIkLimb(rootWorldPos, targetWorldPos, L1, L2, parentRotation, poleLocal, constraint, middle, end, ikBuffer, straight, contact)` — converts `poleLocal→worldPole` via `toWorldDirection(poleLocal, parentRot)` then delegates to the world overload. **Deprecated; exactly 2 call sites (VERIFIED):** `BaseLungePose.kt` and `BaseThoracicPose.kt` — these are the only poses that pass the `parentRotation`/`poleLocal` argument shape (grep for `poleLocal`/`parentRotation` as `bakeIkLimb` args returns exactly 2). The roadmap's "~18" estimate is incorrect; the 64 total `bakeIkLimb(` call sites across poses include the world overload, other `bakeIkLimb` variants, and `BoneMath`/legacy calls — not the frame-relative overload. This count is final; no further verification is required or promised.
 - **`ExerciseValidator`** already reads stamps (`maxIkClampAmount` L625, `rootTranslationDelta` L760,
   `rootRotationDelta` L768) **but also reconstructs geometry**: `validateHipRom` (L812) reads
   `pose.getJointRotation(Joint.PELVIS)` and `femoralTwistDegrees(pose.getJointRotation(hip))` (L896,
@@ -94,9 +94,60 @@ M8  deprecation purge + cleanup ... [all]  remove @Deprecated, legacy bridges, f
 | 1+2 | M2 | `PIPELINE_ACTIVE` | M0, M1 |
 | 3 | M3 | `SOLVER_OWNS_POSTURE` | M2 |
 | 4 | M4 | `FINALIZER_OWNS_CONVERSION` | M2, M1 |
-| 6 | M6 | `VALIDATOR_STAMP_ONLY` | M0 (independent) |
+| 6 | M6 | `VALIDATOR_STAMP_ONLY` | M2 (BLOCKED until engine produces stamps; M3/M4 optional for new ROM stamps) |
 | 7 | M7 | `HEAD_TARGET_ENABLED` | M2 (Intent Layer) |
 | cleanup | M8 | flags removed | M1–M7 green |
+
+---
+
+## 2b. Milestone dependency graph (per-milestone — Issue 3)
+
+The audit correctly identified that M6 (Validator stamp-only) is **NOT independent**: the Validator
+can only consume stamps once the engine stages *actually produce* them. Under `PIPELINE_ACTIVE=false`
+(M0) the legacy path does not guarantee stamp production, so M6 is **BLOCKED** until M2. Each
+milestone below lists Required / Optional / Independent / Blocked predecessors.
+
+```
+M0  scaffold pipeline
+    Required:    (none)          Optional: (none)   Independent: M1–M8   Blocked by: (none)
+        │
+        ▼
+M1  remove deprecated bakeIkLimb overload          [Gap 5]
+    Required: M0     Optional: (none)   Independent: M3,M4,M5,M7   Blocked by: (none)
+        │
+        ▼
+M2  Pose intent-only + pipeline drives stages       [Gap 1 + Gap 2]
+    Required: M1     Optional: (none)   Independent: M7            Blocked by: (none)
+        │  ← engine now PRODUCES stamps (maxIkClampAmount, root*Delta, boneLengthsVerified)
+        ▼
+M3  Solver authority (SOLVER_OWNS_POSTURE)          [Gap 3]
+    Required: M2     Optional: (none)   Independent: M4,M5,M7      Blocked by: (none)
+        │
+        ▼
+M4  Finalizer authority (FINALIZER_OWNS_CONVERSION) [Gap 4]
+    Required: M2, M1 Optional: (none)   Independent: M5,M7         Blocked by: (none)
+        │
+        ▼
+M5  §1.1 carriers live (automatic after M2)         [Gap 2]
+    Required: M2     Optional: (none)   Independent: M7            Blocked by: (none)
+        │
+        ▼
+M6  Validator stamp-only (VALIDATOR_STAMP_ONLY)     [Gap 6 / Phase 8]
+    Required: M2     Optional: M3,M4   Independent: (none)
+    Blocked by: M0 with PIPELINE_ACTIVE=false (legacy path does not guarantee stamp production)
+        │
+        ▼
+M7  headTarget gaze-as-target                       [Gap 7]
+    Required: M2     Optional: (none)   Independent: (none)        Blocked by: (none)
+        │
+        ▼
+M8  deprecation purge + final cleanup
+    Required: M1,M2,M3,M4,M5,M6,M7   Optional: (none)   Independent: (none)   Blocked by: (none)
+```
+
+**Rollout order (linear, no interleaving):** M0 → M1 → M2 → M3 → M4 → M5 → M6 → M7 → M8. Phases marked
+Independent of each other MAY ship as parallel PRs *after* their Required predecessor merges, but MUST
+NOT ship before it. M6 is explicitly **BLOCKED** until M2 (engine produces stamps).
 
 ---
 
@@ -108,12 +159,18 @@ M8  deprecation purge + cleanup ... [all]  remove @Deprecated, legacy bridges, f
    validator). All consumers unchanged.
 3. **Gate:** CI green on full suite. No pose touched.
 
-### M1 — `bakeIkLimb` frame-relative overload removal (Gap 5, F4)
-1. Enumerate exact callers of the frame-relative overload (grep `bakeIkLimb(` with a `poleLocal`/
-   `parentRotation` arg shape; the roadmap says ~18; verify the real count — the 64 total includes
-   other variants).
-2. For each caller, replace with the **world** overload: the caller already has the proximal parent's
-   world rotation at call time (it passed `parentRotation` to derive `worldPole`), so pass the
+### M1 — `bakeIkLimb` frame-relative overload removal (Gap 5, F4)  **[authoritative scope — identical to RFC_ENGINE_PIPELINE §6 M1]**
+1. **Scope (resolved, no contradiction with RFC_ENGINE_PIPELINE):** M1 does ONLY one thing — delete the
+   frame-relative `bakeIkLimb(rootWorldPos, targetWorldPos, L1, L2, parentRotation, poleLocal, …)`
+   overload (`BasePose.kt:316`) and migrate its **exactly 2** call sites (verified: `BaseLungePose.kt`,
+   `BaseThoracicPose.kt`) to the world overload. `declareLimbTarget` is **NOT** introduced in M1; it is
+   introduced in M2 (Pose intent-only) as the intent-recording replacement for the geometry-writing
+   `bakeIkLimb`. This ordering is correct because (a) M1 is a pure mechanical refactor with zero
+   behavioral change and zero new API, trivially revertible; (b) `declareLimbTarget` depends on
+   `IntentBuilder` + the pipeline consuming §1.1, both of which exist only after M0/M2; introducing it
+   in M1 would be a dangling API with no consumer; (c) keeping M1 narrow minimizes rollback surface.
+2. For each of the 2 callers, replace with the **world** overload: the caller already has the proximal
+   parent's world rotation at call time (it passed `parentRotation` to derive `worldPole`), so pass the
    pre-computed `worldPole` directly. Mechanical, 1:1.
 3. Delete the frame-relative overload (`BasePose.kt:316`).
 4. Set `IK_WORLD_ONLY=true`. `preConvertPoles` now owns 100% of conversion (prereq for M4).
@@ -173,6 +230,39 @@ M8  deprecation purge + cleanup ... [all]  remove @Deprecated, legacy bridges, f
    `const val = true`). `PIPELINE_ACTIVE` etc. cease to exist.
 4. Remove legacy position-driven branch in `finalize` (the `else` branch) once no pose exercises it.
 5. **Gate:** full suite + a "no-flag" compile assertion.
+
+---
+
+## 3b. Milestone exit criteria (explicit — Issue 7)
+
+- **M0 complete when:** `SkeletonPipeline` exists with `PIPELINE_ACTIVE=false`; full CI suite green;
+  zero consumers changed; zero poses touched.
+- **M1 complete when:** frame-relative `bakeIkLimb` overload deleted; its **2** call sites migrated to
+  the world overload; `IK_WORLD_ONLY=true`; `ValidatorRomClusterTest` + `ChestFrameIssueFTest` +
+  `*PoseTest` green; grep proves no reference to the deleted overload (compile).
+- **M2 complete when:** `PIPELINE_ACTIVE=true`; `produceFrame` runs the full ordered pipeline; the
+  Finalizer's internal `ConstraintSolver.solve` call removed; `BasePose` helpers forward to
+  `IntentBuilder`; every production pose compiles (no node-writing helper remains); `ValidatorRomClusterTest`
+  matches the pre-M2 baseline (visual/geometry diff); **NFR-PERF-1 allocation gate passes** (zero
+  per-frame heap allocations on the hot path — pooled tree).
+- **M3 complete when:** `SOLVER_OWNS_POSTURE=true`; every production contact/posed pose calls
+  `declarePosture`; posture-seeded poses render with engine-derived pelvis; `PELVIS_INTENT` within
+  tolerance; non-contact poses byte-identical (Solver no-op).
+- **M4 complete when:** `FINALIZER_OWNS_CONVERSION=true`; `preConvertPoles` active; no pose writes a
+  local transform after IK; `reconstructChestFrame` no-move guard verified on a synthetic conflict test.
+- **M5 complete when:** `spineIntent`/`limbTargets`/`jointIntents` consumed by the engine (no dead
+  carrier); lint proves zero unused §1.1 writes.
+- **M6 complete when:** `VALIDATOR_STAMP_ONLY=true`; `ExerciseValidator` no longer imports
+  `toLocalDirection`/`angleBetweenDegrees`/`atan2`; every Validator rule reads ≥1 stamp/intent; a
+  build-time assertion fails the compile if geometry inference remains.
+- **M7 complete when:** `headTarget` carrier + `buildGaze` helper present; `BaseLungePose`/
+  `BaseVerticalPullPose` gaze sites migrated; `null` path byte-identical to legacy; gaze-direction
+  tests green.
+- **M8 complete when:** no `@Deprecated` on the migrated surface; `LegacyPoseAdapter` removed;
+  `EngineFlags` booleans inlined/removed; legacy `else` branch in `finalize` removed; `PoseBuilder.evaluate`
+  removed; grep proves zero `toLocalDirection`/`angleBetweenDegrees`/`atan2` in `ExerciseValidator`, zero
+  `ConstraintSolver.solve` inside `finalize`, zero `EngineFlags.` boolean reads; `ARCHITECTURE_V2_ROADMAP.md`
+  marks Phases 1/2/3/8 behaviorally complete.
 
 ---
 
@@ -335,8 +425,6 @@ compile-checks and merges per the established workflow.
 ---
 
 ## 12. Open questions (non-blocking)
-- Exact caller count of the frame-relative `bakeIkLimb` overload (roadmap says ~18; verify against the
-  64 total `bakeIkLimb(` sites which include other variants).
 - Should new ROM stamps (`hipRomExceeded`, `jointRomExceeded`) be added in M3/M4 (when the stage sets
   the rotation) or centralized in M6? (RFC prefers stage-authoring for locality.)
 - Soak period length before M8 (propose 1 full release cycle).

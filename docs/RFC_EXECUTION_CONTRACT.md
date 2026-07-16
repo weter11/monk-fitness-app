@@ -345,7 +345,7 @@ Flags live in `EngineFlags` (`RFC_ENGINE_PIPELINE` §5.7). Their effect on the *
 
 **Migration sequencing (per `RFC_ENGINE_PIPELINE` §6):**
 - M0: `PIPELINE_ACTIVE=false`; legacy path unchanged. Stages exist but unused by the pipeline.
-- M1: `IK_WORLD_ONLY=true`; delete deprecated `bakeIkLimb` overload; migrate ~18 callers (Gap 5).
+- M1: `IK_WORLD_ONLY=true`; delete deprecated frame-relative `bakeIkLimb` overload; migrate its **exactly 2** call sites (VERIFIED: `BaseLungePose.kt`, `BaseThoracicPose.kt`) to the world overload (Gap 5).
 - M2: `PIPELINE_ACTIVE=true`; Finalizer's internal `solve` call **deleted** (re-entrancy gone);
   pipeline calls Solver once. Double-flatten removed (Solver no longer calls `fromHierarchy`).
 - M3: `SOLVER_OWNS_POSTURE=true`; production poses adopt `declarePosture`.

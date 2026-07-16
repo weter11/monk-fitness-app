@@ -118,6 +118,29 @@ it is demoted to a render-resource holder and must lose any temptation to own ex
   Finalizer mutation).
 - Forbidden from: computing geometry itself, holding render state, holding animation/playback state.
 
+### Ownership, lifetime, and thread-safety of `SkeletonPipeline` (Issue 5)
+
+**Instantiation scope — one instance per *character* (per `SkeletonDefinition`), not a global
+singleton, not per-pose, not per-animation.** Rationale:
+- *Not a singleton:* the pipeline holds stage instances (`ConstraintSolver` ref, one
+  `SkeletonPoseFinalizer`, the `ExerciseValidator` ref) and — critically — the Solver's
+  inter-frame smoothing cache (`lastSolvedRoot`, keyed by `SkeletonPose` identity). Two characters
+  animated concurrently must not share smoothing state, so a process-wide singleton is wrong.
+- *Not per-pose and not per-frame:* poses are pluggable inputs; creating a pipeline per `produceFrame`
+  would rebuild stage instances every frame (wasteful) and would break the smoothing cache
+  (keyed by pose identity, not by pipeline). The pipeline outlives individual pose evaluations.
+- *Per character:* a `SkeletonDefinition` identifies one character's skeleton; the pipeline +
+  its stages + its smoothing cache are bound to that skeleton for the character's lifetime.
+  Multiple characters → multiple pipeline instances, one each.
+
+**Thread-safety:** the pipeline is **not internally synchronized**; it is safe under a *single-thread-
+per-character* contract — the same thread that owns a character drives that character's pipeline.
+Cross-character parallelism is achieved by giving each character its own pipeline on its own thread
+(no shared mutable stage state between pipelines). The only shared mutable state is `EngineFlags`
+(flags), which are read-only at frame time (set at construction / startup), so they require no
+locking. This matches the existing realtime animation model (one render/update loop per character or
+a coordinated scheduler), and introduces no new concurrency primitive.
+
 ### Public surface (signatures only — §5 covers fully)
 
 ```
@@ -340,13 +363,24 @@ the architecture-v2 behavior for that stage only. No big-bang rewrite.
   `finalizer.finalize()` → optional validator. All consumers still call `pose.build()` directly;
   pipeline is unused. **Zero regression.**
 
-### Phase M1 — IK extraction (Gap 5 + foundation for Gap 1)
-- Introduce `declareLimbTarget(...)` alongside `bakeIkLimb`. Poses adopt `declareLimbTarget` one
-  limb at a time; `bakeIkLimb` becomes a thin recorder (writes intent AND, for backward compat,
-  still solves into the tree via the IK stage when `PIPELINE_ACTIVE`).
-- Delete the deprecated frame-relative `bakeIkLimb` overload; migrate its ~18 callers to
-  world-target declaration. `IK_WORLD_ONLY = true`.
-- **Coexist:** legacy poses (still calling tree-building `bakeIkLimb`) work because `PIPELINE_ACTIVE=false`.
+### Phase M1 — Remove deprecated `bakeIkLimb` overload (Gap 5, F4)
+- **Scope (authoritative — see Issue 1 resolution):** M1 does ONLY one thing: delete the
+  frame-relative `bakeIkLimb(rootWorldPos, targetWorldPos, L1, L2, parentRotation, poleLocal, …)`
+  overload and migrate its **exactly 2** call sites (verified: `BaseLungePose.kt`,
+  `BaseThoracicPose.kt`) to the world overload. The caller already computes the proximal parent's
+  world rotation to derive `worldPole`, so it passes the pre-computed `worldPole` directly — a
+  mechanical 1:1 replacement.
+- Set `IK_WORLD_ONLY = true`. With the frame-relative overload gone, `preConvertPoles` (M4) owns
+  100% of world↔local conversion.
+- **`declareLimbTarget` is NOT introduced in M1.** It is introduced in M2 (Pose intent-only) as the
+  intent-recording replacement for the geometry-writing `bakeIkLimb`. M1 is strictly the overload
+  deletion; M2 is the intent migration. This ordering is correct because: (a) M1 is a pure
+  mechanical refactor with zero behavioral change and zero new API, so it is trivially revertible
+  and independently testable; (b) `declareLimbTarget` depends on the `IntentBuilder` + the pipeline
+  consuming §1.1, both of which only exist after M0/M2 land — introducing it in M1 would create a
+  dangling API with no consumer; (c) keeping M1 narrow keeps the rollback surface minimal (flip
+  `IK_WORLD_ONLY`, restore one method).
+- **Coexist:** legacy poses (still calling the world `bakeIkLimb`) work because `PIPELINE_ACTIVE=false`.
 
 ### Phase M2 — Pose becomes intent-only (the core cut)
 - `PIPELINE_ACTIVE = true`. `produceFrame` now: `pose.build()` (intent only) → `IntentNormalization`
@@ -385,11 +419,41 @@ the architecture-v2 behavior for that stage only. No big-bang rewrite.
 **Flags are removed only after the corresponding phase is green in CI for all poses.** Until then
 each flag defaults per `ARCHITECTURE_V2` but can be flipped per-build for canary poses.
 
+### Milestone exit criteria (explicit, every phase)
+
+- **M0 complete when:** `SkeletonPipeline` exists with `PIPELINE_ACTIVE=false`; full CI suite green;
+  zero consumers changed; zero poses touched.
+- **M1 complete when:** frame-relative `bakeIkLimb` overload deleted; its **2** call sites migrated to
+  the world overload; `IK_WORLD_ONLY=true`; `ValidatorRomClusterTest` + `ChestFrameIssueFTest` +
+  `*PoseTest` green; grep proves no reference to the deleted overload (compile).
+- **M2 complete when:** `PIPELINE_ACTIVE=true`; `produceFrame` runs the full ordered pipeline; the
+  Finalizer's internal `ConstraintSolver.solve` call removed; `BasePose` helpers forward to
+  `IntentBuilder`; every production pose compiles (no node-writing helper remains); `ValidatorRomClusterTest`
+  matches the pre-M2 baseline (visual/geometry diff).
+- **M3 complete when:** `SOLVER_OWNS_POSTURE=true`; every production contact/posed pose calls
+  `declarePosture`; posture-seeded poses render with engine-derived pelvis; `PELVIS_INTENT` within
+  tolerance; non-contact poses byte-identical (Solver no-op).
+- **M4 complete when:** `FINALIZER_OWNS_CONVERSION=true`; `preConvertPoles` active; no pose writes a
+  local transform after IK; `reconstructChestFrame` no-move guard verified on a synthetic conflict test.
+- **M5 complete when:** `spineIntent`/`limbTargets`/`jointIntents` are consumed by the engine (no dead
+  carrier); lint proves zero unused §1.1 writes.
+- **M6 complete when:** `VALIDATOR_STAMP_ONLY=true`; `ExerciseValidator` no longer imports
+  `toLocalDirection`/`angleBetweenDegrees`/`atan2`; every Validator rule reads ≥1 stamp/intent; a
+  build-time assertion fails the compile if geometry inference remains.
+- **M7 complete when:** `headTarget` carrier + `buildGaze` helper present; `BaseLungePose`/
+  `BaseVerticalPullPose` gaze sites migrated; `null` path byte-identical to legacy; gaze-direction
+  tests green.
+- **M8 (cleanup) complete when:** no `@Deprecated` on the migrated surface; `LegacyPoseAdapter`
+  removed; `EngineFlags` booleans inlined/removed; legacy `else` branch in `finalize` removed;
+  `PoseBuilder.evaluate` removed; grep proves zero `toLocalDirection`/`angleBetweenDegrees`/`atan2` in
+  `ExerciseValidator`, zero `ConstraintSolver.solve` inside `finalize`, zero `EngineFlags.` boolean
+  reads; `ARCHITECTURE_V2_ROADMAP.md` marks Phases 1/2/3/8 behaviorally complete.
+
 ---
 
-## 7. Dependency graph
+## 7. Dependency graph (per-milestone)
 
-### Allowed edges (who may call whom)
+### 7.1 Stage dependency graph (static, allowed/forbidden edges)
 ```
 Consumer (workout loop / ValidationPoseViewer / snapshot)
         │ owns
@@ -409,8 +473,7 @@ Consumer (workout loop / ValidationPoseViewer / snapshot)
 
 SkeletonEngine  ──owned-by──▶ SkeletonRenderer / SkeletonProjector   [RENDER ONLY, no pipeline edge]
 ```
-
-### Forbidden edges (architecture prevents these)
+**Forbidden edges (architecture prevents these):**
 - **Pose / BasePose may NOT call `SkeletonMath.solveIK` or `bakeIkLimb` that writes a node.** Pose
   writes §1.1 only. (Enforced by removing the node-writing helpers in M2; any remaining call is a
   compile error.)
@@ -420,19 +483,129 @@ SkeletonEngine  ──owned-by──▶ SkeletonRenderer / SkeletonProjector   [
   calls it, in stage order. (Prevents re-entrant posture solving.)
 - **SkeletonPoseFinalizer may NOT translate the root or move a Solver-settled contact.** (F1/B5
   guard inside `reconstructChestFrame`; if it would, it signals the pipeline for a bounded re-pass.)
-- **SkeletonEngine may NOT call any pipeline stage.** It is render-only. (Name retained; logic
-  barred by code review + the fact it holds no stage instances.)
+- **SkeletonEngine may NOT call any pipeline stage.** It is render-only.
 - **ExerciseValidator may NOT write `SkeletonPose`.** (Observer; returns `ValidationReport`.)
-- **No stage may call its predecessor** (e.g. Finalizer calling Pose). The DAG is acyclic by
-  construction; the pipeline holds the only references and calls forward only.
+- **No stage may call its predecessor.** The DAG is acyclic by construction.
 
 ```
         Pose ──▶ Intent ──▶ IK ──▶ Solver ──▶ Finalizer ──▶ FK ──▶ Validator ──▶ Render
           │                                     ▲
           │                                     │ (bounded re-pass only, signal-driven)
           └─────────────────────────────────────┘
-   (Render/SkeletonEngine is OFF this chain — render consumes the final pose only.)
 ```
+
+### 7.2 Milestone dependency graph (rollout order — Issue 3)
+
+The audit correctly noted that M6 (Validator stamp-only) is **NOT independent**: the Validator can
+only consume stamps once the engine stages *actually produce* them. Under `PIPELINE_ACTIVE=false`
+(M0), the legacy path may not write the ROM stamps M6 needs, so M6 is **blocked** until M2 (pipeline
+active + stages writing stamps) and, for the new ROM stamps, until M3/M4 (the stages that set those
+rotations). The dependency graph below makes this explicit. Each milestone lists its Required /
+Optional / Independent / Blocked predecessors.
+
+```
+M0  scaffold pipeline
+    Required:    (none)
+    Optional:    (none)
+    Independent: (all later phases)
+    Blocked by:  (none)
+        │
+        ▼
+M1  remove deprecated bakeIkLimb overload        [Gap 5]
+    Required:    M0
+    Optional:    (none)
+    Independent: M3, M4, M5, M7
+    Blocked by:  (none)
+        │
+        ▼
+M2  Pose intent-only + pipeline drives stages     [Gap 1 + Gap 2 carrier activation]
+    Required:    M1
+    Optional:    (none)
+    Independent: M7
+    Blocked by:  (none)   ← engine now PRODUCES stamps (maxIkClampAmount, root*Delta, boneLengthsVerified)
+        │
+        ▼
+M3  Solver authority (SOLVER_OWNS_POSTURE)        [Gap 3]
+    Required:    M2
+    Optional:    (none)
+    Independent: M4, M5, M7
+    Blocked by:  (none)   ← Solver now writes root*Delta + (new) hip/ROM stamps
+        │
+        ▼
+M4  Finalizer authority (FINALIZER_OWNS_CONVERSION) [Gap 4]
+    Required:    M2, M1
+    Optional:    (none)
+    Independent: M5, M7
+    Blocked by:  (none)
+        │
+        ▼
+M5  §1.1 carriers live (automatic after M2)       [Gap 2]
+    Required:    M2
+    Optional:    (none)
+    Independent: M7
+    Blocked by:  (none)
+        │
+        ▼
+M6  Validator stamp-only (VALIDATOR_STAMP_ONLY)    [Gap 6 / Phase 8]
+    Required:    M2   (engine must produce stamps)
+    Optional:    M3, M4   (new ROM stamps authored by Solver/Finalizer; without them some rules
+                            fall back to intent comparison, but the gate can ship with the
+                            pre-existing stamps maxIkClampAmount/root*Delta/boneLengthsVerified)
+    Independent: (none)
+    Blocked by:  M0 with PIPELINE_ACTIVE=false (legacy path does not guarantee stamp production)
+        │
+        ▼
+M7  headTarget gaze-as-target                     [Gap 7]
+    Required:    M2   (Intent Layer carrier + Finalizer resolver)
+    Optional:    (none)
+    Independent: (none)
+    Blocked by:  (none)
+        │
+        ▼
+M8  deprecation purge + final cleanup
+    Required:    M1, M2, M3, M4, M5, M6, M7   (all green)
+    Optional:    (none)
+    Independent: (none)
+    Blocked by:  (none)
+```
+
+**Rollout order (linear, no interleaving):** M0 → M1 → M2 → M3 → M4 → M5 → M6 → M7 → M8. The only
+"independent" phases (M3/M4/M5/M7 relative to each other) MAY be merged in parallel PRs *after* their
+required predecessor ships, but MUST NOT ship before it. M6 is explicitly **blocked** until M2 lands.
+
+### 7.3 Performance gate (non-functional requirement — Issue 4)
+
+Architecture v2 targets a **realtime animation engine**; allocation strategy is therefore an
+explicit implementation gate, not an open question.
+
+**Requirement (NFR-PERF-1):** After M2 lands, a steady-state frame MUST perform **zero per-frame
+heap allocations** on the hot path (`produceFrame` → IK → Solver → Finalizer → FK).
+
+- **Pooling:** the per-frame `SkeletonNode` tree is **pooled**, not allocated. The pipeline owns one
+  reusable tree per character (see §3 ownership) and resets it at M2-stage-entry; node objects and
+  their `localPosition`/`localRotation` are mutated in place, never re-created.
+- **Stamp/scratch buffers:** `SkeletonMath` scratch vectors (`poleWorldScratch`, `ikResult`, etc.)
+  are already reused; the pipeline guarantees no `Vector3()` / `JointRotation()` allocation inside the
+  stage loop. `PipelineResult`/`ValidationReport` are allocated once per `produceFrame` call (one
+  allocation per frame is acceptable and bounded); if even that is undesirable, the consumer supplies
+  a result buffer.
+- **`IntentBuilder`:** the per-pose `build()` may allocate (it runs once per pose authored shape, not
+  per rendered frame) — this is outside the hot path and exempt.
+- **Gate:** a CI allocation test (e.g. allocating-rate assertion via a debug allocator, or a
+  documented budget) MUST pass before M2 is marked complete. This is a **hard gate**, not advisory.
+
+This requirement does NOT change the architecture — it constrains the *implementation* of the already
+specified stages (pool the tree, reuse scratch). No new component, no new ownership.
+
+### 7.4 Cross-reference index (Issue 8 — all cited sections exist)
+- `RFC_INTENT_LAYER.md`: §1 intent model, §2 ownership, §3 lifecycle, §4 serialization, §5 copy
+  semantics, §6 validation, §7 immutability, §8 dependency, §9–11 Solver/Finalizer/Validator
+  interaction, §12 migration.
+- `RFC_EXECUTION_CONTRACT.md`: §1 stage contracts, §5 re-entrancy, §11 root guarantees, §13 bounded
+  iterations, §14 feature flags.
+- `RFC_GAP_CLOSURE.md`: §1 dependency graph, §2 migration graph, §3 rollout (M0–M8), §6 testing.
+- `CAPABILITY_GAP_REPORT.md`: Gap 1–7.
+All section numbers cited above are present in the referenced files (verified).
 
 ---
 

@@ -108,12 +108,14 @@ evidence of the engine pipeline.
 - **Existing engine support:** `SkeletonMath.deriveDefaultPole`, `bonesExact` invariant,
   `bakeIkLimb` world-only overload (derives default pole, ANDs `boneLengthsVerified`).
 - **Missing APIs:** Deletion of the frame-relative `bakeIkLimb(parentRotation, poleLocal)` overload
-  and migration of its **~18 remaining pose callers** (roadmap Phases 1 note: "retained until its
-  ~18 pose callers are migrated in a follow-up").
+  and migration of its **exactly 2 remaining pose callers (VERIFIED): `BaseLungePose.kt` and
+  `BaseThoracicPose.kt`** — these are the only poses that pass the `parentRotation`/`poleLocal`
+  argument shape. The roadmap's "~18" estimate is incorrect; the 64 total `bakeIkLimb(` call sites
+  across poses include the world overload and other variants.
 - **Missing data structures:** None.
 - **Missing execution phase:** None (F4 contract met by the world overload; cleanup pending).
 - **Required prerequisite phase:** None (independent cleanup).
-- **Estimated implementation scope:** **Medium** (migrate ~18 callers to world overload).
+- **Estimated implementation scope:** **Small** (migrate exactly 2 verified callers — `BaseLungePose.kt`, `BaseThoracicPose.kt` — to the world overload; see Issue 2 resolution).
 - **Blocked / partial:** **Partially blocked** — functional but not finalized.
 
 ## Gap 6 — PHASE 8 validator still reconstructs geometry (spec F-observer / §2.6)
