@@ -1,5 +1,10 @@
 # Engineering Validation Poses — Defect Audit
 
+> **HISTORICAL ARCHIVE.** Retained as the original per-pose defect audit. Not kept
+> in sync with the live code. Index and cross-cutting findings:
+> `docs/ENGINE_HISTORY.md` §5. Live future work: `docs/ENGINE_ROADMAP.md`. When
+> this file conflicts with the current code, the code wins.
+
 > **Investigation only.** No code, pose, engine, or renderer was modified.
 > Purpose: attribute every remaining *visible* defect in the four Engineering
 > Validation poses to exactly one of: AUTHORING (pose), ENGINE (animation core),
