@@ -43,10 +43,11 @@ class CouchStretchPose : BaseHipFlexorPose() {
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
         // 2. Fixed Kinematics for Back Leg (Side B): knee pinned at the wall, shin vertical
+        // (Phase 4: lean-cancel removed; the thigh/shin vectors are written directly)
         thighVecB.set(kneeBX - pelvisX, kneeBY - pelvisY, 0f)
         shinVecB.set(0f, def.shinLength, 0f)
-        SkeletonMath.rotAround(thighVecB, axisZ, leanAngle, kneeB!!.localPosition)
-        SkeletonMath.rotAround(shinVecB, axisZ, leanAngle, ankleB!!.localPosition)
+        kneeB!!.localPosition.set(thighVecB)
+        ankleB!!.localPosition.set(shinVecB)
 
         // 3. Inverse Kinematics for Front Leg (Side F)
         targetAnkleF.set(55f, 25f, -def.hipWidth)

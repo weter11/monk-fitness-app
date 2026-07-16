@@ -37,10 +37,11 @@ class HalfKneelingStretchPose : BaseHipFlexorPose() {
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
         // 2. Fixed Kinematics for Back Leg: knee pinned, shin lies flat on the ground
+        // (Phase 4: lean-cancel removed; the thigh/shin vectors are written directly)
         thighVecB.set(kneeBX - pelvisX, kneeBY - pelvisY, 0f)
         shinVecB.set(-def.shinLength, 0f, 0f)
-        SkeletonMath.rotAround(thighVecB, axisZ, leanAngle, kneeB!!.localPosition)
-        SkeletonMath.rotAround(shinVecB, axisZ, leanAngle, ankleB!!.localPosition)
+        kneeB!!.localPosition.set(thighVecB)
+        ankleB!!.localPosition.set(shinVecB)
 
         // 3. Inverse Kinematics for Front Leg
         targetAnkleF.set(65f, 25f, -def.hipWidth)
