@@ -253,17 +253,63 @@ class ValidatorRomClusterTest {
     }
 
     @Test
-    fun middleSplitDetectableUnderEngineeringValidation() {
+    fun middleSplitIsNowAValidStraightReference() {
+        // The Middle Split reference was fixed (ENGINEERING_VALIDATION_AUDIT §1): its straight
+        // limbs are now reachable, so the authored straight intent must be HONOURED and the hip
+        // ROM must stay within anatomical range.
         val pose = finalized(MiddleSplitPose())
         val report = ExerciseValidator(ValidatorConfig.ENGINEERING_VALIDATION)
             .validate(pose, def, env, camera, 1000f, 1000f)
 
-        // UNI-2: the straight intent is silently dropped (bent legs/arms) -> now detectable.
         val straight = report.results.first { it.ruleId == "STRAIGHT_LIMB_INTENT" }
-        assertFalse("Middle Split's straight limbs must be detected as bent", straight.isValid)
-        // The hip ROM itself stays within anatomical range (the split is valid, just not straight).
+        assertTrue("Middle Split's straight limbs must now resolve straight", straight.isValid)
         val hip = report.results.first { it.ruleId == "HIP_ROM_LIMIT" }
         assertTrue(hip.isValid)
+    }
+
+    @Test
+    fun straightIntentStillDetectableOnBrokenReference() {
+        // Detection coverage no longer depends on a real reference pose staying buggy: a
+        // purpose-built fixture authors a `straight=true` limb with an unsatisfiable (too-close)
+        // target, which the UNI-9 fallback resolves bent. The validator must still flag it.
+        val pose = finalized(BrokenStraightLimbPose())
+        val report = ExerciseValidator(ValidatorConfig.ENGINEERING_VALIDATION)
+            .validate(pose, def, env, camera, 1000f, 1000f)
+
+        val straight = report.results.first { it.ruleId == "STRAIGHT_LIMB_INTENT" }
+        assertFalse("A straight limb authored inside the proximal bone must be detected as bent", straight.isValid)
+        val hip = report.results.first { it.ruleId == "HIP_ROM_LIMIT" }
+        assertTrue(hip.isValid)
+    }
+
+    /**
+     * Purpose-built fixture proving UNI-2 detection works independently of any real reference.
+     * Authors a `straight=true` leg whose target sits 30u from the hip — well inside L1 (112) —
+     * so [SkeletonMath.solveStraightLimb] falls back to the bent UNI-9 solve and the straight
+     * intent is silently dropped, exactly the condition the validator must surface.
+     */
+    private class BrokenStraightLimbPose : BaseValidationPose() {
+        override fun buildStatic(def: SkeletonDefinition): SkeletonPose {
+            ensureHierarchy(def)
+            pelvis!!.localPosition.set(0f, 200f, 0f)
+            pelvis!!.localRotation.set(axisZ, 0f)
+            chest!!.localPosition.set(0f, def.torsoLength, 0f)
+            chest!!.localRotation.set(axisZ, 0f)
+            buildHead(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
+            buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
+            buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
+            roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
+
+            // Unsatisfiable straight target: only 30u from the hip (L1 = 112).
+            val targetF = Vector3(0f, 200f, -def.hipWidth - 30f)
+            val targetB = Vector3(0f, 200f, def.hipWidth + 30f)
+            val legPoleF = Vector3(0f, 1f, -1f)
+            val legPoleB = Vector3(0f, 1f, 1f)
+            val groundContact = ContactConstraint.ground(0f)
+            bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, legStraightConstraint(def), pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, straight = true, contact = groundContact)
+            bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, legStraightConstraint(def), pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true, contact = groundContact)
+            return finalizePose()
+        }
     }
 
     @Test
