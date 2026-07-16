@@ -38,6 +38,8 @@ abstract class BaseValidationPose : PoseBuilder {
 
     protected val zeroVector = Vector3(0f, 0f, 0f)
     protected val identityRotation = JointRotation()
+    protected val axisX = Vector3(1f, 0f, 0f)
+    protected val axisY = Vector3(0f, 1f, 0f)
     protected val axisZ = Vector3(0f, 0f, 1f)
     protected val tempV1 = Vector3()
     protected val tempV2 = Vector3()
@@ -57,6 +59,8 @@ abstract class BaseValidationPose : PoseBuilder {
     protected var pelvis: SkeletonNode? = null; protected var chest: SkeletonNode? = null; protected var neck: SkeletonNode? = null; protected var head: SkeletonNode? = null
     protected var shoulderA: SkeletonNode? = null; protected var elbowA: SkeletonNode? = null; protected var handA: SkeletonNode? = null; protected var palmA: SkeletonNode? = null; protected var knucklesA: SkeletonNode? = null; protected var fingertipsA: SkeletonNode? = null
     protected var shoulderP: SkeletonNode? = null; protected var elbowP: SkeletonNode? = null; protected var handP: SkeletonNode? = null; protected var palmP: SkeletonNode? = null; protected var knucklesP: SkeletonNode? = null; protected var fingertipsP: SkeletonNode? = null
+    protected var clavicleA: SkeletonNode? = null; protected var scapulaA: SkeletonNode? = null
+    protected var clavicleP: SkeletonNode? = null; protected var scapulaP: SkeletonNode? = null
     protected var hipF: SkeletonNode? = null; protected var kneeF: SkeletonNode? = null; protected var ankleF: SkeletonNode? = null; protected var heelF: SkeletonNode? = null; protected var toeF: SkeletonNode? = null
     protected var hipB: SkeletonNode? = null; protected var kneeB: SkeletonNode? = null; protected var ankleB: SkeletonNode? = null; protected var heelB: SkeletonNode? = null; protected var toeB: SkeletonNode? = null
 
@@ -67,6 +71,8 @@ abstract class BaseValidationPose : PoseBuilder {
         pelvis = nodes.pelvis; chest = nodes.chest; neck = nodes.neck; head = nodes.head
         shoulderA = nodes.shoulderA; elbowA = nodes.elbowA; handA = nodes.handA; palmA = nodes.palmA; knucklesA = nodes.knucklesA; fingertipsA = nodes.fingertipsA
         shoulderP = nodes.shoulderP; elbowP = nodes.elbowP; handP = nodes.handP; palmP = nodes.palmP; knucklesP = nodes.knucklesP; fingertipsP = nodes.fingertipsP
+        clavicleA = nodes.clavicleA; scapulaA = nodes.scapulaA
+        clavicleP = nodes.clavicleP; scapulaP = nodes.scapulaP
         hipF = nodes.hipF; kneeF = nodes.kneeF; ankleF = nodes.ankleF; heelF = nodes.heelF; toeF = nodes.toeF
         hipB = nodes.hipB; kneeB = nodes.kneeB; ankleB = nodes.ankleB; heelB = nodes.heelB; toeB = nodes.toeB
     }
@@ -86,6 +92,70 @@ abstract class BaseValidationPose : PoseBuilder {
     protected fun buildShoulders(shoulderA: SkeletonNode, shoulderP: SkeletonNode, shoulderWidth: Float) {
         shoulderA.localPosition.set(0f, 0f, -shoulderWidth)
         shoulderP.localPosition.set(0f, 0f, shoulderWidth)
+    }
+
+    // --- Joint-DOF authoring helpers (mirror com.monkfitness.app.animation.BasePose) ---
+    // The validation base previously only set raw local offsets/rotations. These named paths
+    // give the validation poses access to the same anatomical DOFs the engine exposes (UNI-7/8/10),
+    // so authoring can express hip rotation, scapular/clavicular girdle motion and 2-DOF
+    // wrist/ankle articulation without raw, ambiguous localRotation writes.
+
+    protected fun buildChestOrientation(
+        chest: SkeletonNode,
+        leanRad: Float,
+        twistRad: Float,
+        sideBendRad: Float
+    ) {
+        val z = JointRotation(axisZ, leanRad)
+        val y = JointRotation(axisY, twistRad)
+        val x = JointRotation(axisX, sideBendRad)
+        SkeletonMath.composeRotations(z, y, chest.localRotation)
+        SkeletonMath.composeRotations(chest.localRotation, x, chest.localRotation)
+    }
+
+    protected fun buildHipRotation(hip: SkeletonNode, rotationRad: Float, sideSign: Float) {
+        hip.localRotation.set(axisX, rotationRad * sideSign)
+    }
+
+    protected fun buildHipAbduction(hip: SkeletonNode, abductionRad: Float, sideSign: Float) {
+        hip.localRotation.set(axisY, abductionRad * sideSign)
+    }
+
+    protected fun buildHipOrientation(
+        hip: SkeletonNode,
+        flexionRad: Float,
+        abductionRad: Float,
+        rotationRad: Float,
+        sideSign: Float
+    ) {
+        SkeletonMath.buildHipRotation(flexionRad, abductionRad, rotationRad, sideSign, hip.localRotation)
+    }
+
+    protected fun buildScapularRotation(
+        scapula: SkeletonNode,
+        retraction: Float,
+        depression: Float,
+        sideSign: Float
+    ) {
+        SkeletonMath.buildScapularRotation(retraction, depression, sideSign, scapula.localRotation)
+    }
+
+    protected fun buildClavicularRotation(
+        clavicle: SkeletonNode,
+        elevation: Float,
+        protraction: Float,
+        axialRotation: Float,
+        sideSign: Float
+    ) {
+        SkeletonMath.buildClavicularRotation(elevation, protraction, axialRotation, sideSign, clavicle.localRotation)
+    }
+
+    protected fun buildWristArticulation(hand: SkeletonNode, flexion: Float, deviation: Float) {
+        SkeletonMath.buildWristRotation(flexion, deviation, hand.localRotation)
+    }
+
+    protected fun buildAnkleArticulation(ankle: SkeletonNode, dorsiflexion: Float, inversion: Float) {
+        SkeletonMath.buildAnkleRotation(dorsiflexion, inversion, ankle.localRotation)
     }
 
     // --- Shared IK helpers ---------------------------------------------------------
