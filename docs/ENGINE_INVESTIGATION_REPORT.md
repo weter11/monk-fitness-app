@@ -1,5 +1,12 @@
 # ENGINE INVESTIGATION REPORT — Unified & Corrected
 
+> **HISTORICAL ARCHIVE.** This document is retained as the original source of
+> record for the investigation era. It is **not** kept in sync with the live code.
+> For the consolidated status of all UNI-* issues and an index to the detailed
+> records, see `docs/ENGINE_HISTORY.md`. For what is left to do, see
+> `docs/ENGINE_ROADMAP.md`. When this file conflicts with the current code, the
+> code wins.
+
 > **Scope / stance:** Investigation report only. No engine code, poses, or constants were
 > modified. The four validation poses (Dead Hang, Deep Overhead Squat, Pike Sit, Middle
 > Split) are treated as *frozen anatomical references* per `VALIDATION.md`; "fix the pose"

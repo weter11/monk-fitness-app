@@ -1,5 +1,10 @@
 # PELVIC / HIP COMPLEX INVESTIGATION — focused deep-dive
 
+> **HISTORICAL ARCHIVE.** Retained as the original pelvis/hip source of record.
+> Not kept in sync with the live code. Index and consolidated UNI-* status:
+> `docs/ENGINE_HISTORY.md`. Live future work: `docs/ENGINE_ROADMAP.md`. When this
+> file conflicts with the current code, the code wins.
+
 > **Companion to the unified report.** This file is the **pelvis/hip-focused 14-question
 > deep-dive**. The consolidated, de-duplicated issue register and the single prioritized
 > roadmap now live in **`docs/ENGINE_INVESTIGATION_REPORT.md` (unified & corrected)**. For a

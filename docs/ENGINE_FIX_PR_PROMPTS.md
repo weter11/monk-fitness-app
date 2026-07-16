@@ -1,5 +1,11 @@
 # Engine Fix — 11 PR Prompts (one per investigation issue)
 
+> **HISTORICAL ARCHIVE.** Retained as the original implementation-prompt set. Many
+> prompts are now obsolete because their target issues were resolved. The live,
+> de-duplicated pickup list is `docs/ENGINE_ROADMAP.md`; the consolidated issue
+> index is `docs/ENGINE_HISTORY.md`. When this file conflicts with the current
+> code, the code wins.
+
 > These are **implementation prompts** derived from `docs/ENGINE_INVESTIGATION_REPORT.md`.
 > Each PR fixes an *engine* limitation. All work must obey the project constitution:
 > `ENGINE.md`, `BIOMECHANICS.md`, `VALIDATION.md`, `CODING_RULES.md`.

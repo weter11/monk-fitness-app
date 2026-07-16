@@ -79,13 +79,15 @@ different facets of the same build step, not separate stages in time.
 | **PoseBuilder / BasePose** | The pose contract and shared authoring scaffolding. `build(context): SkeletonPose` authors the body in local space using reusable helpers and IK wrappers. | `docs/ENGINE.md` §3 (`BasePose`), `docs/CODING_RULES.md` §2 (data-driven poses) |
 | **SkeletonFactory** | Constructs the joint hierarchy (`SkeletonNode` tree) for a topology. Owns the *shape* of the tree, not the pose. Named `SkeletonNodes` accessors let poses reference joints by role. | `docs/ENGINE.md` §3, §8; `docs/ENGINE_ARCHITECTURE.md` §R2 (joint set, A/P-F/B naming) |
 | **SkeletonMath / IK** | Stateless math core: vectors, rotations, forward kinematics, the analytical closed-form two-bone solver, near-straight-limb solving, frame↔world direction transforms. Allocation-free. | `docs/ENGINE.md` §4 (coordinates/axes), §6–7 (poles/IK philosophy) |
-| **ConstraintSolver** | Runs after IK, before FK. Reconciles the authored pose with its declared support contacts via damped CCD, regularized toward the authored shape; applies only lateral pelvis roll for balance. | `docs/ENGINE_ARCHITECTURE.md` §R4; `docs/ENGINE.md` §5 (local vs world); `docs/PELVIC_HIP_COMPLEX_INVESTIGATION.md` (UNI-1/4) |
+| **ConstraintSolver** | Runs after IK, before FK. Reconciles the authored pose with its declared support contacts via damped CCD, regularized toward the authored shape; applies only lateral pelvis roll for balance. | `docs/ENGINE_ARCHITECTURE.md` §R4; `docs/ENGINE.md` §5 (local vs world); `docs/ENGINE_HISTORY.md` (UNI-1/UNI-4) |
 | **SkeletonPoseFinalizer** | FK traversal, chest-frame reconstruction (preserves authored thoracic rotation), and anatomical completion of feet/hands. | `docs/ENGINE.md` §3 (`SkeletonPoseFinalizer`); `docs/ENGINE_ARCHITECTURE.md` §R1 (finalizer step) |
 | **Validation (ExerciseValidator)** | Read-only correctness authority. Fixed battery of physical-invariance rules plus engineering-only authored-intent rules. | `docs/VALIDATION.md`; `docs/ENGINE_ARCHITECTURE.md` §R5 |
 | **Projector / Camera / Renderer** | `SkeletonProjector` converts the 3D pose to screen space via the pose-owned `CameraDefinition`; `SkeletonRenderer` draws depth-sorted bones/joints/ground. Camera and environment are owned by `PoseMetadata`. | `docs/ENGINE.md` §10 (camera/environment ownership); `docs/VALIDATION.md` §11.6 (camera framing) |
 | **Biomechanics** | The engineering interpretation of human movement that decides whether a pose is *correct* (honest motion, joint sequencing, pelvis stabilizes, planted parts stay planted). | `docs/BIOMECHANICS.md` |
-| **Pelvic / Hip Complex** | Focused architectural investigation of the pelvis and hip joints, ROM limits, and the ConstraintSolver tilt axis. (Note: the project's hip reference is `docs/PELVIC_HIP_COMPLEX_INVESTIGATION.md`; there is no separate `HIP_COMPLEX.md`.) | `docs/PELVIC_HIP_COMPLEX_INVESTIGATION.md`; `docs/ENGINE_INVESTIGATION_REPORT.md` (UNI register) |
-| **Engineering Validation** | The hidden developer category of frozen reference poses used to verify the engine. Includes the four-pose defect audit and camera framing pass. | `docs/VALIDATION.md` §4–5, §11; `docs/ENGINEERING_VALIDATION_AUDIT.md` |
+| **Pelvic / Hip Complex** | Focused architectural investigation of the pelvis and hip joints, ROM limits, and the ConstraintSolver tilt axis. The historical Q&A and issue list live in the archive; the consolidated status is in the history index. (Note: there is no separate `HIP_COMPLEX.md`; hip material is `docs/PELVIC_HIP_COMPLEX_INVESTIGATION.md`, reached via `docs/ENGINE_HISTORY.md`.) | `docs/ENGINE_HISTORY.md` §4; `docs/ENGINE_ROADMAP.md` |
+| **Engineering Validation** | The hidden developer category of frozen reference poses used to verify the engine. Includes the four-pose defect audit and camera framing pass. | `docs/VALIDATION.md` §4–5, §11; `docs/ENGINE_HISTORY.md` §3, §5 |
+| **History / Archive** | The full historical investigation, audit, and fix-prompt records (UNI-1…12, per-pose audits, pelvic/hip Q&A, PR prompts). Retained as evidence, not kept in sync with code. | `docs/ENGINE_HISTORY.md` |
+| **Roadmap / Future work** | The live list of remaining engine work (open UNI items, trunk DOFs, generalized contacts). | `docs/ENGINE_ROADMAP.md` |
 | **Coding Rules** | Permanent, standing rules for all development on the engine, poses, and validation. | `docs/CODING_RULES.md` |
 
 > **On `HIP_COMPLEX.md` / `CAMERA.md`:** the project lists these as existing docs.
@@ -205,10 +207,15 @@ How the engine documents relate. Read in the order that matches your task.
         │              │                              │
         └──────┬───────┴──────────────┬───────────────┘
                ▼                      ▼
-   PELVIC_HIP_COMPLEX_        ENGINEERING_VALIDATION_AUDIT.md
-   INVESTIGATION.md           (4-pose defect audit + camera pass)
-   ENGINE_INVESTIGATION_      ENGINE_FIX_PR_PROMPTS.md
-   REPORT.md (UNI register)   (fix prompts per issue)
+     ENGINE_HISTORY.md         ENGINE_ROADMAP.md
+     (archive: UNI-1..12,      (live future work:
+      per-pose audits,         open UNI items,
+      pelvic/hip Q&A,          trunk DOFs,
+      PR prompts)              generalized contacts)
+               │
+               └── links to the four retained detailed records:
+                  ENGINE_INVESTIGATION_REPORT.md, PELVIC_HIP_COMPLEX_INVESTIGATION.md,
+                  ENGINEERING_VALIDATION_AUDIT.md, ENGINE_FIX_PR_PROMPTS.md (all HISTORICAL)
 ```
 
 Reading paths:
@@ -221,14 +228,20 @@ Reading paths:
 - **Engine/core change:** `ENGINE.md` §11–12 (what belongs inside) → relevant
   subsystem section in `ENGINE_ARCHITECTURE.md` → `TEST_BASELINE.md` to avoid
   regressions.
-- **Hip/pelvis work:** `PELVIC_HIP_COMPLEX_INVESTIGATION.md` (focused) →
-  `ENGINE_INVESTIGATION_REPORT.md` (UNI register) → `ENGINE_FIX_PR_PROMPTS.md`.
-- **Validation/audit:** `VALIDATION.md` → `ENGINEERING_VALIDATION_AUDIT.md`.
+- **History / past decisions:** `ENGINE_HISTORY.md` (index) → the four detailed
+  HISTORICAL records it links to.
+- **What's left to do:** `ENGINE_ROADMAP.md` (live open items + resolved list).
+- **Hip/pelvis work:** `ENGINE_HISTORY.md` §4 (Q&A verdicts) and §2 (UNI status);
+  for live hip work see `ENGINE_ROADMAP.md`.
+- **Validation/audit:** `VALIDATION.md` → `ENGINE_HISTORY.md` §3, §5 (audit index).
 
 > Where documents disagree, the precedence is: `CODING_RULES.md` (contributor
 > rules) > `VALIDATION.md` (correctness contract) > `ENGINE.md` (architecture) >
-> this map. Investigation reports (`*_INVESTIGATION*.md`,
-> `ENGINEERING_VALIDATION_AUDIT.md`) are *evidence*, not source of truth.
+> this map. The investigation/audit/PR-prompt files and `ENGINE_HISTORY.md` are
+> *evidence / archive*, not source of truth; when they conflict with the current
+> code, the code wins. Camera *ownership* is documented in `docs/ENGINE.md` §10 and
+> the validation camera framing pass in `docs/VALIDATION.md` §11.6 (no standalone
+> `CAMERA.md` exists).
 
 ---
 
