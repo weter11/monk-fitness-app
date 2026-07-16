@@ -283,6 +283,19 @@ abstract class BasePose : PoseBuilder {
         return SkeletonMath.solveStraightLimb(hipW, targetAnkle, thighLen, shinLen, constraint, result)
     }
 
+    /**
+     * Phase 1 (F4): DEPRECATED. Frame-relative IK: the pole is authored in the limb-root's LOCAL
+     * frame and converted to world space here. The IK layer must be strictly world-space, so
+     * callers should convert the pole themselves (or use [SkeletonMath.deriveDefaultPole]) and use
+     * the world-only [bakeIkLimb] overload. Retained until Phase 3 removes it.
+     */
+    @Deprecated(
+        "Phase 1: IK is world-only. Convert the pole with SkeletonMath.toWorldDirection (or deriveDefaultPole) and call the world-only bakeIkLimb overload.",
+        ReplaceWith(
+            "bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld), constraint, parentRotation, middleNode, endNode, ikBuffer, straight, contact)",
+            "com.monkfitness.app.animation.SkeletonMath"
+        )
+    )
     protected fun bakeIkLimb(
         rootWorldPos: Vector3,
         targetWorldPos: Vector3,
@@ -325,10 +338,24 @@ abstract class BasePose : PoseBuilder {
         contact: ContactConstraint? = null
     ): SkeletonMath.IKResult {
         val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
+        // Phase 1 (F5): reset the bone-length stamp once per build. `isTransformsUpdated` is set
+        // true by the previous frame's finalize; the first limb baked this build clears it and
+        // re-arms the optimistic `true` so the AND across limbs starts fresh.
+        if (jointsBuffer.isTransformsUpdated) {
+            jointsBuffer.boneLengthsVerified = true
+            jointsBuffer.isTransformsUpdated = false
+        }
+        // Phase 1 (F6): a zero-length pole means the pose omitted one — derive the default world
+        // pole so the bend plane is always well-defined (the engine owns this, not the pose).
+        val worldPole = if (pole.mag() < 1e-4f) {
+            SkeletonMath.deriveDefaultPole(rootWorldPos, targetWorldPos, tempPoleWorld)
+        } else {
+            pole
+        }
         val ikResult = if (straight) {
             SkeletonMath.solveStraightLimb(rootWorldPos, targetWorldPos, length1, length2, constraint, ikBuffer, contact)
         } else {
-            SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, pole, constraint, ikBuffer, contact)
+            SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, ikBuffer, contact)
         }
 
         // Single source of truth: automatically propagate the solver's clamp amount into the
@@ -336,6 +363,11 @@ abstract class BasePose : PoseBuilder {
         if (ikResult.clampAmount > jointsBuffer.maxIkClampAmount) {
             jointsBuffer.maxIkClampAmount = ikResult.clampAmount
         }
+
+        // Phase 1 (F5): assert the solved chain preserved both bone lengths exactly and fold the
+        // result into the pose's single `boneLengthsVerified` stamp (AND across all limbs).
+        val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)
+        jointsBuffer.boneLengthsVerified = jointsBuffer.boneLengthsVerified && bonesOk
 
         // Store the limb offsets in the parent's true local frame so they survive the parent's
         // full 3D world rotation exactly — no hand-fed inverse-Z scalar.
@@ -373,8 +405,16 @@ abstract class BasePose : PoseBuilder {
 
     // --- Frame-relative IK overloads: the pole is authored in the limb-root's LOCAL frame
     //     (chest/pelvis) and is transformed into world space via the parent's current world
-    //     rotation. The analytical solver is unchanged. ---
+    //     rotation. The analytical solver is unchanged. Phase 1 (F4): DEPRECATED — IK is
+    //     world-only; convert the pole (or deriveDefaultPole) before solving. Kept until Phase 3. ---
 
+    @Deprecated(
+        "Phase 1: IK is world-only. Convert the pole with SkeletonMath.toWorldDirection (or deriveDefaultPole) and call the world-space solveArmIK overload.",
+        ReplaceWith(
+            "solveArmIK(shoulderW, targetHand, upperArmLen, forearmLen, SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld), constraint, result)",
+            "com.monkfitness.app.animation.SkeletonMath"
+        )
+    )
     protected fun solveArmIK(
         shoulderW: Vector3,
         targetHand: Vector3,
@@ -388,6 +428,13 @@ abstract class BasePose : PoseBuilder {
         return SkeletonMath.solveIK(shoulderW, targetHand, upperArmLen, forearmLen, poleLocal, parentRotation, constraint, result)
     }
 
+    @Deprecated(
+        "Phase 1: IK is world-only. Convert the pole with SkeletonMath.toWorldDirection (or deriveDefaultPole) and call the world-space solveLegIK overload.",
+        ReplaceWith(
+            "solveLegIK(hipW, targetAnkle, thighLen, shinLen, SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld), constraint, result)",
+            "com.monkfitness.app.animation.SkeletonMath"
+        )
+    )
     protected fun solveLegIK(
         hipW: Vector3,
         targetAnkle: Vector3,

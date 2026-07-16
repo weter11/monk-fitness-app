@@ -166,8 +166,12 @@ class SkeletonPose(
     /** IK/Solver stamp: a straight-limb intent could not be honoured (the limb was re-baked bent). */
     var straightIntentDropped: Boolean = false
 
-    /** IK stamp: every solved limb exactly preserved its bone lengths (invariant F5). */
-    var boneLengthsVerified: Boolean = false
+    /**
+     * IK stamp: every solved limb exactly preserved its bone lengths (invariant F5). Optimistic
+     * default `true`; each `bakeIkLimb` ANDs its per-limb check in, so a single violated limb
+     * flips the whole pose to `false`. The IK path resets it at the start of each build.
+     */
+    var boneLengthsVerified: Boolean = true
 
     // W1 — explicit ownership of each extremity's heel/toe or palm/fingertip geometry, derived
     // from [extremityOverrides]. Defaults to AUTOMATIC (engine derives) for every extremity,

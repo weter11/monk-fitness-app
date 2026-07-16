@@ -228,9 +228,12 @@ data class ContactConstraint(
     }
 }
 
-object SkeletonMath {
+    object SkeletonMath {
     // Static scratch for transforming a frame-relative pole into world space inside solveIK.
     private val poleWorldScratch = Vector3()
+
+    // Scratch for deriving the default world pole (never allocates per solve).
+    private val defaultPoleAim = Vector3()
 
     // Zero pole reused by the UNI-9 degenerate-straight-limb fallback: a zero-magnitude pole makes
     // [solveTriangleJoint] pick its stable world-down bend plane (never allocates per solve).
@@ -925,11 +928,77 @@ object SkeletonMath {
     }
 
     /**
+     * Phase 1 (F6) — default world-space IK pole, derived by the engine when a pose omits one.
+     *
+     * The bend plane is anchored to world-up projected perpendicular to the `root -> target` aim,
+     * so elbows/knees bend in the body's natural sagittal/frontal plane regardless of how the
+     * parent frame is rotated (the solver receives a world pole, never a parent-frame one — F4).
+     * If the aim is (near) vertical the anchor falls back to world-forward (+Z), then to world-X,
+     * so the pole is always a well-defined unit vector. Allocation-free: writes into [out].
+     */
+    fun deriveDefaultPole(root: Vector3, target: Vector3, out: Vector3): Vector3 {
+        var ax = target.x - root.x
+        var ay = target.y - root.y
+        var az = target.z - root.z
+        val aMag = sqrt(ax * ax + ay * ay + az * az)
+        if (aMag > 1e-6f) {
+            ax /= aMag; ay /= aMag; az /= aMag
+        } else {
+            ax = 1f; ay = 0f; az = 0f
+        }
+        // Anchor on world-up, made perpendicular to the aim.
+        var px = 0f; var py = 1f; var pz = 0f
+        var dot = px * ax + py * ay + pz * az
+        px -= ax * dot; py -= ay * dot; pz -= az * dot
+        var m = sqrt(px * px + py * py + pz * pz)
+        if (m < 1e-4f) {
+            // Aim is vertical: anchor on world-forward instead.
+            px = 0f; py = 0f; pz = 1f
+            dot = px * ax + py * ay + pz * az
+            px -= ax * dot; py -= ay * dot; pz -= az * dot
+            m = sqrt(px * px + py * py + pz * pz)
+            if (m < 1e-4f) {
+                px = 1f; py = 0f; pz = 0f
+            } else {
+                px /= m; py /= m; pz /= m
+            }
+        } else {
+            px /= m; py /= m; pz /= m
+        }
+        return out.set(px, py, pz)
+    }
+
+    /**
+     * Phase 1 (F5) — bone-length invariant check. Returns true iff the solved chain preserves
+     * both bone lengths to within [eps] (the IK solve must be exact). Written by the IK path and
+     * folded into [SkeletonPose.boneLengthsVerified]. Allocation-free.
+     */
+    fun bonesExact(root: Vector3, mid: Vector3, end: Vector3, L1: Float, L2: Float, eps: Float = 1e-3f): Boolean {
+        val d1x = mid.x - root.x; val d1y = mid.y - root.y; val d1z = mid.z - root.z
+        val d1 = sqrt(d1x * d1x + d1y * d1y + d1z * d1z)
+        val d2x = end.x - mid.x; val d2y = end.y - mid.y; val d2z = end.z - mid.z
+        val d2 = sqrt(d2x * d2x + d2y * d2y + d2z * d2z)
+        return abs(d1 - L1) <= eps && abs(d2 - L2) <= eps
+    }
+
+    /**
      * Frame-relative IK overload. The pole is authored in the limb-root's LOCAL frame and is
      * transformed into world space with [parentRotation] before solving. The analytical solver
      * itself is unchanged. This keeps the elbow direction stable as the parent frame rotates
      * (e.g. a twisting thorax), eliminating pole-vector flips and uneven arm motion.
+     *
+     * Phase 1 (F4): DEPRECATED. The IK layer must be strictly world-space — the pose/finalizer
+     * owns any parent-frame→world conversion (or calls [deriveDefaultPole]) before solving.
+     * Retained only so existing callers keep compiling until Phase 3 removes it.
      */
+    @Deprecated(
+        "Phase 1: IK is world-only. Convert the pole to world space (toWorldDirection) or call " +
+            "deriveDefaultPole before solveIK; the frame-relative overload will be removed in Phase 3.",
+        ReplaceWith(
+            "solveIK(root, target, L1, L2, toWorldDirection(poleLocal, parentRotation, Vector3()), constraint, result, contact)",
+            "com.monkfitness.app.animation.SkeletonMath.toWorldDirection"
+        )
+    )
     fun solveIK(
         root: Vector3,
         target: Vector3,

@@ -199,16 +199,33 @@ abstract class BaseValidationPose : PoseBuilder {
         straight: Boolean = false,
         contact: ContactConstraint? = null
     ) {
+        val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
+        // Phase 1 (F5): reset the bone-length stamp once per build (mirrors BasePose.bakeIkLimb).
+        if (jointsBuffer.isTransformsUpdated) {
+            jointsBuffer.boneLengthsVerified = true
+            jointsBuffer.isTransformsUpdated = false
+        }
+        // Phase 1 (F6): a zero-length pole means the pose omitted one — derive the default world
+        // pole so the bend plane is always well-defined.
+        val worldPole = if (pole.mag() < 1e-4f) {
+            SkeletonMath.deriveDefaultPole(rootWorldPos, targetWorldPos, tempPoleWorld)
+        } else {
+            pole
+        }
         val ikResult = if (straight) {
             SkeletonMath.solveStraightLimb(rootWorldPos, targetWorldPos, length1, length2, constraint, ikBuffer, contact)
         } else {
-            SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, pole, constraint, ikBuffer, contact)
+            SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, ikBuffer, contact)
         }
         // Single source of truth: automatically propagate the solver's clamp amount into the
         // pose so reachability is detected without per-pose manual bookkeeping.
         if (ikResult.clampAmount > jointsBuffer.maxIkClampAmount) {
             jointsBuffer.maxIkClampAmount = ikResult.clampAmount
         }
+        // Phase 1 (F5): assert the solved chain preserved both bone lengths exactly and fold the
+        // result into the pose's single `boneLengthsVerified` stamp (AND across all limbs).
+        val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)
+        jointsBuffer.boneLengthsVerified = jointsBuffer.boneLengthsVerified && bonesOk
         // Store the limb offsets in the parent's true local frame (no hand-fed inverse-Z scalar).
         val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
         tempV1.set(ikResult.joint).subtract(rootWorldPos)
@@ -240,6 +257,17 @@ abstract class BaseValidationPose : PoseBuilder {
         }
     }
 
+    /**
+     * Phase 1 (F4): DEPRECATED. Frame-relative IK pole; convert with [SkeletonMath.toWorldDirection]
+     * (or [SkeletonMath.deriveDefaultPole]) and call the world-only [bakeIkLimb] overload.
+     */
+    @Deprecated(
+        "Phase 1: IK is world-only. Convert the pole with SkeletonMath.toWorldDirection (or deriveDefaultPole) and call the world-only bakeIkLimb overload.",
+        ReplaceWith(
+            "bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld), constraint, parentRotation, middleNode, endNode, ikBuffer, straight, contact)",
+            "com.monkfitness.app.animation.SkeletonMath"
+        )
+    )
     protected fun bakeIkLimb(
         rootWorldPos: Vector3,
         targetWorldPos: Vector3,
