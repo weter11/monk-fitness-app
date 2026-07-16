@@ -26,8 +26,6 @@ abstract class BasePushUpPose : BasePose() {
 
     protected val targetHandABuffer = Vector3()
     protected val targetHandPBuffer = Vector3()
-    protected val armAPoleLocal = Vector3()
-    protected val armPPoleLocal = Vector3()
 
     // Head gaze direction for the prone push-up posture (read-only, shared across frames).
     protected val pushUpHeadDirection = Vector3(-1f, 0.2f, 0f).normalize()
@@ -160,13 +158,11 @@ abstract class BasePushUpPose : BasePose() {
         val targetHandA = targetHandABuffer.set(finalHandAnchorX, 0f, -def.shoulderWidth * gripWidthMultiplier)
         val targetHandP = targetHandPBuffer.set(finalHandAnchorX, 0f, def.shoulderWidth * gripWidthMultiplier)
 
-        SkeletonMath.toLocalDirection(poleA, chest!!.worldRotation, armAPoleLocal)
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
-        val armA = bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, chest!!.worldRotation, armAPoleLocal, def.armIKConstraint, elbowA!!, handA!!, armAIK)
+        val armA = bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK)
 
         shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
-        SkeletonMath.toLocalDirection(poleP, chest!!.worldRotation, armPPoleLocal)
-        val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, chest!!.worldRotation, armPPoleLocal, def.armIKConstraint, elbowP!!, handP!!, armPIK)
+        val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
         // The engine derives palm/knuckles/fingertips from the forearm + the neutral wrist
         // articulation. The flat planted palm is intentionally NOT hand-authored here; any visual

@@ -48,8 +48,7 @@ class BirdDogPose : BaseBirdDogPose() {
             -def.shoulderWidth
         )
         poleA.set(-1f, 0f, -0.5f)
-        SkeletonMath.toLocalDirection(poleA, chest!!.worldRotation, poleA)
-        bakeIkLimb(shoulderA!!.worldPosition, targetA, def.upperArmLength, def.forearmLength, chest!!.worldRotation, poleA, def.armIKConstraint, elbowA!!, handA!!, armABuffer)
+        bakeIkLimb(shoulderA!!.worldPosition, targetA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
 
         targetP.set(
             SkeletonMath.lerp(baseHandX, extHandX, armExtP),
@@ -57,8 +56,7 @@ class BirdDogPose : BaseBirdDogPose() {
             def.shoulderWidth
         )
         poleP.set(-1f, 0f, 0.5f)
-        SkeletonMath.toLocalDirection(poleP, chest!!.worldRotation, poleP)
-        bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, chest!!.worldRotation, poleP, def.armIKConstraint, elbowP!!, handP!!, armPBuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         targetF.set(
             SkeletonMath.lerp(baseAnkleX, extAnkleX, legExtF),

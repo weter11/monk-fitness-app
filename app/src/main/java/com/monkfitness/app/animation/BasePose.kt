@@ -300,38 +300,6 @@ abstract class BasePose : PoseBuilder {
         return SkeletonMath.solveStraightLimb(hipW, targetAnkle, thighLen, shinLen, constraint, result)
     }
 
-    /**
-     * Phase 1 (F4): DEPRECATED. Frame-relative IK: the pole is authored in the limb-root's LOCAL
-     * frame and converted to world space here. The IK layer must be strictly world-space, so
-     * callers should convert the pole themselves (or use [SkeletonMath.deriveDefaultPole]) and use
-     * the world-only [bakeIkLimb] overload. Retained until Phase 3 removes it.
-     */
-    @Deprecated(
-        "Phase 1: IK is world-only. Convert the pole with SkeletonMath.toWorldDirection (or deriveDefaultPole) and call the world-only bakeIkLimb overload.",
-        ReplaceWith(
-            "bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld), constraint, parentRotation, middleNode, endNode, ikBuffer, straight, contact)",
-            "com.monkfitness.app.animation.SkeletonMath"
-        )
-    )
-    protected fun bakeIkLimb(
-        rootWorldPos: Vector3,
-        targetWorldPos: Vector3,
-        length1: Float,
-        length2: Float,
-        parentRotation: JointRotation,
-        poleLocal: Vector3,
-        constraint: IKConstraint,
-        middleNode: SkeletonNode,
-        endNode: SkeletonNode,
-        ikBuffer: SkeletonMath.IKResult,
-        straight: Boolean = false,
-        contact: ContactConstraint? = null
-    ): SkeletonMath.IKResult {
-        val parentRot = middleNode.parent?.worldRotation ?: parentRotation
-        val worldPole = SkeletonMath.toWorldDirection(poleLocal, parentRot, tempPoleWorld)
-        return bakeIkLimb(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, parentRot, middleNode, endNode, ikBuffer, straight, contact)
-    }
-
     protected fun solveNearStraightLeg(
         shinLen: Float,
         thighLen: Float,
