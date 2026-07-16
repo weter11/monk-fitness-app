@@ -179,6 +179,18 @@ abstract class BasePose : PoseBuilder {
     }
 
     /**
+     * W1 — opt an [extremity] out of engine-derived orientation and into an explicit author
+     * override. After this call the engine preserves the endpoint local positions the pose wrote on
+     * the HEEL/TOE (or PALM/KNUCKLES/FINGERTIPS) nodes verbatim, instead of deriving them from the
+     * limb + ankle/wrist articulation. Use only for stylized extremities the default derivation
+     * cannot express (pointed toe, curled grip). Poses that describe pure anatomy never call this —
+     * they get the default automatic derivation, restoring the pose→engine ownership boundary.
+     */
+    protected fun overrideExtremityOrientation(pose: SkeletonPose, extremity: Extremity) {
+        pose.overrideExtremityOrientation(extremity)
+    }
+
+    /**
      * Authors hip **flexion/extension** (sagittal plane, about the mediolateral Z axis) on a hip
      * ball-joint node (UNI-10). This is the acetabular ball joint; FK carries the whole leg with it.
      * The single, documented authoring path replaces ad-hoc raw `hip.localRotation` writes.

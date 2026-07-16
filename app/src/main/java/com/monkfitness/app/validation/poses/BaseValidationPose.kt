@@ -158,6 +158,17 @@ abstract class BaseValidationPose : PoseBuilder {
         SkeletonMath.buildAnkleRotation(dorsiflexion, inversion, ankle.localRotation)
     }
 
+    /**
+     * W1 — opt an [extremity] out of engine-derived orientation and into an explicit author
+     * override (mirrors [com.monkfitness.app.animation.BasePose.overrideExtremityOrientation]). The
+     * engine then preserves the endpoint local positions this pose authored verbatim. Validation
+     * poses are diagnostic instruments and are NOT modified by W1; this exists so a future
+     * instrument can deliberately probe the override path.
+     */
+    protected fun overrideExtremityOrientation(pose: SkeletonPose, extremity: com.monkfitness.app.animation.Extremity) {
+        pose.overrideExtremityOrientation(extremity)
+    }
+
     // --- Shared IK helpers ---------------------------------------------------------
 
     // PR-11: cached full-extension variants of the definition's IK constraints. Straight
