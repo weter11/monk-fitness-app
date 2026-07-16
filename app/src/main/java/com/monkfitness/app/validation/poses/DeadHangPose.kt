@@ -8,6 +8,7 @@ import com.monkfitness.app.animation.EnvironmentAnchorType
 import com.monkfitness.app.animation.EnvironmentDefinition
 import com.monkfitness.app.animation.GroundDefinition
 import com.monkfitness.app.animation.PivotType
+import com.monkfitness.app.animation.PostureIntent
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.SupportContact
@@ -74,6 +75,11 @@ class DeadHangPose : BaseValidationPose() {
 
         pelvis!!.localPosition.set(comX, pelvisY, 0f)
         pelvis!!.localRotation.set(axisZ, torsoPitch)
+
+        // Phase 2 (F2): declare the HANGING_UNDER_BAR intent so the solver can derive the pelvis
+        // height from the overhead bar contact when it owns posture (it seeds ~ barY - reach -
+        // torsoLength, matching the authored value here). The solver then honours the bar contacts.
+        declarePosture(PostureIntent.Kind.HANGING_UNDER_BAR)
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
         chest!!.localRotation.set(axisZ, 0f)
 

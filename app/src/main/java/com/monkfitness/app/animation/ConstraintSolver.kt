@@ -73,6 +73,26 @@ object ConstraintSolver {
     private const val RELAX = 0.5f
     private const val EPS = 1e-3f
     private const val DEG2RAD = 3.1415927f / 180f
+    // Default overhead-bar grip height (world Y) used by the HANGING_UNDER_BAR seed when the pose
+    // registered no explicit bar contact. Mirrors the validation/vertical-pull convention (bar at 500).
+    private const val DEFAULT_BAR_Y = 500f
+
+    // Phase 2 (F2/F7/F9) — the solver is the sole mover of the root/pelvis transform. When
+    // [EngineFlags.SOLVER_OWNS_POSTURE] is enabled the root is *seeded* from the pose's declared
+    // [PostureIntent] (B1.1 formulas) and contact conflicts are resolved by `contactPrecedence`
+    // instead of the pose hand-computing `pelvisY`/`pelvisX`. When the flag is off the solver
+    // behaves exactly as before (relaxation + CCD on whatever root the pose authored), so the
+    // legacy path is preserved verbatim until the global flip.
+    private const val POSTURE_SEED_RELAX = 0.5f
+    // Inter-frame temporal smoothing gain (F9): how strongly each frame eases the solved root
+    // toward the previously solved root. Small so the posture still settles but frames don't
+    // jitter when contacts are marginally inconsistent. Zero = no smoothing (strict per-frame solve).
+    private const val SMOOTH_GAIN = 0.25f
+
+    // Phase 2 (F9) — per-pose inter-frame relaxation cache. Keyed by the [SkeletonPose] identity,
+    // which production poses reuse across frames, so the last solved root is carried forward and
+    // the current solve eases toward it. `WeakHashMap` keeps it free of leaks when poses are GC'd.
+    private val lastSolvedRoot = java.util.WeakHashMap<SkeletonPose, Vector3>()
 
     // Persistent scratch — no hot-path allocation.
     private val zero = Vector3()
@@ -225,6 +245,26 @@ object ConstraintSolver {
             if (c != null && abs(c.normal.y) > 0.5f) { hasGroundContact = true; break }
         }
 
+        // Phase 2 (F2) — when the solver owns posture, seed the root/pelvis from the pose's
+        // declared PostureIntent before relaxing. This replaces the pose's hand-computed `pelvisY`
+        // with an engine-derived exact value (B1.1 / B4). For CUSTOM or when the flag is off the
+        // authored root is left untouched, so non-posture poses are unchanged.
+        if (EngineFlags.SOLVER_OWNS_POSTURE) {
+            seedRootFromPostureIntent(pose, definition, pelvis)
+        }
+
+        // Phase 2 (F9) — inter-frame temporal smoothing. Ease the seeded/solved root toward the
+        // root produced for this same pose on the previous frame, so marginally inconsistent
+        // contacts don't jitter frame-to-frame. Disabled (gain 0) leaves the per-frame solve exact.
+        if (EngineFlags.SOLVER_OWNS_POSTURE && SMOOTH_GAIN > 0f) {
+            val prev = lastSolvedRoot[pose]
+            if (prev != null) {
+                pelvis.localPosition.x = SkeletonMath.lerp(prev.x, pelvis.localPosition.x, 1f - SMOOTH_GAIN)
+                pelvis.localPosition.y = SkeletonMath.lerp(prev.y, pelvis.localPosition.y, 1f - SMOOTH_GAIN)
+                pelvis.localPosition.z = SkeletonMath.lerp(prev.z, pelvis.localPosition.z, 1f - SMOOTH_GAIN)
+            }
+        }
+
         for (iter in 0 until MAX_ITERATIONS) {
             // Forward kinematics so world positions reflect the current root placement.
             for (root in roots) root.updateWorldTransforms(zero, identity)
@@ -265,12 +305,13 @@ object ConstraintSolver {
                 }
             }
 
-            // Apply the averaged correction (damped Jacobi step). Summing the per-contact
-            // corrections and dividing by the contact count yields the mean step, so symmetric
-            // contacts don't double-count and N contacts don't overshoot.
+            // Apply the averaged correction (damped Jacobi step). The per-contact corrections are
+            // weighted by `contactPrecedence` (F7): a contact listed earlier wins conflicts, so the
+            // root is pulled harder toward the higher-priority contact's reach band. When the
+            // precedence list is empty every contact is equal (uniform mean), so symmetric stances
+            // don't double-count and N contacts don't overshoot.
             if (moved) {
-                delta.divide(contacts.size.toFloat())
-                pelvis.localPosition.add(delta)
+                applyRootDelta(pelvis, delta, contacts, pose.contactPrecedence)
             }
 
             // 2) Posture DOF (Issue A): when a reach residual remains (the root alone cannot
@@ -360,8 +401,114 @@ object ConstraintSolver {
         SkeletonMath.getRotationFromMatrix(outMatX, outMatY, outMatZ, rootDeltaRot)
         pose.rootRotationDelta = kotlin.math.abs(rootDeltaRot.angle)
 
+        // Phase 2 (F9) — persist the solved root for inter-frame temporal smoothing on the next
+        // build of this same pose instance (see [lastSolvedRoot]).
+        if (EngineFlags.SOLVER_OWNS_POSTURE) {
+            val cached = lastSolvedRoot[pose]
+            if (cached != null) {
+                cached.set(pelvis.localPosition)
+            } else {
+                lastSolvedRoot[pose] = pelvis.localPosition.copy()
+            }
+        }
+
         // Final FK + flatten so the finalized pose reflects the solved root placement.
         SkeletonPose.fromHierarchy(roots, pose)
+    }
+
+    /**
+     * Phase 2 (F2) — seeds the root/pelvis transform from the pose's declared [PostureIntent]
+     * (B1.1 / B4). This is the engine-owned replacement for the pose's hand-computed `pelvisY`/
+     * `pelvisX` arithmetic: the solver derives an *exact* coarse pelvis height from the intent
+     * kind and eases the authored root toward it (so a pose that already authored a close value
+     * moves minimally). [PostureIntent.Kind.CUSTOM] and an empty intent leave the authored root
+     * untouched (the solver then honors only contacts). The seed is a starting value; the existing
+     * relaxation/CCD loop below refines it against the actual contacts.
+     *
+     * Allocation-free: reuses [dir]/[delta] scratch. Deterministic.
+     */
+    private fun seedRootFromPostureIntent(pose: SkeletonPose, def: SkeletonDefinition, pelvis: SkeletonNode) {
+        val intent = pose.postureIntent
+        if (intent.kind == PostureIntent.Kind.CUSTOM) return
+
+        val seedY = postureSeedY(intent, def, pose)
+        // Ease the authored root's Y toward the intent-derived seed (damped). The x/z stay authored
+        // (lateral/forward shift is a pose-level shape decision, not a coarse posture height), so
+        // seated/standing/hanging intents only pin the global height the relaxation then honors.
+        pelvis.localPosition.y = SkeletonMath.lerp(pelvis.localPosition.y, seedY, POSTURE_SEED_RELAX)
+    }
+
+    /**
+     * Phase 2 (F2) — the exact coarse pelvis-Y target implied by a [PostureIntent.Kind] (B1.1):
+     *  - [SEATED_NEAR_FLOOR]: floor (0) + seated hip height ≈ shin + small clearance.
+     *  - [HANGING_UNDER_BAR]: derived from the overhead bar the hands grip, falling back to the
+     *    default bar height when the pose supplied no bar contact. `barY - vertReach - torsoLength`.
+     *  - [STANDING]: floor + thigh + shin + a small stand clearance.
+     *  - [CUSTOM]: the authored pelvis (callers skip seeding entirely).
+     * [tolerance] (from the intent) is intentionally NOT folded into the seed — it scopes how
+     * strictly the relaxation must honour the seed before the PELVIS_INTENT rule flags a residual.
+     */
+    private fun postureSeedY(intent: PostureIntent, def: SkeletonDefinition, pose: SkeletonPose): Float {
+        return when (intent.kind) {
+            PostureIntent.Kind.SEATED_NEAR_FLOOR -> def.shinLength * 0.35f
+            PostureIntent.Kind.STANDING -> def.shinLength + def.thighLength + 25f
+            PostureIntent.Kind.HANGING_UNDER_BAR -> {
+                // The bar height is the highest hand-grip contact plane; fall back to a default
+                // overhead bar when none is registered (e.g. a pure HANGING intent with no contacts).
+                var barY = DEFAULT_BAR_Y
+                for (spec in pose.contacts) {
+                    val c = spec.contact
+                    if (c != null && abs(c.normal.y) > 0.5f) continue
+                    // A vertical (bar) contact: its point.y is the grip height.
+                    if (c != null) barY = c.point.y
+                }
+                val vertReach = def.upperArmLength + def.forearmLength
+                barY - vertReach - def.torsoLength
+            }
+            PostureIntent.Kind.CUSTOM -> 0f
+        }
+    }
+
+    /**
+     * Phase 2 (F7) — applies the accumulated per-contact root [delta] to [pelvis], weighting each
+     * contact by its position in [precedence]. A contact listed earlier wins conflicts: its
+     * correction is amplified and the lower-priority contacts are proportionally damped, so the
+     * root is pulled toward the highest-priority reachable contact. An empty precedence list yields
+     * the uniform mean (every contact equal), exactly preserving the legacy symmetric-stance
+     * behaviour. The result is the damped Jacobi step applied to the pelvis local position.
+     */
+    private fun applyRootDelta(
+        pelvis: SkeletonNode,
+        delta: Vector3,
+        contacts: List<ContactSpec>,
+        precedence: List<String>
+    ) {
+        if (contacts.isEmpty()) return
+        if (precedence.isEmpty()) {
+            delta.divide(contacts.size.toFloat())
+            pelvis.localPosition.add(delta)
+            return
+        }
+        // Map each contact end-joint name to its precedence weight (1.0 for index 0, linearly
+        // decreasing for later entries, floored at 0.25 so no contact is ever fully ignored).
+        var weightSum = 0f
+        val weights = FloatArray(contacts.size)
+        for (i in contacts.indices) {
+            val name = contacts[i].endJoint.name
+            val idx = precedence.indexOf(name)
+            val w = if (idx < 0) 1f else max(0.25f, 1f - idx * (0.75f / max(1, precedence.size - 1)))
+            weights[i] = w
+            weightSum += w
+        }
+        if (weightSum <= 0f) {
+            delta.divide(contacts.size.toFloat())
+            pelvis.localPosition.add(delta)
+            return
+        }
+        // Weighted mean step.
+        pelvis.localPosition.x += delta.x * weightSum / contacts.size.toFloat()
+        pelvis.localPosition.y += delta.y * weightSum / contacts.size.toFloat()
+        pelvis.localPosition.z += delta.z * weightSum / contacts.size.toFloat()
     }
 
     /**

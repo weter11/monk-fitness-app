@@ -2,8 +2,10 @@ package com.monkfitness.app.validation.poses
 
 import com.monkfitness.app.animation.CameraDefinition
 import com.monkfitness.app.animation.ContactConstraint
+import com.monkfitness.app.animation.EngineFlags
 import com.monkfitness.app.animation.GroundDefinition
 import com.monkfitness.app.animation.PivotType
+import com.monkfitness.app.animation.PostureIntent
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.SupportContact
@@ -34,11 +36,14 @@ class DeepOverheadSquatPose : BaseValidationPose() {
     override fun buildStatic(def: SkeletonDefinition): SkeletonPose {
         ensureHierarchy(def)
 
-        val pelvisY = 30f
+        // Phase 2 (F2): declare the coarse posture intent so the solver can derive the pelvis
+        // height (SEATED_NEAR_FLOOR -> floor + seated hip height) when it owns posture. The pose
+        // still authors a plausible pelvis as the IK seed; the solver eases it toward the intent
+        // and then honours the ground contacts. When the flag is off the solver only relaxes.
+        declarePosture(PostureIntent.Kind.SEATED_NEAR_FLOOR)
+
         val leanAngle = 0.5f
-        // Hips track over the feet (audit §3.2): the previous x=-25 pushed the hip far behind the
-        // foot target, reading as "sitting back". Center the pelvis on the midline so the femur
-        // travels straight down into the squat.
+        val pelvisY = 30f
         pelvis!!.localPosition.set(0f, pelvisY, 0f)
         pelvis!!.localRotation.set(axisZ, -leanAngle)
 
