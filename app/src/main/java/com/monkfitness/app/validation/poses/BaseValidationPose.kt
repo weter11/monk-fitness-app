@@ -227,7 +227,6 @@ abstract class BaseValidationPose : PoseBuilder {
         val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)
         jointsBuffer.boneLengthsVerified = jointsBuffer.boneLengthsVerified && bonesOk
         // Store the limb offsets in the parent's true local frame (no hand-fed inverse-Z scalar).
-        val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
         tempV1.set(ikResult.joint).subtract(rootWorldPos)
         SkeletonMath.toLocalDirection(tempV1, parentRot, middleNode.localPosition)
         tempV1.set(ikResult.end).subtract(ikResult.joint)
