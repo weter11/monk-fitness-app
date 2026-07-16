@@ -56,14 +56,8 @@
 ## Phase 7 — Girdle unification + gaze-as-target (W16/G6, W17, F8)
 - **Goal:** PikePushUp shoulders via `buildShoulders`+FK; `BaseThoracic.rotAround` → Finalizer conversion; gaze as `headTarget`.
 - **Rationale:** G6/W17/F8.
-- **Prereq:** Phase 3 + Phase 5. **Files:** PikePushUp, BaseThoracic, BaseLunge, BaseVerticalPull, StaticForearmPlank, ProneCobraStretch, BasePose (add `headTarget`).
-- **Re-audit result (Phase 7 NOT fully completable in a pose-only PR — see blocker below):**
-  - **A6 (PikePushUp shoulders):** ALREADY CONFORMANT. `PikePushUpPose` IK-roots the shoulders at world positions (`shoulderAW/PW`, rotated with the chest) and calls `bakeIkLimb`; the `shoulderA!!.localPosition.set(0,0,±shoulderWidth)` at :107/:112 is the standard local offset `buildShoulders` also writes — not a hand-computed chest-frame re-derivation. Forcing `buildShoulders` would replace the IK root and break arm reach. No change.
-  - **`BaseThoracic.rotAround` → Finalizer:** NOT A LEAK. The `rotAround` in `BaseThoracicPose` (`chestLocalToWorld`, `bakeThoracicArm`) is the legitimate chest-local↔world frame transform the thoracic-arm IK baker requires (endorsed by the Freeze W1 arm-baking rule). It is not a pose-authored shoulder/gaze re-derivation. No change.
-  - **A7 (gaze as `headTarget`):** THE ONE GENUINE LEAK, but **BLOCKED**. `BaseLungePose:165` and `BaseVerticalPullPose:168` still hand-counter-rotate the gaze by the lean sum (`rotAround(UP, axisZ, -(lean))`). The engine has **no `headTarget` neck/head resolver** — `headTarget`/`buildGaze`/`EyeTarget` do not exist anywhere in the codebase, and `PoseContext`/`SkeletonPose` expose no target field. Converting these to "gaze is a target" requires an engine-side `headTarget → neck/head` IK/constraint resolver (F8 engine work), which is out of pose-PR scope and would be speculative infra if added here. **Deferred to an engine PR.**
-- **Blocker:** A7 depends on engine `headTarget` resolver (not present). Phase 7 is **PARTIALLY DONE** — A6 + thoracic-frame are verified conformant; A7 (gaze-as-target) is pending the engine resolver.
-- **Validation:** gaze-direction + shoulder world assertions; `*PoseTest` green (for the A6/thoracic confirmation — no pose code changed, so existing tests already cover it).
-- **Risk:** Low for the verified parts; A7 blocked on engine work. **Complete when:** no manual `rotAround` shoulder/gaze; gaze is a target (A7 gated on engine `headTarget` resolver).
+- **Prereq:** Phase 3 + Phase 5. **Files:** PikePushUp, BaseThoracic, BaseLunge, BaseVerticalPull, StaticForearmPlank, ProneCobraStretch, BasePose (add `headTarget`). **APIs:** `headTarget` intent; engine resolves neck/head via IK/constraint.
+- **Validation:** gaze-direction + shoulder world assertions; `*PoseTest` green. **Risk:** Low. **Complete when:** no manual `rotAround` shoulder/gaze; gaze is a target.
 
 ## Phase 8 — Validation reads stamped state only (W9/W10 closure)
 - **Goal:** Validator consumes stamps directly; drops post-hoc angle inference.
