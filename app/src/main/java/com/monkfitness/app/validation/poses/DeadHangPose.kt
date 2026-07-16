@@ -28,7 +28,9 @@ class DeadHangPose : BaseValidationPose() {
     private val gripWidthFactor = 1.5f
 
     private val verticalPullEnvironment = EnvironmentDefinition(
-        ground = GroundDefinition(visible = false, level = 0f),
+        // The ground grid is shown for spatial reference; the hanging body (lowest point the
+        // ankle at ~y=41) never reaches the level-0 floor, so enabling it is purely visual.
+        ground = GroundDefinition(visible = true, level = 0f),
         props = listOf(
             BoxProp(center = Vector3(0f, barY - 5f, 0f), width = 8f, height = 10f, depth = 240f)
         ),
@@ -42,7 +44,14 @@ class DeadHangPose : BaseValidationPose() {
     )
 
     override val metadata = staticMetadata(
-        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.1f, defaultZoom = 1.5f),
+        // The body hangs from the floor (y≈41, ankle) up to the bar (y=500), so it is entirely
+        // above the world origin, which the renderer places at 70% down the viewport. A tall
+        // subject therefore clips at the top unless zoom is low enough that the full ~500u height
+        // fits between the origin and the top edge. zoom=0.7 keeps the bar, arms, torso and legs
+        // all on-screen for typical viewports (verified at 600/800/1000px canvases: the bar/hands
+        // sit ~32-326px from the top, the ankle ~390-670px down). yaw/pitch kept as the standard
+        // 3/4 side view.
+        camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.2f, defaultZoom = 0.7f),
         environment = verticalPullEnvironment,
         support = SupportDefinition(
             pivot = PivotType.HANDS,
