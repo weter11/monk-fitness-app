@@ -98,7 +98,10 @@ abstract class BaseLungePose : BasePose() {
         buffer: SkeletonMath.IKResult
     ) {
         // W1: engine now derives foot orientation (removed ankle tilt counter-rotation + manual heel/toe).
-        bakeIkLimb(hipWorld, targetAnkle, def.thighLength, def.shinLength, parentRotation, poleLocal, def.legIKConstraint, knee, ankle, buffer)
+        // M1 (Gap 5 / F4): frame-relative pole converted to world space here, then the world-only
+        // bakeIkLimb overload is used (the frame-relative overload was deleted).
+        val worldPoleLeg = SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld)
+        bakeIkLimb(hipWorld, targetAnkle, def.thighLength, def.shinLength, worldPoleLeg, def.legIKConstraint, parentRotation, knee, ankle, buffer)
     }
 
     /**
@@ -119,7 +122,10 @@ abstract class BaseLungePose : BasePose() {
         buffer: SkeletonMath.IKResult
     ) {
         // W1: engine now derives hand orientation (removed wrist tilt counter-rotation + 6/6/10 offsets).
-        bakeIkLimb(shoulderWorld, targetHand, def.upperArmLength, def.forearmLength, parentRotation, poleLocal, def.armIKConstraint, elbow, hand, buffer)
+        // M1 (Gap 5 / F4): frame-relative pole converted to world space here, then the world-only
+        // bakeIkLimb overload is used (the frame-relative overload was deleted).
+        val worldPoleArm = SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld)
+        bakeIkLimb(shoulderWorld, targetHand, def.upperArmLength, def.forearmLength, worldPoleArm, def.armIKConstraint, parentRotation, elbow, hand, buffer)
     }
 
     protected fun finishPose(): SkeletonPose {
