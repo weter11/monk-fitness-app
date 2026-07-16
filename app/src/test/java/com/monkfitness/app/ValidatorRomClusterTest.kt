@@ -253,25 +253,29 @@ class ValidatorRomClusterTest {
     }
 
     @Test
-    fun middleSplitIsNowAValidStraightReference() {
-        // The Middle Split reference was fixed (ENGINEERING_VALIDATION_AUDIT §1): its straight
-        // limbs are now reachable, so the authored straight intent must be HONOURED and the hip
-        // ROM must stay within anatomical range.
+    fun middleSplitSurfacesDroppedStraightIntent() {
+        // Middle Split is a DIAGNOSTIC INSTRUMENT, not a development target
+        // (docs/VALIDATION.md §2, MIDDLE_SPLIT_DIAGNOSTIC_AUDIT.md). It requests straight limbs at
+        // targets inside the proximal bone (hip→foot ≈ 58.9 < L1 112), so solveStraightLimb drops
+        // the straight intent and returns a bent limb. The instrument's job is to READ that: the
+        // validator must flag the dropped straight intent. It must NOT be retuned to full reach to
+        // make the limbs resolve straight (that would tamper with the probe). Hip ROM stays in range.
         val pose = finalized(MiddleSplitPose())
         val report = ExerciseValidator(ValidatorConfig.ENGINEERING_VALIDATION)
             .validate(pose, def, env, camera, 1000f, 1000f)
 
         val straight = report.results.first { it.ruleId == "STRAIGHT_LIMB_INTENT" }
-        assertTrue("Middle Split's straight limbs must now resolve straight", straight.isValid)
+        assertFalse("Middle Split must surface the dropped straight intent, not hide it", straight.isValid)
         val hip = report.results.first { it.ruleId == "HIP_ROM_LIMIT" }
         assertTrue(hip.isValid)
     }
 
     @Test
     fun straightIntentStillDetectableOnBrokenReference() {
-        // Detection coverage no longer depends on a real reference pose staying buggy: a
-        // purpose-built fixture authors a `straight=true` limb with an unsatisfiable (too-close)
-        // target, which the UNI-9 fallback resolves bent. The validator must still flag it.
+        // Complementary coverage alongside the Middle Split instrument: a purpose-built fixture
+        // authors a `straight=true` limb with an unsatisfiable (too-close) target, which the UNI-9
+        // fallback resolves bent. The validator must flag it. This isolates the detection logic
+        // from the specific geometry of any real reference pose.
         val pose = finalized(BrokenStraightLimbPose())
         val report = ExerciseValidator(ValidatorConfig.ENGINEERING_VALIDATION)
             .validate(pose, def, env, camera, 1000f, 1000f)

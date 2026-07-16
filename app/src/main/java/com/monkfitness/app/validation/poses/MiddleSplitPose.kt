@@ -2,7 +2,6 @@ package com.monkfitness.app.validation.poses
 
 import com.monkfitness.app.animation.CameraDefinition
 import com.monkfitness.app.animation.ContactConstraint
-import com.monkfitness.app.animation.GroundDefinition
 import com.monkfitness.app.animation.PivotType
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPose
@@ -14,17 +13,23 @@ import com.monkfitness.app.animation.Vector3
 /**
  * Engineering Validation — Middle Split.
  *
- * Static, frozen snapshot. Validates: pelvis centering, hip symmetry, leg IK,
- * arm length, shoulder symmetry, left/right mirror correctness.
+ * Static, frozen snapshot. **Diagnostic instrument** (see
+ * `docs/VALIDATION.md §2` and `MIDDLE_SPLIT_DIAGNOSTIC_AUDIT.md`): a validation pose
+ * is not a development target that gets retuned until it renders green. It is a probe
+ * whose reading must stay faithful to the engine's true state.
  *
- * Authoring notes (ENGINEERING_VALIDATION_AUDIT §1): the previous pose placed the
- * straight-limb targets *inside* the proximal bone (leg dist 58.9 < L1 112; arm
- * dist 33.2 < L1 80), so `solveStraightLimb` fell back to the UNI-9 bent solve and
- * the authored `straight=true` intent was silently dropped — exactly the defect the
- * validator is meant to catch. The targets below are widened so every straight limb
- * is actually reachable (dist in [L1, L1+L2]), the hips externally rotate so the
- * knees face up, and the pelvis sits on the floor so the feet rest flat (no ground
- * penetration).
+ * This pose requests a wide straight-limb split with the foot/hand targets placed
+ * *inside* the proximal bone (leg hip→foot ≈ 58.9 < L1 112; arm shoulder→hand ≈ 33.2
+ * < L1 80). At those distances `SkeletonMath.solveStraightLimb` takes the `dist < L1`
+ * branch and returns a **bent** triangle limb: the authored `straight = true` intent
+ * is silently dropped. That is the exact engine limitation this instrument exists to
+ * surface — `STRAIGHT_LIMB_INTENT` (UNI-2) reads it as a dropped-intent failure.
+ *
+ * Do **not** widen the spread to full reach to make the limbs resolve straight. Doing
+ * so moves the instrument off the fault so the fault stops registering (green-tuning),
+ * which is precisely what the diagnostic-instrument rule forbids. If a true-straight
+ * middle split is ever wanted, the ENGINE must first honour `straight = true` at
+ * in-proximal-radius targets — the pose is left as the reading, not the fix.
  */
 class MiddleSplitPose : BaseValidationPose() {
 
@@ -42,9 +47,9 @@ class MiddleSplitPose : BaseValidationPose() {
     override fun buildStatic(def: SkeletonDefinition): SkeletonPose {
         ensureHierarchy(def)
 
-        // Seated on the floor: pelvis (and therefore the hips) at y = 0 so the straight legs
-        // can lie flat out to the sides with the feet resting on the ground.
-        val pelvisY = 0f
+        // Seated reference: pelvis (and therefore the hips) slightly above the floor. The exact
+        // height is not the point of this instrument — the straight-limb reach is (see below).
+        val pelvisY = 14f
         pelvis!!.localPosition.set(0f, pelvisY, 0f)
         pelvis!!.localRotation.set(axisZ, 0f)
 
@@ -55,30 +60,19 @@ class MiddleSplitPose : BaseValidationPose() {
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 
-        // Hip external (femoral axial) rotation: in a middle split the femurs abduct and the
-        // knees must face up/forward, not laterally/down. This is the acetabular ball joint's
-        // axial DOF, kept separate from the IK pole (audit §1.4). Capped at 0.8 rad (~46°) so the
-        // resulting femur excursion (~136° from neutral) and axial twist (~46°) stay comfortably
-        // inside the 150° excursion / 60° external-rotation ROM limits.
-        buildHipRotation(hipF!!, 0.8f, -1f)
-        buildHipRotation(hipB!!, 0.8f, 1f)
-
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
-        // Symmetric wide split on the floor. A straight limb placed colinearly by solveStraightLimb
-        // keeps BOTH bone lengths only when the target is at the true full-extension distance
-        // dist = L1 + L2 (= 210 for the leg): the middle->end gap is dist - L1, which equals L2
-        // only at full extension. Hips sit at z = ±hipWidth; the foot target is therefore placed
-        // at |z| = hipWidth + (L1 + L2) = 22 + 210 = 232, on the floor (y = 0). The ground contact
-        // keeps the foot on y = 0 (audit §1.1/§1.3). The ConstraintSolver re-bakes the leg against
-        // this same target, reproducing the identical colinear, full-length placement.
-        val spread = def.hipWidth + def.thighLength + def.shinLength
+        // Straight-intent diagnostic: request a wide split with the foot targets placed *inside*
+        // the proximal (thigh) bone. Spread = hipWidth * 3.6 = 79.2; the hip sits at z = ±hipWidth,
+        // so hip→foot ≈ 79.2 − 22 = 57.2 (replica 58.9) << L1 = 112. `solveStraightLimb` therefore
+        // takes the `dist < L1` branch and returns a BENT limb: the authored straight intent is
+        // dropped. That dropped intent is the reading `STRAIGHT_LIMB_INTENT` (UNI-2) must surface.
+        // Do NOT widen this to full reach to "fix" the render — that would tamper with the probe.
+        val spread = def.hipWidth * 3.6f
         val targetF = Vector3(0f, 0f, -spread)
         val targetB = Vector3(0f, 0f, spread)
-        // Pole tracks the foot: pure lateral bend plane (the limb is straight so the pole is
-        // unused by the solver, but a lateral pole keeps the knee facing the foot, audit §1.5).
-        val legPoleF = Vector3(0f, 1f, -1f)
-        val legPoleB = Vector3(0f, 1f, 1f)
+        val legPoleF = Vector3(0.2f, 1f, -0.6f)
+        val legPoleB = Vector3(0.2f, 1f, 0.6f)
         val groundContact = ContactConstraint.ground(0f)
         bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, legStraightConstraint(def), pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, straight = true, contact = groundContact)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, legStraightConstraint(def), pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true, contact = groundContact)
@@ -87,17 +81,16 @@ class MiddleSplitPose : BaseValidationPose() {
         heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
         heelB!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
 
-        // Arms extended symmetrically out to the sides, palms down. Same full-extension rule as
-        // the legs: a straight arm keeps both bones only at dist = L1 + L2 (= 146). The shoulder
-        // sits at z = ±shoulderWidth, so the hand target is placed at |z| = shoulderWidth + 146
-        // (= 192) at shoulder height (audit §1.2). The arm carries no contact, so it is exactly
-        // the solveStraightLimb placement (no ConstraintSolver re-bake).
+        // Arms extended out to the sides with the same straight-intent probe: hand targets placed
+        // inside the upper-arm bone. Spread = shoulderWidth * 1.72 ≈ 79.2; the shoulder sits at
+        // z = ±shoulderWidth, so shoulder→hand ≈ 33.2 << L1 = 80 → the straight arm also drops to
+        // the bent fallback. Same reading as the legs; same rule against retargeting to green.
         val chestY = chest!!.worldPosition.y
-        val armHandZ = def.shoulderWidth + def.upperArmLength + def.forearmLength
+        val armHandZ = spread
         val armTargetA = Vector3(0f, chestY, -armHandZ)
         val armTargetP = Vector3(0f, chestY, armHandZ)
-        val armPoleA = Vector3(0f, -1f, -1f)
-        val armPoleP = Vector3(0f, -1f, 1f)
+        val armPoleA = Vector3(0.2f, -1f, -0.6f)
+        val armPoleP = Vector3(0.2f, -1f, 0.6f)
         bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armPoleA, armStraightConstraint(def), chest!!.worldRotation, elbowA!!, handA!!, armABuffer, straight = true)
         bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPoleP, armStraightConstraint(def), chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, straight = true)
 

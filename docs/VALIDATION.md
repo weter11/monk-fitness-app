@@ -28,21 +28,37 @@ and does not reuse animation drivers, breathing, or loops.
 
 ---
 
-## 2. The Contract: Engine Satisfies Validation
+## 2. The Contract: Validation Poses Are Diagnostic Instruments
 
-The direction of responsibility is fixed and must never be reversed:
+> **Validation poses are no longer development targets. They are diagnostic
+> instruments.**
 
-> **The engine must satisfy validation. Validation must never adapt to engine
-> limitations.**
+A validation pose is an instrument you point at the engine to **read its true
+state**. Its reading must stay honest whether the engine passes or fails.
 
-A validation pose defines what a correct skeleton looks like. If the engine
-cannot reproduce that pose cleanly — the IK clamps, a bone stretches, a limb
-flips, a support slides — then the **engine** is wrong and must be investigated.
-The validation pose is not softened, retargeted, or "made easier" to get a
-green result. Doing so would hide exactly the defect the pose exists to expose.
+The direction of responsibility that follows is fixed and must never be reversed:
 
-A validation pose is the fixed reference. The engine moves to meet it, never the
-other way around.
+> **A validation pose reports the engine's true state. You fix the engine, or you
+> record the reading — you never retune the instrument to make it read green.**
+
+A development *target* is something the engine is dragged toward until it goes
+green. A diagnostic *instrument* is the opposite: you do not adjust the instrument
+to change the reading. Retuning a pose (widening an IK target so a bent limb
+resolves straight, raising a root so feet stop penetrating, softening an angle so a
+ROM rule stops firing) to get a green result is **instrument tampering** — it is
+adjusting the thermometer to lower the fever. It hides exactly the defect the pose
+exists to expose.
+
+If the engine cannot reproduce a pose cleanly — the IK clamps, a bone stretches, a
+limb flips, a support slides — the correct responses are:
+
+1. **fix the root cause in the engine**, or
+2. **record the reading** (leave the pose as the faithful probe and track the engine
+   limitation it surfaces).
+
+The one thing you must never do is move the instrument off the fault so the fault
+stops registering.
+
 
 ---
 
@@ -127,8 +143,11 @@ When adding or reviewing a validation pose:
    penetration, no sliding supports, balanced support polygon, etc.).
 5. Confirm the pose remains fully invisible with the setting **off**.
 
-A validation pose is "done" only when it is both anatomically correct and
-cleanly reproducible by the engine.
+A validation pose is "done" when it is a **faithful instrument**: it renders the
+configuration it claims to probe, and its reading against the engine's rules is
+truthful — whether that reading is clean (engine reproduces it) or a recorded defect
+(engine limitation the pose surfaces). A pose is *not* required to read green to be
+done; it is required to read *honestly*.
 
 ---
 
@@ -136,54 +155,78 @@ cleanly reproducible by the engine.
 
 When a validation pose does **not** reproduce cleanly:
 
-1. **Assume the engine is at fault first.** The pose is the reference.
+1. **Read the failure as an engine measurement.** The pose is the instrument.
 2. Identify which rule fails and at which joint (bone stretch, IK clamp/
    unreachable target, pole flip, support slide, etc.).
 3. Trace the failure back through the pipeline: pose intent → IK solve → bake →
    FK traversal → finalization → projection.
-4. Fix the **root cause in the engine** so the whole family of exercises
-   benefits, not just this pose.
-5. Re-run the validation pose to confirm it now reproduces cleanly, and confirm
-   no other pose regressed.
+4. Either **fix the root cause in the engine** so the whole family of exercises
+   benefits (not just this pose), **or record the reading** as a known engine
+   limitation the instrument now guards.
+5. If you fixed the engine, re-run the pose to confirm it now reproduces cleanly and
+   that no other pose regressed. If you recorded the reading, keep a test that
+   asserts the instrument still detects the limitation.
 
-Never resolve a validation failure by editing the target to dodge the problem.
+Never resolve a validation failure by editing the target to dodge the problem — that
+tampers with the instrument (see §2).
 
 ---
 
 ## 9. When to Modify a Pose vs. the Engine
 
-**Modify the validation pose only when the pose itself is anatomically wrong** —
-i.e. the reference it encodes does not actually represent correct anatomy (a
-typo'd angle, an impossible target, a mis-set support). In that case the pose
-was lying and must be corrected.
+Because a validation pose is a **diagnostic instrument**, the bar for touching the
+pose is high and narrow.
 
-**Modify the engine in every other case.** If the reference anatomy is correct
-and the engine cannot reproduce it, the engine is the defect. This is the
-default and by far the more common case.
+**Modify a validation pose only when the instrument itself is miscalibrated** — i.e.
+the probe is not measuring what it claims to measure. Examples: a typo'd axis so it
+reads the wrong joint, a support attached to the wrong point, a coordinate sign that
+makes the reading meaningless. In that case the instrument is lying about the engine
+and must be corrected so it reads truthfully again.
+
+**Do not modify a pose to change what it reads about the engine.** If the reference
+configuration the probe requests is faithful to its stated purpose (e.g. "request a
+straight limb at this target and show me what the engine does"), and the engine
+produces a defect, the defect is the reading. Fix the engine, or record the reading
+— never retune the probe to green.
 
 The test to apply:
 
-> "Is the reference anatomy correct?"
-> - **No** → fix the pose.
-> - **Yes, but the engine can't reproduce it** → fix the engine.
+> "Is the instrument measuring the engine truthfully?"
+> - **No (it's miscalibrated / measuring the wrong thing)** → fix the pose.
+> - **Yes, and the reading is a defect** → fix the engine (or record the reading).
 
-Never weaken a correct reference to make a broken engine pass.
+Note that "the configuration is not a pose a human would hold" is **not** grounds to
+retune it. A diagnostic probe is judged by whether its reading is faithful, not by
+whether the geometry is anatomically photogenic. Never retune a faithful instrument
+to make a broken engine read green.
 
 ---
 
 ## 10. Summary
 
-- Validation poses are frozen reference anatomy, not exercises.
-- The engine satisfies validation; validation never bends to the engine.
+- Validation poses are **diagnostic instruments**, not exercises and not
+  development targets.
+- A pose reports the engine's true state; you fix the engine or record the reading,
+  you never retune the instrument to read green.
 - Validation poses are fully isolated from workouts, stats, progression, and
   achievements, and are invisible unless Engineering Validation is enabled.
-- Failures are engine defects to investigate, not targets to retune.
-- Change a pose only when the pose is anatomically wrong; otherwise fix the
-  engine.
+- Failures are engine measurements — defects to fix or limitations to record — not
+  targets to retune away.
+- Change a pose only when the instrument is miscalibrated (measuring the wrong
+  thing); otherwise fix the engine or record the reading.
 
 ---
 
 ## 11. Quality Audit of the Four Engineering Validation Poses
+
+> **Supersession note (diagnostic-instrument rule).** After this audit was first
+> written, Middle Split was briefly retargeted to full reach so its straight limbs
+> resolved green (`ENGINEERING_VALIDATION_AUDIT §1`, `PELVIC_HIP_COMPLEX_INVESTIGATION
+> §P6`, both authored under the old "engine satisfies validation" contract). Under the
+> **diagnostic-instrument rule** (§2) that retarget was instrument tampering and has
+> been reverted — the pose is restored to the straight-intent probe described in §11.1
+> below. Those two documents' "fix the pose" verdicts are **superseded**; the audit of
+> the reversal is in `MIDDLE_SPLIT_DIAGNOSTIC_AUDIT.md`.
 
 A visual / biomechanical audit was performed by rendering each frozen pose
 through the real engine (`SkeletonPoseFinalizer` + `ConstraintSolver`) and
@@ -208,9 +251,10 @@ angles are the interior joint angle (180° = perfectly straight).
   picks an upward bend plane. This is exactly the **straight-intent-dropped**
   engine limitation.
 - **Engine vs pose:** **Engine limitation, surfaced on purpose.** This pose is a
-  deliberate regression reference: `ValidatorRomClusterTest.middleSplitDetectableUnderEngineeringValidation`
-  *asserts* the straight limbs are detected as bent. Fixing the pose to look
-  like a true split would hide the bug the test exists to catch.
+  deliberate diagnostic instrument: `ValidatorRomClusterTest.middleSplitSurfacesDroppedStraightIntent`
+  *asserts* the straight limbs are detected as bent. Retuning the pose to look
+  like a true split would tamper with the instrument and hide the limitation it
+  exists to read (see §2).
 - **Proposed fix:** **None (keep as-is).** Document it as the straight-intent
   reference. If a true-straight middle split is ever wanted, the engine must
   first honour `straight = true` at in-proximal-radius targets (UNI-9 / straight
