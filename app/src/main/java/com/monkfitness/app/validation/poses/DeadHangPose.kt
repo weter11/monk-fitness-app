@@ -28,7 +28,9 @@ class DeadHangPose : BaseValidationPose() {
     private val gripWidthFactor = 1.5f
 
     private val verticalPullEnvironment = EnvironmentDefinition(
-        ground = GroundDefinition(visible = false, level = 0f),
+        // The ground grid is shown for spatial reference; the hanging body (lowest point the
+        // ankle at ~y=41) never reaches the level-0 floor, so enabling it is purely visual.
+        ground = GroundDefinition(visible = true, level = 0f),
         props = listOf(
             BoxProp(center = Vector3(0f, barY - 5f, 0f), width = 8f, height = 10f, depth = 240f)
         ),
