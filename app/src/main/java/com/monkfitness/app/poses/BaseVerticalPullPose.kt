@@ -157,10 +157,11 @@ abstract class BaseVerticalPullPose : BasePose() {
         val pelvisY = shoulderY - def.torsoLength
 
         pelvis!!.localPosition.set(comX, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, torsoPitch)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        chest!!.localRotation.set(axisZ, chestFlex)
+        // Phase 5 (W13/G4, W14/G5): single spine-intent call. Lower segment is the
+        // PELVIS (hips attach here, so the hanging legs inherit the lean).
+        buildSpineCurve(pelvis!!, chest!!, torsoPitch, chestFlex)
 
         // Head follows the thorax by FK; a tiny gaze lift toward the bar at the top.
         val gaze = tempV3.set(0f, 1f, 0f)

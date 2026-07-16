@@ -80,10 +80,11 @@ class StaticForearmPlankPose : BasePlankPose() {
         val comShiftX = breath * 4f
 
         pelvis!!.localPosition.set(comShiftX, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, torsoPitch)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        chest!!.localRotation.set(axisZ, chestFlex)
+        // Phase 5 (W13/G4, W14/G5): single spine-intent call. Lower segment is the
+        // PELVIS; chest adds the braced thoracic rounding. Hips inherit the incline.
+        buildSpineCurve(pelvis!!, chest!!, torsoPitch, chestFlex)
 
         // Head neutral, gaze slightly toward the mat ahead of the hands; a tiny nod
         // with the breath. The rest of the head motion is inherited from the thorax.

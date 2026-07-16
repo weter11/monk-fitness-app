@@ -16,7 +16,7 @@ These are the legacy engine-compensation leaks removed by the W1 audit and the t
 ### A2. Pelvis/chest lean as compensation
 - `pelvis.localRotation.set(axisZ, ±leanAngle)` where `leanAngle` is then cancelled in limbs.
 - Dual independent `pelvis.localRotation.set` + `chest.localRotation.set` hand-tuned pairs.
-- **Owner instead:** single `buildSpineCurve(lumbarRad, thoracicRad, axis)`.
+- **Owner instead:** single `buildSpineCurve(lower, chest, lowerRad, thoracicRad, axis)` — one call, same Z axis. `lower` is the PELVIS (hips attach to the pelvis, so the lower tilt must live there to keep planted feet correct).
 
 ### A3. `rotAround` limb counter-rotation (W11/G1 — CLOSED in Phase 4)
 - `rotAround(..., ±leanAngle)`, `rotAround(..., -torsoAngle)`, `rotAround(..., ±spinePitch)` on knee/ankle/elbow/hand to undo inherited trunk tilt.
@@ -82,7 +82,7 @@ Every pose sets a typed `postureIntent` (SEATED_NEAR_FLOOR / HANGING_UNDER_BAR /
 Poles are authored in the limb's own root frame; the Finalizer converts them to world. Poses never call `toWorldDirection`/`toLocalDirection`.
 
 ### B7. No dual spine writes
-Never write both `pelvis.localRotation` and `chest.localRotation` as independent angles. One `buildSpineCurve` call.
+Never write both `pelvis.localRotation` and `chest.localRotation` as independent angles. One `buildSpineCurve(lower, chest, lowerRad, thoracicRad, axis)` call expresses the whole trunk lean (Phase 5 / W13/G4, W14/G5). `lower` = PELVIS so the hips inherit the bend.
 
 ### B8. Leave geometry to the engine
 After declaring intent + targets + contacts, a pose calls the bake/finalize pipeline and returns `SkeletonPose`. It does not compute knee/ankle/elbow/hand/shoulder/heel/toe transforms.
