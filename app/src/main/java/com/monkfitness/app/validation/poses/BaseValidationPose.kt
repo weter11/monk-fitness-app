@@ -258,6 +258,7 @@ abstract class BaseValidationPose : PoseBuilder {
     }
 
 
+    protected fun solveNearStraightLeg(
         shinLen: Float,
         thighLen: Float,
         targetFlexionDegrees: Float

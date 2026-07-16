@@ -300,7 +300,7 @@ abstract class BasePose : PoseBuilder {
         return SkeletonMath.solveStraightLimb(hipW, targetAnkle, thighLen, shinLen, constraint, result)
     }
 
-
+    protected fun solveNearStraightLeg(
         shinLen: Float,
         thighLen: Float,
         targetFlexionDegrees: Float
