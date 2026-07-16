@@ -97,16 +97,13 @@ abstract class BaseLungePose : BasePose() {
         toe: SkeletonNode,
         buffer: SkeletonMath.IKResult
     ) {
-        val localAngle = -parentRotation.angle
+        // W1: engine now derives foot orientation (removed ankle tilt counter-rotation + manual heel/toe).
         bakeIkLimb(hipWorld, targetAnkle, def.thighLength, def.shinLength, parentRotation, poleLocal, def.legIKConstraint, knee, ankle, buffer)
-        ankle.localRotation.set(axisZ, localAngle)
-        heel.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f)
-        toe.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
     }
 
     /**
      * Bakes one arm from its shoulder to a world-space hand target using a frame-relative
-     * pole (stable in the chest frame) and writes the hand/palm/knuckles/fingertips offsets.
+     * pole (stable in the chest frame).
      */
     protected fun bakeArm(
         def: SkeletonDefinition,
@@ -121,10 +118,8 @@ abstract class BaseLungePose : BasePose() {
         fingertips: SkeletonNode,
         buffer: SkeletonMath.IKResult
     ) {
-        val localAngle = -parentRotation.angle
+        // W1: engine now derives hand orientation (removed wrist tilt counter-rotation + 6/6/10 offsets).
         bakeIkLimb(shoulderWorld, targetHand, def.upperArmLength, def.forearmLength, parentRotation, poleLocal, def.armIKConstraint, elbow, hand, buffer)
-        hand.localRotation.set(axisZ, localAngle)
-        palm.localPosition.set(6f, 0f, 0f); knuckles.localPosition.set(6f, 0f, 0f); fingertips.localPosition.set(10f, 0f, 0f)
     }
 
     protected fun finishPose(): SkeletonPose {

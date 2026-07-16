@@ -143,12 +143,8 @@ abstract class BaseThoracicPose : BasePose() {
         return ik
     }
 
-    /** Constant open-hand extremity offsets (family convention shared across families). */
+    /** W1: the engine now derives hand orientation; the open-hand offsets and tilt counter-rotation are removed. */
     protected fun applyThoracicHands() {
-        handA!!.localRotation.set(axisZ, -spinePitch)
-        handP!!.localRotation.set(axisZ, -spinePitch)
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
     }
 
     protected fun finalizeThoracicPose(): SkeletonPose {

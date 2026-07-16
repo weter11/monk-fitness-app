@@ -83,9 +83,7 @@ abstract class BaseSquatPose : BasePose() {
         val legFIK = bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, tempV3.set(1f, 0f, -0.2f), def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
         val legBIK = bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, tempV3.set(1f, 0f, 0.2f), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
-        ankleF!!.localRotation.set(axisZ, leanAngle); ankleB!!.localRotation.set(axisZ, leanAngle)
-        heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        heelB!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        // W1: engine now derives foot orientation (removed ankle tilt counter-rotation + manual heel/toe).
 
         // Arm counterbalance reach
         val handTargetX = SkeletonMath.lerp(0f, armLeanEnd * 40f, tProgress)
@@ -94,9 +92,7 @@ abstract class BaseSquatPose : BasePose() {
         val armAIK = bakeIkLimb(shoulderA!!.worldPosition, tempV1.set(handTargetX, handTargetY, -def.shoulderWidth * 1.2f), def.upperArmLength, def.forearmLength, tempV3.set(0f, -1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
         val armPIK = bakeIkLimb(shoulderP!!.worldPosition, tempV2.set(handTargetX, handTargetY, def.shoulderWidth * 1.2f), def.upperArmLength, def.forearmLength, tempV3.set(0f, -1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
-        handA!!.localRotation.set(axisZ, leanAngle); handP!!.localRotation.set(axisZ, leanAngle)
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
+        // W1: engine now derives hand orientation (removed wrist tilt counter-rotation + 6/6/10 offsets).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))

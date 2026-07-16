@@ -73,8 +73,6 @@ class StaticForearmPlankPose : BasePlankPose() {
         // up, with a tiny breathing modulation. Kept small so it reads as a braced
         // upper back, not a hunch.
         val chestFlex = SkeletonMath.lerp(0f, 0.09f, lift) + breath * 0.02f
-        val chestWorldZ = torsoPitch + chestFlex
-        val invChestZ = -chestWorldZ      // cancels chest frame for flat forearms/hands
         val invTorsoZ = -torsoPitch       // cancels pelvis frame for legs
 
         // Centre-of-mass drift: a few units forward over the forearms mid-hold and
@@ -150,10 +148,13 @@ class StaticForearmPlankPose : BasePlankPose() {
         bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         // Hands lie flat on the mat, fingers forward (open-hand family offsets 6/6/10).
-        handA!!.localRotation.set(axisZ, invChestZ)
-        handP!!.localRotation.set(axisZ, invChestZ)
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
+        // W1: engine now derives hand orientation (removed tilt counter-rotation + 6/6/10 offsets).
+
+        // Explicit override: the feet plantar-flex onto the balls of the toes (heels lift), an
+        // intentional foot articulation the engine's flat perpendicular-to-shin derivation would
+        // flatten; opt the feet out of auto-derivation.
+        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_F)
+        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_B)
 
         return finalizePlankPose()
     }

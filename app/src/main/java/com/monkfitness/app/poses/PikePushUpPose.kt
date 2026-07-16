@@ -69,14 +69,7 @@ class PikePushUpPose : BasePushUpPose() {
 
         ankleF!!.localPosition.set(ankleX, ankleHeight, -def.hipWidth)
         ankleF!!.localRotation.set(axisZ, legPitch)
-
-        val worldFootDir = tempV1.set(0f, -1f, 0f)
-        val localFootDir = rotAround(worldFootDir, axisZ, -legPitch, tempV2)
-        heelF!!.localPosition.set(localFootDir.x * -def.foot.footLength * def.foot.heelRatio, localFootDir.y * -def.foot.footLength * def.foot.heelRatio, localFootDir.z * -def.foot.footLength * def.foot.heelRatio)
-        toeF!!.localPosition.set(localFootDir.x * def.foot.footLength * def.foot.toeRatio, localFootDir.y * def.foot.footLength * def.foot.toeRatio, localFootDir.z * def.foot.footLength * def.foot.toeRatio)
-        heelB!!.localPosition.set(localFootDir.x * -def.foot.footLength * def.foot.heelRatio, localFootDir.y * -def.foot.footLength * def.foot.heelRatio, localFootDir.z * -def.foot.footLength * def.foot.heelRatio)
-        toeB!!.localPosition.set(localFootDir.x * def.foot.footLength * def.foot.toeRatio, localFootDir.y * def.foot.footLength * def.foot.toeRatio, localFootDir.z * def.foot.footLength * def.foot.toeRatio)
-
+        // W1: engine now derives heel/toe from the shank + this ankle articulation.
         kneeF!!.localPosition.set(-def.shinLength, 0f, 0f)
         hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
 
@@ -121,12 +114,7 @@ class PikePushUpPose : BasePushUpPose() {
         bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, chest!!.worldRotation, armPPoleLocal, def.armIKConstraint, elbowP!!, handP!!, armPIK)
 
         handA!!.localRotation.set(axisZ, -torsoGlobalPitch)
-        val handDirA = tempV1.set(-1f, 0f, -0.1f).normalize()
-        palmA!!.localPosition.set(handDirA.x * handPalmOffset, handDirA.y * handPalmOffset, handDirA.z * handPalmOffset); knucklesA!!.localPosition.set(handDirA.x * handPalmOffset, handDirA.y * handPalmOffset, handDirA.z * handPalmOffset); fingertipsA!!.localPosition.set(handDirA.x * handFingertipOffset, handDirA.y * handFingertipOffset, handDirA.z * handFingertipOffset)
-
-        handP!!.localRotation.set(axisZ, -torsoGlobalPitch)
-        val handDirP = tempV1.set(-1f, 0f, 0.1f).normalize()
-        palmP!!.localPosition.set(handDirP.x * handPalmOffset, handDirP.y * handPalmOffset, handDirP.z * handPalmOffset); knucklesP!!.localPosition.set(handDirP.x * handPalmOffset, handDirP.y * handPalmOffset, handDirP.z * handPalmOffset); fingertipsP!!.localPosition.set(handDirP.x * handFingertipOffset, handDirP.y * handFingertipOffset, handDirP.z * handFingertipOffset)
+        // W1: engine now derives hand orientation (removed tilt counter-rotation + 6/6/10 offsets).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))

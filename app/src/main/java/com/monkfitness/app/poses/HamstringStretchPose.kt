@@ -102,10 +102,7 @@ class HamstringStretchPose : BasePose() {
         // Front foot points to sky, back foot lays flat sideways
         ankleF!!.localRotation.set(axisZ, torsoPitch - 1.57f)
         ankleB!!.localRotation.set(axisZ, torsoPitch)
-        heelF!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f)
-        toeF!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        heelB!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f)
-        toeB!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        // W1: engine now derives heel/toe from the shank + these intentional ankle articulations.
 
         // 3. Dynamic Forward Reach
         val chestW = chest!!.worldPosition
@@ -126,8 +123,7 @@ class HamstringStretchPose : BasePose() {
 
         handA!!.localRotation.set(axisZ, -torsoPitch)
         handP!!.localRotation.set(axisZ, -torsoPitch)
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
+        // W1: engine now derives hand orientation (removed 6/6/10 offsets).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))

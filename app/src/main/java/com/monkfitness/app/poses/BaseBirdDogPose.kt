@@ -112,16 +112,7 @@ abstract class BaseBirdDogPose : BasePose() {
      * open-hand offsets (palm/knuckles 6, fingertips 10) and the foot heel/toe ratios.
      */
     protected fun applyBirdDogExtremities(def: SkeletonDefinition) {
-        handA!!.localRotation.set(axisZ, -torsoPitch)
-        handP!!.localRotation.set(axisZ, -torsoPitch)
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
-
-        ankleF!!.localRotation.set(axisZ, -torsoPitch)
-        ankleB!!.localRotation.set(axisZ, -torsoPitch)
-        // Foot ratios are owned by FootDefinition (no duplicated literals).
-        heelF!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        heelB!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
     }
 
     protected fun finalizeBirdDogPose(): SkeletonPose {

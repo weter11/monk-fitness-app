@@ -107,13 +107,7 @@ class PelvicTiltPose : PoseBuilder {
         rotAround(Vector3(legBIK.joint.x - hipB!!.worldPosition.x, legBIK.joint.y - hipB!!.worldPosition.y, legBIK.joint.z - hipB!!.worldPosition.z), Vector3(0f, 0f, 1f), -torsoAngle, kneeB!!.localPosition)
         rotAround(Vector3(legBIK.end.x - legBIK.joint.x, legBIK.end.y - legBIK.joint.y, legBIK.end.z - legBIK.joint.z), Vector3(0f, 0f, 1f), -torsoAngle, ankleB!!.localPosition)
 
-        ankleF!!.localRotation.set(Vector3(0f, 0f, 1f), -torsoAngle)
-        ankleB!!.localRotation.set(Vector3(0f, 0f, 1f), -torsoAngle)
-
-        heelF!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f)
-        toeF!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
-        heelB!!.localPosition = Vector3(-def.foot.footLength * 0.29f, 0f, 0f)
-        toeB!!.localPosition = Vector3(def.foot.footLength * 0.71f, 0f, 0f)
+        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         // 2. Arms flat on the floor alongside the body
         val targetHandA = Vector3(-35f, 12f, -def.shoulderWidth - 5f)
@@ -128,11 +122,7 @@ class PelvicTiltPose : PoseBuilder {
         rotAround(Vector3(armPIK.joint.x - shoulderP!!.worldPosition.x, armPIK.joint.y - shoulderP!!.worldPosition.y, armPIK.joint.z - shoulderP!!.worldPosition.z), Vector3(0f, 0f, 1f), -torsoAngle, elbowP!!.localPosition)
         rotAround(Vector3(armPIK.end.x - armPIK.joint.x, armPIK.end.y - armPIK.joint.y, armPIK.end.z - armPIK.joint.z), Vector3(0f, 0f, 1f), -torsoAngle, handP!!.localPosition)
 
-        handA!!.localRotation.set(Vector3(0f, 0f, 1f), -torsoAngle)
-        handP!!.localRotation.set(Vector3(0f, 0f, 1f), -torsoAngle)
-
-        palmA!!.localPosition = Vector3(6f, 0f, 0f); knucklesA!!.localPosition = Vector3(6f, 0f, 0f); fingertipsA!!.localPosition = Vector3(10f, 0f, 0f)
-        palmP!!.localPosition = Vector3(6f, 0f, 0f); knucklesP!!.localPosition = Vector3(6f, 0f, 0f); fingertipsP!!.localPosition = Vector3(10f, 0f, 0f)
+        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))

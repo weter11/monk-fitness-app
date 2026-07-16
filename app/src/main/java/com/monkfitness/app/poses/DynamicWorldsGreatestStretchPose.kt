@@ -63,11 +63,11 @@ class DynamicWorldsGreatestStretchPose : BaseThoracicPose() {
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         // Feet: front foot flat (toe forward), back foot plantar-flexed (toe down).
+        // W1: the inherited torso/spine tilt is now removed by the engine, so only the intentional
+        // back-foot plantar flexion remains (front foot lays flat via engine derivation).
         val footPitchB = 0.6f
-        ankleF!!.localRotation.set(axisZ, -spinePitch)
-        heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        ankleB!!.localRotation.set(axisZ, -spinePitch - footPitchB)
-        heelB!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        ankleB!!.localRotation.set(axisZ, -footPitchB)
+        // W1: engine now derives heel/toe from the shank + these ankle articulations.
 
         // Support arm (P): planted on the floor beside the front foot -> stable pillar.
         targetP.set(targetF.x * 0.5f, 0f, def.shoulderWidth)
