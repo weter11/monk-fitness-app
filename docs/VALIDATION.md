@@ -287,3 +287,41 @@ angles are the interior joint angle (180° = perfectly straight).
 
 Only **Pike Sit** required a correction, and only because its authored anatomy
 was wrong (§9). No engine code was modified.
+
+### 11.6 Camera Framing Pass (pitch +20°)
+
+A follow-up framing adjustment so overhead / hanging references (notably **Dead
+Hang**, whose pull-up bar reaches world y ≈ 500) fit naturally inside the
+viewport without changing any geometry.
+
+- **Goal:** improve framing of the test poses only. Camera looks slightly higher
+  toward the sky (pitch increased by ≈ 20°). World origin, ground plane,
+  character, camera distance (zoom), viewport scaling, and FOV are all unchanged.
+- **What changed:** only `defaultPitch` in each validation pose's
+  `CameraDefinition`. Yaw and zoom untouched. `Camera.project` consumes pitch in
+  radians (default 0.22 ≈ 12.6°), so +20° = +0.349066 rad.
+
+| Pose | Previous pitch | New pitch | Δ |
+|------|---------------|-----------|---|
+| Middle Split | 0.22 rad (≈12.6°) | 0.569 rad (≈32.6°) | +20° |
+| Pike Sit | 0.28 rad (≈16.0°) | 0.629 rad (≈36.0°) | +20° |
+| Deep Overhead Squat | 0.22 rad (≈12.6°) | 0.569 rad (≈32.6°) | +20° |
+| Dead Hang | 0.22 rad (≈12.6°) | 0.569 rad (≈32.6°) | +20° |
+
+- **Files changed:** `MiddleSplitPose.kt`, `PikeSitPose.kt`,
+  `DeepOverheadSquatPose.kt`, `DeadHangPose.kt` (camera `defaultPitch` only).
+  No engine/renderer/ground code modified.
+- **Screenshots:** not available in this environment (headless build sandbox, no
+  render surface). The change is a pure camera-orientation constant; verify
+  visually in the Engineering Validation viewer with the developer setting on.
+- **Expected result:** raising the pitch shifts the projected skeleton upward in
+  frame, giving overhead poses (Dead Hang bar, Deep Squat raised arms) more head
+  room while the same world coordinates and camera distance are preserved.
+
+### 11.7 Summary of changes in this PR
+
+1. **Pike Sit** foot/pelvis authoring fix (§11.2).
+2. **Audit report** for all four poses (§11.1–§11.5).
+3. **Camera pitch +20°** framing pass for all four poses (§11.6).
+
+No ground-plane, world-coordinate, character, FOV, or viewport changes.
