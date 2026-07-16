@@ -77,9 +77,8 @@ class MiddleSplitPose : BaseValidationPose() {
         bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, legStraightConstraint(def), pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, straight = true, contact = groundContact)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, legStraightConstraint(def), pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true, contact = groundContact)
 
-        ankleF!!.localRotation.set(axisZ, 0f); ankleB!!.localRotation.set(axisZ, 0f)
-        heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        heelB!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        // The engine derives heel/toe from the shank + the neutral ankle articulation (cancelling
+        // inherited tilt automatically) — no manual endpoint authoring, no ankle tilt.
 
         // Arms extended out to the sides with the same straight-intent probe: hand targets placed
         // inside the upper-arm bone. Spread = shoulderWidth * 1.72 ≈ 79.2; the shoulder sits at
@@ -94,9 +93,8 @@ class MiddleSplitPose : BaseValidationPose() {
         bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armPoleA, armStraightConstraint(def), chest!!.worldRotation, elbowA!!, handA!!, armABuffer, straight = true)
         bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPoleP, armStraightConstraint(def), chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, straight = true)
 
-        handA!!.localRotation.set(axisZ, 0f); handP!!.localRotation.set(axisZ, 0f)
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
+        // The engine derives palm/knuckles/fingertips from the forearm + the neutral wrist
+        // articulation — no manual hand endpoint authoring, no hand tilt.
 
         return finalizePose()
     }

@@ -15,13 +15,10 @@ class SumoSquatPose : BaseSquatPose() {
     private val armAPole = Vector3(0f, 0f, -1f)
     private val armPPole = Vector3(0f, 0f, 1f)
 
-    // Outward toe flare rotates around the global Y axis; axisX/axisY are provided by BasePose.
     private val legTargetF = Vector3()
     private val legTargetB = Vector3()
     private val armTargetA = Vector3()
     private val armTargetP = Vector3()
-    private val leftToeDir = Vector3()
-    private val rightToeDir = Vector3()
 
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.2f),
@@ -66,20 +63,10 @@ class SumoSquatPose : BaseSquatPose() {
         bakeIkLimb(hipF!!.worldPosition, legTargetF, def.thighLength, def.shinLength, legFPole, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
         bakeIkLimb(hipB!!.worldPosition, legTargetB, def.thighLength, def.shinLength, legBPole, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
-        ankleF!!.localRotation.set(axisZ, leanAngle)
-        ankleB!!.localRotation.set(axisZ, leanAngle)
-
-        // 45-degree outward toe flare (rotated around global Y-axis) — an intentional sumo-stance
-        // foot orientation the engine's perpendicular-to-shin derivation cannot express; opt the
-        // feet out of auto-derivation and keep the authored flare + flat heel/toe.
-        SkeletonMath.rotAround(axisX, axisY, -0.785f, leftToeDir)
-        SkeletonMath.rotAround(axisX, axisY, 0.785f, rightToeDir)
-        heelF!!.localPosition.set(leftToeDir.x * -def.foot.footLength * def.foot.heelRatio, 0f, leftToeDir.z * -def.foot.footLength * def.foot.heelRatio)
-        toeF!!.localPosition.set(leftToeDir.x * def.foot.footLength * def.foot.toeRatio, 0f, leftToeDir.z * def.foot.footLength * def.foot.toeRatio)
-        heelB!!.localPosition.set(rightToeDir.x * -def.foot.footLength * def.foot.heelRatio, 0f, rightToeDir.z * -def.foot.footLength * def.foot.heelRatio)
-        toeB!!.localPosition.set(rightToeDir.x * def.foot.footLength * def.foot.toeRatio, 0f, rightToeDir.z * def.foot.footLength * def.foot.toeRatio)
-        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_F)
-        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_B)
+        // The engine derives heel/toe from the shank + the neutral ankle articulation. The sumo
+        // 45-degree toe flare is intentionally NOT hand-authored here; a foot aligned with the
+        // shank (no flare) is the engine's derivation, and any visual shortfall is an engine
+        // limitation left exposed.
 
         // Arms drop vertically toward crotch
         val handTargetX = pelvisX + 10f

@@ -65,9 +65,9 @@ class DeepOverheadSquatPose : BaseValidationPose() {
         bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, contact = groundContact)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, contact = groundContact)
 
-        ankleF!!.localRotation.set(axisZ, leanAngle); ankleB!!.localRotation.set(axisZ, leanAngle)
-        heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        heelB!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        // The engine derives heel/toe from the shank + the neutral ankle articulation (cancelling
+        // the inherited lean automatically) and lays the foot flat on the ground — no manual
+        // endpoint authoring, no leanAngle tilt counter-rotation.
 
         // Arms overhead (shoulder flexion to full elevation), reaching straight up.
         val shoulderY = shoulderA!!.worldPosition.y
@@ -79,9 +79,9 @@ class DeepOverheadSquatPose : BaseValidationPose() {
         bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armPoleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
         bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPoleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
-        handA!!.localRotation.set(axisZ, leanAngle * 0.4f); handP!!.localRotation.set(axisZ, leanAngle * 0.4f)
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
+        // The engine derives palm/knuckles/fingertips from the forearm + the neutral wrist
+        // articulation (cancelling the inherited lean automatically) — no manual hand endpoint
+        // authoring, no leanAngle*0.4f tilt counter-rotation.
 
         return finalizePose()
     }

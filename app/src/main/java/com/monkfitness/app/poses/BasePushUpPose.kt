@@ -29,13 +29,6 @@ abstract class BasePushUpPose : BasePose() {
     protected val armAPoleLocal = Vector3()
     protected val armPPoleLocal = Vector3()
 
-    // Stylized planted-palm hand proportions for push-ups.
-    // These intentionally differ from the canonical open-hand HandDefinition: in a push-up the
-    // palm is flat on the ground and the fingers are tucked, so the palm and knuckles coincide
-    // (a short stub) and the fingertips sit at handFingertipOffset rather than the open-hand 22.
-    protected val handPalmOffset = 6f
-    protected val handFingertipOffset = 10f
-
     // Head gaze direction for the prone push-up posture (read-only, shared across frames).
     protected val pushUpHeadDirection = Vector3(-1f, 0.2f, 0f).normalize()
 
@@ -103,13 +96,10 @@ abstract class BasePushUpPose : BasePose() {
 
             // 1. Root Anchoring
             ankleF!!.localPosition.set(ankleX, ankleHeightVal, -def.hipWidth)
-            ankleF!!.localRotation.set(axisZ, shinPitch)
 
-            val footDir = SkeletonMath.rotAround(tempV1.set(1f, -1f, 0f).normalize(), axisZ, -shinPitch, tempV2)
-            heelF!!.localPosition.set(footDir.x * -def.foot.footLength * def.foot.heelRatio, footDir.y * -def.foot.footLength * def.foot.heelRatio, footDir.z * -def.foot.footLength * def.foot.heelRatio)
-            toeF!!.localPosition.set(footDir.x * def.foot.footLength * def.foot.toeRatio, footDir.y * def.foot.footLength * def.foot.toeRatio, footDir.z * def.foot.footLength * def.foot.toeRatio)
-            heelB!!.localPosition.set(footDir.x * -def.foot.footLength * def.foot.heelRatio, footDir.y * -def.foot.footLength * def.foot.heelRatio, footDir.z * -def.foot.footLength * def.foot.heelRatio)
-            toeB!!.localPosition.set(footDir.x * def.foot.footLength * def.foot.toeRatio, footDir.y * def.foot.footLength * def.foot.toeRatio, footDir.z * def.foot.footLength * def.foot.toeRatio)
+            // The engine derives heel/toe from the shank + the neutral ankle articulation. The
+            // planted flat foot is intentionally NOT hand-authored here; any visual shortfall is
+            // an engine limitation left exposed.
 
             // 2. Main Plank (Side F)
             kneeF!!.localPosition.set(-def.shinLength, 0f, 0f)
@@ -130,14 +120,10 @@ abstract class BasePushUpPose : BasePose() {
         } else {
             // Feet Pivot push-up leg orientation (Standard, Wide, Decline, Diamond, Military)
             ankleF!!.localPosition.set(ankleX, ankleHeightVal, -def.hipWidth)
-            ankleF!!.localRotation.set(axisZ, -theta)
 
-            val worldFootDir = tempV1.set(0f, -1f, 0f)
-            val localFootDir = SkeletonMath.rotAround(worldFootDir, axisZ, theta, tempV2)
-            heelF!!.localPosition.set(localFootDir.x * -def.foot.footLength * def.foot.heelRatio, localFootDir.y * -def.foot.footLength * def.foot.heelRatio, localFootDir.z * -def.foot.footLength * def.foot.heelRatio)
-            toeF!!.localPosition.set(localFootDir.x * def.foot.footLength * def.foot.toeRatio, localFootDir.y * def.foot.footLength * def.foot.toeRatio, localFootDir.z * def.foot.footLength * def.foot.toeRatio)
-            heelB!!.localPosition.set(localFootDir.x * -def.foot.footLength * def.foot.heelRatio, localFootDir.y * -def.foot.footLength * def.foot.heelRatio, localFootDir.z * -def.foot.footLength * def.foot.heelRatio)
-            toeB!!.localPosition.set(localFootDir.x * def.foot.footLength * def.foot.toeRatio, localFootDir.y * def.foot.footLength * def.foot.toeRatio, localFootDir.z * def.foot.footLength * def.foot.toeRatio)
+            // The engine derives heel/toe from the shank + the neutral ankle articulation. The
+            // planted flat foot is intentionally NOT hand-authored here; any visual shortfall is
+            // an engine limitation left exposed.
 
             // Precompute local knee flexion coordinates (F-leg: ankle is the parent, hip is child)
             val kX = -limbResult.x
@@ -181,20 +167,9 @@ abstract class BasePushUpPose : BasePose() {
         SkeletonMath.toLocalDirection(poleP, chest!!.worldRotation, armPPoleLocal)
         val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, chest!!.worldRotation, armPPoleLocal, def.armIKConstraint, elbowP!!, handP!!, armPIK)
 
-        handA!!.localRotation.set(axisZ, theta)
-        palmA!!.localPosition.set(handDirA.x * handPalmOffset, handDirA.y * handPalmOffset, handDirA.z * handPalmOffset); knucklesA!!.localPosition.set(handDirA.x * handPalmOffset, handDirA.y * handPalmOffset, handDirA.z * handPalmOffset); fingertipsA!!.localPosition.set(handDirA.x * handFingertipOffset, handDirA.y * handFingertipOffset, handDirA.z * handFingertipOffset)
-
-        handP!!.localRotation.set(axisZ, theta)
-        palmP!!.localPosition.set(handDirP.x * handPalmOffset, handDirP.y * handPalmOffset, handDirP.z * handPalmOffset); knucklesP!!.localPosition.set(handDirP.x * handPalmOffset, handDirP.y * handPalmOffset, handDirP.z * handPalmOffset); fingertipsP!!.localPosition.set(handDirP.x * handFingertipOffset, handDirP.y * handFingertipOffset, handDirP.z * handFingertipOffset)
-
-        // Explicit override: the push-up's planted foot (flat on the mat, counter-rotated to the
-        // plank pitch) and flat palm are precisely authored geometry the engine's perpendicular-to-
-        // limb derivation does not reproduce; opt all four extremities out of auto-derivation so the
-        // authored heel/toe and palm/knuckles/fingertips are preserved verbatim.
-        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_F)
-        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_B)
-        overrideExtremityOrientation(jointsBuffer, Extremity.HAND_A)
-        overrideExtremityOrientation(jointsBuffer, Extremity.HAND_P)
+        // The engine derives palm/knuckles/fingertips from the forearm + the neutral wrist
+        // articulation. The flat planted palm is intentionally NOT hand-authored here; any visual
+        // shortfall is an engine limitation left exposed.
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))

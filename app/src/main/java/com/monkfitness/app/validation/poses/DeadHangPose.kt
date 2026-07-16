@@ -93,7 +93,6 @@ class DeadHangPose : BaseValidationPose() {
         val targetP = Vector3(0f, barY, gZ)
         val armPoleA = Vector3(0f, -1f, 0f)
         val armPoleP = Vector3(0f, -1f, 0f)
-        val invChestZ = -torsoPitch
         // Hands are fixed contacts on the bar: clamp the IK end onto the bar plane (normal +Y at
         // barY) so the over-clamp can't drag the grip off the bar (PR-03). Target is unchanged.
         // Arms opt into full extension so they render perfectly straight (PR-11).
@@ -104,14 +103,12 @@ class DeadHangPose : BaseValidationPose() {
         // Overhand grip: fingers wrap up and over the top of the bar. A +90° wrist rotation
         // turns the rigid hand's forward axis (+X) upward (+Y) so the fingertips curl over the
         // bar (audit §4.2 — the previous -90° splayed the hand sideways). The palm thus faces
-        // forward away from the body, the correct overhand hang.
-        val gripAngle = invChestZ + (PI.toFloat() / 2f)
-        handA!!.localRotation.set(axisZ, gripAngle); handP!!.localRotation.set(axisZ, gripAngle)
-        palmA!!.localPosition.set(6f, 0f, 0f); knucklesA!!.localPosition.set(6f, 0f, 0f); fingertipsA!!.localPosition.set(10f, 0f, 0f)
-        palmP!!.localPosition.set(6f, 0f, 0f); knucklesP!!.localPosition.set(6f, 0f, 0f); fingertipsP!!.localPosition.set(10f, 0f, 0f)
+        // forward away from the body, the correct overhand hang. The engine derives palm/knuckles/
+        // fingertips from the forearm + this wrist articulation, cancelling the inherited torso
+        // tilt automatically (no hand-authored heel/toe/palm endpoints, no -torsoPitch term).
+        handA!!.localRotation.set(axisZ, PI.toFloat() / 2f); handP!!.localRotation.set(axisZ, PI.toFloat() / 2f)
 
         // Legs hang straight down with a slight forward pendulum.
-        val invTorsoZ = -torsoPitch
         val ankleX = comX - 18f
         val ankleY = pelvisY - 200f
         val targetF = Vector3(ankleX, ankleY, -def.hipWidth * 0.9f)
@@ -121,12 +118,8 @@ class DeadHangPose : BaseValidationPose() {
         bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, legStraightConstraint(def), pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, straight = true)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, legStraightConstraint(def), pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true)
 
-        ankleF!!.localRotation.set(axisZ, invTorsoZ); ankleB!!.localRotation.set(axisZ, invTorsoZ)
-        // Consistent heel/toe sign with the standing poses (audit §4.6): heel forward (+X),
-        // toe further forward (+X) — the previous pose negated the toe/heel so the feet pointed
-        // slightly back relative to every other reference.
-        heelF!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        heelB!!.localPosition.set(-def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        // The engine derives heel/toe from the shank (knee→ankle) + the neutral ankle articulation,
+        // laying the hanging foot out flat — no manual endpoint authoring, no tilt counter-rotation.
 
         return finalizePose()
     }

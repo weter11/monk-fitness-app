@@ -73,7 +73,6 @@ class StaticForearmPlankPose : BasePlankPose() {
         // up, with a tiny breathing modulation. Kept small so it reads as a braced
         // upper back, not a hunch.
         val chestFlex = SkeletonMath.lerp(0f, 0.09f, lift) + breath * 0.02f
-        val invTorsoZ = -torsoPitch       // cancels pelvis frame for legs
 
         // Centre-of-mass drift: a few units forward over the forearms mid-hold and
         // back. Zero at the endpoints (breath is 0 there) so the contract holds and
@@ -114,14 +113,9 @@ class StaticForearmPlankPose : BasePlankPose() {
         poleB.set(0f, 1f, 0f)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
-        // Plantar-flex onto the balls of the feet: heels lift, toes press the mat.
-        // Toe offset is behind the ankle (-x), so a POSITIVE world rotation tips the
-        // toe down to the floor and lifts the heel (weight on the toes).
-        val plantar = SkeletonMath.lerp(0f, 1.0f, lift)
-        ankleF!!.localRotation.set(axisZ, invTorsoZ + plantar)
-        ankleB!!.localRotation.set(axisZ, invTorsoZ + plantar)
-        heelF!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeF!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
-        heelB!!.localPosition.set(def.foot.footLength * def.foot.heelRatio, 0f, 0f); toeB!!.localPosition.set(-def.foot.footLength * def.foot.toeRatio, 0f, 0f)
+        // The engine derives heel/toe from the shank + the neutral ankle articulation. The
+        // plantar-flexed (heels-lifted) foot is intentionally NOT hand-authored here; if the
+        // engine derivation lands the foot flat that is an engine limitation left exposed.
 
         // --- 3. Forearms: flat on the mat, elbows loaded under the shoulders -----
         scratchShoulderA.set(shoulderA!!.worldPosition)
@@ -149,12 +143,6 @@ class StaticForearmPlankPose : BasePlankPose() {
 
         // Hands lie flat on the mat, fingers forward (open-hand family offsets 6/6/10).
         // W1: engine now derives hand orientation (removed tilt counter-rotation + 6/6/10 offsets).
-
-        // Explicit override: the feet plantar-flex onto the balls of the toes (heels lift), an
-        // intentional foot articulation the engine's flat perpendicular-to-shin derivation would
-        // flatten; opt the feet out of auto-derivation.
-        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_F)
-        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_B)
 
         return finalizePlankPose()
     }

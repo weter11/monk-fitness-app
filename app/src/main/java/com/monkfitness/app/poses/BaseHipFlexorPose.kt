@@ -49,8 +49,6 @@ abstract class BaseHipFlexorPose : BasePose() {
     protected val shinVecB = Vector3()
     protected val targetAnkleF = Vector3()
     protected val handTarget = Vector3()
-    protected val worldFootDir = Vector3()
-    protected val localFoot = Vector3()
 
     // Constant IK poles (allocated once).
     protected val frontLegPole = Vector3(1f, 0f, -0.5f)
@@ -129,20 +127,13 @@ abstract class BaseHipFlexorPose : BasePose() {
         // W1: engine now derives heel/toe + foot orientation from the shank + neutral ankle.
     }
 
-    /** Back foot orientation, parameterized by its world direction (up the wall or flat backward). */
+    /** Back foot orientation. The engine now derives the back foot from the shank + the neutral
+     *  ankle articulation; the intentional up-the-wall / flat-backward direction is intentionally
+     *  NOT hand-authored here, leaving any visual shortfall as an exposed engine limitation. */
     protected fun applyBackFoot(worldDir: Vector3, def: SkeletonDefinition) {
-        // Explicit override: the back foot points along an intentional direction (toes up the wall
-        // for the couch stretch, flat backward for the half-kneeling stretch) that the engine's
-        // perpendicular-to-shank derivation cannot express; opt the feet out of auto-derivation.
-        worldFootDir.set(worldDir)
-        SkeletonMath.rotAround(worldFootDir, axisZ, leanAngle, localFoot)
-        heelB!!.localPosition.set(localFoot).multiply(-def.foot.footLength * def.foot.heelRatio)
-        toeB!!.localPosition.set(localFoot).multiply(def.foot.footLength * def.foot.toeRatio)
-        ankleB!!.localRotation.set(axisZ, leanAngle)
     }
 
     protected fun finalizeHipFlexorPose(): SkeletonPose {
-        overrideExtremityOrientation(jointsBuffer, Extremity.FOOT_B)
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
         jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
