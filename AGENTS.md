@@ -4,6 +4,22 @@
 > keeps critical context alive across token drops / context compaction. Re-read it first
 > at the start of a session and update it when a durable fact changes.
 
+## Governing rule — validation poses are DIAGNOSTIC INSTRUMENTS (not dev targets)
+
+- **Validation poses are no longer development targets. They are diagnostic instruments.**
+  A pose is a probe you point at the engine to read its true state; its reading must stay
+  honest whether the engine passes or fails. You **fix the engine** or **record the reading** —
+  you never retune a pose to make it read green (that is instrument tampering). This reverses the
+  old `VALIDATION.md §2` "engine satisfies validation" wording; §2/§8/§9/§10/§11 are updated.
+- **Middle Split** is the canonical instrument for the `straight=true` dropped-intent limitation:
+  it requests straight limbs at in-proximal-radius targets (hip→foot ≈58.9 < L1 112) so
+  `solveStraightLimb` returns a bent limb; the pose must READ that, not hide it. It was briefly
+  retargeted to full reach (spread 79.2→232, pelvis→0) to go green — that was reverted this
+  session. Test: `ValidatorRomClusterTest.middleSplitSurfacesDroppedStraightIntent` (asserts
+  STRAIGHT_LIMB_INTENT is flagged). Audit: `MIDDLE_SPLIT_DIAGNOSTIC_AUDIT.md`. The "fix the pose"
+  verdicts in `ENGINEERING_VALIDATION_AUDIT §1` and `PELVIC_HIP_COMPLEX_INVESTIGATION §P6` are
+  SUPERSEDED (they were written under the old target model).
+
 ## Build toolchain (see `docs/TOOLCHAIN_PROVISIONING.md` for the full recipe)
 
 - **JDK 17** at `/usr/lib/jvm/java-17-openjdk-amd64`.
