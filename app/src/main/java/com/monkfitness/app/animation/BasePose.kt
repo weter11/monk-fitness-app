@@ -146,14 +146,31 @@ abstract class BasePose : PoseBuilder {
      * values reproduces a single overall bend split across the spine; passing e.g. a lumbar of
      * zero with a thoracic value expresses "thoracic extends while the lumbar stays" (Issue E).
      */
+    /**
+     * Authors a **two-segment spine curve**: a lower-spine rotation and a thoracic
+     * (chest) rotation about the same [axis], letting the two segments differ. Passing equal
+     * values reproduces a single overall bend split across the spine; passing e.g. a lower
+     * value of zero with a thoracic value expresses "thoracic extends while the lower back
+     * stays" (Issue E).
+     *
+     * [lower] is the node that carries the lower-spine rotation. In the standard skeleton the
+     * hips attach to the PELVIS, so the lower trunk tilt MUST live on `pelvis` (not on `LUMBAR`)
+     * to keep the hips/legs inheriting the bend — otherwise planted feet drift. Pass
+     * `nodes.pelvis` here for pelvis-rooted trunks and `nodes.lumbar` only when the hips are
+     * themselves children of the lumbar. [chest] is always the CHEST node.
+     *
+     * Phase 5 (W13/G4, W14/G5): this is the SINGLE authorized way to express a trunk lean.
+     * A pose must never hand-write both `pelvis.localRotation` and `chest.localRotation` as
+     * independent angles (migration rule B7 / frozen A2) — call this once instead.
+     */
     protected fun buildSpineCurve(
-        lumbar: SkeletonNode,
+        lower: SkeletonNode,
         chest: SkeletonNode,
-        lumbarRad: Float,
+        lowerRad: Float,
         thoracicRad: Float,
         axis: Vector3 = axisZ
     ) {
-        lumbar.localRotation.set(axis, lumbarRad)
+        lower.localRotation.set(axis, lowerRad)
         chest.localRotation.set(axis, thoracicRad)
     }
 

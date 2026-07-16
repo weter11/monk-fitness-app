@@ -40,8 +40,10 @@
 ## Phase 5 — Collapse pelvis+chest dual writes into single spine intent (W13/G4, W14/G5)
 - **Goal:** route trunk lean through `buildSpineCurve`; remove coupled dual writes.
 - **Rationale:** G4/G5 — pre-Issue-E habit.
-- **Prereq: Phase 3. **Files:** BaseLunge, BaseVerticalPull, StaticForearmPlank, Hamstring, Quadruped, DynamicWGStretch + 17 `pelvis.localRotation` sites. **APIs:** use existing `buildSpineCurve`/`buildLumbarFlexion`.
-- **Validation:** spine-angle assertions; `ChestFrameIssueFTest`. **Risk:** Medium. **Complete when:** no pose dual-writes pelvis+chest as independent angles.
+- **Prereq:** Phase 3. **Files:** the 3 poses that hand-wrote BOTH `pelvis.localRotation` and `chest.localRotation` as independent Z angles — `BaseLungePose`, `BaseVerticalPullPose`, `StaticForearmPlankPose`. (The roadmap's original file list — Hamstring, Quadruped, DynamicWGStretch — were re-audited and contain ZERO spine dual-writes, so they were already conformant and needed no change. The "17 `pelvis.localRotation` sites" count conflated single-segment pelvis writes, identity resets, and FK-driven chests, which are out of Phase-5 scope per frozen rule A2/B7.)
+- **APIs:** `buildSpineCurve(lower, chest, lowerRad, thoracicRad, axis)` (signature re-documented in `BasePose` so the lower segment is the PELVIS — hips attach to the pelvis, so the lower trunk tilt must live there to keep planted feet correct; LUMBAR stays the identity pass-through).
+- **Validation:** rotation-equivalent by construction (single `buildSpineCurve` call writes the identical pelvis+chest axis-angles that the two manual `set`s wrote). **`ValidatorRomClusterTest` + `ChestFrameIssueFTest` + `*PoseTest` MUST run green in CI** — they could NOT be executed in the authoring environment (no Android SDK / build-tools present).
+- **Risk:** Medium. **Complete when:** zero poses dual-write pelvis+chest as independent angles (verified: the 3 sites now use one `buildSpineCurve` call).
 
 ## Phase 6 — Hip 3-DOF via helper; retire raw hip writes (W15/G7)
 - **Goal:** route hip via `buildHipOrientation`; delete PikePushUp raw `hipB` counter-rotation + BasePushUp no-op.

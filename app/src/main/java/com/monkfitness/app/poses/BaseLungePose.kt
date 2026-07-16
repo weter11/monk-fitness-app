@@ -153,10 +153,11 @@ abstract class BaseLungePose : BasePose() {
         poleArmPLocal: Vector3
     ): SkeletonPose {
         pelvis!!.localPosition.set(pelvisX, pelvisY, pelvisZ)
-        pelvis!!.localRotation.set(axisZ, pelvisAngle)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        chest!!.localRotation.set(axisZ, chestPitch)
+        // Phase 5 (W13/G4, W14/G5): single spine-intent call. Lower segment is the
+        // PELVIS (hips attach here, so they inherit the lean); chest adds the upper bend.
+        buildSpineCurve(pelvis!!, chest!!, pelvisAngle, chestPitch)
 
         // Head follows the thorax: counter-rotate the gaze so the head stays upright
         // (eyes forward) while the torso leans.
