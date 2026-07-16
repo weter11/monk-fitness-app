@@ -6,6 +6,8 @@
 > original reasoning behind a past decision, the full UNI-* issue narratives, or
 > the per-pose defect audit.
 >
+> - The detailed original records live in **`docs/HISTORICAL/`** (see
+>   `docs/HISTORICAL/README.md` for the inventory).
 > - **Live future work** (what is left to do) lives in `docs/ENGINE_ROADMAP.md`.
 > - **Current architecture** (what the engine is now) lives in
 >   `docs/ENGINE_ARCHITECTURE.md` and `docs/ENGINE.md`.
@@ -22,10 +24,10 @@ weak engine areas. The output was four detailed documents:
 
 | Original file | What it holds | Status |
 | --- | --- | --- |
-| `docs/ENGINE_INVESTIGATION_REPORT.md` | The **unified** issue register (UNI-1…UNI-12), per-validation-pose analysis, and the consolidated prioritized roadmap. | HISTORICAL |
-| `docs/PELVIC_HIP_COMPLEX_INVESTIGATION.md` | 14-question pelvic/hip deep-dive (Q1–Q14) and the pelvis/hip-focused issue list (P1–P6). | HISTORICAL |
-| `docs/ENGINEERING_VALIDATION_AUDIT.md` | Per-pose defect audit of the four Engineering Validation poses, with strict AUTHORING/ENGINE/CAMERA/VALIDATION/RENDERER attribution. | HISTORICAL |
-| `docs/ENGINE_FIX_PR_PROMPTS.md` | Eleven implementation prompts (PR-01…PR-11), one per investigation issue. | HISTORICAL |
+| `docs/HISTORICAL/ENGINE_INVESTIGATION_REPORT.md` | The **unified** issue register (UNI-1…UNI-12), per-validation-pose analysis, and the consolidated prioritized roadmap. | HISTORICAL |
+| `docs/HISTORICAL/PELVIC_HIP_COMPLEX_INVESTIGATION.md` | 14-question pelvic/hip deep-dive (Q1–Q14) and the pelvis/hip-focused issue list (P1–P6). | HISTORICAL |
+| `docs/HISTORICAL/ENGINEERING_VALIDATION_AUDIT.md` | Per-pose defect audit of the four Engineering Validation poses, with strict AUTHORING/ENGINE/CAMERA/VALIDATION/RENDERER attribution. | HISTORICAL |
+| `docs/HISTORICAL/ENGINE_FIX_PR_PROMPTS.md` | Eleven implementation prompts (PR-01…PR-11), one per investigation issue. | HISTORICAL |
 
 These are referenced from the architecture doc's documentation map
 (`docs/ENGINE_ARCHITECTURE.md` §7) as the "evidence" tier. They are **evidence,
@@ -35,7 +37,7 @@ not source of truth** — when they contradict the current code, the code wins.
 
 ## 2. UNI issue register — consolidated status
 
-Status strings are taken from the headers of `docs/ENGINE_INVESTIGATION_REPORT.md`
+Status strings are taken from the headers of `docs/HISTORICAL/ENGINE_INVESTIGATION_REPORT.md`
 §4. **Caveat:** the same report's §6 summary claims several issues resolved by a
 later merged PR ("improve pose accuracy and anatomical DOF support"). Where the
 register and summary disagree, **verify against the current code before starting
@@ -71,8 +73,8 @@ work** — the live, de-duplicated list is `docs/ENGINE_ROADMAP.md`.
   `VALIDATION.md §9` the *reference* is anatomically wrong (a real straight-leg
   split puts feet at ≈±230, not ±79.2). Front Split is naturally supportable.
 
-Full per-pose numeric detail: `docs/ENGINE_INVESTIGATION_REPORT.md` §2 and
-`docs/ENGINEERING_VALIDATION_AUDIT.md` §1–§4.
+Full per-pose numeric detail: `docs/HISTORICAL/ENGINE_INVESTIGATION_REPORT.md` §2 and
+`docs/HISTORICAL/ENGINEERING_VALIDATION_AUDIT.md` §1–§4.
 
 ---
 
@@ -94,13 +96,13 @@ Full per-pose numeric detail: `docs/ENGINE_INVESTIGATION_REPORT.md` §2 and
   Horse Stance, most yoga/martial-arts stances) are **naturally supportable
   without hacks**, with the caveats noted under UNI-3/UNI-4.
 
-Full 14-question analysis: `docs/PELVIC_HIP_COMPLEX_INVESTIGATION.md` Q1–Q14.
+Full 14-question analysis: `docs/HISTORICAL/PELVIC_HIP_COMPLEX_INVESTIGATION.md` Q1–Q14.
 
 ---
 
 ## 5. Engineering Validation audit — cross-cutting findings
 
-From `docs/ENGINEERING_VALIDATION_AUDIT.md` §5:
+From `docs/HISTORICAL/ENGINEERING_VALIDATION_AUDIT.md` §5:
 
 - **RENDERER** — no defects.
 - **CAMERA** — no defects (the only camera change was a +20° pitch framing pass for
@@ -109,7 +111,7 @@ From `docs/ENGINEERING_VALIDATION_AUDIT.md` §5:
 - **VALIDATION** — no validator defects; it is the intended detector.
 - **ENGINE** — no engine bugs; UNI-9 and the IK clamp behave as designed.
 
-Full per-defect attribution table: `docs/ENGINEERING_VALIDATION_AUDIT.md` §6.
+Full per-defect attribution table: `docs/HISTORICAL/ENGINEERING_VALIDATION_AUDIT.md` §6.
 
 ---
 
@@ -129,7 +131,7 @@ Full per-defect attribution table: `docs/ENGINEERING_VALIDATION_AUDIT.md` §6.
 | PR-10 | IK reachability detection | propagate clamp automatically |
 | PR-11 | true straight limb | opt-in extension ratio 1.0 (UNI-9) |
 
-Suggested sequencing and full prompts: `docs/ENGINE_FIX_PR_PROMPTS.md`.
+Suggested sequencing and full prompts: `docs/HISTORICAL/ENGINE_FIX_PR_PROMPTS.md`.
 
 > Many of these prompts are now obsolete because their target issues were resolved
 > (see §2). The **live** subset is tracked in `docs/ENGINE_ROADMAP.md`.

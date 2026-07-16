@@ -7,7 +7,7 @@
 
 > **Companion to the unified report.** This file is the **pelvis/hip-focused 14-question
 > deep-dive**. The consolidated, de-duplicated issue register and the single prioritized
-> roadmap now live in **`docs/ENGINE_INVESTIGATION_REPORT.md` (unified & corrected)**. For a
+> roadmap now live in **`docs/HISTORICAL/ENGINE_INVESTIGATION_REPORT.md` (unified & corrected)**. For a
 > future hip-specific PR, use this Q&A plus the mapped issues below; do not duplicate the
 > roadmap here.
 >

@@ -16,7 +16,7 @@
 > **This is the single consolidated source of truth.** It merges two prior investigations —
 > the broad engine pass and the focused Pelvic / Hip Complex pass — into one de-duplicated
 > issue register and one prioritized roadmap. The pelvis/hip **Q&A deep-dive** is preserved
-> in §3; the focused companion file `docs/PELVIC_HIP_COMPLEX_INVESTIGATION.md` keeps the
+> in §3; the focused companion file `docs/HISTORICAL/PELVIC_HIP_COMPLEX_INVESTIGATION.md` keeps the
 > original 14-question hip analysis and maps its `P1–P6` to the unified `UNI-*` ids below.
 >
 > All numeric claims were derived directly from the **current** source (`git` HEAD, branch
@@ -127,7 +127,7 @@ the engine cannot satisfy it. **Front Split, by contrast, is naturally supportab
 
 ## 3. Pelvic / Hip Complex — Q&A deep-dive
 
-*(Full 14-question analysis in `docs/PELVIC_HIP_COMPLEX_INVESTIGATION.md`; summary + verdicts
+*(Full 14-question analysis in `docs/HISTORICAL/PELVIC_HIP_COMPLEX_INVESTIGATION.md`; summary + verdicts
 below. Issues cross-referenced to the unified register.)*
 
 - **Q1 What is the pelvis?** A rigid node + the root transform of the standard skeleton + the
@@ -661,5 +661,5 @@ UNI-4 for full fidelity.
 
 *No code, constants, targets, or validation poses were modified during this investigation. The
 prior broad engine report and the focused pelvic/hip report are consolidated here; the
-pelvis/hip Q&A deep-dive remains available in `docs/PELVIC_HIP_COMPLEX_INVESTIGATION.md`
+pelvis/hip Q&A deep-dive remains available in `docs/HISTORICAL/PELVIC_HIP_COMPLEX_INVESTIGATION.md`
 (mapped to UNI-1/UNI-3/UNI-4/UNI-10/UNI-11).*

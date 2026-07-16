@@ -84,7 +84,7 @@ different facets of the same build step, not separate stages in time.
 | **Validation (ExerciseValidator)** | Read-only correctness authority. Fixed battery of physical-invariance rules plus engineering-only authored-intent rules. | `docs/VALIDATION.md`; `docs/ENGINE_ARCHITECTURE.md` §R5 |
 | **Projector / Camera / Renderer** | `SkeletonProjector` converts the 3D pose to screen space via the pose-owned `CameraDefinition`; `SkeletonRenderer` draws depth-sorted bones/joints/ground. Camera and environment are owned by `PoseMetadata`. | `docs/ENGINE.md` §10 (camera/environment ownership); `docs/VALIDATION.md` §11.6 (camera framing) |
 | **Biomechanics** | The engineering interpretation of human movement that decides whether a pose is *correct* (honest motion, joint sequencing, pelvis stabilizes, planted parts stay planted). | `docs/BIOMECHANICS.md` |
-| **Pelvic / Hip Complex** | Focused architectural investigation of the pelvis and hip joints, ROM limits, and the ConstraintSolver tilt axis. The historical Q&A and issue list live in the archive; the consolidated status is in the history index. (Note: there is no separate `HIP_COMPLEX.md`; hip material is `docs/PELVIC_HIP_COMPLEX_INVESTIGATION.md`, reached via `docs/ENGINE_HISTORY.md`.) | `docs/ENGINE_HISTORY.md` §4; `docs/ENGINE_ROADMAP.md` |
+| **Pelvic / Hip Complex** | Focused architectural investigation of the pelvis and hip joints, ROM limits, and the ConstraintSolver tilt axis. The historical Q&A and issue list live in the archive; the consolidated status is in the history index. (Note: there is no separate `HIP_COMPLEX.md`; hip material is `docs/HISTORICAL/PELVIC_HIP_COMPLEX_INVESTIGATION.md`, reached via `docs/ENGINE_HISTORY.md`.) | `docs/ENGINE_HISTORY.md` §4; `docs/ENGINE_ROADMAP.md` |
 | **Engineering Validation** | The hidden developer category of frozen reference poses used to verify the engine. Includes the four-pose defect audit and camera framing pass. | `docs/VALIDATION.md` §4–5, §11; `docs/ENGINE_HISTORY.md` §3, §5 |
 | **History / Archive** | The full historical investigation, audit, and fix-prompt records (UNI-1…12, per-pose audits, pelvic/hip Q&A, PR prompts). Retained as evidence, not kept in sync with code. | `docs/ENGINE_HISTORY.md` |
 | **Roadmap / Future work** | The live list of remaining engine work (open UNI items, trunk DOFs, generalized contacts). | `docs/ENGINE_ROADMAP.md` |
@@ -92,7 +92,7 @@ different facets of the same build step, not separate stages in time.
 
 > **On `HIP_COMPLEX.md` / `CAMERA.md`:** the project lists these as existing docs.
 > In the current tree they do not exist as standalone files. The hip material lives
-> in `docs/PELVIC_HIP_COMPLEX_INVESTIGATION.md`; camera ownership/framing is
+> in `docs/HISTORICAL/PELVIC_HIP_COMPLEX_INVESTIGATION.md`; camera ownership/framing is
 > covered by `docs/ENGINE.md` §10 and `docs/VALIDATION.md` §11.6. If dedicated
 > `HIP_COMPLEX.md` / `CAMERA.md` pages are later extracted, update this table.
 
@@ -213,10 +213,10 @@ How the engine documents relate. Read in the order that matches your task.
       pelvic/hip Q&A,          trunk DOFs,
       PR prompts)              generalized contacts)
                │
-               └── links to the four retained detailed records:
+               └── links to the four retained detailed records in `docs/HISTORICAL/`:
                   ENGINE_INVESTIGATION_REPORT.md, PELVIC_HIP_COMPLEX_INVESTIGATION.md,
                   ENGINEERING_VALIDATION_AUDIT.md, ENGINE_FIX_PR_PROMPTS.md (all HISTORICAL)
-```
+ ```
 
 Reading paths:
 
@@ -271,12 +271,12 @@ satisfies validation; validation never adapts to the engine* (`docs/VALIDATION.m
 
 **Phase 4 — Biomechanical subsystem audits.** With a stable validator, the team
 ran focused architectural investigations of weak areas. The Pelvic/Hip Complex
-deep-dive (`docs/PELVIC_HIP_COMPLEX_INVESTIGATION.md`) and the consolidated
-`docs/ENGINE_INVESTIGATION_REPORT.md` (the UNI-* issue register) audited hip ROM,
+deep-dive (`docs/HISTORICAL/PELVIC_HIP_COMPLEX_INVESTIGATION.md`) and the consolidated
+`docs/HISTORICAL/ENGINE_INVESTIGATION_REPORT.md` (the UNI-* issue register) audited hip ROM,
 the ConstraintSolver tilt axis, scapular initiation, girdle DOF, and
 straight-limb intent. Each finding was attributed strictly to AUTHORING, ENGINE,
 CAMERA, VALIDATION, or RENDERER, and fixes were routed to the owning layer
-(`docs/ENGINEERING_VALIDATION_AUDIT.md`, `docs/ENGINE_FIX_PR_PROMPTS.md`). This is
+(`docs/HISTORICAL/ENGINEERING_VALIDATION_AUDIT.md`, `docs/HISTORICAL/ENGINE_FIX_PR_PROMPTS.md`). This is
 the current state: a layered engine under continuous, evidence-based audit.
 
 ---
