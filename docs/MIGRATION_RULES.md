@@ -18,8 +18,9 @@ These are the legacy engine-compensation leaks removed by the W1 audit and the t
 - Dual independent `pelvis.localRotation.set` + `chest.localRotation.set` hand-tuned pairs.
 - **Owner instead:** single `buildSpineCurve(lumbarRad, thoracicRad, axis)`.
 
-### A3. `rotAround` limb counter-rotation (W11/G1 — 56 sites historically)
+### A3. `rotAround` limb counter-rotation (W11/G1 — CLOSED in Phase 4)
 - `rotAround(..., ±leanAngle)`, `rotAround(..., -torsoAngle)`, `rotAround(..., ±spinePitch)` on knee/ankle/elbow/hand to undo inherited trunk tilt.
+- **Status:** all 60 remaining W11/G1 lean-cancel sites were deleted in Phase 4; limbs now stay flat via the engine (Solver residual distribution + Finalizer relative-rotation). Any new `rotAround` that re-cancels an inherited trunk tilt on a limb is a regression of this rule.
 - **Owner instead:** Solver residual distribution + Finalizer relative-rotation. Limb stays flat automatically.
 
 ### A4. Raw hip writes (W15/G7)

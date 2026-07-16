@@ -3,7 +3,6 @@ package com.monkfitness.app.poses
 import com.monkfitness.app.animation.*
 import com.monkfitness.app.animation.SkeletonMath.solveIK
 import com.monkfitness.app.animation.SkeletonMath.lerp
-import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
 class KettlebellSwingPose : PoseBuilder {
@@ -78,11 +77,11 @@ class KettlebellSwingPose : PoseBuilder {
         val legFIK = solveIK(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, legFBuffer)
         val legBIK = solveIK(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, legBBuffer)
 
-        // Set Leg joint local coordinates
-        rotAround(Vector3(legFIK.joint.x - hipF!!.worldPosition.x, legFIK.joint.y - hipF!!.worldPosition.y, legFIK.joint.z - hipF!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, kneeF!!.localPosition)
-        rotAround(Vector3(legFIK.end.x - legFIK.joint.x, legFIK.end.y - legFIK.joint.y, legFIK.end.z - legFIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, ankleF!!.localPosition)
-        rotAround(Vector3(legBIK.joint.x - hipB!!.worldPosition.x, legBIK.joint.y - hipB!!.worldPosition.y, legBIK.joint.z - hipB!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, kneeB!!.localPosition)
-        rotAround(Vector3(legBIK.end.x - legBIK.joint.x, legBIK.end.y - legBIK.joint.y, legBIK.end.z - legBIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, ankleB!!.localPosition)
+        // Set Leg joint local coordinates (Phase 4: lean-cancel removed; the IK offset is written directly)
+        kneeF!!.localPosition.set(legFIK.joint.x - hipF!!.worldPosition.x, legFIK.joint.y - hipF!!.worldPosition.y, legFIK.joint.z - hipF!!.worldPosition.z)
+        ankleF!!.localPosition.set(legFIK.end.x - legFIK.joint.x, legFIK.end.y - legFIK.joint.y, legFIK.end.z - legFIK.joint.z)
+        kneeB!!.localPosition.set(legBIK.joint.x - hipB!!.worldPosition.x, legBIK.joint.y - hipB!!.worldPosition.y, legBIK.joint.z - hipB!!.worldPosition.z)
+        ankleB!!.localPosition.set(legBIK.end.x - legBIK.joint.x, legBIK.end.y - legBIK.joint.y, legBIK.end.z - legBIK.joint.z)
 
         // The engine derives heel/toe from the shank + the neutral ankle articulation. The flat
         // foot on the forward-leaning shank is intentionally NOT hand-authored here; if the engine
@@ -95,10 +94,11 @@ class KettlebellSwingPose : PoseBuilder {
         val armAIK = solveIK(shoulderA!!.worldPosition, Vector3(targetHandX, targetHandY, -def.shoulderWidth * 0.8f), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, armABuffer)
         val armPIK = solveIK(shoulderP!!.worldPosition, Vector3(targetHandX, targetHandY, def.shoulderWidth * 0.8f), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, armPBuffer)
 
-        rotAround(Vector3(armAIK.joint.x - shoulderA!!.worldPosition.x, armAIK.joint.y - shoulderA!!.worldPosition.y, armAIK.joint.z - shoulderA!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, elbowA!!.localPosition)
-        rotAround(Vector3(armAIK.end.x - armAIK.joint.x, armAIK.end.y - armAIK.joint.y, armAIK.end.z - armAIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, handA!!.localPosition)
-        rotAround(Vector3(armPIK.joint.x - shoulderP!!.worldPosition.x, armPIK.joint.y - shoulderP!!.worldPosition.y, armPIK.joint.z - shoulderP!!.worldPosition.z), Vector3(0f, 0f, 1f), leanAngle, elbowP!!.localPosition)
-        rotAround(Vector3(armPIK.end.x - armPIK.joint.x, armPIK.end.y - armPIK.joint.y, armPIK.end.z - armPIK.joint.z), Vector3(0f, 0f, 1f), leanAngle, handP!!.localPosition)
+        // Set Arm joint local coordinates (Phase 4: lean-cancel removed; the IK offset is written directly)
+        elbowA!!.localPosition.set(armAIK.joint.x - shoulderA!!.worldPosition.x, armAIK.joint.y - shoulderA!!.worldPosition.y, armAIK.joint.z - shoulderA!!.worldPosition.z)
+        handA!!.localPosition.set(armAIK.end.x - armAIK.joint.x, armAIK.end.y - armAIK.joint.y, armAIK.end.z - armAIK.joint.z)
+        elbowP!!.localPosition.set(armPIK.joint.x - shoulderP!!.worldPosition.x, armPIK.joint.y - shoulderP!!.worldPosition.y, armPIK.joint.z - shoulderP!!.worldPosition.z)
+        handP!!.localPosition.set(armPIK.end.x - armPIK.joint.x, armPIK.end.y - armPIK.joint.y, armPIK.end.z - armPIK.joint.z)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
