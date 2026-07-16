@@ -29,28 +29,6 @@ class SkeletonPoseFinalizer(
     // Scratch rotation reused by the modern-path chest-frame reconstruction (no hot-path allocation).
     private val reconRot = JointRotation()
 
-    private var cachedRootsIdentity: List<SkeletonNode>? = null
-    private var cachedHasHeelToeF = false
-    private var cachedHasHeelToeB = false
-    private var cachedHasHandDetailA = false
-    private var cachedHasHandDetailP = false
-
-    private fun containsJoint(roots: List<SkeletonNode>, joint: Joint): Boolean {
-        for (i in 0 until roots.size) {
-            if (containsJointNode(roots[i], joint)) return true
-        }
-        return false
-    }
-
-    private fun containsJointNode(node: SkeletonNode, joint: Joint): Boolean {
-        if (node.joint == joint) return true
-        val children = node.children
-        for (i in 0 until children.size) {
-            if (containsJointNode(children[i], joint)) return true
-        }
-        return false
-    }
-
     private fun findJointNode(node: SkeletonNode, joint: Joint): SkeletonNode? {
         if (node.joint == joint) return node
         for (child in node.children) {
@@ -158,15 +136,6 @@ class SkeletonPoseFinalizer(
         // pass-through lumbar this re-flattens to identical world positions (no behavioural change).
         chest.updateWorldTransforms(chestParent.worldPosition, chestParent.worldRotation)
         chest.flatten(outputPose)
-    }
-
-    private fun refreshJointPresenceCache(roots: List<SkeletonNode>) {
-        if (roots === cachedRootsIdentity) return
-        cachedRootsIdentity = roots
-        cachedHasHeelToeF = containsJoint(roots, Joint.HEEL_F) && containsJoint(roots, Joint.TOE_F)
-        cachedHasHeelToeB = containsJoint(roots, Joint.HEEL_B) && containsJoint(roots, Joint.TOE_B)
-        cachedHasHandDetailA = containsJoint(roots, Joint.PALM_A) && containsJoint(roots, Joint.FINGERTIPS_A)
-        cachedHasHandDetailP = containsJoint(roots, Joint.PALM_P) && containsJoint(roots, Joint.FINGERTIPS_P)
     }
 
     // Pre-allocated standard SkeletonNode hierarchy (for legacy compat path)
@@ -369,27 +338,38 @@ class SkeletonPoseFinalizer(
             // is already propagated to the upper chain by FK and must not be overwritten.
             reconstructChestFrame(pose.roots)
 
-            refreshJointPresenceCache(pose.roots)
-
-            if (!cachedHasHeelToeF) {
+            // W1 — Engine ownership of extremity orientation.
+            //
+            // The engine derives heel/toe and palm/fingertip geometry for every extremity by
+            // default (ExtremityOrientationMode.AUTOMATIC). Derivation is skipped ONLY when the pose
+            // has *explicitly* opted that extremity into MANUAL_OVERRIDE — i.e. it deliberately
+            // authored the endpoint local positions (a stylized toe / grip) and wants them
+            // preserved. Ownership is read from the pose's explicit declaration, never inferred from
+            // whether the HEEL/TOE/PALM/FINGERTIPS nodes exist (the factory always creates them, so
+            // node-existence silently disabled this derivation for every pose — the W1 bug).
+            //
+            // The relative ankle/wrist rotation (articulation w.r.t. the parent segment) is passed
+            // in so inherited torso/limb tilt is removed automatically; identity articulation lays
+            // the foot/hand flat along the limb, equalling the FK frame for a neutral limb.
+            if (pose.isExtremityAutomatic(Extremity.FOOT_F)) {
                 adjustFootOrientation(
                     outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F,
                     relativeRotation(outputPose.getJointRotation(Joint.ANKLE_F), outputPose.getJointRotation(Joint.KNEE_F), relAnkle)
                 )
             }
-            if (!cachedHasHeelToeB) {
+            if (pose.isExtremityAutomatic(Extremity.FOOT_B)) {
                 adjustFootOrientation(
                     outputPose, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B,
                     relativeRotation(outputPose.getJointRotation(Joint.ANKLE_B), outputPose.getJointRotation(Joint.KNEE_B), relAnkle)
                 )
             }
-            if (!cachedHasHandDetailA) {
+            if (pose.isExtremityAutomatic(Extremity.HAND_A)) {
                 adjustHandOrientation(
                     outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A,
                     relativeRotation(outputPose.getJointRotation(Joint.HAND_A), outputPose.getJointRotation(Joint.ELBOW_A), relWrist)
                 )
             }
-            if (!cachedHasHandDetailP) {
+            if (pose.isExtremityAutomatic(Extremity.HAND_P)) {
                 adjustHandOrientation(
                     outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P,
                     relativeRotation(outputPose.getJointRotation(Joint.HAND_P), outputPose.getJointRotation(Joint.ELBOW_P), relWrist)

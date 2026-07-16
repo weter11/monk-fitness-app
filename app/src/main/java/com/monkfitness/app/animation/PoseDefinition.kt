@@ -1,6 +1,38 @@
 package com.monkfitness.app.animation
 
 /**
+ * The four extremities whose heel/toe or palm/fingertip geometry the engine derives.
+ *
+ * W1 (Restore Engine Ownership of Extremity Orientation): ownership of an extremity's
+ * orientation is now expressed **explicitly** per-extremity on the [SkeletonPose], rather than
+ * inferred from whether the endpoint nodes (HEEL/TOE, PALM/FINGERTIPS) happen to exist in the
+ * hierarchy. The skeleton factory always creates those nodes, so node-existence was never a
+ * valid ownership signal.
+ */
+enum class Extremity {
+    FOOT_F,
+    FOOT_B,
+    HAND_A,
+    HAND_P
+}
+
+/**
+ * Who owns an extremity's heel/toe or palm/fingertip geometry (W1).
+ *
+ * - [AUTOMATIC] — the pose describes anatomy only (limb target + ankle/wrist articulation) and the
+ *   **engine derives** the extremity geometry from the limb direction, the relative ankle/wrist
+ *   articulation and the [FootDefinition]/[HandDefinition] anatomy. This is the default and the
+ *   restored architectural boundary: *pose authors describe anatomy, the engine derives geometry.*
+ * - [MANUAL_OVERRIDE] — the pose has **explicitly** authored the endpoint local positions and asks
+ *   the engine to preserve them verbatim (e.g. a stylized pointed toe or curled grip that the
+ *   default derivation cannot express). The engine leaves the authored values untouched.
+ */
+enum class ExtremityOrientationMode {
+    AUTOMATIC,
+    MANUAL_OVERRIDE
+}
+
+/**
  * Encapsulates the joint positions and rotations for a specific frame.
  * Now owns a Scene Graph hierarchy and provides backward compatibility.
  */
@@ -18,6 +50,31 @@ class SkeletonPose(
     // global constraint solver consumes these to reposition the root so every contact holds.
     val contacts: MutableList<ContactSpec> = mutableListOf()
 ) {
+
+    // W1 — explicit ownership of each extremity's heel/toe or palm/fingertip geometry. Defaults to
+    // AUTOMATIC (engine derives) for every extremity, restoring the pose→engine boundary. A pose
+    // opts a single extremity into MANUAL_OVERRIDE only when it deliberately authors the endpoints.
+    // Ownership is intentionally NOT inferred from endpoint-node existence (the factory always
+    // creates those nodes), so the engine's derivation is never silently disabled again.
+    private val extremityOrientation =
+        Array(Extremity.entries.size) { ExtremityOrientationMode.AUTOMATIC }
+
+    /** Ownership mode of [extremity]'s orientation. Defaults to [ExtremityOrientationMode.AUTOMATIC]. */
+    fun getExtremityOrientationMode(extremity: Extremity): ExtremityOrientationMode =
+        extremityOrientation[extremity.ordinal]
+
+    /**
+     * Declares that [extremity]'s heel/toe or palm/fingertip geometry is authored by the pose and
+     * must be preserved verbatim (see [ExtremityOrientationMode.MANUAL_OVERRIDE]). Poses that do not
+     * call this get the default automatic engine derivation.
+     */
+    fun overrideExtremityOrientation(extremity: Extremity) {
+        extremityOrientation[extremity.ordinal] = ExtremityOrientationMode.MANUAL_OVERRIDE
+    }
+
+    /** True when [extremity]'s geometry should be derived by the engine (the default). */
+    fun isExtremityAutomatic(extremity: Extremity): Boolean =
+        extremityOrientation[extremity.ordinal] == ExtremityOrientationMode.AUTOMATIC
 
     /** True when at least one fixed contact was registered and the constraint pass should run. */
     fun hasContacts(): Boolean = contacts.isNotEmpty()
@@ -45,6 +102,11 @@ class SkeletonPose(
         this.rootRotationDelta = other.rootRotationDelta
         this.contacts.clear()
         this.contacts.addAll(other.contacts)
+        // W1 — preserve explicit extremity-ownership when a pose is copied into the finalizer's
+        // working buffer, so an authored MANUAL_OVERRIDE is honoured after the copy.
+        for (i in extremityOrientation.indices) {
+            this.extremityOrientation[i] = other.extremityOrientation[i]
+        }
     }
 
     companion object {
