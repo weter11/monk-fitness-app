@@ -33,8 +33,82 @@ enum class ExtremityOrientationMode {
 }
 
 /**
+ * Phase 0 (Architecture v2 §1.1) — typed coarse posture intent declared by a pose and
+ * interpreted by the [ConstraintSolver]. It names the global body arrangement the pose is
+ * aiming for so the Solver can derive an exact pelvis/root without the pose hand-computing
+ * root arithmetic. Resolves finding F2.
+ *
+ * @param kind the coarse posture family.
+ * @param tolerance how strictly the solver must honour the intent before flagging a residual
+ *   (passed through as a soft bound; zero means "follow authored shape exactly").
+ */
+data class PostureIntent(
+    val kind: Kind,
+    val tolerance: Float = 0f
+) {
+    enum class Kind {
+        /** Sitting low with the pelvis near the floor (e.g. squat, seated stretch). */
+        SEATED_NEAR_FLOOR,
+        /** Hanging suspended beneath an overhead bar (e.g. dead hang, pull-up). */
+        HANGING_UNDER_BAR,
+        /** Upright, feet on the floor (e.g. standing press, march). */
+        STANDING,
+        /** Pose supplies its own posture semantics; solver must not impose a template. */
+        CUSTOM
+    }
+}
+
+/**
+ * Phase 0 (Architecture v2 §1.1) — a single declarative spine curve: one call replaces the
+ * legacy coupled pelvis+chest dual writes. Authored by the pose, consumed by the engine.
+ *
+ * @param lumbarRad lumbar flexion/extension in radians (signed).
+ * @param thoracicRad thoracic flexion/extension in radians (signed).
+ * @param axis the shared bend axis in the chest/pelvis parent frame.
+ */
+data class SpineCurve(
+    val lumbarRad: Float = 0f,
+    val thoracicRad: Float = 0f,
+    val axis: Vector3 = Vector3(1f, 0f, 0f)
+)
+
+/**
+ * Phase 0 (Architecture v2 §1.1) — a relative articulation of a single joint with respect to
+ * its parent (chest/hip/girdle/ankle/wrist). Replaces raw `joint.localRotation.set` authoring
+ * so the engine owns the geometry derivation.
+ */
+data class RelativeArticulation(
+    val joint: Joint,
+    val rotation: JointRotation
+)
+
+/**
+ * Phase 0 (Architecture v2 §1.1) — a world-space target for a limb end-effector or intermediate
+ * joint (hand/foot/knee/elbow/head). Authored by the pose; resolved by IK/ConstraintSolver.
+ *
+ * @param joint the joint this target pins.
+ * @param world the world-space position the joint should occupy.
+ */
+data class WorldTarget(
+    val joint: Joint,
+    val world: Vector3
+)
+
+/**
  * Encapsulates the joint positions and rotations for a specific frame.
- * Now owns a Scene Graph hierarchy and provides backward compatibility.
+ *
+ * ## Architecture v2 — single intent + state carrier (Phase 0)
+ *
+ * This is the one and only carrier of both pose **intent** (§1.1, written by Pose, read by
+ * Engine) and derived **state** (§1.2, written by Engine, read by Validation). See
+ * `docs/ARCHITECTURE_V2.md`. No component edits another's section.
+ *
+ * - **Intent section (§1.1):** `jointIntents`, `spineIntent`, `limbTargets`, `contacts`,
+ *   `contactPrecedence`, `postureIntent`, `extremityOverrides`, `motion`, `camera`,
+ *   `environment`.
+ * - **State section (§1.2):** `nodes` (the `joints`/`rotations`/`roots` triple),
+ *   `maxIkClampAmount`, `straightIntentDropped`, `rootTranslationDelta`, `rootRotationDelta`,
+ *   `boneLengthsVerified`.
  */
 class SkeletonPose(
     val joints: Array<Vector3> = Array(Joint.entries.size) { Vector3() },
@@ -51,17 +125,62 @@ class SkeletonPose(
     val contacts: MutableList<ContactSpec> = mutableListOf()
 ) {
 
-    // W1 — explicit ownership of each extremity's heel/toe or palm/fingertip geometry. Defaults to
-    // AUTOMATIC (engine derives) for every extremity, restoring the pose→engine boundary. A pose
-    // opts a single extremity into MANUAL_OVERRIDE only when it deliberately authors the endpoints.
-    // Ownership is intentionally NOT inferred from endpoint-node existence (the factory always
-    // creates those nodes), so the engine's derivation is never silently disabled again.
-    private val extremityOrientation =
-        Array(Extremity.entries.size) { ExtremityOrientationMode.AUTOMATIC }
+    // ---- §1.1 INTENT SECTION (written by Pose, read by Engine) ----------------------------
+
+    /** Per-joint relative articulations (chest/hip/girdle/ankle/wrist) declared by the pose. */
+    val jointIntents: MutableList<RelativeArticulation> = mutableListOf()
+
+    /** Single declarative spine curve; replaces coupled pelvis+chest dual writes. */
+    var spineIntent: SpineCurve = SpineCurve()
+
+    /** World-space targets for limb end-effectors / intermediate joints (hand/foot/knee/elbow/head). */
+    val limbTargets: MutableList<WorldTarget> = mutableListOf()
+
+    /**
+     * Ordered list of [ContactSpec] ids declaring which contacts win when the solver must resolve
+     * a conflict (finding F7). Earlier entries take precedence. Empty means "all contacts equal".
+     */
+    val contactPrecedence: MutableList<String> = mutableListOf()
+
+    /** Typed coarse posture intent (finding F2); interpreted by the [ConstraintSolver]. */
+    var postureIntent: PostureIntent = PostureIntent(PostureIntent.Kind.CUSTOM)
+
+    /**
+     * Phase 0 — explicit opt-out set of extremities whose heel/toe or palm/fingertip geometry the
+     * pose authors verbatim and the engine must NOT derive (stylized only). This is the canonical
+     * §1.1 carrier; it is the source of truth for the W1 [ExtremityOrientationMode] plumbing below.
+     */
+    val extremityOverrides: MutableSet<Extremity> = mutableSetOf()
+
+    /** Motion driver describing how the pose interpolates across the frame (§1.1). */
+    var motion: Any? = null
+
+    /** Camera framing hint authored by the pose (§1.1). */
+    var camera: Any? = null
+
+    /** Environment hint authored by the pose (§1.1). */
+    var environment: Any? = null
+
+    // ---- §1.2 STATE SECTION (written by Engine, read by Validation) -----------------------
+
+    /** IK/Solver stamp: a straight-limb intent could not be honoured (the limb was re-baked bent). */
+    var straightIntentDropped: Boolean = false
+
+    /** IK stamp: every solved limb exactly preserved its bone lengths (invariant F5). */
+    var boneLengthsVerified: Boolean = false
+
+    // W1 — explicit ownership of each extremity's heel/toe or palm/fingertip geometry, derived
+    // from [extremityOverrides]. Defaults to AUTOMATIC (engine derives) for every extremity,
+    // restoring the pose→engine boundary. Ownership is intentionally NOT inferred from
+    // endpoint-node existence (the factory always creates those nodes).
 
     /** Ownership mode of [extremity]'s orientation. Defaults to [ExtremityOrientationMode.AUTOMATIC]. */
     fun getExtremityOrientationMode(extremity: Extremity): ExtremityOrientationMode =
-        extremityOrientation[extremity.ordinal]
+        if (extremityOverrides.contains(extremity)) {
+            ExtremityOrientationMode.MANUAL_OVERRIDE
+        } else {
+            ExtremityOrientationMode.AUTOMATIC
+        }
 
     /**
      * Declares that [extremity]'s heel/toe or palm/fingertip geometry is authored by the pose and
@@ -69,12 +188,12 @@ class SkeletonPose(
      * call this get the default automatic engine derivation.
      */
     fun overrideExtremityOrientation(extremity: Extremity) {
-        extremityOrientation[extremity.ordinal] = ExtremityOrientationMode.MANUAL_OVERRIDE
+        extremityOverrides.add(extremity)
     }
 
     /** True when [extremity]'s geometry should be derived by the engine (the default). */
     fun isExtremityAutomatic(extremity: Extremity): Boolean =
-        extremityOrientation[extremity.ordinal] == ExtremityOrientationMode.AUTOMATIC
+        !extremityOverrides.contains(extremity)
 
     /** True when at least one fixed contact was registered and the constraint pass should run. */
     fun hasContacts(): Boolean = contacts.isNotEmpty()
@@ -100,13 +219,23 @@ class SkeletonPose(
         this.maxIkClampAmount = other.maxIkClampAmount
         this.rootTranslationDelta = other.rootTranslationDelta
         this.rootRotationDelta = other.rootRotationDelta
+        this.straightIntentDropped = other.straightIntentDropped
+        this.boneLengthsVerified = other.boneLengthsVerified
+        this.spineIntent = other.spineIntent
+        this.postureIntent = other.postureIntent
+        this.motion = other.motion
+        this.camera = other.camera
+        this.environment = other.environment
         this.contacts.clear()
         this.contacts.addAll(other.contacts)
-        // W1 — preserve explicit extremity-ownership when a pose is copied into the finalizer's
-        // working buffer, so an authored MANUAL_OVERRIDE is honoured after the copy.
-        for (i in extremityOrientation.indices) {
-            this.extremityOrientation[i] = other.extremityOrientation[i]
-        }
+        this.jointIntents.clear()
+        this.jointIntents.addAll(other.jointIntents)
+        this.limbTargets.clear()
+        this.limbTargets.addAll(other.limbTargets)
+        this.contactPrecedence.clear()
+        this.contactPrecedence.addAll(other.contactPrecedence)
+        this.extremityOverrides.clear()
+        this.extremityOverrides.addAll(other.extremityOverrides)
     }
 
     companion object {
