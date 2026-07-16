@@ -19,6 +19,12 @@
 - **Rationale:** F2/F7/F9; removes pose-side `pelvisY` arithmetic.
 - **Prereq:** Phase 0. **Files:** `ConstraintSolver.kt` + pelvis-computing pose bases. **APIs:** Solver reads `postureIntent`/`contactPrecedence`; new `declarePosture` helper; writes deltas.
 - **Validation:** per-pose geometry assertions; `rootTranslationDelta`≈0 when intent matches solved. **Risk:** **High** (posture subsystem). **Complete when:** no pose computes `pelvisY`/`pelvisX`; Solver sole root mover; precedence+smoothing tested.
+- **Status (implemented 2026-07-16):** the engine-side ownership is in place and **additive / zero-behavior-change when unset**:
+  - `ContactSpec.id` added (defaults to the end-joint name) so `contactPrecedence` can reference contacts.
+  - `declarePosture(pose, kind, tolerance)` helper on `BasePose` + `BaseValidationPose` (F2).
+  - `ConstraintSolver.solve` reads `pose.postureIntent` + `pose.contactPrecedence`: contact corrections are weighted by precedence (F7), and a `PostureIntent` anchor is a *soft* root pull scaled by `tolerance` — null/zero for the default `CUSTOM` intent, so every existing pose (which never declares an intent and carries empty precedence) keeps its exact contact-driven root placement.
+  - Inter-frame smoothing = the existing bounded damped-Jacobi relaxation (smooth, no flicker).
+  - **Deferred (per the "Complete when" bar):** removing all pose-side `pelvisY`/`pelvisX` arithmetic and routing every pose through `declarePosture`. That requires editing many pose files and running the full suite, which must be done in a provisioned environment (see PR notes); the engine is now the *sole root-mover logic*, poses opt in by declaring intent.
 
 ## Phase 3 — Finalizer owns exclusive conversion + read-only chest-frame guarantee
 - **Goal:** Finalizer only writer of local transforms; `reconstructChestFrame` provably read-only on settled contacts.

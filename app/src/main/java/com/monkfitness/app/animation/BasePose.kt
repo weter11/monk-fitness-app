@@ -454,6 +454,18 @@ abstract class BasePose : PoseBuilder {
     protected fun alternating(progress: Float): AlternatingMotion = MotionDrivers.alternating(progress)
     protected fun parabolicFootLift(t: Float): Float = MotionDrivers.ParabolicLift(t)
 
+    /**
+     * Phase 2 (F2) — declares the pose's typed coarse posture intent. The [ConstraintSolver]
+     * reads this to derive an exact pelvis/root instead of the pose hand-computing root
+     * arithmetic. [tolerance] is a soft bound (0 = follow the authored contacts exactly; the
+     * solver applies an anchor pull scaled by it). Poses that do not call this get the default
+     * `CUSTOM` intent, which is a strict no-op for the solver (the existing contact-driven root
+     * placement is preserved verbatim).
+     */
+    protected fun declarePosture(pose: SkeletonPose, kind: PostureIntent.Kind, tolerance: Float = 0f) {
+        pose.postureIntent = PostureIntent(kind, tolerance)
+    }
+
     // Common Support helpers building SupportContact collections allocation-free
     protected fun leftFoot(): SupportContact = SupportContact.LEFT_FOOT
     protected fun rightFoot(): SupportContact = SupportContact.RIGHT_FOOT

@@ -28,7 +28,13 @@ class ContactSpec(
     val length2: Float,
     val constraint: IKConstraint,
     val straight: Boolean,
-    val contact: ContactConstraint?
+    val contact: ContactConstraint?,
+    /**
+     * Phase 2 (F7) — stable identifier used by the solver to resolve contact conflicts via
+     * [SkeletonPose.contactPrecedence]. Defaults to the end-joint name, so existing callers that
+     * do not pass an id still participate (with equal precedence).
+     */
+    val id: String = endJoint.name
 )
 
 /**
@@ -83,6 +89,12 @@ object ConstraintSolver {
     private val rootWorld = Vector3()
     private val ikResult = SkeletonMath.IKResult()
     private val nodeMap = Array<SkeletonNode?>(Joint.entries.size) { null }
+    // Phase 2 (F2): scratch for the posture-intent anchor point the solver may softly pull the
+    // root toward (no-op when the intent is the default CUSTOM / tolerance 0). `anchorStore`
+    // holds the stable anchor returned by computeIntentAnchor; `anchor` is the per-iteration
+    // working buffer so the stored value is never mutated across relaxation iterations.
+    private val anchorStore = Vector3()
+    private val anchor = Vector3()
 
     // Posture-DOF scratch (pelvis tilt relaxation, PR-04 / Issue A). The solver is no longer
     // translation-only: when contacts are reachable it leaves the root where the contact pins it
@@ -225,6 +237,26 @@ object ConstraintSolver {
             if (c != null && abs(c.normal.y) > 0.5f) { hasGroundContact = true; break }
         }
 
+        // Phase 2 (F7) — contact precedence. When the pose declares an order via
+        // `pose.contactPrecedence`, higher-ranked (earlier) contacts win conflicts: their root
+        // correction is weighted more heavily. With an empty precedence list every contact keeps
+        // equal weight (the pre-Phase-2 behaviour, so correct symmetric poses are untouched).
+        val precedence = pose.contactPrecedence
+        val weightOf: (ContactSpec) -> Float = { spec ->
+            if (precedence.isEmpty()) {
+                1f
+            } else {
+                val idx = precedence.indexOf(spec.id)
+                if (idx < 0) 0.5f else (precedence.size - idx).toFloat()
+            }
+        }
+
+        // Phase 2 (F2) — typed posture intent. The solver derives an exact root from the contacts
+        // augmented by the intent. The anchor is a *soft* pull scaled by `intent.tolerance`; with
+        // the default CUSTOM intent (or tolerance 0) it is null and the solver is a strict no-op
+        // beyond honouring contacts — so poses that never call `declarePosture` are unchanged.
+        val intentAnchor = computeIntentAnchor(pose.postureIntent, contacts, definition, pelvis)
+
         for (iter in 0 until MAX_ITERATIONS) {
             // Forward kinematics so world positions reflect the current root placement.
             for (root in roots) root.updateWorldTransforms(zero, identity)
@@ -236,6 +268,7 @@ object ConstraintSolver {
             //    whose target sat closer than L1 to `maxReach`, which lifted the root to fake a
             //    straight leg (the Issue A "point-reach, not posture" floating-pelvis bug).
             delta.set(0f, 0f, 0f)
+            var totalWeight = 0f
             var moved = false
             for (spec in contacts) {
                 val parent = nodeMap[spec.rootJoint.index] ?: continue
@@ -255,21 +288,39 @@ object ConstraintSolver {
                 val desired = dist.coerceIn(minReach, maxReach)
 
                 val diff = desired - dist
+                val w = weightOf(spec)
+                totalWeight += w
                 if (abs(diff) > EPS) {
                     val inv = 1f / max(dist, 1e-5f)
                     dir.set(away.x * inv, away.y * inv, away.z * inv)
-                    delta.x += dir.x * diff * RELAX
-                    delta.y += dir.y * diff * RELAX
-                    delta.z += dir.z * diff * RELAX
+                    // Phase 2 (F7): weight the per-contact correction by its precedence so
+                    // higher-ranked contacts dominate conflict resolution.
+                    delta.x += dir.x * diff * RELAX * w
+                    delta.y += dir.y * diff * RELAX * w
+                    delta.z += dir.z * diff * RELAX * w
                     moved = true
                 }
             }
 
-            // Apply the averaged correction (damped Jacobi step). Summing the per-contact
-            // corrections and dividing by the contact count yields the mean step, so symmetric
-            // contacts don't double-count and N contacts don't overshoot.
-            if (moved) {
-                delta.divide(contacts.size.toFloat())
+            // Phase 2 (F2): soft pull of the root toward the posture-intent anchor, scaled by the
+            // intent tolerance (null anchor → no pull; default CUSTOM intent is a strict no-op).
+            if (intentAnchor != null) {
+                anchor.set(intentAnchor).subtract(pelvis.localPosition)
+                val pull = pose.postureIntent.tolerance * RELAX
+                if (pull > 1e-4f && anchor.mag() > EPS) {
+                    delta.x += anchor.x * pull
+                    delta.y += anchor.y * pull
+                    delta.z += anchor.z * pull
+                    totalWeight += 1f
+                    moved = true
+                }
+            }
+
+            // Apply the weighted averaged correction (damped Jacobi step). Dividing by the total
+            // precedence weight (instead of the contact count) keeps symmetric contacts from
+            // double-counting and lets higher-precedence contacts steer the root.
+            if (moved && totalWeight > 1e-5f) {
+                delta.divide(totalWeight)
                 pelvis.localPosition.add(delta)
             }
 
@@ -523,5 +574,45 @@ object ConstraintSolver {
     private fun collectNodes(node: SkeletonNode) {
         nodeMap[node.joint.index] = node
         for (child in node.children) collectNodes(child)
+    }
+
+    /**
+     * Phase 2 (F2) — derives the soft root anchor implied by [pose.postureIntent]. Returns null
+     * (no pull) for the default `CUSTOM` intent or when [PostureIntent.tolerance] is 0, so poses
+     * that never declare an intent — or declare one with zero tolerance — keep the exact
+     * contact-driven root placement they had before Phase 2.
+     *
+     * - [PostureIntent.Kind.SEATED_NEAR_FLOOR]: anchor the pelvis near the floor, at the lowest
+     *   contact target's height (the body sits on/beside its lowest support).
+     * - [PostureIntent.Kind.HANGING_UNDER_BAR]: anchor the pelvis below the highest contact
+     *   target (the bar/hands) by the trunk length, so the body hangs under the bar.
+     * - [PostureIntent.Kind.STANDING] / [PostureIntent.Kind.CUSTOM]: no anchor (null).
+     */
+    private fun computeIntentAnchor(
+        intent: PostureIntent,
+        contacts: List<ContactSpec>,
+        definition: SkeletonDefinition,
+        pelvis: SkeletonNode
+    ): Vector3? {
+        if (intent.tolerance <= 0f) return null
+        if (contacts.isEmpty()) return null
+        when (intent.kind) {
+            PostureIntent.Kind.SEATED_NEAR_FLOOR -> {
+                var minY = Float.POSITIVE_INFINITY
+                for (spec in contacts) minY = minOf(minY, spec.targetWorld.y)
+                if (minY.isFinite()) return anchorStore.set(pelvis.localPosition.x, minY, pelvis.localPosition.z)
+                return null
+            }
+            PostureIntent.Kind.HANGING_UNDER_BAR -> {
+                var maxY = Float.NEGATIVE_INFINITY
+                for (spec in contacts) maxY = maxOf(maxY, spec.targetWorld.y)
+                if (maxY.isFinite()) {
+                    val hang = maxY - (definition.torsoLength + definition.neckLength)
+                    return anchorStore.set(pelvis.localPosition.x, hang, pelvis.localPosition.z)
+                }
+                return null
+            }
+            else -> return null
+        }
     }
 }

@@ -11,6 +11,7 @@ import com.monkfitness.app.animation.JointRotation
 import com.monkfitness.app.animation.LoopMode
 import com.monkfitness.app.animation.MotionCurve
 import com.monkfitness.app.animation.PivotType
+import com.monkfitness.app.animation.PostureIntent
 import com.monkfitness.app.animation.PoseBuilder
 import com.monkfitness.app.animation.PoseContext
 import com.monkfitness.app.animation.PoseMetadata
@@ -291,6 +292,16 @@ abstract class BaseValidationPose : PoseBuilder {
         thighLen: Float,
         targetFlexionDegrees: Float
     ) = SkeletonMath.solveNearStraightLimb(shinLen, thighLen, targetFlexionDegrees, legScratch)
+
+    /**
+     * Phase 2 (F2) — declares the pose's typed coarse posture intent. The [ConstraintSolver]
+     * reads this to derive an exact pelvis/root. [tolerance] is a soft bound (0 = follow the
+     * authored contacts exactly; the solver applies an anchor pull scaled by it). The default
+     * `CUSTOM` intent is a strict no-op for the solver.
+     */
+    protected fun declarePosture(pose: SkeletonPose, kind: PostureIntent.Kind, tolerance: Float = 0f) {
+        pose.postureIntent = PostureIntent(kind, tolerance)
+    }
 
     // --- Finalization (mirrors production poses; produces a rotation-driven snapshot) --
 
