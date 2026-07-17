@@ -20,6 +20,23 @@
   verdicts in `ENGINEERING_VALIDATION_AUDIT §1` and `PELVIC_HIP_COMPLEX_INVESTIGATION §P6` are
   SUPERSEDED (they were written under the old target model).
 
+## Governing rule — Compile-first Policy (broken-windows for compilation)
+
+- **A branch may never intentionally leave the repository in a non-compiling state.**
+  The project must always remain in a buildable state. If any change introduces compilation
+  errors they become the **highest-priority blocking defect**, must be fixed immediately, and
+  the current task is **incomplete until compilation is restored**.
+- **Compilation errors are not backlog items.** They are blocking defects — never postponed,
+  never scheduled as debt. Technical debt may be scheduled; broken compilation may not.
+- **Rationale:** a non-compiling repo gives invalid engineering feedback — it hides runtime
+  failures, validation failures and architectural defects (exactly what PR #134 exposed: four
+  compile-broken test files suppressed the whole `:app` test module, so 0 tests ran and 31
+  real engine failures stayed invisible). Compile errors must never be postponed.
+- **Every discovered compile error is fixed before additional feature work resumes.** The
+  project never knowingly accumulates broken states (broken-windows policy).
+- **Architecture decisions, RFCs and roadmaps must only be produced against a compiling
+  codebase.** Work from a truthful, executable baseline — never from a red build.
+
 ## Build toolchain (see `docs/TOOLCHAIN_PROVISIONING.md` for the full recipe)
 
 - **JDK 17** at `/usr/lib/jvm/java-17-openjdk-amd64`.
