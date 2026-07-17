@@ -24,10 +24,12 @@ class SkeletonPipelineM0Test {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
     private val originalActive = EngineFlags.PIPELINE_ACTIVE
+    private val originalFinalizer = EngineFlags.FINALIZER_OWNS_CONVERSION
 
     @After
     fun restore() {
         EngineFlags.PIPELINE_ACTIVE = originalActive
+        EngineFlags.FINALIZER_OWNS_CONVERSION = originalFinalizer
     }
 
     private fun poseFactories(): List<Pair<String, () -> PoseBuilder>> = listOf(
@@ -121,7 +123,10 @@ class SkeletonPipelineM0Test {
 
     @Test
     fun legacyBypassIsByteIdenticalToDirectFinalizer() {
+        // Legacy mode: pipeline off AND finalizer-authority off (the M4 flip is a pipeline-era
+        // concern; the coherence invariant forbids FINALIZER_OWNS_CONVERSION without PIPELINE_ACTIVE).
         EngineFlags.PIPELINE_ACTIVE = false
+        EngineFlags.FINALIZER_OWNS_CONVERSION = false
         val frames = 20
         var maxDev = 0f
         var worst = ""
@@ -174,19 +179,15 @@ class SkeletonPipelineM0Test {
     fun incoherentFlagsFailAtConstruction() {
         // The coherence invariant only fires when FINALIZER_OWNS_CONVERSION is turned on WITHOUT
         // the pipeline being active (an incoherent "finalizer owns conversion but nothing drives
-        // it" configuration). M2 keeps FINALIZER_OWNS_CONVERSION off by design.
+        // it" configuration). M4 keeps FINALIZER_OWNS_CONVERSION on by default.
         EngineFlags.PIPELINE_ACTIVE = false
         EngineFlags.FINALIZER_OWNS_CONVERSION = true
+        var threw = false
         try {
-            var threw = false
-            try {
-                SkeletonPipeline(def)
-            } catch (e: IllegalArgumentException) {
-                threw = true
-            }
-            assertTrue("FINALIZER_OWNS_CONVERSION without PIPELINE_ACTIVE must fail", threw)
-        } finally {
-            EngineFlags.FINALIZER_OWNS_CONVERSION = false
+            SkeletonPipeline(def)
+        } catch (e: IllegalArgumentException) {
+            threw = true
         }
+        assertTrue("FINALIZER_OWNS_CONVERSION without PIPELINE_ACTIVE must fail", threw)
     }
 }

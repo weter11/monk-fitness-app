@@ -81,7 +81,7 @@ M0  scaffold pipeline ............. [Gap 1] PIPELINE_ACTIVE=false      (no behav
 M1  IK extraction ................. [Gap 5] IK_WORLD_ONLY=true          (delete frame-relative overload)
 M2  pipeline owns stages .......... [Gap 1] PIPELINE_ACTIVE=true        (Finalizer stops calling Solver; renderers re-pointed)  [DONE]
 M3  Solver authority .............. [Gap 3] SOLVER_OWNS_POSTURE=true   (posture seed + F7 precedence + F9 smoothing; no-op for contact-less production poses)  [DONE]
-M4  Finalizer authority ........... [Gap 4] FINALIZER_OWNS_CONVERSION=true
+M4  Finalizer authority ........... [Gap 4] FINALIZER_OWNS_CONVERSION=true (preConvertPoles + F1/B5 chest no-move guard; no-op for contact-less production)  [DONE]
 M5  §1.1 carriers live ............ [Gap 2] (automatic once M2 lands)
 M6  Validator stamp-only .......... [Gap 6] VALIDATOR_STAMP_ONLY=true  (remove geometry inference)
 M7  headTarget .................... [Gap 7] (carrier + Finalizer resolver; own flag HEAD_TARGET_ENABLED)
@@ -98,6 +98,15 @@ M8  deprecation purge + cleanup ... [all]  remove @Deprecated, legacy bridges, f
 > production pose (none register engine contacts, so the solver no-ops); exercises only the
 > contact-bearing validation instruments. `ConstraintSolverPhase2Test` was re-pointed through the
 > pipeline so it genuinely runs the solver post-M2.
+>
+> **M4 shipped scope (2026-07-17):** `FINALIZER_OWNS_CONVERSION=true`. Pure flag flip + test coverage —
+> `preConvertPoles` (reserved no-op hook) and the F1/B5 chest-frame no-move guard are now live. The
+> guard only fires for contact poses and never displaces hand/foot contacts (the chest reconstruction
+> touches only the chest subtree), so output is byte-identical for every production pose (none
+> register engine contacts). `FinalizerOwnsConversionM4Test` proves flag-on == flag-off (maxDev 0.0);
+> `ChestFrameNoMoveTest` was re-pointed through the pipeline so the Solver actually runs and the guard
+> sees solver-settled contacts (its `@After` also stopped hardcoding the flag back to `false`, which
+> had been leaking into other test classes).
 **Per-gap → phase map:**
 | Gap | Phase | Flag flipped | Prereq phases |
 |---|---|---|---|
@@ -252,9 +261,23 @@ NOT ship before it. M6 is explicitly **BLOCKED** until M2 (engine produces stamp
    determinism, default-on) + `ValidatorRomClusterTest` baseline match + full suite green.
 
 ### M4 — Finalizer authority (Gap 4)
-1. `FINALIZER_OWNS_CONVERSION=true`. `preConvertPoles` active; no pose writes local transform after IK.
-2. `reconstructChestFrame` no-move guard live (F1/B5).
-3. **Gate:** chest-frame tests green; contact poses preserve foot planting.
+> **STATUS: COMPLETE.** `FINALIZER_OWNS_CONVERSION=true` (default). The Finalizer is now the
+> *exclusive* writer of every local transform and the `reconstructChestFrame` F1/B5 read-only
+> chest-frame guard is live. The guard only activates for poses that registered an engine
+> `ContactSpec` (the 4 validation instruments); the chest reconstruction touches only the chest
+> subtree (shoulders/arms/neck/head), so it never displaces a Solver-settled hand/foot contact, and
+> the guard is a no-op that leaves output **byte-identical**. `FinalizerOwnsConversionM4Test` proves
+> flag-on == flag-off for 10 production poses and the 4 contact instruments (maxDeviation 0.0 across
+> all sampled frames); `ChestFrameNoMoveTest` (re-pointed through the pipeline so the Solver actually
+> runs and the guard sees solver-settled contacts) confirms the guard holds for every contact and an
+> authored chest is never reached. Full suite green (255/0). Because no production pose registers an
+> engine contact, the entire production set is unchanged; only the contact-bearing validation
+> instruments exercise the guard (and pass unchanged).
+1. `FINALIZER_OWNS_CONVERSION=true`. `preConvertPoles` active (reserved no-op hook today); no pose
+   writes local transform after IK. `reconstructChestFrame` no-move guard live (F1/B5).
+2. **Gate:** `FinalizerOwnsConversionM4Test` (production + contact poses byte-identical flag-on vs
+   flag-off) + `ChestFrameNoMoveTest` (guard holds for all contacts; authored chest preserved) +
+   full suite green.
 
 ### M5 — §1.1 carriers live (Gap 2, automatic)
 1. No code change beyond M2; documents that `spineIntent`/`limbTargets`/`jointIntents` are now consumed.
@@ -316,8 +339,11 @@ NOT ship before it. M6 is explicitly **BLOCKED** until M2 (engine produces stamp
   no-op — all production poses register zero engine contacts). Note: the "every production
   contact/posed pose calls `declarePosture`" clause is vacuous today (no production engine-contact
   poses exist); it applies when the deferred Pose intent-only work adds engine contacts.
-- **M4 complete when:** `FINALIZER_OWNS_CONVERSION=true`; `preConvertPoles` active; no pose writes a
-  local transform after IK; `reconstructChestFrame` no-move guard verified on a synthetic conflict test.
+- **M4 complete when (shipped):** `FINALIZER_OWNS_CONVERSION=true`; `preConvertPoles` active (reserved
+  no-op hook); no pose writes a local transform after IK; `reconstructChestFrame` F1/B5 no-move guard
+  live and verified (`ChestFrameNoMoveTest` through the pipeline + `FinalizerOwnsConversionM4Test`
+  proving flag-on == flag-off for production + contact poses). Output byte-identical for every
+  production pose (none register engine contacts, so the guard never runs for them).
 - **M5 complete when:** `spineIntent`/`limbTargets`/`jointIntents` consumed by the engine (no dead
   carrier); lint proves zero unused §1.1 writes.
 - **M6 complete when:** `VALIDATOR_STAMP_ONLY=true`; `ExerciseValidator` no longer imports

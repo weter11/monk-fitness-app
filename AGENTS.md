@@ -136,11 +136,17 @@
   weighting (F7) + inter-frame smoothing (F9) — pure flag flip, byte-identical for all production
   poses since none register engine contacts so the solver no-ops; only contact-bearing validation
   instruments are exercised; `ConstraintSolverPhase2Test` re-pointed through the pipeline proves
-  seated/hanging seeds + flag-on==flag-off within 1u + determinism). **Next: M4** (flip
-  `FINALIZER_OWNS_CONVERSION` — activate `preConvertPoles` + the `reconstructChestFrame` F1/B5 no-move
-  guard); M1 mechanically landed; Phase 8/M6 (validator stamp-only) remains, unblocked by M2.
+  seated/hanging seeds + flag-on==flag-off within 1u + determinism), and **M4 complete**
+  (`FINALIZER_OWNS_CONVERSION=true`; the Finalizer is the exclusive local-transform writer and the
+  `reconstructChestFrame` F1/B5 no-move guard is live — `preConvertPoles` active as a reserved no-op
+  hook; the guard only fires for contact poses and never displaces hand/foot contacts, so output is
+  byte-identical for all production poses; `FinalizerOwnsConversionM4Test` proves flag-on==flag-off
+  (maxDev 0.0) and `ChestFrameNoMoveTest` was re-pointed through the pipeline so it genuinely runs the
+  Solver+guard). **Next: M5** (§1.1 carriers live — automatic once M2 landed; requires no flag flip,
+  just verifying `spineIntent`/`limbTargets`/`jointIntents` are consumed) or jump to **M6** (validator
+  stamp-only — now unblocked since M2/M3/M4 produce stamps). M1 mechanically landed.
   (Deferred to a follow-up: the larger "Pose becomes intent-only" `BasePose`→`IntentBuilder` rewrite —
-  requires the §1.1 Intent Layer live; the M2 ordering fix already makes M3/M4 safe to land.)
+  requires the §1.1 Intent Layer live; the M2 ordering fix already made M3/M4 safe to land.)
 - **S1 (DONE):** IK angular-clamp recording, chest-frame → shoulder propagation,
   ground-contact projection, foot support-plane. `ConstraintSolverTest`×2, `IKLimbHelperTest`,
   `TrunkFrameTest` green (7 tests).
