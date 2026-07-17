@@ -1,6 +1,6 @@
 package com.monkfitness.app.animation
 
-import kotlin.math.*
+import com.monkfitness.app.animation.SkeletonPose.IntentBuilder
 
 /**
  * BasePose serves as a generalized biomechanical framework for all exercise poses,
@@ -68,8 +68,10 @@ abstract class BasePose : PoseBuilder {
         if (tempV1.mag() < 1e-4f) tempV1.set(0f, 1f, 0f) else tempV1.normalize()
         val nw = neck.worldPosition
         tempV2.set(nw.x + tempV1.x * targetDistance, nw.y + tempV1.y * targetDistance, nw.z + tempV1.z * targetDistance)
-        jointsBuffer.headTarget = HeadTarget(tempV2.copy(), Vector3(0f, 1f, 0f))
         // The head is resolved by SkeletonPoseFinalizer.resolveHeadTarget (single source of truth).
+        // Declared through the sole-mutator IntentBuilder (B0 compile guard: §1.1 carriers are
+        // private-set on SkeletonPose, so only the builder may write them).
+        IntentBuilder(jointsBuffer).headTarget(tempV2.copy())
     }
 
     protected fun buildPelvis(pelvis: SkeletonNode, hipF: SkeletonNode, hipB: SkeletonNode, hipWidth: Float) {
@@ -440,9 +442,8 @@ abstract class BasePose : PoseBuilder {
         tolerance: Float = 0f,
         precedence: List<Joint> = emptyList()
     ) {
-        pose.postureIntent = PostureIntent(kind, tolerance)
-        pose.contactPrecedence.clear()
-        for (j in precedence) pose.contactPrecedence.add(j.name)
+        // Route through the sole-mutator IntentBuilder (B0 compile guard).
+        IntentBuilder(pose).posture(kind, tolerance, precedence)
     }
 
     // Common Support helpers building SupportContact collections allocation-free

@@ -149,6 +149,7 @@ class SkeletonPose(
 
     /** Single declarative spine curve; replaces coupled pelvis+chest dual writes. */
     var spineIntent: SpineCurve = SpineCurve()
+        private set
 
     /** World-space targets for limb end-effectors / intermediate joints (hand/foot/knee/elbow/head). */
     val limbTargets: MutableList<WorldTarget> = mutableListOf()
@@ -161,6 +162,7 @@ class SkeletonPose(
 
     /** Typed coarse posture intent (finding F2); interpreted by the [ConstraintSolver]. */
     var postureIntent: PostureIntent = PostureIntent(PostureIntent.Kind.CUSTOM)
+        private set
 
     /**
      * Phase 0 — explicit opt-out set of extremities whose heel/toe or palm/fingertip geometry the
@@ -171,12 +173,15 @@ class SkeletonPose(
 
     /** Motion driver describing how the pose interpolates across the frame (§1.1). */
     var motion: Any? = null
+        private set
 
     /** Camera framing hint authored by the pose (§1.1). */
     var camera: Any? = null
+        private set
 
     /** Environment hint authored by the pose (§1.1). */
     var environment: Any? = null
+        private set
 
     /**
      * Phase 7 (Gap 7 / F8 / W17) — gaze-as-target (COMPLETE). The pose declares where the head
@@ -186,6 +191,7 @@ class SkeletonPose(
      * "no gaze target declared" — a non-gaze pose whose head is left as authored.
      */
     var headTarget: HeadTarget? = null
+        private set
 
     // ---- §1.2 STATE SECTION (written by Engine, read by Validation) -----------------------
 
@@ -267,6 +273,110 @@ class SkeletonPose(
         this.contactPrecedence.addAll(other.contactPrecedence)
         this.extremityOverrides.clear()
         this.extremityOverrides.addAll(other.extremityOverrides)
+    }
+
+    /**
+     * Branch B (RFC_DECLARATIVE_POSE_AUTHORING §3) — the **sole mutator** of the §1.1 intent
+     * carriers. A pose declares intent exclusively through this builder; it never assigns
+     * `spineIntent` / `postureIntent` / `headTarget` / `motion` / `camera` / `environment` directly
+     * (those setters are `private set` on [SkeletonPose], so any `pose.spineIntent = …` outside this
+     * builder fails to compile — the B0 compile-time guard, RFC_BRANCH_B_IMPLEMENTATION §2 B0).
+     *
+     * The builder is **not yet consumed by any engine stage** in B0: declaring intent populates the
+     * §1.1 carriers exactly as before, but no stage reads the dead subset (`spineIntent`,
+     * `jointIntents`, `limbTargets`) yet. Consumption lands in B1 (IkStage), B2 (Finalizer) and B3
+     * (posture). B0 is purely additive substrate + a compile guard; no pose behavior changes.
+     */
+    class IntentBuilder(private val pose: SkeletonPose) {
+
+        /**
+         * Declares the single spine curve (lumbar + thoracic about a shared axis). Backs
+         * `spineIntent`, consumed by the Finalizer in B2.
+         */
+        fun spine(lumbarRad: Float, thoracicRad: Float, axis: Vector3 = Vector3(1f, 0f, 0f)): IntentBuilder {
+            pose.spineIntent = SpineCurve(lumbarRad, thoracicRad, axis)
+            return this
+        }
+
+        /**
+         * Declares a single relative joint articulation (chest/hip/girdle/ankle/wrist) B2 consumer.
+         */
+        fun joint(joint: Joint, rotation: JointRotation): IntentBuilder {
+            pose.jointIntents.add(RelativeArticulation(joint, rotation))
+            return this
+        }
+
+        /** Declares a world-space limb end-effector / intermediate target. B1 consumer (IkStage). */
+        fun limbTarget(joint: Joint, world: Vector3): IntentBuilder {
+            pose.limbTargets.add(WorldTarget(joint, world))
+            return this
+        }
+
+        /** Declares the gaze-as-target intent. Already consumed by [SkeletonPoseFinalizer.resolveHeadTarget]. */
+        fun headTarget(world: Vector3, upBias: Vector3 = Vector3(0f, 1f, 0f)): IntentBuilder {
+            pose.headTarget = HeadTarget(world, upBias)
+            return this
+        }
+
+        /**
+         * Declares the coarse posture intent (consumed by [ConstraintSolver], already live) and the
+         * contact-conflict precedence order.
+         */
+        fun posture(kind: PostureIntent.Kind, tolerance: Float = 0f, precedence: List<Joint> = emptyList()): IntentBuilder {
+            pose.postureIntent = PostureIntent(kind, tolerance)
+            pose.contactPrecedence.clear()
+            for (j in precedence) pose.contactPrecedence.add(j.name)
+            return this
+        }
+
+        /** Registers a fixed support contact (consumed by [ConstraintSolver]). */
+        fun contact(spec: ContactSpec): IntentBuilder {
+            pose.contacts.add(spec)
+            return this
+        }
+
+        /** Opts an extremity out of engine-derived orientation (W1 / B2 consumer). */
+        fun overrideExtremity(extremity: Extremity): IntentBuilder {
+            pose.extremityOverrides.add(extremity)
+            return this
+        }
+
+        /** Motion hint (§1.1). */
+        fun motion(driver: Any?): IntentBuilder {
+            pose.motion = driver
+            return this
+        }
+
+        /** Camera framing hint (§1.1). */
+        fun camera(hint: Any?): IntentBuilder {
+            pose.camera = hint
+            return this
+        }
+
+        /** Environment hint (§1.1). */
+        fun environment(hint: Any?): IntentBuilder {
+            pose.environment = hint
+            return this
+        }
+
+        /**
+         * Clears every §1.1 intent carrier so a reused [SkeletonPose] buffer starts a build fresh.
+         * (Structural `segment`/`clavicle`/`trunk` declarations from §3.2 are added with their
+         * consuming stages in B1/B2; until then the carrier-backed surface above is the substrate.)
+         */
+        fun reset() {
+            pose.spineIntent = SpineCurve()
+            pose.jointIntents.clear()
+            pose.limbTargets.clear()
+            pose.extremityOverrides.clear()
+            pose.postureIntent = PostureIntent(PostureIntent.Kind.CUSTOM)
+            pose.contactPrecedence.clear()
+            pose.contacts.clear()
+            pose.headTarget = null
+            pose.motion = null
+            pose.camera = null
+            pose.environment = null
+        }
     }
 
     companion object {
