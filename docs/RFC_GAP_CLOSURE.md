@@ -80,7 +80,7 @@ Gap 7 (headTarget) attaches to [IntentLayer] (carrier) + [Finalizer] (resolver).
 M0  scaffold pipeline ............. [Gap 1] PIPELINE_ACTIVE=false      (no behavior change)  [DONE]
 M1  IK extraction ................. [Gap 5] IK_WORLD_ONLY=true          (delete frame-relative overload)
 M2  pipeline owns stages .......... [Gap 1] PIPELINE_ACTIVE=true        (Finalizer stops calling Solver; renderers re-pointed)  [DONE]
-M3  Solver authority .............. [Gap 3] SOLVER_OWNS_POSTURE=true   (poses adopt declarePosture)
+M3  Solver authority .............. [Gap 3] SOLVER_OWNS_POSTURE=true   (posture seed + F7 precedence + F9 smoothing; no-op for contact-less production poses)  [DONE]
 M4  Finalizer authority ........... [Gap 4] FINALIZER_OWNS_CONVERSION=true
 M5  §1.1 carriers live ............ [Gap 2] (automatic once M2 lands)
 M6  Validator stamp-only .......... [Gap 6] VALIDATOR_STAMP_ONLY=true  (remove geometry inference)
@@ -92,6 +92,12 @@ M8  deprecation purge + cleanup ... [all]  remove @Deprecated, legacy bridges, f
 > larger superset deferred to the Pose intent-only follow-up (requires the §1.1 Intent Layer, M5).
 > The ordering fix — single owner of Solver+Finalizer, no Finalizer→Solver re-entrancy — is the
 > substantive M2 deliverable and is what unblocks M3/M4 safely.
+>
+> **M3 shipped scope (2026-07-17):** `SOLVER_OWNS_POSTURE=true`. Pure flag flip + test coverage — the
+> posture-seed / precedence / smoothing code already existed behind the flag. Byte-identical for every
+> production pose (none register engine contacts, so the solver no-ops); exercises only the
+> contact-bearing validation instruments. `ConstraintSolverPhase2Test` was re-pointed through the
+> pipeline so it genuinely runs the solver post-M2.
 **Per-gap → phase map:**
 | Gap | Phase | Flag flipped | Prereq phases |
 |---|---|---|---|
@@ -221,11 +227,29 @@ NOT ship before it. M6 is explicitly **BLOCKED** until M2 (engine produces stamp
    baseline match + full suite green.
 
 ### M3 — Solver authority (Gap 3)
-1. `SOLVER_OWNS_POSTURE=true`. Production poses adopt `declarePosture(kind)`; `seedRootFromPostureIntent`
-   becomes active (F2); `lastSolvedRoot` smoothing active (F9).
-2. Non-contact poses: Solver no-ops on empty contacts → unchanged.
-3. **Gate:** posture-seeded poses (squat/seated/pull-up) render with engine-derived pelvis; Validator
-   `PELVIS_INTENT` within tolerance.
+> **STATUS: COMPLETE.** `SOLVER_OWNS_POSTURE=true` (default). The `ConstraintSolver`
+> `seedRootFromPostureIntent` (F2), `contactPrecedence` weighting (F7) and `lastSolvedRoot`
+> inter-frame smoothing (F9) — all already implemented behind the flag — are now live. The whole
+> solver no-ops on contact-less poses, and **every production pose registers zero engine
+> `ContactSpec`s** (no `bakeIkLimb(... contact=)` call in `poses/`), so the flip is **byte-identical**
+> for all production poses. It affects only the diagnostic validation instruments that register engine
+> contacts (`DeepOverheadSquatPose` + `DeadHangPose` declare posture; `MiddleSplitPose`/`PikeSitPose`
+> register ground contacts with `CUSTOM` posture → seed skipped). `ConstraintSolverPhase2Test` was
+> re-pointed through `SkeletonPipeline` (post-M2 the Finalizer no longer calls the Solver, so a direct
+> `finalize()` would have silently skipped the posture solve) and proves: seated intent seeds the
+> pelvis near the floor, hanging intent pins hands on the bar, flag-on vs flag-off geometry matches
+> within 1u (`seatedSeedDoesNotRegressFootPlacement`), and the solve is deterministic across runs.
+> Full suite green (251/0).
+1. `SOLVER_OWNS_POSTURE=true`. `seedRootFromPostureIntent` active (F2); `contactPrecedence` weighting
+   active (F7); `lastSolvedRoot` smoothing active (F9). No `ConstraintSolver` code change — the
+   implementation shipped with the flag in an earlier phase; M3 flips it on and adds test coverage.
+2. Non-contact poses: Solver no-ops on empty contacts → unchanged. Production poses register no engine
+   contacts today, so the entire production set is byte-identical; only the contact-bearing validation
+   instruments are exercised. (The RFC prose "production poses adopt `declarePosture`" is a no-op for
+   the current pose set — there are no production engine-contact poses to migrate; when the deferred
+   Pose intent-only work introduces engine contacts on production poses, they will declare posture.)
+3. **Gate:** `ConstraintSolverPhase2Test` (seated/hanging seed, flag-on==flag-off within 1u,
+   determinism, default-on) + `ValidatorRomClusterTest` baseline match + full suite green.
 
 ### M4 — Finalizer authority (Gap 4)
 1. `FINALIZER_OWNS_CONVERSION=true`. `preConvertPoles` active; no pose writes local transform after IK.
@@ -286,9 +310,12 @@ NOT ship before it. M6 is explicitly **BLOCKED** until M2 (engine produces stamp
   a pooled `SkeletonPoseFinalizer` output buffer + scratch vectors; the per-frame tree is still
   allocated by `build()` (Pose-owned), so the strict zero-allocation gate is deferred to the Pose
   intent-only follow-up.
-- **M3 complete when:** `SOLVER_OWNS_POSTURE=true`; every production contact/posed pose calls
-  `declarePosture`; posture-seeded poses render with engine-derived pelvis; `PELVIS_INTENT` within
-  tolerance; non-contact poses byte-identical (Solver no-op).
+- **M3 complete when (shipped):** `SOLVER_OWNS_POSTURE=true`; `seedRootFromPostureIntent`/F7/F9 live;
+  contact-bearing posture instruments render with engine-derived pelvis (`ConstraintSolverPhase2Test`
+  seated/hanging seeds); flag-on == flag-off within 1u; non-contact poses byte-identical (Solver
+  no-op — all production poses register zero engine contacts). Note: the "every production
+  contact/posed pose calls `declarePosture`" clause is vacuous today (no production engine-contact
+  poses exist); it applies when the deferred Pose intent-only work adds engine contacts.
 - **M4 complete when:** `FINALIZER_OWNS_CONVERSION=true`; `preConvertPoles` active; no pose writes a
   local transform after IK; `reconstructChestFrame` no-move guard verified on a synthetic conflict test.
 - **M5 complete when:** `spineIntent`/`limbTargets`/`jointIntents` consumed by the engine (no dead

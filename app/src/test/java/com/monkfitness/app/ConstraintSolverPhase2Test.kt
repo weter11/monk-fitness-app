@@ -21,15 +21,23 @@ class ConstraintSolverPhase2Test {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
     private val context = PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)
+    private val originalPosture = EngineFlags.SOLVER_OWNS_POSTURE
 
     @After
     fun resetFlag() {
-        EngineFlags.SOLVER_OWNS_POSTURE = false
+        EngineFlags.SOLVER_OWNS_POSTURE = originalPosture
     }
 
+    // M2/M3: route through the pipeline (the production path) so the ordered Solver → Finalizer
+    // chain runs. The Finalizer no longer calls the Solver itself (M2), so a direct
+    // `finalizer.finalize(build())` would silently skip the posture solve this suite exists to test.
     private fun finalized(pose: BaseValidationPose): SkeletonPose {
-        val raw = pose.build(context)
-        return SkeletonPoseFinalizer(def).finalize(raw)
+        return SkeletonPipeline(def).produceFrame(pose, context).pose
+    }
+
+    @Test
+    fun postureFlagDefaultsTrue() {
+        assertTrue("SOLVER_OWNS_POSTURE must default to true in M3", originalPosture)
     }
 
     @Test
