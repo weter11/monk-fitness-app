@@ -58,6 +58,24 @@
 - **Rationale:** G6/W17/F8.
 - **Prereq:** Phase 3 + Phase 5. **Files:** PikePushUp, BaseThoracic, BaseLunge, BaseVerticalPull, StaticForearmPlank, ProneCobraStretch, BasePose (add `headTarget`). **APIs:** `headTarget` intent; engine resolves neck/head via IK/constraint.
 - **Validation:** gaze-direction + shoulder world assertions; `*PoseTest` green. **Risk:** Low. **Complete when:** no manual `rotAround` shoulder/gaze; gaze is a target.
+- **STATUS: IN PROGRESS (Gap 7 / gaze-as-target landed; G6 shoulder girdle deferred).**
+  - **Done (Gap 7 — gaze-as-`headTarget`):** added `HeadTarget` data class + `headTarget` carrier on
+    `SkeletonPose` §1.1 (with `copyFrom` propagation); added `EngineFlags.HEAD_TARGET_ENABLED`
+    (default **false**); added `BasePose.buildGaze(neck, head, neckLength, gazeDir)` which records the
+    additive `headTarget` intent (synthetic target along the authored gaze direction) and still calls
+    the legacy `buildHead(gazeDir)` so the rendered head is **byte-identical** to the pre-Phase-7
+    baseline. Migrated the four gaze sites — `BaseLungePose`, `BaseVerticalPullPose`,
+    `ProneCobraStretchPose`, `StaticForearmPlankPose` — from `buildHead(direction)` to `buildGaze`.
+    The Finalizer neck/head resolver that *consumes* `headTarget` (replacing the legacy direction
+    path when `HEAD_TARGET_ENABLED=true`) is a follow-up requiring the intent pipeline (M0/M2).
+  - **Deferred (G6 — PikePushUp shoulder girdle):** routing `PikePushUp` shoulders through
+    `buildShoulders`+FK instead of the manual `rotAround` world-position computation is a behavioral
+    change to where the IK root sits; it must be verified against the per-pose baseline (and ideally
+    behind a flag) before merge. Left intact this pass to avoid an unverified geometry shift.
+  - **Note:** the four gaze `rotAround` calls remain, but they now compute the *gaze direction* passed
+    to `buildGaze` (which forwards to `buildHead`) rather than writing the head directly; the head is
+    authored as an intent target. `BaseThoracic`'s `rotAround` calls are chest-frame local-offset
+    writes (not gaze), out of Gap 7 scope.
 
 ## Phase 8 — Validation reads stamped state only (W9/W10 closure)
 - **Goal:** Validator consumes stamps directly; drops post-hoc angle inference.
