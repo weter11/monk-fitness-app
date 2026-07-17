@@ -27,6 +27,25 @@ jobs:
     - name: Run unit tests
       run: ./gradlew :app:testDebugUnitTest
 
+    - name: Pin expected test-failure count (S0 baseline guard)
+      # S0 (docs/RFC_ENGINE_STABILIZATION.md) establishes the truthful baseline:
+      #   236 tests executed, 31 failed (run #461, 2026-07-17).
+      # This step fails the build if the failure count drifts from EXPECTED_FAILED,
+      # so a regression (or a silently-muted test) becomes visible immediately.
+      # Per AGENTS.md, a test may NEVER be muted to satisfy this pin — if failures
+      # drop, confirm it is a real fix; if they rise, fix the regression.
+      env:
+        EXPECTED_FAILED: "31"
+      run: |
+        LOG=$(./gradlew :app:testDebugUnitTest 2>&1 | tee /tmp/test_out.txt || true)
+        COUNT=$(grep -oE "[0-9]+ tests completed, [0-9]+ failed" /tmp/test_out.txt | grep -oE "[0-9]+ failed" | grep -oE "[0-9]+")
+        echo "Test failures measured: ${COUNT:-unknown} (baseline pin: $EXPECTED_FAILED)"
+        if [ "$COUNT" != "$EXPECTED_FAILED" ]; then
+          echo "::error::Test-failure count $COUNT differs from pinned baseline $EXPECTED_FAILED. Investigate (do not mute tests)."
+          exit 1
+        fi
+        echo "::notice::Test-failure count matches pinned baseline ($EXPECTED_FAILED). No regression detected."
+
     - name: Upload APK
       uses: actions/upload-artifact@v7
       with:
