@@ -24,6 +24,7 @@ import com.monkfitness.app.animation.SkeletonPose.IntentBuilder
 import com.monkfitness.app.animation.SupportContact
 import com.monkfitness.app.animation.SupportDefinition
 import com.monkfitness.app.animation.Vector3
+import com.monkfitness.app.animation.WorldTarget
 
 /**
  * Base class for Engineering Validation poses.
@@ -201,6 +202,20 @@ abstract class BaseValidationPose : PoseBuilder {
         straight: Boolean = false,
         contact: ContactConstraint? = null
     ) {
+        // B1 (IkStage extraction) — forward the end joint + full IK context into the §1.1
+        // `limbTargets` carrier so the engine-owned IkStage can reproduce this solve byte-for-byte
+        // (dead→live flip). `bakeIkLimb` remains the sole solver while EngineFlags.IK_STAGE_ACTIVE is
+        // false.
+        jointsBuffer.limbTargets.add(
+            WorldTarget(
+                endNode.joint,
+                Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
+                Vector3(pole.x, pole.y, pole.z),
+                straight,
+                contact
+            )
+        )
+
         val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
         // Phase 1 (F5): reset the bone-length stamp once per build (mirrors BasePose.bakeIkLimb).
         if (jointsBuffer.isTransformsUpdated) {
@@ -257,12 +272,6 @@ abstract class BaseValidationPose : PoseBuilder {
             }
         }
     }
-
-    protected fun solveNearStraightLeg(
-        shinLen: Float,
-        thighLen: Float,
-        targetFlexionDegrees: Float
-    ) = SkeletonMath.solveNearStraightLimb(shinLen, thighLen, targetFlexionDegrees, legScratch)
 
     /**
      * Phase 2 (F2/F7) — declares the coarse posture intent the [ConstraintSolver] should honour

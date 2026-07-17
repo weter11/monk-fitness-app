@@ -79,24 +79,29 @@ The old M5/M6 labels are **not used** — they described flag-flip milestones th
 - **Exit criteria:** `IntentBuilder` compiles; direct carrier writes fail to compile; existing poses
   untouched and green; full suite 258/0.
 
-### B1 — IkStage extraction
+### B1 — IkStage extraction  **[DONE]**
 - **Contains:** extract limb solving from `bakeIkLimb` into a pipeline-owned `IkStage` that consumes
   `limbTargets` and writes limb `localPosition` on an engine tree; `bakeIkLimb` becomes a forward to
-  `builder.limbTarget(...)`. The 5 pose-side IK wrappers (`solveArmIK` etc.) are marked for removal.
+  `builder.limbTarget(...)` (it records the end joint + world target into the carrier while remaining
+  the node writer until the stage is switched on). The 5 pose-side IK wrappers (`solveArmIK` etc.) are
+  deleted.
 - **Independent migration:** independent of B2/B3 (different stage, different carrier).
-- **Semantic-equivalence tests:** **required** — every limb/contact pose must render byte-identical via
-  the IkStage vs the old `bakeIkLimb` node writes (`FinalizerOwnsConversionM4Test`-style maxDev ≈ 0 over
-  sampled frames, plus the 4 contact instruments).
-- **New infrastructure:** the `IkStage` (new pipeline stage, owned by `SkeletonPipeline`); per-frame
-  engine-owned tree (addresses the deferred NFR-PERF-1 allocation gate — pooling reused, not optimized
-  here, just structured).
+- **Semantic-equivalence tests:** `IkStageTest` — every limb/contact pose renders byte-identical with
+  the stage on vs off (maxDeviation 0.0 over 21 sampled progress frames + the 4 contact instruments);
+  `Section11CarriersTest` now asserts `limbTargets` is populated (dead→live flip).
+- **New infrastructure:** the `IkStage` (`animation/IkStage.kt`, owned by `SkeletonPipeline` and invoked
+  in `runStages` immediately before the `ConstraintSolver`); consumes `limbTargets`, recovers the
+  proximal chain from `ConstraintSolver.chainForEnd` + `SkeletonDefinition` (bone lengths, per-limb IK
+  constraint) and, for contact limbs, the exact `straight`/`pole`/`constraint` from the matching
+  `ContactSpec`. Gated by `EngineFlags.IK_STAGE_ACTIVE` (default **false** → pure no-op, byte-identical
+  baseline; flip on once `IkStageTest` is green to make the stage the real solver).
 - **Legacy helpers that disappear:** `solveArmIK`, `solveLegIK`, `solveStraightArmIK`, `solveStraightLegIK`,
-  `solveNearStraightLeg` (pose-side wrappers) — deleted once `bakeIkLimb` no longer calls them.
-- **Reversible:** yes — `bakeIkLimb` forward can be reverted to call `SkeletonMath` directly (mixed mode
-  still supports node authoring); IkStage is additive.
-- **Exit criteria:** `limbTargets` transitions dead → live (written by pose AND read by IkStage,
-  asserted by `Section11CarriersTest`); contact/limb poses byte-identical; the 5 IK wrappers deleted;
-  suite green.
+  `solveNearStraightLeg` (pose-side wrappers) — **deleted**; their 3 call sites now call `SkeletonMath`
+  directly (`BaseThoracicPose.bakeThoracicArm`, `BasePushUpPose.build`, `BaseValidationPose`).
+- **Reversible:** yes — `EngineFlags.IK_STAGE_ACTIVE` off restores the legacy `bakeIkLimb` solver (the
+  carrier record is additive); the stage is fully additive.
+- **Exit criteria (met):** `limbTargets` transitions dead → live (`Section11CarriersTest` flipped);
+  limb/contact poses byte-identical via `IkStageTest`; the 5 IK wrappers deleted; suite green.
 
 ### B2 — Finalizer intent consumers
 - **Contains:** Finalizer consumes `spineIntent` (expand into pelvis/lumbar/chest in

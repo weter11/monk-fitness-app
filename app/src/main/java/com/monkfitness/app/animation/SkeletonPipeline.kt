@@ -89,6 +89,12 @@ class SkeletonPipeline(
      * (RFC_ENGINE_PIPELINE §8.1 — the pipeline is the sole caller of both, preventing re-entrancy).
      */
     private fun runStages(pose: SkeletonPose): SkeletonPose {
+        // B1 (IkStage extraction) — the pipeline-owned limb stage consumes the §1.1 `limbTargets`
+        // carrier and re-derives each limb's local positions on the engine-owned node tree. Gated by
+        // EngineFlags.IK_STAGE_ACTIVE (default false → pure no-op, byte-identical baseline). It runs
+        // before the ConstraintSolver so contact limbs are re-baked from their targets ahead of the
+        // root-repositioning pass, and before the Finalizer's FK.
+        IkStage.apply(pose, definition)
         // Stage 3 (ConstraintSolver) — posture/contact settling. No-op for the common
         // contact-less production pose, so those are untouched. Guarded exactly as the former
         // Finalizer call was (roots present + contacts present).

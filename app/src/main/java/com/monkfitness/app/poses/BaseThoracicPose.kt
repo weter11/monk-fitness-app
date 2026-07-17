@@ -136,7 +136,7 @@ abstract class BaseThoracicPose : BasePose() {
         buffer: SkeletonMath.IKResult
     ): SkeletonMath.IKResult {
         val poleWorld = SkeletonMath.toWorldDirection(poleLocal, chest!!.worldRotation, tempPoleWorld)
-        val ik = solveArmIK(rootWorld, targetWorld, def.upperArmLength, def.forearmLength, poleWorld, def.armIKConstraint, buffer)
+        val ik = SkeletonMath.solveIK(rootWorld, targetWorld, def.upperArmLength, def.forearmLength, poleWorld, def.armIKConstraint, buffer)
         tempV1.set(ik.joint).subtract(rootWorld)
         SkeletonMath.rotAround(tempV1, chest!!.worldRotation.axis, -chest!!.worldRotation.angle, elbowNode.localPosition)
         tempV1.set(ik.end).subtract(ik.joint)
