@@ -20,6 +20,7 @@ import com.monkfitness.app.animation.SkeletonFactory
 import com.monkfitness.app.animation.SkeletonMath
 import com.monkfitness.app.animation.SkeletonNode
 import com.monkfitness.app.animation.SkeletonPose
+import com.monkfitness.app.animation.SkeletonPose.IntentBuilder
 import com.monkfitness.app.animation.SupportContact
 import com.monkfitness.app.animation.SupportDefinition
 import com.monkfitness.app.animation.Vector3
@@ -278,9 +279,9 @@ abstract class BaseValidationPose : PoseBuilder {
         tolerance: Float = 0f,
         precedence: List<Joint> = emptyList()
     ) {
-        jointsBuffer.postureIntent = PostureIntent(kind, tolerance)
-        jointsBuffer.contactPrecedence.clear()
-        for (j in precedence) jointsBuffer.contactPrecedence.add(j.name)
+        // Route through the sole-mutator IntentBuilder (B0 compile guard: §1.1 carriers are
+        // private-set on SkeletonPose, so only the builder may write them).
+        IntentBuilder(jointsBuffer).posture(kind, tolerance, precedence)
     }
 
     // --- Finalization (mirrors production poses; produces a rotation-driven snapshot) --
