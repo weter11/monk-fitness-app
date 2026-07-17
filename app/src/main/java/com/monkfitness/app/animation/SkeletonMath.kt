@@ -173,6 +173,22 @@ data class HipRomLimits(
     }
 }
 
+/**
+ * B5 (RFC_BRANCH_B_IMPLEMENTATION) — §1.2 STATE stamp carrying a hip's femur direction
+ * decomposed into the four independent anatomical angles the [HipRomLimits] bound. Produced by
+ * the engine ([computeHipRomStamp]) from the solved skeleton so the validator reads it directly
+ * instead of re-deriving geometry. All angles are in degrees; signs follow [HipRomLimits] semantics
+ * (sagittal + = flexion toward +X; frontal + = abduction, mirrored per side; axial + = internal
+ * rotation about the femur's long axis — the caller mirrors it per side to keep internal/external
+ * consistent for both legs).
+ */
+data class HipRomStamp(
+    val excursionDegrees: Float,
+    val sagittalDegrees: Float,
+    val frontalDegrees: Float,
+    val axialDegrees: Float
+)
+
 data class IKConstraint(
     val minimumFlexionAngle: Float,
     val maximumExtensionRatio: Float,
@@ -962,6 +978,68 @@ data class ContactConstraint(
         composeRotations(hipRotFlex, hipRotAbd, out)
         composeRotations(out, hipRotAxial, out)
         return out
+    }
+
+    // B5 (RFC_BRANCH_B_IMPLEMENTATION) — §1.2 STATE stamp production.
+    // Scratch buffers for the hip-ROM stamp computation (no hot-path allocation).
+    private val hipScratchV1 = Vector3()
+    private val hipScratchV2 = Vector3()
+    private val hipScratchV3 = Vector3()
+
+    /**
+     * B5 — produces a [HipRomStamp] for one hip from the solved skeleton. This is the EXACT
+     * femur-direction math the validator's old `validateHipRom` performed inline; lifted here so the
+     * engine writes the stamp once and the validator (B5) only *reads* it — no `toLocalDirection` /
+     * `angleBetweenDegrees` / `atan2` remain in the validator. The four returned angles are
+     * byte-identical to the values `validateHipRom` used to compute, so the rule's verdicts are
+     * unchanged.
+     *
+     * [pelvisRotation] is the pelvis world rotation; [hipPos]/[kneePos] are the hip/knee world
+     * positions; [abductionSign] mirrors abduction/axial so both legs report abduction/rotation
+     * positively outward. [hipRotation] is the hip's authored local rotation (the acetabular twist,
+     * UNI-10) — its swing-twist decomposition yields the axial component.
+     */
+    fun computeHipRomStamp(
+        pelvisRotation: JointRotation,
+        hipPos: Vector3,
+        kneePos: Vector3,
+        abductionSign: Float,
+        hipRotation: JointRotation,
+        out: HipRomStamp
+    ): HipRomStamp {
+        hipScratchV1.set(kneePos.x - hipPos.x, kneePos.y - hipPos.y, kneePos.z - hipPos.z)
+        if (hipScratchV1.mag() < 1e-5f) {
+            return HipRomStamp(0f, 0f, 0f, 0f)
+        }
+        // Femur direction expressed in the pelvis' local frame.
+        toLocalDirection(hipScratchV1, pelvisRotation, hipScratchV2)
+        val fMag = hipScratchV2.mag()
+        if (fMag < 1e-5f) return HipRomStamp(0f, 0f, 0f, 0f)
+        val fx = hipScratchV2.x / fMag
+        val fy = hipScratchV2.y / fMag
+        val fz = hipScratchV2.z / fMag
+
+        // (1) Total excursion from the neutral down direction (0,-1,0).
+        val excursion = angleBetweenDegrees(hipScratchV2, hipScratchV3.set(0f, -1f, 0f))
+        // (2) Sagittal elevation (flexion/extension): sin(sagittal) = fx.
+        val sagittal = Math.toDegrees(kotlin.math.asin(fx.coerceIn(-1f, 1f).toDouble())).toFloat()
+        // (3) Frontal elevation (abduction/adduction): sin(frontal) = fz * abductionSign.
+        val frontal = Math.toDegrees(kotlin.math.asin((fz * abductionSign).coerceIn(-1f, 1f).toDouble())).toFloat()
+        // (4) Axial femoral twist: 2·atan2(qx, qw) of the hip's authored rotation.
+        val axis = hipRotation.axis
+        val axisMag = kotlin.math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z)
+        val axial = if (axisMag < 1e-6f) {
+            0f
+        } else {
+            val half = hipRotation.angle * 0.5f
+            val s = kotlin.math.sin(half)
+            val qw = kotlin.math.cos(half)
+            val qx = axis.x / axisMag * s
+            Math.toDegrees((2f * kotlin.math.atan2(qx, qw)).toDouble()).toFloat()
+        }
+        // Mirror the axial twist across the body mid-line so internal/external stay consistent per side.
+        val axialMirrored = axial * abductionSign
+        return HipRomStamp(excursion, sagittal, frontal, axialMirrored)
     }
 
     /**
