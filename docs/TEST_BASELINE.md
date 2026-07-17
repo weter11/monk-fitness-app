@@ -4,12 +4,14 @@ Snapshot of the expected unit-test state so future sessions can tell **pre-exist
 failures** apart from **regressions they introduced**.
 
 - Command: `./gradlew :app:testDebugUnitTest`
-- **Current truthful baseline (post PR #134 + S1 + S2 + S3 + remediation R1–R4):**
-  **243 tests executed, 0 failures, 0 errors.**
+- **Current truthful baseline (post Branch B: B1 IkStage + B2 Finalizer intent consumers +
+  B3 Posture universality, all byte-identical):**
+  **280 tests executed, 0 failures, 0 errors.**
 - Progression: `236 / 9` (post-S3) → `239 / 7` (**R1** foot derivation) → `243 / 4` (**R2**
   reach targets) → `243 / 1` (**R3** lunge support anchoring) → **`243 / 0`** (**R4** camera
-  framing + hanging-leg reach). All legacy engine defects R1–R4 are cleared; the suite is
-  fully green.
+  framing + hanging-leg reach, legacy engine defects R1–R4 cleared) → **`251 / 0`** (B1) →
+  **`275 / 0`** (B2) → **`280 / 0`** (B3, +5 `PostureUniversalityTest`). The full suite is
+  fully green; every Branch-B carrier flip is byte-identical (maxDev 0.0).
 - The count `236` includes the four previously-compile-broken files
   (`ConstraintSolverTest`, `IKLimbHelperTest`, `TrunkFrameTest`, `VerticalPullPosesTest`)
   that PR #134 (`efef793`) restored to the module. The old "168 / 30" figure was measured

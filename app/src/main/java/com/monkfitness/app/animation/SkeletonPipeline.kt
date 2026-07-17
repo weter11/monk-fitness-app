@@ -95,11 +95,13 @@ class SkeletonPipeline(
         // before the ConstraintSolver so contact limbs are re-baked from their targets ahead of the
         // root-repositioning pass, and before the Finalizer's FK.
         IkStage.apply(pose, definition)
-        // Stage 3 (ConstraintSolver) — posture/contact settling. No-op for the common
-        // contact-less production pose, so those are untouched. Guarded exactly as the former
-        // Finalizer call was (roots present + contacts present).
+        // Stage 3 (ConstraintSolver) — posture/contact settling. Runs for contact poses (M3) and,
+        // under B3, for any pose that names a non-CUSTOM posture intent so the engine owns the
+        // coarse root height. A CUSTOM, contact-less production pose is still a pure no-op.
+        val postureDriven = EngineFlags.SOLVER_OWNS_POSTURE &&
+            pose.postureIntent.kind != PostureIntent.Kind.CUSTOM
         if (EngineFlags.PIPELINE_ACTIVE &&
-            pose.roots.isNotEmpty() && pose.hasContacts()) {
+            pose.roots.isNotEmpty() && (pose.hasContacts() || postureDriven)) {
             ConstraintSolver.solve(pose, definition)
         }
         // Stage 4+ (Finalizer) — world↔local conversion, extremity derivation, chest-frame

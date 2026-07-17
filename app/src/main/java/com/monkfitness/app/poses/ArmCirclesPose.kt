@@ -69,11 +69,17 @@ class ArmCirclesPose : PoseBuilder {
         val def = context.definition
         ensureHierarchy(def)
 
-        // Arm circles: Standing upright
-        val standH = def.shinLength + def.thighLength + 25f
+        // Arm circles: Standing upright. B3 — the coarse pelvis height is now owned by the
+        // ConstraintSolver (STANDING seed == standH), so the pose declares the intent and no
+        // longer hand-writes pelvis.y. The solver pins pelvis.y = standH byte-identically.
+        SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.STANDING)
 
-        pelvis!!.localPosition = Vector3(0f, standH, 0f)
+        pelvis!!.localPosition = Vector3(0f, 0f, 0f)
         pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), 0f)
+
+        // standH is retained only for the arm-circle hand kinematics (a shape decision), not
+        // for the root height the solver now owns.
+        val standH = def.shinLength + def.thighLength + 25f
 
         chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)
         neck!!.localPosition = Vector3(0f, def.neckLength, 0f)

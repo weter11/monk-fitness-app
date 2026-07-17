@@ -132,19 +132,36 @@ The old M5/M6 labels are **not used** — they described flag-flip milestones th
   flipped); `extremityOverrides` confirmed live; trunk/hip/extremity poses byte-identical
   (`FinalizerIntentConsumersTest`); full suite green (275/0).
 
-### B3 — Posture universality
+### B3 — Posture universality (DONE)
 - **Contains:** every production pose declares a `postureIntent` (STANDING/CUSTOM/…); Solver derives root
   for **all** poses, extending M3 from contact-only to universal; no pose hand-computes `pelvisY`/`pelvisX`.
 - **Independent migration:** independent; Solver already owns contact posture (M3), so this is extension,
   not new infrastructure.
-- **Semantic-equivalence tests:** **required** — production poses that previously authored root arithmetic
-  must produce identical root via the Solver seed (maxDev ≈ 0 for pelvis world position across frames).
+- **Semantic-equivalence tests:** **required** — `PostureUniversalityTest` proves the STANDING production
+  poses produce an engine-owned root via the Solver seed; pelvis Y equals the exact STANDING seed
+  (`shinLength + thighLength + 25f`) for flag-on, and the reversible CUSTOM fallback (authored root)
+  when the flag is off. `ConstraintSolverPhase2Test` still green (contact regression contract preserved).
 - **New infrastructure:** none (reuses `SOLVER_OWNS_POSTURE` + `seedRootFromPostureIntent`).
-- **Legacy helpers that disappear:** none specifically (posture was already intent via `declarePosture`);
-  this phase removes any remaining inline `pelvis.localPosition.y = …` arithmetic in poses.
+- **Implementation (this landing):**
+  - `ConstraintSolver.seedRootFromPostureIntent` now **pins the seed exactly** for non-contact poses
+    (the relaxation loop cannot move a contact-less root, so the pin == authored height, byte-identical),
+    and keeps the damped ease for contact poses (preserving the M3 seated/hanging regression contract).
+  - `ConstraintSolver.solve` and `SkeletonPipeline.runStages` now run the posture seed for **any** pose
+    that names a non-`CUSTOM` intent, even with no contacts (previously the solver was skipped entirely
+    for contact-less poses), so the engine genuinely owns the root universally rather than only for
+    instruments.
+  - Every concrete production pose declares a `postureIntent`. The five static STANDING shapes
+    (ArmCircles / FacePull / HipCars / ScapularRetraction / WallSlides) declare `STANDING` and no longer
+    hand-write `pelvis.y` — the solver pins `standH`. All other production poses author shape-driven
+    roots and declare `CUSTOM` (the deliberate, reversible B3 fallback); the solver leaves their authored
+    root untouched. The vertical-pull (hanging) family is rep-dependent and stays `CUSTOM` for now (its
+    root is not a static template), leaving the engine-owned hang path to the `DeadHang` instrument.
+  - **Exit criteria (met):** every production pose declares a posture; the Solver owns the coarse root
+    height for every non-`CUSTOM` intent (universal); the static STANDING poses no longer write root
+    arithmetic; `PostureUniversalityTest` proves byte-identity; full suite green.
+- **Legacy helpers that disappear:** none (posture was already intent via `declarePosture`); the inline
+  `pelvis.localPosition.y = standH` arithmetic was removed from the five static STANDING poses.
 - **Reversible:** yes — a pose can fall back to declaring `CUSTOM` and authoring root as before.
-- **Exit criteria:** every production pose declares a posture; Solver owns root universally; no pose writes
-  root arithmetic; byte-identical; suite green.
 
 ### B4 — Pose migration (family-by-family)
 - **Contains:** migrate each production/validation pose family from node-writing helpers to declarations,

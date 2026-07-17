@@ -15,6 +15,9 @@ class StaticBirdDogHoldPose : BaseBirdDogPose() {
     override fun build(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
+        // B3 — every production pose declares its posture intent. This pose authors a
+        // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
+        declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
         anchorTabletop(def)
 
         // Base (neutral tabletop) and extended limb targets

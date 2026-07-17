@@ -26,6 +26,8 @@ class DeadBugPose : PoseBuilder {
     }
 
     override fun build(context: PoseContext): SkeletonPose {
+        // B3 — every production pose declares its posture intent. Shape-driven root, so CUSTOM.
+        SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
         val def = context.definition
 
         // 1. Supine Core Positioning
