@@ -460,6 +460,8 @@ the architecture-v2 behavior for that stage only. No big-bang rewrite.
   stamp-only) is likewise gated on the same intent-only plumbing and cannot land as a pure flip either.
 - **Live §1.1 carriers today:** `contacts`, `contactPrecedence`, `postureIntent` (consumed by
   `ConstraintSolver`; covered by M3/M4). `extremityOverrides` is consumed by the Finalizer.
+- **Factual audit + required-work breakdown:** `RFC_INTENT_BUILDER_REWRITE.md` (current authoring model,
+  carrier dead/dormant/obsolete table, files/helpers/stages affected, migration order, M5/M6/M7 classification).
 
 ### Phase M6 — Validator stamp-only (Gap 6 / Phase 8)
 - `VALIDATOR_STAMP_ONLY = true`. Remove geometry inference from `ExerciseValidator`; add any missing

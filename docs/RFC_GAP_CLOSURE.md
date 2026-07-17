@@ -9,7 +9,8 @@
 - **Gap 4** — SkeletonPoseFinalizer exclusive conversion activation (`FINALIZER_OWNS_CONVERSION`).
 - **Gap 7** — `headTarget` architecture (gaze-as-target, F8/W17).
 - **State ownership, deprecation strategy, compatibility strategy, final cleanup.**
-**Companion RFCs:** `RFC_ENGINE_PIPELINE.md` (Gap 1), `RFC_INTENT_LAYER.md` (Gap 2),
+**Companion RFCs:** `RFC_ENGINE_PIPELINE.md` (Gap 1), `RFC_INTENT_LAYER.md` (Gap 2 / target design),
+`RFC_INTENT_BUILDER_REWRITE.md` (Gap 2 / current-state audit + required work),
 `RFC_EXECUTION_CONTRACT.md` (stage execution). This document is the **rollout + closure** plan that
 sequences those designs into merged, flag-gated phases with rollback.
 **Scope:** implementation specification only. No code. Maximum detail on dependency/migration graphs,
@@ -300,6 +301,8 @@ NOT ship before it. M6 is explicitly **BLOCKED** until M2 (engine produces stamp
 > A regression test (`Section11CarriersTest`) now pins this truth: the three carriers are unwritten and
 > unread; the posture/contact carriers ARE consumed. This prevents a future "fix the milestone" edit from
 > silently claiming M5 done without the plumbing.
+> **Factual audit + required-work breakdown:** `RFC_INTENT_BUILDER_REWRITE.md` (current authoring model,
+> carrier dead/dormant/obsolete table, files/helpers/stages, migration order, and M5/M6/M7 classification).
 1. Requires the deferred `BasePose`→`IntentBuilder` intent-only migration (RFC_ENGINE_PIPELINE §8/§9),
    NOT a flag flip. Out of scope for the M2–M4 flag-driven flips.
 2. **Gate (currently unmet):** `spineIntent`/`limbTargets`/`jointIntents` are read by the engine after
