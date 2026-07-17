@@ -13,6 +13,7 @@
 `RFC_INTENT_BUILDER_REWRITE.md` (Gap 2 / current-state audit + required work),
 `RFC_PHASE_I_CLOSURE.md` (Phase I canonical closure + Branch A/B split + entry criteria for Branch B),
 `RFC_DECLARATIVE_POSE_AUTHORING.md` (Branch B authoritative design: declarative authoring, B0–B6 phases),
+`RFC_DECLARATIVE_AUTHORING.md` (Branch B semantic inventory: per-helper classification intent/engine/obsolete/split),
 `RFC_EXECUTION_CONTRACT.md` (stage execution). This document is the **rollout + closure** plan that
 sequences those designs into merged, flag-gated phases with rollback.
 **Scope:** implementation specification only. No code. Maximum detail on dependency/migration graphs,

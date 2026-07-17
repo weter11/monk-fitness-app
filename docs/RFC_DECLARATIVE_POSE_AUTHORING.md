@@ -6,6 +6,9 @@
 > criteria), `RFC_ENGINE_PIPELINE.md` (Runtime stage design), `RFC_INTENT_LAYER.md` (§1.1 intent model
 > target), `RFC_INTENT_BUILDER_REWRITE.md` (current-state audit + required-work breakdown),
 > `RFC_GAP_CLOSURE.md` (milestone gates; M5/M6 recorded as BLOCKED/deferred onto this branch).
+> **Authoritative semantic inventory (per-helper classification):** `RFC_DECLARATIVE_AUTHORING.md` —
+> the contract this design must honour (every "Becomes intent" helper → a consumed carrier; every
+> "Splits" helper → declaration + engine stage; every "Becomes obsolete" wrapper → deleted).
 > **Date:** 2026-07-17.
 >
 > This document defines the future authoring architecture **independently of the Runtime**. It is the
