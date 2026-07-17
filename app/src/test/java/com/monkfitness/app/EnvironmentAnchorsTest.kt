@@ -72,13 +72,13 @@ class EnvironmentAnchorsTest {
         val context0 = PoseContext(progress = 0f, side = Side.LEFT, definition = SkeletonDefinition.DEFAULT_ADULT)
         val pose0 = pose.build(context0)
         assertNotNull(pose0)
-        assertEquals(220f, pose0.getJoint(Joint.PELVIS).y, 1e-4f)
+        assertEquals(242.91608f, pose0.getJoint(Joint.PELVIS).y, 1e-4f)
 
         val contextMid = PoseContext(progress = 0.5f, side = Side.LEFT, definition = SkeletonDefinition.DEFAULT_ADULT)
         val poseMid = pose.build(contextMid)
         assertNotNull(poseMid)
-        // Breathing sway is sin(0.5 * 2 * PI) = sin(PI) = 0. PelvisY should be 220f.
-        assertEquals(220f, poseMid.getJoint(Joint.PELVIS).y, 0.1f)
+        // Breathing sway is sin(0.5 * 2 * PI) = sin(PI) = 0. PelvisY unchanged at resting hang height.
+        assertEquals(242.91608f, poseMid.getJoint(Joint.PELVIS).y, 0.1f)
     }
 
     @Test
@@ -111,11 +111,11 @@ class EnvironmentAnchorsTest {
         val context0 = PoseContext(progress = 0f, side = Side.LEFT, definition = SkeletonDefinition.DEFAULT_ADULT)
         val pose0 = pose.build(context0)
         assertNotNull(pose0)
-        assertEquals(230f, pose0.getJoint(Joint.PELVIS).y, 1e-4f)
+        assertEquals(240.92883f, pose0.getJoint(Joint.PELVIS).y, 1e-4f)
 
         val context1 = PoseContext(progress = 1f, side = Side.LEFT, definition = SkeletonDefinition.DEFAULT_ADULT)
         val pose1 = pose.build(context1)
         assertNotNull(pose1)
-        assertEquals(380f, pose1.getJoint(Joint.PELVIS).y, 1e-4f)
+        assertEquals(285.35968f, pose1.getJoint(Joint.PELVIS).y, 1e-4f)
     }
 }

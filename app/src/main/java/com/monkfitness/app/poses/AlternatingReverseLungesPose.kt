@@ -48,12 +48,11 @@ class AlternatingReverseLungesPose : BaseLungePose() {
         val plantZ = if (plantUsesFrontHip) -footSepZ else footSepZ
         val swingZ = if (swingIsFront) -footSepZ else footSepZ
 
-        // Support foot fixed; swing foot travels BACKWARD (-X).
-        targetF.set(0f, footRestY, plantZ)
-        targetB.set(-stride * s, footRestY + liftHeight * 4f * s * (1f - s), swingZ)
-
-        val plantAnkle = if (plantUsesFrontHip) targetF else targetB
-        val swingAnkle = if (plantUsesFrontHip) targetB else targetF
+        // R3 (lunge support anchoring): author plant/swing targets directly so the fixed anchor
+        // keeps its own side of the track when the planted foot swaps at the half cycle. The swing
+        // foot travels BACKWARD (-X). See AlternatingForwardLungesPose for the full rationale.
+        val plantAnkle = targetF.set(0f, footRestY, plantZ)
+        val swingAnkle = targetB.set(-stride * s, footRestY + liftHeight * 4f * s * (1f - s), swingZ)
 
         // COM shifts backward (negative X) as the rep deepens.
         val pelvisX = comX(0f, -stride * s, s)

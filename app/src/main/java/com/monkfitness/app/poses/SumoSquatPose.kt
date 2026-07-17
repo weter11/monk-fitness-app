@@ -59,6 +59,14 @@ class SumoSquatPose : BaseSquatPose() {
         legTargetF.set(0f, 25f, -def.hipWidth * 2.8f)
         legTargetB.set(0f, 25f, def.hipWidth * 2.8f)
 
+        // R2 (reach target authoring): the wide sumo stance places the authored foot target
+        // marginally beyond leg reach when standing tall (top of rep). Project it onto the
+        // reachable band so the wide track is honoured without the solver clamping (which would
+        // fire IK_TARGET_UNREACHABLE). Direction/stance intent is preserved; only the radius is
+        // pulled inside the anatomical limit.
+        SkeletonMath.clampTargetToReach(hipF!!.worldPosition, legTargetF, def.thighLength, def.shinLength, def.legIKConstraint, legTargetF)
+        SkeletonMath.clampTargetToReach(hipB!!.worldPosition, legTargetB, def.thighLength, def.shinLength, def.legIKConstraint, legTargetB)
+
         // Wide track pole vectors
         bakeIkLimb(hipF!!.worldPosition, legTargetF, def.thighLength, def.shinLength, legFPole, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
         bakeIkLimb(hipB!!.worldPosition, legTargetB, def.thighLength, def.shinLength, legBPole, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
@@ -74,6 +82,12 @@ class SumoSquatPose : BaseSquatPose() {
 
         armTargetA.set(handTargetX, handTargetY, -10f)
         armTargetP.set(handTargetX, handTargetY, 10f)
+
+        // R2 (reach target authoring): hands dropping toward the crotch sit closer to the shoulder
+        // than the elbow's minimum-flexion reach; keep the target inside the reachable band.
+        SkeletonMath.clampTargetToReach(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, def.armIKConstraint, armTargetA)
+        SkeletonMath.clampTargetToReach(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, def.armIKConstraint, armTargetP)
+
 
         bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armAPole, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
         bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPPole, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)

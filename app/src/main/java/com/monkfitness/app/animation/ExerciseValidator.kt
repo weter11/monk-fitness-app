@@ -743,7 +743,7 @@ class ExerciseValidator(
                 issues.add(ValidationIssue(
                     ruleId = "CONTACT_PRESERVED",
                     message = "Contact on ${spec.endJoint.name} landed ${"%.1f".format(dist)}u from its authored anchor (tolerance ${CONTACT_PRESERVATION_TOLERANCE.toInt()}u); end-effector did not preserve the intended contact.",
-                    severity = ValidationSeverity.WARNING,
+                    severity = ValidationSeverity.ERROR,
                     joint = spec.endJoint
                 ))
             }
@@ -761,7 +761,7 @@ class ExerciseValidator(
             issues.add(ValidationIssue(
                 ruleId = "PELVIS_INTENT",
                 message = "Global solver displaced the root/pelvis by ${"%.1f".format(pose.rootTranslationDelta)}u (tolerance ${PELVIS_TRANSLATION_TOLERANCE.toInt()}u) from its authored position.",
-                severity = ValidationSeverity.WARNING,
+                severity = ValidationSeverity.ERROR,
                 joint = Joint.PELVIS
             ))
         }
@@ -769,7 +769,7 @@ class ExerciseValidator(
             issues.add(ValidationIssue(
                 ruleId = "PELVIS_INTENT",
                 message = "Global solver rotated the root/pelvis by ${"%.1f".format(pose.rootRotationDelta)}° (tolerance ${PELVIS_ROTATION_TOLERANCE.toInt()}°) from its authored orientation.",
-                severity = ValidationSeverity.WARNING,
+                severity = ValidationSeverity.ERROR,
                 joint = Joint.PELVIS
             ))
         }

@@ -40,9 +40,10 @@ class ExerciseValidatorTest {
         pose.setJoint(Joint.HEEL_B, Vector3(def.foot.footLength * def.foot.heelRatio, ankleY, def.hipWidth))
         pose.setJoint(Joint.TOE_B, Vector3(-def.foot.footLength * def.foot.toeRatio, ankleY, def.hipWidth))
 
-        // 3. Arms (bent slightly so distance is 138f, less than max extension 138.7f)
-        val elbowX = 23.63f
-        val elbowY = 270.52f
+        // 3. Arms (bent slightly so each segment matches the true bone lengths; total
+        // shoulder->hand distance stays well under the max extension).
+        val elbowX = 23.70f
+        val elbowY = 253.59f
         val handY = 192f
 
         pose.setJoint(Joint.ELBOW_A, Vector3(elbowX, elbowY, -def.shoulderWidth))

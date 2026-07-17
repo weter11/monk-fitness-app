@@ -49,12 +49,11 @@ class AlternatingSideLungesPose : BaseLungePose() {
         val plantZ = if (plantUsesFrontHip) -footSepZ else footSepZ
         val swingZ = if (swingIsFront) -footSepZ - stride * s else footSepZ + stride * s
 
-        // Support foot fixed (no forward/back travel); swing foot travels laterally.
-        targetF.set(0f, footRestY, plantZ)
-        targetB.set(0f, footRestY + liftHeight * 4f * s * (1f - s), swingZ)
-
-        val plantAnkle = if (plantUsesFrontHip) targetF else targetB
-        val swingAnkle = if (plantUsesFrontHip) targetB else targetF
+        // R3 (lunge support anchoring): author plant/swing targets directly so the fixed anchor
+        // keeps its own side of the track when the planted foot swaps at the half cycle. The swing
+        // foot travels laterally (in Z). See AlternatingForwardLungesPose for the full rationale.
+        val plantAnkle = targetF.set(0f, footRestY, plantZ)
+        val swingAnkle = targetB.set(0f, footRestY + liftHeight * 4f * s * (1f - s), swingZ)
 
         // COM shifts sideways toward the working leg.
         val pelvisX = 0f
