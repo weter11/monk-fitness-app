@@ -141,12 +141,17 @@
   `reconstructChestFrame` F1/B5 no-move guard is live — `preConvertPoles` active as a reserved no-op
   hook; the guard only fires for contact poses and never displaces hand/foot contacts, so output is
   byte-identical for all production poses; `FinalizerOwnsConversionM4Test` proves flag-on==flag-off
-  (maxDev 0.0) and `ChestFrameNoMoveTest` was re-pointed through the pipeline so it genuinely runs the
-  Solver+guard). **Next: M5** (§1.1 carriers live — automatic once M2 landed; requires no flag flip,
-  just verifying `spineIntent`/`limbTargets`/`jointIntents` are consumed) or jump to **M6** (validator
-  stamp-only — now unblocked since M2/M3/M4 produce stamps). M1 mechanically landed.
-  (Deferred to a follow-up: the larger "Pose becomes intent-only" `BasePose`→`IntentBuilder` rewrite —
-  requires the §1.1 Intent Layer live; the M2 ordering fix already made M3/M4 safe to land.)
+   (maxDev 0.0) and `ChestFrameNoMoveTest` was re-pointed through the pipeline so it genuinely runs
+   the Solver+guard). **M5 is BLOCKED** — the RFC's "automatic once M2 lands" premise is false: a
+   source audit shows only the posture/contact §1.1 subset (`contacts`/`contactPrecedence`/
+   `postureIntent`) is consumed by `ConstraintSolver` (this is what M3/M4 exercise); the spine/limb/
+   joint carriers `spineIntent`/`jointIntents`/`limbTargets` are NEVER written or read anywhere
+   (dead — left from the deferred `BasePose`→`IntentBuilder` rewrite; `Section11CarriersTest` pins
+   this). M5 is NOT a flag flip; it needs that deferred intent-only migration. **Next safely-landable:
+   none of M5/M6/M7 as flag-flips** (all gated on the same deferred IntentBuilder work); the realistic
+   next step is the `BasePose`→`IntentBuilder` rewrite, or M8 cleanup if applicable. M1 mechanically
+   landed. (Deferred: the larger "Pose becomes intent-only" rewrite — requires the §1.1 Intent Layer
+   live; the M2 ordering fix made M3/M4 safe to land but not M5.)
 - **S1 (DONE):** IK angular-clamp recording, chest-frame → shoulder propagation,
   ground-contact projection, foot support-plane. `ConstraintSolverTest`×2, `IKLimbHelperTest`,
   `TrunkFrameTest` green (7 tests).

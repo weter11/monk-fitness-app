@@ -9,7 +9,12 @@
 - **Gap 4** — SkeletonPoseFinalizer exclusive conversion activation (`FINALIZER_OWNS_CONVERSION`).
 - **Gap 7** — `headTarget` architecture (gaze-as-target, F8/W17).
 - **State ownership, deprecation strategy, compatibility strategy, final cleanup.**
-**Companion RFCs:** `RFC_ENGINE_PIPELINE.md` (Gap 1), `RFC_INTENT_LAYER.md` (Gap 2),
+**Companion RFCs:** `RFC_ENGINE_PIPELINE.md` (Gap 1), `RFC_INTENT_LAYER.md` (Gap 2 / target design),
+`RFC_INTENT_BUILDER_REWRITE.md` (Gap 2 / current-state audit + required work),
+`RFC_PHASE_I_CLOSURE.md` (Phase I canonical closure + Branch A/B split + entry criteria for Branch B),
+`RFC_DECLARATIVE_POSE_AUTHORING.md` (Branch B authoritative design: declarative authoring, B0–B6 phases),
+`RFC_DECLARATIVE_AUTHORING.md` (Branch B semantic inventory: per-helper classification intent/engine/obsolete/split),
+`RFC_BRANCH_B_IMPLEMENTATION.md` (Branch B migration plan: phase order, PR slicing, exit criteria),
 `RFC_EXECUTION_CONTRACT.md` (stage execution). This document is the **rollout + closure** plan that
 sequences those designs into merged, flag-gated phases with rollback.
 **Scope:** implementation specification only. No code. Maximum detail on dependency/migration graphs,
@@ -82,7 +87,7 @@ M1  IK extraction ................. [Gap 5] IK_WORLD_ONLY=true          (delete 
 M2  pipeline owns stages .......... [Gap 1] PIPELINE_ACTIVE=true        (Finalizer stops calling Solver; renderers re-pointed)  [DONE]
 M3  Solver authority .............. [Gap 3] SOLVER_OWNS_POSTURE=true   (posture seed + F7 precedence + F9 smoothing; no-op for contact-less production poses)  [DONE]
 M4  Finalizer authority ........... [Gap 4] FINALIZER_OWNS_CONVERSION=true (preConvertPoles + F1/B5 chest no-move guard; no-op for contact-less production)  [DONE]
-M5  §1.1 carriers live ............ [Gap 2] (automatic once M2 lands)
+M5  §1.1 carriers live ............ [Gap 2] BLOCKED — see M5 status (RFC premise wrong; needs deferred IntentBuilder rewrite)
 M6  Validator stamp-only .......... [Gap 6] VALIDATOR_STAMP_ONLY=true  (remove geometry inference)
 M7  headTarget .................... [Gap 7] (carrier + Finalizer resolver; own flag HEAD_TARGET_ENABLED)
 M8  deprecation purge + cleanup ... [all]  remove @Deprecated, legacy bridges, flags→const true
@@ -279,9 +284,33 @@ NOT ship before it. M6 is explicitly **BLOCKED** until M2 (engine produces stamp
    flag-off) + `ChestFrameNoMoveTest` (guard holds for all contacts; authored chest preserved) +
    full suite green.
 
-### M5 — §1.1 carriers live (Gap 2, automatic)
-1. No code change beyond M2; documents that `spineIntent`/`limbTargets`/`jointIntents` are now consumed.
-2. **Gate:** dead-code lint shows zero unused §1.1 writes.
+### M5 — §1.1 carriers live (Gap 2) — BLOCKED (RFC premise was incorrect)
+> **STATUS: BLOCKED — NOT a flag flip.** The RFC asserted M5 was "automatic once M2 lands", i.e. that
+> flipping the pipeline on would make `spineIntent`/`limbTargets`/`jointIntents` the live engine input.
+> That is **false**. Verified by source audit (2026-07-17): of the §1.1 carriers, only the
+> posture/contact subset is consumed by the engine — `pose.contacts`, `pose.contactPrecedence`, and
+> `pose.postureIntent` are read by `ConstraintSolver` (this is what M3/M4 actually exercise). The spine /
+> limb / joint intent carriers — `spineIntent`, `jointIntents`, `limbTargets` — have **zero reads and
+> zero writes** anywhere in `app/src` (only their declaration + `copyFrom` in `PoseDefinition.kt`).
+> They are dead fields left from the deferred "Pose becomes intent-only" (`BasePose`→`IntentBuilder`)
+> rewrite, which the RFC explicitly deferred and which itself depends on the intent-only pipeline. The
+> pose-authoring helpers (`buildSpineCurve`, `buildHipFlexion`, `bakeIkLimb`) write **directly to
+> `node.localRotation` / nodes**, not to these §1.1 carriers.
+>
+> Therefore M5 cannot be completed as written: there is no code path that consumes those carriers, so
+> "documents that they are consumed" would be a false statement and the gate "zero unused §1.1 writes"
+> is unmet (they are neither written nor read). M5 is re-scoped to **require the deferred IntentBuilder
+> rewrite** (migrate `BasePose` helpers to populate `spineIntent`/`jointIntents`/`limbTargets` and have
+> the IK/Solver stages consume them). Until that lands, M5 stays BLOCKED and the carriers remain dead.
+> A regression test (`Section11CarriersTest`) now pins this truth: the three carriers are unwritten and
+> unread; the posture/contact carriers ARE consumed. This prevents a future "fix the milestone" edit from
+> silently claiming M5 done without the plumbing.
+> **Factual audit + required-work breakdown:** `RFC_INTENT_BUILDER_REWRITE.md` (current authoring model,
+> carrier dead/dormant/obsolete table, files/helpers/stages, migration order, and M5/M6/M7 classification).
+1. Requires the deferred `BasePose`→`IntentBuilder` intent-only migration (RFC_ENGINE_PIPELINE §8/§9),
+   NOT a flag flip. Out of scope for the M2–M4 flag-driven flips.
+2. **Gate (currently unmet):** `spineIntent`/`limbTargets`/`jointIntents` are read by the engine after
+   a pose authors them; lint proves zero unused §1.1 writes. Today both sides fail (unwritten + unread).
 
 ### M6 — Validator stamp-only (Gap 6 / Phase 8)
 1. `VALIDATOR_STAMP_ONLY=true`. Replace geometry-inference methods:
@@ -344,8 +373,11 @@ NOT ship before it. M6 is explicitly **BLOCKED** until M2 (engine produces stamp
   live and verified (`ChestFrameNoMoveTest` through the pipeline + `FinalizerOwnsConversionM4Test`
   proving flag-on == flag-off for production + contact poses). Output byte-identical for every
   production pose (none register engine contacts, so the guard never runs for them).
-- **M5 complete when:** `spineIntent`/`limbTargets`/`jointIntents` consumed by the engine (no dead
-  carrier); lint proves zero unused §1.1 writes.
+- **M5 complete when (BLOCKED):** `spineIntent`/`limbTargets`/`jointIntents` consumed by the engine
+  (no dead carrier). NOT a flag flip — requires the deferred `BasePose`→`IntentBuilder` intent-only
+  migration. Verified 2026-07-17 that these three carriers are currently unwritten AND unread
+  (`Section11CarriersTest` pins this), so the gate is unmet. The live §1.1 subset (`contacts`,
+  `contactPrecedence`, `postureIntent`) IS consumed by `ConstraintSolver` and covered by M3/M4.
 - **M6 complete when:** `VALIDATOR_STAMP_ONLY=true`; `ExerciseValidator` no longer imports
   `toLocalDirection`/`angleBetweenDegrees`/`atan2`; every Validator rule reads ≥1 stamp/intent; a
   build-time assertion fails the compile if geometry inference remains.

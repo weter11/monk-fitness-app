@@ -444,9 +444,24 @@ the architecture-v2 behavior for that stage only. No big-bang rewrite.
   `ChestFrameNoMoveTest` (re-pointed through the pipeline) confirms the guard holds for all contacts.
   Full suite green (255/0).
 
-### Phase M5 — §1.1 carriers become live (Gap 2)
-- With Pose intent-only and pipeline consuming it, `spineIntent`/`limbTargets`/`jointIntents` are
-  now the real input. The helpers already feed them. No dead carriers remain.
+### Phase M5 — §1.1 carriers become live (Gap 2) — BLOCKED
+- **RFC premise was incorrect.** The original text claimed "automatic once M2 lands" — that the pipeline
+  flip would make `spineIntent`/`limbTargets`/`jointIntents` the live engine input. Verified by source
+  audit (2026-07-17): only the posture/contact subset of §1.1 is consumed — `ConstraintSolver`
+  reads `pose.contacts`, `pose.contactPrecedence`, `pose.postureIntent` (these are what M3/M4 exercise).
+  `spineIntent`, `jointIntents`, `limbTargets` have **zero reads and zero writes** anywhere in `app/src`
+  (only declaration + `copyFrom` in `PoseDefinition.kt`). They are dead, left from the deferred
+  "Pose becomes intent-only" (`BasePose`→`IntentBuilder`) rewrite. The authoring helpers
+  (`buildSpineCurve`, `buildHipFlexion`, `bakeIkLimb`) write **directly to node rotations**, not to
+  these carriers.
+- **M5 is NOT a flag flip.** Completing it requires the deferred `IntentBuilder` migration: helpers
+  must populate `spineIntent`/`jointIntents`/`limbTargets` and the IK/Solver stages must consume them.
+  Until that lands, the carriers stay dead; documenting them as "live" would be false. `M6` (validator
+  stamp-only) is likewise gated on the same intent-only plumbing and cannot land as a pure flip either.
+- **Live §1.1 carriers today:** `contacts`, `contactPrecedence`, `postureIntent` (consumed by
+  `ConstraintSolver`; covered by M3/M4). `extremityOverrides` is consumed by the Finalizer.
+- **Factual audit + required-work breakdown:** `RFC_INTENT_BUILDER_REWRITE.md` (current authoring model,
+  carrier dead/dormant/obsolete table, files/helpers/stages affected, migration order, M5/M6/M7 classification).
 
 ### Phase M6 — Validator stamp-only (Gap 6 / Phase 8)
 - `VALIDATOR_STAMP_ONLY = true`. Remove geometry inference from `ExerciseValidator`; add any missing
@@ -477,8 +492,10 @@ each flag defaults per `ARCHITECTURE_V2` but can be flipped per-build for canary
   tolerance; non-contact poses byte-identical (Solver no-op).
 - **M4 complete when:** `FINALIZER_OWNS_CONVERSION=true`; `preConvertPoles` active; no pose writes a
   local transform after IK; `reconstructChestFrame` no-move guard verified on a synthetic conflict test.
-- **M5 complete when:** `spineIntent`/`limbTargets`/`jointIntents` are consumed by the engine (no dead
-  carrier); lint proves zero unused §1.1 writes.
+- **M5 complete when (BLOCKED):** `spineIntent`/`limbTargets`/`jointIntents` are consumed by the
+  engine (no dead carrier). NOT a flag flip — requires the deferred `BasePose`→`IntentBuilder`
+  intent-only migration. Verified 2026-07-17 these three are currently unwritten AND unread, so the
+  gate is unmet. The live §1.1 subset (`contacts`, `contactPrecedence`, `postureIntent`) IS consumed.
 - **M6 complete when:** `VALIDATOR_STAMP_ONLY=true`; `ExerciseValidator` no longer imports
   `toLocalDirection`/`angleBetweenDegrees`/`atan2`; every Validator rule reads ≥1 stamp/intent; a
   build-time assertion fails the compile if geometry inference remains.

@@ -7,7 +7,8 @@
 (`ARCHITECTURE_V2.md` §1.1).
 **Companion RFC:** `RFC_ENGINE_PIPELINE.md` (Gap 1) — this document designs the data the pipeline
 consumes. The two are co-dependent: the pipeline cannot exist until the intent model is real, and
-the intent model is meaningless until the pipeline reads it.
+the intent model is meaningless until the pipeline reads it. **Current-state audit + required-work
+breakdown:** `RFC_INTENT_BUILDER_REWRITE.md` (what is implemented today vs this target design).
 **Scope:** Design the complete intent model — ownership, lifecycle, serialization, copy semantics,
 builder API, validation, immutability, dependency rules, and interaction with Solver / Finalizer /
 Validator / migration. Reconciliation + design only; no new anatomical behavior; frozen
