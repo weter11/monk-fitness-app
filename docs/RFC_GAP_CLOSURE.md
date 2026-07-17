@@ -159,6 +159,16 @@ NOT ship before it. M6 is explicitly **BLOCKED** until M2 (engine produces stamp
    validator). All consumers unchanged.
 3. **Gate:** CI green on full suite. No pose touched.
 
+> **STATUS: COMPLETE.** `SkeletonPipeline` added (`animation/SkeletonPipeline.kt`) with
+> `EngineFlags.PIPELINE_ACTIVE=false` (default). `produceFrame` runs the legacy path and
+> `produceFrameValidated` adds the validation stage with previous/pre-previous history for the
+> dynamics rules. The constructor asserts the coherence invariant (`PIPELINE_ACTIVE ⇒
+> FINALIZER_OWNS_CONVERSION`) fail-fast, and active mode hard-errors until M2 (the stage chain is
+> not wired yet). `SkeletonPipelineM0Test` proves the legacy path **byte-identical** to direct
+> `build()+finalize()` (maxDeviation 0.0 across 8 pose families × 21 frames) and covers the
+> flag-default, validated-path, and fail-fast invariants. **Zero consumers changed** (renderers
+> still call `finalizer.finalize` directly; they are re-pointed in M2). Full suite green (249/0).
+
 ### M1 — `bakeIkLimb` frame-relative overload removal (Gap 5, F4)  **[authoritative scope — identical to RFC_ENGINE_PIPELINE §6 M1]**
 1. **Scope (resolved, no contradiction with RFC_ENGINE_PIPELINE):** M1 does ONLY one thing — delete the
    frame-relative `bakeIkLimb(rootWorldPos, targetWorldPos, L1, L2, parentRotation, poleLocal, …)`

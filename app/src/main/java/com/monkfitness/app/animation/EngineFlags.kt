@@ -18,6 +18,20 @@ package com.monkfitness.app.animation
  *   When false the legacy finalize path runs unchanged.
  */
 object EngineFlags {
+    /**
+     * Master switch (M0/M2) — when **false** (default) the engine runs the legacy path
+     * (`pose.build()` → `SkeletonPoseFinalizer.finalize()` → optional validation), whether invoked
+     * directly by consumers or via [SkeletonPipeline.produceFrame] (which, in legacy mode, just
+     * wraps that same path — zero behavior change). When **true** (M2) `produceFrame` drives the
+     * full ordered stage pipeline and the Finalizer's internal Solver call is removed.
+     *
+     * **Coherence invariant** (RFC_ENGINE_PIPELINE §5.7 / RFC_EXECUTION_CONTRACT §14): if
+     * `PIPELINE_ACTIVE` is true then [FINALIZER_OWNS_CONVERSION] must also be true (a pipeline
+     * without finalizer-owned conversion is incoherent). [SkeletonPipeline]'s constructor asserts
+     * this fail-fast. M0 ships with `PIPELINE_ACTIVE=false`, so the invariant is vacuously held.
+     */
+    var PIPELINE_ACTIVE: Boolean = false
+
     var SOLVER_OWNS_POSTURE: Boolean = false
     var FINALIZER_OWNS_CONVERSION: Boolean = false
 
@@ -29,6 +43,7 @@ object EngineFlags {
 
     /** Snapshot of every flag, for assertions that a phase is enabled/disabled in tests. */
     fun snapshot(): Map<String, Boolean> = mapOf(
+        "PIPELINE_ACTIVE" to PIPELINE_ACTIVE,
         "SOLVER_OWNS_POSTURE" to SOLVER_OWNS_POSTURE,
         "FINALIZER_OWNS_CONVERSION" to FINALIZER_OWNS_CONVERSION
     )

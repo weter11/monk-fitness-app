@@ -124,6 +124,13 @@
 
 - Roadmap: S0 baseline → S1 IK+ConstraintSolver → S2 Validator+stale-constants → S3
   pose authoring. Architecture v2 suspended after M1 until S0–S3 done.
+- **STATUS (current):** stabilization + legacy engine remediation **complete** — full suite
+  **249/0**. S0–S3 done; engine defects R1–R4 (`ENGINE_DEFECT_REMEDIATION_PLAN.md`) all fixed;
+  Architecture-v2 **Phase 7 complete** (headTarget resolver is the sole gaze writer, legacy
+  `buildHead` branch + `HEAD_TARGET_ENABLED` flag removed) and **M0 complete** (`SkeletonPipeline`
+  scaffold behind `PIPELINE_ACTIVE=false`, byte-identical legacy path). **Next: M2** (flip
+  `PIPELINE_ACTIVE`, wire the stage chain, re-point renderers); M1 mechanically landed; Phase 8/M6
+  (validator stamp-only) remains, blocked until M2 produces stamps.
 - **S1 (DONE):** IK angular-clamp recording, chest-frame → shoulder propagation,
   ground-contact projection, foot support-plane. `ConstraintSolverTest`×2, `IKLimbHelperTest`,
   `TrunkFrameTest` green (7 tests).
