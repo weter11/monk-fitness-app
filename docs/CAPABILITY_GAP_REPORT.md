@@ -118,15 +118,43 @@ evidence of the engine pipeline.
   overload converted the pole with `middleNode.parent?.worldRotation ?: parentRotation`, which is
   exactly what the call sites now do explicitly (the caller-passed `parentRotation` was only a
   fallback that the overload ignored whenever `middleNode.parent` was non-null).
-- **Remaining deprecated frame-relative overloads (separate, out of scope for M1/Gap5):** the
+- **Remaining deprecated frame-relative overloads (tracked as Gap 5b, now RESOLVED):** the
   `solveArmIK(shoulderW, targetHand, …, poleLocal, parentRotation, …)` and `solveLegIK(…)`
-  overloads are still retained and still called from `BaseThoracicPose.kt:138`
-  (`solveArmIK(…, poleLocal, chest!!.worldRotation, …)`). Deleting those is a distinct cleanup.
+  overloads were removed and their sole caller (`BaseThoracicPose.kt:138`) migrated. See Gap 5b.
 - **Missing data structures:** None.
 - **Missing execution phase:** None (F4 contract met by the world overload).
 - **Required prerequisite phase:** None (independent cleanup).
 - **Estimated implementation scope:** **Small** (done).
 - **Blocked / partial:** **Resolved.**
+- **See also:** the sibling frame-relative `solveArmIK`/`solveLegIK` overloads are tracked as
+  **Gap 5b** below (distinct cleanup, single caller `BaseThoracicPose.kt:138`).
+
+## Gap 5b — PHASE 1 deprecated frame-relative `solveArmIK`/`solveLegIK` overloads not removed (spec F4)
+**Status: RESOLVED (M1/Gap5b — deprecated `solveArmIK(poleLocal, parentRotation)` / `solveLegIK(poleLocal, parentRotation)` overloads deleted).**
+
+- **Existing engine support:** world-only `solveArmIK(shoulderW, targetHand, L1, L2, pole, constraint, result)`
+  and `solveLegIK(hipW, targetAnkle, L1, L2, pole, constraint, result)` wrappers in `BasePose.kt`
+  (delegate to `SkeletonMath.solveIK` world-only); `SkeletonMath.toWorldDirection` for pole conversion.
+- **Completed work:** The frame-relative `solveArmIK(poleLocal, parentRotation, …)` and
+  `solveLegIK(poleLocal, parentRotation, …)` overloads were removed from `BasePose.kt`. Their only
+  caller — `BaseThoracicPose.kt:138` (`bakeThoracicArm`) — was migrated to the world-only
+  `solveArmIK` by converting the authored local pole with
+  `SkeletonMath.toWorldDirection(poleLocal, chest!!.worldRotation, tempPoleWorld)` before the call
+  (reusing the existing allocation-free `tempPoleWorld` scratch, never a `Vector3()` on the hot
+  path). The migration is behavior-preserving: the deleted overloads delegated to
+  `SkeletonMath.solveIK(…, poleLocal, parentRotation, …)`, whose frame-relative variant converts the
+  pole with `toWorldDirection(poleLocal, parentRotation)` — exactly `chest!!.worldRotation`, which is
+  what `bakeThoracicArm` passes and what its doc comment (BaseThoracicPose.kt:123-127) declares as
+  the pole's authoring frame. Net pole = original world pole; no change to the solved elbow/hand.
+- **Missing data structures:** None.
+- **Missing execution phase:** None (F4 contract met by the world overload).
+- **Required prerequisite phase:** None (independent cleanup; depends only on Gap 5 being done first
+  so the IK layer is uniformly world-only).
+- **Estimated implementation scope:** **Small** (1 caller migrated, 2 overloads deleted).
+- **Blocked / partial:** **Resolved.** With Gap 5 + Gap 5b done, no frame-relative IK overload
+  (`bakeIkLimb` / `solveArmIK` / `solveLegIK`) remains in `BasePose.kt`; the IK layer is fully
+  world-only, satisfying spec F4. (The `SkeletonMath.solveIK` frame-relative *variant* that these
+  overloads delegated to is retained as a general utility but is now uncalled from pose code.)
 
 ## Gap 6 — PHASE 8 validator still reconstructs geometry (spec F-observer / §2.6)
 **Status: PARTIALLY BLOCKED (reads stamps BUT also infers angles from nodes).**

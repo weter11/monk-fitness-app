@@ -388,52 +388,7 @@ abstract class BasePose : PoseBuilder {
         return ikResult
     }
 
-    // --- Frame-relative solve overloads: the pole is authored in the limb-root's LOCAL frame
-    //     (chest/pelvis) and is transformed into world space via the parent's current world
-    //     rotation. The analytical solver is unchanged. Phase 1 (F4): DEPRECATED — IK is
-    //     world-only; convert the pole (or deriveDefaultPole) before solving. Kept until Phase 3. ---
-
-    @Deprecated(
-        "Phase 1: IK is world-only. Convert the pole with SkeletonMath.toWorldDirection (or deriveDefaultPole) and call the world-space solveArmIK overload.",
-        ReplaceWith(
-            "solveArmIK(shoulderW, targetHand, upperArmLen, forearmLen, SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld), constraint, result)",
-            "com.monkfitness.app.animation.SkeletonMath"
-        )
-    )
-    protected fun solveArmIK(
-        shoulderW: Vector3,
-        targetHand: Vector3,
-        upperArmLen: Float,
-        forearmLen: Float,
-        poleLocal: Vector3,
-        parentRotation: JointRotation,
-        constraint: IKConstraint,
-        result: SkeletonMath.IKResult
-    ): SkeletonMath.IKResult {
-        return SkeletonMath.solveIK(shoulderW, targetHand, upperArmLen, forearmLen, poleLocal, parentRotation, constraint, result)
-    }
-
-    @Deprecated(
-        "Phase 1: IK is world-only. Convert the pole with SkeletonMath.toWorldDirection (or deriveDefaultPole) and call the world-space solveLegIK overload.",
-        ReplaceWith(
-            "solveLegIK(hipW, targetAnkle, thighLen, shinLen, SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld), constraint, result)",
-            "com.monkfitness.app.animation.SkeletonMath"
-        )
-    )
-    protected fun solveLegIK(
-        hipW: Vector3,
-        targetAnkle: Vector3,
-        thighLen: Float,
-        shinLen: Float,
-        poleLocal: Vector3,
-        parentRotation: JointRotation,
-        constraint: IKConstraint,
-        result: SkeletonMath.IKResult
-    ): SkeletonMath.IKResult {
-        return SkeletonMath.solveIK(hipW, targetAnkle, thighLen, shinLen, poleLocal, parentRotation, constraint, result)
-    }
-
-    // Common Motion helpers (internally utilizing stateless MotionDrivers)
+    protected fun solveNearStraightLeg(
     protected fun phase(progress: Float): Float = progress
     protected fun downMotion(progress: Float): Float = MotionDrivers.PushPhase(progress)
     protected fun alternating(progress: Float): AlternatingMotion = MotionDrivers.alternating(progress)
