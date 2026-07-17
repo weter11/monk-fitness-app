@@ -76,6 +76,7 @@ class ArmCirclesPose : PoseBuilder {
 
         pelvis!!.localPosition = Vector3(0f, 0f, 0f)
         pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), 0f)
+        SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.PELVIS, JointRotation(Vector3(0f, 0f, 1f), 0f))
 
         // standH is retained only for the arm-circle hand kinematics (a shape decision), not
         // for the root height the solver now owns.

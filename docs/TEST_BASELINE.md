@@ -10,8 +10,9 @@ failures** apart from **regressions they introduced**.
 - Progression: `236 / 9` (post-S3) → `239 / 7` (**R1** foot derivation) → `243 / 4` (**R2**
   reach targets) → `243 / 1` (**R3** lunge support anchoring) → **`243 / 0`** (**R4** camera
   framing + hanging-leg reach, legacy engine defects R1–R4 cleared) → **`251 / 0`** (B1) →
-  **`275 / 0`** (B2) → **`280 / 0`** (B3, +5 `PostureUniversalityTest`). The full suite is
-  fully green; every Branch-B carrier flip is byte-identical (maxDev 0.0).
+  **`275 / 0`** (B2) → **`280 / 0`** (B3, +5 `PostureUniversalityTest`) → **`282 / 0`** (B4 first
+  migration, +2 `BranchBFamilyMigrationTest`). The full suite is fully green; every Branch-B carrier
+  flip is byte-identical (maxDev 0.0).
 - The count `236` includes the four previously-compile-broken files
   (`ConstraintSolverTest`, `IKLimbHelperTest`, `TrunkFrameTest`, `VerticalPullPosesTest`)
   that PR #134 (`efef793`) restored to the module. The old "168 / 30" figure was measured

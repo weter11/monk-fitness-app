@@ -41,6 +41,7 @@ class CouchStretchPose : BaseHipFlexorPose() {
 
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
         pelvis!!.localRotation.set(axisZ, -leanAngle)
+        declareJointIntent(Joint.PELVIS, JointRotation(axisZ, -leanAngle))
 
         setUpperBodyLocal(def)
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }

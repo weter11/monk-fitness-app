@@ -189,6 +189,26 @@ The old M5/M6 labels are **not used** — they described flag-flip milestones th
   legacy node-writing helpers deleted; `motion`/`camera`/`environment` obsolete fields removed; every
   family byte-identical; suite green.
 
+### B4 — IN PROGRESS (first migration landed)
+- **Landed this step (mixed mode, byte-identical):**
+  - **Dead legacy helpers deleted** (0 callers anywhere): `buildRigidSegment`, `buildLumbarFlexion`,
+    `buildWristArticulation`, `buildAnkleArticulation`, `buildHipAbduction` — removed from both
+    `BasePose` and `BaseValidationPose` (their `BaseValidationPose` copies were also unused). `TrunkFrameTest`
+    still exercises `buildChestOrientation`/`buildChestTwist`/`buildChestSideBend`, which remain.
+  - **Trunk/hip/pelvis authoring migrated to carrier-backed intent:** every production pose that hand-wrote
+    `pelvis`/`chest`/`lumbar` local rotations now also records a `jointIntents` entry via `declareJointIntent`
+    (BasePose) or `SkeletonPose.IntentBuilder(…).joint(...)` (PoseBuilder). The node is still set during
+    `build()` for build-time FK (the documented B2 idempotent mixed-mode form); the Finalizer consumes the
+    carrier and reproduces the authored rotation exactly. This is the per-family dead→live flip.
+  - `BranchBFamilyMigrationTest` (2 tests) locks the contract: migrated families populate `jointIntents`,
+    and the Finalizer consumer reproduces them byte-identically (maxDev 0.0) on vs off.
+- **Remaining (follow-up PRs, same pattern):** extend the carrier-backed migration to the remaining
+  raw node writes (limb/extremity local positions, head/gaze already covered by `headTarget`), then delete
+  each shared helper as its last caller converts (`buildSpineCurve`, `buildHip*`, `buildPelvis`,
+  `buildShoulders`, `buildTorso`, `buildHead`, `bakeIkLimb` + 5 IK wrappers) and retire the obsolete
+  `motion`/`camera`/`environment` fields. Full "zero pose writes a node" is the B6 purge, gated on every
+  family being carrier-backed.
+
 ### B5 — Validator stamp-only (the old M6)
 - **Contains:** `ExerciseValidator` reads §1.2 stamps + §1.1 intents only; removes `toLocalDirection`/
   `angleBetweenDegrees`/`atan2` geometry inference; build-time assertion fails compile if inference remains.

@@ -71,6 +71,7 @@ abstract class BaseSquatPose : BasePose() {
 
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
         pelvis!!.localRotation.set(axisZ, -leanAngle)
+        declareJointIntent(Joint.PELVIS, JointRotation(axisZ, -leanAngle))
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
         buildGaze(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))

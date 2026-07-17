@@ -84,6 +84,7 @@ class HamstringStretchPose : BasePose() {
 
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
         pelvis!!.localRotation.set(axisZ, -torsoPitch)
+        declareJointIntent(Joint.PELVIS, JointRotation(axisZ, -torsoPitch))
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
         buildGaze(neck!!, head!!, def.neckLength, headDir)

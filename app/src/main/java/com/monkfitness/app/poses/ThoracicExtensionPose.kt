@@ -46,6 +46,7 @@ class ThoracicExtensionPose : BaseThoracicPose() {
 
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
         pelvis!!.localRotation.set(axisZ, 0f)
+        declareJointIntent(Joint.PELVIS, JointRotation(axisZ, 0f))
 
         // Thoracic extension about the lateral (Z) axis. The arch originates in the spine BELOW
         // the chest (the thoracolumbar junction), so the chest node itself tips up and BACK (-X)
@@ -56,11 +57,13 @@ class ThoracicExtensionPose : BaseThoracicPose() {
         val extAngle = lerp(0f, 0.5f, progress)
         lumbar!!.localPosition.set(0f, 0f, 0f)
         lumbar!!.localRotation.set(axisZ, extAngle)
+        declareJointIntent(Joint.LUMBAR, JointRotation(axisZ, extAngle))
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
         // A small additional chest-local extension keeps the upper rib cage opening relative to
         // the lower spine (the thorax is not perfectly rigid with the lumbar segment).
         chest!!.localRotation.set(axisZ, extAngle * 0.4f)
+        declareJointIntent(Joint.CHEST, JointRotation(axisZ, extAngle * 0.4f))
 
         buildGaze(neck!!, head!!, def.neckLength, headDir)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)

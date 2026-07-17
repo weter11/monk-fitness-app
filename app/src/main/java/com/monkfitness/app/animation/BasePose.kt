@@ -147,10 +147,6 @@ abstract class BasePose : PoseBuilder {
         declareJointIntent(Joint.CHEST, JointRotation(chest.localRotation.axis, chest.localRotation.angle))
     }
 
-    protected fun buildRigidSegment(parent: SkeletonNode, child: SkeletonNode, offsetX: Float, offsetY: Float, offsetZ: Float) {
-        child.localPosition.set(offsetX, offsetY, offsetZ)
-    }
-
     /**
      * Authors a **clavicular** rotation on the proximal shoulder-girdle node, between the
      * chest and the scapula (CHEST -> CLAVICLE -> SCAPULA -> SHOULDER). Elevation/depression
@@ -172,33 +168,6 @@ abstract class BasePose : PoseBuilder {
         declareJointIntent(clavicle.joint, JointRotation(clavicle.localRotation.axis, clavicle.localRotation.angle))
     }
 
-    /**
-     * Authors a **lower-spine (lumbar / pelvis-tilt)** rotation on the LUMBAR segment of the
-     * two-segment spine (PELVIS -> LUMBAR -> CHEST). Because the lumbar sits below the chest,
-     * FK carries the whole thorax + shoulder girdle + arms with it, and
-     * `SkeletonPoseFinalizer.reconstructChestFrame` composes this lower-spine rotation with the
-     * thoracic frame — so patterns where the pelvis/lumbar and thorax move differently
-     * (hip hinge, good morning, deadlift, cat-cow, thoracic opener) become real joint motion
-     * instead of one overall trunk bend (Issue E).
-     *
-     * The lumbar defaults to a pass-through (identity), so leaving it unset reproduces the old
-     * single PELVIS->CHEST bend exactly. Common axes: local +Z sagittal flexion/extension,
-     * +Y axial rotation, +X lateral (side) bend.
-     */
-    protected fun buildLumbarFlexion(lumbar: SkeletonNode, flexionRad: Float, axis: Vector3 = axisZ) {
-        lumbar.localRotation.set(axis, flexionRad)
-        // B2: lower-spine articulation intent (jointIntents). The standard two-segment spine
-        // carries the lower trunk tilt on the LUMBAR (when present) or PELVIS; either way the
-        // node itself is the carrier, so recording by joint is unambiguous.
-        declareJointIntent(lumbar.joint, JointRotation(axis, flexionRad))
-    }
-
-    /**
-     * Authors a **two-segment spine curve**: a lower-spine (lumbar) rotation and a thoracic
-     * (chest) rotation about the same [axis], letting the two segments differ. Passing equal
-     * values reproduces a single overall bend split across the spine; passing e.g. a lumbar of
-     * zero with a thoracic value expresses "thoracic extends while the lumbar stays" (Issue E).
-     */
     /**
      * Authors a **two-segment spine curve**: a lower-spine rotation and a thoracic
      * (chest) rotation about the same [axis], letting the two segments differ. Passing equal
@@ -235,31 +204,6 @@ abstract class BasePose : PoseBuilder {
     }
 
     /**
-     * Authors a **2-DOF wrist** articulation on the hand node (UNI-8): flexion/extension composed
-     * with radial/ulnar deviation into one exact local rotation the FK traversal propagates and the
-     * hand completion honours. Combining the two axes is now first-class instead of one silently
-     * overwriting the other. Leaving both at zero keeps the wrist at identity (rigid extension of
-     * the forearm). Delegates to [SkeletonMath.buildWristRotation] (no duplicated rotation math).
-     */
-    protected fun buildWristArticulation(hand: SkeletonNode, flexion: Float, deviation: Float) {
-        SkeletonMath.buildWristRotation(flexion, deviation, hand.localRotation)
-        // B2: wrist articulation intent (jointIntents).
-        declareJointIntent(hand.joint, JointRotation(hand.localRotation.axis, hand.localRotation.angle))
-    }
-
-    /**
-     * Authors a **2-DOF ankle** articulation on the ankle node (UNI-8): dorsi/plantar-flexion
-     * composed with inversion/eversion into one exact local rotation. Combining the two axes is
-     * now first-class instead of one silently overwriting the other. Leaving both at zero keeps the
-     * ankle at identity (flat foot). Delegates to [SkeletonMath.buildAnkleRotation].
-     */
-    protected fun buildAnkleArticulation(ankle: SkeletonNode, dorsiflexion: Float, inversion: Float) {
-        SkeletonMath.buildAnkleRotation(dorsiflexion, inversion, ankle.localRotation)
-        // B2: ankle articulation intent (jointIntents).
-        declareJointIntent(ankle.joint, JointRotation(ankle.localRotation.axis, ankle.localRotation.angle))
-    }
-
-    /**
      * W1 — opt an [extremity] out of engine-derived orientation and into an explicit author
      * override. After this call the engine preserves the endpoint local positions the pose wrote on
      * the HEEL/TOE (or PALM/KNUCKLES/FINGERTIPS) nodes verbatim, instead of deriving them from the
@@ -280,16 +224,6 @@ abstract class BasePose : PoseBuilder {
         hip.localRotation.set(axisZ, flexionRad)
         // B2: hip flexion intent (jointIntents).
         declareJointIntent(hip.joint, JointRotation(axisZ, flexionRad))
-    }
-
-    /**
-     * Authors hip **abduction/adduction** (frontal plane, about the antero-posterior Y axis) on a
-     * hip ball-joint node (UNI-10). [sideSign] (-1 left / +1 right) mirrors the motion across the
-     * mid-line so a positive value abducts (spreads) both legs symmetrically.
-     */
-    protected fun buildHipAbduction(hip: SkeletonNode, abductionRad: Float, sideSign: Float) {
-        hip.localRotation.set(axisY, abductionRad * sideSign)
-        declareJointIntent(hip.joint, JointRotation(axisY, abductionRad * sideSign))
     }
 
     /**
