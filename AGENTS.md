@@ -176,17 +176,23 @@
       hanging regression contract (`ConstraintSolverPhase2Test`) is preserved. `PostureUniversalityTest`
        proves the B3 contract (STANDING poses solver-owned byte-identically; flag-off reverts to authored
        root). **Next safely-landable:** B4 (pose migration) or M8 cleanup.
-- **B4 (Branch B Pose migration) IN PROGRESS** — first migration landed (mixed mode, byte-identical):
-  dead legacy helpers deleted (`buildRigidSegment`, `buildLumbarFlexion`, `buildWristArticulation`,
-  `buildAnkleArticulation`, `buildHipAbduction` — from both `BasePose` and `BaseValidationPose`); every
-  production pose that hand-wrote `pelvis`/`chest`/`lumbar` rotations now records a `jointIntents` entry
-  via `declareJointIntent` (BasePose) or `SkeletonPose.IntentBuilder(...).joint(...)` (PoseBuilder), so the
-  Finalizer (B2) consumes the carrier and reproduces the authored rotation idempotently. `BranchBFamilyMigrationTest`
-  proves the migrated families populate `jointIntents` and render byte-identically (maxDev 0.0) with the
-  consumer on vs off. Remaining: extend carrier-backed authoring to the rest of the raw node writes, then
-  delete each shared helper as its last caller converts (`buildSpineCurve`, `buildHip*`, `buildPelvis`,
-  `buildShoulders`, `buildTorso`, `buildHead`, `bakeIkLimb` + 5 IK wrappers) and retire the obsolete
-  `motion`/`camera`/`environment` fields; full "zero pose writes a node" is the B6 purge.
+- **B4 (Branch B Pose migration) IN PROGRESS** — step 1 (PR #155) + step 2 (PR #156) landed, both
+  mixed-mode byte-identical (full suite **282/0** throughout):
+  - Step 1: dead legacy helpers deleted (`buildRigidSegment`, `buildLumbarFlexion`, `buildWristArticulation`,
+    `buildAnkleArticulation`, `buildHipAbduction` — from both `BasePose` and `BaseValidationPose`); every
+    production pose that hand-wrote `pelvis`/`chest`/`lumbar` rotations now records a `jointIntents` entry
+    via `declareJointIntent` (BasePose) or `SkeletonPose.IntentBuilder(...).joint(...)` (PoseBuilder), so the
+    Finalizer (B2) consumes the carrier and reproduces the authored rotation idempotently. `BranchBFamilyMigrationTest`
+    proves the migrated families populate `jointIntents` and render byte-identically (maxDev 0.0) with the
+    consumer on vs off.
+  - Step 2: more dead helper carriers deleted — `buildHipOrientation` (both bases, 0 callers) and
+    `buildChestSideBend` (BasePose, 0 production callers); `TrunkFrameTest` re-points to `IntentBuilder`
+    `declareJointIntent(CHEST, …)` directly, preserving the side-bend semantics.
+  - Remaining: extend carrier-backed authoring to the rest of the raw node writes, then delete each shared
+    helper as its last caller converts (`buildSpineCurve`, `buildChestTwist`/`buildChestOrientation`,
+    `buildHipFlexion`/`buildHipRotation`, `buildPelvis`, `buildShoulders`, `buildTorso`, `buildHead`,
+    `bakeIkLimb` + 5 IK wrappers) and retire the obsolete `motion`/`camera`/`environment` fields; full
+    "zero pose writes a node" is the B6 purge.
 - **S1 (DONE):** IK angular-clamp recording, chest-frame → shoulder propagation,
   ground-contact projection, foot support-plane. `ConstraintSolverTest`×2, `IKLimbHelperTest`,
   `TrunkFrameTest` green (7 tests).
