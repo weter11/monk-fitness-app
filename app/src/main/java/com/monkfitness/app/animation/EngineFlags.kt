@@ -28,7 +28,17 @@ object EngineFlags {
      * intent pipeline + Finalizer resolver are verified against the baseline. The pose still
      * records `headTarget` regardless of this flag; the flag only controls who *consumes* it.
      */
-    var HEAD_TARGET_ENABLED: Boolean = false
+    /**
+     * Phase 7 (Gap 7) — when true, the Finalizer resolves neck/head from the pose-declared
+     * `headTarget` intent (gaze-as-target) instead of the legacy direction-based `buildHead`.
+     * Flipped to **true** once the Finalizer resolver (`SkeletonPoseFinalizer.resolveHeadTarget`)
+     * and the pose-side `buildGaze` declaration landed; the resolver reproduces the identical gaze
+     * direction the pose authored (the pose records the synthetic target as neckWorld + gazeDir*100,
+     * so resolving it yields the same direction), so the rendered head is byte-identical to the
+     * legacy path. Poses that declare no `headTarget` (or run before the migration) keep the legacy
+     * `buildHead` direction path untouched.
+     */
+    var HEAD_TARGET_ENABLED: Boolean = true
 
     /** Snapshot of every flag, for assertions that a phase is enabled/disabled in tests. */
     fun snapshot(): Map<String, Boolean> = mapOf(

@@ -70,8 +70,13 @@ abstract class BasePose : PoseBuilder {
         val nw = neck.worldPosition
         tempV2.set(nw.x + tempV1.x * targetDistance, nw.y + tempV1.y * targetDistance, nw.z + tempV1.z * targetDistance)
         jointsBuffer.headTarget = HeadTarget(tempV2.copy(), Vector3(0f, 1f, 0f))
-        // Legacy direction path — unchanged output.
-        buildHead(neck, head, neckLength, gazeDir)
+        // When the Finalizer owns gaze resolution (HEAD_TARGET_ENABLED), the pose only *declares*
+        // the target; the head is written by SkeletonPoseFinalizer.resolveHeadTarget so the
+        // resolver math is the single source of truth. Otherwise (flag off) we keep writing the
+        // head here via the legacy direction path, byte-identical to the pre-Phase-7 baseline.
+        if (!EngineFlags.HEAD_TARGET_ENABLED) {
+            buildHead(neck, head, neckLength, gazeDir)
+        }
     }
 
     protected fun buildPelvis(pelvis: SkeletonNode, hipF: SkeletonNode, hipB: SkeletonNode, hipWidth: Float) {
