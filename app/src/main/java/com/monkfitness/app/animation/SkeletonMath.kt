@@ -373,30 +373,33 @@ data class ContactConstraint(
             else -> 0f
         }
 
-        // 2) Angular band on the middle joint interior angle. The distance band already bounds
-        //    the middle joint, but an explicit angular cap rejects orientations it could not
-        //    (e.g. a hyperextended elbow). Clamp the joint toward the limit by adjusting the
-        //    solved distance, staying inside the reach band.
-        var angularClampAmount = 0f
-        {
-            val denom = (2f * L1 * L2)
-            var cosT = ((L1 * L1 + L2 * L2 - dist * dist) / denom).coerceIn(-1f, 1f)
-            var theta = acos(cosT) * RAD2DEG
-            if (theta < limits.minFlexionDegrees) {
-                angularClampAmount = limits.minFlexionDegrees - theta
-                theta = limits.minFlexionDegrees
-                val newCos = cos(theta * DEG2RAD)
-                dist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * newCos).coerceIn(minDist, maxDist)
-            } else if (theta > limits.maxFlexionDegrees) {
-                angularClampAmount = theta - limits.maxFlexionDegrees
-                theta = limits.maxFlexionDegrees
-                val newCos = cos(theta * DEG2RAD)
-                dist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * newCos).coerceIn(minDist, maxDist)
-            }
+        // 2) Angular band on the middle joint interior angle.
+        //
+        //    The angular clamp records whether the *requested* pose (what the author actually
+        //    asked for, via `dMag`) violates the joint's flexion limits — e.g. a fully extended
+        //    limb (180 deg interior angle) is a hyperextension past `maxFlexionDegrees`. The
+        //    clamp is computed from the requested angle so a straight-limb request that the reach
+        //    band pre-clamps to 98% reach is still honestly reported as a hyperextension.
+        //
+        //    The *placed* joint is solved at the capped angle (not the reach-band-clamped
+        //    distance), so the final interior angle always honours the angular limit while the
+        //    resulting distance is still coerced inside the reach band. Diagnostic-instrument
+        //    rule: surface the violation, don't mute it.
+        val denom = (2f * L1 * L2)
+        val reqCosT = ((L1 * L1 + L2 * L2 - dMag * dMag) / denom).coerceIn(-1f, 1f)
+        val reqTheta = acos(reqCosT) * RAD2DEG
+        val cappedTheta = reqTheta.coerceIn(limits.minFlexionDegrees, limits.maxFlexionDegrees)
+        val angularClampAmount = when {
+            reqTheta < limits.minFlexionDegrees -> limits.minFlexionDegrees - reqTheta
+            reqTheta > limits.maxFlexionDegrees -> reqTheta - limits.maxFlexionDegrees
+            else -> 0f
         }
 
+        // Geometry solve: place the middle joint at the capped interior angle, then keep the
+        // resulting distance inside the reach band.
+        dist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * cos(cappedTheta * DEG2RAD)).coerceIn(minDist, maxDist)
+
         result.requestedDistance = dMag
-        result.clampedDistance = dist
         result.clampAmount = max(distanceClampAmount, angularClampAmount)
         result.angularClampAmount = angularClampAmount
 
