@@ -92,8 +92,17 @@ WidePushUpPoseTest :: testWidePushUpPoseBiomechanicalCompliance
 `ScapularPullUpPoseTest`, `SquatPosesTest`, `StandardPushUpPoseTest`, `StepUpPoseTest`,
 `ThoracicAndHamstringStretchPosesTest`, `WidePushUpPoseTest`.
 
-## Separately: 4 test files that do not compile (pre-existing)
+## Separately: 4 test files that previously did not compile
 
 `ConstraintSolverTest`, `IKLimbHelperTest`, `TrunkFrameTest`, `VerticalPullPosesTest`
-fail to compile (missing `kotlin.math` imports for `.pow`/`abs`, unsupported 3-arg
-`max`). Not counted above and not caused by feature work.
+previously failed to compile (missing `kotlin.math.pow` / `kotlin.math.abs` imports,
+and an unsupported 3-arg `max` in `VerticalPullPosesTest`). These compile errors have
+been **fixed** (add the missing `kotlin.math.*` imports; rewrite the 3-arg `max` as a
+nested 2-arg `max`).
+
+After the fix these four files participate in `./gradlew :app:testDebugUnitTest` and are
+**now counted in the totals above**. The previous "168 tests / 30 failures" snapshot was
+taken with the four files excluded from compilation, so the post-fix baseline must be
+re-measured: run the suite and update the count/30-failure list accordingly. Their
+*intended* assertions target the constraint solver, IK limb helper, trunk (chest) frame,
+and vertical-pull family — biomechanics coverage that was previously dark.

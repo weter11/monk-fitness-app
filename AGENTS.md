@@ -20,6 +20,23 @@
   verdicts in `ENGINEERING_VALIDATION_AUDIT §1` and `PELVIC_HIP_COMPLEX_INVESTIGATION §P6` are
   SUPERSEDED (they were written under the old target model).
 
+## Governing rule — Compile-first Policy (broken-windows for compilation)
+
+- **A branch may never intentionally leave the repository in a non-compiling state.**
+  The project must always remain in a buildable state. If any change introduces compilation
+  errors they become the **highest-priority blocking defect**, must be fixed immediately, and
+  the current task is **incomplete until compilation is restored**.
+- **Compilation errors are not backlog items.** They are blocking defects — never postponed,
+  never scheduled as debt. Technical debt may be scheduled; broken compilation may not.
+- **Rationale:** a non-compiling repo gives invalid engineering feedback — it hides runtime
+  failures, validation failures and architectural defects (exactly what PR #134 exposed: four
+  compile-broken test files suppressed the whole `:app` test module, so 0 tests ran and 31
+  real engine failures stayed invisible). Compile errors must never be postponed.
+- **Every discovered compile error is fixed before additional feature work resumes.** The
+  project never knowingly accumulates broken states (broken-windows policy).
+- **Architecture decisions, RFCs and roadmaps must only be produced against a compiling
+  codebase.** Work from a truthful, executable baseline — never from a red build.
+
 ## Build toolchain (see `docs/TOOLCHAIN_PROVISIONING.md` for the full recipe)
 
 - **JDK 17** at `/usr/lib/jvm/java-17-openjdk-amd64`.
@@ -51,13 +68,17 @@
 
 ## Test baseline (see `docs/TEST_BASELINE.md`)
 
-- `./gradlew :app:testDebugUnitTest` → **168 tests / 30 failures = GREEN-for-us**
-  (165/30 without Issue E). The 30 are **pre-existing on `main`**, not regressions.
+- `./gradlew :app:testDebugUnitTest` → baseline was **168 tests / 30 failures = GREEN-for-us**
+  (165/30 without Issue E), measured with the four compile-broken files excluded. The 30
+  are **pre-existing on `main`**, not regressions. Re-measure after the four files were
+  fixed (they now compile and count).
 - Two failure families: (1) `BONE_LENGTH` frame-0 arm/hand validation;
   (2) stale hard-coded expected positions (e.g. pelvis hang `230` vs `~240`).
-- **4 test files have pre-existing compile errors** (missing `kotlin.math` imports /
+- **4 test files previously had compile errors** (missing `kotlin.math` imports /
   3-arg `max`): `ConstraintSolverTest`, `IKLimbHelperTest`, `TrunkFrameTest`,
-  `VerticalPullPosesTest`. Do NOT "fix" them during unrelated tasks.
+  `VerticalPullPosesTest`. These have now been **fixed** (added the missing
+  `kotlin.math.*` imports; rewrote the 3-arg `max` as a nested 2-arg `max`). They now
+  compile and count toward the totals, so the "168 / 30" snapshot should be re-measured.
 
 ## Issue E — two-segment spine (DONE, committed `bcbee92`, pushed)
 

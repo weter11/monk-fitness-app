@@ -1,6 +1,8 @@
 package com.monkfitness.app
 
 import com.monkfitness.app.animation.*
+import com.monkfitness.app.poses.*
+import kotlin.math.abs
 import org.junit.Assert.*
 import org.junit.Test
 
