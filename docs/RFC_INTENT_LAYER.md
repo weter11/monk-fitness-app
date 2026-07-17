@@ -63,7 +63,7 @@ the skeleton definition, never as absolute node transforms.
 | `contactPrecedence` | `List<ContactId>` | conflict resolution order | Pose | Solver |
 | `postureIntent` | `PostureIntent` | coarse body arrangement (SEATED/HANGING/STANDING/CUSTOM) | Pose | Solver |
 | `extremityOverrides` | `Set<Extremity>` | opt-out of engine extremity derivation | Pose | Finalizer |
-| `headTarget` | `WorldTarget?` (NEW, see §1.2) | gaze-as-target (Gap 7) | Pose | Finalizer (neck/head resolver) |
+| `headTarget` | `HeadTarget?` (NEW, see §1.2) | gaze-as-target (Gap 7) | Pose | Finalizer (neck/head resolver) |
 | `motion` | `MotionDriver` (typed, see §1.3) | interpolation across frame | Pose | Pipeline (drives progress) |
 | `camera` / `environment` | typed (see §1.3) | framing hints | Pose | Render |
 

@@ -44,6 +44,41 @@ abstract class BasePose : PoseBuilder {
         head.localPosition.set(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
     }
 
+    /**
+     * Phase 7 (Gap 7 / F8 / W17) — declares the gaze as a world-space [HeadTarget] intent and,
+     * to remain behavior-preserving until the Finalizer consumes it, still writes the head via
+     * the legacy direction-based [buildHead]. The gaze *direction* is taken verbatim (exactly the
+     * value the legacy code passed to [buildHead]), and a synthetic [HeadTarget] is recorded at a
+     * fixed distance along that direction from the neck's current world position so the intent
+     * pipeline / Finalizer resolver has a target to consume once [EngineFlags.HEAD_TARGET_ENABLED]
+     * is flipped. The recorded target is derived from the same direction, so the rendered head is
+     * byte-identical to the pre-Phase-7 baseline (legacy path unchanged).
+     *
+     * @param gazeDir the (already-authored) world-space gaze direction — passed straight through
+     *   to [buildHead], so behavior is unchanged.
+     */
+    protected fun buildGaze(
+        neck: SkeletonNode,
+        head: SkeletonNode,
+        neckLength: Float,
+        gazeDir: Vector3,
+        targetDistance: Float = 100f
+    ) {
+        // Record the additive intent carrier (synthetic target along the authored gaze direction).
+        tempV1.set(gazeDir)
+        if (tempV1.mag() < 1e-4f) tempV1.set(0f, 1f, 0f) else tempV1.normalize()
+        val nw = neck.worldPosition
+        tempV2.set(nw.x + tempV1.x * targetDistance, nw.y + tempV1.y * targetDistance, nw.z + tempV1.z * targetDistance)
+        jointsBuffer.headTarget = HeadTarget(tempV2.copy(), Vector3(0f, 1f, 0f))
+        // When the Finalizer owns gaze resolution (HEAD_TARGET_ENABLED), the pose only *declares*
+        // the target; the head is written by SkeletonPoseFinalizer.resolveHeadTarget so the
+        // resolver math is the single source of truth. Otherwise (flag off) we keep writing the
+        // head here via the legacy direction path, byte-identical to the pre-Phase-7 baseline.
+        if (!EngineFlags.HEAD_TARGET_ENABLED) {
+            buildHead(neck, head, neckLength, gazeDir)
+        }
+    }
+
     protected fun buildPelvis(pelvis: SkeletonNode, hipF: SkeletonNode, hipB: SkeletonNode, hipWidth: Float) {
         hipF.localPosition.set(0f, 0f, -hipWidth)
         hipB.localPosition.set(0f, 0f, hipWidth)
@@ -386,51 +421,6 @@ abstract class BasePose : PoseBuilder {
         }
 
         return ikResult
-    }
-
-    // --- Frame-relative solve overloads: the pole is authored in the limb-root's LOCAL frame
-    //     (chest/pelvis) and is transformed into world space via the parent's current world
-    //     rotation. The analytical solver is unchanged. Phase 1 (F4): DEPRECATED — IK is
-    //     world-only; convert the pole (or deriveDefaultPole) before solving. Kept until Phase 3. ---
-
-    @Deprecated(
-        "Phase 1: IK is world-only. Convert the pole with SkeletonMath.toWorldDirection (or deriveDefaultPole) and call the world-space solveArmIK overload.",
-        ReplaceWith(
-            "solveArmIK(shoulderW, targetHand, upperArmLen, forearmLen, SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld), constraint, result)",
-            "com.monkfitness.app.animation.SkeletonMath"
-        )
-    )
-    protected fun solveArmIK(
-        shoulderW: Vector3,
-        targetHand: Vector3,
-        upperArmLen: Float,
-        forearmLen: Float,
-        poleLocal: Vector3,
-        parentRotation: JointRotation,
-        constraint: IKConstraint,
-        result: SkeletonMath.IKResult
-    ): SkeletonMath.IKResult {
-        return SkeletonMath.solveIK(shoulderW, targetHand, upperArmLen, forearmLen, poleLocal, parentRotation, constraint, result)
-    }
-
-    @Deprecated(
-        "Phase 1: IK is world-only. Convert the pole with SkeletonMath.toWorldDirection (or deriveDefaultPole) and call the world-space solveLegIK overload.",
-        ReplaceWith(
-            "solveLegIK(hipW, targetAnkle, thighLen, shinLen, SkeletonMath.toWorldDirection(poleLocal, parentRotation, tempPoleWorld), constraint, result)",
-            "com.monkfitness.app.animation.SkeletonMath"
-        )
-    )
-    protected fun solveLegIK(
-        hipW: Vector3,
-        targetAnkle: Vector3,
-        thighLen: Float,
-        shinLen: Float,
-        poleLocal: Vector3,
-        parentRotation: JointRotation,
-        constraint: IKConstraint,
-        result: SkeletonMath.IKResult
-    ): SkeletonMath.IKResult {
-        return SkeletonMath.solveIK(hipW, targetAnkle, thighLen, shinLen, poleLocal, parentRotation, constraint, result)
     }
 
     // Common Motion helpers (internally utilizing stateless MotionDrivers)

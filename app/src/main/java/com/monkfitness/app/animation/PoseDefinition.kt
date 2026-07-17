@@ -95,6 +95,23 @@ data class WorldTarget(
 )
 
 /**
+ * Phase 7 (Gap 7 / F8 / W17) — gaze-as-target carrier (§1.1 intent).
+ *
+ * The pose declares a world-space point the head should look at, instead of hand-authoring a
+ * counter-rotated UP direction. The Finalizer resolves neck/head from this target (reusing the
+ * existing [buildHead] math) once the intent pipeline is active; until then the pose keeps
+ * authoring the legacy gaze direction and the carrier is additive.
+ *
+ * @param world the world-space point the gaze should track.
+ * @param upBias the neutral gaze-up bias used when deriving the head direction from the target
+ *   (defaults to world up, matching the legacy upright gaze).
+ */
+data class HeadTarget(
+    val world: Vector3,
+    val upBias: Vector3 = Vector3(0f, 1f, 0f)
+)
+
+/**
  * Encapsulates the joint positions and rotations for a specific frame.
  *
  * ## Architecture v2 — single intent + state carrier (Phase 0)
@@ -160,6 +177,16 @@ class SkeletonPose(
 
     /** Environment hint authored by the pose (§1.1). */
     var environment: Any? = null
+
+    /**
+     * Phase 7 (Gap 7 / F8 / W17) — gaze-as-target. The pose declares where the head should
+     * look in world space; the Finalizer (once the intent pipeline lands) resolves neck/head
+     * from this target, reusing [buildHead] math. While `EngineFlags.HEAD_TARGET_ENABLED` is
+     * false the pose keeps authoring the legacy gaze *direction* and calling [buildHead]
+     * directly, so this carrier is purely additive and the rendered head is byte-identical
+     * to the pre-Phase-7 baseline. `null` means "no gaze target declared" (legacy direction path).
+     */
+    var headTarget: HeadTarget? = null
 
     // ---- §1.2 STATE SECTION (written by Engine, read by Validation) -----------------------
 
@@ -230,6 +257,7 @@ class SkeletonPose(
         this.motion = other.motion
         this.camera = other.camera
         this.environment = other.environment
+        this.headTarget = other.headTarget
         this.contacts.clear()
         this.contacts.addAll(other.contacts)
         this.jointIntents.clear()
