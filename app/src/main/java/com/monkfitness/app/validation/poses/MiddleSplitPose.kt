@@ -51,10 +51,10 @@ class MiddleSplitPose : BaseValidationPose() {
         // height is not the point of this instrument — the straight-limb reach is (see below).
         val pelvisY = 14f
         pelvis!!.localPosition.set(0f, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, 0f)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        chest!!.localRotation.set(axisZ, 0f)
+        // B2: route the (neutral) trunk through the declarative spine curve so carriers populate.
+        buildSpineCurve(pelvis!!, chest!!, 0f, 0f, axisZ)
 
         buildHead(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)

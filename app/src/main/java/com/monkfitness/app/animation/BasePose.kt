@@ -89,8 +89,22 @@ abstract class BasePose : PoseBuilder {
      * real 3-D local rotation. The chest is the IK root for both arms, so the whole upper
      * chain (rib cage, neck, head and both shoulders) follows the twist via FK.
      */
+    /**
+     * B2 (RFC_BRANCH_B_IMPLEMENTATION §2) — every trunk/hip/girdle/extremity helper now records its
+     * intent into the §1.1 `jointIntents` (chest/hip/girdle/ankle/wrist) and `spineIntent` carriers
+     * via the sole-mutator `IntentBuilder`, in addition to writing the node's `localRotation`. The
+     * Finalizer ([SkeletonPoseFinalizer.applyIntentCarriers]) consumes these carriers and re-derives
+     * the node rotations, making them live (the dead→live flip that completes B2). The node write is
+     * retained so build-time logic that reads a node's world transform (e.g. arm IK under a rotating
+     * chest) keeps working; the Finalizer re-application is idempotent, so output stays byte-identical.
+     */
+    protected fun declareJointIntent(joint: Joint, rotation: JointRotation) {
+        IntentBuilder(jointsBuffer).joint(joint, rotation)
+    }
+
     protected fun buildChestTwist(chest: SkeletonNode, twistRad: Float) {
         chest.localRotation.set(axisY, twistRad)
+        declareJointIntent(Joint.CHEST, JointRotation(axisY, twistRad))
     }
 
     /**
@@ -99,6 +113,7 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildChestSideBend(chest: SkeletonNode, sideBendRad: Float) {
         chest.localRotation.set(axisX, sideBendRad)
+        declareJointIntent(Joint.CHEST, JointRotation(axisX, sideBendRad))
     }
 
     /**
@@ -128,6 +143,8 @@ abstract class BasePose : PoseBuilder {
         // (Rz·Ry) · Rx -> final
         SkeletonMath.multiplyMatrices(cmX, cmY, cmZ, cxX, cxY, cxZ, cfX, cfY, cfZ)
         SkeletonMath.getRotationFromMatrix(cfX, cfY, cfZ, chest.localRotation)
+        // B2: record the composed thoracic orientation as a chest joint intent.
+        declareJointIntent(Joint.CHEST, JointRotation(chest.localRotation.axis, chest.localRotation.angle))
     }
 
     protected fun buildRigidSegment(parent: SkeletonNode, child: SkeletonNode, offsetX: Float, offsetY: Float, offsetZ: Float) {
@@ -151,6 +168,8 @@ abstract class BasePose : PoseBuilder {
         sideSign: Float
     ) {
         SkeletonMath.buildClavicularRotation(elevation, protraction, axialRotation, sideSign, clavicle.localRotation)
+        // B2: girdle articulation intent (jointIntents).
+        declareJointIntent(clavicle.joint, JointRotation(clavicle.localRotation.axis, clavicle.localRotation.angle))
     }
 
     /**
@@ -168,6 +187,10 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildLumbarFlexion(lumbar: SkeletonNode, flexionRad: Float, axis: Vector3 = axisZ) {
         lumbar.localRotation.set(axis, flexionRad)
+        // B2: lower-spine articulation intent (jointIntents). The standard two-segment spine
+        // carries the lower trunk tilt on the LUMBAR (when present) or PELVIS; either way the
+        // node itself is the carrier, so recording by joint is unambiguous.
+        declareJointIntent(lumbar.joint, JointRotation(axis, flexionRad))
     }
 
     /**
@@ -202,6 +225,13 @@ abstract class BasePose : PoseBuilder {
     ) {
         lower.localRotation.set(axis, lowerRad)
         chest.localRotation.set(axis, thoracicRad)
+        // B2: the single declarative spine curve (lower + thoracic about a shared axis). The
+        // Finalizer consumes `spineIntent` to re-derive the pelvis/lumbar/chest rotation; the
+        // concrete node writes are also recorded per-joint in `jointIntents` so the unified
+        // consumer covers both segments unambiguously.
+        IntentBuilder(jointsBuffer).spine(lowerRad, thoracicRad, axis)
+        declareJointIntent(lower.joint, JointRotation(axis, lowerRad))
+        declareJointIntent(chest.joint, JointRotation(axis, thoracicRad))
     }
 
     /**
@@ -213,6 +243,8 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildWristArticulation(hand: SkeletonNode, flexion: Float, deviation: Float) {
         SkeletonMath.buildWristRotation(flexion, deviation, hand.localRotation)
+        // B2: wrist articulation intent (jointIntents).
+        declareJointIntent(hand.joint, JointRotation(hand.localRotation.axis, hand.localRotation.angle))
     }
 
     /**
@@ -223,6 +255,8 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildAnkleArticulation(ankle: SkeletonNode, dorsiflexion: Float, inversion: Float) {
         SkeletonMath.buildAnkleRotation(dorsiflexion, inversion, ankle.localRotation)
+        // B2: ankle articulation intent (jointIntents).
+        declareJointIntent(ankle.joint, JointRotation(ankle.localRotation.axis, ankle.localRotation.angle))
     }
 
     /**
@@ -244,6 +278,8 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildHipFlexion(hip: SkeletonNode, flexionRad: Float) {
         hip.localRotation.set(axisZ, flexionRad)
+        // B2: hip flexion intent (jointIntents).
+        declareJointIntent(hip.joint, JointRotation(axisZ, flexionRad))
     }
 
     /**
@@ -253,6 +289,7 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildHipAbduction(hip: SkeletonNode, abductionRad: Float, sideSign: Float) {
         hip.localRotation.set(axisY, abductionRad * sideSign)
+        declareJointIntent(hip.joint, JointRotation(axisY, abductionRad * sideSign))
     }
 
     /**
@@ -263,6 +300,7 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildHipRotation(hip: SkeletonNode, rotationRad: Float, sideSign: Float) {
         hip.localRotation.set(axisX, rotationRad * sideSign)
+        declareJointIntent(hip.joint, JointRotation(axisX, rotationRad * sideSign))
     }
 
     /**
@@ -280,6 +318,7 @@ abstract class BasePose : PoseBuilder {
         sideSign: Float
     ) {
         SkeletonMath.buildHipRotation(flexionRad, abductionRad, rotationRad, sideSign, hip.localRotation)
+        declareJointIntent(hip.joint, JointRotation(hip.localRotation.axis, hip.localRotation.angle))
     }
 
     protected fun bakeIkLimb(

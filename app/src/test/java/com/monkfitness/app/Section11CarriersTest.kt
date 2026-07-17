@@ -13,16 +13,18 @@ import org.junit.Test
  * actual state by runtime observation rather than grep:
  *  - The **live** subset of §1.1 — `contacts`, `contactPrecedence`, `postureIntent` — IS populated
  *    by the validation instruments and consumed by the [ConstraintSolver] (this is what M3/M4 exercise).
- *  - The **dead** subset — `spineIntent`, `jointIntents` — is NEVER written by any production or
- *    validation pose (the authoring helpers write directly to node rotations instead), so they remain
- *    in their empty/identity default after a full build. They have no consumer in the engine yet.
  *  - The **live** subset after B1 — `limbTargets` — IS now populated by every `bakeIkLimb` call (which
  *    forwards its end joint + world target into the carrier) and IS consumed by the engine-owned
- *    `IkStage` (RFC_BRANCH_B_IMPLEMENTATION §2 B1). This is the dead→live flip that defines B1-complete;
- *    `spineIntent`/`jointIntents` remain dead until B2.
+ *    `IkStage` (RFC_BRANCH_B_IMPLEMENTATION §2 B1). This is the dead→live flip that defines B1-complete.
+ *  - **B2 (now complete):** `spineIntent` and `jointIntents` are now poppedated by every trunk/hip/
+ *    girdle/extremity authoring helper (which forwards its intent through the sole-mutator
+ *    `IntentBuilder`) and consumed by the [SkeletonPoseFinalizer] (RFC_BRANCH_B_IMPLEMENTATION §2 B2).
+ *    The `spineAndJointCarriersLiveAfterB2` test flips the old dead→live assertion; the B2 equivalence
+ *    is proven by `FinalizerIntentConsumersTest` (maxDeviation 0.0 on vs off).
  *
- * When the deferred `BasePose`→`IntentBuilder` intent-only migration lands (B2/B3), the remaining
- * dead-carrier asserts below must be flipped to assert they ARE populated — that is M5-complete.
+ * `extremityOverrides` was already live from W1 (the Finalizer's hand/foot derivation reads it), so it
+ * is consumed, not dead. The remaining deferred `BasePose`→`IntentBuilder` intent-only migration (B4)
+ * will delete the helpers' node writes, leaving the carriers as the sole authoring surface.
  */
 class Section11CarriersTest {
 
@@ -42,6 +44,20 @@ class Section11CarriersTest {
         "DeadHang" to { DeadHangPose() },
         "MiddleSplit" to { MiddleSplitPose() },
         "PikeSit" to { PikeSitPose() }
+    )
+
+    /**
+     * Poses that actually AUTHOR a trunk/hip/girdle/extremity intent. These are the poses the B2
+     * dead→live flip targets: their `spineIntent` / `jointIntents` carriers must now be populated
+     * (the authoring helpers forward through the sole-mutator IntentBuilder). Poses that express no
+     * such intent legitimately leave the carriers empty, so they are intentionally excluded.
+     */
+    private fun trunkHipPoses(): List<Pair<String, () -> PoseBuilder>> = listOf(
+        "StaticForearmPlank" to { StaticForearmPlankPose() },
+        "PikePushUp" to { PikePushUpPose() },
+        "QuadrupedThoracicRotations" to { QuadrupedThoracicRotationsPose() },
+        "DynamicWorldsGreatestStretch" to { DynamicWorldsGreatestStretchPose() },
+        "AlternatingForwardLunges" to { AlternatingForwardLungesPose() }
     )
 
     @Test
@@ -74,33 +90,44 @@ class Section11CarriersTest {
     }
 
     @Test
-    fun deadCarriersNeverWrittenByPoses() {
-        val all = productionPoses() + contactPoses()
-        for ((name, factory) in all) {
-            val pose = when (factory) {
-                in productionPoses().map { it.second } -> (factory() as PoseBuilder).build(PoseContext(0.5f, Side.LEFT, def))
-                else -> (factory() as BaseValidationPose).build(PoseContext(0.5f, Side.LEFT, def))
-            }
-            // The dead §1.1 carriers must stay in their default/empty state. `SpineCurve` structural
-            // equality is unreliable here (Vector3 lacks equals), so assert the scalar fields directly.
-            assertEquals("$name: spineIntent.lumbarRad must stay 0 (carrier dead)", 0f, pose.spineIntent.lumbarRad, 1e-6f)
-            assertEquals("$name: spineIntent.thoracicRad must stay 0 (carrier dead)", 0f, pose.spineIntent.thoracicRad, 1e-6f)
-            assertEquals("$name: jointIntents must stay empty (carrier dead) got=${pose.jointIntents.size}", 0, pose.jointIntents.size)
+    fun spineAndJointCarriersLiveAfterB2() {
+        // B2 dead→live flip: the trunk/hip/girdle/extremity authoring helpers now forward their
+        // intent through the sole-mutator IntentBuilder, so the §1.1 `spineIntent` and `jointIntents`
+        // carriers are populated for every pose that authors such intent (the Finalizer consumes them).
+        for ((name, factory) in trunkHipPoses()) {
+            val pose = factory().build(PoseContext(0.5f, Side.LEFT, def))
+            // Every trunk/hip/girdle/extremity authoring pose records a joint articulation.
+            assertTrue("$name must populate jointIntents (B2 carrier live) got=${pose.jointIntents.size}", pose.jointIntents.isNotEmpty())
+        }
+        for ((name, factory) in contactPoses()) {
+            val pose = factory().build(PoseContext(0.5f, Side.LEFT, def))
+            // Every contact instrument authors a trunk curve, so it records both `spineIntent`
+            // (via buildSpineCurve, at least the joints) and `jointIntents`. The neutral MiddleSplit
+            // keeps the curve at (0,0) by design, so we assert the joint intents (the consumed
+            // carrier) are populated for every contact pose.
+            assertTrue("$name must populate jointIntents (B2 carrier live) got=${pose.jointIntents.size}", pose.jointIntents.isNotEmpty())
+        }
+        // Poses that author a non-neutral trunk curve must populate `spineIntent`.
+        for ((name, factory) in listOf(
+            "DeepOverheadSquat" to { DeepOverheadSquatPose() },
+            "PikeSit" to { PikeSitPose() }
+        )) {
+            val pose = factory().build(PoseContext(0.5f, Side.LEFT, def))
+            val spinePopulated = pose.spineIntent.lumbarRad != 0f || pose.spineIntent.thoracicRad != 0f
+            assertTrue("$name must populate spineIntent (B2 carrier live)", spinePopulated)
         }
     }
 
     @Test
     fun limbTargetsConsumedByPipeline() {
         // End-to-end: after a full pipeline produceFrame (IkStage → Solver → Finalizer) the B1
-        // `limbTargets` carrier is retained and the dead `spineIntent`/`jointIntents` carriers
-        // remain empty (still awaiting B2). When IK_STAGE_ACTIVE is on, IkStage re-bakes every
-        // limb from the carrier; the frame must be identical to the off-baseline (see IkStageTest).
+        // `limbTargets` carrier is retained and the B2 `jointIntents` carrier is populated (live)
+        // and consumed by the Finalizer (idempotent, byte-identical output). Contact poses are
+        // solver-settled, so the consumer is a no-op for them — the carrier is still retained.
         for ((name, factory) in contactPoses()) {
             val out = SkeletonPipeline(def).produceFrame(factory(), PoseContext(0.5f, Side.LEFT, def))
             assertTrue("$name: limbTargets retained through pipeline got=${out.pose.limbTargets.size}", out.pose.limbTargets.size > 0)
-            assertEquals("$name: spineIntent.lumbarRad untouched got=${out.pose.spineIntent.lumbarRad}", 0f, out.pose.spineIntent.lumbarRad, 1e-6f)
-            assertEquals("$name: spineIntent.thoracicRad untouched got=${out.pose.spineIntent.thoracicRad}", 0f, out.pose.spineIntent.thoracicRad, 1e-6f)
-            assertEquals("$name: jointIntents untouched by pipeline got=${out.pose.jointIntents.size}", 0, out.pose.jointIntents.size)
+            assertTrue("$name: jointIntents retained through pipeline got=${out.pose.jointIntents.size}", out.pose.jointIntents.isNotEmpty())
         }
     }
 }

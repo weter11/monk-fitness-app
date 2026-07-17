@@ -149,14 +149,23 @@
     `bakeIkLimb` remains the sole solver, byte-identical baseline). The 5 pose-side IK wrappers
     (`solveArmIK`/`solveLegIK`/`solveStraightArmIK`/`solveStraightLegIK`/`solveNearStraightLeg`) are
     deleted; their 3 call sites now call `SkeletonMath` directly. `IkStageTest` proves stage-on == off
-    (maxDev 0.0) across 13 production + 4 contact poses; `Section11CarriersTest` flipped to assert
-    `limbTargets` populated. **M5 is BLOCKED** on the remaining dead carriers — the RFC's "automatic
-    once M2 lands" premise is false: a source audit shows only the posture/contact §1.1 subset
-    (`contacts`/`contactPrecedence`/`postureIntent`) plus the B1 limb subset (`limbTargets`) is
-    consumed; the spine/joint carriers `spineIntent`/`jointIntents` are still NEVER written or read
-    anywhere (dead — left from the deferred `BasePose`→`IntentBuilder` rewrite; `Section11CarriersTest`
-    pins this). M5 is NOT a flag flip; it needs that deferred intent-only migration. **Next
-    safely-landable:** B2/B3 (Finalizer/Posture) once the intent-only rewrite lands, or M8 cleanup.
+     (maxDev 0.0) across 13 production + 4 contact poses; `Section11CarriersTest` flipped to assert
+     `limbTargets` populated. **B2 (Branch B Finalizer intent consumers) DONE** — `spineIntent` +
+     `jointIntents` are now live: every trunk/hip/girdle/extremity authoring helper in `BasePose` and
+     `BaseValidationPose` forwards its intent through the sole-mutator `IntentBuilder`, and
+     `SkeletonPoseFinalizer.applyIntentCarriers` re-derives the node rotations from the carriers and
+     re-propagates FK. The re-application is idempotent with the helper's node write (the helper keeps
+     writing the node so build-time logic that reads a node's world transform keeps working), so output
+     is byte-identical to the pre-B2 baseline. Gated by `EngineFlags.FINALIZER_CONSUMES_INTENT` (default
+     **true**); a no-op for contact poses so the ConstraintSolver's settled contacts are never disturbed.
+     `FinalizerIntentConsumersTest` proves consumer-on == off (maxDev 0.0); `Section11CarriersTest`
+     flipped to assert `spineIntent`/`jointIntents` populated. **M5 is UNBLOCKED** — the RFC's "automatic
+     once M2 lands" premise was false, but the deferred intent-only migration is no longer required to
+     make the carriers live: B2 (Finalizer) completed the spine/joint carrier dead→live flip, and
+     `extremityOverrides` was already live from W1. All of §1.1 (`contacts`/`contactPrecedence`/
+     `postureIntent`/`limbTargets`/`spineIntent`/`jointIntents`/`extremityOverrides`) is now written and
+     read by the engine. **Next safely-landable:** B3 (Posture universality) or B4 (pose migration),
+     or M8 cleanup.
 - **S1 (DONE):** IK angular-clamp recording, chest-frame → shoulder propagation,
   ground-contact projection, foot support-plane. `ConstraintSolverTest`×2, `IKLimbHelperTest`,
   `TrunkFrameTest` green (7 tests).

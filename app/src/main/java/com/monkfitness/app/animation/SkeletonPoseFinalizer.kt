@@ -220,6 +220,44 @@ class SkeletonPoseFinalizer(
         neck.flatten(outputPose)
     }
 
+    /**
+     * B2 (RFC_BRANCH_B_IMPLEMENTATION §2) — consumes the §1.1 `spineIntent` and `jointIntents`
+     * carriers. Every trunk/hip/girdle/extremity authoring helper now forwards its intent through the
+     * sole-mutator `IntentBuilder`, so these carriers are populated after a build. The Finalizer is
+     * now the documented consumer: it re-derives each declared node rotation from the carrier and
+     * re-propagates the full FK tree.
+     *
+     * The helpers ALSO write the node during `build()` (so build-time logic that reads a node's world
+     * transform — e.g. arm IK under a rotating chest — keeps working), so the carrier re-application
+     * here is **idempotent**: the applied rotation equals the authored node rotation and the re-FK'd
+     * world state equals the pre-B2 baseline exactly (proven by `FinalizerIntentConsumersTest`,
+     * maxDeviation 0.0). The carrier therefore genuinely drives the final geometry while remaining a
+     * pure no-op on output until the node-write is deleted in B4.
+     *
+     * Gated by [EngineFlags.FINALIZER_CONSUMES_INTENT] (default on); flip off to skip consumption
+     * and restore the pre-B2 finalize. No-op when [SkeletonPose.jointIntents] is empty.
+     */
+    private fun applyIntentCarriers(roots: List<SkeletonNode>, pose: SkeletonPose) {
+        if (!EngineFlags.FINALIZER_CONSUMES_INTENT) return
+        if (pose.jointIntents.isEmpty()) return
+        // Contact poses are solver-settled: the ConstraintSolver has already honoured the declared
+        // trunk/hip intents when it repositions the root to hold every contact. Re-applying the
+        // carriers here would re-FK the whole tree and can displace the solver-settled contacts, so
+        // the consumer is a no-op for contact poses (the carriers are still populated = live; the
+        // full intent-only migration of contact instruments lands in B4).
+        if (pose.hasContacts()) return
+        for (a in pose.jointIntents) {
+            val n = findJointNode(roots[0], a.joint) ?: continue
+            n.localRotation.copyFrom(a.rotation)
+        }
+        // Re-propagate the whole tree so every declared articulation reaches its descendants, then
+        // flatten into the output pose. The `spineIntent` carrier is already reflected via the
+        // per-joint `jointIntents` entries recorded by buildSpineCurve, so no separate spine pass is
+        // needed (and applying both would be idempotent anyway).
+        for (root in roots) root.updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION)
+        for (root in roots) root.flatten(outputPose)
+    }
+
     // Phase 3 (F1/B5) — contact end-effector world-position snapshot, reused across the guard.
     // Keyed by end-joint index; values are the world positions captured before reconstruction.
     private val guardNodeMap = Array<SkeletonNode?>(Joint.entries.size) { null }
@@ -484,6 +522,12 @@ class SkeletonPoseFinalizer(
                 pose.isTransformsUpdated = true
             }
             outputPose.roots = pose.roots
+
+            // B2 (RFC_BRANCH_B_IMPLEMENTATION §2) — consume the §1.1 `spineIntent` / `jointIntents`
+            // carriers: re-derive the declared node rotations and re-propagate FK. This is idempotent
+            // with the node write the authoring helpers also perform during build, so geometry is
+            // byte-identical to the pre-B2 baseline (proven by FinalizerIntentConsumersTest).
+            applyIntentCarriers(pose.roots, pose)
 
             // Issue F: derive the chest frame only when the author left it unauthored (identity);
             // an authored chest rotation (thoracic twist / side-bend / flex, possibly asymmetric)

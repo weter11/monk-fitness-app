@@ -103,25 +103,34 @@ The old M5/M6 labels are **not used** — they described flag-flip milestones th
 - **Exit criteria (met):** `limbTargets` transitions dead → live (`Section11CarriersTest` flipped);
   limb/contact poses byte-identical via `IkStageTest`; the 5 IK wrappers deleted; suite green.
 
-### B2 — Finalizer intent consumers
-- **Contains:** Finalizer consumes `spineIntent` (expand into pelvis/lumbar/chest in
-  `reconstructChestFrame`), `jointIntents` (chest/hip/girdle/ankle/wrist), and `extremityOverrides`
-  (make the dormant consumer real). `buildSpineCurve`, `buildLumbarFlexion`, `buildChest*`,
-  `buildHip*`, `buildClavicularRotation`, `buildWrist/AnkleArticulation` become forwards to declarations.
-- **Independent migration:** independent of B1/B3.
-- **Semantic-equivalence tests:** **required** — trunk/hip/extremity poses render byte-identical with the
-  Finalizer expanding intent vs the old node writes (maxDev ≈ 0; covers side-bend, twist, 3-DOF compose,
-  clavicle, wrist, ankle).
+### B2 — Finalizer intent consumers  **[DONE]**
+- **Contains:** every trunk/hip/girdle/extremity authoring helper (`buildSpineCurve`, `buildLumbarFlexion`,
+  `buildChest*`, `buildHip*`, `buildClavicularRotation`, `buildWrist/AnkleArticulation` in both
+  `BasePose` and `BaseValidationPose`) now forwards its intent through the sole-mutator `IntentBuilder`
+  (`spineIntent` + `jointIntents`), while **also** writing the node's `localRotation` during `build()` so
+  build-time logic that reads a node's world transform (e.g. arm IK under a rotating chest) keeps working.
+  The `SkeletonPoseFinalizer.applyIntentCarriers` consumer re-derives each declared node rotation from the
+  carrier and re-propagates FK. The re-application is **idempotent** with the helper's node write, so output
+  is byte-identical to the pre-B2 baseline. `extremityOverrides` was already live (W1: the Finalizer's
+  hand/foot derivation reads it), so it is confirmed-live, not newly wired.
+- **Independent migration:** independent of B1/B3 (different stage, different carriers).
+- **Semantic-equivalence tests:** **required, met** — `FinalizerIntentConsumersTest` proves trunk/hip/
+  extremity (and contact) poses render byte-identically with the consumer on vs off (maxDeviation 0.0
+  across sampled progress frames). `Section11CarriersTest` is flipped to assert `spineIntent` /
+  `jointIntents` are now populated (dead→live).
 - **New infrastructure:** none new beyond B0's builder; this phase *wires existing Finalizer math* to read
-  carriers instead of pre-written nodes.
+  carriers (`applyIntentCarriers`) instead of relying solely on pre-written nodes.
 - **Legacy helpers that disappear:** `buildSpineCurve`, `buildLumbarFlexion`, `buildChestTwist`,
   `buildChestSideBend`, `buildChestOrientation`, `buildHipFlexion`, `buildHipAbduction`, `buildHipRotation`,
   `buildHipOrientation`, `buildClavicularRotation`, `buildWristArticulation`, `buildAnkleArticulation`
-  (become forwards in B2, deleted in B4 once no pose calls them).
-- **Reversible:** yes — revert the forward to the node-write body; Finalizer falls back to reading nodes.
-- **Exit criteria:** `spineIntent` + `jointIntents` transition dead → live (`Section11CarriersTest`
-  flipped); `extremityOverrides` transitions dormant → live; trunk/hip/extremity poses byte-identical;
-  suite green.
+  (became forwards in B2, deleted in B4 once no pose calls them).
+- **Reversible:** yes — `EngineFlags.FINALIZER_CONSUMES_INTENT` (default **true**) gates the consumer; set
+  false to restore the pre-B2 finalize (carriers recorded but not consumed — still byte-identical, since
+  the helpers keep writing the nodes). The consumer is a no-op for contact poses (`pose.hasContacts()`) so
+  the ConstraintSolver's settled contacts are never disturbed.
+- **Exit criteria (met):** `spineIntent` + `jointIntents` transition dead → live (`Section11CarriersTest`
+  flipped); `extremityOverrides` confirmed live; trunk/hip/extremity poses byte-identical
+  (`FinalizerIntentConsumersTest`); full suite green (275/0).
 
 ### B3 — Posture universality
 - **Contains:** every production pose declares a `postureIntent` (STANDING/CUSTOM/…); Solver derives root
