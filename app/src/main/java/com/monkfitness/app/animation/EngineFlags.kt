@@ -21,9 +21,20 @@ object EngineFlags {
     var SOLVER_OWNS_POSTURE: Boolean = false
     var FINALIZER_OWNS_CONVERSION: Boolean = false
 
+    /**
+     * M0/M2 gate for the [SkeletonPipeline] orchestrator (Gap 1).
+     * - false (legacy / M0): the pipeline's [produceFrame] is a thin facade over today's path
+     *   (`PoseBuilder.build` → `SkeletonPoseFinalizer.finalize`); no consumer uses the pipeline yet.
+     * - true (M2): [produceFrame] moves tree construction into the IK stage and [PoseBuilder.build]
+     *   becomes intent-only (§1.1). Flipped in the M2 milestone, gated on a green compile + B6
+     *   baseline. Defaults to false so the legacy path is preserved until then.
+     */
+    var PIPELINE_ACTIVE: Boolean = false
+
     /** Snapshot of every flag, for assertions that a phase is enabled/disabled in tests. */
     fun snapshot(): Map<String, Boolean> = mapOf(
         "SOLVER_OWNS_POSTURE" to SOLVER_OWNS_POSTURE,
-        "FINALIZER_OWNS_CONVERSION" to FINALIZER_OWNS_CONVERSION
+        "FINALIZER_OWNS_CONVERSION" to FINALIZER_OWNS_CONVERSION,
+        "PIPELINE_ACTIVE" to PIPELINE_ACTIVE
     )
 }
