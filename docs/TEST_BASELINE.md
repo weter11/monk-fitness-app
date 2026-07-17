@@ -4,12 +4,11 @@ Snapshot of the expected unit-test state so future sessions can tell **pre-exist
 failures** apart from **regressions they introduced**.
 
 - Command: `./gradlew :app:testDebugUnitTest`
-- **Current truthful baseline (post PR #134 + S1 + S2 + S3 + remediation R1–R2):**
-  **243 tests executed, 4 failures, 0 errors.**
-- Progression: `236 / 9` (post-S3) → `239 / 7` (after **R1**, foot extremity derivation) →
-  **`243 / 4`** (after **R2**, reach target authoring: `StandardPushUpPoseTest`,
-  `SquatPosesTest` Sumo, `KneePushUpPoseTest` now green; +`ReachTargetTest` unit tests). R3–R4
-  remain (see below).
+- **Current truthful baseline (post PR #134 + S1 + S2 + S3 + remediation R1–R3):**
+  **243 tests executed, 1 failure, 0 errors.**
+- Progression: `236 / 9` (post-S3) → `239 / 7` (**R1** foot derivation) → `243 / 4` (**R2**
+  reach targets) → **`243 / 1`** (**R3** lunge support anchoring: `LungePosesTest` ×3 now
+  green). Only **R4** (camera framing, `VerticalPullPosesTest`) remains.
 - The count `236` includes the four previously-compile-broken files
   (`ConstraintSolverTest`, `IKLimbHelperTest`, `TrunkFrameTest`, `VerticalPullPosesTest`)
   that PR #134 (`efef793`) restored to the module. The old "168 / 30" figure was measured
@@ -25,8 +24,18 @@ failures** apart from **regressions they introduced**.
   |---|---|---|
   | R1 | Foot extremity derivation | ~~`BurpeePoseTest`, `KettlebellSwingPoseTest`, `KneePushUpPoseTest` (foot bones)~~ **DONE** |
   | R2 | Reach target authoring | ~~`StandardPushUpPoseTest`, `SquatPosesTest` (Sumo), `KneePushUpPoseTest` (arm reach)~~ **DONE** |
-  | R3 | Lunge support anchoring | `LungePosesTest` ×3 (Forward/Reverse/Side) |
+  | R3 | Lunge support anchoring | ~~`LungePosesTest` ×3 (Forward/Reverse/Side)~~ **DONE** |
   | R4 | Camera framing | `VerticalPullPosesTest` |
+
+  **R3 (DONE):** a plant/swing target-assignment logic error, not a solver/IK issue (verified by
+  probe: the planted ankle was rock-steady during its own plant phase). The lunge poses always
+  wrote `targetF = plantZ` and `targetB = swingZ`, then chose `plantAnkle = if (plantUsesFrontHip)
+  targetF else targetB`. Because which physical foot is the anchor swaps every half cycle, in the
+  second half the "plant" ankle inherited the *swing* foot's Z (a sign flip), so the test saw the
+  anchor slide up to ~88 units. Fixed by authoring the plant and swing targets **directly** so the
+  fixed anchor keeps its own side of the track regardless of role (`assemble` already routes
+  `plantAnkle` to the correct hip via `plantUsesFrontHip`). Applied to Forward/Reverse/Side; the
+  `StepUp` test in the same class is unaffected. Drift dropped 88 → 0.02.
 
   **R2 (DONE):** three distinct sub-causes, all "authored IK target outside the reachable
   annulus `[minReach, maxReach]`", each verified by probe (not assumed):

@@ -49,12 +49,15 @@ class AlternatingForwardLungesPose : BaseLungePose() {
         val plantZ = if (plantUsesFrontHip) -footSepZ else footSepZ
         val swingZ = if (swingIsFront) -footSepZ else footSepZ
 
-        // Support foot is fixed; swing foot follows its arc.
-        targetF.set(0f, footRestY, plantZ)
-        targetB.set(stride * s, footRestY + liftHeight * 4f * s * (1f - s), swingZ)
-
-        val plantAnkle = if (plantUsesFrontHip) targetF else targetB
-        val swingAnkle = if (plantUsesFrontHip) targetB else targetF
+        // R3 (lunge support anchoring): author the plant and swing targets DIRECTLY (not the
+        // named targetF/targetB), because which physical foot is the anchor swaps every half
+        // cycle. The plant foot is fixed at the origin on its own side of the track; the swing
+        // foot travels forward along its arc. targetF/targetB previously hard-coded plantZ/swingZ
+        // regardless of role, so in the second half the "plant" ankle inherited the swing foot's
+        // Z (sign flip) and the test saw the anchor slide ~88 units. `assemble` routes plantAnkle
+        // to the correct hip via plantUsesFrontHip, so the Z here must match the anchor's side.
+        val plantAnkle = targetF.set(0f, footRestY, plantZ)
+        val swingAnkle = targetB.set(stride * s, footRestY + liftHeight * 4f * s * (1f - s), swingZ)
 
         val pelvisX = comX(0f, stride * s, s)
         val pelvisY = SkeletonMath.lerp(standH, bottomH, s)
