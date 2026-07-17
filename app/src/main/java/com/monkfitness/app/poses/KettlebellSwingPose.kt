@@ -47,6 +47,9 @@ class KettlebellSwingPose : PoseBuilder {
     override fun build(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
+        // B3 — every production pose declares its posture intent. This pose authors a
+        // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
+        SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
 
         // 1. Core Hip Hinge Positioning
         // Smooth C2 cosine wave mapping progress 0.0 -> 0.5 (upright snap) -> 1.0 (deep hike)

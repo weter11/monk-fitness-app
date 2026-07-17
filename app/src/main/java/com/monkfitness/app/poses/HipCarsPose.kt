@@ -70,9 +70,11 @@ class HipCarsPose : PoseBuilder {
         ensureHierarchy(def)
 
         // Hip Controlled Articular Rotations (CARs)
-        val standH = def.shinLength + def.thighLength + 25f
+        // B3 — STANDING posture: the solver owns the coarse pelvis height (seed == standH).
+        SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.STANDING)
 
-        pelvis!!.localPosition = Vector3(0f, standH, 0f)
+        val standH = def.shinLength + def.thighLength + 25f
+        pelvis!!.localPosition = Vector3(0f, 0f, 0f)
         pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), 0f)
 
         chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)

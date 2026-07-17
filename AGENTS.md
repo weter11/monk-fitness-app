@@ -158,14 +158,24 @@
      writing the node so build-time logic that reads a node's world transform keeps working), so output
      is byte-identical to the pre-B2 baseline. Gated by `EngineFlags.FINALIZER_CONSUMES_INTENT` (default
      **true**); a no-op for contact poses so the ConstraintSolver's settled contacts are never disturbed.
-     `FinalizerIntentConsumersTest` proves consumer-on == off (maxDev 0.0); `Section11CarriersTest`
-     flipped to assert `spineIntent`/`jointIntents` populated. **M5 is UNBLOCKED** — the RFC's "automatic
-     once M2 lands" premise was false, but the deferred intent-only migration is no longer required to
-     make the carriers live: B2 (Finalizer) completed the spine/joint carrier dead→live flip, and
-     `extremityOverrides` was already live from W1. All of §1.1 (`contacts`/`contactPrecedence`/
-     `postureIntent`/`limbTargets`/`spineIntent`/`jointIntents`/`extremityOverrides`) is now written and
-     read by the engine. **Next safely-landable:** B3 (Posture universality) or B4 (pose migration),
-     or M8 cleanup.
+      `FinalizerIntentConsumersTest` proves consumer-on == off (maxDev 0.0); `Section11CarriersTest`
+      flipped to assert `spineIntent`/`jointIntents` populated. **M5 is UNBLOCKED** — the RFC's "automatic
+      once M2 lands" premise was false, but the deferred intent-only migration is no longer required to
+      make the carriers live: B2 (Finalizer) completed the spine/joint carrier dead→live flip, and
+      `extremityOverrides` was already live from W1. All of §1.1 (`contacts`/`contactPrecedence`/
+      `postureIntent`/`limbTargets`/`spineIntent`/`jointIntents`/`extremityOverrides`) is now written and
+      read by the engine. **B3 (Branch B Posture universality) DONE** — every concrete production pose now
+      declares a `postureIntent`; the `ConstraintSolver` (and `SkeletonPipeline.runStages`) runs the
+      posture seed for **any** pose naming a non-`CUSTOM` intent even with no contacts, and
+      `seedRootFromPostureIntent` pins the seed exactly for contact-less poses (the relaxation loop is a
+      no-op for them, so output is byte-identical to the authored height). The five static STANDING
+      shapes (ArmCircles / FacePull / HipCars / ScapularRetraction / WallSlides) declare `STANDING` and no
+      longer hand-write `pelvis.y` — the solver pins `standH` (`shinLength + thighLength + 25f`). All other
+      production poses declare `CUSTOM` (shape-driven roots; the solver leaves the authored root
+      untouched, the reversible B3 fallback). Contact poses keep the M3 damped-ease seed, so the seated/
+      hanging regression contract (`ConstraintSolverPhase2Test`) is preserved. `PostureUniversalityTest`
+      proves the B3 contract (STANDING poses solver-owned byte-identically; flag-off reverts to authored
+      root). **Next safely-landable:** B4 (pose migration) or M8 cleanup.
 - **S1 (DONE):** IK angular-clamp recording, chest-frame → shoulder propagation,
   ground-contact projection, foot support-plane. `ConstraintSolverTest`×2, `IKLimbHelperTest`,
   `TrunkFrameTest` green (7 tests).

@@ -202,12 +202,20 @@ object ConstraintSolver {
     /**
      * Repositions the root so all registered fixed contacts are honored, then re-bakes each
      * contact limb from the moved root. Mutates the supplied [pose] (its node local
-     * transforms and, at the end, runs a fresh FK + flatten). No-ops when there are no
-     * contacts, so non-contact poses are untouched.
+     * transforms and, at the end, runs a fresh FK + flatten).
+     *
+     * Branch B3 — posture universality: when [EngineFlags.SOLVER_OWNS_POSTURE] is on and the pose
+     * declares a non-[PostureIntent.Kind.CUSTOM] intent, the solver runs even with **no** contacts,
+     * so it can seed/pin the coarse pelvis height from the intent (the relaxation loop below is a
+     * strict no-op for contact-less poses, so production standing shapes are untouched apart from
+     * the engine-owned root height). A pose that neither registers contacts nor names a posture is
+     * still a pure no-op.
      */
     fun solve(pose: SkeletonPose, definition: SkeletonDefinition) {
         val contacts = pose.contacts
-        if (contacts.isEmpty()) return
+        val postureDriven = EngineFlags.SOLVER_OWNS_POSTURE &&
+            pose.postureIntent.kind != PostureIntent.Kind.CUSTOM
+        if (contacts.isEmpty() && !postureDriven) return
         val roots = pose.roots
         if (roots.isEmpty()) return
 
@@ -418,12 +426,24 @@ object ConstraintSolver {
 
     /**
      * Phase 2 (F2) — seeds the root/pelvis transform from the pose's declared [PostureIntent]
-     * (B1.1 / B4). This is the engine-owned replacement for the pose's hand-computed `pelvisY`/
-     * `pelvisX` arithmetic: the solver derives an *exact* coarse pelvis height from the intent
-     * kind and eases the authored root toward it (so a pose that already authored a close value
-     * moves minimally). [PostureIntent.Kind.CUSTOM] and an empty intent leave the authored root
-     * untouched (the solver then honors only contacts). The seed is a starting value; the existing
-     * relaxation/CCD loop below refines it against the actual contacts.
+     * (B1.1 / B3). This is the engine-owned replacement for the pose's hand-computed `pelvisY`/
+     * `pelvisX` arithmetic: the solver derives the coarse pelvis height from the intent kind.
+     *
+     * Branch B3 — posture universality: the solver now owns the root for **every** pose that names
+     * a non-[PostureIntent.Kind.CUSTOM] intent, not just contact poses:
+     *  - **Non-contact poses** (most production STANDING / HANGING / SEATED shapes): the relaxation
+     *    loop below can never move the root (there is no anchored contact to satisfy), so the seed
+     *    is *pinned exactly* (`pelvis.y = seedY`). This is the engine-owned root: a STANDING pose's
+     *    `standH` is now derived by the solver, byte-identical to the value the pose used to write
+     *    by hand. The x/z stay authored (lateral/forward shift is a pose-level shape decision).
+     *  - **Contact poses** (squats/hangs/etc. that register fixed supports): the seed is *eased*
+     *    (damped) toward `seedY`, exactly as in M3, so the authored root and the contact relaxation
+     *    dominate; the regression contract (`ConstraintSolverPhase2Test.seatedSeedDoesNotRegress…`)
+     *    is preserved. The relaxation loop then refines the seed against the actual contacts.
+     *
+     * [PostureIntent.Kind.CUSTOM] leaves the authored root untouched (the pose owns its own shape);
+     * this is the deliberate, reversible B3 fallback for poses whose root is genuinely shape-driven
+     * (planks, dynamic jumps, leans) rather than a simple postural template.
      *
      * Allocation-free: reuses [dir]/[delta] scratch. Deterministic.
      */
@@ -432,10 +452,15 @@ object ConstraintSolver {
         if (intent.kind == PostureIntent.Kind.CUSTOM) return
 
         val seedY = postureSeedY(intent, def, pose)
-        // Ease the authored root's Y toward the intent-derived seed (damped). The x/z stay authored
-        // (lateral/forward shift is a pose-level shape decision, not a coarse posture height), so
-        // seated/standing/hanging intents only pin the global height the relaxation then honors.
-        pelvis.localPosition.y = SkeletonMath.lerp(pelvis.localPosition.y, seedY, POSTURE_SEED_RELAX)
+        if (pose.contacts.isEmpty()) {
+            // No anchored contact: the relaxation loop cannot move the root, so pin the seed
+            // exactly. The solver is the sole owner of the coarse pelvis height (B3).
+            pelvis.localPosition.y = seedY
+        } else {
+            // Contact-bearing pose: keep the M3 eased seed so the authored root + relaxation
+            // dominate; preserves the seated/hanging regression contract.
+            pelvis.localPosition.y = SkeletonMath.lerp(pelvis.localPosition.y, seedY, POSTURE_SEED_RELAX)
+        }
     }
 
     /**

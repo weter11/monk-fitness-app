@@ -70,9 +70,12 @@ class WallSlidesPose : PoseBuilder {
         ensureHierarchy(def)
 
         // Wall slides: Standing against the wall
-        val standH = def.shinLength + def.thighLength + 25f
+        // B3 — STANDING posture: the solver owns the coarse pelvis height (seed == standH).
+        // The -5f x is a shape decision (lean toward the wall) and stays authored.
+        SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.STANDING)
 
-        pelvis!!.localPosition = Vector3(-5f, standH, 0f)
+        val standH = def.shinLength + def.thighLength + 25f
+        pelvis!!.localPosition = Vector3(-5f, 0f, 0f)
         pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), 0f)
 
         chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)

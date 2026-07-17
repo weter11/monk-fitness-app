@@ -67,6 +67,9 @@ class PelvicTiltPose : PoseBuilder {
     override fun build(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
+        // B3 — every production pose declares its posture intent. This pose authors a
+        // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
+        SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
 
         // Posterior pelvic tilt: lying on the back (supine) with bent knees
         // Pelvis Y remains static on the floor (14f)

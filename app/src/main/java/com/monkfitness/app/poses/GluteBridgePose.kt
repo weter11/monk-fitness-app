@@ -67,6 +67,9 @@ class GluteBridgePose : PoseBuilder {
     override fun build(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
+        // B3 — every production pose declares its posture intent. This pose authors a
+        // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
+        SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
 
         // Supine glute bridge: lying on the back
         // progress 0 (resting on floor) to 1 (bridge peak)
