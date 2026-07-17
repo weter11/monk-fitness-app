@@ -157,10 +157,12 @@ class IKLimbHelperTest {
 
         assertTrue("angular clamp should be recorded for a hyperextended target", result.angularClampAmount > 0f)
 
-        // The resulting middle-joint interior angle must respect the 150° cap.
+        // The resulting middle-joint interior angle must respect the 150° cap. Measure the
+        // angle against the *solved* end (not the unreachable target): when the target is
+        // hyperextended the limb stops short and the joint angle is realized at the cap.
         val mid = result.joint
         val v1 = Vector3(root.x - mid.x, root.y - mid.y, root.z - mid.z)
-        val v2 = Vector3(target.x - mid.x, target.y - mid.y, target.z - mid.z)
+        val v2 = Vector3(result.end.x - mid.x, result.end.y - mid.y, result.end.z - mid.z)
         val m1 = v1.mag(); val m2 = v2.mag()
         val dot = v1.dot(v2) / (m1 * m2)
         val theta = kotlin.math.acos(dot.coerceIn(-1f, 1f)) * 180f / kotlin.math.PI.toFloat()
