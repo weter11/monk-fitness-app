@@ -9,6 +9,7 @@
 > **Authoritative semantic inventory (per-helper classification):** `RFC_DECLARATIVE_AUTHORING.md` —
 > the contract this design must honour (every "Becomes intent" helper → a consumed carrier; every
 > "Splits" helper → declaration + engine stage; every "Becomes obsolete" wrapper → deleted).
+> **Migration plan (phase order, PR slicing, exit criteria):** `RFC_BRANCH_B_IMPLEMENTATION.md`.
 > **Date:** 2026-07-17.
 >
 > This document defines the future authoring architecture **independently of the Runtime**. It is the

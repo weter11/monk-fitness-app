@@ -303,3 +303,7 @@ proposed here — only the gate.
 
 > Branch B does **not** begin until criteria 1–2 are met (1 is met today; 2 is met by this RFC's companion
 > docs). Criteria 3–7 are the standing contract for the work itself.
+>
+> **Migration plan (phase order, PR slicing, exit criteria, reversibility):** `RFC_BRANCH_B_IMPLEMENTATION.md`
+> — the authoritative plan that turns these entry criteria into B0–B6 PRs. It is the document every future
+> Branch B PR corresponds to.

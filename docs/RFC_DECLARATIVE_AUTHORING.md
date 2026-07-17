@@ -6,9 +6,10 @@
 > between declarative authoring and runtime geometry before any Branch B work begins.
 > **Status:** authoritative specification for Branch B (companion to `RFC_DECLARATIVE_POSE_AUTHORING.md`,
 > which is the design; this document is the per-helper semantic classification that the design must honour).
-> **Companion RFCs:** `RFC_DECLARATIVE_POSE_AUTHORING.md` (Branch B design), `RFC_PHASE_I_CLOSURE.md`
-> (Branch A closure + ownership model), `RFC_INTENT_BUILDER_REWRITE.md` (current-state audit),
-> `RFC_INTENT_LAYER.md` (§1.1 intent model), `RFC_GAP_CLOSURE.md` (milestone gates).
+> **Companion RFCs:** `RFC_DECLARATIVE_POSE_AUTHORING.md` (Branch B design), `RFC_BRANCH_B_IMPLEMENTATION.md`
+> (Branch B migration plan), `RFC_PHASE_I_CLOSURE.md` (Branch A closure + ownership model),
+> `RFC_INTENT_BUILDER_REWRITE.md` (current-state audit), `RFC_INTENT_LAYER.md` (§1.1 intent model),
+> `RFC_GAP_CLOSURE.md` (milestone gates).
 > **Date:** 2026-07-17. **Verified against:** `BasePose.kt` helper inventory + §1.1 carrier audit
 > (`RFC_INTENT_BUILDER_REWRITE.md` §2) + `RFC_PHASE_I_CLOSURE.md` §2/§5/§6.
 >
