@@ -162,11 +162,12 @@ abstract class BaseLungePose : BasePose() {
         buildSpineCurve(pelvis!!, chest!!, pelvisAngle, chestPitch)
 
         // Head follows the thorax: counter-rotate the gaze so the head stays upright
-        // (eyes forward) while the torso leans.
+        // (eyes forward) while the torso leans. Declared as a gaze target (Phase 7 Gap 7) while
+        // the legacy direction path still writes the head (byte-identical until HEAD_TARGET_ENABLED).
         val headTilt = pelvisAngle + chestPitch
         val gaze = SkeletonMath.rotAround(Vector3(0f, 1f, 0f), axisZ, -headTilt, tempV3)
         gaze.normalize()
-        buildHead(neck!!, head!!, def.neckLength, gaze)
+        buildGaze(neck!!, head!!, def.neckLength, gaze)
 
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)

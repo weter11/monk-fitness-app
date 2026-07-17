@@ -44,6 +44,36 @@ abstract class BasePose : PoseBuilder {
         head.localPosition.set(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
     }
 
+    /**
+     * Phase 7 (Gap 7 / F8 / W17) — declares the gaze as a world-space [HeadTarget] intent and,
+     * to remain behavior-preserving until the Finalizer consumes it, still writes the head via
+     * the legacy direction-based [buildHead]. The gaze *direction* is taken verbatim (exactly the
+     * value the legacy code passed to [buildHead]), and a synthetic [HeadTarget] is recorded at a
+     * fixed distance along that direction from the neck's current world position so the intent
+     * pipeline / Finalizer resolver has a target to consume once [EngineFlags.HEAD_TARGET_ENABLED]
+     * is flipped. The recorded target is derived from the same direction, so the rendered head is
+     * byte-identical to the pre-Phase-7 baseline (legacy path unchanged).
+     *
+     * @param gazeDir the (already-authored) world-space gaze direction — passed straight through
+     *   to [buildHead], so behavior is unchanged.
+     */
+    protected fun buildGaze(
+        neck: SkeletonNode,
+        head: SkeletonNode,
+        neckLength: Float,
+        gazeDir: Vector3,
+        targetDistance: Float = 100f
+    ) {
+        // Record the additive intent carrier (synthetic target along the authored gaze direction).
+        tempV1.set(gazeDir)
+        if (tempV1.mag() < 1e-4f) tempV1.set(0f, 1f, 0f) else tempV1.normalize()
+        val nw = neck.worldPosition
+        tempV2.set(nw.x + tempV1.x * targetDistance, nw.y + tempV1.y * targetDistance, nw.z + tempV1.z * targetDistance)
+        jointsBuffer.headTarget = HeadTarget(tempV2.copy(), Vector3(0f, 1f, 0f))
+        // Legacy direction path — unchanged output.
+        buildHead(neck, head, neckLength, gazeDir)
+    }
+
     protected fun buildPelvis(pelvis: SkeletonNode, hipF: SkeletonNode, hipB: SkeletonNode, hipWidth: Float) {
         hipF.localPosition.set(0f, 0f, -hipWidth)
         hipB.localPosition.set(0f, 0f, hipWidth)

@@ -163,11 +163,12 @@ abstract class BaseVerticalPullPose : BasePose() {
         // PELVIS (hips attach here, so the hanging legs inherit the lean).
         buildSpineCurve(pelvis!!, chest!!, torsoPitch, chestFlex)
 
-        // Head follows the thorax by FK; a tiny gaze lift toward the bar at the top.
+        // Head follows the thorax by FK; a tiny gaze lift toward the bar at the top. Declared as a
+        // gaze target (Phase 7 Gap 7) while the legacy direction path still writes the head.
         val gaze = tempV3.set(0f, 1f, 0f)
         SkeletonMath.rotAround(gaze, axisZ, -chestFlex - breath * 0.03f, gaze)
         gaze.normalize()
-        buildHead(neck!!, head!!, def.neckLength, gaze)
+        buildGaze(neck!!, head!!, def.neckLength, gaze)
 
         // Shoulder girdle: scapular depression + retraction are REAL scapula rotations
         // (BIOMECHANICS.md §4/§10) — the shoulder (glenoid) position is *derived* from the

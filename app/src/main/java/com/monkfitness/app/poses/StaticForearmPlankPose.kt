@@ -87,11 +87,12 @@ class StaticForearmPlankPose : BasePlankPose() {
         buildSpineCurve(pelvis!!, chest!!, torsoPitch, chestFlex)
 
         // Head neutral, gaze slightly toward the mat ahead of the hands; a tiny nod
-        // with the breath. The rest of the head motion is inherited from the thorax.
+        // with the breath. The rest of the head motion is inherited from the thorax. Declared as
+        // a gaze target (Phase 7 Gap 7) while the legacy direction path still writes the head.
         val headDir = tempV3.set(0.14f, 1f, 0f)
         SkeletonMath.rotAround(headDir, axisZ, breath * 0.05f, headDir)
         headDir.normalize()
-        buildHead(neck!!, head!!, def.neckLength, headDir)
+        buildGaze(neck!!, head!!, def.neckLength, headDir)
 
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
