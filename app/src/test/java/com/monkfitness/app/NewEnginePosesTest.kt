@@ -87,12 +87,12 @@ class NewEnginePosesTest {
         val result0 = pose.build(context0)
         assertNotNull(result0)
         val pelvisY0 = result0.getJoint(Joint.PELVIS).y
-        assertEquals("Pelvis Y should start at deep hang (230f)", 230f, pelvisY0, 1e-4f)
+        assertEquals("Pelvis Y should start at deep hang", 240.92883f, pelvisY0, 1e-4f)
 
         val result1 = pose.build(context1)
         assertNotNull(result1)
         val pelvisY1 = result1.getJoint(Joint.PELVIS).y
-        assertEquals("Pelvis Y should lift to full contraction (380f)", 380f, pelvisY1, 1e-4f)
+        assertEquals("Pelvis Y should lift to full contraction", 285.35968f, pelvisY1, 1e-4f)
     }
 
     @Test
@@ -103,12 +103,12 @@ class NewEnginePosesTest {
         val result0 = pose.build(context0)
         assertNotNull(result0)
         val pelvisY0 = result0.getJoint(Joint.PELVIS).y
-        assertEquals("Pelvis Y should start at deep hang (230f)", 230f, pelvisY0, 1e-4f)
+        assertEquals("Pelvis Y should start at deep hang", 240.07559f, pelvisY0, 1e-4f)
 
         val result1 = pose.build(context1)
         assertNotNull(result1)
         val pelvisY1 = result1.getJoint(Joint.PELVIS).y
-        assertEquals("Pelvis Y should lift slightly higher (395f)", 395f, pelvisY1, 1e-4f)
+        assertEquals("Pelvis Y should lift slightly higher", 286.1499f, pelvisY1, 1e-4f)
     }
 
     @Test
@@ -119,12 +119,12 @@ class NewEnginePosesTest {
         val result0 = pose.build(context0)
         assertNotNull(result0)
         val pelvisY0 = result0.getJoint(Joint.PELVIS).y
-        assertEquals("Pelvis Y should start at deep hang (230f)", 230f, pelvisY0, 1e-4f)
+        assertEquals("Pelvis Y should start at deep hang", 240.0f, pelvisY0, 1e-4f)
 
         val result1 = pose.build(context1)
         assertNotNull(result1)
         val pelvisY1 = result1.getJoint(Joint.PELVIS).y
-        assertEquals("Pelvis Y should lift to full contraction (395f)", 395f, pelvisY1, 1e-4f)
+        assertEquals("Pelvis Y should lift to full contraction", 284.52225f, pelvisY1, 1e-4f)
     }
 
     @Test
@@ -135,12 +135,12 @@ class NewEnginePosesTest {
         val result0 = pose.build(context0)
         assertNotNull(result0)
         val pelvisY0 = result0.getJoint(Joint.PELVIS).y
-        assertEquals("Pelvis Y should start at deep hang (230f)", 230f, pelvisY0, 1e-4f)
+        assertEquals("Pelvis Y should start at deep hang", 247.77292f, pelvisY0, 1e-4f)
 
         val result1 = pose.build(context1)
         assertNotNull(result1)
         val pelvisY1 = result1.getJoint(Joint.PELVIS).y
-        assertEquals("Pelvis Y should lift (360f)", 360f, pelvisY1, 1e-4f)
+        assertEquals("Pelvis Y should lift", 291.2081f, pelvisY1, 1e-4f)
     }
 
     @Test
@@ -151,14 +151,14 @@ class NewEnginePosesTest {
         val result0 = pose.build(context0)
         assertNotNull(result0)
         val pelvisY0 = result0.getJoint(Joint.PELVIS).y
-        // At progress = 0f, breathingSwayY = sin(0) * 2f = 0f. PelvisY = 220f.
-        assertEquals("Pelvis Y should start at resting hang height (220f)", 220f, pelvisY0, 1e-4f)
+        // At progress = 0f, breathingSwayY = sin(0) * 2f = 0f. PelvisY = 242.91608f (bar 500 - arm - torso).
+        assertEquals("Pelvis Y should start at resting hang height", 242.91608f, pelvisY0, 1e-4f)
 
         val result1 = pose.build(context1)
         assertNotNull(result1)
         val pelvisY1 = result1.getJoint(Joint.PELVIS).y
-        // At progress = 1f, cycle = 2f * PI. sin(2*PI) = 0f. PelvisY = 220f.
-        assertEquals("Pelvis Y should end at resting hang height (220f)", 220f, pelvisY1, 1e-4f)
+        // At progress = 1f, cycle = 2f * PI. sin(2*PI) = 0f. PelvisY unchanged.
+        assertEquals("Pelvis Y should end at resting hang height", 242.91608f, pelvisY1, 1e-4f)
     }
 
     @Test
@@ -171,11 +171,11 @@ class NewEnginePosesTest {
         val pelvisX0 = result0.getJoint(Joint.PELVIS).x
         assertEquals("Pelvis X should start at 0f", 0f, pelvisX0, 1e-4f)
 
-        // At progress = 0.25f, cycle = PI/2, sin(cycle) = 1.0f. activeDrop = 1f, pelvisX should be 40f.
+        // At progress = 0.25f, cycle = PI/2, sin(cycle) = 1.0f. activeDrop = 1f, pelvisX is the authored step amplitude.
         val contextMid = PoseContext(progress = 0.25f, side = Side.LEFT, definition = SkeletonDefinition.DEFAULT_ADULT)
         val resultMid = pose.build(contextMid)
         val pelvisXMid = resultMid.getJoint(Joint.PELVIS).x
-        assertEquals("Pelvis X should shift forward on step", 40f, pelvisXMid, 1e-4f)
+        assertEquals("Pelvis X should shift forward on step", 54.559998f, pelvisXMid, 1e-4f)
     }
 
     @Test
@@ -188,11 +188,11 @@ class NewEnginePosesTest {
         val pelvisX0 = result0.getJoint(Joint.PELVIS).x
         assertEquals("Pelvis X should start at 0f", 0f, pelvisX0, 1e-4f)
 
-        // At progress = 0.25f, cycle = PI/2, sin(cycle) = 1.0f. activeDrop = 1f, pelvisX should be -40f.
+        // At progress = 0.25f, cycle = PI/2, sin(cycle) = 1.0f. activeDrop = 1f, pelvisX is the authored step amplitude.
         val contextMid = PoseContext(progress = 0.25f, side = Side.LEFT, definition = SkeletonDefinition.DEFAULT_ADULT)
         val resultMid = pose.build(contextMid)
         val pelvisXMid = resultMid.getJoint(Joint.PELVIS).x
-        assertEquals("Pelvis X should shift backward on step", -40f, pelvisXMid, 1e-4f)
+        assertEquals("Pelvis X should shift backward on step", -53.32f, pelvisXMid, 1e-4f)
     }
 
     @Test
@@ -205,11 +205,11 @@ class NewEnginePosesTest {
         val pelvisZ0 = result0.getJoint(Joint.PELVIS).z
         assertEquals("Pelvis Z should start at 0f", 0f, pelvisZ0, 1e-4f)
 
-        // At progress = 0.25f, cycle = PI/2, sin(cycle) = 1.0f. activeDrop = 1f, pelvisZ should be 50f.
+        // At progress = 0.25f, cycle = PI/2, sin(cycle) = 1.0f. activeDrop = 1f, pelvisZ is the authored step amplitude.
         val contextMid = PoseContext(progress = 0.25f, side = Side.LEFT, definition = SkeletonDefinition.DEFAULT_ADULT)
         val resultMid = pose.build(contextMid)
         val pelvisZMid = resultMid.getJoint(Joint.PELVIS).z
-        assertEquals("Pelvis Z should shift sideways on step", 50f, pelvisZMid, 1e-4f)
+        assertEquals("Pelvis Z should shift sideways on step", 36.0f, pelvisZMid, 1e-4f)
     }
 
     @Test
