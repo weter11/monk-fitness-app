@@ -38,10 +38,16 @@ abstract class BaseVerticalPullPose : BasePose() {
 
     protected val barY = 500f
 
+    // R4: A vertical pull travels a large vertical distance (dead hang -> full
+    // contraction). At zoom 1.5 the subject overflowed the frame and the head
+    // clipped off the TOP of the viewport around the top of the rep (HEAD_VIEWPORT,
+    // ~frame 71+). Zoom 1.1 frames the full athlete — head to ankles — across the
+    // entire rep for every grip variant, without muting the validator. Yaw/pitch
+    // unchanged (the framing problem was vertical travel, not view angle).
     protected val verticalPullCamera = CameraDefinition(
         defaultYaw = 1.19f,
         defaultPitch = 0.22f,
-        defaultZoom = 1.5f
+        defaultZoom = 1.1f
     )
 
     protected val verticalPullEnvironment = EnvironmentDefinition(
@@ -226,11 +232,18 @@ abstract class BaseVerticalPullPose : BasePose() {
         val ankleX = comX - 18f - breath * 4f + rep * 8f
         val ankleY = pelvisY - 200f + breath * 3f - rep * 10f
         targetF.set(ankleX, ankleY, -def.hipWidth * 0.9f)
+        // R4 (leg reach authoring): as the body rises the hanging-leg target drifts past the
+        // leg's reachable radius (maxReach = (thigh+shin)*0.98 = 205.8), so the solver clamped
+        // and honestly reported it (maxIkClampAmount up to ~4.45). Project the authored target
+        // onto the reachable band — same reachable-by-construction fix as R2 — so the pendulum
+        // legs hang at full-but-valid extension without muting the clamp signal.
+        SkeletonMath.clampTargetToReach(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, def.legIKConstraint, targetF)
         poleF.set(0.15f, 1f, 0f)
         val legFPoleWorld = SkeletonMath.toWorldDirection(poleF, kneeF!!.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legFPoleWorld, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
 
         targetB.set(ankleX, ankleY, def.hipWidth * 0.9f)
+        SkeletonMath.clampTargetToReach(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, def.legIKConstraint, targetB)
         poleB.set(0.15f, 1f, 0f)
         val legBPoleWorld = SkeletonMath.toWorldDirection(poleB, kneeB!!.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legBPoleWorld, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)

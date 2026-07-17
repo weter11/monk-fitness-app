@@ -4,11 +4,12 @@ Snapshot of the expected unit-test state so future sessions can tell **pre-exist
 failures** apart from **regressions they introduced**.
 
 - Command: `./gradlew :app:testDebugUnitTest`
-- **Current truthful baseline (post PR #134 + S1 + S2 + S3 + remediation R1–R3):**
-  **243 tests executed, 1 failure, 0 errors.**
+- **Current truthful baseline (post PR #134 + S1 + S2 + S3 + remediation R1–R4):**
+  **243 tests executed, 0 failures, 0 errors.**
 - Progression: `236 / 9` (post-S3) → `239 / 7` (**R1** foot derivation) → `243 / 4` (**R2**
-  reach targets) → **`243 / 1`** (**R3** lunge support anchoring: `LungePosesTest` ×3 now
-  green). Only **R4** (camera framing, `VerticalPullPosesTest`) remains.
+  reach targets) → `243 / 1` (**R3** lunge support anchoring) → **`243 / 0`** (**R4** camera
+  framing + hanging-leg reach). All legacy engine defects R1–R4 are cleared; the suite is
+  fully green.
 - The count `236` includes the four previously-compile-broken files
   (`ConstraintSolverTest`, `IKLimbHelperTest`, `TrunkFrameTest`, `VerticalPullPosesTest`)
   that PR #134 (`efef793`) restored to the module. The old "168 / 30" figure was measured
@@ -16,7 +17,7 @@ failures** apart from **regressions they introduced**.
   RFC_ENGINE_STABILIZATION §2).
 - The **9 remaining failures are legacy engine defects, not Intent-Pipeline gaps** (a
   control experiment with the Architecture-v2 flags enabled changed nothing — same 9). They
-  are grouped into 4 root-cause defects (R1–R4) and are being cleared under
+  were grouped into 4 root-cause defects (R1–R4) and are now **all cleared** under
   **`docs/ENGINE_DEFECT_REMEDIATION_PLAN.md`**, a temporary stabilization detour after which
   work resumes on Architecture v2 / M2. The 9 → R mapping:
 
@@ -25,7 +26,25 @@ failures** apart from **regressions they introduced**.
   | R1 | Foot extremity derivation | ~~`BurpeePoseTest`, `KettlebellSwingPoseTest`, `KneePushUpPoseTest` (foot bones)~~ **DONE** |
   | R2 | Reach target authoring | ~~`StandardPushUpPoseTest`, `SquatPosesTest` (Sumo), `KneePushUpPoseTest` (arm reach)~~ **DONE** |
   | R3 | Lunge support anchoring | ~~`LungePosesTest` ×3 (Forward/Reverse/Side)~~ **DONE** |
-  | R4 | Camera framing | `VerticalPullPosesTest` |
+  | R4 | Camera framing (+ hanging-leg reach) | ~~`VerticalPullPosesTest`~~ **DONE** |
+
+  **R4 (DONE):** two facets, both surfaced honestly by the validator (the second was masked
+  by the first, which short-circuited the per-frame loop):
+  - **R4a — camera framing.** A vertical pull travels a large vertical distance (dead hang →
+    full contraction). At `defaultZoom = 1.5` the subject overflowed the frame and `HEAD_POS`
+    projected off the **top** of the 1000×1000 viewport around the top of the rep (`standard`
+    frame ~71+, `HEAD_VIEWPORT`). Probing the head's projected Y across the rep showed it
+    crossing screen-y 0 near frame 71; a zoom sweep confirmed **zoom 1.1** frames the full
+    athlete (head→ankles) for every grip variant. Fixed in `BaseVerticalPullPose.verticalPullCamera`
+    (yaw/pitch unchanged — the problem was vertical travel, not view angle).
+  - **R4b — hanging-leg reach authoring.** With framing fixed, the loop reached the post-loop
+    `maxClamp < 0.1` assertion and exposed a latent R2-class defect: as the body rises, the
+    authored pendulum-leg ankle target (`rep*8` in X, `−rep*10` in Y) drifts *past* the leg's
+    reachable radius (`maxReach = (thigh+shin)*0.98 = 205.8`), so the solver clamped and
+    truthfully reported it (`maxIkClampAmount` up to ~4.45). Fixed with the same
+    `SkeletonMath.clampTargetToReach` used in R2 — the target is projected onto the reachable
+    band so the pendulum legs hang at full-but-valid extension and the solver records **zero**
+    clamp, without muting the signal.
 
   **R3 (DONE):** a plant/swing target-assignment logic error, not a solver/IK issue (verified by
   probe: the planted ankle was rock-steady during its own plant phase). The lunge poses always
