@@ -72,27 +72,25 @@ class S1DiagnosticTest {
 
     @Test
     fun dumpVerticalPull() {
-        val cases = com.monkfitness.app.poses.VerticalPullPosesTest.cases()
+        val pose = com.monkfitness.app.poses.StandardPullUpPose()
+        val camera = Camera(pose.metadata.camera)
+        val env = pose.metadata.environment
         val finalizer = SkeletonPoseFinalizer(def)
-        for (c in cases) {
-            val camera = Camera(c.pose.metadata.camera)
-            val env = c.pose.metadata.environment
-            var worstScore = 100f
-            var worstFrame = -1
-            var maxHandYDev = 0f
-            var firstIssue = ""
-            for (i in 0..90) {
-                val progress = i / 90f
-                val context = PoseContext(progress=progress, side=Side.LEFT, definition=def, deltaTime=0.033f, cycleDuration=3000f, playbackSpeed=1f, mirrored=false, phase=progress, loopIndex=0)
-                val raw = c.pose.build(context)
-                val pose = finalizer.finalize(raw)
-                val report = ExerciseValidator().validate(pose=pose, definition=def, environment=env, camera=camera, width=1000f, height=1000f, previousPose=null, prePreviousPose=null, deltaTime=0.033f)
-                val review = ExerciseReview.review(report)
-                if (review.score < worstScore) { worstScore = review.score; worstFrame = i; firstIssue = report.allIssues.filter { it.severity == ValidationSeverity.ERROR }.map { it.ruleId }.joinToString(",") }
-                maxHandYDev = max(maxHandYDev, max(kotlin.math.abs(pose.getJoint(Joint.HAND_A).y-500f), kotlin.math.abs(pose.getJoint(Joint.HAND_P).y-500f)))
-            }
-            println("DIAG VPull ${c.name} worstScore=$worstScore atFrame=$worstFrame firstErr=$firstIssue maxHandYDev=$maxHandYDev")
+        var worstScore = 100f
+        var worstFrame = -1
+        var maxHandYDev = 0f
+        var firstIssue = ""
+        for (i in 0..90) {
+            val progress = i / 90f
+            val context = PoseContext(progress=progress, side=Side.LEFT, definition=def, deltaTime=0.033f, cycleDuration=3000f, playbackSpeed=1f, mirrored=false, phase=progress, loopIndex=0)
+            val raw = pose.build(context)
+            val fp = finalizer.finalize(raw)
+            val report = ExerciseValidator().validate(pose=fp, definition=def, environment=env, camera=camera, width=1000f, height=1000f, previousPose=null, prePreviousPose=null, deltaTime=0.033f)
+            val review = ExerciseReview.review(report)
+            if (review.score < worstScore) { worstScore = review.score; worstFrame = i; firstIssue = report.allIssues.filter { it.severity == ValidationSeverity.ERROR }.map { it.ruleId }.joinToString(",") }
+            maxHandYDev = max(maxHandYDev, max(kotlin.math.abs(fp.getJoint(Joint.HAND_A).y-500f), kotlin.math.abs(fp.getJoint(Joint.HAND_P).y-500f)))
         }
+        println("DIAG VPull StandardPullUp worstScore=$worstScore atFrame=$worstFrame firstErr=$firstIssue maxHandYDev=$maxHandYDev")
     }
 
     @Test
