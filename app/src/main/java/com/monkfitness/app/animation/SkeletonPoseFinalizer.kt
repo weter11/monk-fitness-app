@@ -455,13 +455,12 @@ class SkeletonPoseFinalizer(
      * Finalizes the 3D pose. Supports both modern rotation-driven custom hierarchies and legacy position-driven poses.
      */
     fun finalize(pose: SkeletonPose): SkeletonPose {
-        // PR-04: global contact-constraint / root-repositioning pass. Runs before the FK
-        // flatten so fixed support contacts are honored and the root/pelvis is derived from
-        // them rather than a fixed authored value. No-op when the pose registered no contacts
-        // (the common production case), so non-contact poses are untouched.
-        if (pose.roots.isNotEmpty() && pose.hasContacts()) {
-            ConstraintSolver.solve(pose, definition)
-        }
+        // M2 (RFC_ENGINE_PIPELINE §8.1): the ConstraintSolver pass that used to run here has been
+        // moved up into [SkeletonPipeline.runStages], which is now the **sole** caller of both the
+        // Solver and the Finalizer, in fixed order. The Finalizer therefore NEVER calls the Solver
+        // (no re-entrancy), and a contact pose reaches `finalize` already solver-settled. The
+        // rendering/test paths that call `finalizer.finalize(pose)` directly must route through the
+        // pipeline ([SkeletonPipeline.produceFrame]) so the Solver is not skipped for contact poses.
 
         // Phase 3 (F1/F4): the finalizer is the *exclusive* writer of local transforms. This is
         // the single conversion entry point — any world↔local frame work (pole→world, the

@@ -31,7 +31,9 @@ fun SkeletonRenderer(
     screenSpaceSettings: ScreenSpaceSettings = ScreenSpaceSettings.DEFAULT
 ) {
     val style = engine.style
-    val finalizer = remember(engine.definition) { SkeletonPoseFinalizer(engine.definition) }
+    // M2 — route through the pipeline so the full ordered stage chain (Solver → Finalizer) runs.
+    // The pipeline owns the Finalizer; renderers no longer call it directly (RFC_ENGINE_PIPELINE §2).
+    val pipeline = remember(engine.definition) { SkeletonPipeline(engine.definition) }
     val projector = remember { SkeletonProjector() }
     val compensator = remember(screenSpaceSettings) { ScreenSpaceCompensation(screenSpaceSettings) }
 
@@ -45,7 +47,7 @@ fun SkeletonRenderer(
         val width = size.width
         val height = size.height
 
-        val finalizedPose = finalizer.finalize(pose)
+        val finalizedPose = pipeline.produceFrame(pose).pose
         projector.project(
             pose = finalizedPose,
             camera = camera,

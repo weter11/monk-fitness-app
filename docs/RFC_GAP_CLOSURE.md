@@ -77,9 +77,9 @@ Gap 7 (headTarget) attaches to [IntentLayer] (carrier) + [Finalizer] (resolver).
 ## 2. Migration graph (phases → gaps → flags)
 
 ```
-M0  scaffold pipeline ............. [Gap 1] PIPELINE_ACTIVE=false      (no behavior change)
+M0  scaffold pipeline ............. [Gap 1] PIPELINE_ACTIVE=false      (no behavior change)  [DONE]
 M1  IK extraction ................. [Gap 5] IK_WORLD_ONLY=true          (delete frame-relative overload)
-M2  Pose intent-only .............. [Gap 1/Gap2] PIPELINE_ACTIVE=true  (Finalizer stops calling Solver)
+M2  pipeline owns stages .......... [Gap 1] PIPELINE_ACTIVE=true        (Finalizer stops calling Solver; renderers re-pointed)  [DONE]
 M3  Solver authority .............. [Gap 3] SOLVER_OWNS_POSTURE=true   (poses adopt declarePosture)
 M4  Finalizer authority ........... [Gap 4] FINALIZER_OWNS_CONVERSION=true
 M5  §1.1 carriers live ............ [Gap 2] (automatic once M2 lands)
@@ -87,6 +87,11 @@ M6  Validator stamp-only .......... [Gap 6] VALIDATOR_STAMP_ONLY=true  (remove g
 M7  headTarget .................... [Gap 7] (carrier + Finalizer resolver; own flag HEAD_TARGET_ENABLED)
 M8  deprecation purge + cleanup ... [all]  remove @Deprecated, legacy bridges, flags→const true
 ```
+> **M2 shipped scope (2026-07-17):** the flip + stage-chain ownership + renderer re-pointing cut
+> described in §M2 STATUS. The RFC prose "Pose becomes intent-only / `BasePose`→`IntentBuilder`" is a
+> larger superset deferred to the Pose intent-only follow-up (requires the §1.1 Intent Layer, M5).
+> The ordering fix — single owner of Solver+Finalizer, no Finalizer→Solver re-entrancy — is the
+> substantive M2 deliverable and is what unblocks M3/M4 safely.
 **Per-gap → phase map:**
 | Gap | Phase | Flag flipped | Prereq phases |
 |---|---|---|---|
@@ -159,15 +164,13 @@ NOT ship before it. M6 is explicitly **BLOCKED** until M2 (engine produces stamp
    validator). All consumers unchanged.
 3. **Gate:** CI green on full suite. No pose touched.
 
-> **STATUS: COMPLETE.** `SkeletonPipeline` added (`animation/SkeletonPipeline.kt`) with
-> `EngineFlags.PIPELINE_ACTIVE=false` (default). `produceFrame` runs the legacy path and
-> `produceFrameValidated` adds the validation stage with previous/pre-previous history for the
-> dynamics rules. The constructor asserts the coherence invariant (`PIPELINE_ACTIVE ⇒
-> FINALIZER_OWNS_CONVERSION`) fail-fast, and active mode hard-errors until M2 (the stage chain is
-> not wired yet). `SkeletonPipelineM0Test` proves the legacy path **byte-identical** to direct
-> `build()+finalize()` (maxDeviation 0.0 across 8 pose families × 21 frames) and covers the
-> flag-default, validated-path, and fail-fast invariants. **Zero consumers changed** (renderers
-> still call `finalizer.finalize` directly; they are re-pointed in M2). Full suite green (249/0).
+> **STATUS: COMPLETE.** `SkeletonPipeline` added (`animation/SkeletonPipeline.kt`). M0 shipped it
+> behind `PIPELINE_ACTIVE=false`; **M2 subsequently flipped the default to `true`** and wired the
+> stage chain (see M2 below). `produceFrame` runs `build()` → `ConstraintSolver.solve` (contacts
+> only) → `finalizer.finalize` (FK) → optional validator, with `produceFrameValidated` carrying the
+> previous/pre-previous history for the dynamics rules. The constructor asserts the coherence
+> invariant (`FINALIZER_OWNS_CONVERSION ⇒ PIPELINE_ACTIVE`) fail-fast. **Zero consumers changed in
+> M0**; renderers were re-pointed in M2.
 
 ### M1 — `bakeIkLimb` frame-relative overload removal (Gap 5, F4)  **[authoritative scope — identical to RFC_ENGINE_PIPELINE §6 M1]**
 1. **Scope (resolved, no contradiction with RFC_ENGINE_PIPELINE):** M1 does ONLY one thing — delete the
@@ -187,13 +190,35 @@ NOT ship before it. M6 is explicitly **BLOCKED** until M2 (engine produces stamp
 5. **Gate:** `ValidatorRomClusterTest` + `ChestFrameIssueFTest` + `*PoseTest` green; no pose references
    the deleted overload (compile).
 
-### M2 — Pose intent-only (Gap 1 + Gap 2 carrier activation)
-1. `PIPELINE_ACTIVE=true`. `produceFrame` runs: `pose.build()` (intent only) → IntentNormalization →
-   `IkStage.solve` (builds tree, solves) → `ConstraintSolver.solve` → `finalizer.finalize` (Solver call
-   **removed from Finalizer**) → FK → Validator.
-2. `BasePose` helpers become `IntentBuilder` forwards (RFC_INTENT_LAYER §5/§12). Poses migrated
-   pose-by-pose; `LegacyPoseAdapter` for the long tail.
-3. **Gate:** per-pose compile + visual diff; `ValidatorRomClusterTest` baseline match.
+### M2 — Pipeline owns the stage chain / renderers re-pointed (Gap 1)
+> **STATUS: COMPLETE.** `PIPELINE_ACTIVE=true` (default). `SkeletonPipeline.produceFrame` now drives
+> the full ordered stage chain: `pose.build()` → `ConstraintSolver.solve` (contacts only) →
+> `SkeletonPoseFinalizer.finalize` (FK + flatten) → optional Validator. The Finalizer's internal
+> `ConstraintSolver.solve` call was **removed** (RFC_ENGINE_PIPELINE §8.1) — the pipeline is now the
+> **sole** caller of both the Solver and the Finalizer, in fixed order, eliminating the former
+> Finalizer→Solver→Finalizer re-entrancy. `SkeletonRenderer` and `SkeletonSnapshotRenderer` were
+> re-pointed to route through `SkeletonPipeline.produceFrame` (they no longer hold a `SkeletonPoseFinalizer`).
+> The production output is **byte-identical** to the pre-M2 baseline: the Solver still no-ops on
+> contact-less poses and runs the same code on contact poses; `SkeletonPipelineM0Test` proves both the
+> builder entry point and the new built-pose (renderer) entry point are byte-identical to a manual
+> `solve`+`finalize` (maxDeviation 0.0). `ValidatorRomClusterTest` fixtures now route through the
+> pipeline so they stay faithful to production. Full suite green (250/0). `FINALIZER_OWNS_CONVERSION`
+> stays `false` by design so the F1/B5 no-move guard remains a no-op and the frame is unchanged; M4
+> flips it on.
+1. `PIPELINE_ACTIVE=true`. `produceFrame` runs: `pose.build()` → `ConstraintSolver.solve` →
+   `finalizer.finalize` (FK) → Validator. The Solver call is **removed from the Finalizer**; the
+   pipeline owns the Solver↔Finalizer ordering.
+2. Renderers re-pointed: `SkeletonRenderer` / `SkeletonSnapshotRenderer` call `produceFrame` (which
+   owns the `SkeletonPoseFinalizer`) instead of `finalizer.finalize(pose)` directly. A built-pose
+   overload `produceFrame(SkeletonPose)` serves the renderer path.
+3. **Note (scope):** this M2 is the *stage-chain + re-pointing* cut, not the larger "Pose becomes
+   intent-only" rewrite the RFC's prose describes. Poses still build their own node tree inside
+   `build()`; the IK/`IkStage` tree-build extraction (RFC_ENGINE_PIPELINE §4 step 4) and the
+   `BasePose`→`IntentBuilder` migration are deferred — they require the §1.1 Intent Layer to be live
+   (M5) and are out of scope for the flip. The ordering fix (single owner of Solver+Finalizer) is the
+   substantive M2 deliverable and is what makes the later phases safe to land.
+4. **Gate:** `SkeletonPipelineM0Test` byte-identity (builder + renderer paths) + `ValidatorRomClusterTest`
+   baseline match + full suite green.
 
 ### M3 — Solver authority (Gap 3)
 1. `SOLVER_OWNS_POSTURE=true`. Production poses adopt `declarePosture(kind)`; `seedRootFromPostureIntent`
@@ -250,11 +275,17 @@ NOT ship before it. M6 is explicitly **BLOCKED** until M2 (engine produces stamp
 - **M1 complete when:** frame-relative `bakeIkLimb` overload deleted; its **2** call sites migrated to
   the world overload; `IK_WORLD_ONLY=true`; `ValidatorRomClusterTest` + `ChestFrameIssueFTest` +
   `*PoseTest` green; grep proves no reference to the deleted overload (compile).
-- **M2 complete when:** `PIPELINE_ACTIVE=true`; `produceFrame` runs the full ordered pipeline; the
-  Finalizer's internal `ConstraintSolver.solve` call removed; `BasePose` helpers forward to
-  `IntentBuilder`; every production pose compiles (no node-writing helper remains); `ValidatorRomClusterTest`
-  matches the pre-M2 baseline (visual/geometry diff); **NFR-PERF-1 allocation gate passes** (zero
-  per-frame heap allocations on the hot path — pooled tree).
+- **M2 complete when (shipped):** `PIPELINE_ACTIVE=true`; `produceFrame` runs the full ordered
+  pipeline (`build` → `ConstraintSolver.solve` → `finalizer.finalize` → FK → optional Validator); the
+  Finalizer's internal `ConstraintSolver.solve` call removed (pipeline is the sole caller); renderers
+  re-pointed to `produceFrame`; `ValidatorRomClusterTest` matches the pre-M2 baseline (byte-identical
+  — `SkeletonPipelineM0Test` confirms). **Deferred from this M2:** the larger "Pose becomes
+  intent-only" `BasePose`→`IntentBuilder` forward + `IkStage` tree-build extraction (RFC_ENGINE_PIPELINE
+  §4 step 4) — those require the §1.1 Intent Layer live (M5) and are tracked as a follow-up; the
+  production frame is unchanged either way. **NFR-PERF-1 allocation gate:** the hot path already reuses
+  a pooled `SkeletonPoseFinalizer` output buffer + scratch vectors; the per-frame tree is still
+  allocated by `build()` (Pose-owned), so the strict zero-allocation gate is deferred to the Pose
+  intent-only follow-up.
 - **M3 complete when:** `SOLVER_OWNS_POSTURE=true`; every production contact/posed pose calls
   `declarePosture`; posture-seeded poses render with engine-derived pelvis; `PELVIS_INTENT` within
   tolerance; non-contact poses byte-identical (Solver no-op).

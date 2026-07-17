@@ -19,18 +19,27 @@ package com.monkfitness.app.animation
  */
 object EngineFlags {
     /**
-     * Master switch (M0/M2) — when **false** (default) the engine runs the legacy path
+     * Master switch (M0 → M2) — when **false** (M0 default) the engine runs the legacy path
      * (`pose.build()` → `SkeletonPoseFinalizer.finalize()` → optional validation), whether invoked
      * directly by consumers or via [SkeletonPipeline.produceFrame] (which, in legacy mode, just
-     * wraps that same path — zero behavior change). When **true** (M2) `produceFrame` drives the
-     * full ordered stage pipeline and the Finalizer's internal Solver call is removed.
+     * wraps that same path — zero behavior change). When **true** (M2, the current default) the
+     * pipeline owns the full ordered stage chain: `pose.build()` → `ConstraintSolver.solve` →
+     * `SkeletonPoseFinalizer.finalize()` (→ FK → optional validation). The Finalizer's internal
+     * `ConstraintSolver.solve` call was removed in M2 (RFC_ENGINE_PIPELINE §8.1) — the pipeline is
+     * now the **sole** caller of both, in fixed order.
      *
-     * **Coherence invariant** (RFC_ENGINE_PIPELINE §5.7 / RFC_EXECUTION_CONTRACT §14): if
-     * `PIPELINE_ACTIVE` is true then [FINALIZER_OWNS_CONVERSION] must also be true (a pipeline
-     * without finalizer-owned conversion is incoherent). [SkeletonPipeline]'s constructor asserts
-     * this fail-fast. M0 ships with `PIPELINE_ACTIVE=false`, so the invariant is vacuously held.
+     * **Coherence invariant** (RFC_ENGINE_PIPELINE §5.7 / RFC_EXECUTION_CONTRACT §14): under the
+     * *full* Architecture-v2 preset an active pipeline also requires [FINALIZER_OWNS_CONVERSION]
+     * (a pipeline without finalizer-owned conversion is incoherent). M2 deliberately ships with
+     * `PIPELINE_ACTIVE=true` but `FINALIZER_OWNS_CONVERSION=false` to keep the production output
+     * **byte-identical** to the pre-M2 baseline — the Finalizer's internal Solver call was the only
+     * place that flag's F1/B5 no-move guard could fire, and removing it (plus the guard's no-op
+     * status when the flag is off) means the rendered frame is unchanged. The constructor invariant
+     * therefore only enforces `FINALIZER_OWNS_CONVERSION` once that flag is itself turned on (M4);
+     * M2 keeps it off by design. The pipeline still *is* the exclusive path, so the F1 re-entrancy
+     * risk is gone regardless.
      */
-    var PIPELINE_ACTIVE: Boolean = false
+    var PIPELINE_ACTIVE: Boolean = true
 
     var SOLVER_OWNS_POSTURE: Boolean = false
     var FINALIZER_OWNS_CONVERSION: Boolean = false

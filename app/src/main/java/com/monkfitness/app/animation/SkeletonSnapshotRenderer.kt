@@ -15,7 +15,7 @@ import android.graphics.RectF
 class SkeletonSnapshotRenderer(
     private val engine: SkeletonEngine
 ) {
-    private val finalizer = SkeletonPoseFinalizer(engine.definition)
+    private val pipeline = SkeletonPipeline(engine.definition)
     private val projector = SkeletonProjector()
     private val compensator = ScreenSpaceCompensation(ScreenSpaceSettings.DEFAULT)
     private val skeletonBuffer = ProjectedSkeleton()
@@ -72,7 +72,7 @@ class SkeletonSnapshotRenderer(
             canvas.drawColor(backgroundColor)
         }
 
-        val finalizedPose = finalizer.finalize(pose)
+        val finalizedPose = pipeline.produceFrame(pose).pose
         projector.project(
             pose = finalizedPose,
             camera = camera,
