@@ -83,15 +83,38 @@ data class RelativeArticulation(
 )
 
 /**
- * Phase 0 (Architecture v2 §1.1) — a world-space target for a limb end-effector or intermediate
- * joint (hand/foot/knee/elbow/head). Authored by the pose; resolved by IK/ConstraintSolver.
+ * Branch B (RFC_BRANCH_B_IMPLEMENTATION §2 B1) — the **limb-carrier**: a fully-described IK
+ * bake command authored by the pose and consumed by the pipeline-owned [com.monkfitness.app.animation.IkStage].
  *
- * @param joint the joint this target pins.
- * @param world the world-space position the joint should occupy.
+ * It is the single §1.1 carrier `limbTargets` is built from. The pose records the *exact* inputs the
+ * legacy `BasePose.bakeIkLimb` used to bake a limb (captured at authoring time, while the node tree's
+ * world transforms are current), and `IkStage` replays the identical [SkeletonMath] solve later in the
+ * pipeline — so the produced local transforms are byte-identical to the old inline bake (B1 exit criterion).
+ *
+ * @param endJoint the limb end-effector joint this target pins (ANKLE_*, HAND_*, KNEE_*, ELBOW_*, …).
+ * @param rootWorld the world position of the limb root joint (hip/shoulder) at authoring time.
+ * @param targetWorld the world-space position the end-effector should occupy.
+ * @param length1 the proximal bone length (thigh / upper-arm).
+ * @param length2 the distal bone length (shin / forearm).
+ * @param pole the world-space bend-plane pole (zero length → engine derives a default).
+ * @param constraint the IK reach/ROM constraint.
+ * @param parentRotation the world rotation of the limb's parent frame at authoring time (pelvis / chest).
+ * @param middleJoint the limb's intermediate joint (knee / elbow) the bake writes.
+ * @param straight when true the limb is solved collinear (straight-limb IK).
+ * @param contact when non-null registers a fixed support contact for the ConstraintSolver to honor.
  */
 data class WorldTarget(
-    val joint: Joint,
-    val world: Vector3
+    val endJoint: Joint,
+    val rootWorld: Vector3,
+    val targetWorld: Vector3,
+    val length1: Float,
+    val length2: Float,
+    val pole: Vector3,
+    val constraint: IKConstraint,
+    val parentRotation: JointRotation,
+    val middleJoint: Joint,
+    val straight: Boolean = false,
+    val contact: ContactConstraint? = null
 )
 
 /**
@@ -306,9 +329,9 @@ class SkeletonPose(
             return this
         }
 
-        /** Declares a world-space limb end-effector / intermediate target. B1 consumer (IkStage). */
-        fun limbTarget(joint: Joint, world: Vector3): IntentBuilder {
-            pose.limbTargets.add(WorldTarget(joint, world))
+        /** Declares a fully-described limb IK bake (the §1.1 `limbTargets` carrier). B1 consumer (IkStage). */
+        fun limbTarget(spec: WorldTarget): IntentBuilder {
+            pose.limbTargets.add(spec)
             return this
         }
 

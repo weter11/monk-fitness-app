@@ -52,6 +52,10 @@ class SkeletonPipeline(
 
     private val finalizer = SkeletonPoseFinalizer(definition)
 
+    // Branch B (B1) — the pipeline-owned IK stage: consumes `limbTargets` and is the
+    // sole writer of limb `localPosition` (replacing the pose-embedded `bakeIkLimb`).
+    private val ikStage = IkStage(definition)
+
     // Per-frame history for the dynamics validator rules (velocity/acceleration/discontinuity).
     // Snapshots so a later frame's finalize (which reuses the finalizer's output buffer) cannot
     // alias the previous frame's data.
@@ -89,6 +93,14 @@ class SkeletonPipeline(
      * (RFC_ENGINE_PIPELINE §8.1 — the pipeline is the sole caller of both, preventing re-entrancy).
      */
     private fun runStages(pose: SkeletonPose): SkeletonPose {
+        // Stage 2 (Branch B B1) — the pipeline-owned IkStage consumes the §1.1
+        // `limbTargets` carrier and writes every declared limb's `localPosition`. It is the sole
+        // limb writer now that poses only *declare* targets via `bakeIkLimb` (→ WorldTarget).
+        // Byte-identical to the legacy inline `bakeIkLimb` solve (RFC_BRANCH_B_IMPLEMENTATION
+        // §2 B1 exit criterion); the contact-instrument tests pin the geometry unchanged.
+        if (EngineFlags.IK_STAGE_ACTIVE) {
+            ikStage.solve(pose)
+        }
         // Stage 3 (ConstraintSolver) — posture/contact settling. No-op for the common
         // contact-less production pose, so those are untouched. Guarded exactly as the former
         // Finalizer call was (roots present + contacts present).

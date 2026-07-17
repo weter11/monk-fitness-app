@@ -23,6 +23,12 @@ package com.monkfitness.app.animation
  *   activates for poses that registered an engine [ContactSpec]; the reconstruction touches only
  *   the chest subtree (shoulders/arms/neck/head), so it never displaces hand/foot contacts, and the
  *   guard is a no-op that leaves output byte-identical for every contact-less production pose.
+ * - [IK_STAGE_ACTIVE] — Branch B / **B1 (default-on)**: the pipeline-owned [IkStage] consumes the
+ *   §1.1 `limbTargets` carrier and is the **sole writer** of limb `localPosition`, replacing the
+ *   pose-embedded `bakeIkLimb` inline solve (the pose now only *declares* each limb as a
+ *   [WorldTarget]). The stage replays the identical [SkeletonMath] solve, so produced geometry is
+ *   byte-identical to the legacy inline bake; the existing contact-instrument tests pin this. When
+ *   false, the legacy path is preserved (poses still bake inline) for rollback.
  */
 object EngineFlags {
     /**
@@ -67,6 +73,15 @@ object EngineFlags {
      */
     var FINALIZER_OWNS_CONVERSION: Boolean = true
 
+    /**
+     * B1 (default-on) — the pipeline-owned [IkStage] consumes the §1.1 `limbTargets` carrier
+     * and is the *sole writer* of limb `localPosition`, replacing the pose-embedded `bakeIkLimb`
+     * inline solve. The stage replays the identical [SkeletonMath] solve, so produced geometry is
+     * byte-identical to the legacy inline bake; the existing contact-instrument tests pin this.
+     * Set `false` to restore the pre-B1 behavior (poses bake inline) for rollback.
+     */
+    var IK_STAGE_ACTIVE: Boolean = true
+
     // Phase 7 (Gap 7) — COMPLETE. The gaze-as-`headTarget` resolver in the Finalizer is now the
     // sole head/neck writer; the legacy direction-based `buildHead` fallback was removed after
     // `HeadTargetBaselineTest` proved the resolver byte-identical (maxDeviation ~6e-5). The former
@@ -77,6 +92,7 @@ object EngineFlags {
     fun snapshot(): Map<String, Boolean> = mapOf(
         "PIPELINE_ACTIVE" to PIPELINE_ACTIVE,
         "SOLVER_OWNS_POSTURE" to SOLVER_OWNS_POSTURE,
-        "FINALIZER_OWNS_CONVERSION" to FINALIZER_OWNS_CONVERSION
+        "FINALIZER_OWNS_CONVERSION" to FINALIZER_OWNS_CONVERSION,
+        "IK_STAGE_ACTIVE" to IK_STAGE_ACTIVE
     )
 }

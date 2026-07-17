@@ -282,61 +282,13 @@ abstract class BasePose : PoseBuilder {
         SkeletonMath.buildHipRotation(flexionRad, abductionRad, rotationRad, sideSign, hip.localRotation)
     }
 
-    // Common IK helpers (wrappers around the actual IK solver to avoid code duplication)
-    protected fun solveArmIK(
-        shoulderW: Vector3,
-        targetHand: Vector3,
-        upperArmLen: Float,
-        forearmLen: Float,
-        pole: Vector3,
-        constraint: IKConstraint,
-        result: SkeletonMath.IKResult
-    ): SkeletonMath.IKResult {
-        return SkeletonMath.solveIK(shoulderW, targetHand, upperArmLen, forearmLen, pole, constraint, result)
-    }
-
-    protected fun solveLegIK(
-        hipW: Vector3,
-        targetAnkle: Vector3,
-        thighLen: Float,
-        shinLen: Float,
-        pole: Vector3,
-        constraint: IKConstraint,
-        result: SkeletonMath.IKResult
-    ): SkeletonMath.IKResult {
-        return SkeletonMath.solveIK(hipW, targetAnkle, thighLen, shinLen, pole, constraint, result)
-    }
-
-    // Straight / rigid-segment IK wrappers: a limb pinned collinear to its target.
-    protected fun solveStraightArmIK(
-        shoulderW: Vector3,
-        targetHand: Vector3,
-        upperArmLen: Float,
-        forearmLen: Float,
-        constraint: IKConstraint,
-        result: SkeletonMath.IKResult
-    ): SkeletonMath.IKResult {
-        return SkeletonMath.solveStraightLimb(shoulderW, targetHand, upperArmLen, forearmLen, constraint, result)
-    }
-
-    protected fun solveStraightLegIK(
-        hipW: Vector3,
-        targetAnkle: Vector3,
-        thighLen: Float,
-        shinLen: Float,
-        constraint: IKConstraint,
-        result: SkeletonMath.IKResult
-    ): SkeletonMath.IKResult {
-        return SkeletonMath.solveStraightLimb(hipW, targetAnkle, thighLen, shinLen, constraint, result)
-    }
-
-    protected fun solveNearStraightLeg(
-        shinLen: Float,
-        thighLen: Float,
-        targetFlexionDegrees: Float
-    ): SkeletonMath.NearStraightLimbResult {
-        return SkeletonMath.solveNearStraightLimb(shinLen, thighLen, targetFlexionDegrees, legScratch)
-    }
+    // Branch B (B1) — the 5 pose-side IK wrappers (solveArmIK / solveLegIK /
+    // solveStraightArmIK / solveStraightLegIK / solveNearStraightLeg) were deleted: limb
+    // solving now lives exclusively in the pipeline-owned `IkStage` (consuming `limbTargets`),
+    // and the only remaining inline IK is the `bakeIkLimb` forward below. Poses that
+    // need a raw solve (e.g. thoracic-arm chest-twist compensation, push-up near-straight
+    // leg geometry) call `SkeletonMath.solveIK` / `SkeletonMath.solveNearStraightLimb`
+    // directly.
 
     protected fun bakeIkLimb(
         rootWorldPos: Vector3,
@@ -352,48 +304,35 @@ abstract class BasePose : PoseBuilder {
         straight: Boolean = false,
         contact: ContactConstraint? = null
     ): SkeletonMath.IKResult {
-        val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
-        // Phase 1 (F5): reset the bone-length stamp once per build. `isTransformsUpdated` is set
-        // true by the previous frame's finalize; the first limb baked this build clears it and
-        // re-arms the optimistic `true` so the AND across limbs starts fresh.
-        if (jointsBuffer.isTransformsUpdated) {
-            jointsBuffer.boneLengthsVerified = true
-            jointsBuffer.isTransformsUpdated = false
-        }
-        // Phase 1 (F6): a zero-length pole means the pose omitted one — derive the default world
-        // pole so the bend plane is always well-defined (the engine owns this, not the pose).
-        val worldPole = if (pole.mag() < 1e-4f) {
-            SkeletonMath.deriveDefaultPole(rootWorldPos, targetWorldPos, tempPoleWorld)
+        // Capture the parent frame rotation exactly as the legacy bake did (middleNode.parent's
+        // worldRotation at authoring time), as a fresh copy so later tree mutation cannot alias it.
+        val parentRot = if (middleNode.parent != null) {
+            JointRotation(middleNode.parent!!.worldRotation.axis, middleNode.parent!!.worldRotation.angle)
         } else {
-            pole
+            JointRotation(parentRotation.axis, parentRotation.angle)
         }
-        val ikResult = if (straight) {
-            SkeletonMath.solveStraightLimb(rootWorldPos, targetWorldPos, length1, length2, constraint, ikBuffer, contact)
-        } else {
-            SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, ikBuffer, contact)
-        }
-
-        // Single source of truth: automatically propagate the solver's clamp amount into the
-        // pose so reachability is detected without per-pose manual bookkeeping.
-        if (ikResult.clampAmount > jointsBuffer.maxIkClampAmount) {
-            jointsBuffer.maxIkClampAmount = ikResult.clampAmount
-        }
-
-        // Phase 1 (F5): assert the solved chain preserved both bone lengths exactly and fold the
-        // result into the pose's single `boneLengthsVerified` stamp (AND across all limbs).
-        val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)
-        jointsBuffer.boneLengthsVerified = jointsBuffer.boneLengthsVerified && bonesOk
-
-        // Store the limb offsets in the parent's true local frame so they survive the parent's
-        // full 3D world rotation exactly — no hand-fed inverse-Z scalar.
-        tempV1.set(ikResult.joint).subtract(rootWorldPos)
-        SkeletonMath.toLocalDirection(tempV1, parentRot, middleNode.localPosition)
-
-        tempV1.set(ikResult.end).subtract(ikResult.joint)
-        SkeletonMath.toLocalDirection(tempV1, parentRot, endNode.localPosition)
-
-        // PR-04: if this limb carries a fixed support contact, register it so the global
-        // constraint solver can reposition the root and re-bake the limb to honor the contact.
+        IntentBuilder(jointsBuffer).limbTarget(
+            WorldTarget(
+                endJoint = endNode.joint,
+                rootWorld = Vector3(rootWorldPos.x, rootWorldPos.y, rootWorldPos.z),
+                targetWorld = Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
+                length1 = length1,
+                length2 = length2,
+                pole = Vector3(pole.x, pole.y, pole.z),
+                constraint = constraint,
+                parentRotation = parentRot,
+                middleJoint = middleNode.joint,
+                straight = straight,
+                contact = contact
+            )
+        )
+        // Delegate the actual limb solve to the engine-owned stage (same math the pipeline
+        // `IkStage.solve` replays) so a `build()`-only consumer still gets a fully-baked
+        // tree, byte-identical to the legacy inline bake. The pipeline path is idempotent.
+        IkStage.bakeLimbCore(jointsBuffer, jointsBuffer.limbTargets.last(), middleNode, endNode)
+        // PR-04: register the fixed support contact at authoring time (as the legacy inline
+        // bake did) so a `build()`-only consumer already sees it and the pipeline-owned
+        // `IkStage` (limb writer) need not re-register. The Solver consumes it.
         if (contact != null) {
             val chain = ConstraintSolver.chainForEnd(endNode.joint)
             if (chain != null) {
@@ -414,8 +353,8 @@ abstract class BasePose : PoseBuilder {
                 )
             }
         }
-
-        return ikResult
+        // Source-compatible no-op result; real solve is deferred to IkStage.
+        return ikBuffer
     }
 
     // Common Motion helpers (internally utilizing stateless MotionDrivers)

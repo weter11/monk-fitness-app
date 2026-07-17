@@ -42,9 +42,19 @@ class IntentBuilderSubstrateTest {
     fun builderPopulatesLimbTargets() {
         val pose = SkeletonPose()
         val world = Vector3(10f, 20f, 30f)
-        SkeletonPose.IntentBuilder(pose).limbTarget(Joint.HAND_A, world)
+        val spec = WorldTarget(
+            endJoint = Joint.HAND_A,
+            rootWorld = Vector3(0f, 0f, 0f),
+            targetWorld = world,
+            length1 = 1f, length2 = 1f,
+            pole = Vector3(),
+            constraint = IKConstraint.LegConstraint,
+            parentRotation = JointRotation(),
+            middleJoint = Joint.ELBOW_A
+        )
+        SkeletonPose.IntentBuilder(pose).limbTarget(spec)
         assertEquals(1, pose.limbTargets.size)
-        assertEquals(Joint.HAND_A, pose.limbTargets[0].joint)
+        assertEquals(Joint.HAND_A, pose.limbTargets[0].endJoint)
     }
 
     @Test
@@ -98,7 +108,18 @@ class IntentBuilderSubstrateTest {
         val b = SkeletonPose.IntentBuilder(pose)
         b.spine(0.4f, 0.4f)
             .joint(Joint.HIP_F, JointRotation())
-            .limbTarget(Joint.HAND_A, Vector3(1f, 2f, 3f))
+            .limbTarget(
+                WorldTarget(
+                    endJoint = Joint.HAND_A,
+                    rootWorld = Vector3(),
+                    targetWorld = Vector3(1f, 2f, 3f),
+                    length1 = 1f, length2 = 1f,
+                    pole = Vector3(),
+                    constraint = IKConstraint.LegConstraint,
+                    parentRotation = JointRotation(),
+                    middleJoint = Joint.ELBOW_A
+                )
+            )
             .posture(PostureIntent.Kind.HANGING_UNDER_BAR)
             .overrideExtremity(Extremity.FOOT_F)
         b.reset()
