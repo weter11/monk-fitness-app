@@ -84,14 +84,28 @@ data class RelativeArticulation(
 
 /**
  * Phase 0 (Architecture v2 §1.1) — a world-space target for a limb end-effector or intermediate
- * joint (hand/foot/knee/elbow/head). Authored by the pose; resolved by IK/ConstraintSolver.
+ * joint (hand/foot/knee/elbow/head). Authored by the pose; resolved by IK/ConstraintSolver and, in
+ * B1, by the pipeline-owned `IkStage`.
+ *
+ * The carrier carries the full IK-solving context (not just the joint + world point) so the
+ * `IkStage` can reproduce `bakeIkLimb` byte-for-byte without re-deriving intent the pose already
+ * expressed: the `pole` (bend-plane direction), `straight` flag (rigid-segment solve) and the
+ * optional `contact` (fixed support). The default values make the builder-facing
+ * `IntentBuilder.limbTarget(joint, world)` ergonomic for non-contact, non-straight targets.
  *
  * @param joint the joint this target pins.
  * @param world the world-space position the joint should occupy.
+ * @param pole the authored IK bend-plane pole (zero vector ⇒ the stage derives the default pole).
+ * @param straight true ⇒ solve as a rigid (straight) limb segment.
+ * @param contact non-null ⇒ this target is a fixed support contact (the pose also registers a
+ *   `ContactSpec`; the stage reuses the exact `contact` so the ConstraintSolver re-bake matches).
  */
 data class WorldTarget(
     val joint: Joint,
-    val world: Vector3
+    val world: Vector3,
+    val pole: Vector3 = Vector3(),
+    val straight: Boolean = false,
+    val contact: ContactConstraint? = null
 )
 
 /**
@@ -282,10 +296,11 @@ class SkeletonPose(
      * (those setters are `private set` on [SkeletonPose], so any `pose.spineIntent = …` outside this
      * builder fails to compile — the B0 compile-time guard, RFC_BRANCH_B_IMPLEMENTATION §2 B0).
      *
-     * The builder is **not yet consumed by any engine stage** in B0: declaring intent populates the
-     * §1.1 carriers exactly as before, but no stage reads the dead subset (`spineIntent`,
-     * `jointIntents`, `limbTargets`) yet. Consumption lands in B1 (IkStage), B2 (Finalizer) and B3
-     * (posture). B0 is purely additive substrate + a compile guard; no pose behavior changes.
+     * B0 introduced this builder as the sole mutator; B1 made `limbTargets` live and consumed it:
+     * every `bakeIkLimb` forwards its end joint + world target into the carrier, and the pipeline-owned
+     * `IkStage` reads it (gated by `EngineFlags.IK_STAGE_ACTIVE`, default false). The remaining dead
+     * subset (`spineIntent`, `jointIntents`) is consumed in B2 (Finalizer) and B3 (posture). The
+     * builder remains additive substrate + a compile guard; no pose behavior changes when flags are off.
      */
     class IntentBuilder(private val pose: SkeletonPose) {
 

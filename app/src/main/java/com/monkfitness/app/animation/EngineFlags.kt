@@ -67,6 +67,17 @@ object EngineFlags {
      */
     var FINALIZER_OWNS_CONVERSION: Boolean = true
 
+    /**
+     * B1 (Branch B, default-off) — the [IkStage] owns limb solving: it consumes the §1.1
+     * `limbTargets` carrier (populated by every `bakeIkLimb` call, which now also forwards its
+     * end joint + world target into the carrier) and re-derives the limb local positions on the
+     * engine-owned node tree, registering contacts for any matching [ContactSpec]. When **false**
+     * (the default) `bakeIkLimb` remains the sole limb solver, so every pose is byte-identical to
+     * the pre-B1 baseline — B1 is purely additive and reversible. Flip this on (after the
+     * `IkStageTest` byte-identity check is green) to make the stage the real solver.
+     */
+    var IK_STAGE_ACTIVE: Boolean = false
+
     // Phase 7 (Gap 7) — COMPLETE. The gaze-as-`headTarget` resolver in the Finalizer is now the
     // sole head/neck writer; the legacy direction-based `buildHead` fallback was removed after
     // `HeadTargetBaselineTest` proved the resolver byte-identical (maxDeviation ~6e-5). The former
@@ -77,6 +88,7 @@ object EngineFlags {
     fun snapshot(): Map<String, Boolean> = mapOf(
         "PIPELINE_ACTIVE" to PIPELINE_ACTIVE,
         "SOLVER_OWNS_POSTURE" to SOLVER_OWNS_POSTURE,
-        "FINALIZER_OWNS_CONVERSION" to FINALIZER_OWNS_CONVERSION
+        "FINALIZER_OWNS_CONVERSION" to FINALIZER_OWNS_CONVERSION,
+        "IK_STAGE_ACTIVE" to IK_STAGE_ACTIVE
     )
 }

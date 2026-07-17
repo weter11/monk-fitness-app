@@ -13,12 +13,16 @@ import org.junit.Test
  * actual state by runtime observation rather than grep:
  *  - The **live** subset of §1.1 — `contacts`, `contactPrecedence`, `postureIntent` — IS populated
  *    by the validation instruments and consumed by the [ConstraintSolver] (this is what M3/M4 exercise).
- *  - The **dead** subset — `spineIntent`, `jointIntents`, `limbTargets` — is NEVER written by any
- *    production or validation pose (the authoring helpers write directly to node rotations instead), so
- *    they remain in their empty/identity default after a full build. They have no consumer in the engine.
+ *  - The **dead** subset — `spineIntent`, `jointIntents` — is NEVER written by any production or
+ *    validation pose (the authoring helpers write directly to node rotations instead), so they remain
+ *    in their empty/identity default after a full build. They have no consumer in the engine yet.
+ *  - The **live** subset after B1 — `limbTargets` — IS now populated by every `bakeIkLimb` call (which
+ *    forwards its end joint + world target into the carrier) and IS consumed by the engine-owned
+ *    `IkStage` (RFC_BRANCH_B_IMPLEMENTATION §2 B1). This is the dead→live flip that defines B1-complete;
+ *    `spineIntent`/`jointIntents` remain dead until B2.
  *
- * When the deferred `BasePose`→`IntentBuilder` intent-only migration lands, the dead-carrier asserts
- * below must be flipped to assert they ARE populated — that is the real definition of M5-complete.
+ * When the deferred `BasePose`→`IntentBuilder` intent-only migration lands (B2/B3), the remaining
+ * dead-carrier asserts below must be flipped to assert they ARE populated — that is M5-complete.
  */
 class Section11CarriersTest {
 
@@ -55,6 +59,21 @@ class Section11CarriersTest {
     }
 
     @Test
+    fun liveLimbTargetsPopulatedByPoses() {
+        // B1 dead→live flip: every pose that bakes a limb now also declares a `limbTargets`
+        // entry (bakeIkLimb forwards its end joint + world target into the §1.1 carrier).
+        val all = productionPoses() + contactPoses()
+        for ((name, factory) in all) {
+            val pose = when (factory) {
+                in productionPoses().map { it.second } -> (factory() as PoseBuilder).build(PoseContext(0.5f, Side.LEFT, def))
+                else -> (factory() as BaseValidationPose).build(PoseContext(0.5f, Side.LEFT, def))
+            }
+            // The leg/arm IK calls populate the carrier; at least the limbs baked must be present.
+            assertTrue("$name must populate limbTargets (B1 carrier live) got=${pose.limbTargets.size}", pose.limbTargets.size > 0)
+        }
+    }
+
+    @Test
     fun deadCarriersNeverWrittenByPoses() {
         val all = productionPoses() + contactPoses()
         for ((name, factory) in all) {
@@ -67,21 +86,21 @@ class Section11CarriersTest {
             assertEquals("$name: spineIntent.lumbarRad must stay 0 (carrier dead)", 0f, pose.spineIntent.lumbarRad, 1e-6f)
             assertEquals("$name: spineIntent.thoracicRad must stay 0 (carrier dead)", 0f, pose.spineIntent.thoracicRad, 1e-6f)
             assertEquals("$name: jointIntents must stay empty (carrier dead) got=${pose.jointIntents.size}", 0, pose.jointIntents.size)
-            assertEquals("$name: limbTargets must stay empty (carrier dead) got=${pose.limbTargets.size}", 0, pose.limbTargets.size)
         }
     }
 
     @Test
-    fun deadCarriersHaveNoEngineConsumer() {
-        // End-to-end: even after a full pipeline produceFrame (IK → Solver → Finalizer), a contact
-        // instrument's dead carriers remain empty — proving no stage consumes them. If a future
-        // migration starts consuming them, this test fails and signals M5 progress.
+    fun limbTargetsConsumedByPipeline() {
+        // End-to-end: after a full pipeline produceFrame (IkStage → Solver → Finalizer) the B1
+        // `limbTargets` carrier is retained and the dead `spineIntent`/`jointIntents` carriers
+        // remain empty (still awaiting B2). When IK_STAGE_ACTIVE is on, IkStage re-bakes every
+        // limb from the carrier; the frame must be identical to the off-baseline (see IkStageTest).
         for ((name, factory) in contactPoses()) {
             val out = SkeletonPipeline(def).produceFrame(factory(), PoseContext(0.5f, Side.LEFT, def))
+            assertTrue("$name: limbTargets retained through pipeline got=${out.pose.limbTargets.size}", out.pose.limbTargets.size > 0)
             assertEquals("$name: spineIntent.lumbarRad untouched got=${out.pose.spineIntent.lumbarRad}", 0f, out.pose.spineIntent.lumbarRad, 1e-6f)
             assertEquals("$name: spineIntent.thoracicRad untouched got=${out.pose.spineIntent.thoracicRad}", 0f, out.pose.spineIntent.thoracicRad, 1e-6f)
             assertEquals("$name: jointIntents untouched by pipeline got=${out.pose.jointIntents.size}", 0, out.pose.jointIntents.size)
-            assertEquals("$name: limbTargets untouched by pipeline got=${out.pose.limbTargets.size}", 0, out.pose.limbTargets.size)
         }
     }
 }

@@ -73,7 +73,7 @@ abstract class BasePushUpPose : BasePose() {
 
         // Target a small knee flexion for a visual and anatomically natural, barely-perceptible knee bend
         val targetFlexionDegrees = PushUpGeometrySolver.TARGET_KNEE_FLEXION_DEGREES
-        val limbResult = solveNearStraightLeg(shinL, thighL, targetFlexionDegrees)
+        val limbResult = SkeletonMath.solveNearStraightLimb(shinL, thighL, targetFlexionDegrees, legScratch)
         val legTargetLen = limbResult.d
 
         val solverGeometry = PushUpGeometrySolver.solve(

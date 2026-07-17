@@ -142,16 +142,21 @@
   hook; the guard only fires for contact poses and never displaces hand/foot contacts, so output is
   byte-identical for all production poses; `FinalizerOwnsConversionM4Test` proves flag-on==flag-off
    (maxDev 0.0) and `ChestFrameNoMoveTest` was re-pointed through the pipeline so it genuinely runs
-   the Solver+guard). **M5 is BLOCKED** — the RFC's "automatic once M2 lands" premise is false: a
-   source audit shows only the posture/contact §1.1 subset (`contacts`/`contactPrecedence`/
-   `postureIntent`) is consumed by `ConstraintSolver` (this is what M3/M4 exercise); the spine/limb/
-   joint carriers `spineIntent`/`jointIntents`/`limbTargets` are NEVER written or read anywhere
-   (dead — left from the deferred `BasePose`→`IntentBuilder` rewrite; `Section11CarriersTest` pins
-   this). M5 is NOT a flag flip; it needs that deferred intent-only migration. **Next safely-landable:
-   none of M5/M6/M7 as flag-flips** (all gated on the same deferred IntentBuilder work); the realistic
-   next step is the `BasePose`→`IntentBuilder` rewrite, or M8 cleanup if applicable. M1 mechanically
-   landed. (Deferred: the larger "Pose becomes intent-only" rewrite — requires the §1.1 Intent Layer
-   live; the M2 ordering fix made M3/M4 safe to land but not M5.)
+    the Solver+guard). **B1 (Branch B IkStage extraction) DONE** — `limbTargets` is now live: every
+    `bakeIkLimb` forwards its end joint + world target into the carrier, and the pipeline-owned
+    `IkStage` (`animation/IkStage.kt`, invoked in `SkeletonPipeline.runStages` before the
+    ConstraintSolver) consumes it. Gated by `EngineFlags.IK_STAGE_ACTIVE` (default **false** →
+    `bakeIkLimb` remains the sole solver, byte-identical baseline). The 5 pose-side IK wrappers
+    (`solveArmIK`/`solveLegIK`/`solveStraightArmIK`/`solveStraightLegIK`/`solveNearStraightLeg`) are
+    deleted; their 3 call sites now call `SkeletonMath` directly. `IkStageTest` proves stage-on == off
+    (maxDev 0.0) across 13 production + 4 contact poses; `Section11CarriersTest` flipped to assert
+    `limbTargets` populated. **M5 is BLOCKED** on the remaining dead carriers — the RFC's "automatic
+    once M2 lands" premise is false: a source audit shows only the posture/contact §1.1 subset
+    (`contacts`/`contactPrecedence`/`postureIntent`) plus the B1 limb subset (`limbTargets`) is
+    consumed; the spine/joint carriers `spineIntent`/`jointIntents` are still NEVER written or read
+    anywhere (dead — left from the deferred `BasePose`→`IntentBuilder` rewrite; `Section11CarriersTest`
+    pins this). M5 is NOT a flag flip; it needs that deferred intent-only migration. **Next
+    safely-landable:** B2/B3 (Finalizer/Posture) once the intent-only rewrite lands, or M8 cleanup.
 - **S1 (DONE):** IK angular-clamp recording, chest-frame → shoulder propagation,
   ground-contact projection, foot support-plane. `ConstraintSolverTest`×2, `IKLimbHelperTest`,
   `TrunkFrameTest` green (7 tests).
