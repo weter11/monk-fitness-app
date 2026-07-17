@@ -37,10 +37,10 @@ class PikeSitPose : BaseValidationPose() {
         // Fold the torso forward over the extended legs (+x is forward).
         val fold = 0.95f
         pelvis!!.localPosition.set(0f, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, -fold)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        chest!!.localRotation.set(axisZ, -fold * 0.6f)
+        // B2: route the pike fold through the declarative spine curve so carriers populate.
+        buildSpineCurve(pelvis!!, chest!!, -fold, -fold * 0.6f, axisZ)
 
         // Head follows the folded thorax, gaze forward/down.
         val gaze = tempV3.set(1f, 0.2f, 0f).normalize()

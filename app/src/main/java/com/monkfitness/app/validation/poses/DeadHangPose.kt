@@ -11,6 +11,8 @@ import com.monkfitness.app.animation.PivotType
 import com.monkfitness.app.animation.PostureIntent
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPose
+import com.monkfitness.app.animation.Joint
+import com.monkfitness.app.animation.JointRotation
 import com.monkfitness.app.animation.SupportContact
 import com.monkfitness.app.animation.SupportDefinition
 import com.monkfitness.app.animation.SupportPoint
@@ -74,14 +76,15 @@ class DeadHangPose : BaseValidationPose() {
         val comX = 0f
 
         pelvis!!.localPosition.set(comX, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, torsoPitch)
 
         // Phase 2 (F2): declare the HANGING_UNDER_BAR intent so the solver can derive the pelvis
         // height from the overhead bar contact when it owns posture (it seeds ~ barY - reach -
         // torsoLength, matching the authored value here). The solver then honours the bar contacts.
         declarePosture(PostureIntent.Kind.HANGING_UNDER_BAR)
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        chest!!.localRotation.set(axisZ, 0f)
+        // B2: route the trunk (pelvis + chest) through the declarative spine curve so the
+        // carriers are populated (spineIntent + jointIntents).
+        buildSpineCurve(pelvis!!, chest!!, torsoPitch, 0f, axisZ)
 
         buildHead(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
@@ -113,6 +116,9 @@ class DeadHangPose : BaseValidationPose() {
         // fingertips from the forearm + this wrist articulation, cancelling the inherited torso
         // tilt automatically (no hand-authored heel/toe/palm endpoints, no -torsoPitch term).
         handA!!.localRotation.set(axisZ, PI.toFloat() / 2f); handP!!.localRotation.set(axisZ, PI.toFloat() / 2f)
+        // B2: record the overhand wrist articulation as a joint intent.
+        declareJointIntent(Joint.HAND_A, JointRotation(axisZ, PI.toFloat() / 2f))
+        declareJointIntent(Joint.HAND_P, JointRotation(axisZ, PI.toFloat() / 2f))
 
         // Legs hang straight down with a slight forward pendulum.
         val ankleX = comX - 18f

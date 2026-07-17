@@ -87,6 +87,35 @@ abstract class BaseValidationPose : PoseBuilder {
         head.localPosition.set(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
     }
 
+    /**
+     * B2 (RFC_BRANCH_B_IMPLEMENTATION §2) — records a single joint articulation into the §1.1
+     * `jointIntents` carrier via the sole-mutator `IntentBuilder`. The node is still written by the
+     * caller (so build-time FK stays intact); the Finalizer consumes `jointIntents` and re-derives
+     * the rotation idempotently, byte-identical to the pre-B2 baseline.
+     */
+    protected fun declareJointIntent(joint: Joint, rotation: JointRotation) {
+        IntentBuilder(jointsBuffer).joint(joint, rotation)
+    }
+
+    /**
+     * B2 — the single declarative spine curve (lower + thoracic about a shared axis), mirroring
+     * [com.monkfitness.app.animation.BasePose.buildSpineCurve]. Writes both nodes and records the
+     * `spineIntent` plus per-joint `jointIntents` entries for the Finalizer to consume.
+     */
+    protected fun buildSpineCurve(
+        lower: SkeletonNode,
+        chest: SkeletonNode,
+        lowerRad: Float,
+        thoracicRad: Float,
+        axis: Vector3 = axisZ
+    ) {
+        lower.localRotation.set(axis, lowerRad)
+        chest.localRotation.set(axis, thoracicRad)
+        IntentBuilder(jointsBuffer).spine(lowerRad, thoracicRad, axis)
+        declareJointIntent(lower.joint, JointRotation(axis, lowerRad))
+        declareJointIntent(chest.joint, JointRotation(axis, thoracicRad))
+    }
+
     protected fun buildPelvis(pelvis: SkeletonNode, hipF: SkeletonNode, hipB: SkeletonNode, hipWidth: Float) {
         hipF.localPosition.set(0f, 0f, -hipWidth)
         hipB.localPosition.set(0f, 0f, hipWidth)
@@ -114,14 +143,18 @@ abstract class BaseValidationPose : PoseBuilder {
         val x = JointRotation(axisX, sideBendRad)
         SkeletonMath.composeRotations(z, y, chest.localRotation)
         SkeletonMath.composeRotations(chest.localRotation, x, chest.localRotation)
+        // B2: chest thoracic orientation intent (jointIntents).
+        declareJointIntent(chest.joint, JointRotation(chest.localRotation.axis, chest.localRotation.angle))
     }
 
     protected fun buildHipRotation(hip: SkeletonNode, rotationRad: Float, sideSign: Float) {
         hip.localRotation.set(axisX, rotationRad * sideSign)
+        declareJointIntent(hip.joint, JointRotation(axisX, rotationRad * sideSign))
     }
 
     protected fun buildHipAbduction(hip: SkeletonNode, abductionRad: Float, sideSign: Float) {
         hip.localRotation.set(axisY, abductionRad * sideSign)
+        declareJointIntent(hip.joint, JointRotation(axisY, abductionRad * sideSign))
     }
 
     protected fun buildHipOrientation(
@@ -132,6 +165,7 @@ abstract class BaseValidationPose : PoseBuilder {
         sideSign: Float
     ) {
         SkeletonMath.buildHipRotation(flexionRad, abductionRad, rotationRad, sideSign, hip.localRotation)
+        declareJointIntent(hip.joint, JointRotation(hip.localRotation.axis, hip.localRotation.angle))
     }
 
     protected fun buildScapularRotation(
@@ -151,14 +185,20 @@ abstract class BaseValidationPose : PoseBuilder {
         sideSign: Float
     ) {
         SkeletonMath.buildClavicularRotation(elevation, protraction, axialRotation, sideSign, clavicle.localRotation)
+        // B2: girdle articulation intent (jointIntents).
+        declareJointIntent(clavicle.joint, JointRotation(clavicle.localRotation.axis, clavicle.localRotation.angle))
     }
 
     protected fun buildWristArticulation(hand: SkeletonNode, flexion: Float, deviation: Float) {
         SkeletonMath.buildWristRotation(flexion, deviation, hand.localRotation)
+        // B2: wrist articulation intent (jointIntents).
+        declareJointIntent(hand.joint, JointRotation(hand.localRotation.axis, hand.localRotation.angle))
     }
 
     protected fun buildAnkleArticulation(ankle: SkeletonNode, dorsiflexion: Float, inversion: Float) {
         SkeletonMath.buildAnkleRotation(dorsiflexion, inversion, ankle.localRotation)
+        // B2: ankle articulation intent (jointIntents).
+        declareJointIntent(ankle.joint, JointRotation(ankle.localRotation.axis, ankle.localRotation.angle))
     }
 
     /**

@@ -45,13 +45,13 @@ class DeepOverheadSquatPose : BaseValidationPose() {
         val leanAngle = 0.5f
         val pelvisY = 30f
         pelvis!!.localPosition.set(0f, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, -leanAngle)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
         // Coherent trunk lean (audit §3.1): a deep squat is one leaned trunk, not an opposed
         // pelvis/chest kink. The chest follows the pelvis forward (a touch less, so the upper
         // back stays long) rather than lifting against it.
-        chest!!.localRotation.set(axisZ, -leanAngle * 0.3f)
+        // B2: route the trunk through the declarative spine curve so carriers are populated.
+        buildSpineCurve(pelvis!!, chest!!, -leanAngle, -leanAngle * 0.3f, axisZ)
 
         buildHead(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
