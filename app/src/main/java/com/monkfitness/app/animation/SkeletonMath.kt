@@ -382,6 +382,7 @@ data class ContactConstraint(
             val denom = (2f * L1 * L2)
             var cosT = ((L1 * L1 + L2 * L2 - dist * dist) / denom).coerceIn(-1f, 1f)
             var theta = acos(cosT) * RAD2DEG
+            System.out.println("DIAG-IK-BLOCK dist=$dist minDist=$minDist maxDist=$maxDist theta=$theta minFlex=${limits.minFlexionDegrees} maxFlex=${limits.maxFlexionDegrees} allowFull=${(constraint as com.monkfitness.app.animation.IKConstraint).allowFullExtension}")
             if (theta < limits.minFlexionDegrees) {
                 angularClampAmount = limits.minFlexionDegrees - theta
                 theta = limits.minFlexionDegrees
@@ -393,6 +394,7 @@ data class ContactConstraint(
                 val newCos = cos(theta * DEG2RAD)
                 dist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * newCos).coerceIn(minDist, maxDist)
             }
+            System.out.println("DIAG-IK-AFTER angClamp=$angularClampAmount dist=$dist")
         }
 
         result.requestedDistance = dMag
