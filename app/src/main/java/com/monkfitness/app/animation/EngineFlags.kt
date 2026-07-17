@@ -21,19 +21,15 @@ object EngineFlags {
     var SOLVER_OWNS_POSTURE: Boolean = false
     var FINALIZER_OWNS_CONVERSION: Boolean = false
 
-    /**
-     * Phase 7 (Gap 7) — when true, the Finalizer resolves neck/head from the pose-declared
-     * `headTarget` intent (gaze-as-target) instead of the legacy direction-based `buildHead`.
-     * Defaults to **false** so the legacy gaze path is preserved (byte-identical head) until the
-     * intent pipeline + Finalizer resolver are verified against the baseline. The pose still
-     * records `headTarget` regardless of this flag; the flag only controls who *consumes* it.
-     */
-    var HEAD_TARGET_ENABLED: Boolean = true
+    // Phase 7 (Gap 7) — COMPLETE. The gaze-as-`headTarget` resolver in the Finalizer is now the
+    // sole head/neck writer; the legacy direction-based `buildHead` fallback was removed after
+    // `HeadTargetBaselineTest` proved the resolver byte-identical (maxDeviation ~6e-5). The former
+    // `HEAD_TARGET_ENABLED` gate is therefore gone (it controlled a branch that no longer exists);
+    // gaze resolution is unconditional. No flag replaces it.
 
     /** Snapshot of every flag, for assertions that a phase is enabled/disabled in tests. */
     fun snapshot(): Map<String, Boolean> = mapOf(
         "SOLVER_OWNS_POSTURE" to SOLVER_OWNS_POSTURE,
-        "FINALIZER_OWNS_CONVERSION" to FINALIZER_OWNS_CONVERSION,
-        "HEAD_TARGET_ENABLED" to HEAD_TARGET_ENABLED
+        "FINALIZER_OWNS_CONVERSION" to FINALIZER_OWNS_CONVERSION
     )
 }

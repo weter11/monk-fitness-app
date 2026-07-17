@@ -180,27 +180,23 @@ class SkeletonPoseFinalizer(
 
     /**
      * Phase 7 (Gap 7 / F8 / W17) — resolves the gaze from the pose-declared `headTarget` intent.
+     * This resolver is the **single writer** of the neck/head local offsets (the legacy
+     * direction-based `buildHead` fallback in `buildGaze` was removed once this path was proven
+     * byte-identical — `HeadTargetBaselineTest`, maxDeviation ~6e-5).
      *
-     * When [EngineFlags.HEAD_TARGET_ENABLED] is false, or the pose declared no `headTarget`, this
-     * is a no-op: the legacy `buildHead(direction)` call inside the pose's `buildGaze` already wrote
-     * the neck/head local offsets, so the rendered head is byte-identical to the pre-Phase-7 baseline.
-     *
-     * When the flag is on AND a target is present, this resolver is the **single writer** of the
-     * neck/head local offsets (the pose's `buildGaze` skips its own `buildHead` in that mode). The
-     * gaze direction is derived from the neck's current world position toward `headTarget.world`,
-     * biased upright by `headTarget.upBias`, and written with the exact same math `buildHead` uses
+     * If the pose declared no `headTarget` (a non-gaze pose), this is a no-op. Otherwise the gaze
+     * direction is derived from the neck's current world position toward `headTarget.world`, biased
+     * upright by `headTarget.upBias`, and written with the same math `buildHead` uses
      * (`neck.localPosition = dir * neckLength`, `head.localPosition = dir * 18f`). Because the pose
      * records the synthetic target as `neckWorldPos + gazeDir * 100`, resolving here reproduces the
-     * identical direction the pose authored — so the flag-on path is also byte-identical to the
-     * legacy direction path. The intent layer's value (a named world target the engine owns) is what
-     * is newly present; the geometry is unchanged.
+     * identical direction the pose authored — the geometry equals the pre-Phase-7 baseline while the
+     * intent layer (a named world target the engine owns) is what is newly present.
      *
      * The neck/head nodes are located in the already-FK-flattened `pose.roots` tree (updated just
      * before this call in [finalize]); only their *local* positions are rewritten, never the world
      * tree upstream of them.
      */
     private fun resolveHeadTarget(pose: SkeletonPose) {
-        if (!EngineFlags.HEAD_TARGET_ENABLED) return
         val target = pose.headTarget ?: return
         if (pose.roots.isEmpty()) return
 
@@ -496,10 +492,9 @@ class SkeletonPoseFinalizer(
             reconstructChestFrame(pose.roots, pose)
 
             // Phase 7 (Gap 7 / F8 / W17): resolve the gaze from the pose-declared `headTarget`
-            // intent. When the flag is off (or the pose declared no target) this is a no-op and the
-            // legacy `buildHead(direction)` path (run during pose.build()) is authoritative, so the
-            // output is byte-identical to the pre-Phase-7 baseline. When on, the pose only *declares*
-            // the target and this resolver is the single writer of the neck/head local offsets.
+            // intent. This resolver is the sole writer of the neck/head local offsets; poses only
+            // *declare* the gaze target (via `buildGaze`). A pose that declared no target (non-gaze
+            // pose) is a no-op and keeps its authored head.
             resolveHeadTarget(pose)
 
             // W1 — Engine ownership of extremity orientation.

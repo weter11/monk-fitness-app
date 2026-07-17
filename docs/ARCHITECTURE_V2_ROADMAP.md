@@ -58,7 +58,13 @@
 - **Rationale:** G6/W17/F8.
 - **Prereq:** Phase 3 + Phase 5. **Files:** PikePushUp, BaseThoracic, BaseLunge, BaseVerticalPull, StaticForearmPlank, ProneCobraStretch, BasePose (add `headTarget`). **APIs:** `headTarget` intent; engine resolves neck/head via IK/constraint.
 - **Validation:** gaze-direction + shoulder world assertions; `*PoseTest` green. **Risk:** Low. **Complete when:** no manual `rotAround` shoulder/gaze; gaze is a target.
-- **STATUS: IN PROGRESS (Gap 7 + G6 both landed on the gaze/girdle axis; flag-default verification + CI baseline diff still required).**
+- **STATUS: COMPLETE.** (Gap 7 gaze-as-`headTarget` + G6 PikePushUp girdle landed; the flag-on
+  resolver was verified **byte-identical** to the legacy direction path — `HeadTargetBaselineTest`,
+  maxDeviation ~6e-5 across 24 gaze pose families × 31 frames — then the legacy `buildHead`
+  fallback branch in `buildGaze` and the `HEAD_TARGET_ENABLED` gate were removed, making
+  `SkeletonPoseFinalizer.resolveHeadTarget` the sole head/neck writer. Full suite green 244/0.
+  Note: `BasePushUpPose`'s shared `rotAround` shoulder setup remains intentionally (shared
+  push-up logic, not the Phase-7-named `PikePushUp` G6 item).)
   - **Done (Gap 7 — gaze-as-`headTarget`):** added `HeadTarget` data class + `headTarget` carrier on
     `SkeletonPose` §1.1 (with `copyFrom` propagation); added `EngineFlags.HEAD_TARGET_ENABLED`
     (default **false** — legacy path authoritative until verified against baseline); added
