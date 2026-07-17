@@ -18,6 +18,7 @@ class SkeletonPoseFinalizer(
     private val tempDir = Vector3()
     private val tempForwardHint = Vector3()
     private val tempFootDir = Vector3()
+    private val tempFootNormal = Vector3()
     private val handJointsBuffer = HandJoints()
     private val tempV1 = Vector3()
 
@@ -212,6 +213,15 @@ class SkeletonPoseFinalizer(
         // Same math as BasePose.buildHead — single source of truth for head orientation.
         neck.localPosition.set(tempV1.x * definition.neckLength, tempV1.y * definition.neckLength, tempV1.z * definition.neckLength)
         head.localPosition.set(tempV1.x * 18f, tempV1.y * 18f, tempV1.z * 18f)
+
+        // The neck/head local offsets are written AFTER the initial FK flatten (above), so they
+        // have not yet propagated into the output pose. Re-propagate the neck->head subtree so
+        // HEAD_POS carries the extended neck length instead of collapsing onto the neck (which
+        // otherwise fails the validator's BONE_LENGTH rule on NECK_END->HEAD_POS). The neck's
+        // parent (chest) world transform is already current from the flatten above.
+        val neckParent = neck.parent ?: return
+        neck.updateWorldTransforms(neckParent.worldPosition, neckParent.worldRotation)
+        neck.flatten(outputPose)
     }
 
     // Phase 3 (F1/B5) — contact end-effector world-position snapshot, reused across the guard.
@@ -635,6 +645,36 @@ class SkeletonPoseFinalizer(
         }
         tempFootDir.normalize()
 
+        // Support-aware foot orientation (stabilization S1). When this ankle is a fixed support
+        // contact, the foot's long axis must lie *in* the support plane, not poke through it.
+        // A steep shank (deep squat, wide split, wall-seat) makes the natural (shank-perpendicular)
+        // forward direction tilt downward, which drives the toe/heel below the ground and fails the
+        // no-penetration check. Projecting the direction onto the contact plane keeps the planted
+        // foot flat on its support (generic support-plane reasoning — no per-pose special casing).
+        // Free-hanging feet (no contact) are untouched, so non-support poses are unchanged.
+        val supportNormal = supportPlaneNormalForFoot(pose, ankleId)
+        if (supportNormal != null) {
+            val nd = supportNormal.dot(tempFootDir)
+            tempFootDir.set(
+                tempFootDir.x - supportNormal.x * nd,
+                tempFootDir.y - supportNormal.y * nd,
+                tempFootDir.z - supportNormal.z * nd
+            )
+            // A purely normal shank direction (foot perpendicular to the support) has no in-plane
+            // component to project onto; fall back to the (already world-flat) +X heading so the
+            // foot still lies in the plane instead of collapsing to a zero vector.
+            if (tempFootDir.mag() < 1e-3f) {
+                tempFootDir.set(1f, 0f, 0f)
+                val nd2 = supportNormal.dot(tempFootDir)
+                tempFootDir.set(
+                    tempFootDir.x - supportNormal.x * nd2,
+                    tempFootDir.y - supportNormal.y * nd2,
+                    tempFootDir.z - supportNormal.z * nd2
+                )
+            }
+            tempFootDir.normalize()
+        }
+
         // Promote the ankle to a real joint: computeHeelToe composes the authored ankle
         // orientation with this neutral (shank-perpendicular) foot direction and keeps the
         // pitch clamp as a bound on the resulting direction. The passed [ankleRotation] is
@@ -644,5 +684,24 @@ class SkeletonPoseFinalizer(
         // unchanged, so flat-foot rendering is preserved.
         val foot = definition.foot
         foot.computeHeelToe(ankle, tempFootDir, ankleRotation, pose.getJoint(heelId), pose.getJoint(toeId))
+    }
+
+    /**
+     * Returns the support-plane normal for a foot whose [ankleId] is registered as a fixed
+     * support contact, or `null` when the ankle is not a contact (a free-hanging foot). The
+     * normal comes straight from the contact the pose already declared, so the foot inherits
+     * exactly the support the pose asked the solver to honor — ground, wall, prop or bar — and
+     * nothing is invented here. Allocation-free: reuses [tempFootNormal] scratch.
+     */
+    private fun supportPlaneNormalForFoot(pose: SkeletonPose, ankleId: Joint): Vector3? {
+        for (spec in pose.contacts) {
+            if (spec.endJoint == ankleId && spec.contact != null) {
+                val n = spec.contact.normal
+                val nMag = sqrt(n.x * n.x + n.y * n.y + n.z * n.z)
+                if (nMag < 1e-4f) return null
+                return tempFootNormal.set(n.x / nMag, n.y / nMag, n.z / nMag)
+            }
+        }
+        return null
     }
 }

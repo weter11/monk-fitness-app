@@ -39,17 +39,23 @@
 
 ## Build toolchain (see `docs/TOOLCHAIN_PROVISIONING.md` for the full recipe)
 
-- **JDK 17** at `/usr/lib/jvm/java-17-openjdk-amd64`.
-- **Gradle 8.7** (wrapper-managed); `GRADLE_USER_HOME=<ws>/.gradle-home`.
-- **Android SDK 34** in `<ws>/android-sdk` (build-tools 34.0.0, platforms;android-34).
+- **In this environment the whole toolchain is pre-provisioned under `/tmp/kilo`** (NOT
+  the `/usr/lib/jvm` + workspace download flow the older docs assume). Use these paths —
+  they are verified working:
+  - **JDK 17** at `/tmp/kilo/jdk-17.0.19+10`.
+  - **Android SDK 34** at `/tmp/kilo/android-sdk` (build-tools 34.0.0, platforms;android-34).
+  - **Java truststore** (Cloudflare intercept CA already imported) at `/tmp/kilo/custom-cacerts`.
+  - Gradle 8.7 is in `/tmp/kilo/gradle-8.7`; the wrapper downloads into `.gradle-home`.
 - Build matrix: **AGP 8.5.0, Kotlin 2.0.0, compileSdk 34, minSdk 24, targetSdk 28**.
 - Required env each session:
   ```bash
-  export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-  export ANDROID_HOME="$(pwd)/android-sdk"
+  export JAVA_HOME=/tmp/kilo/jdk-17.0.19+10
+  export ANDROID_HOME=/tmp/kilo/android-sdk
   export GRADLE_USER_HOME="$(pwd)/.gradle-home"
-  export GRADLE_OPTS="-Djavax.net.ssl.trustStore=$(pwd)/custom-cacerts -Djavax.net.ssl.trustStorePassword=changeit"
+  export GRADLE_OPTS="-Djavax.net.ssl.trustStore=/tmp/kilo/custom-cacerts -Djavax.net.ssl.trustStorePassword=changeit"
   ```
+- Fallback only if `/tmp/kilo` is absent: the `/usr/lib/jvm` + workspace `android-sdk` +
+  harvested `custom-cacerts` recipe in `docs/TOOLCHAIN_PROVISIONING.md` §3–§5.
 
 ## TLS intercept (the #1 time-sink — do not re-investigate)
 
@@ -63,7 +69,7 @@
 - **Gradle (Java):** `custom-cacerts` = JDK cacerts + imported `cf-intercept` alias
   (storepass `changeit`, ~122 entries). Wired via `GRADLE_OPTS` above.
 - **git (OpenSSL, separate!):** push with
-  `GIT_SSL_CAINFO="$(pwd)/git-proxy-ca.pem" git push origin HEAD`. Re-harvest if it rotates.
+  `GIT_SSL_CAINFO=/tmp/kilo/github.com.pem git push origin HEAD`. Re-harvest if it rotates.
 - Git-ignored, never commit: `.gradle-home/ .gradle-dist/ android-sdk/ proxy-ca.pem custom-cacerts git-proxy-ca.pem`.
 
 ## Test baseline (see `docs/TEST_BASELINE.md`)
