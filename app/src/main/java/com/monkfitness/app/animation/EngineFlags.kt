@@ -78,6 +78,18 @@ object EngineFlags {
      */
     var IK_STAGE_ACTIVE: Boolean = false
 
+    /**
+     * B2 (Branch B, default-off) — the [SkeletonPoseFinalizer] consumes the §1.1 `spineIntent` and
+     * `jointIntents` carriers (populated by every `build*` helper, which now also forwards its
+     * authored rotation into the carrier) and re-expands them onto the engine-owned node tree
+     * (pelvis/lumbar/chest for the spine curve; each joint's `localRotation` for `jointIntents`).
+     * When **false** (the default) the pose-written node rotations are used directly, so every pose
+     * is byte-identical to the pre-B2 baseline — B2 is purely additive and reversible. Flip this on
+     * (after `B2Test` byte-identity is green) to make the Finalizer the real consumer of these
+     * carriers. `extremityOverrides` is already consumed unconditionally (W1).
+     */
+    var FINALIZER_OWNS_SPINE: Boolean = false
+
     // Phase 7 (Gap 7) — COMPLETE. The gaze-as-`headTarget` resolver in the Finalizer is now the
     // sole head/neck writer; the legacy direction-based `buildHead` fallback was removed after
     // `HeadTargetBaselineTest` proved the resolver byte-identical (maxDeviation ~6e-5). The former

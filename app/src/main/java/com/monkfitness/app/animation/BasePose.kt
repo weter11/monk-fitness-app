@@ -91,6 +91,10 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildChestTwist(chest: SkeletonNode, twistRad: Float) {
         chest.localRotation.set(axisY, twistRad)
+        // B2 (Finalizer intent consumers): forward the authored chest rotation into the §1.1
+        // `jointIntents` carrier so the engine-owned Finalizer can reproduce it (dead→live flip).
+        // The node write above is retained (byte-identical default until FINALIZER_OWNS_SPINE flips).
+        IntentBuilder(jointsBuffer).joint(chest.joint, JointRotation().also { it.copyFrom(chest.localRotation) })
     }
 
     /**
@@ -99,6 +103,8 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildChestSideBend(chest: SkeletonNode, sideBendRad: Float) {
         chest.localRotation.set(axisX, sideBendRad)
+        // B2: forward the authored chest rotation into `jointIntents` (dead→live flip; node write retained).
+        IntentBuilder(jointsBuffer).joint(chest.joint, JointRotation().also { it.copyFrom(chest.localRotation) })
     }
 
     /**
@@ -128,6 +134,8 @@ abstract class BasePose : PoseBuilder {
         // (Rz·Ry) · Rx -> final
         SkeletonMath.multiplyMatrices(cmX, cmY, cmZ, cxX, cxY, cxZ, cfX, cfY, cfZ)
         SkeletonMath.getRotationFromMatrix(cfX, cfY, cfZ, chest.localRotation)
+        // B2: forward the authored chest rotation into `jointIntents` (dead→live flip; node write retained).
+        IntentBuilder(jointsBuffer).joint(chest.joint, JointRotation().also { it.copyFrom(chest.localRotation) })
     }
 
     protected fun buildRigidSegment(parent: SkeletonNode, child: SkeletonNode, offsetX: Float, offsetY: Float, offsetZ: Float) {
@@ -151,6 +159,8 @@ abstract class BasePose : PoseBuilder {
         sideSign: Float
     ) {
         SkeletonMath.buildClavicularRotation(elevation, protraction, axialRotation, sideSign, clavicle.localRotation)
+        // B2: forward the authored clavicular (girdle) rotation into `jointIntents` (dead→live; node write retained).
+        IntentBuilder(jointsBuffer).joint(clavicle.joint, JointRotation().also { it.copyFrom(clavicle.localRotation) })
     }
 
     /**
@@ -168,6 +178,8 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildLumbarFlexion(lumbar: SkeletonNode, flexionRad: Float, axis: Vector3 = axisZ) {
         lumbar.localRotation.set(axis, flexionRad)
+        // B2: forward the authored lumbar rotation into `jointIntents` (dead→live flip; node write retained).
+        IntentBuilder(jointsBuffer).joint(lumbar.joint, JointRotation().also { it.copyFrom(lumbar.localRotation) })
     }
 
     /**
@@ -202,6 +214,10 @@ abstract class BasePose : PoseBuilder {
     ) {
         lower.localRotation.set(axis, lowerRad)
         chest.localRotation.set(axis, thoracicRad)
+        // B2: forward the single spine curve into the §1.1 `spineIntent` carrier (dead→live flip;
+        // the node writes above are retained until FINALIZER_OWNS_SPINE flips and the Finalizer
+        // re-expands the curve onto the pelvis/lumbar/chest itself).
+        IntentBuilder(jointsBuffer).spine(lowerRad, thoracicRad, Vector3(axis.x, axis.y, axis.z))
     }
 
     /**
@@ -213,6 +229,8 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildWristArticulation(hand: SkeletonNode, flexion: Float, deviation: Float) {
         SkeletonMath.buildWristRotation(flexion, deviation, hand.localRotation)
+        // B2: forward the authored wrist articulation into `jointIntents` (dead→live; node write retained).
+        IntentBuilder(jointsBuffer).joint(hand.joint, JointRotation().also { it.copyFrom(hand.localRotation) })
     }
 
     /**
@@ -223,6 +241,8 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildAnkleArticulation(ankle: SkeletonNode, dorsiflexion: Float, inversion: Float) {
         SkeletonMath.buildAnkleRotation(dorsiflexion, inversion, ankle.localRotation)
+        // B2: forward the authored ankle articulation into `jointIntents` (dead→live; node write retained).
+        IntentBuilder(jointsBuffer).joint(ankle.joint, JointRotation().also { it.copyFrom(ankle.localRotation) })
     }
 
     /**
@@ -244,6 +264,8 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildHipFlexion(hip: SkeletonNode, flexionRad: Float) {
         hip.localRotation.set(axisZ, flexionRad)
+        // B2: forward the authored hip rotation into `jointIntents` (dead→live; node write retained).
+        IntentBuilder(jointsBuffer).joint(hip.joint, JointRotation().also { it.copyFrom(hip.localRotation) })
     }
 
     /**
@@ -253,6 +275,8 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildHipAbduction(hip: SkeletonNode, abductionRad: Float, sideSign: Float) {
         hip.localRotation.set(axisY, abductionRad * sideSign)
+        // B2: forward the authored hip rotation into `jointIntents` (dead→live; node write retained).
+        IntentBuilder(jointsBuffer).joint(hip.joint, JointRotation().also { it.copyFrom(hip.localRotation) })
     }
 
     /**
@@ -263,6 +287,8 @@ abstract class BasePose : PoseBuilder {
      */
     protected fun buildHipRotation(hip: SkeletonNode, rotationRad: Float, sideSign: Float) {
         hip.localRotation.set(axisX, rotationRad * sideSign)
+        // B2: forward the authored hip rotation into `jointIntents` (dead→live; node write retained).
+        IntentBuilder(jointsBuffer).joint(hip.joint, JointRotation().also { it.copyFrom(hip.localRotation) })
     }
 
     /**
@@ -280,6 +306,8 @@ abstract class BasePose : PoseBuilder {
         sideSign: Float
     ) {
         SkeletonMath.buildHipRotation(flexionRad, abductionRad, rotationRad, sideSign, hip.localRotation)
+        // B2: forward the authored hip rotation into `jointIntents` (dead→live; node write retained).
+        IntentBuilder(jointsBuffer).joint(hip.joint, JointRotation().also { it.copyFrom(hip.localRotation) })
     }
 
     protected fun bakeIkLimb(

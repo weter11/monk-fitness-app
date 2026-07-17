@@ -44,6 +44,19 @@ class Section11CarriersTest {
         "PikeSit" to { PikeSitPose() }
     )
 
+    // Poses that call the B2 `build*` helpers, so they now populate the `spineIntent`/`jointIntents`
+    // §1.1 carriers (the B2 dead→live flip). Every other pose leaves these carriers empty.
+    private fun helperPoses(): List<Pair<String, () -> PoseBuilder>> = listOf(
+        "AlternatingForwardLunges" to { AlternatingForwardLungesPose() },
+        "StaticForearmPlank" to { StaticForearmPlankPose() },
+        "QuadrupedThoracicRotations" to { QuadrupedThoracicRotationsPose() },
+        "DynamicWorldsGreatestStretch" to { DynamicWorldsGreatestStretchPose() },
+        "BaseVerticalPull" to { StandardPullUpPose() },
+        "PikePushUp" to { PikePushUpPose() },
+        "BasePushUp" to { StandardPushUpPose() },
+        "PikeSit" to { PikeSitPose() }
+    )
+
     @Test
     fun liveCarriersPopulatedByContactInstruments() {
         for ((name, factory) in contactPoses()) {

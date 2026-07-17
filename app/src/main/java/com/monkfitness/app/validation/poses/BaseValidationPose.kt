@@ -114,6 +114,8 @@ abstract class BaseValidationPose : PoseBuilder {
         val x = JointRotation(axisX, sideBendRad)
         SkeletonMath.composeRotations(z, y, chest.localRotation)
         SkeletonMath.composeRotations(chest.localRotation, x, chest.localRotation)
+        // B2: forward the authored chest rotation into `jointIntents` (dead→live; node write retained).
+        IntentBuilder(jointsBuffer).joint(chest.joint, JointRotation().also { it.copyFrom(chest.localRotation) })
     }
 
     protected fun buildHipRotation(hip: SkeletonNode, rotationRad: Float, sideSign: Float) {
@@ -122,6 +124,8 @@ abstract class BaseValidationPose : PoseBuilder {
 
     protected fun buildHipAbduction(hip: SkeletonNode, abductionRad: Float, sideSign: Float) {
         hip.localRotation.set(axisY, abductionRad * sideSign)
+        // B2: forward the authored hip rotation into `jointIntents` (dead→live; node write retained).
+        IntentBuilder(jointsBuffer).joint(hip.joint, JointRotation().also { it.copyFrom(hip.localRotation) })
     }
 
     protected fun buildHipOrientation(
@@ -132,6 +136,8 @@ abstract class BaseValidationPose : PoseBuilder {
         sideSign: Float
     ) {
         SkeletonMath.buildHipRotation(flexionRad, abductionRad, rotationRad, sideSign, hip.localRotation)
+        // B2: forward the authored hip rotation into `jointIntents` (dead→live; node write retained).
+        IntentBuilder(jointsBuffer).joint(hip.joint, JointRotation().also { it.copyFrom(hip.localRotation) })
     }
 
     protected fun buildScapularRotation(
@@ -141,6 +147,8 @@ abstract class BaseValidationPose : PoseBuilder {
         sideSign: Float
     ) {
         SkeletonMath.buildScapularRotation(retraction, depression, sideSign, scapula.localRotation)
+        // B2: forward the authored scapular (girdle) rotation into `jointIntents` (dead→live; node write retained).
+        IntentBuilder(jointsBuffer).joint(scapula.joint, JointRotation().also { it.copyFrom(scapula.localRotation) })
     }
 
     protected fun buildClavicularRotation(
@@ -151,14 +159,17 @@ abstract class BaseValidationPose : PoseBuilder {
         sideSign: Float
     ) {
         SkeletonMath.buildClavicularRotation(elevation, protraction, axialRotation, sideSign, clavicle.localRotation)
+        IntentBuilder(jointsBuffer).joint(clavicle.joint, JointRotation().also { it.copyFrom(clavicle.localRotation) })
     }
 
     protected fun buildWristArticulation(hand: SkeletonNode, flexion: Float, deviation: Float) {
         SkeletonMath.buildWristRotation(flexion, deviation, hand.localRotation)
+        IntentBuilder(jointsBuffer).joint(hand.joint, JointRotation().also { it.copyFrom(hand.localRotation) })
     }
 
     protected fun buildAnkleArticulation(ankle: SkeletonNode, dorsiflexion: Float, inversion: Float) {
         SkeletonMath.buildAnkleRotation(dorsiflexion, inversion, ankle.localRotation)
+        IntentBuilder(jointsBuffer).joint(ankle.joint, JointRotation().also { it.copyFrom(ankle.localRotation) })
     }
 
     /**

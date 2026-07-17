@@ -40,6 +40,27 @@ class SkeletonPoseFinalizer(
     }
 
     /**
+     * B2 (Finalizer intent consumers) — re-expands the §1.1 `spineIntent` and `jointIntents` carriers
+     * onto the engine-owned node tree, reproducing exactly what the pose's `build*` helpers wrote
+     * (so the rendered frame is unchanged when [EngineFlags.FINALIZER_OWNS_SPINE] is on). Called
+     * before FK. The carriers are populated by every `build*` helper (which forwards its authored
+     * rotation into the carrier while retaining the node write until this flag flips).
+     */
+    private fun applyIntentCarriers(pose: SkeletonPose) {
+        // Spine curve → pelvis (lower) + chest (thoracic) about the shared axis.
+        val spine = pose.spineIntent
+        val pelvis = findJointNode(pose.roots[0], Joint.PELVIS)
+        val chest = findJointNode(pose.roots[0], Joint.CHEST)
+        if (pelvis != null) pelvis.localRotation.set(spine.axis, spine.lumbarRad)
+        if (chest != null) chest.localRotation.set(spine.axis, spine.thoracicRad)
+        // Per-joint relative articulations → node local rotations.
+        for (art in pose.jointIntents) {
+            val node = findJointNode(pose.roots[0], art.joint)
+            if (node != null) node.localRotation.copyFrom(art.rotation)
+        }
+    }
+
+    /**
      * Phase 3 (F1) — the finalizer's single local-transform conversion entry point. When
      * [EngineFlags.FINALIZER_OWNS_CONVERSION] is off this is intentionally a no-op so the legacy
      * finalize path is byte-identical and the global flip is purely opt-in. When on, this is where
@@ -472,6 +493,12 @@ class SkeletonPoseFinalizer(
         outputPose.copyFrom(pose)
 
         if (pose.roots.isNotEmpty()) {
+            // B2 (Finalizer intent consumers): when enabled, re-expand the §1.1 spineIntent/jointIntents
+            // carriers onto the engine-owned node tree before FK, reproducing exactly what the pose's
+            // build* helpers wrote (so the rendered frame is unchanged). Default-off ⇒ pose-written
+            // node rotations are used directly (byte-identical baseline).
+            if (EngineFlags.FINALIZER_OWNS_SPINE) applyIntentCarriers(pose)
+
             // Modern rotation-driven path: Execute Forward Kinematics traversal directly using direct local joint rotations/offsets
             if (!pose.isTransformsUpdated) {
                 val size = pose.roots.size
