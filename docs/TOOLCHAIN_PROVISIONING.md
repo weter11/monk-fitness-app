@@ -153,13 +153,16 @@ Results (JUnit XML) land in `app/build/test-results/testDebugUnitTest/`.
 
 ### Known-baseline test state (main + Issue E)
 
-- **168 tests, 30 failures** is the expected GREEN-for-us baseline.
+- **168 tests, 30 failures** is the expected GREEN-for-us baseline (snapshotted with
+  the four files below excluded from compilation — re-measure after the fix).
 - The **30 failures are pre-existing** on `main` (biomechanics/validation drift,
   unrelated to engine refactors). See `docs/TEST_BASELINE.md` for the exact list.
-- 4 test files have **pre-existing compile errors** (missing `kotlin.math` imports,
+- 4 test files had **pre-existing compile errors** (missing `kotlin.math` imports,
   unsupported 3-arg `max`): `ConstraintSolverTest`, `IKLimbHelperTest`,
-  `TrunkFrameTest`, `VerticalPullPosesTest`. They are not caused by feature work.
-  Do not "fix" them as part of unrelated tasks.
+  `TrunkFrameTest`, `VerticalPullPosesTest`. **These are now fixed** — the missing
+  `kotlin.math.pow` / `kotlin.math.abs` imports were added and the 3-arg `max` in
+  `VerticalPullPosesTest` was rewritten as a nested 2-arg `max`. They now compile and
+  participate in the suite.
 
 ---
 
@@ -170,5 +173,6 @@ Results (JUnit XML) land in `app/build/test-results/testDebugUnitTest/`.
 3. `openssl s_client ... > git-proxy-ca.pem` (step 4a).
 4. Build `custom-cacerts` from it (step 4b).
 5. Provision SDK 34 if `android-sdk/` is missing (step 3) + write `local.properties`.
-6. `./gradlew :app:testDebugUnitTest` — expect 168 tests / 30 known failures.
+6. `./gradlew :app:testDebugUnitTest` — expect ~168 tests / 30 known failures
+   (re-measure; the four previously-non-compiling files now compile and count).
 7. For `git push`: prefix with `GIT_SSL_CAINFO="$WS/git-proxy-ca.pem"`.

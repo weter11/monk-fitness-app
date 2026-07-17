@@ -102,7 +102,7 @@ class VerticalPullPosesTest {
                 val ankleB = pose.getJoint(Joint.ANKLE_B)
 
                 // Hands must stay glued to the bar (Y = 500) across the whole rep.
-                maxHandYDev = max(maxHandYDev, abs(handA.y - 500f), abs(handP.y - 500f))
+                maxHandYDev = max(maxHandYDev, max(abs(handA.y - 500f), abs(handP.y - 500f)))
 
                 // No IK clamp => the fixed hand target was reachable (no detach/stretch).
                 maxClamp = max(maxClamp, pose.maxIkClampAmount)

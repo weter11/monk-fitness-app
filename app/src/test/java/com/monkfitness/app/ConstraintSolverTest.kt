@@ -3,6 +3,7 @@ package com.monkfitness.app
 import com.monkfitness.app.animation.*
 import com.monkfitness.app.poses.*
 import com.monkfitness.app.validation.poses.*
+import kotlin.math.pow
 import org.junit.Assert.*
 import org.junit.Test
 

@@ -51,13 +51,17 @@
 
 ## Test baseline (see `docs/TEST_BASELINE.md`)
 
-- `./gradlew :app:testDebugUnitTest` → **168 tests / 30 failures = GREEN-for-us**
-  (165/30 without Issue E). The 30 are **pre-existing on `main`**, not regressions.
+- `./gradlew :app:testDebugUnitTest` → baseline was **168 tests / 30 failures = GREEN-for-us**
+  (165/30 without Issue E), measured with the four compile-broken files excluded. The 30
+  are **pre-existing on `main`**, not regressions. Re-measure after the four files were
+  fixed (they now compile and count).
 - Two failure families: (1) `BONE_LENGTH` frame-0 arm/hand validation;
   (2) stale hard-coded expected positions (e.g. pelvis hang `230` vs `~240`).
-- **4 test files have pre-existing compile errors** (missing `kotlin.math` imports /
+- **4 test files previously had compile errors** (missing `kotlin.math` imports /
   3-arg `max`): `ConstraintSolverTest`, `IKLimbHelperTest`, `TrunkFrameTest`,
-  `VerticalPullPosesTest`. Do NOT "fix" them during unrelated tasks.
+  `VerticalPullPosesTest`. These have now been **fixed** (added the missing
+  `kotlin.math.*` imports; rewrote the 3-arg `max` as a nested 2-arg `max`). They now
+  compile and count toward the totals, so the "168 / 30" snapshot should be re-measured.
 
 ## Issue E — two-segment spine (DONE, committed `bcbee92`, pushed)
 
