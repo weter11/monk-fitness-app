@@ -125,17 +125,22 @@
 - Roadmap: S0 baseline → S1 IK+ConstraintSolver → S2 Validator+stale-constants → S3
   pose authoring. Architecture v2 suspended after M1 until S0–S3 done.
 - **STATUS (current):** stabilization + legacy engine remediation **complete** — full suite
-  **250/0**. S0–S3 done; engine defects R1–R4 (`ENGINE_DEFECT_REMEDIATION_PLAN.md`) all fixed;
+  **251/0**. S0–S3 done; engine defects R1–R4 (`ENGINE_DEFECT_REMEDIATION_PLAN.md`) all fixed;
   Architecture-v2 **Phase 7 complete** (headTarget resolver is the sole gaze writer, legacy
   `buildHead` branch + `HEAD_TARGET_ENABLED` flag removed), **M0 complete** (`SkeletonPipeline`
-  scaffold), and **M2 complete** (`PIPELINE_ACTIVE=true`; `SkeletonPipeline.produceFrame` drives the
+  scaffold), **M2 complete** (`PIPELINE_ACTIVE=true`; `SkeletonPipeline.produceFrame` drives the
   ordered `build` → `ConstraintSolver.solve` → `SkeletonPoseFinalizer.finalize` → FK stage chain; the
   Finalizer's internal Solver call removed so the pipeline is the sole Solver/Finalizer owner;
-  `SkeletonRenderer` + `SkeletonSnapshotRenderer` re-pointed to `produceFrame`; byte-identical to the
-  pre-M2 baseline, `SkeletonPipelineM0Test` proves it). **Next: M3** (flip `SOLVER_OWNS_POSTURE`);
-  M1 mechanically landed; Phase 8/M6 (validator stamp-only) remains, unblocked now that M2 produces
-  stamps. (Deferred to a follow-up: the larger "Pose becomes intent-only" `BasePose`→`IntentBuilder`
-  rewrite — requires the §1.1 Intent Layer live; the M2 ordering fix already makes M3/M4 safe to land.)
+  `SkeletonRenderer` + `SkeletonSnapshotRenderer` re-pointed to `produceFrame`), and **M3 complete**
+  (`SOLVER_OWNS_POSTURE=true`; solver seeds the pelvis from `PostureIntent` (F2) + `contactPrecedence`
+  weighting (F7) + inter-frame smoothing (F9) — pure flag flip, byte-identical for all production
+  poses since none register engine contacts so the solver no-ops; only contact-bearing validation
+  instruments are exercised; `ConstraintSolverPhase2Test` re-pointed through the pipeline proves
+  seated/hanging seeds + flag-on==flag-off within 1u + determinism). **Next: M4** (flip
+  `FINALIZER_OWNS_CONVERSION` — activate `preConvertPoles` + the `reconstructChestFrame` F1/B5 no-move
+  guard); M1 mechanically landed; Phase 8/M6 (validator stamp-only) remains, unblocked by M2.
+  (Deferred to a follow-up: the larger "Pose becomes intent-only" `BasePose`→`IntentBuilder` rewrite —
+  requires the §1.1 Intent Layer live; the M2 ordering fix already makes M3/M4 safe to land.)
 - **S1 (DONE):** IK angular-clamp recording, chest-frame → shoulder propagation,
   ground-contact projection, foot support-plane. `ConstraintSolverTest`×2, `IKLimbHelperTest`,
   `TrunkFrameTest` green (7 tests).

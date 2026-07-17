@@ -7,10 +7,14 @@ package com.monkfitness.app.animation
  * (B6 test mapping) and the global flip is committed. Phases keep the legacy branch during
  * migration for rollback, then delete it in a follow-up once green.
  *
- * - [SOLVER_OWNS_POSTURE] — Phase 2: the [ConstraintSolver] seeds the root/pelvis `Y` from
- *   the pose's declared [PostureIntent] and resolves contact conflicts via `contactPrecedence`,
- *   instead of the pose hand-computing `pelvisY`/`pelvisX`. When false, the solver behaves
- *   exactly as before (relaxation + CCD on whatever root the pose authored).
+ * - [SOLVER_OWNS_POSTURE] — Phase 2 / **M3 (default-on)**: the [ConstraintSolver] seeds the
+ *   root/pelvis `Y` from the pose's declared [PostureIntent] and resolves contact conflicts via
+ *   `contactPrecedence`, plus applies inter-frame temporal smoothing (F9), instead of the pose
+ *   hand-computing `pelvisY`/`pelvisX`. When false, the solver behaves exactly as before
+ *   (relaxation + CCD on whatever root the pose authored). Only fires for poses that register an
+ *   engine [ContactSpec] (via `bakeIkLimb(... contact=)`); the whole solver is a no-op for
+ *   contact-less poses, so every production pose (none register engine contacts today) is
+ *   byte-identical regardless of this flag.
  * - [FINALIZER_OWNS_CONVERSION] — Phase 3: the [SkeletonPoseFinalizer] is the *exclusive* writer
  *   of local transforms (world↔local frame conversion, `preConvertPoles`, `toLocalDirection`
  *   bakes, extremity derivation, `reconstructChestFrame`) and enforces the read-only chest-frame
@@ -41,7 +45,15 @@ object EngineFlags {
      */
     var PIPELINE_ACTIVE: Boolean = true
 
-    var SOLVER_OWNS_POSTURE: Boolean = false
+    /**
+     * M3 (default-on) — the [ConstraintSolver] owns the root/pelvis transform: it seeds the pelvis
+     * height from the pose's declared [PostureIntent], resolves contact conflicts via
+     * `contactPrecedence`, and applies inter-frame smoothing (F9). Fires **only** for poses that
+     * registered an engine [ContactSpec]; the solver no-ops on contact-less poses, so all production
+     * poses (none register engine contacts) stay byte-identical. Set `false` to restore the pre-M3
+     * relaxation-only behaviour.
+     */
+    var SOLVER_OWNS_POSTURE: Boolean = true
     var FINALIZER_OWNS_CONVERSION: Boolean = false
 
     // Phase 7 (Gap 7) — COMPLETE. The gaze-as-`headTarget` resolver in the Finalizer is now the

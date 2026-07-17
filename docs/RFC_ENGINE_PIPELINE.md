@@ -410,10 +410,27 @@ the architecture-v2 behavior for that stage only. No big-bang rewrite.
   Prefer direct migration; adapter is the fallback for the long tail.
 -->
 
-### Phase M3 — Activate Solver authority (Gap 3)
+### Phase M3 — Activate Solver authority (Gap 3) **[SHIPPED]**
+- **Shipped:** `SOLVER_OWNS_POSTURE = true`. The `ConstraintSolver` now seeds the pelvis from the
+  pose's `PostureIntent` (F2), weights contact conflicts by `contactPrecedence` (F7), and applies
+  inter-frame smoothing (F9) — all code that already existed behind the flag. Pure flag flip + test
+  coverage.
+- **Byte-identical for production:** the whole solver no-ops on contact-less poses, and **no
+  production pose registers an engine `ContactSpec`** (none call `bakeIkLimb(... contact=)`), so every
+  production pose is unchanged. Only the diagnostic validation instruments that register engine
+  contacts are exercised: `DeepOverheadSquatPose`/`DeadHangPose` (declare posture → seed active),
+  `MiddleSplitPose`/`PikeSitPose` (ground contacts, `CUSTOM` posture → seed skipped).
+- `ConstraintSolverPhase2Test` re-pointed through `SkeletonPipeline` (post-M2 the Finalizer no longer
+  calls the Solver, so a direct `finalize()` would skip the posture solve). Proves seated/hanging
+  seeds, flag-on == flag-off within 1u, and determinism. Full suite green (251/0).
+
+<!-- Original design intent (superset — "production poses migrated to declarePosture" is a no-op
+     today since no production pose registers an engine contact; applies once the Pose intent-only
+     follow-up introduces engine contacts):
 - `SOLVER_OWNS_POSTURE = true`. Production poses migrated to `declarePosture(...)`. Contact poses
   get correct root-from-intent; non-contact poses unchanged (Solver no-ops on empty contacts).
 - Validation poses already declare posture → unaffected.
+-->
 
 ### Phase M4 — Activate Finalizer authority (Gap 4)
 - `FINALIZER_OWNS_CONVERSION = true`. `preConvertPoles` owns all conversion; no pose writes a local
