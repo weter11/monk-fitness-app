@@ -335,6 +335,14 @@ abstract class BasePose : PoseBuilder {
         return SkeletonMath.solveStraightLimb(hipW, targetAnkle, thighLen, shinLen, constraint, result)
     }
 
+    protected fun solveNearStraightLeg(
+        shinLen: Float,
+        thighLen: Float,
+        targetFlexionDegrees: Float
+    ): SkeletonMath.NearStraightLimbResult {
+        return SkeletonMath.solveNearStraightLimb(shinLen, thighLen, targetFlexionDegrees, legScratch)
+    }
+
     protected fun bakeIkLimb(
         rootWorldPos: Vector3,
         targetWorldPos: Vector3,
@@ -416,14 +424,6 @@ abstract class BasePose : PoseBuilder {
     }
 
     // Common Motion helpers (internally utilizing stateless MotionDrivers)
-    protected fun solveNearStraightLeg(
-        shinLen: Float,
-        thighLen: Float,
-        targetFlexionDegrees: Float
-    ): SkeletonMath.NearStraightLimbResult {
-        return SkeletonMath.solveNearStraightLimb(shinLen, thighLen, targetFlexionDegrees, legScratch)
-    }
-
     protected fun phase(progress: Float): Float = progress
     protected fun downMotion(progress: Float): Float = MotionDrivers.PushPhase(progress)
     protected fun alternating(progress: Float): AlternatingMotion = MotionDrivers.alternating(progress)

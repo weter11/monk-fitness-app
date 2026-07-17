@@ -98,7 +98,7 @@ abstract class BaseBirdDogPose : BasePose() {
         pelvis!!.localRotation.set(axisZ, torsoPitch)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        buildHead(neck!!, head!!, def.neckLength, birdDogHeadDirection)
+        buildGaze(neck!!, head!!, def.neckLength, birdDogHeadDirection)
 
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)

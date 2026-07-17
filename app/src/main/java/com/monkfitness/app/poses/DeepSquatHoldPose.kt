@@ -46,7 +46,7 @@ class DeepSquatHoldPose : BaseSquatPose() {
         pelvis!!.localRotation.set(axisZ, -leanAngle)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        buildHead(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
+        buildGaze(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
         shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)

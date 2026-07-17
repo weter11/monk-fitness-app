@@ -49,7 +49,7 @@ class DynamicWorldsGreatestStretchPose : BaseThoracicPose() {
         val twist = lerp(-0.2f, 1.4f, progress)
         buildChestTwist(chest!!, twist)
 
-        buildHead(neck!!, head!!, def.neckLength, headDir)
+        buildGaze(neck!!, head!!, def.neckLength, headDir)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 

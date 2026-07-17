@@ -49,7 +49,7 @@ class ThoracicExtensionPose : BaseThoracicPose() {
         val extAngle = lerp(0f, 0.5f, progress)
         chest!!.localRotation.set(axisZ, extAngle)
 
-        buildHead(neck!!, head!!, def.neckLength, headDir)
+        buildGaze(neck!!, head!!, def.neckLength, headDir)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 

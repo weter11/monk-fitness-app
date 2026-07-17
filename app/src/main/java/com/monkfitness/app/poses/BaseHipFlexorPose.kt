@@ -96,7 +96,7 @@ abstract class BaseHipFlexorPose : BasePose() {
      */
     protected fun setUpperBodyLocal(def: SkeletonDefinition) {
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        buildHead(neck!!, head!!, def.neckLength, uprightHeadDir)
+        buildGaze(neck!!, head!!, def.neckLength, uprightHeadDir)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
     }

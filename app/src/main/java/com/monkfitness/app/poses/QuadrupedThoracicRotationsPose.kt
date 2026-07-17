@@ -47,7 +47,7 @@ class QuadrupedThoracicRotationsPose : BaseThoracicPose() {
         val twist = lerp(0.35f, -1.35f, progress)
         buildChestTwist(chest!!, twist)
 
-        buildHead(neck!!, head!!, def.neckLength, headDir)
+        buildGaze(neck!!, head!!, def.neckLength, headDir)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 

@@ -118,43 +118,15 @@ evidence of the engine pipeline.
   overload converted the pole with `middleNode.parent?.worldRotation ?: parentRotation`, which is
   exactly what the call sites now do explicitly (the caller-passed `parentRotation` was only a
   fallback that the overload ignored whenever `middleNode.parent` was non-null).
-- **Remaining deprecated frame-relative overloads (tracked as Gap 5b, now RESOLVED):** the
+- **Remaining deprecated frame-relative overloads (separate, out of scope for M1/Gap5):** the
   `solveArmIK(shoulderW, targetHand, …, poleLocal, parentRotation, …)` and `solveLegIK(…)`
-  overloads were removed and their sole caller (`BaseThoracicPose.kt:138`) migrated. See Gap 5b.
+  overloads are still retained and still called from `BaseThoracicPose.kt:138`
+  (`solveArmIK(…, poleLocal, chest!!.worldRotation, …)`). Deleting those is a distinct cleanup.
 - **Missing data structures:** None.
 - **Missing execution phase:** None (F4 contract met by the world overload).
 - **Required prerequisite phase:** None (independent cleanup).
 - **Estimated implementation scope:** **Small** (done).
 - **Blocked / partial:** **Resolved.**
-- **See also:** the sibling frame-relative `solveArmIK`/`solveLegIK` overloads are tracked as
-  **Gap 5b** below (distinct cleanup, single caller `BaseThoracicPose.kt:138`).
-
-## Gap 5b — PHASE 1 deprecated frame-relative `solveArmIK`/`solveLegIK` overloads not removed (spec F4)
-**Status: RESOLVED (M1/Gap5b — deprecated `solveArmIK(poleLocal, parentRotation)` / `solveLegIK(poleLocal, parentRotation)` overloads deleted).**
-
-- **Existing engine support:** world-only `solveArmIK(shoulderW, targetHand, L1, L2, pole, constraint, result)`
-  and `solveLegIK(hipW, targetAnkle, L1, L2, pole, constraint, result)` wrappers in `BasePose.kt`
-  (delegate to `SkeletonMath.solveIK` world-only); `SkeletonMath.toWorldDirection` for pole conversion.
-- **Completed work:** The frame-relative `solveArmIK(poleLocal, parentRotation, …)` and
-  `solveLegIK(poleLocal, parentRotation, …)` overloads were removed from `BasePose.kt`. Their only
-  caller — `BaseThoracicPose.kt:138` (`bakeThoracicArm`) — was migrated to the world-only
-  `solveArmIK` by converting the authored local pole with
-  `SkeletonMath.toWorldDirection(poleLocal, chest!!.worldRotation, tempPoleWorld)` before the call
-  (reusing the existing allocation-free `tempPoleWorld` scratch, never a `Vector3()` on the hot
-  path). The migration is behavior-preserving: the deleted overloads delegated to
-  `SkeletonMath.solveIK(…, poleLocal, parentRotation, …)`, whose frame-relative variant converts the
-  pole with `toWorldDirection(poleLocal, parentRotation)` — exactly `chest!!.worldRotation`, which is
-  what `bakeThoracicArm` passes and what its doc comment (BaseThoracicPose.kt:123-127) declares as
-  the pole's authoring frame. Net pole = original world pole; no change to the solved elbow/hand.
-- **Missing data structures:** None.
-- **Missing execution phase:** None (F4 contract met by the world overload).
-- **Required prerequisite phase:** None (independent cleanup; depends only on Gap 5 being done first
-  so the IK layer is uniformly world-only).
-- **Estimated implementation scope:** **Small** (1 caller migrated, 2 overloads deleted).
-- **Blocked / partial:** **Resolved.** With Gap 5 + Gap 5b done, no frame-relative IK overload
-  (`bakeIkLimb` / `solveArmIK` / `solveLegIK`) remains in `BasePose.kt`; the IK layer is fully
-  world-only, satisfying spec F4. (The `SkeletonMath.solveIK` frame-relative *variant* that these
-  overloads delegated to is retained as a general utility but is now uncalled from pose code.)
 
 ## Gap 6 — PHASE 8 validator still reconstructs geometry (spec F-observer / §2.6)
 **Status: PARTIALLY BLOCKED (reads stamps BUT also infers angles from nodes).**
@@ -173,23 +145,23 @@ evidence of the engine pipeline.
 - **Blocked / partial:** **Partially blocked.**
 
 ## Gap 7 — Gaze as `headTarget` (spec §1.1 "Gaze = head target"; A7/F8)
-**Status: BLOCKED (no field, no resolver).**
+**Status: IN PROGRESS (carrier + resolver + all gaze sites migrated; flag-default verification + CI baseline diff remaining).**
 
-- **Existing engine support:** `buildHead(neck, head, neckLength, headDir)` consumes a *direction*
-  vector authored by the pose (e.g. `BaseLungePose:165`, `BaseVerticalPullPose:168` counter-rotate
-  the UP vector by the lean sum via `rotAround`). No target-resolution.
-- **Missing APIs:** No `headTarget` field on `SkeletonPose`/`PoseContext`; no engine resolver that
-  derives neck/head from a world target; `headTarget`/`buildGaze`/`EyeTarget` do not exist anywhere
-  in the codebase (verified by exhaustive grep).
-- **Missing data structures:** `headTarget: WorldTarget?` (or similar) on §1.1.
-- **Missing execution phase:** Finalizer/engine step that resolves neck/head from `headTarget`
-  (would live in the Gap-1 pipeline).
+- **Existing engine support:** `buildHead(neck, head, neckLength, headDir)` consumed by the pose;
+  now wrapped by `buildGaze(neck, head, neckLength, gazeDir)` which records a synthetic `HeadTarget`
+  (neck world pos + gazeDir·100) and still calls `buildHead` while `EngineFlags.HEAD_TARGET_ENABLED`
+  is false. The Finalizer's `resolveHeadTarget` consumes `headTarget` (reusing `buildHead` math) when
+  the flag is on.
+- **Missing APIs:** none (added `HeadTarget` carrier + `headTarget` on `SkeletonPose` §1.1 +
+  `copyFrom` propagation; `HeadTarget_ENABLED` flag; `BasePose.buildGaze`; `SkeletonPoseFinalizer.resolveHeadTarget`).
+- **Missing data structures:** none.
+- **Missing execution phase:** the Finalizer resolver stage is present and consumes `headTarget` when
+  the flag is on; the flag defaults to **false** (legacy direction path authoritative) until the
+  resolver is diffed against the baseline in CI.
 - **Required prerequisite phase:** Gap 1 (resolver needs the pipeline context) — though a standalone
-  `buildGaze(targetWorld)` helper could be added first.
-- **Estimated implementation scope:** **Medium** (add carrier + resolver + retrofit the 2 gaze
-  counter-rotation sites).
-- **Blocked / partial:** **Blocked** on engine resolver; the 2 pose sites are a known open leak
-  (documented in `MIGRATION_RULES.md` A7).
+  `buildGaze` helper + Finalizer resolver were added first, gated by the flag.
+- **Estimated implementation scope:** **Small** (remaining: flip flag, run baseline diff, delete legacy branch).
+- **Blocked / partial:** no longer blocked on carrier/resolver; remaining work is verification-only.
 
 ---
 
@@ -200,7 +172,7 @@ evidence of the engine pipeline.
 | Phase 4 — limb counter-rotation deletion (G1) | 60 `rotAround` lean-cancel calls deleted; tests baseline matched (commit history + grep). |
 | Phase 5 — single spine-intent call (G4/G5) | `buildSpineCurve(pelvis, chest, …)` used in the 3 genuine dual-write sites (PR #127). NOTE: uses the helper directly, does **not** populate `spineIntent` (see Gap 2). |
 | Phase 6 — hip helper (G7/A4) | `buildHipFlexion`/`buildHipOrientation` exist; zero raw `hip*.localRotation.set` remain (PR #128). |
-| A6 — girdle/shoulders (G6) | Shoulders IK-rooted + `bakeIkLimb`'d; `buildShoulders` exists and used where applicable. No hand-computed chest-frame shoulder placement. **Already conformant.** |
+| A6 — girdle/shoulders (G6) | PikePushUp now routes shoulders through `buildShoulders`+FK and feeds the FK-derived `shoulderA/shoulderP.worldPosition` to `bakeIkLimb` (no hand-computed `rotAround` chest-frame shoulder placement in PikePushUp). `BasePushUpPose` (shared push-up base) still has a `rotAround` shoulder-computation at its IK-root setup — that is shared push-up logic, not the Phase-7-named PikePushUp G6 item, and is deferred pending a per-variant baseline diff. |
 | W1 — extremity derivation | `extremityOverrides`/`ExtremityOrientationMode` present; engine derives heel/toe/palm (AUTOMATIC), pose opts out via `overrideExtremityOrientation`. |
 | F3 — stamp ownership | `SkeletonPose` single carrier; `copyFrom` propagates §1.1 + §1.2. |
 | F5/F6 — bone-length + default pole | `SkeletonMath.bonesExact`/`deriveDefaultPole` present and used by `bakeIkLimb`. |
@@ -223,4 +195,4 @@ finding is **Gap 1**: until a Pose->Engine pipeline consumes §1.1, the spec's f
 | 4 Finalizer inactive | Partial | — (needs 1 + 5) |
 | 5 Deprecated IK overload | Partial | 4 |
 | 6 Validator inference | Partial | — (independent) |
-| 7 Gaze `headTarget` | **Blocked** | — (needs 1 or standalone helper) |
+| 7 Gaze `headTarget` | **IN PROGRESS** (carrier + resolver + all sites migrated; flag flip + CI baseline diff remaining) | — |
