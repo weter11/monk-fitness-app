@@ -42,7 +42,7 @@ class QuadrupedThoracicRotationsPose : BaseThoracicPose() {
         val basePelvisY = 127f
 
         pelvis!!.localPosition.set(basePelvisX, basePelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, spinePitch)
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, spinePitch)
         declareJointIntent(Joint.PELVIS, JointRotation(axisZ, spinePitch))
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)

@@ -75,7 +75,7 @@ class ArmCirclesPose : PoseBuilder {
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.STANDING)
 
         pelvis!!.localPosition = Vector3(0f, 0f, 0f)
-        pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), 0f)
+        declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), 0f)
         SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.PELVIS, JointRotation(Vector3(0f, 0f, 1f), 0f))
 
         // standH is retained only for the arm-circle hand kinematics (a shape decision), not

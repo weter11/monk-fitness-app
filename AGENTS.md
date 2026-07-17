@@ -188,11 +188,17 @@
   - Step 2: more dead helper carriers deleted — `buildHipOrientation` (both bases, 0 callers) and
     `buildChestSideBend` (BasePose, 0 production callers); `TrunkFrameTest` re-points to `IntentBuilder`
     `declareJointIntent(CHEST, …)` directly, preserving the side-bend semantics.
-   - Remaining: extend carrier-backed authoring to the rest of the raw node writes, then delete each shared
-    helper as its last caller converts (`buildSpineCurve`, `buildChestTwist`/`buildChestOrientation`,
-    `buildHipFlexion`/`buildHipRotation`, `buildPelvis`, `buildShoulders`, `buildTorso`, `buildHead`,
-    `bakeIkLimb` + 5 IK wrappers) and retire the obsolete `motion`/`camera`/`environment` fields; full
-    "zero pose writes a node" is the B6 purge.
+   - Step 3 (B4 follow-up, byte-identical): the 26 production poses with a bare `pelvis.localRotation.set`
+    now route through the package-level `declarePelvisTilt(pelvis, buffer, axis, angle)` helper, which
+    writes the node for build-time FK and records the `Joint.PELVIS` joint intent on the pose buffer
+    (idempotent B2 consume). The B4 pelvis gap is fully closed; full suite **282/0**.
+   - Remaining: extend carrier-backed authoring to the rest of the raw node writes (limb/extremity
+    local positions; `buildSpineCurve`, `buildChest*`, `buildHip*` already record intents but still
+    hand-write the node), then delete each shared helper as its last caller converts (`buildSpineCurve`,
+    `buildChest*`, `buildHip*`, `buildPelvis`, `buildShoulders`, `buildTorso`, `buildHead`,
+    `bakeIkLimb` + 5 IK wrappers) and retire the obsolete `motion`/`camera`/`environment` fields (these are
+    still live §1.1 substrate written by IntentBuilder + asserted by IntentBuilderSubstrateTest, so NOT dead);
+    full "zero pose writes a node" is the B6 purge.
 - **B5 (Branch B Validator stamp-only) DONE** — the validator is now a pure §1.2-stamp / §1.1-intent
   reader; every geometry-inference path was lifted into the **engine** and the validator only consumes the
   resulting stamps (full suite **282/0**, byte-identical):

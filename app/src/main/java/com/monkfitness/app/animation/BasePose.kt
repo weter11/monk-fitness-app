@@ -362,3 +362,17 @@ abstract class BasePose : PoseBuilder {
     protected fun rightKnee(): SupportContact = SupportContact.RIGHT_KNEE
     protected fun hands(): Set<SupportContact> = setOf(SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND)
 }
+
+/**
+ * B4 — authors a pelvis tilt (root rotation) and records it as a [Joint.PELVIS] joint intent on
+ * [buffer] so the Finalizer (B2) consumes it idempotently. Package-level (not a [BasePose] member)
+ * so both [BasePose] subclasses and poses that implement [PoseBuilder] directly can call it.
+ *
+ * Mirrors the mixed-mode form of [buildHipFlexion]/[buildChestTwist]: the node is still written for
+ * build-time FK and the carrier reproduces the rotation, so output is byte-identical to a bare
+ * `pelvis.localRotation.set`. Closes the last bare `pelvis.localRotation.set` gap in the B4 migration.
+ */
+fun declarePelvisTilt(pelvis: SkeletonNode, buffer: SkeletonPose, axis: Vector3, angle: Float) {
+    pelvis.localRotation.set(axis, angle)
+    SkeletonPose.IntentBuilder(buffer).joint(Joint.PELVIS, JointRotation(axis, angle))
+}

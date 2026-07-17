@@ -209,7 +209,17 @@ The old M5/M6 labels are **not used** — they described flag-flip milestones th
   - `TrunkFrameTest` (the last reference to `buildChestSideBend`) migrated to set the chest axis-X
     rotation and record the `CHEST` `jointIntent` directly via `IntentBuilder`; the side-bend semantics
     (rotation about chest-local +X, preserved angle) are unchanged.
-  - Full suite: **282/0** (no engine output change).
+   - Full suite: **282/0** (no engine output change).
+- **Landed step 3 (B4 follow-up, mixed mode, byte-identical):** closed the last bare `pelvis.localRotation.set`
+  gap — the 26 production poses that authored a root tilt directly (CouchStretch, DeepSquatHold,
+  Quadruped, LatStretch, HipCars, ArmCircles, ThoracicExtension, IsometricSidePlank, ScapularRetraction,
+  BaseSquat/SumoSquat, GluteBridge, HalfKneelingStretch, MountainClimber, PelvicTilt,
+  DynamicWorldsGreatestStretch, ReverseSnowAngel, HamstringStretch, KettlebellSwing, WallSlides,
+  ProneCobraStretch, PikePushUp, BaseBirdDog, JumpSquat, Burpee, FacePull) now route through the new
+  package-level `declarePelvisTilt(pelvis, buffer, axis, angle)` helper, which writes the node for
+  build-time FK **and** records the `Joint.PELVIS` joint intent on the pose's `jointsBuffer` (idempotent
+  B2 consume). Validation poses carry no bare pelvis writes, so the B4 pelvis gap is fully closed.
+  Full suite: **282/0**.
 - **Remaining (follow-up PRs, same pattern):** extend the carrier-backed migration to the remaining
   raw node writes (limb/extremity local positions, head/gaze already covered by `headTarget`), then delete
   each shared helper as its last caller converts (`buildSpineCurve`, `buildChest*`, `buildHip*`, `buildPelvis`,

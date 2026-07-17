@@ -49,7 +49,7 @@ class SumoSquatPose : BaseSquatPose() {
         val leanAngle = SkeletonMath.lerp(0f, 0.15f, context.progress) // Upright torso
 
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, -leanAngle)
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, -leanAngle)
         declareJointIntent(Joint.PELVIS, JointRotation(axisZ, -leanAngle))
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)

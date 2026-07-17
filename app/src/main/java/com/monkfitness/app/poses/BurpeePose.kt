@@ -174,7 +174,7 @@ class BurpeePose : PoseBuilder {
         val info = getPhase(context.progress, def)
 
         pelvis!!.localPosition = Vector3(info.pelvisX, info.pelvisY, 0f)
-        pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), info.torsoAngle)
+        declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), info.torsoAngle)
         SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.PELVIS, JointRotation(Vector3(0f, 0f, 1f), info.torsoAngle))
 
         chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)
