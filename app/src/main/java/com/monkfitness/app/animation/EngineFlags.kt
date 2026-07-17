@@ -28,7 +28,7 @@ object EngineFlags {
      * intent pipeline + Finalizer resolver are verified against the baseline. The pose still
      * records `headTarget` regardless of this flag; the flag only controls who *consumes* it.
      */
-    var HEAD_TARGET_ENABLED: Boolean = false
+    var HEAD_TARGET_ENABLED: Boolean = true
 
     /** Snapshot of every flag, for assertions that a phase is enabled/disabled in tests. */
     fun snapshot(): Map<String, Boolean> = mapOf(
