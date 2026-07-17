@@ -272,7 +272,7 @@ object ConstraintSolver {
                 val signed = (e.x - c.point.x) * n.x + (e.y - c.point.y) * n.y + (e.z - c.point.z) * n.z
                 effTargets[i].set(e.x - n.x * signed, e.y - n.y * signed, e.z - n.z * signed)
             } else {
-                effTargets[i].copyFrom(spec.targetWorld)
+                effTargets[i].set(spec.targetWorld)
             }
         }
 
