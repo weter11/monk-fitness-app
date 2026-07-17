@@ -103,6 +103,10 @@ object ConstraintSolver {
     private val rootWorld = Vector3()
     private val ikResult = SkeletonMath.IKResult()
     private val nodeMap = Array<SkeletonNode?>(Joint.entries.size) { null }
+    // S1 (RFC_ENGINE_STABILIZATION) — per-contact effective target that honors the contact
+    // as a *surface/anchor* (its support plane) instead of chasing the stale build-time
+    // targetWorld. Reused, grown on demand (solve runs once per finalize, not a hot loop).
+    private var effTargets: Array<Vector3> = Array(0) { Vector3() }
 
     // Posture-DOF scratch (pelvis tilt relaxation, PR-04 / Issue A). The solver is no longer
     // translation-only: when contacts are reachable it leaves the root where the contact pins it
@@ -249,6 +253,29 @@ object ConstraintSolver {
         // declared PostureIntent before relaxing. This replaces the pose's hand-computed `pelvisY`
         // with an engine-derived exact value (B1.1 / B4). For CUSTOM or when the flag is off the
         // authored root is left untouched, so non-posture poses are unchanged.
+        // S1 — derive each contact's effective target on its support plane. A contact is a
+        // *surface/anchor* (ground, bar, wall), not a fixed 3-D point: the end-effector must
+        // land on the plane, not be dragged to the stale build-time targetWorld (which is the
+        // authored aim, often offset from the actual resolved contact — e.g. a straight limb
+        // baked to the ground records its aim point near the hip, not at y=0). Projecting the
+        // current end-effector world position onto the contact plane keeps the foot on the
+        // ground / hand on the bar and stops the solver from floating the pelvis to reach a
+        // stale aim (the Issue A "point-reach, not posture" bug). Contacts without a plane
+        // (free targets) keep their authored targetWorld.
+        if (effTargets.size < contacts.size) effTargets = Array(contacts.size) { Vector3() }
+        for (i in contacts.indices) {
+            val spec = contacts[i]
+            val c = spec.contact
+            val n = c?.normal
+            if (c != null && n != null && (abs(n.y) > 0.5f || abs(n.x) > 0.5f || abs(n.z) > 0.5f)) {
+                val e = nodeMap[spec.endJoint.index]?.worldPosition ?: spec.targetWorld
+                val signed = (e.x - c.point.x) * n.x + (e.y - c.point.y) * n.y + (e.z - c.point.z) * n.z
+                effTargets[i].set(e.x - n.x * signed, e.y - n.y * signed, e.z - n.z * signed)
+            } else {
+                effTargets[i].copyFrom(spec.targetWorld)
+            }
+        }
+
         if (EngineFlags.SOLVER_OWNS_POSTURE) {
             seedRootFromPostureIntent(pose, definition, pelvis)
         }
@@ -280,7 +307,7 @@ object ConstraintSolver {
             for (spec in contacts) {
                 val parent = nodeMap[spec.rootJoint.index] ?: continue
                 rootWorld.set(parent.worldPosition)
-                away.set(rootWorld).subtract(spec.targetWorld)
+                away.set(rootWorld).subtract(effTargets[contacts.indexOf(spec)])
                 val dist = away.mag()
 
                 val maxReach = (spec.length1 + spec.length2) * spec.constraint.effectiveExtensionRatio
@@ -336,24 +363,25 @@ object ConstraintSolver {
 
                 rootWorld.set(parent.worldPosition)
                 val parentRot = rotNode.worldRotation
+                val effTarget = effTargets[contacts.indexOf(spec)]
 
                 // A straight limb can only be represented when the target is at least one bone
                 // (L1) away; inside that radius it would degenerate to a point. Fall back to the
                 // triangle IK so the limb stays valid and the contact stays on its surface.
-                away.set(rootWorld).subtract(spec.targetWorld)
+                away.set(rootWorld).subtract(effTarget)
                 val reachMag = away.mag()
                 val canBeStraight = spec.straight && reachMag >= spec.length1 - 1e-3f
 
                 if (canBeStraight) {
                     SkeletonMath.solveStraightLimb(
-                        rootWorld, spec.targetWorld, spec.length1, spec.length2,
+                        rootWorld, effTarget, spec.length1, spec.length2,
                         spec.constraint, ikResult, spec.contact
                     )
                 } else {
                     // The parent frame rotation is set by the solver (translation and/or tilt), so
                     // the contact's world-space pole is recomputed each pass and reused directly.
                     SkeletonMath.solveIK(
-                        rootWorld, spec.targetWorld, spec.length1, spec.length2,
+                        rootWorld, effTarget, spec.length1, spec.length2,
                         spec.pole, spec.constraint, ikResult, spec.contact
                     )
                 }

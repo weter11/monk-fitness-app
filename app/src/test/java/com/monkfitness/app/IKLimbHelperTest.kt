@@ -158,9 +158,15 @@ class IKLimbHelperTest {
         assertTrue("angular clamp should be recorded for a hyperextended target", result.angularClampAmount > 0f)
 
         // The resulting middle-joint interior angle must respect the 150° cap.
+        // Measure the middle-joint interior angle of the ACTUAL solved chain (root, joint,
+        // end). The end-effector is clamped to the reachable distance (1.93, not the full-reach
+        // target 2.0), so the angle must be taken against `result.end`, not the original
+        // `target` — measuring against `target` (2.0) reads a near-straight ~173 deg even though
+        // the real solved knee is capped at 150 deg. This asserts the intended property
+        // ("middle joint interior angle must respect the 150 deg cap") correctly.
         val mid = result.joint
         val v1 = Vector3(root.x - mid.x, root.y - mid.y, root.z - mid.z)
-        val v2 = Vector3(target.x - mid.x, target.y - mid.y, target.z - mid.z)
+        val v2 = Vector3(result.end.x - mid.x, result.end.y - mid.y, result.end.z - mid.z)
         val m1 = v1.mag(); val m2 = v2.mag()
         val dot = v1.dot(v2) / (m1 * m2)
         val theta = kotlin.math.acos(dot.coerceIn(-1f, 1f)) * 180f / kotlin.math.PI.toFloat()
