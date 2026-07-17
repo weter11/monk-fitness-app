@@ -152,6 +152,13 @@ abstract class BaseThoracicPose : BasePose() {
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
         jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
-        return jointsBuffer
+        // Return an independent snapshot, not the reused internal buffer. A caller that retains
+        // the result of one build must not see it mutated by a later build (e.g. an animation
+        // that samples the same pose at two progresses); the chest/twist frame is correctly
+        // propagated to the shoulders, but a shared buffer would alias the two samples and make
+        // the thoracic twist appear to leave the shoulder chain static.
+        val out = SkeletonPose()
+        out.copyFrom(jointsBuffer)
+        return out
     }
 }
