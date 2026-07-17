@@ -11,16 +11,18 @@ import org.junit.Test
 import kotlin.math.abs
 
 /**
- * M0 (RFC_GAP_CLOSURE) — `SkeletonPipeline` scaffold verification.
+ * M2 (RFC_GAP_CLOSURE) — `SkeletonPipeline` active stage-chain verification.
  *
- * M0 introduces the pipeline behind `PIPELINE_ACTIVE=false` with ZERO behavior change: its legacy
- * `produceFrame` path must be byte-identical to invoking `pose.build()` + `finalizer.finalize()`
- * directly (the exact flow every consumer runs today). This locks that guarantee in.
+ * M2 flips `PIPELINE_ACTIVE=true` and makes `produceFrame` drive the full ordered stage chain
+ * (`build` → `ConstraintSolver.solve` → `SkeletonPoseFinalizer.finalize`), with the Finalizer's
+ * internal Solver call removed. The two entry points ([produceFrame] with a [PoseBuilder] and with
+ * a pre-built [SkeletonPose] for renderers) must be byte-identical to a manual Solver+Finalizer run,
+ * and the legacy bypass (flag off) must remain byte-identical to the direct finalizer path. This
+ * locks the "zero regression vs pre-M2 baseline" guarantee in.
  */
 class SkeletonPipelineM0Test {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
-    private val directFinalizer = SkeletonPoseFinalizer(def)
     private val originalActive = EngineFlags.PIPELINE_ACTIVE
 
     @After
@@ -40,15 +42,15 @@ class SkeletonPipelineM0Test {
     )
 
     @Test
-    fun pipelineFlagDefaultsFalse() {
-        // M0 ships with the master switch off.
-        assertFalse("PIPELINE_ACTIVE must default to false in M0", originalActive)
+    fun pipelineFlagDefaultsTrue() {
+        // M2 ships with the master switch on.
+        assertTrue("PIPELINE_ACTIVE must default to true in M2", originalActive)
         assertTrue("PIPELINE_ACTIVE must appear in the flag snapshot", EngineFlags.snapshot().containsKey("PIPELINE_ACTIVE"))
     }
 
     @Test
-    fun legacyProduceFrameIsByteIdenticalToDirectPath() {
-        EngineFlags.PIPELINE_ACTIVE = false
+    fun activeProduceFrameIsByteIdenticalToManualSolvePlusFinalize() {
+        EngineFlags.PIPELINE_ACTIVE = true
         val frames = 20
         var maxDev = 0f
         var worst = ""
@@ -56,7 +58,74 @@ class SkeletonPipelineM0Test {
         // Use INDEPENDENT pose + finalizer instances per path: poses reuse an internal node tree /
         // jointsBuffer across build() calls and the finalizer flattens a pose only once
         // (`isTransformsUpdated`), so sharing an instance between the two paths would alias state.
-        // Two fresh objects is the faithful "same inputs, two code paths" comparison.
+        // Two fresh objects is the faithful "same inputs, two code paths" comparison. The manual
+        // reference path replicates exactly what the pipeline's runStages does:
+        //   build -> (Solver iff contacts) -> finalizer.finalize.
+        for ((name, factory) in poseFactories()) {
+            val refFinalizer = SkeletonPoseFinalizer(def)
+            val refPose = factory()
+            val pipeline = SkeletonPipeline(def)
+            val pipelinePose = factory()
+
+            for (i in 0..frames) {
+                val p = i / frames.toFloat()
+
+                val built = refPose.build(PoseContext(p, Side.LEFT, def))
+                if (built.roots.isNotEmpty() && built.hasContacts()) {
+                    ConstraintSolver.solve(built, def)
+                }
+                val ref = refFinalizer.finalize(built)
+                val refSnap = SkeletonPose().apply { copyFrom(ref) }
+
+                val result = pipeline.produceFrame(pipelinePose, PoseContext(p, Side.LEFT, def))
+                assertNull("active produceFrame must not attach a report", result.report)
+
+                for (j in Joint.values()) {
+                    val a = refSnap.getJoint(j); val b = result.pose.getJoint(j)
+                    val d = maxOf(abs(a.x - b.x), abs(a.y - b.y), abs(a.z - b.z))
+                    if (d > maxDev) { maxDev = d; worst = "$name @$p joint=$j" }
+                }
+            }
+        }
+        assertEquals("Active pipeline deviates from manual solve+finalize at $worst", 0f, maxDev, 1e-4f)
+        println("SkeletonPipelineM0Test.activeProduceFrameIsByteIdenticalToManualSolvePlusFinalize: OK  maxDeviation=$maxDev")
+    }
+
+    @Test
+    fun rendererPathIsByteIdenticalToBuilderPath() {
+        EngineFlags.PIPELINE_ACTIVE = true
+        var maxDev = 0f
+        var worst = ""
+        for ((name, factory) in poseFactories()) {
+            val pipeline = SkeletonPipeline(def)
+            val poseA = factory()
+            val poseB = factory()
+            for (i in 0..20) {
+                val p = i / 20f
+                val ctx = PoseContext(p, Side.LEFT, def)
+                // Builder-based entry point.
+                val fromBuilder = pipeline.produceFrame(poseA, ctx).pose
+                // Renderer-style entry point: a pose that has already been built.
+                val built = poseB.build(ctx)
+                val fromBuilt = pipeline.produceFrame(built).pose
+                for (j in Joint.values()) {
+                    val a = fromBuilder.getJoint(j); val b = fromBuilt.getJoint(j)
+                    val d = maxOf(abs(a.x - b.x), abs(a.y - b.y), abs(a.z - b.z))
+                    if (d > maxDev) { maxDev = d; worst = "$name @$p joint=$j" }
+                }
+            }
+        }
+        assertEquals("Renderer (built-pose) path deviates from builder path at $worst", 0f, maxDev, 1e-4f)
+        println("SkeletonPipelineM0Test.rendererPathIsByteIdenticalToBuilderPath: OK  maxDeviation=$maxDev")
+    }
+
+    @Test
+    fun legacyBypassIsByteIdenticalToDirectFinalizer() {
+        EngineFlags.PIPELINE_ACTIVE = false
+        val frames = 20
+        var maxDev = 0f
+        var worst = ""
+
         for ((name, factory) in poseFactories()) {
             val directFinalizer = SkeletonPoseFinalizer(def)
             val directPose = factory()
@@ -80,19 +149,21 @@ class SkeletonPipelineM0Test {
             }
         }
         assertEquals("Pipeline legacy path deviates from direct path at $worst", 0f, maxDev, 1e-4f)
-        println("SkeletonPipelineM0Test: OK  maxDeviation=$maxDev")
+        println("SkeletonPipelineM0Test.legacyBypassIsByteIdenticalToDirectFinalizer: OK  maxDeviation=$maxDev")
     }
 
     @Test
     fun validatedPathMatchesDirectValidator() {
-        EngineFlags.PIPELINE_ACTIVE = false
+        EngineFlags.PIPELINE_ACTIVE = true
         val validator = ExerciseValidator()
         val pipeline = SkeletonPipeline(def, validator)
         val camera = Camera(StandardPullUpPose().metadata.camera)
         val env = StandardPullUpPose().metadata.environment
 
         // Independent pose instances per path (see byte-identity test rationale).
-        val directPose = directFinalizer.finalize(StandardPullUpPose().build(PoseContext(0f, Side.LEFT, def)))
+        val built = StandardPullUpPose().build(PoseContext(0f, Side.LEFT, def))
+        if (built.roots.isNotEmpty() && built.hasContacts()) ConstraintSolver.solve(built, def)
+        val directPose = SkeletonPoseFinalizer(def).finalize(built)
         val directReport = validator.validate(directPose, def, env, camera, 1000f, 1000f, null, null, 0.033f)
 
         val framed = pipeline.produceFrameValidated(StandardPullUpPose(), PoseContext(0f, Side.LEFT, def), camera, env, 1000f, 1000f, 0.033f)
@@ -100,42 +171,22 @@ class SkeletonPipelineM0Test {
     }
 
     @Test
-    fun activeModeFailsFastUntilM2() {
-        EngineFlags.PIPELINE_ACTIVE = true
-        // Coherence invariant: active mode also requires FINALIZER_OWNS_CONVERSION; but even with
-        // that satisfied, the active stage chain is not implemented until M2, so produceFrame must
-        // refuse to run rather than silently produce a wrong frame.
-        val originalFinalizer = EngineFlags.FINALIZER_OWNS_CONVERSION
+    fun incoherentFlagsFailAtConstruction() {
+        // The coherence invariant only fires when FINALIZER_OWNS_CONVERSION is turned on WITHOUT
+        // the pipeline being active (an incoherent "finalizer owns conversion but nothing drives
+        // it" configuration). M2 keeps FINALIZER_OWNS_CONVERSION off by design.
+        EngineFlags.PIPELINE_ACTIVE = false
+        EngineFlags.FINALIZER_OWNS_CONVERSION = true
         try {
-            EngineFlags.FINALIZER_OWNS_CONVERSION = true
-            val pipeline = SkeletonPipeline(def)
-            var threw = false
-            try {
-                pipeline.produceFrame(StandardPullUpPose(), PoseContext(0f, Side.LEFT, def))
-            } catch (e: IllegalStateException) {
-                threw = true
-            }
-            assertTrue("active-mode produceFrame must fail fast until M2", threw)
-        } finally {
-            EngineFlags.FINALIZER_OWNS_CONVERSION = originalFinalizer
-        }
-    }
-
-    @Test
-    fun activeModeWithoutFinalizerConversionFailsAtConstruction() {
-        EngineFlags.PIPELINE_ACTIVE = true
-        val originalFinalizer = EngineFlags.FINALIZER_OWNS_CONVERSION
-        try {
-            EngineFlags.FINALIZER_OWNS_CONVERSION = false
             var threw = false
             try {
                 SkeletonPipeline(def)
             } catch (e: IllegalArgumentException) {
                 threw = true
             }
-            assertTrue("incoherent flags must fail at construction", threw)
+            assertTrue("FINALIZER_OWNS_CONVERSION without PIPELINE_ACTIVE must fail", threw)
         } finally {
-            EngineFlags.FINALIZER_OWNS_CONVERSION = originalFinalizer
+            EngineFlags.FINALIZER_OWNS_CONVERSION = false
         }
     }
 }

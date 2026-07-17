@@ -357,11 +357,13 @@ object EngineFlags {
 pipeline runs the same code paths as today when all flags are `LEGACY`; flipping a flag activates
 the architecture-v2 behavior for that stage only. No big-bang rewrite.
 
-### Phase M0 — Scaffold orchestrator (no behavior change)
+### Phase M0 — Scaffold orchestrator (no behavior change) **[SHIPPED; superseded by M2]**
 - Add `SkeletonPipeline` with `PIPELINE_ACTIVE = false`.
 - `produceFrame` in legacy mode = exactly today: `pose.build()` (which still builds the tree) →
   `finalizer.finalize()` → optional validator. All consumers still call `pose.build()` directly;
   pipeline is unused. **Zero regression.**
+- **M2 has since flipped `PIPELINE_ACTIVE` to `true`** and re-pointed the renderers; the legacy
+  `false` branch remains reachable as a rollback path.
 
 ### Phase M1 — Remove deprecated `bakeIkLimb` overload (Gap 5, F4)
 - **Scope (authoritative — see Issue 1 resolution):** M1 does ONLY one thing: delete the
@@ -382,7 +384,21 @@ the architecture-v2 behavior for that stage only. No big-bang rewrite.
   `IK_WORLD_ONLY`, restore one method).
 - **Coexist:** legacy poses (still calling the world `bakeIkLimb`) work because `PIPELINE_ACTIVE=false`.
 
-### Phase M2 — Pose becomes intent-only (the core cut)
+### Phase M2 — Pipeline owns the stage chain (the ordering cut) **[SHIPPED — narrowed scope]**
+- **Shipped:** `PIPELINE_ACTIVE = true`. `produceFrame` now drives the ordered chain
+  `pose.build()` → `ConstraintSolver.solve` (contacts only) → `finalizer.finalize` → FK → validator.
+  The Finalizer's internal `ConstraintSolver.solve` call was **removed** (§8.1) so the pipeline is
+  the **sole** caller of both, killing the Finalizer→Solver re-entrancy. `SkeletonRenderer` and
+  `SkeletonSnapshotRenderer` were re-pointed to `produceFrame` (a built-pose overload serves the
+  renderer path); they no longer own a `SkeletonPoseFinalizer`. Output is byte-identical to the
+  pre-M2 baseline (`SkeletonPipelineM0Test`, full suite 250/0).
+- **Deferred to a follow-up (the RFC's "Pose intent-only" prose below):** `BasePose.build()` still
+  constructs the node tree; the `BasePose`→`IntentBuilder` forward + moving the tree build into
+  `IkStage` require the §1.1 Intent Layer to be live (Phase M5) and are out of scope for the flip.
+  The substantive M2 deliverable — single Solver/Finalizer owner, no re-entrancy — is what makes M3
+  and M4 safe to land next.
+
+<!-- Original design intent (superset, deferred):
 - `PIPELINE_ACTIVE = true`. `produceFrame` now: `pose.build()` (intent only) → `IntentNormalization`
   → `IkStage.solve` (builds the tree, solves) → `ConstraintSolver.solve` → `finalizer.finalize` →
   FK → validator.
@@ -392,6 +408,7 @@ the architecture-v2 behavior for that stage only. No big-bang rewrite.
 - **Adapter needed:** `LegacyPoseAdapter` — wraps an old `PoseBuilder` whose `build()` still returns
   a full tree; the adapter extracts §1.1-equivalent from the tree (or the pose is simply migrated).
   Prefer direct migration; adapter is the fallback for the long tail.
+-->
 
 ### Phase M3 — Activate Solver authority (Gap 3)
 - `SOLVER_OWNS_POSTURE = true`. Production poses migrated to `declarePosture(...)`. Contact poses

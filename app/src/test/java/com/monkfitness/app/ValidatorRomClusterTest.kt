@@ -249,7 +249,12 @@ class ValidatorRomClusterTest {
     // ---- End-to-end: the UNI-1 solver rework must still reproduce references ----
 
     private fun finalized(pose: BaseValidationPose): SkeletonPose {
-        return SkeletonPoseFinalizer(def).finalize(pose.build(PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)))
+        // M2: route through the pipeline (the production path) so the Solver + Finalizer run in
+        // fixed order, exactly as pre-M2 (the Finalizer itself no longer calls the Solver). This
+        // keeps the end-to-end fixtures faithful to production and byte-identical to the baseline.
+        return SkeletonPipeline(def).produceFrame(
+            pose, PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)
+        ).pose
     }
 
     @Test
