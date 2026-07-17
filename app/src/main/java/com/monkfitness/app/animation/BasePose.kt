@@ -34,6 +34,14 @@ abstract class BasePose : PoseBuilder {
     protected val legScratch = SkeletonMath.NearStraightLimbResult()
     protected val jointsBuffer = SkeletonPose()
 
+    // Branch B (B0) — the single intent-authoring surface for §1.1. Every declaration a pose makes
+    // about intent (spine curve, joint articulation, limb target, posture, contact, gaze, extremity
+    // override, motion/camera/environment hints) goes through this builder, never a direct carrier
+    // field assignment. The builder wraps the pose's own `jointsBuffer`, so intent and the §1.2 state
+    // the pose still seeds (IK stamps inside `bakeIkLimb`) share one buffer. Geometry is never computed
+    // here — only declared. The hard carrier-visibility lockdown is deferred to B4.
+    protected val intent = IntentBuilder(jointsBuffer)
+
     // Common body construction helpers
     protected fun buildTorso(pelvis: SkeletonNode, chest: SkeletonNode, torsoLength: Float) {
         chest.localPosition.set(-torsoLength, 0f, 0f)
@@ -68,7 +76,7 @@ abstract class BasePose : PoseBuilder {
         if (tempV1.mag() < 1e-4f) tempV1.set(0f, 1f, 0f) else tempV1.normalize()
         val nw = neck.worldPosition
         tempV2.set(nw.x + tempV1.x * targetDistance, nw.y + tempV1.y * targetDistance, nw.z + tempV1.z * targetDistance)
-        jointsBuffer.headTarget = HeadTarget(tempV2.copy(), Vector3(0f, 1f, 0f))
+        intent.headTarget(tempV2.copy(), Vector3(0f, 1f, 0f))
         // The head is resolved by SkeletonPoseFinalizer.resolveHeadTarget (single source of truth).
     }
 
@@ -232,7 +240,7 @@ abstract class BasePose : PoseBuilder {
      * they get the default automatic derivation, restoring the pose→engine ownership boundary.
      */
     protected fun overrideExtremityOrientation(pose: SkeletonPose, extremity: Extremity) {
-        pose.overrideExtremityOrientation(extremity)
+        IntentBuilder(pose).overrideExtremity(extremity)
     }
 
     /**
@@ -395,7 +403,7 @@ abstract class BasePose : PoseBuilder {
         if (contact != null) {
             val chain = ConstraintSolver.chainForEnd(endNode.joint)
             if (chain != null) {
-                jointsBuffer.contacts.add(
+                intent.contact(
                     ContactSpec(
                         endJoint = endNode.joint,
                         rootJoint = chain.rootJoint,
@@ -440,9 +448,7 @@ abstract class BasePose : PoseBuilder {
         tolerance: Float = 0f,
         precedence: List<Joint> = emptyList()
     ) {
-        pose.postureIntent = PostureIntent(kind, tolerance)
-        pose.contactPrecedence.clear()
-        for (j in precedence) pose.contactPrecedence.add(j.name)
+        IntentBuilder(pose).posture(kind, tolerance).precedence(precedence)
     }
 
     // Common Support helpers building SupportContact collections allocation-free
