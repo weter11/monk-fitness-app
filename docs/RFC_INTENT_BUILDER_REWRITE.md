@@ -270,3 +270,8 @@ new architecture branch," based solely on the facts in §1–§3.
 
 **Roadmap status:** unchanged by this document. M5 remains BLOCKED and M6 remains deferred-on-M5 in
 `RFC_GAP_CLOSURE.md`; M7 remains complete. No flag was flipped and no production code was modified.
+
+**Authoritative Branch B design:** `RFC_DECLARATIVE_POSE_AUTHORING.md` — the future authoring architecture
+defined independently of the Runtime (problem statement, design goals, authoring API, engine consumption,
+migration strategy, runtime guarantees, risks, and the fresh B0–B6 phase plan). This document is the
+current-state audit it builds on; that document is the target design.

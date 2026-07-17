@@ -151,6 +151,8 @@ Architecture v2 is officially divided into two branches.
   (`IntentBuilder`); extract the IK `IkStage` that solves a pipeline-owned tree from `limbTargets`; make
   the Finalizer consume `spineIntent`/`jointIntents`/`extremityOverrides`; retire dead/obsolete carriers;
   enable M6 (validator stamp-only) on the resulting stamps.
+- **Authoritative design:** `RFC_DECLARATIVE_POSE_AUTHORING.md` (problem statement, design goals, authoring
+  API, engine consumption, migration strategy, runtime guarantees, risks, and the fresh B0–B6 phase plan).
 - **Definition of ready:** see §8 (entry criteria). Not started.
 - **Status:** not begun. Target design in `RFC_INTENT_LAYER.md`; current-state audit + required-work in
   `RFC_INTENT_BUILDER_REWRITE.md`.
