@@ -213,6 +213,15 @@ class SkeletonPoseFinalizer(
         // Same math as BasePose.buildHead — single source of truth for head orientation.
         neck.localPosition.set(tempV1.x * definition.neckLength, tempV1.y * definition.neckLength, tempV1.z * definition.neckLength)
         head.localPosition.set(tempV1.x * 18f, tempV1.y * 18f, tempV1.z * 18f)
+
+        // The neck/head local offsets are written AFTER the initial FK flatten (above), so they
+        // have not yet propagated into the output pose. Re-propagate the neck->head subtree so
+        // HEAD_POS carries the extended neck length instead of collapsing onto the neck (which
+        // otherwise fails the validator's BONE_LENGTH rule on NECK_END->HEAD_POS). The neck's
+        // parent (chest) world transform is already current from the flatten above.
+        val neckParent = neck.parent ?: return
+        neck.updateWorldTransforms(neckParent.worldPosition, neckParent.worldRotation)
+        neck.flatten(outputPose)
     }
 
     // Phase 3 (F1/B5) — contact end-effector world-position snapshot, reused across the guard.
