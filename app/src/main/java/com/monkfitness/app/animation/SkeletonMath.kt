@@ -340,6 +340,53 @@ data class ContactConstraint(
     )
 
     /**
+     * Minimum reachable end-effector distance for a 2-bone chain: the distance when the middle
+     * joint is at its tightest allowed interior angle ([IKConstraint.minimumFlexionAngle]).
+     */
+    fun minReach(L1: Float, L2: Float, constraint: IKConstraint): Float {
+        val minCos = cos(constraint.minimumFlexionAngle * DEG2RAD)
+        return sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
+    }
+
+    /** Maximum reachable end-effector distance for a 2-bone chain (honours the extension cap). */
+    fun maxReach(L1: Float, L2: Float, constraint: IKConstraint): Float =
+        (L1 + L2) * constraint.effectiveExtensionRatio
+
+    /**
+     * R2 (reach target authoring): project an authored IK [target] onto the *reachable annulus*
+     * `[minReach, maxReach]` centred on [root], along the root→target direction, writing the
+     * result into [out]. A target inside the band is copied unchanged. A tiny [margin] keeps the
+     * result strictly inside the band so the solver records **zero** clamp (the reachability
+     * signal stays honest — this fixes the authored target instead of muting the validator).
+     *
+     * This encodes "reachable-by-construction": poses author the intended direction/stance and
+     * the engine guarantees the target lies where a real limb can actually place the end-effector.
+     * Allocation-free.
+     */
+    fun clampTargetToReach(
+        root: Vector3,
+        target: Vector3,
+        L1: Float,
+        L2: Float,
+        constraint: IKConstraint,
+        out: Vector3,
+        margin: Float = 0.02f
+    ): Vector3 {
+        val dx = target.x - root.x
+        val dy = target.y - root.y
+        val dz = target.z - root.z
+        val dMag = sqrt(dx * dx + dy * dy + dz * dz)
+        val lo = minReach(L1, L2, constraint) * (1f + margin)
+        val hi = maxReach(L1, L2, constraint) * (1f - margin)
+        if (dMag < 1e-6f || dMag in lo..hi) {
+            return out.set(target.x, target.y, target.z)
+        }
+        val clamped = dMag.coerceIn(lo, hi)
+        val s = clamped / dMag
+        return out.set(root.x + dx * s, root.y + dy * s, root.z + dz * s)
+    }
+
+    /**
      * Analytical IK with strict Biological Clamps
      */
     fun solveIK(

@@ -4,12 +4,12 @@ Snapshot of the expected unit-test state so future sessions can tell **pre-exist
 failures** apart from **regressions they introduced**.
 
 - Command: `./gradlew :app:testDebugUnitTest`
-- **Current truthful baseline (post PR #134 + S1 + S2 + S3 + remediation R1):**
-  **239 tests executed, 7 failures, 0 errors.**
-- Progression: `236 / 9` (post-S3) → **`239 / 7`** after remediation **R1** (foot extremity
-  derivation) fixed `BurpeePoseTest` and `KettlebellSwingPoseTest` and cleared the foot
-  `BONE_LENGTH` portion of `KneePushUpPoseTest`; +3 new `FootDerivationTest` unit tests lock
-  in the invariants. R2–R4 remain (see below).
+- **Current truthful baseline (post PR #134 + S1 + S2 + S3 + remediation R1–R2):**
+  **243 tests executed, 4 failures, 0 errors.**
+- Progression: `236 / 9` (post-S3) → `239 / 7` (after **R1**, foot extremity derivation) →
+  **`243 / 4`** (after **R2**, reach target authoring: `StandardPushUpPoseTest`,
+  `SquatPosesTest` Sumo, `KneePushUpPoseTest` now green; +`ReachTargetTest` unit tests). R3–R4
+  remain (see below).
 - The count `236` includes the four previously-compile-broken files
   (`ConstraintSolverTest`, `IKLimbHelperTest`, `TrunkFrameTest`, `VerticalPullPosesTest`)
   that PR #134 (`efef793`) restored to the module. The old "168 / 30" figure was measured
@@ -24,9 +24,25 @@ failures** apart from **regressions they introduced**.
   | R | Defect | Failing tests |
   |---|---|---|
   | R1 | Foot extremity derivation | ~~`BurpeePoseTest`, `KettlebellSwingPoseTest`, `KneePushUpPoseTest` (foot bones)~~ **DONE** |
-  | R2 | Reach target authoring | `StandardPushUpPoseTest`, `SquatPosesTest` (Sumo), `KneePushUpPoseTest` (arm reach) |
+  | R2 | Reach target authoring | ~~`StandardPushUpPoseTest`, `SquatPosesTest` (Sumo), `KneePushUpPoseTest` (arm reach)~~ **DONE** |
   | R3 | Lunge support anchoring | `LungePosesTest` ×3 (Forward/Reverse/Side) |
   | R4 | Camera framing | `VerticalPullPosesTest` |
+
+  **R2 (DONE):** three distinct sub-causes, all "authored IK target outside the reachable
+  annulus `[minReach, maxReach]`", each verified by probe (not assumed):
+  - R2a `StandardPushUp` — arm hand target too *close* (dMag 34.3 < minReach 40.1).
+  - R2b `SumoSquat` — wide-stance foot target too *far* (dMag 213.7 > maxReach 205.8) and the
+    crotch-drop hand target too *close* (dMag 9.2).
+  - R2c `KneePushUp` — a *posture* bug: the knee-pivot chain pitched the whole trunk ~68° so the
+    shoulders stood ~300 units up, making the floor hand target physically unreachable
+    (dMag 318 ≫ arm reach 146).
+
+  Fixes: a shared `SkeletonMath.clampTargetToReach` projects an authored target onto the reachable
+  band (fixes R2a/R2b — reachable-by-construction, so the solver records **zero** clamp and the
+  `IK_TARGET_UNREACHABLE` signal stays honest); R2c adds a hip counter-rotation so the knee push-up
+  trunk returns to a level plank (the shin keeps its 45° upward pitch). `ReachTargetTest` locks in
+  the band behaviour. Passing variants (`WidePushUp` grip 1.9, `Decline`, `AirSquat`) are unchanged
+  — the clamp is a no-op for already-in-band targets.
 
   **R1 (DONE):** two facets in the engine foot derivation — (R1a) `FootDefinition.applyPitchClamp`
   produced a non-unit direction for a purely-vertical foot (`|sin 45°| = 0.707`), scaling

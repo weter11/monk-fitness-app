@@ -106,6 +106,13 @@ abstract class BasePushUpPose : BasePose() {
             kneeF!!.localRotation.set(axisZ, -theta - shinPitch)
 
             hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
+            // R2 (reach target authoring): the knee rotation above pitches the whole downstream
+            // chain (thigh → pelvis → torso) up by (theta + shinPitch). Left uncorrected the torso
+            // stands nearly vertical (shoulders ~300 units up) and the hand IK target — authored on
+            // the floor — becomes physically unreachable (dMag ~318 >> arm reach). Counter-rotate at
+            // the hip so the torso returns to the horizontal plank the exercise actually is; the
+            // shin keeps its 45° upward pitch (knee-on-ground, ankle raised) while the trunk is level.
+            hipF!!.localRotation.set(axisZ, theta + shinPitch)
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
             buildTorso(pelvis!!, chest!!, def.torsoLength)
 
@@ -159,6 +166,15 @@ abstract class BasePushUpPose : BasePose() {
         val finalHandAnchorX = handAnchorX + handAnchorXOffset
         val targetHandA = targetHandABuffer.set(finalHandAnchorX, 0f, -def.shoulderWidth * gripWidthMultiplier)
         val targetHandP = targetHandPBuffer.set(finalHandAnchorX, 0f, def.shoulderWidth * gripWidthMultiplier)
+
+        // R2 (reach target authoring): keep the authored hand target inside the arm's reachable
+        // band so a compact stance (narrow grip / shallow shoulder drop) cannot ask for a target
+        // closer than the elbow's minimum-flexion reach — which would fire IK_TARGET_UNREACHABLE.
+        // A target already in band (Wide/Decline) is unchanged; only the radius is nudged, the
+        // grip direction is preserved.
+        SkeletonMath.clampTargetToReach(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandA)
+        SkeletonMath.clampTargetToReach(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandP)
+
 
         SkeletonMath.toLocalDirection(poleA, chest!!.worldRotation, armAPoleLocal)
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
