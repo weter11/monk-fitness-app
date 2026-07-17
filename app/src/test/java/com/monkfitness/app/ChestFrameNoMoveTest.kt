@@ -14,21 +14,24 @@ import org.junit.Test
  * exactly where the solver pinned it.
  *
  * These are diagnostic instruments (validation poses), so they are exercised through the full
- * render path (build -> SkeletonPoseFinalizer, which runs the ConstraintSolver for contact poses).
+ * production path (build -> SkeletonPipeline.produceFrame, which runs the ConstraintSolver then the
+ * Finalizer; the Solver-settles the contacts that the F1/B5 guard then protects). Post-M2 the
+ * Finalizer no longer calls the Solver itself, so a direct `finalize()` would skip the Solver and
+ * the guard would have nothing to protect — routing through the pipeline is mandatory.
  */
 class ChestFrameNoMoveTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
     private val context = PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)
+    private val original = EngineFlags.FINALIZER_OWNS_CONVERSION
 
     @After
     fun resetFlag() {
-        EngineFlags.FINALIZER_OWNS_CONVERSION = false
+        EngineFlags.FINALIZER_OWNS_CONVERSION = original
     }
 
     private fun finalized(pose: BaseValidationPose): SkeletonPose {
-        val raw = pose.build(context)
-        return SkeletonPoseFinalizer(def).finalize(raw)
+        return SkeletonPipeline(def).produceFrame(pose, context).pose
     }
 
     @Test

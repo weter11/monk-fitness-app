@@ -15,11 +15,14 @@ package com.monkfitness.app.animation
  *   engine [ContactSpec] (via `bakeIkLimb(... contact=)`); the whole solver is a no-op for
  *   contact-less poses, so every production pose (none register engine contacts today) is
  *   byte-identical regardless of this flag.
- * - [FINALIZER_OWNS_CONVERSION] — Phase 3: the [SkeletonPoseFinalizer] is the *exclusive* writer
- *   of local transforms (world↔local frame conversion, `preConvertPoles`, `toLocalDirection`
- *   bakes, extremity derivation, `reconstructChestFrame`) and enforces the read-only chest-frame
- *   no-move guard (F1): a Solver-settled contact end-effector must never move during finalization.
- *   When false the legacy finalize path runs unchanged.
+ * - [FINALIZER_OWNS_CONVERSION] — Phase 3 / **M4 (default-on)**: the [SkeletonPoseFinalizer] is the
+ *   *exclusive* writer of local transforms (world↔local frame conversion, `preConvertPoles`,
+ *   `toLocalDirection` bakes, extremity derivation, `reconstructChestFrame`) and enforces the
+ *   read-only chest-frame no-move guard (F1/B5): a Solver-settled contact end-effector must never
+ *   move during finalization. When false the legacy finalize path runs unchanged. The guard only
+ *   activates for poses that registered an engine [ContactSpec]; the reconstruction touches only
+ *   the chest subtree (shoulders/arms/neck/head), so it never displaces hand/foot contacts, and the
+ *   guard is a no-op that leaves output byte-identical for every contact-less production pose.
  */
 object EngineFlags {
     /**
@@ -54,7 +57,15 @@ object EngineFlags {
      * relaxation-only behaviour.
      */
     var SOLVER_OWNS_POSTURE: Boolean = true
-    var FINALIZER_OWNS_CONVERSION: Boolean = false
+    /**
+     * M4 (default-on) — the [SkeletonPoseFinalizer] is the *exclusive* writer of local transforms and
+     * enforces the F1/B5 read-only chest-frame guard: a Solver-settled contact end-effector must not
+     * move during finalization. Activates `preConvertPoles` (a reserved no-op hook today) and the
+     * `reconstructChestFrame` no-move guard. The guard only fires for contact poses and never
+     * displaces hand/foot contacts (the chest reconstruction touches only the chest subtree), so it
+     * is byte-identical for all production poses. Set `false` to restore the pre-M4 finalize.
+     */
+    var FINALIZER_OWNS_CONVERSION: Boolean = true
 
     // Phase 7 (Gap 7) — COMPLETE. The gaze-as-`headTarget` resolver in the Finalizer is now the
     // sole head/neck writer; the legacy direction-based `buildHead` fallback was removed after

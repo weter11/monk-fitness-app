@@ -432,9 +432,17 @@ the architecture-v2 behavior for that stage only. No big-bang rewrite.
 - Validation poses already declare posture → unaffected.
 -->
 
-### Phase M4 — Activate Finalizer authority (Gap 4)
-- `FINALIZER_OWNS_CONVERSION = true`. `preConvertPoles` owns all conversion; no pose writes a local
-  transform after IK. Chests reconstructed read-only on settled contacts (F1/B5 live).
+### Phase M4 — Activate Finalizer authority (Gap 4) **[SHIPPED]**
+- **Shipped:** `FINALIZER_OWNS_CONVERSION = true`. The Finalizer is now the exclusive writer of every
+  local transform; `preConvertPoles` (reserved no-op hook) and the `reconstructChestFrame` F1/B5
+  read-only chest-frame guard are live. Pure flag flip + test coverage.
+- **Byte-identical for production:** the guard only activates for poses that registered an engine
+  `ContactSpec` (the 4 validation instruments); the chest reconstruction touches only the chest
+  subtree (shoulders/arms/neck/head), so it never displaces a Solver-settled hand/foot contact and the
+  guard is a no-op. Every production pose registers zero engine contacts, so the entire production set
+  is unchanged. `FinalizerOwnsConversionM4Test` proves flag-on == flag-off (maxDev 0.0);
+  `ChestFrameNoMoveTest` (re-pointed through the pipeline) confirms the guard holds for all contacts.
+  Full suite green (255/0).
 
 ### Phase M5 — §1.1 carriers become live (Gap 2)
 - With Pose intent-only and pipeline consuming it, `spineIntent`/`limbTargets`/`jointIntents` are
