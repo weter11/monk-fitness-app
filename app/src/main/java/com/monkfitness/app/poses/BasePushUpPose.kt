@@ -162,11 +162,13 @@ abstract class BasePushUpPose : BasePose() {
 
         SkeletonMath.toLocalDirection(poleA, chest!!.worldRotation, armAPoleLocal)
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
-        val armA = bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, chest!!.worldRotation, armAPoleLocal, def.armIKConstraint, elbowA!!, handA!!, armAIK)
+        val armAPoleWorld = SkeletonMath.toWorldDirection(armAPoleLocal, elbowA!!.parent!!.worldRotation, tempPoleWorld)
+        val armA = bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, armAPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK)
 
         shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
         SkeletonMath.toLocalDirection(poleP, chest!!.worldRotation, armPPoleLocal)
-        val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, chest!!.worldRotation, armPPoleLocal, def.armIKConstraint, elbowP!!, handP!!, armPIK)
+        val armPPoleWorld = SkeletonMath.toWorldDirection(armPPoleLocal, elbowP!!.parent!!.worldRotation, tempPoleWorld)
+        val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
         // The engine derives palm/knuckles/fingertips from the forearm + the neutral wrist
         // articulation. The flat planted palm is intentionally NOT hand-authored here; any visual
