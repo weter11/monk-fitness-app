@@ -67,12 +67,16 @@ class QuadrupedThoracicRotationsPose : BaseThoracicPose() {
         poleP.set(0f, -1f, 1f)
         bakeThoracicArm(shoulderP!!.worldPosition, targetP, def, poleP, elbowP!!, handP!!, armPBuffer)
 
-        // Reaching arm (A): target lives in the chest's rotating frame, so it follows the
-        // thorax. Starts threaded under the chest, opens up toward the sky as the spine rotates.
-        reachLocal.set(0.35f, lerp(-0.25f, 1.25f, progress), -0.45f).normalize()
+        // Reaching arm (A): the horizontal reach follows the thorax (target in the chest's
+        // rotating frame), while the vertical component is authored in world space so the hand
+        // demonstrably sweeps from threaded-under (low) at the start to reaching-for-the-sky
+        // (high) at the end — the defining biomechanics of the drill.
+        reachLocal.set(0.35f, 0f, -0.45f).normalize()
         val reachLen = (def.upperArmLength + def.forearmLength) * 0.82f
-        reachWorld.set(reachLocal.x * reachLen, reachLocal.y * reachLen, reachLocal.z * reachLen)
+        reachWorld.set(reachLocal.x * reachLen, 0f, reachLocal.z * reachLen)
         chestLocalToWorld(reachWorld, targetA)
+        // World-space vertical sweep: low (threaded under the torso) -> high (open to the sky).
+        targetA.y = lerp(20f, chestW.y + reachLen * 0.9f, progress)
         poleA.set(0.2f, -0.6f, -1f)
         if (targetA.y < 6f) targetA.y = 6f
         bakeThoracicArm(shoulderA!!.worldPosition, targetA, def, poleA, elbowA!!, handA!!, armABuffer)

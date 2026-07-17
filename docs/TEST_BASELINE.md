@@ -5,17 +5,17 @@ failures** apart from **regressions they introduced**.
 
 - Command: `./gradlew :app:testDebugUnitTest`
 - Baseline after **S0 (baseline) + S1 (IK/ConstraintSolver) + S2 (Validator rules +
-  stale constants)**: **236 tests, 11 failures**.
+  stale constants) + S3 (pose authoring)**: **236 tests, 9 failures**.
 - The count `236` includes the four previously-compile-broken files
   (`ConstraintSolverTest`, `IKLimbHelperTest`, `TrunkFrameTest`, `VerticalPullPosesTest`)
   that PR #134 (`efef793`) restored to the module. The old "168 / 30" figure was measured
   with those four files excluded and is stale (see RFC_ENGINE_STABILIZATION §2).
-- The 11 remaining failures are **not** regressions introduced by stabilization: every
-  stabilization change was additive (doc/CI), a genuine validator-rule fix, or a correction
+- The 9 remaining failures are **not** regressions introduced by stabilization: every
+  stabilization change was additive (doc/CI), a genuine validator-rule fix, a correction
   of a test constant that encoded a stale expected value (engine output verified correct
-  first). The 11 are upstream defects sequenced for **S1 residual (IK/reach)** and **S3
-  (pose authoring)**, per RFC_ENGINE_STABILIZATION §5 dependency order. The Validator is
-  the *last* layer; these failures are symptoms of upstream authoring/IK/solver defects and
+  first), or an isolated per-pose authoring correction. The 9 are the **S1-residual
+  IK/reach** family, per RFC_ENGINE_STABILIZATION §5 dependency order. The Validator is
+  the *last* layer; these failures are symptoms of upstream IK/solver reach-band defects and
   must not be papered over by weakening validator rules.
 
 ## Stabilization progress
@@ -25,16 +25,16 @@ failures** apart from **regressions they introduced**.
 | S0 | truthful baseline doc + CI failure-count guard | docs only |
 | S1 | IK angular-clamp recording; chest-frame → shoulder propagation; ground-contact projection; foot support-plane | `ConstraintSolverTest`×2, `IKLimbHelperTest`, `TrunkFrameTest` green (7 tests total) |
 | S2 | (1) `PELVIS_INTENT` + `CONTACT_PRESERVED` rules now emit ERROR so they invalidate the rule (they previously fired as WARNING and the rule stayed "valid" — the RFC §6 "rule not firing" defect); (2) corrected stale test constants in `ExerciseValidatorTest`, `EnvironmentAnchorsTest`×2, `NewEnginePosesTest`×8; (3) `ValidatorRomClusterTest`×2 (undocumented) now green | 12 tests green |
+| S3 | per-pose authoring: `QuadrupedThoracicRotationsPose` reaching-arm world-space vertical sweep (elbow now sweeps up); `ThoracicExtensionPose` arch driven from the thoracolumbar (lumbar) segment so the chest/head translate backward | `DynamicStretchPosesTest.testQuadrupedThoracicRotationsPoseBuildsCorrectly`, `ThoracicAndHamstringStretchPosesTest.testThoracicExtensionPoseBuildsCorrectly` green |
 
-## Remaining 11 failures and their true subsystem
+## Remaining 9 failures and their true subsystem
 
-These are **not** Validator-rule bugs. Each is an upstream defect:
+These are **not** Validator-rule or pose-authoring bugs. Each is an upstream S1-residual
+IK/reach defect:
 
 ```
 BurpeePoseTest :: testBurpeePoseBiomechanicalCompliance
     -> Frame 0 failed validation (BONE_LENGTH on arm/hand chain)   [S1 residual: IK/solver FK]
-DynamicStretchPosesTest :: testQuadrupedThoracicRotationsPoseBuildsCorrectly
-    -> Elbow sweep direction wrong                                [S3: pose authoring]
 KettlebellSwingPoseTest :: testKettlebellSwingPoseMeetsAllBiomechanicalRequirements
     -> Frame 0 failed: [BONE_LENGTH] Bone HAND_A ...              [S1 residual: IK/solver FK]
 KneePushUpPoseTest :: testKneePushUpPoseBiomechanicalCompliance
@@ -49,8 +49,6 @@ SquatPosesTest :: testSumoSquatPoseBiomechanicalCompliance
     -> validation errors (BONE_LENGTH / IK_TARGET_UNREACHABLE)    [S1 residual: IK/solver FK]
 StandardPushUpPoseTest :: testStandardPushUpPoseBiomechanicalCompliance
     -> IK_TARGET_UNREACHABLE (hand target outside reach band)     [S1 residual: IK/reach]
-ThoracicAndHamstringStretchPosesTest :: testThoracicExtensionPoseBuildsCorrectly
-    -> Chest extension magnitude not produced                     [S3: pose authoring]
 VerticalPullPosesTest :: testVerticalPullFamilyBiomechanics
     -> reach/clamp band not respected (pull family)               [S1 residual: IK/reach]
 ```

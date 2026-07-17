@@ -139,11 +139,20 @@
   - Did NOT weaken `BONE_LENGTH`/`IK_TARGET_UNREACHABLE` thresholds — the remaining
     11 failures are upstream (S1-residual IK/reach + S3 pose authoring), per RFC §5 the
     Validator is last and must not mask them.
-- **Remaining 11 failures (truthful, see `docs/TEST_BASELINE.md`):** S1-residual IK/reach
+- **S3 (DONE, pose-authoring portion):** suite moved **11 → 9 failures**.
+  - `QuadrupedThoracicRotationsPose`: reach's vertical component was authored in the chest's
+    *rotating local frame* (chest-local +Y is forward in tabletop), so the "sweep up" ramp
+    swept the hand forward/down. Re-authored the vertical component in world space (horizontal
+    still follows the thorax) → elbow now sweeps up. `DynamicStretchPosesTest` green.
+  - `ThoracicExtensionPose`: extension was driven by the chest node's own localRotation, which
+    rotates children in place but never translates CHEST/HEAD → `chestX`/`headX` never moved.
+    Re-authored the arch to originate at the `lumbar` (thoracolumbar) segment so the chest tips
+    up and BACK (-X) carrying neck/head/shoulders. `ThoracicAndHamstringStretchPosesTest` green.
+- **Remaining 9 failures (truthful, see `docs/TEST_BASELINE.md`):** all S1-residual IK/reach
   (`StandardPushUpPoseTest`, `KettlebellSwingPoseTest`, `BurpeePoseTest`, `KneePushUpPoseTest`,
-  `SquatPosesTest`, `LungePosesTest` ×3, `VerticalPullPosesTest`) + S3 authoring
-  (`DynamicStretchPosesTest`, `ThoracicAndHamstringStretchPosesTest`).
-- `docs/TEST_BASELINE.md` rewritten to the truthful **236 / 11** baseline.
+  `SquatPosesTest`, `LungePosesTest` ×3, `VerticalPullPosesTest`). `BONE_LENGTH` frame-0 on
+  arm/hand chain + `IK_TARGET_UNREACHABLE`; deferred to a follow-up S1-residual IK pass.
+- `docs/TEST_BASELINE.md` rewritten to the truthful **236 / 9** baseline.
 
 ## Git
 

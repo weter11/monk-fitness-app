@@ -44,10 +44,20 @@ class ThoracicExtensionPose : BaseThoracicPose() {
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
         pelvis!!.localRotation.set(axisZ, 0f)
 
-        chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        // Thoracic extension about the lateral (Z) axis: chest arches up and back.
+        // Thoracic extension about the lateral (Z) axis. The arch originates in the spine BELOW
+        // the chest (the thoracolumbar junction), so the chest node itself tips up and BACK (-X)
+        // and carries the neck/head/shoulders with it — that is what makes the rib cage open and
+        // the gaze travel backward. Driving the chest's own localRotation alone would rotate the
+        // children in place but never translate the chest, so the extension would be invisible at
+        // the CHEST/HEAD joints (the previous defect).
         val extAngle = lerp(0f, 0.5f, progress)
-        chest!!.localRotation.set(axisZ, extAngle)
+        lumbar!!.localPosition.set(0f, 0f, 0f)
+        lumbar!!.localRotation.set(axisZ, extAngle)
+
+        chest!!.localPosition.set(0f, def.torsoLength, 0f)
+        // A small additional chest-local extension keeps the upper rib cage opening relative to
+        // the lower spine (the thorax is not perfectly rigid with the lumbar segment).
+        chest!!.localRotation.set(axisZ, extAngle * 0.4f)
 
         buildGaze(neck!!, head!!, def.neckLength, headDir)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
