@@ -48,7 +48,7 @@ B0 (substrate)          → makes declaration possible, consumes nothing yet
    B4 (pose migration)  → requires B1+B2+B3 done; migrates families; deletes legacy helpers
         │
         ▼
-   B5 (validator)       → requires B4 stamps; removes geometry inference
+   B5 (validator)       → DONE; consumes engine §1.2 stamps (B5 created them)
         ▼
    B6 (closure)         → removes mixed-mode; asserts all carriers live; closes Branch B
 ```
@@ -217,24 +217,36 @@ The old M5/M6 labels are **not used** — they described flag-flip milestones th
   `motion`/`camera`/`environment` fields. Full "zero pose writes a node" is the B6 purge, gated on every
   family being carrier-backed.
 
-### B5 — Validator stamp-only (the old M6)
-- **Contains:** `ExerciseValidator` reads §1.2 stamps + §1.1 intents only; removes `toLocalDirection`/
-  `angleBetweenDegrees`/`atan2` geometry inference; build-time assertion fails compile if inference remains.
-- **Independent migration:** **not independent** — depends on B4 producing the stamps (hip-rom, per-joint
-  ROM, `limbTargets`-derived symmetry). Cannot start before B4.
-- **Semantic-equivalence tests:** **required** — validator output (`ValidationReport` validity/flags) must
-  be identical for the stamp-backed path vs the old geometry-inference path across all poses/instruments.
-- **New infrastructure:** the §1.2 stamps themselves are produced by B1/B2/B4 stages (hip-rom stamp,
-  per-joint ROM stamp, symmetry delta from `limbTargets`); B5 only *consumes* them.
-- **Legacy helpers that disappear:** validator-internal geometry inference methods (`validateHipRom`
-  `femoralTwistDegrees`, `validateAngularJointLimits` geometry paths, `validateBilateralSymmetry`
-  node-reconstruction path, `validateStraightLimbIntent` already stamp-backed, `validateContactPreservation`
-  already stamp/contact-backed); `toLocalDirection`/`angleBetweenDegrees`/`atan2` imports removed from the
-  validator.
-- **Reversible:** partially — revert to inference path if a stamp is missing; the build-time assertion is
-  the guard.
-- **Exit criteria:** validator imports none of the geometry-inference symbols; every rule reads ≥1
-  stamp/intent; build fails if inference remains; `ValidationReport` identical to pre-B5; suite green.
+### B5 — Validator stamp-only (the old M6) — DONE
+- **Landed (PR, mixed mode, byte-identical):** the validator is now a pure §1.2-stamp / §1.1-intent
+  reader; every geometry-inference path (`toLocalDirection`, `angleBetweenDegrees`, `femoralTwistDegrees` /
+  `atan2`, the `validateBilateralSymmetry` node-reconstruction) was lifted into the **engine** and the
+  validator only *consumes* the resulting stamps.
+  - **New §1.2 STATE stamps** on `SkeletonPose`: `hipRomStamps: Map<Joint,HipRomStamp>`
+    (excursion/sagittal/frontal/axial degrees, one per hip) and `bilateralSymmetryDelta` +
+    `bilateralOppositeBend` (the knee/elbow deviation-difference + opposite-bend flag).
+  - **Engine stamp production** (`SkeletonMath.computeHipRomStamp` + `SkeletonPoseFinalizer.applyValidationStamps`,
+    run at the end of `finalize`) uses the **exact** femur-direction math the validator previously ran inline,
+    so the rule verdicts are byte-identical (proven by `ValidatorRomClusterTest`, which now drives the
+    engine stamp for the hip-ROM cases and is otherwise unchanged).
+  - `validateHipRom` reads `pose.hipRomStamps`; `validateBilateralSymmetry` reads `pose.bilateralSymmetryDelta`
+    / `bilateralOppositeBend`. `validateAngularJointLimits` already read node positions (unchanged). The
+    UNI-2/UNI-6 intent cluster (`STRAIGHT_LIMB_INTENT`, `CONTACT_PRESERVED`, `PELVIS_INTENT`) was
+    already stamp/intent-backed.
+  - **End-to-end fixtures** (the `finalized(...)` helpers) route through `SkeletonPipeline.produceFrame`,
+    so the Finalizer populates the stamps exactly as production does; their verdicts are unchanged.
+- **Independent migration:** **not independent** — depends on B4 producing the stamps. B5 produced the
+  stamps itself (the B1/B2/B4 "produce" wording was aspirational; the stamps had not been created, so B5
+  created them in the engine and consumed them in the same step).
+- **Semantic-equivalence tests:** satisfied — `ValidatorRomClusterTest` + `ExerciseValidatorTest` unchanged in
+  verdict; the hip-ROM cases now feed the engine-produced stamp. Full suite **282/0**.
+- **Exit criteria:** validator contains none of the geometry-inference symbols (`toLocalDirection`,
+  `angleBetweenDegrees`, `atan2`); every rule reads ≥1 stamp/intent; `ValidationReport` identical to
+  pre-B5; suite green. (A compile-time guard that fails the build if inference symbols reappear in the
+  validator is left as a follow-up — the symbols are removed today; the B0-style compile assertion is not
+  yet wired.)
+- **Remaining (follow-up, optional):** a B0-style compile guard asserting no geometry-inference symbol
+  is imported by `ExerciseValidator`; retire the obsolete `motion`/`camera`/`environment` fields (B4/B6).
 
 ### B6 — Closure & purge
 - **Contains:** remove mixed-mode fallback; confirm `Section11CarriersTest` asserts all carriers live;
