@@ -4,13 +4,37 @@ Snapshot of the expected unit-test state so future sessions can tell **pre-exist
 failures** apart from **regressions they introduced**.
 
 - Command: `./gradlew :app:testDebugUnitTest`
-- **Current truthful baseline (post PR #134 + S1 + S2 + S3 stabilization):**
-  **236 tests executed, 9 failures, 0 errors.**
+- **Current truthful baseline (post PR #134 + S1 + S2 + S3 + remediation R1):**
+  **239 tests executed, 7 failures, 0 errors.**
+- Progression: `236 / 9` (post-S3) → **`239 / 7`** after remediation **R1** (foot extremity
+  derivation) fixed `BurpeePoseTest` and `KettlebellSwingPoseTest` and cleared the foot
+  `BONE_LENGTH` portion of `KneePushUpPoseTest`; +3 new `FootDerivationTest` unit tests lock
+  in the invariants. R2–R4 remain (see below).
 - The count `236` includes the four previously-compile-broken files
   (`ConstraintSolverTest`, `IKLimbHelperTest`, `TrunkFrameTest`, `VerticalPullPosesTest`)
   that PR #134 (`efef793`) restored to the module. The old "168 / 30" figure was measured
   with those four files excluded and is stale — do not revert to it (see
   RFC_ENGINE_STABILIZATION §2).
+- The **9 remaining failures are legacy engine defects, not Intent-Pipeline gaps** (a
+  control experiment with the Architecture-v2 flags enabled changed nothing — same 9). They
+  are grouped into 4 root-cause defects (R1–R4) and are being cleared under
+  **`docs/ENGINE_DEFECT_REMEDIATION_PLAN.md`**, a temporary stabilization detour after which
+  work resumes on Architecture v2 / M2. The 9 → R mapping:
+
+  | R | Defect | Failing tests |
+  |---|---|---|
+  | R1 | Foot extremity derivation | ~~`BurpeePoseTest`, `KettlebellSwingPoseTest`, `KneePushUpPoseTest` (foot bones)~~ **DONE** |
+  | R2 | Reach target authoring | `StandardPushUpPoseTest`, `SquatPosesTest` (Sumo), `KneePushUpPoseTest` (arm reach) |
+  | R3 | Lunge support anchoring | `LungePosesTest` ×3 (Forward/Reverse/Side) |
+  | R4 | Camera framing | `VerticalPullPosesTest` |
+
+  **R1 (DONE):** two facets in the engine foot derivation — (R1a) `FootDefinition.applyPitchClamp`
+  produced a non-unit direction for a purely-vertical foot (`|sin 45°| = 0.707`), scaling
+  derived heel/toe bones ~29% short → fixed by falling back to a stable horizontal heading so
+  the clamped direction stays unit; (R1b) a *neutral* (un-articulated) foot inherited a downward
+  pitch from shank geometry and penetrated the ground for poses declaring no support contact →
+  fixed in `SkeletonPoseFinalizer.adjustFootOrientation` by clamping the neutral foot direction
+  to non-downward (plantar flexion is still honored via the ankle articulation applied after).
 
 > **Audit note (2026-07-17):** an earlier `main` doc commit (`fff841b`) recorded a
 > **236 / 24** snapshot taken *after S1 but before S2/S3 landed*. That snapshot is now
@@ -52,26 +76,34 @@ Do **not** mute them by weakening the engine or the validator thresholds — the
 diagnostic instruments and must be fixed at the IK/solver source (per RFC §5 the Validator
 is the last layer).
 
+Verbatim signals (from JUnit XML), each mapped to its remediation defect:
+
 ```
 BurpeePoseTest :: testBurpeePoseBiomechanicalCompliance
-    -> Frame 0 failed validation (BONE_LENGTH on arm/hand chain)   [S1 residual: IK/solver FK]
+    -> Frame 0: FOOT_GROUND_PENETRATION TOE_F/TOE_B y=-2.57            [R1 foot derivation]
 KettlebellSwingPoseTest :: testKettlebellSwingPoseMeetsAllBiomechanicalRequirements
-    -> Frame 0 failed: [BONE_LENGTH] Bone HAND_A ...              [S1 residual: IK/solver FK]
+    -> Frame 31: FOOT_GROUND_PENETRATION TOE y=-0.456                  [R1 foot derivation]
 KneePushUpPoseTest :: testKneePushUpPoseBiomechanicalCompliance
-    -> validation errors (IK_TARGET_UNREACHABLE / BONE_LENGTH)    [S1 residual: IK/reach]
-LungePosesTest :: testForwardLungeBiomechanics
-    -> Frame 0: [BONE_LENGTH]                                     [S1 residual: IK/solver FK]
-LungePosesTest :: testReverseLungeBiomechanics
-    -> Frame 0: [BONE_LENGTH]                                     [S1 residual: IK/solver FK]
-LungePosesTest :: testSideLungeBiomechanics
-    -> Frame 0: [BONE_LENGTH]                                     [S1 residual: IK/solver FK]
+    -> BONE_LENGTH ANKLE_B->HEEL_B 7.18 vs 10.15 (29.29%) x200        [R1 foot derivation]
+    -> HAND_SHOULDER_ALIGNMENT offset 38.9 x100; IK_TARGET_UNREACHABLE clamp 175 x100 [R2 reach]
 SquatPosesTest :: testSumoSquatPoseBiomechanicalCompliance
-    -> validation errors (BONE_LENGTH / IK_TARGET_UNREACHABLE)    [S1 residual: IK/solver FK]
+    -> IK_TARGET_UNREACHABLE x60 (all frames)                         [R2 reach]
 StandardPushUpPoseTest :: testStandardPushUpPoseBiomechanicalCompliance
-    -> IK_TARGET_UNREACHABLE (hand target outside reach band)     [S1 residual: IK/reach]
+    -> IK_TARGET_UNREACHABLE x60 (all frames)                         [R2 reach]
+LungePosesTest :: testForwardLungeBiomechanics
+    -> Support foot drift 88.0                                        [R3 lunge anchoring]
+LungePosesTest :: testReverseLungeBiomechanics
+    -> Support foot drift 86.0                                        [R3 lunge anchoring]
+LungePosesTest :: testSideLungeBiomechanics
+    -> Support foot drift 122.6                                       [R3 lunge anchoring]
 VerticalPullPosesTest :: testVerticalPullFamilyBiomechanics
-    -> reach/clamp band not respected (pull family)               [S1 residual: IK/reach]
+    -> standard frame 71: HEAD_VIEWPORT (head off 1000x1000 viewport) [R4 camera framing]
 ```
+
+Note: the earlier "arm/hand chain / IK reach" attribution in prior revisions of this file
+was **superseded** by the direct XML trace above — the dominant signals are foot-derivation
+and ground-penetration (R1), authored-target reach (R2), support-foot drift (R3), and
+camera framing (R4). See `ENGINE_DEFECT_REMEDIATION_PLAN.md` for the full analysis.
 
 ### Failing classes (8)
 

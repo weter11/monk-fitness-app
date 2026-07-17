@@ -62,7 +62,7 @@ data class FootDefinition(
     /**
      * Clamps the elevation (pitch) of [dir] into [minPitch]..[maxPitch] in place,
      * leaving the horizontal heading untouched. Used as a safety bound on the
-     * articulated foot direction.
+     * articulated foot direction. The output is always unit length.
      */
     private fun applyPitchClamp(dir: Vector3) {
         val pitch = atan2(dir.y, sqrt(dir.x * dir.x + dir.z * dir.z))
@@ -73,6 +73,14 @@ data class FootDefinition(
             if (hMag > 1e-6f) {
                 scratchHoriz.x /= hMag
                 scratchHoriz.z /= hMag
+            } else {
+                // Purely vertical direction: the horizontal heading is degenerate, so there is
+                // no in-plane direction to preserve. Without a fallback heading the reconstructed
+                // vector below collapses to (0, sin(clamped), 0) — a NON-unit vector (|sin 45°|
+                // = 0.707) — which then scales heel/toe bones ~29% short (the R1 foot-derivation
+                // defect). Fall back to a stable +X heading so the clamped foot direction stays
+                // unit length and the derived bones keep their full footLength·ratio magnitude.
+                scratchHoriz.set(1f, 0f, 0f)
             }
             dir.set(
                 scratchHoriz.x * cos(clamped),

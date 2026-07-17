@@ -645,7 +645,29 @@ class SkeletonPoseFinalizer(
         }
         tempFootDir.normalize()
 
-        // Support-aware foot orientation (stabilization S1). When this ankle is a fixed support
+        // R1 (foot extremity derivation): a *neutral* foot — one with no authored ankle
+        // articulation — must not point below the floor. The shank-perpendicular forward
+        // direction tilts downward whenever the shank leans forward (standing, plank, mid-swing),
+        // which drives the toe under the ground even for poses that declare no support contact
+        // (Burpee frame 0, KettlebellSwing mid-swing). This was the "near-horizontal-shank foot"
+        // sharp edge documented in ENGINE_AUTOMATIC_ORIENTATION_AUDIT §"residual engine limits".
+        //
+        // Clamp only the NEUTRAL direction's *downward* pitch to horizontal (a flat foot). Genuine
+        // plantar flexion / pointed toe is authored as the ankle articulation ([ankleRotation],
+        // applied by computeHeelToe AFTER this), so this never overrides intent — it only removes
+        // the accidental downward tilt that pure shank geometry leaks into an un-articulated foot.
+        // Upward pitch (dorsiflexion hint) is left untouched. Magnitude is preserved (unit).
+        if (tempFootDir.y < 0f) {
+            val horiz = kotlin.math.sqrt(tempFootDir.x * tempFootDir.x + tempFootDir.z * tempFootDir.z)
+            if (horiz > 1e-4f) {
+                tempFootDir.set(tempFootDir.x / horiz, 0f, tempFootDir.z / horiz)
+            } else {
+                // Foot pointed straight down with no horizontal heading: lay it flat along +X.
+                tempFootDir.set(1f, 0f, 0f)
+            }
+        }
+
+
         // contact, the foot's long axis must lie *in* the support plane, not poke through it.
         // A steep shank (deep squat, wide split, wall-seat) makes the natural (shank-perpendicular)
         // forward direction tilt downward, which drives the toe/heel below the ground and fails the
