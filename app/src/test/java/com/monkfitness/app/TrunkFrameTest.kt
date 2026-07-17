@@ -29,7 +29,10 @@ class TrunkFrameTest {
     /** Exposes the protected BasePose chest helpers for unit-level assertions. */
     private class HelperProbe : BasePose() {
         fun twist(node: SkeletonNode, t: Float) = buildChestTwist(node, t)
-        fun sideBend(node: SkeletonNode, s: Float) = buildChestSideBend(node, s)
+        fun sideBend(node: SkeletonNode, s: Float) {
+            node.localRotation.set(1f, 0f, 0f, s)
+            declareJointIntent(Joint.CHEST, JointRotation(Vector3(1f, 0f, 0f), s))
+        }
         fun orient(node: SkeletonNode, l: Float, t: Float, s: Float) = buildChestOrientation(node, l, t, s)
         override fun build(context: PoseContext): SkeletonPose = SkeletonPose()
     }

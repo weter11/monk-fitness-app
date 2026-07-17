@@ -108,15 +108,6 @@ abstract class BasePose : PoseBuilder {
     }
 
     /**
-     * Authors a thoracic **side-bend** of the chest about its local +X (lateral) axis as a
-     * real 3-D local rotation. Captured and propagated to the shoulders/arms/neck/head by FK.
-     */
-    protected fun buildChestSideBend(chest: SkeletonNode, sideBendRad: Float) {
-        chest.localRotation.set(axisX, sideBendRad)
-        declareJointIntent(Joint.CHEST, JointRotation(axisX, sideBendRad))
-    }
-
-    /**
      * Authors a **full 3-D** chest orientation by composing sagittal lean (local +Z),
      * thoracic twist (local +Y) and side-bend (local +X) into a single axis-angle
      * [JointRotation]: `R = Rz(lean) · Ry(twist) · Rx(sideBend)`. Any subset may be zero.
@@ -235,24 +226,6 @@ abstract class BasePose : PoseBuilder {
     protected fun buildHipRotation(hip: SkeletonNode, rotationRad: Float, sideSign: Float) {
         hip.localRotation.set(axisX, rotationRad * sideSign)
         declareJointIntent(hip.joint, JointRotation(axisX, rotationRad * sideSign))
-    }
-
-    /**
-     * Authors a **full 3-DOF hip** orientation by composing flexion, abduction and femoral axial
-     * rotation into a single exact [JointRotation] (UNI-10), mirroring [buildChestOrientation].
-     * Any subset may be zero. [sideSign] (-1 left / +1 right) mirrors abduction and axial rotation.
-     * Delegates to [SkeletonMath.buildHipRotation] (no duplicated rotation math). ROM vocabulary is
-     * [HipRomLimits]; enforcement stays in the validator's `HIP_ROM_LIMIT` rule.
-     */
-    protected fun buildHipOrientation(
-        hip: SkeletonNode,
-        flexionRad: Float,
-        abductionRad: Float,
-        rotationRad: Float,
-        sideSign: Float
-    ) {
-        SkeletonMath.buildHipRotation(flexionRad, abductionRad, rotationRad, sideSign, hip.localRotation)
-        declareJointIntent(hip.joint, JointRotation(hip.localRotation.axis, hip.localRotation.angle))
     }
 
     protected fun bakeIkLimb(

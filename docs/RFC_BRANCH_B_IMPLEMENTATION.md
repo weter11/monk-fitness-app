@@ -177,8 +177,9 @@ The old M5/M6 labels are **not used** — they described flag-flip milestones th
 - **New infrastructure:** none new (mixed mode already supported by B0–B3); the `Section11CarriersTest`
   extension that flips each carrier dead→live per migrated family.
 - **Legacy helpers that disappear:** after B4, **all** of: `buildSpineCurve`, `buildLumbarFlexion`,
-  `buildChest*`, `buildHip*`, `buildClavicularRotation`, `buildWrist/AnkleArticulation`, `buildRigidSegment`,
-  `buildTorso`, `buildPelvis`, `buildShoulders`, `buildHead` (split: offset half forwards, direction half
+  `buildChest*`, `buildHip*` (`buildHipOrientation` already deleted), `buildClavicularRotation`,
+  `buildWrist/AnkleArticulation`, `buildRigidSegment`, `buildTorso`, `buildPelvis`, `buildShoulders`,
+  `buildHead` (`buildChestSideBend` already deleted; split: offset half forwards, direction half
   superseded by `headTarget`), `bakeIkLimb` (replaced by `limbTarget` declaration), and the 5 IK wrappers.
   `buildGaze`, `declarePosture`, `overrideExtremityOrientation` remain (already intent). Motion/support
   helpers remain (own no transform).
@@ -190,11 +191,10 @@ The old M5/M6 labels are **not used** — they described flag-flip milestones th
   family byte-identical; suite green.
 
 ### B4 — IN PROGRESS (first migration landed)
-- **Landed this step (mixed mode, byte-identical):**
+- **Landed step 1 (mixed mode, byte-identical):**
   - **Dead legacy helpers deleted** (0 callers anywhere): `buildRigidSegment`, `buildLumbarFlexion`,
     `buildWristArticulation`, `buildAnkleArticulation`, `buildHipAbduction` — removed from both
-    `BasePose` and `BaseValidationPose` (their `BaseValidationPose` copies were also unused). `TrunkFrameTest`
-    still exercises `buildChestOrientation`/`buildChestTwist`/`buildChestSideBend`, which remain.
+    `BasePose` and `BaseValidationPose` (their `BaseValidationPose` copies were also unused).
   - **Trunk/hip/pelvis authoring migrated to carrier-backed intent:** every production pose that hand-wrote
     `pelvis`/`chest`/`lumbar` local rotations now also records a `jointIntents` entry via `declareJointIntent`
     (BasePose) or `SkeletonPose.IntentBuilder(…).joint(...)` (PoseBuilder). The node is still set during
@@ -202,9 +202,17 @@ The old M5/M6 labels are **not used** — they described flag-flip milestones th
     carrier and reproduces the authored rotation exactly. This is the per-family dead→live flip.
   - `BranchBFamilyMigrationTest` (2 tests) locks the contract: migrated families populate `jointIntents`,
     and the Finalizer consumer reproduces them byte-identically (maxDev 0.0) on vs off.
+  - Full suite: **282/0**.
+- **Landed step 2 (PR #156, mixed mode, byte-identical):**
+  - **Dead legacy helpers deleted** (0 callers anywhere): `buildHipOrientation` (removed from both
+    `BasePose` and `BaseValidationPose`), and `buildChestSideBend` (removed from `BasePose`).
+  - `TrunkFrameTest` (the last reference to `buildChestSideBend`) migrated to set the chest axis-X
+    rotation and record the `CHEST` `jointIntent` directly via `IntentBuilder`; the side-bend semantics
+    (rotation about chest-local +X, preserved angle) are unchanged.
+  - Full suite: **282/0** (no engine output change).
 - **Remaining (follow-up PRs, same pattern):** extend the carrier-backed migration to the remaining
   raw node writes (limb/extremity local positions, head/gaze already covered by `headTarget`), then delete
-  each shared helper as its last caller converts (`buildSpineCurve`, `buildHip*`, `buildPelvis`,
+  each shared helper as its last caller converts (`buildSpineCurve`, `buildChest*`, `buildHip*`, `buildPelvis`,
   `buildShoulders`, `buildTorso`, `buildHead`, `bakeIkLimb` + 5 IK wrappers) and retire the obsolete
   `motion`/`camera`/`environment` fields. Full "zero pose writes a node" is the B6 purge, gated on every
   family being carrier-backed.
