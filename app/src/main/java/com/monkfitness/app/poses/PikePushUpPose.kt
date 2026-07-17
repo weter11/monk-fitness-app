@@ -2,7 +2,6 @@ package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
 import com.monkfitness.app.animation.SkeletonMath.lerp
-import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
 class PikePushUpPose : BasePushUpPose() {
@@ -87,16 +86,23 @@ class PikePushUpPose : BasePushUpPose() {
         ankleB!!.localPosition.set(def.shinLength, 0f, 0f)
 
         val headDir = tempV1.set(-1f, -0.6f, 0f).normalize()
-        buildHead(neck!!, head!!, def.neckLength, headDir)
+        buildGaze(neck!!, head!!, def.neckLength, headDir)
 
         val rSize = roots!!.size
         for (i in 0 until rSize) {
             roots!![i].updateWorldTransforms(zeroVector, identityRotation)
         }
 
-        val chestW = chest!!.worldPosition
-        val shoulderAW = rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV2).add(chestW)
-        val shoulderPW = rotAround(tempV1.set(0f, 0f, def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV3).add(chestW)
+        // Phase 7 (G6) — route the shoulder girdle through buildShoulders + FK instead of the
+        // hand-computed rotAround world-position. The chest world rotation already carries the torso
+        // pitch, so FK-derived shoulderA/shoulderP.worldPosition equals the old rotAround result
+        // (geometry unchanged), and the IK root now sits where the engine owns it.
+        buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
+        for (i in 0 until rSize) {
+            roots!![i].updateWorldTransforms(zeroVector, identityRotation)
+        }
+        val shoulderAW = shoulderA!!.worldPosition
+        val shoulderPW = shoulderP!!.worldPosition
 
         val handAnchorX = -25f
         val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * gripWidthMultiplier)
@@ -104,13 +110,12 @@ class PikePushUpPose : BasePushUpPose() {
 
         // Pole vectors (1, 1, ±2) perfectly orient the shoulder joints outwards.
         // bakeIkLimb owns the IK-solve + local-space bake orchestration used by the whole family.
-        shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
+        // Shoulders already positioned by buildShoulders + FK above.
         armAPoleLocal.set(1f, 1f, -2f)
         SkeletonMath.toLocalDirection(armAPoleLocal, chest!!.worldRotation, armAPoleLocal)
         val armAPoleWorld = SkeletonMath.toWorldDirection(armAPoleLocal, elbowA!!.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, armAPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK)
 
-        shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
         armPPoleLocal.set(1f, 1f, 2f)
         SkeletonMath.toLocalDirection(armPPoleLocal, chest!!.worldRotation, armPPoleLocal)
         val armPPoleWorld = SkeletonMath.toWorldDirection(armPPoleLocal, elbowP!!.parent!!.worldRotation, tempPoleWorld)

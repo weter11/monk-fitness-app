@@ -83,7 +83,7 @@ class HamstringStretchPose : BasePose() {
         pelvis!!.localRotation.set(axisZ, -torsoPitch)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        buildHead(neck!!, head!!, def.neckLength, headDir)
+        buildGaze(neck!!, head!!, def.neckLength, headDir)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 

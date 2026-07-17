@@ -73,7 +73,7 @@ class IsometricSidePlankPose : BasePlankPose() {
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
 
         // Head continues the spine line (neutral); the thorax carries the rest.
-        buildHead(neck!!, head!!, def.neckLength, tempV3.set(0f, 1f, 0f))
+        buildGaze(neck!!, head!!, def.neckLength, tempV3.set(0f, 1f, 0f))
 
         // --- 2. Roll the body onto its side ------------------------------------
         // Build the neutral lateral offsets, then roll them 90° about the local

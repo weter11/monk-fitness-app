@@ -145,7 +145,7 @@ abstract class BasePushUpPose : BasePose() {
             ankleB!!.localPosition.set(legTargetLen - bX, -bY, 0f)
         }
 
-        buildHead(neck!!, head!!, def.neckLength, pushUpHeadDirection)
+        buildGaze(neck!!, head!!, def.neckLength, pushUpHeadDirection)
 
         val rSize = roots!!.size
         for (i in 0 until rSize) {

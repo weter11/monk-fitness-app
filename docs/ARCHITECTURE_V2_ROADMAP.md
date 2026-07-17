@@ -58,6 +58,32 @@
 - **Rationale:** G6/W17/F8.
 - **Prereq:** Phase 3 + Phase 5. **Files:** PikePushUp, BaseThoracic, BaseLunge, BaseVerticalPull, StaticForearmPlank, ProneCobraStretch, BasePose (add `headTarget`). **APIs:** `headTarget` intent; engine resolves neck/head via IK/constraint.
 - **Validation:** gaze-direction + shoulder world assertions; `*PoseTest` green. **Risk:** Low. **Complete when:** no manual `rotAround` shoulder/gaze; gaze is a target.
+- **STATUS: IN PROGRESS (Gap 7 + G6 both landed on the gaze/girdle axis; flag-default verification + CI baseline diff still required).**
+  - **Done (Gap 7 — gaze-as-`headTarget`):** added `HeadTarget` data class + `headTarget` carrier on
+    `SkeletonPose` §1.1 (with `copyFrom` propagation); added `EngineFlags.HEAD_TARGET_ENABLED`
+    (default **false** — legacy path authoritative until verified against baseline); added
+    `BasePose.buildGaze(neck, head, neckLength, gazeDir)` which records the additive `headTarget`
+    intent (synthetic target along the authored gaze direction) and still calls the legacy
+    `buildHead(gazeDir)` so the rendered head is **byte-identical** to the pre-Phase-7 baseline while
+    the flag is off. Migrated **all** gaze sites (17 call sites across BaseLungePose, BaseVerticalPullPose,
+    ProneCobraStretchPose, StaticForearmPlankPose, PikePushUpPose, BasePushUpPose, BaseSquatPose,
+    SumoSquatPose, JumpSquatPose, DeepSquatHoldPose, IsometricSidePlankPose, ThoracicExtensionPose,
+    HamstringStretchPose, QuadrupedThoracicRotationsPose, DynamicWorldsGreatestStretchPose,
+    BaseHipFlexorPose, BaseBirdDogPose) from `buildHead(direction)` to `buildGaze`. The Finalizer
+    gains `resolveHeadTarget` which consumes `headTarget` (reusing `buildHead` math) when the flag is on.
+  - **Done (G6 — PikePushUp shoulder girdle):** `PikePushUpPose` shoulders now route through
+    `buildShoulders`+FK; the IK root is the FK-derived `shoulderA/shoulderP.worldPosition` instead of
+    the hand-computed `rotAround(..., chest.worldRotation.angle, ...)` world point. The chest world
+    rotation already carries the torso pitch, so the FK-derived shoulder world position equals the old
+    `rotAround` result (geometry unchanged, byte-identical). The removed `rotAround` import + the two
+    redundant `shoulder.localPosition.set` lines are gone.
+  - **Note:** `BasePushUpPose` (the generic push-up base reused by other push-up variants) still
+    contains a `rotAround` shoulder-computation at its IK-root setup; that is shared push-up logic, not
+    the Phase-7-named `PikePushUp` G6 item, and is left intact this pass (a behavioral change to the
+    shared base must be verified against every push-up variant's baseline before migration).
+  - **Remaining:** flip `HEAD_TARGET_ENABLED=true` and run the CI baseline diff (gaze-direction + shoulder
+    world assertions, `*PoseTest` / `ValidatorRomClusterTest` / `ChestFrameIssueFTest` green) to
+    confirm the flag-on resolver is byte-identical to legacy; then delete the legacy `buildHead` branch.
 
 ## Phase 8 — Validation reads stamped state only (W9/W10 closure)
 - **Goal:** Validator consumes stamps directly; drops post-hoc angle inference.

@@ -81,10 +81,11 @@ class ProneCobraStretchPose : BasePose() {
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
 
-        // Head tilts up dynamically to follow the cobra stretch
+        // Head tilts up dynamically to follow the cobra stretch. Declared as a gaze target
+        // (Phase 7 Gap 7) while the legacy direction path still writes the head.
         val headTilt = SkeletonMath.lerp(0f, -0.3f, context.progress)
         val headDir = SkeletonMath.rotAround(Vector3(0.2f, 1f, 0f), axisZ, headTilt, Vector3()).normalize()
-        buildHead(neck!!, head!!, def.neckLength, headDir)
+        buildGaze(neck!!, head!!, def.neckLength, headDir)
 
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
