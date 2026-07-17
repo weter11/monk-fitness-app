@@ -31,7 +31,11 @@ fun SkeletonRenderer(
     screenSpaceSettings: ScreenSpaceSettings = ScreenSpaceSettings.DEFAULT
 ) {
     val style = engine.style
-    val finalizer = remember(engine.definition) { SkeletonPoseFinalizer(engine.definition) }
+    // M2 (RFC_GAP_CLOSURE): the renderer no longer finalizes directly — it delegates to the engine
+    // orchestrator (SkeletonPipeline) which owns build -> ConstraintSolver stage (contact poses) ->
+    // Finalizer. The pose handed in is finalized through that pipeline so the active stage chain
+    // governs output.
+    val pipeline = remember(engine.definition) { SkeletonPipeline(engine.definition) }
     val projector = remember { SkeletonProjector() }
     val compensator = remember(screenSpaceSettings) { ScreenSpaceCompensation(screenSpaceSettings) }
 
@@ -45,7 +49,7 @@ fun SkeletonRenderer(
         val width = size.width
         val height = size.height
 
-        val finalizedPose = finalizer.finalize(pose)
+        val finalizedPose = pipeline.produceFrame(pose).pose
         projector.project(
             pose = finalizedPose,
             camera = camera,

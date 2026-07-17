@@ -15,7 +15,10 @@ import android.graphics.RectF
 class SkeletonSnapshotRenderer(
     private val engine: SkeletonEngine
 ) {
-    private val finalizer = SkeletonPoseFinalizer(engine.definition)
+    // M2 (RFC_GAP_CLOSURE): finalization is owned by the engine orchestrator (SkeletonPipeline),
+    // which runs the ConstraintSolver stage for contact poses and the Finalizer. The off-screen
+    // renderer delegates to it so the active stage chain governs output (no direct finalizer call).
+    private val pipeline = SkeletonPipeline(engine.definition)
     private val projector = SkeletonProjector()
     private val compensator = ScreenSpaceCompensation(ScreenSpaceSettings.DEFAULT)
     private val skeletonBuffer = ProjectedSkeleton()
@@ -72,7 +75,7 @@ class SkeletonSnapshotRenderer(
             canvas.drawColor(backgroundColor)
         }
 
-        val finalizedPose = finalizer.finalize(pose)
+        val finalizedPose = pipeline.produceFrame(pose).pose
         projector.project(
             pose = finalizedPose,
             camera = camera,

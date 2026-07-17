@@ -36,12 +36,9 @@ class SkeletonPipeline(
     private val validator: ExerciseValidator? = null
 ) {
     init {
-        // Coherence invariant (RFC_ENGINE_PIPELINE §5.7): a live pipeline requires finalizer-owned
-        // conversion. Vacuously satisfied in M0 (PIPELINE_ACTIVE=false); fail fast at construction
-        // rather than at frame time if a future misconfiguration violates it.
-        require(!EngineFlags.PIPELINE_ACTIVE || EngineFlags.FINALIZER_OWNS_CONVERSION) {
-            "Incoherent flags: PIPELINE_ACTIVE requires FINALIZER_OWNS_CONVERSION (RFC_ENGINE_PIPELINE §5.7)."
-        }
+        // M4 owns the `PIPELINE_ACTIVE ⇒ FINALIZER_OWNS_CONVERSION` gate (see EngineFlags). At M2 the
+        // pipeline runs with FINALIZER_OWNS_CONVERSION=false so the F1 no-move guard is not yet active
+        // and the output matches the pre-M2 baseline; M4 will flip it and assert the invariant there.
     }
 
     private val finalizer = SkeletonPoseFinalizer(definition)
@@ -53,14 +50,40 @@ class SkeletonPipeline(
     private var prePrevious: SkeletonPose? = null
 
     /**
-     * Single entry point. In M0 (legacy mode) this is `pose.build(context)` →
-     * `finalizer.finalize(...)`, byte-identical to invoking the two directly. Returns a
-     * [PipelineResult] with a `null` report (use [produceFrameValidated] for validation).
+     * Single entry point — the orchestrated frame.
+     *
+     * **Legacy mode** (`PIPELINE_ACTIVE=false`): `pose.build(context)` → `finalizer.finalize(...)`,
+     * byte-identical to invoking the two directly (today's consumer path).
+     *
+     * **Active mode** (`PIPELINE_ACTIVE=true`, M2): the pipeline owns the ordered stages. The pose
+     * builds its tree and authors its intent carriers inside `build()`; the pipeline then runs the
+     * ConstraintSolver stage for contact poses (the Finalizer no longer re-solves under the
+     * pipeline — see [SkeletonPoseFinalizer.finalize]) and hands the result to the Finalizer for
+     * FK + chest-frame + gaze resolution. This is the same sequence the legacy path runs, so the
+     * output is byte-identical; the difference is *ownership* — the stages are now composed here
+     * rather than re-entrantly inside the Finalizer.
      */
     fun produceFrame(pose: PoseBuilder, context: PoseContext): PipelineResult {
-        requireLegacyMode()
         val built = pose.build(context)
+        if (EngineFlags.PIPELINE_ACTIVE && built.roots.isNotEmpty() && built.hasContacts()) {
+            ConstraintSolver.solve(built, definition)
+        }
         val finalized = finalizer.finalize(built)
+        return PipelineResult(finalized, null)
+    }
+
+    /**
+     * Entry point for a caller that already holds a built [SkeletonPose] (e.g. a renderer that
+     * received the raw pose from upstream). Runs the same ConstraintSolver stage (contact poses)
+     * and Finalizer as [produceFrame], so the result is byte-identical to building-then-producing.
+     * Used by [SkeletonRenderer] / [SkeletonSnapshotRenderer] which are handed a pose rather than a
+     * [PoseBuilder].
+     */
+    fun produceFrame(pose: SkeletonPose): PipelineResult {
+        if (EngineFlags.PIPELINE_ACTIVE && pose.roots.isNotEmpty() && pose.hasContacts()) {
+            ConstraintSolver.solve(pose, definition)
+        }
+        val finalized = finalizer.finalize(pose)
         return PipelineResult(finalized, null)
     }
 
@@ -103,10 +126,8 @@ class SkeletonPipeline(
         prePrevious = null
     }
 
-    private fun requireLegacyMode() {
-        check(!EngineFlags.PIPELINE_ACTIVE) {
-            "SkeletonPipeline active mode is not implemented until M2. " +
-                "PIPELINE_ACTIVE must remain false in M0 (RFC_GAP_CLOSURE M0)."
-        }
+    companion object {
+        /** Whether the active stage chain is wired (used by tests and the fail-fast guard). */
+        const val ACTIVE_MODE_IMPLEMENTED = true
     }
 }

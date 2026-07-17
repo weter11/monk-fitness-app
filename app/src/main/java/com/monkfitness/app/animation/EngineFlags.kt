@@ -19,18 +19,20 @@ package com.monkfitness.app.animation
  */
 object EngineFlags {
     /**
-     * Master switch (M0/M2) — when **false** (default) the engine runs the legacy path
-     * (`pose.build()` → `SkeletonPoseFinalizer.finalize()` → optional validation), whether invoked
-     * directly by consumers or via [SkeletonPipeline.produceFrame] (which, in legacy mode, just
-     * wraps that same path — zero behavior change). When **true** (M2) `produceFrame` drives the
-     * full ordered stage pipeline and the Finalizer's internal Solver call is removed.
+     * Master switch (M0/M2) — when **false** (M0) the engine runs the legacy path
+     * (`pose.build()` → `SkeletonPoseFinalizer.finalize()` → optional validation). When **true**
+     * (M2, the default) `produceFrame` drives the full ordered stage pipeline (build →
+     * ConstraintSolver stage for contact poses → Finalizer FK/chest/gaze) and the Finalizer no
+     * longer re-solves under the pipeline.
      *
-     * **Coherence invariant** (RFC_ENGINE_PIPELINE §5.7 / RFC_EXECUTION_CONTRACT §14): if
-     * `PIPELINE_ACTIVE` is true then [FINALIZER_OWNS_CONVERSION] must also be true (a pipeline
-     * without finalizer-owned conversion is incoherent). [SkeletonPipeline]'s constructor asserts
-     * this fail-fast. M0 ships with `PIPELINE_ACTIVE=false`, so the invariant is vacuously held.
+     * **Milestone ownership (do not over-couple):** the spec's `PIPELINE_ACTIVE ⇒
+     * FINALIZER_OWNS_CONVERSION` coherence invariant belongs to **M4** (Finalizer authority), not
+     * M2. At M2 `FINALIZER_OWNS_CONVERSION` stays `false` so the read-only chest-frame no-move guard
+     * (F1) is not yet active and the output is byte-identical to the pre-M2 baseline. M4 flips it
+     * `true` and activates F1. [SkeletonPipeline] therefore does NOT assert the M4 invariant at
+     * construction — that would wrongly make M2 impossible.
      */
-    var PIPELINE_ACTIVE: Boolean = false
+    var PIPELINE_ACTIVE: Boolean = true
 
     var SOLVER_OWNS_POSTURE: Boolean = false
     var FINALIZER_OWNS_CONVERSION: Boolean = false

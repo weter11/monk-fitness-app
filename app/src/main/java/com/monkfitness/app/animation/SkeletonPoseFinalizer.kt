@@ -459,7 +459,13 @@ class SkeletonPoseFinalizer(
         // flatten so fixed support contacts are honored and the root/pelvis is derived from
         // them rather than a fixed authored value. No-op when the pose registered no contacts
         // (the common production case), so non-contact poses are untouched.
-        if (pose.roots.isNotEmpty() && pose.hasContacts()) {
+        //
+        // M2 (RFC_GAP_CLOSURE): when the pipeline is active, the ConstraintSolver stage is owned
+        // by SkeletonPipeline.produceFrame, so the Finalizer must NOT solve again (no re-entrancy,
+        // no double solve). In legacy mode (!PIPELINE_ACTIVE — direct callers / tests) the
+        // Finalizer still owns this step so behavior is unchanged. The two configurations produce
+        // byte-identical output because the pipeline runs the exact same solve beforehand.
+        if (!EngineFlags.PIPELINE_ACTIVE && pose.roots.isNotEmpty() && pose.hasContacts()) {
             ConstraintSolver.solve(pose, definition)
         }
 

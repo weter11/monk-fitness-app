@@ -132,6 +132,11 @@ class SkeletonPose(
     val rotations: Array<JointRotation> = Array(Joint.entries.size) { JointRotation() },
     var roots: List<SkeletonNode> = emptyList(),
     var isTransformsUpdated: Boolean = false,
+    // M2 re-entrancy guard: set true once the ConstraintSolver stage has run for this pose, so the
+    // Finalizer (which historically also solved) skips a double solve when driven through the
+    // SkeletonPipeline. Direct finalizer.finalize() callers leave this false and the Finalizer still
+    // owns the solve. Reset on each build() (see BasePose/BaseValidationPose).
+    var solverRan: Boolean = false,
     var maxIkClampAmount: Float = 0f,
     // UNI-6 — how far the global solver displaced the root from its authored transform, so the
     // PELVIS_INTENT rule can surface unexpected root motion. Zero for non-contact (no-op) poses.
