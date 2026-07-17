@@ -210,8 +210,10 @@ abstract class BaseVerticalPullPose : BasePose() {
         targetP.set(0f, barY, gZ)
         // Bake the arm in the SHOULDER's world frame: the IK root is the shoulder, whose frame
         // now includes the scapula rotation, so the limb follows the girdle correctly.
-        bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, shoulderA!!.worldRotation, elbowPoleA, def.armIKConstraint, elbowA!!, handA!!, armABuffer)
-        bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, shoulderP!!.worldRotation, elbowPoleP, def.armIKConstraint, elbowP!!, handP!!, armPBuffer)
+        val armAPoleWorld = SkeletonMath.toWorldDirection(elbowPoleA, elbowA!!.parent!!.worldRotation, tempPoleWorld)
+        bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, armAPoleWorld, def.armIKConstraint, shoulderA!!.worldRotation, elbowA!!, handA!!, armABuffer)
+        val armPPoleWorld = SkeletonMath.toWorldDirection(elbowPoleP, elbowP!!.parent!!.worldRotation, tempPoleWorld)
+        bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, shoulderP!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         // W1: the intentional grip is authored without the old inherited-tilt cancellation; the
         // engine removes torso/chest tilt relative to the forearm, so pass 0 and keep only the grip
@@ -224,11 +226,13 @@ abstract class BaseVerticalPullPose : BasePose() {
         val ankleY = pelvisY - 200f + breath * 3f - rep * 10f
         targetF.set(ankleX, ankleY, -def.hipWidth * 0.9f)
         poleF.set(0.15f, 1f, 0f)
-        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, pelvis!!.worldRotation, poleF, def.legIKConstraint, kneeF!!, ankleF!!, legFBuffer)
+        val legFPoleWorld = SkeletonMath.toWorldDirection(poleF, kneeF!!.parent!!.worldRotation, tempPoleWorld)
+        bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legFPoleWorld, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
 
         targetB.set(ankleX, ankleY, def.hipWidth * 0.9f)
         poleB.set(0.15f, 1f, 0f)
-        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, pelvis!!.worldRotation, poleB, def.legIKConstraint, kneeB!!, ankleB!!, legBBuffer)
+        val legBPoleWorld = SkeletonMath.toWorldDirection(poleB, kneeB!!.parent!!.worldRotation, tempPoleWorld)
+        bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legBPoleWorld, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         ankleF!!.localRotation.set(axisZ, -plantarFlexion)
         ankleB!!.localRotation.set(axisZ, -plantarFlexion)
