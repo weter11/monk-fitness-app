@@ -96,6 +96,7 @@ abstract class BaseBirdDogPose : BasePose() {
     protected fun anchorTabletop(def: SkeletonDefinition) {
         pelvis!!.localPosition.set(basePelvisX, basePelvisY, 0f)
         pelvis!!.localRotation.set(axisZ, torsoPitch)
+        declareJointIntent(Joint.PELVIS, JointRotation(axisZ, torsoPitch))
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
         buildGaze(neck!!, head!!, def.neckLength, birdDogHeadDirection)

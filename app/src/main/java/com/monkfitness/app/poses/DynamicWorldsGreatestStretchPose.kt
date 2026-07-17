@@ -46,6 +46,7 @@ class DynamicWorldsGreatestStretchPose : BaseThoracicPose() {
 
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
         pelvis!!.localRotation.set(axisZ, spinePitch)
+        declareJointIntent(Joint.PELVIS, JointRotation(axisZ, spinePitch))
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
         // Thoracic rotation about the spine (chest-local +Y). Rib cage/neck/head/shoulders follow.

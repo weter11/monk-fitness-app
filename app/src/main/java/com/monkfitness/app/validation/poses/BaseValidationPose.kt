@@ -152,11 +152,6 @@ abstract class BaseValidationPose : PoseBuilder {
         declareJointIntent(hip.joint, JointRotation(axisX, rotationRad * sideSign))
     }
 
-    protected fun buildHipAbduction(hip: SkeletonNode, abductionRad: Float, sideSign: Float) {
-        hip.localRotation.set(axisY, abductionRad * sideSign)
-        declareJointIntent(hip.joint, JointRotation(axisY, abductionRad * sideSign))
-    }
-
     protected fun buildHipOrientation(
         hip: SkeletonNode,
         flexionRad: Float,
@@ -187,18 +182,6 @@ abstract class BaseValidationPose : PoseBuilder {
         SkeletonMath.buildClavicularRotation(elevation, protraction, axialRotation, sideSign, clavicle.localRotation)
         // B2: girdle articulation intent (jointIntents).
         declareJointIntent(clavicle.joint, JointRotation(clavicle.localRotation.axis, clavicle.localRotation.angle))
-    }
-
-    protected fun buildWristArticulation(hand: SkeletonNode, flexion: Float, deviation: Float) {
-        SkeletonMath.buildWristRotation(flexion, deviation, hand.localRotation)
-        // B2: wrist articulation intent (jointIntents).
-        declareJointIntent(hand.joint, JointRotation(hand.localRotation.axis, hand.localRotation.angle))
-    }
-
-    protected fun buildAnkleArticulation(ankle: SkeletonNode, dorsiflexion: Float, inversion: Float) {
-        SkeletonMath.buildAnkleRotation(dorsiflexion, inversion, ankle.localRotation)
-        // B2: ankle articulation intent (jointIntents).
-        declareJointIntent(ankle.joint, JointRotation(ankle.localRotation.axis, ankle.localRotation.angle))
     }
 
     /**

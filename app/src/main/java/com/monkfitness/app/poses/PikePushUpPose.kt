@@ -77,6 +77,7 @@ class PikePushUpPose : BasePushUpPose() {
 
         pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
         pelvis!!.localRotation.set(axisZ, torsoGlobalPitch - legPitch)
+        declareJointIntent(Joint.PELVIS, JointRotation(axisZ, torsoGlobalPitch - legPitch))
         chest!!.localPosition.set(-def.torsoLength, 0f, 0f)
 
         // 1. Correcting the Right-Side (Side B) Floating Leg Asymmetry
