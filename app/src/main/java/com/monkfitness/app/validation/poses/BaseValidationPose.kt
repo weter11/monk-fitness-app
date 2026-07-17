@@ -152,17 +152,6 @@ abstract class BaseValidationPose : PoseBuilder {
         declareJointIntent(hip.joint, JointRotation(axisX, rotationRad * sideSign))
     }
 
-    protected fun buildHipOrientation(
-        hip: SkeletonNode,
-        flexionRad: Float,
-        abductionRad: Float,
-        rotationRad: Float,
-        sideSign: Float
-    ) {
-        SkeletonMath.buildHipRotation(flexionRad, abductionRad, rotationRad, sideSign, hip.localRotation)
-        declareJointIntent(hip.joint, JointRotation(hip.localRotation.axis, hip.localRotation.angle))
-    }
-
     protected fun buildScapularRotation(
         scapula: SkeletonNode,
         retraction: Float,
