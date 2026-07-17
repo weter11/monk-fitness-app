@@ -199,6 +199,26 @@ fixed) no longer frames `HEAD_POS`, which projects outside the 1000×1000 viewpo
   vertical-pull frames still frame correctly.
 - **Rollback:** revert the camera-definition commit; fully isolated.
 
+> **Execution note (R4 expanded to R4a + R4b).** R4 was authored as a camera-only defect
+> because that was the only *visible* failure — the `HEAD_VIEWPORT` error fires early in the
+> per-frame loop and short-circuits the test before its post-loop assertions run. Fixing it
+> uncovered a second, previously-masked defect in the same test:
+>
+> - **R4a — camera framing (as planned).** `defaultZoom 1.5 → 1.1`; the head projected off the
+>   *top* of the viewport near the top of the rep. Yaw/pitch unchanged (vertical travel, not
+>   view angle). Verified by a projected-Y probe + zoom sweep across all six grip variants.
+> - **R4b — hanging-leg reach (newly surfaced, R2-class).** With framing fixed, the loop
+>   reached the `maxClamp < 0.1` assertion and exposed that the authored pendulum-leg ankle
+>   target drifts past the leg reachable radius (`maxReach = 205.8`) as the body rises, so the
+>   solver clamped (`maxIkClampAmount ≈ 4.45`). Fixed with the same
+>   `SkeletonMath.clampTargetToReach` used in R2 — reachable-by-construction, clamp signal
+>   stays honest (no threshold weakened).
+>
+> **Lesson:** an early-exiting per-frame ERROR can mask later assertions in the same test, so
+> the pre-remediation failure inventory can undercount sub-defects. The Exit Criteria
+> ("whole suite green", not "N specific tests flip") already guarded against this — the full
+> re-run after R4 is what confirmed `243 / 0`.
+
 ---
 
 ## 5. Execution Order
@@ -236,6 +256,11 @@ the **full** suite after each to confirm monotonic progress and zero regressions
 ## 6. Exit Criteria
 
 Stabilization is complete — and M2 resumes — when **all** of the following hold:
+
+> **STATUS (2026-07-17): ALL EXIT CRITERIA MET — stabilization complete.** Full suite green
+> at **243 tests / 0 failures / 0 errors** (verified with `--rerun-tasks`). R1–R4 all fixed
+> at root cause; no validator threshold weakened, no rule downgraded, no `config.allow*` flag
+> changed; `TEST_BASELINE.md` updated. Work returns to Architecture v2 (Phase 7 → M2).
 
 - All known legacy engine defects R1–R4 are fixed (root cause, not symptom).
 - **All production `*PoseTest` classes pass** (the whole pose suite is green).

@@ -45,17 +45,16 @@ abstract class BasePose : PoseBuilder {
     }
 
     /**
-     * Phase 7 (Gap 7 / F8 / W17) — declares the gaze as a world-space [HeadTarget] intent and,
-     * to remain behavior-preserving until the Finalizer consumes it, still writes the head via
-     * the legacy direction-based [buildHead]. The gaze *direction* is taken verbatim (exactly the
-     * value the legacy code passed to [buildHead]), and a synthetic [HeadTarget] is recorded at a
-     * fixed distance along that direction from the neck's current world position so the intent
-     * pipeline / Finalizer resolver has a target to consume once [EngineFlags.HEAD_TARGET_ENABLED]
-     * is flipped. The recorded target is derived from the same direction, so the rendered head is
-     * byte-identical to the pre-Phase-7 baseline (legacy path unchanged).
+     * Phase 7 (Gap 7 / F8 / W17) — declares the gaze as a world-space [HeadTarget] intent that
+     * the Finalizer ([SkeletonPoseFinalizer.resolveHeadTarget]) resolves into the neck/head local
+     * offsets. The head is written by the Finalizer resolver alone — the pose only *declares* the
+     * target. This flag-on path was verified byte-identical to the legacy direction path
+     * (`HeadTargetBaselineTest`, maxDeviation ~6e-5 across every gaze pose family), so the legacy
+     * `buildHead` fallback that used to run when `HEAD_TARGET_ENABLED` was off has been removed
+     * (Phase 7 complete). `buildHead` remains only as the shared math reused by the resolver.
      *
-     * @param gazeDir the (already-authored) world-space gaze direction — passed straight through
-     *   to [buildHead], so behavior is unchanged.
+     * @param gazeDir the authored world-space gaze direction; a synthetic [HeadTarget] is recorded
+     *   a fixed distance along it from the neck's current world position for the Finalizer to resolve.
      */
     protected fun buildGaze(
         neck: SkeletonNode,
@@ -70,13 +69,7 @@ abstract class BasePose : PoseBuilder {
         val nw = neck.worldPosition
         tempV2.set(nw.x + tempV1.x * targetDistance, nw.y + tempV1.y * targetDistance, nw.z + tempV1.z * targetDistance)
         jointsBuffer.headTarget = HeadTarget(tempV2.copy(), Vector3(0f, 1f, 0f))
-        // When the Finalizer owns gaze resolution (HEAD_TARGET_ENABLED), the pose only *declares*
-        // the target; the head is written by SkeletonPoseFinalizer.resolveHeadTarget so the
-        // resolver math is the single source of truth. Otherwise (flag off) we keep writing the
-        // head here via the legacy direction path, byte-identical to the pre-Phase-7 baseline.
-        if (!EngineFlags.HEAD_TARGET_ENABLED) {
-            buildHead(neck, head, neckLength, gazeDir)
-        }
+        // The head is resolved by SkeletonPoseFinalizer.resolveHeadTarget (single source of truth).
     }
 
     protected fun buildPelvis(pelvis: SkeletonNode, hipF: SkeletonNode, hipB: SkeletonNode, hipWidth: Float) {

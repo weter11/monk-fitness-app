@@ -18,22 +18,33 @@ package com.monkfitness.app.animation
  *   When false the legacy finalize path runs unchanged.
  */
 object EngineFlags {
+    /**
+     * Master switch (M0/M2) — when **false** (default) the engine runs the legacy path
+     * (`pose.build()` → `SkeletonPoseFinalizer.finalize()` → optional validation), whether invoked
+     * directly by consumers or via [SkeletonPipeline.produceFrame] (which, in legacy mode, just
+     * wraps that same path — zero behavior change). When **true** (M2) `produceFrame` drives the
+     * full ordered stage pipeline and the Finalizer's internal Solver call is removed.
+     *
+     * **Coherence invariant** (RFC_ENGINE_PIPELINE §5.7 / RFC_EXECUTION_CONTRACT §14): if
+     * `PIPELINE_ACTIVE` is true then [FINALIZER_OWNS_CONVERSION] must also be true (a pipeline
+     * without finalizer-owned conversion is incoherent). [SkeletonPipeline]'s constructor asserts
+     * this fail-fast. M0 ships with `PIPELINE_ACTIVE=false`, so the invariant is vacuously held.
+     */
+    var PIPELINE_ACTIVE: Boolean = false
+
     var SOLVER_OWNS_POSTURE: Boolean = false
     var FINALIZER_OWNS_CONVERSION: Boolean = false
 
-    /**
-     * Phase 7 (Gap 7) — when true, the Finalizer resolves neck/head from the pose-declared
-     * `headTarget` intent (gaze-as-target) instead of the legacy direction-based `buildHead`.
-     * Defaults to **false** so the legacy gaze path is preserved (byte-identical head) until the
-     * intent pipeline + Finalizer resolver are verified against the baseline. The pose still
-     * records `headTarget` regardless of this flag; the flag only controls who *consumes* it.
-     */
-    var HEAD_TARGET_ENABLED: Boolean = true
+    // Phase 7 (Gap 7) — COMPLETE. The gaze-as-`headTarget` resolver in the Finalizer is now the
+    // sole head/neck writer; the legacy direction-based `buildHead` fallback was removed after
+    // `HeadTargetBaselineTest` proved the resolver byte-identical (maxDeviation ~6e-5). The former
+    // `HEAD_TARGET_ENABLED` gate is therefore gone (it controlled a branch that no longer exists);
+    // gaze resolution is unconditional. No flag replaces it.
 
     /** Snapshot of every flag, for assertions that a phase is enabled/disabled in tests. */
     fun snapshot(): Map<String, Boolean> = mapOf(
+        "PIPELINE_ACTIVE" to PIPELINE_ACTIVE,
         "SOLVER_OWNS_POSTURE" to SOLVER_OWNS_POSTURE,
-        "FINALIZER_OWNS_CONVERSION" to FINALIZER_OWNS_CONVERSION,
-        "HEAD_TARGET_ENABLED" to HEAD_TARGET_ENABLED
+        "FINALIZER_OWNS_CONVERSION" to FINALIZER_OWNS_CONVERSION
     )
 }

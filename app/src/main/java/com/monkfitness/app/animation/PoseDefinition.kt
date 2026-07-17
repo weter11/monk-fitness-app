@@ -98,9 +98,9 @@ data class WorldTarget(
  * Phase 7 (Gap 7 / F8 / W17) — gaze-as-target carrier (§1.1 intent).
  *
  * The pose declares a world-space point the head should look at, instead of hand-authoring a
- * counter-rotated UP direction. The Finalizer resolves neck/head from this target (reusing the
- * existing [buildHead] math) once the intent pipeline is active; until then the pose keeps
- * authoring the legacy gaze direction and the carrier is additive.
+ * counter-rotated UP direction. The Finalizer ([SkeletonPoseFinalizer.resolveHeadTarget])
+ * resolves neck/head from this target and is the sole head writer (Phase 7 complete — the legacy
+ * gaze-direction path has been removed).
  *
  * @param world the world-space point the gaze should track.
  * @param upBias the neutral gaze-up bias used when deriving the head direction from the target
@@ -179,12 +179,11 @@ class SkeletonPose(
     var environment: Any? = null
 
     /**
-     * Phase 7 (Gap 7 / F8 / W17) — gaze-as-target. The pose declares where the head should
-     * look in world space; the Finalizer (once the intent pipeline lands) resolves neck/head
-     * from this target, reusing [buildHead] math. While `EngineFlags.HEAD_TARGET_ENABLED` is
-     * false the pose keeps authoring the legacy gaze *direction* and calling [buildHead]
-     * directly, so this carrier is purely additive and the rendered head is byte-identical
-     * to the pre-Phase-7 baseline. `null` means "no gaze target declared" (legacy direction path).
+     * Phase 7 (Gap 7 / F8 / W17) — gaze-as-target (COMPLETE). The pose declares where the head
+     * should look in world space; the Finalizer ([SkeletonPoseFinalizer.resolveHeadTarget])
+     * resolves neck/head from this target, reusing [buildHead] math, and is now the sole head
+     * writer (the legacy direction path was removed after byte-identity was proven). `null` means
+     * "no gaze target declared" — a non-gaze pose whose head is left as authored.
      */
     var headTarget: HeadTarget? = null
 
