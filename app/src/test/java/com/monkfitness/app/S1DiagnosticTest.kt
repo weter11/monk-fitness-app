@@ -21,13 +21,21 @@ class S1DiagnosticTest {
 
     @Test
     fun dumpMiddleSplit() {
-        val p = finalized(MiddleSplitPose())
+        val pose = MiddleSplitPose()
+        val raw = pose.build(ctx)
+        val afPre = raw.getJoint(Joint.ANKLE_F)
+        val abPre = raw.getJoint(Joint.ANKLE_B)
+        println("DIAG MiddleSplit PRE-FINALIZE ankleF=(${afPre.x},${afPre.y},${afPre.z}) ankleB=(${abPre.x},${abPre.y},${abPre.z}) pelvisPre=${raw.getJoint(Joint.PELVIS).y}")
+        for (c in raw.contacts) {
+            println("DIAG contact end=${c.endJoint} target=(${c.targetWorld.x},${c.targetWorld.y},${c.targetWorld.z}) straight=${c.straight} contact=${c.contact} normal=${c.contact?.normal} pt=${c.contact?.point}")
+        }
+        val p = SkeletonPoseFinalizer(def).finalize(raw)
         val pelvisY = p.getJoint(Joint.PELVIS).y
         val af = p.getJoint(Joint.ANKLE_F)
         val ab = p.getJoint(Joint.ANKLE_B)
         val kf = p.getJoint(Joint.KNEE_F)
         val kneeDist = kotlin.math.sqrt((kf.x-af.x).pow(2)+(kf.y-af.y).pow(2)+(kf.z-af.z).pow(2))
-        println("DIAG MiddleSplit pelvisY=$pelvisY ankleF.y=${af.y} ankleB.y=${ab.y} ankleZspread=${kotlin.math.abs(af.z-ab.z)} kneeDist=$kneeDist thigh=${def.thighLength} shin=${def.shinLength}")
+        println("DIAG MiddleSplit POST-FINALIZE pelvisY=$pelvisY ankleF.y=${af.y} ankleB.y=${ab.y} ankleZspread=${kotlin.math.abs(af.z-ab.z)} kneeDist=$kneeDist thigh=${def.thighLength} shin=${def.shinLength}")
     }
 
     @Test
