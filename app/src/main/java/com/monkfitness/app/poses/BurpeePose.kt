@@ -1,7 +1,6 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.animation.SkeletonMath.solveIK
 import com.monkfitness.app.animation.SkeletonMath.lerp
 import kotlin.math.*
 
@@ -175,7 +174,6 @@ class BurpeePose : PoseBuilder {
 
         pelvis!!.localPosition = Vector3(info.pelvisX, info.pelvisY, 0f)
         declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), info.torsoAngle)
-        SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.PELVIS, JointRotation(Vector3(0f, 0f, 1f), info.torsoAngle))
 
         chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)
         neck!!.localPosition = Vector3(0f, def.neckLength, 0f)
@@ -190,28 +188,14 @@ class BurpeePose : PoseBuilder {
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
         // Solve IK for legs
-        val legFIK = solveIK(hipF!!.worldPosition, info.ankleF, def.thighLength, def.shinLength, Vector3(0.5f, 1f, 0f), def.legIKConstraint, legFBuffer)
-        val legBIK = solveIK(hipB!!.worldPosition, info.ankleB, def.thighLength, def.shinLength, Vector3(0.5f, 1f, 0f), def.legIKConstraint, legBBuffer)
-
-        // Set knee and ankle positions (Phase 4: lean-cancel removed; the IK offset is written directly)
-        kneeF!!.localPosition.set(legFIK.joint.x - hipF!!.worldPosition.x, legFIK.joint.y - hipF!!.worldPosition.y, legFIK.joint.z - hipF!!.worldPosition.z)
-        ankleF!!.localPosition.set(legFIK.end.x - legFIK.joint.x, legFIK.end.y - legFIK.joint.y, legFIK.end.z - legFIK.joint.z)
-
-        kneeB!!.localPosition.set(legBIK.joint.x - hipB!!.worldPosition.x, legBIK.joint.y - hipB!!.worldPosition.y, legBIK.joint.z - hipB!!.worldPosition.z)
-        ankleB!!.localPosition.set(legBIK.end.x - legBIK.joint.x, legBIK.end.y - legBIK.joint.y, legBIK.end.z - legBIK.joint.z)
+        val legFIK = bakeIkLimb(hipF!!.worldPosition, info.ankleF, def.thighLength, def.shinLength, Vector3(0.5f, 1f, 0f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
+        val legBIK = bakeIkLimb(hipB!!.worldPosition, info.ankleB, def.thighLength, def.shinLength, Vector3(0.5f, 1f, 0f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         // Solve IK for arms
-        val armAIK = solveIK(shoulderA!!.worldPosition, info.handA, def.upperArmLength, def.forearmLength, info.armPole, def.armIKConstraint, armABuffer)
-        val armPIK = solveIK(shoulderP!!.worldPosition, info.handP, def.upperArmLength, def.forearmLength, info.armPole, def.armIKConstraint, armPBuffer)
-
-        // Set elbow and hand positions (Phase 4: lean-cancel removed; the IK offset is written directly)
-        elbowA!!.localPosition.set(armAIK.joint.x - shoulderA!!.worldPosition.x, armAIK.joint.y - shoulderA!!.worldPosition.y, armAIK.joint.z - shoulderA!!.worldPosition.z)
-        handA!!.localPosition.set(armAIK.end.x - armAIK.joint.x, armAIK.end.y - armAIK.joint.y, armAIK.end.z - armAIK.joint.z)
-
-        elbowP!!.localPosition.set(armPIK.joint.x - shoulderP!!.worldPosition.x, armPIK.joint.y - shoulderP!!.worldPosition.y, armPIK.joint.z - shoulderP!!.worldPosition.z)
-        handP!!.localPosition.set(armPIK.end.x - armPIK.joint.x, armPIK.end.y - armPIK.joint.y, armPIK.end.z - armPIK.joint.z)
+        val armAIK = bakeIkLimb(shoulderA!!.worldPosition, info.handA, def.upperArmLength, def.forearmLength, info.armPole, def.armIKConstraint, JointRotation(), elbowA!!, handA!!, armABuffer, jointsBuffer)
+        val armPIK = bakeIkLimb(shoulderP!!.worldPosition, info.handP, def.upperArmLength, def.forearmLength, info.armPole, def.armIKConstraint, JointRotation(), elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 

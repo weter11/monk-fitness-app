@@ -367,3 +367,90 @@ fun declarePelvisTilt(pelvis: SkeletonNode, buffer: SkeletonPose, axis: Vector3,
     pelvis.localRotation.set(axis, angle)
     SkeletonPose.IntentBuilder(buffer).joint(Joint.PELVIS, JointRotation(axis, angle))
 }
+
+/**
+ * Package-level IK bake that mirrors [BasePose.bakeIkLimb] so poses implementing [PoseBuilder]
+ * directly (the upper-body / dynamic family) can route through the engine's single IK solver path.
+ *
+ * This closes the H2 stabilization gap: those poses previously called [SkeletonMath.solveIK]
+ * directly, which skipped the §1.1 `limbTargets` carrier, the `maxIkClampAmount` recording, and the
+ * `boneLengthsVerified` stamp — so the engine-owned [IkStage] and the reachability/contact
+ * diagnostics had no data for them. Routing through this helper reproduces the exact same
+ * `middleNode`/`endNode` local positions (byte-identical for identity-rotation parents) while
+ * populating those carriers, making the family consistent with every other production pose.
+ */
+private val bakeIkScratch1 = Vector3()
+private val bakeIkScratchPole = Vector3()
+
+fun bakeIkLimb(
+    rootWorldPos: Vector3,
+    targetWorldPos: Vector3,
+    length1: Float,
+    length2: Float,
+    pole: Vector3,
+    constraint: IKConstraint,
+    parentRotation: JointRotation,
+    middleNode: SkeletonNode,
+    endNode: SkeletonNode,
+    ikBuffer: SkeletonMath.IKResult,
+    buffer: SkeletonPose,
+    straight: Boolean = false,
+    contact: ContactConstraint? = null
+): SkeletonMath.IKResult {
+    val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
+    if (buffer.isTransformsUpdated) {
+        buffer.boneLengthsVerified = true
+        buffer.isTransformsUpdated = false
+    }
+    buffer.limbTargets.add(
+        WorldTarget(
+            endNode.joint,
+            Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
+            Vector3(pole.x, pole.y, pole.z),
+            straight,
+            contact
+        )
+    )
+    val worldPole = if (pole.mag() < 1e-4f) {
+        SkeletonMath.deriveDefaultPole(rootWorldPos, targetWorldPos, bakeIkScratchPole)
+    } else {
+        pole
+    }
+    val ikResult = if (straight) {
+        SkeletonMath.solveStraightLimb(rootWorldPos, targetWorldPos, length1, length2, constraint, ikBuffer, contact)
+    } else {
+        SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, ikBuffer, contact)
+    }
+    if (ikResult.clampAmount > buffer.maxIkClampAmount) {
+        buffer.maxIkClampAmount = ikResult.clampAmount
+    }
+    val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)
+    buffer.boneLengthsVerified = buffer.boneLengthsVerified && bonesOk
+
+    bakeIkScratch1.set(ikResult.joint).subtract(rootWorldPos)
+    SkeletonMath.toLocalDirection(bakeIkScratch1, parentRot, middleNode.localPosition)
+    bakeIkScratch1.set(ikResult.end).subtract(ikResult.joint)
+    SkeletonMath.toLocalDirection(bakeIkScratch1, parentRot, endNode.localPosition)
+
+    if (contact != null) {
+        val chain = ConstraintSolver.chainForEnd(endNode.joint)
+        if (chain != null) {
+            buffer.contacts.add(
+                ContactSpec(
+                    endJoint = endNode.joint,
+                    rootJoint = chain.rootJoint,
+                    parentRotationJoint = chain.parentRotationJoint,
+                    middleJoint = chain.middleJoint,
+                    targetWorld = Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
+                    pole = Vector3(pole.x, pole.y, pole.z),
+                    length1 = length1,
+                    length2 = length2,
+                    constraint = constraint,
+                    straight = straight,
+                    contact = contact
+                )
+            )
+        }
+    }
+    return ikResult
+}
