@@ -175,7 +175,8 @@
       untouched, the reversible B3 fallback). Contact poses keep the M3 damped-ease seed, so the seated/
       hanging regression contract (`ConstraintSolverPhase2Test`) is preserved. `PostureUniversalityTest`
        proves the B3 contract (STANDING poses solver-owned byte-identically; flag-off reverts to authored
-       root). **Next safely-landable:** B4 (pose migration) or M8 cleanup.
+       root). **Next safely-landable:** M6 (Validator stamp-only) or M7 (headTarget) or M8 cleanup
+       (B4/B4a and Phase D are done).
 - **B4 (Branch B Pose migration) IN PROGRESS** — step 1 (PR #155) + step 2 (PR #156) landed, both
   mixed-mode byte-identical (full suite **282/0** throughout):
   - Step 1: dead legacy helpers deleted (`buildRigidSegment`, `buildLumbarFlexion`, `buildWristArticulation`,
@@ -225,6 +226,23 @@
          `legPitch` foot orientation vanished). The fallback now reads the node's **local** rotation from the
          authored hierarchy, which equals the carrier exactly and recovers the authored articulation for
          straight limbs. Full suite **283/0**.
+- **Phase D — direct-finalize test re-pointing (DONE):** tests no longer call
+  `SkeletonPoseFinalizer(...).finalize(pose)` directly; they route through
+  `SkeletonPipeline.produceFrame(pose).pose` so the real Solver→Finalizer stage chain runs
+  (the finalizer's own doc warns direct callers skip the Solver for contact poses;
+  `ConstraintSolverPhase2Test` already relied on this). Audit of all 57 `finalize(` call sites:
+  - **6 control files left untouched** (they intentionally test the finalizer / direct path):
+    `SkeletonPipelineM0Test` (byte-identity comparison), `ChestFrameNoMoveTest` (control block),
+    `ChestFrameIssueFTest` (chest-frame reconstruction in isolation), `ConstraintSolverTest`
+    (Solver+Finalizer in isolation), `LumbarThoracicSpineTest` (finalizer FK unit),
+    `HeadTargetBaselineTest` (legacy direction-path A/B reference).
+  - **27 production/pose-rendering test files re-pointed** (48 call sites): the `finalizer` field
+    became `val pipeline = SkeletonPipeline(def)` and `finalizer.finalize(x)` →
+    `pipeline.produceFrame(x).pose`; one inline `SkeletonPoseFinalizer(DEFAULT_ADULT)` in
+    `ProceduralAnimationPerformanceRefactorTest` got a `pipeline` field. Byte-identical for every
+    non-contact production pose (M3/M4 proven Solver no-op), so output is unchanged.
+  - Audit + classification in `docs/PHASE_D_DIRECT_FINALIZE_REPOINTING.md`. Full suite **283/0**,
+    compile-clean. This is pure test hygiene — no production-code change.
  - **B5 (Branch B Validator stamp-only) DONE** — the validator is now a pure §1.2-stamp / §1.1-intent
   reader; every geometry-inference path was lifted into the **engine** and the validator only consumes the
   resulting stamps (full suite **282/0**, byte-identical):

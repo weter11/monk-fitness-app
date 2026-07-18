@@ -22,7 +22,7 @@ class ConstraintSolverPhase2Test {
 
     // Route through the pipeline (the production path) so the ordered Solver → Finalizer
     // chain runs. The Finalizer no longer calls the Solver itself (M2), so a direct
-    // `finalizer.finalize(build())` would silently skip the posture solve this suite exists to test.
+    // `pipeline.produceFrame(build()).pose` would silently skip the posture solve this suite exists to test.
     private fun finalized(pose: BaseValidationPose): SkeletonPose {
         return SkeletonPipeline(def).produceFrame(pose, context).pose
     }

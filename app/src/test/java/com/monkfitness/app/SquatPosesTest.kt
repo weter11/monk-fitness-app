@@ -80,7 +80,7 @@ class SquatPosesTest {
         val def = SkeletonDefinition.DEFAULT_ADULT
         val env = poseBuilder.metadata.environment ?: EnvironmentDefinition()
         val camera = Camera()
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
 
         val config = ValidatorConfig(
             allowFootGroundPenetration = false,
@@ -110,7 +110,7 @@ class SquatPosesTest {
                 cycleDuration = 2500f
             )
             val rawPose = poseBuilder.build(context)
-            val finalizedPose = finalizer.finalize(rawPose)
+            val finalizedPose = pipeline.produceFrame(rawPose).pose
             poses.add(finalizedPose)
         }
 
@@ -162,7 +162,7 @@ class SquatPosesTest {
                 cycleDuration = 2500f
             )
             val rawPose = poseBuilder.build(context)
-            val pose = finalizer.finalize(rawPose)
+            val pose = pipeline.produceFrame(rawPose).pose
 
             val hipF = pose.getJoint(Joint.HIP_F)
             val kneeF = pose.getJoint(Joint.KNEE_F)

@@ -10,7 +10,7 @@ class KettlebellSwingPoseTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
     private val swingPose = KettlebellSwingPose()
-    private val finalizer = SkeletonPoseFinalizer(def)
+    private val pipeline = SkeletonPipeline(def)
     private val validator = ExerciseValidator()
     private val camera = Camera(swingPose.metadata.camera)
 
@@ -44,7 +44,7 @@ class KettlebellSwingPoseTest {
             )
 
             val rawPose = swingPose.build(context)
-            val pose = finalizer.finalize(rawPose)
+            val pose = pipeline.produceFrame(rawPose).pose
 
             // 1. Validation Report
             val report = validator.validate(

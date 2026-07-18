@@ -126,8 +126,8 @@ class ProceduralAnimationPerformanceRefactorTest {
         val pose = SkeletonPose()
         pose.roots = listOf(pelvis)
 
-        val finalizer = SkeletonPoseFinalizer(SkeletonDefinition.DEFAULT_ADULT)
-        val finalizedPose = finalizer.finalize(pose)
+        val pipeline = SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT)
+        val finalizedPose = pipeline.produceFrame(pose).pose
 
         // Check roots reference preservation
         assertEquals(pose.roots, finalizedPose.roots)
