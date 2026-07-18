@@ -83,6 +83,9 @@ class CatCowPose : PoseBuilder {
         jointsBuffer.setJoint(Joint.NECK_END, neckEnd)
         jointsBuffer.setJoint(Joint.HEAD_POS, headPos)
 
+        // Phase E (L1 bridge removal): this pose authors joints as world positions; populate the
+        // roots hierarchy from them so finalize no longer takes the deleted legacy bridge.
+        SkeletonPose.fromJointPositions(definition, jointsBuffer, jointsBuffer)
         return jointsBuffer
     }
 }

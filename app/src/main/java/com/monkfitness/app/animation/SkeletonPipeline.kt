@@ -28,8 +28,8 @@ data class ValidatedFrame(val pose: SkeletonPose, val report: ValidationReport)
  * same work it did when it called the Solver itself), so the rendered frame is unchanged.
  *
  * **No legacy bypass:** Phase B removed the `PIPELINE_ACTIVE` flag, so `produceFrame` always drives the
- * pre-M0 flow (`pose.build()` → `finalizer.finalize()` with *no* pipeline-owned Solver call) so the
- * old path remains reachable for rollback and the M0 byte-identity guarantee still holds.
+ * full stage pipeline (`pose.build()` → `ConstraintSolver.solve` → `finalizer.finalize()`). The
+ * M0 byte-identity guarantee still holds for contact-less poses (the Solver no-ops on them).
  *
  * **Ownership & lifetime (RFC_ENGINE_PIPELINE §Issue 5):** a `SkeletonPipeline` owns its stage
  * *instances* (currently the [SkeletonPoseFinalizer] and an optional [ExerciseValidator]) and the
@@ -70,10 +70,9 @@ class SkeletonPipeline(
     /**
      * Single entry point. The pipeline is unconditionally live (Phase B collapsed the flag), so this always drives
      * the full ordered stage pipeline: `pose.build(context)` → `ConstraintSolver.solve` (contacts
-     * only) → `finalizer.finalize(...)` → FK flatten. When `false` (legacy bypass) it is exactly the
-     * pre-M0 flow (`build` → `finalize`, no pipeline-owned Solver) — byte-identical to invoking the
-     * two directly. Returns a [PipelineResult] with a `null` report (use [produceFrameValidated] for
-     * validation).
+     * only) → `finalizer.finalize(...)` → FK flatten. This is exactly the pre-M0 `build` → `finalize`
+     * flow, but with the pipeline-owned Solver folded in. Returns a [PipelineResult] with a `null`
+     * report (use [produceFrameValidated] for validation).
      */
     fun produceFrame(pose: PoseBuilder, context: PoseContext): PipelineResult {
         val built = pose.build(context)

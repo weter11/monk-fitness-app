@@ -7,9 +7,10 @@ import kotlin.math.*
  * It adds biomechanical details like Heel/Toe and Hand segments that are not part of the core PoseBuilder logic.
  * This stage ensures the 3D skeleton is anatomically complete and that all world positions and rotations are derived by FK traversal.
  *
- * Under the progressive rotation-driven migration, SkeletonPoseFinalizer serves as a compatibility layer:
- * - If a custom hierarchy (pose.roots) is supplied, it bypasses legacy position-to-rotation reconstruction.
- * - If pose.roots is empty, it runs the legacy reconstruction bridge to derive 3D transforms with zero regressions.
+ * The finalizer operates exclusively over a populated `pose.roots` hierarchy (the rotation-driven model).
+ * A `SkeletonPose` reaching `finalize` must always supply `roots`; the legacy position-to-rotation
+ * reconstruction bridge was removed in Phase E (RFC_ENGINE_CLEANUP_PLAN), so empty-`roots` input is
+ * a programming error caught by a `check` at the top of [finalize].
  */
 class SkeletonPoseFinalizer(
     private val definition: SkeletonDefinition
@@ -181,7 +182,6 @@ class SkeletonPoseFinalizer(
      */
     private fun resolveHeadTarget(pose: SkeletonPose) {
         val target = pose.headTarget ?: return
-        if (pose.roots.isEmpty()) return
 
         val neck = findJointNode(pose.roots[0], Joint.NECK_END) ?: return
         val head = findJointNode(pose.roots[0], Joint.HEAD_POS) ?: return
@@ -305,10 +305,6 @@ class SkeletonPoseFinalizer(
     // Phase 3 (F1/B5) — tolerance for the contact no-move assertion (1e-3f, per IMPLEMENTATION_BRIDGE B5).
     private val EPS = 1e-3f
 
-    // Pre-allocated standard SkeletonNode hierarchy (for legacy compat path)
-    private var roots: List<SkeletonNode>? = null
-    private val nodesMap = Array<SkeletonNode?>(Joint.entries.size) { null }
-
     private val IDENTITY_ROTATION = JointRotation()
     private val ZERO_VECTOR = Vector3(0f, 0f, 0f)
 
@@ -327,153 +323,8 @@ class SkeletonPoseFinalizer(
     private val localMatY = Vector3()
     private val localMatZ = Vector3()
 
-    private fun ensureHierarchy() {
-        if (roots != null) return
-
-        // Create all nodes
-        for (joint in Joint.entries) {
-            nodesMap[joint.index] = SkeletonNode(joint)
-        }
-
-        fun getNode(joint: Joint): SkeletonNode = nodesMap[joint.index]!!
-
-        // Parent-child connections
-        // Spine
-        getNode(Joint.PELVIS).addChild(getNode(Joint.CHEST))
-        getNode(Joint.CHEST).addChild(getNode(Joint.NECK_END))
-        getNode(Joint.NECK_END).addChild(getNode(Joint.HEAD_POS))
-
-        // Left Arm (Active): shoulder girdle chain CHEST -> CLAVICLE -> SCAPULA -> SHOULDER
-        getNode(Joint.CHEST).addChild(getNode(Joint.CLAVICLE_A))
-        getNode(Joint.CLAVICLE_A).addChild(getNode(Joint.SCAPULA_A))
-        getNode(Joint.SCAPULA_A).addChild(getNode(Joint.SHOULDER_A))
-        getNode(Joint.SHOULDER_A).addChild(getNode(Joint.ELBOW_A))
-        getNode(Joint.ELBOW_A).addChild(getNode(Joint.HAND_A))
-        getNode(Joint.HAND_A).addChild(getNode(Joint.WRIST_A))
-        getNode(Joint.WRIST_A).addChild(getNode(Joint.PALM_A))
-        getNode(Joint.PALM_A).addChild(getNode(Joint.KNUCKLES_A))
-        getNode(Joint.KNUCKLES_A).addChild(getNode(Joint.FINGERTIPS_A))
-
-        // Right Arm (Passive): shoulder girdle chain CHEST -> CLAVICLE -> SCAPULA -> SHOULDER
-        getNode(Joint.CHEST).addChild(getNode(Joint.CLAVICLE_P))
-        getNode(Joint.CLAVICLE_P).addChild(getNode(Joint.SCAPULA_P))
-        getNode(Joint.SCAPULA_P).addChild(getNode(Joint.SHOULDER_P))
-        getNode(Joint.SHOULDER_P).addChild(getNode(Joint.ELBOW_P))
-        getNode(Joint.ELBOW_P).addChild(getNode(Joint.HAND_P))
-        getNode(Joint.HAND_P).addChild(getNode(Joint.WRIST_P))
-        getNode(Joint.WRIST_P).addChild(getNode(Joint.PALM_P))
-        getNode(Joint.PALM_P).addChild(getNode(Joint.KNUCKLES_P))
-        getNode(Joint.KNUCKLES_P).addChild(getNode(Joint.FINGERTIPS_P))
-
-        // Left Leg (Foreground)
-        getNode(Joint.PELVIS).addChild(getNode(Joint.HIP_F))
-        getNode(Joint.HIP_F).addChild(getNode(Joint.KNEE_F))
-        getNode(Joint.KNEE_F).addChild(getNode(Joint.ANKLE_F))
-        getNode(Joint.ANKLE_F).addChild(getNode(Joint.HEEL_F))
-        getNode(Joint.ANKLE_F).addChild(getNode(Joint.TOE_F))
-
-        // Right Leg (Background)
-        getNode(Joint.PELVIS).addChild(getNode(Joint.HIP_B))
-        getNode(Joint.HIP_B).addChild(getNode(Joint.KNEE_B))
-        getNode(Joint.KNEE_B).addChild(getNode(Joint.ANKLE_B))
-        getNode(Joint.ANKLE_B).addChild(getNode(Joint.HEEL_B))
-        getNode(Joint.ANKLE_B).addChild(getNode(Joint.TOE_B))
-
-        roots = listOf(getNode(Joint.PELVIS))
-    }
-
-    private fun setupTransforms(node: SkeletonNode, parentWorldRot: JointRotation, pose: SkeletonPose) {
-        val parentNode = node.parent
-        if (parentNode == null) {
-            // Root node (PELVIS)
-            node.localPosition.set(pose.getJoint(node.joint))
-
-            // Set pelvis rotation based on Chest-Pelvis direction (spine)
-            val chestPos = pose.getJoint(Joint.CHEST)
-            val pelvisPos = pose.getJoint(Joint.PELVIS)
-            tempBoneVec.set(chestPos).subtract(pelvisPos)
-            SkeletonMath.getRotationToAlign(Vector3(0f, 1f, 0f), tempBoneVec, tempV1, node.localRotation)
-
-            node.worldPosition.set(node.localPosition)
-            node.worldRotation.copyFrom(node.localRotation)
-        } else {
-            // Child node
-            val parentPos = parentNode.worldPosition
-            val childPos = pose.getJoint(node.joint)
-
-            // Apply anatomical offsets in local space as defined by the parent's segment
-            when (node.joint) {
-                Joint.HIP_F -> {
-                    node.localPosition.set(0f, 0f, -definition.hipWidth)
-                }
-                Joint.HIP_B -> {
-                    node.localPosition.set(0f, 0f, definition.hipWidth)
-                }
-                Joint.SHOULDER_A -> {
-                    node.localPosition.set(0f, 0f, -definition.shoulderWidth)
-                }
-                Joint.SHOULDER_P -> {
-                    node.localPosition.set(0f, 0f, definition.shoulderWidth)
-                }
-                Joint.CLAVICLE_A, Joint.CLAVICLE_P, Joint.SCAPULA_A, Joint.SCAPULA_P -> {
-                    // Girdle bones sit coincident with their parent in the legacy bridge; the
-                    // scapula derives the shoulder position via its own (identity here) rotation.
-                    node.localPosition.set(0f, 0f, 0f)
-                }
-                Joint.NECK_END -> {
-                    node.localPosition.set(0f, definition.neckLength, 0f)
-                }
-                Joint.HEAD_POS -> {
-                    node.localPosition.set(0f, 18f, 0f)
-                }
-                else -> {
-                    // Standard joint: calculate local position rotated backward by parent's world rotation
-                    tempBoneVec.set(childPos).subtract(parentPos)
-                    SkeletonMath.rotAround(tempBoneVec, parentWorldRot.axis, -parentWorldRot.angle, node.localPosition)
-                }
-            }
-
-            // Compute the world rotation of this joint
-            if (node.joint == Joint.CHEST) {
-                // Chest is the torso, compute its 3D rotation matrix to avoid position subtractions in projector/renderer
-                val chestPos = pose.getJoint(Joint.CHEST)
-                val pelvisPos = pose.getJoint(Joint.PELVIS)
-                val shoulderA = pose.getJoint(Joint.SHOULDER_A)
-                val shoulderP = pose.getJoint(Joint.SHOULDER_P)
-
-                val lean = tempColY.set(chestPos).subtract(pelvisPos).normalize()
-                val shVec = tempColZ.set(shoulderA).subtract(shoulderP).normalize()
-                val chestNorm = lean.cross(shVec, tempColX).normalize()
-
-                // colZ should be -shVec
-                tempColZ.multiply(-1f)
-
-                SkeletonMath.getRotationFromMatrix(tempColX, tempColY, tempColZ, node.worldRotation)
-            } else {
-                // Shortest arc rotation aligning Vector3(1f, 0f, 0f) with bone direction
-                tempBoneVec.set(childPos).subtract(parentPos)
-                SkeletonMath.getRotationToAlign(tempBoneVec, node.worldRotation)
-            }
-
-            // localRotation is the relative rotation: R_local = R_parent.inverse * R_world
-            // Compute relative rotation via matrix transpose multiplication:
-            SkeletonMath.rotationToMatrix(parentWorldRot, parentMatX, parentMatY, parentMatZ)
-            SkeletonMath.rotationToMatrix(node.worldRotation, worldMatX, worldMatY, worldMatZ)
-            SkeletonMath.transposeMultiply(parentMatX, parentMatY, parentMatZ, worldMatX, worldMatY, worldMatZ, localMatX, localMatY, localMatZ)
-            SkeletonMath.getRotationFromMatrix(localMatX, localMatY, localMatZ, node.localRotation)
-
-            // Set temporary world transforms during setup pass
-            node.worldPosition.set(childPos)
-        }
-
-        // Setup children
-        for (child in node.children) {
-            setupTransforms(child, node.worldRotation, pose)
-        }
-    }
-
     /**
-     * Finalizes the 3D pose. Supports both modern rotation-driven custom hierarchies and legacy position-driven poses.
+     * Finalizes the 3D pose over a populated rotation-driven `pose.roots` hierarchy.
      */
     fun finalize(pose: SkeletonPose): SkeletonPose {
         // M2 (RFC_ENGINE_PIPELINE §8.1): the ConstraintSolver pass that used to run here has been
@@ -488,100 +339,80 @@ class SkeletonPoseFinalizer(
         // `toLocalDirection` limb bakes already performed by the solver, extremity derivation)
         // is concentrated here.
 
+        // Phase E (L1 compatibility bridge removal): `pose.roots` is now a required invariant.
+        // Every production pose and the eval/test control paths populate `roots` via `build()` /
+        // `fromHierarchy`, so an empty-roots pose reaching `finalize` is a programming error, not a
+        // supported legacy path. Fail fast instead of silently taking the deleted bridge.
+        check(pose.roots.isNotEmpty()) { "SkeletonPoseFinalizer.finalize requires a populated pose.roots (legacy bridge removed in Phase E)" }
+
         outputPose.copyFrom(pose)
 
-        if (pose.roots.isNotEmpty()) {
-            // Modern rotation-driven path: Execute Forward Kinematics traversal directly using direct local joint rotations/offsets
-            if (!pose.isTransformsUpdated) {
-                val size = pose.roots.size
-                for (i in 0 until size) {
-                    pose.roots[i].updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION)
-                }
-                for (i in 0 until size) {
-                    pose.roots[i].flatten(outputPose)
-                }
-                pose.isTransformsUpdated = true
+        // Modern rotation-driven path: Execute Forward Kinematics traversal directly using direct local joint rotations/offsets
+        if (!pose.isTransformsUpdated) {
+            val size = pose.roots.size
+            for (i in 0 until size) {
+                pose.roots[i].updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION)
             }
-            outputPose.roots = pose.roots
-
-            // B2 (RFC_BRANCH_B_IMPLEMENTATION §2) — consume the §1.1 `spineIntent` / `jointIntents`
-            // carriers: re-derive the declared node rotations and re-propagate FK. This is idempotent
-            // with the node write the authoring helpers also perform during build, so geometry is
-            // byte-identical to the pre-B2 baseline (proven by FinalizerIntentConsumersTest).
-            applyIntentCarriers(pose.roots, pose)
-
-            // Issue F: derive the chest frame only when the author left it unauthored (identity);
-            // an authored chest rotation (thoracic twist / side-bend / flex, possibly asymmetric)
-            // is already propagated to the upper chain by FK and must not be overwritten.
-            reconstructChestFrame(pose.roots, pose)
-
-            // Phase 7 (Gap 7 / F8 / W17): resolve the gaze from the pose-declared `headTarget`
-            // intent. This resolver is the sole writer of the neck/head local offsets; poses only
-            // *declare* the gaze target (via `buildGaze`). A pose that declared no target (non-gaze
-            // pose) is a no-op and keeps its authored head.
-            resolveHeadTarget(pose)
-
-            // W1 — Engine ownership of extremity orientation.
-            //
-            // The engine derives heel/toe and palm/fingertip geometry for every extremity by
-            // default (ExtremityOrientationMode.AUTOMATIC). Derivation is skipped ONLY when the pose
-            // has *explicitly* opted that extremity into MANUAL_OVERRIDE — i.e. it deliberately
-            // authored the endpoint local positions (a stylized toe / grip) and wants them
-            // preserved. Ownership is read from the pose's explicit declaration, never inferred from
-            // whether the HEEL/TOE/PALM/FINGERTIPS nodes exist (the factory always creates them, so
-            // node-existence silently disabled this derivation for every pose — the W1 bug).
-            //
-            // The relative ankle/wrist rotation (articulation w.r.t. the parent segment) is passed
-            // in so inherited torso/limb tilt is removed automatically; identity articulation lays
-            // the foot/hand flat along the limb, equalling the FK frame for a neutral limb.
-            if (pose.isExtremityAutomatic(Extremity.FOOT_F)) {
-                adjustFootOrientation(
-                    outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F,
-                    articulationFor(pose, Extremity.FOOT_F, Joint.ANKLE_F, Joint.KNEE_F, relAnkle)
-                )
+            for (i in 0 until size) {
+                pose.roots[i].flatten(outputPose)
             }
-            if (pose.isExtremityAutomatic(Extremity.FOOT_B)) {
-                adjustFootOrientation(
-                    outputPose, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B,
-                    articulationFor(pose, Extremity.FOOT_B, Joint.ANKLE_B, Joint.KNEE_B, relAnkle)
-                )
-            }
-            if (pose.isExtremityAutomatic(Extremity.HAND_A)) {
-                adjustHandOrientation(
-                    outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A,
-                    articulationFor(pose, Extremity.HAND_A, Joint.HAND_A, Joint.ELBOW_A, relWrist)
-                )
-            }
-            if (pose.isExtremityAutomatic(Extremity.HAND_P)) {
-                adjustHandOrientation(
-                    outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P,
-                    articulationFor(pose, Extremity.HAND_P, Joint.HAND_P, Joint.ELBOW_P, relWrist)
-                )
-            }
-        } else {
-            // Legacy position-driven compatibility bridge: Compute anatomical foot & hand extensions procedurally.
-            // The legacy convention derives each joint's rotation from its bone direction, so there is no wrist/ankle
-            // articulation separate from the segment; pass identity so the hand/foot extend rigidly along the segment
-            // and the already-world direction is not double-counted by the (forearm/shank) frame (Issue C).
-            adjustFootOrientation(outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F, IDENTITY_ROTATION)
-            adjustFootOrientation(outputPose, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B, IDENTITY_ROTATION)
+            pose.isTransformsUpdated = true
+        }
+        outputPose.roots = pose.roots
 
-            adjustHandOrientation(outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A, IDENTITY_ROTATION)
-            adjustHandOrientation(outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P, IDENTITY_ROTATION)
+        // B2 (RFC_BRANCH_B_IMPLEMENTATION §2) — consume the §1.1 `spineIntent` / `jointIntents`
+        // carriers: re-derive the declared node rotations and re-propagate FK. This is idempotent
+        // with the node write the authoring helpers also perform during build, so geometry is
+        // byte-identical to the pre-B2 baseline (proven by FinalizerIntentConsumersTest).
+        applyIntentCarriers(pose.roots, pose)
 
-            // Ensure standard compatibility hierarchy is created
-            ensureHierarchy()
+        // Issue F: derive the chest frame only when the author left it unauthored (identity);
+        // an authored chest rotation (thoracic twist / side-bend / flex, possibly asymmetric)
+        // is already propagated to the upper chain by FK and must not be overwritten.
+        reconstructChestFrame(pose.roots, pose)
 
-            // Run setupTransforms to reconstruct orientation parameters and set proper local anatomical offsets
-            setupTransforms(nodesMap[Joint.PELVIS.index]!!, IDENTITY_ROTATION, outputPose)
+        // Phase 7 (Gap 7 / F8 / W17): resolve the gaze from the pose-declared `headTarget`
+        // intent. This resolver is the sole writer of the neck/head local offsets; poses only
+        // *declare* the gaze target (via `buildGaze`). A pose that declared no target (non-gaze
+        // pose) is a no-op and keeps its authored head.
+        resolveHeadTarget(pose)
 
-            // Propagate world positions and world rotations via Forward Kinematics traversal
-            roots!!.forEach { it.updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION) }
-
-            // Flatten standard compatibility hierarchy back into outputPose
-            roots!!.forEach { it.flatten(outputPose) }
-
-            outputPose.roots = roots!!
+        // W1 — Engine ownership of extremity orientation.
+        //
+        // The engine derives heel/toe and palm/fingertip geometry for every extremity by
+        // default (ExtremityOrientationMode.AUTOMATIC). Derivation is skipped ONLY when the pose
+        // has *explicitly* opted that extremity into MANUAL_OVERRIDE — i.e. it deliberately
+        // authored the endpoint local positions (a stylized toe / grip) and wants them
+        // preserved. Ownership is read from the pose's explicit declaration, never inferred from
+        // whether the HEEL/TOE/PALM/FINGERTIPS nodes exist (the factory always creates them, so
+        // node-existence silently disabled this derivation for every pose — the W1 bug).
+        //
+        // The relative ankle/wrist rotation (articulation w.r.t. the parent segment) is passed
+        // in so inherited torso/limb tilt is removed automatically; identity articulation lays
+        // the foot/hand flat along the limb, equalling the FK frame for a neutral limb.
+        if (pose.isExtremityAutomatic(Extremity.FOOT_F)) {
+            adjustFootOrientation(
+                outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F,
+                articulationFor(pose, Extremity.FOOT_F, Joint.ANKLE_F, Joint.KNEE_F, relAnkle)
+            )
+        }
+        if (pose.isExtremityAutomatic(Extremity.FOOT_B)) {
+            adjustFootOrientation(
+                outputPose, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B,
+                articulationFor(pose, Extremity.FOOT_B, Joint.ANKLE_B, Joint.KNEE_B, relAnkle)
+            )
+        }
+        if (pose.isExtremityAutomatic(Extremity.HAND_A)) {
+            adjustHandOrientation(
+                outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A,
+                articulationFor(pose, Extremity.HAND_A, Joint.HAND_A, Joint.ELBOW_A, relWrist)
+            )
+        }
+        if (pose.isExtremityAutomatic(Extremity.HAND_P)) {
+            adjustHandOrientation(
+                outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P,
+                articulationFor(pose, Extremity.HAND_P, Joint.HAND_P, Joint.ELBOW_P, relWrist)
+            )
         }
 
         // B5 — populate the §1.2 STATE stamps the validator consumes (no geometry inference
@@ -648,13 +479,6 @@ class SkeletonPoseFinalizer(
 
 
     /**
-     * Resolves [worldRotation] into the rotation *relative to its parent segment frame*
-     * [parentRotation]: `inverse(parentRotation) ∘ worldRotation`. Applying the result to a
-     * segment direction (which is already a world vector framed by [parentRotation]) adds only
-     * the joint's own articulation instead of re-framing the direction by the whole ancestor
-     * chain. Allocation-free: writes into [out].
-     */
-    /**
      * Branch C — resolves the wrist/ankle articulation rotation for [extremity] to feed the W1
      * geometry derivation. The pose-authored value is the single source of truth: when the pose
      * populated [SkeletonPose.extremityArticulations] for this extremity the carrier value is
@@ -685,15 +509,14 @@ class SkeletonPoseFinalizer(
             out.copyFrom(carried)
             return out
         }
-        // Mixed-mode / legacy fallback: the authored local rotation of the wrist/ankle node, which
-        // is already expressed relative to the joint's parent segment (forearm / shank).
-        val node = if (pose.roots.isNotEmpty()) findJointNode(pose.roots[0], nodeId) else null
+        // Mixed-mode fallback: the authored local rotation of the wrist/ankle node, which is already
+        // expressed relative to the joint's parent segment (forearm / shank). `pose.roots` is always
+        // populated at `finalize` (Phase E invariant), so the node is always resolvable.
+        val node = findJointNode(pose.roots[0], nodeId)
         if (node != null) {
             out.copyFrom(node.localRotation)
             return out
         }
-        // No hierarchy available (legacy bridge path with empty roots): fall back to the
-        // world-relative composition, which is exact whenever the limb is not straight.
         return relativeRotation(pose.getJointRotation(nodeId), pose.getJointRotation(parentId), out)
     }
 

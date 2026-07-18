@@ -414,6 +414,13 @@ class SkeletonPose(
         private val IDENTITY_ROTATION = JointRotation()
         private val ZERO_VECTOR = Vector3(0f, 0f, 0f)
 
+        // Scratch buffers for the legacy position-driven migration helper (fromJointPositions).
+        private val tempBoneVec = Vector3()
+        private val tempV1 = Vector3()
+        private val tempColX = Vector3()
+        private val tempColY = Vector3()
+        private val tempColZ = Vector3()
+
         /**
          * Factory method to build a pose from a Scene Graph hierarchy.
          * Updates transforms and flattens into the compatible joint map.
@@ -429,6 +436,101 @@ class SkeletonPose(
             targetPose.roots = roots
             targetPose.isTransformsUpdated = true
             return targetPose
+        }
+
+        /**
+         * Legacy position-driven migration helper (Phase E, RFC_ENGINE_CLEANUP_PLAN).
+         *
+         * A pose that authors joints purely as **world positions** (the pre-rotation-driven
+         * contract) reaches [finalize] with an empty `roots` hierarchy, which Phase E no longer
+         * supports. This helper re-homes the exact reconstruction the deleted finalizer bridge
+         * performed (`ensureHierarchy` + `setupTransforms`): it builds the standard skeleton
+         * hierarchy and derives each node's `localPosition`/`localRotation` from the authored
+         * world positions, then flattens — producing byte-identical output to the old bridge.
+         *
+         * Call once at the end of a legacy `build()` before returning `jointsBuffer`.
+         */
+        fun fromJointPositions(
+            definition: SkeletonDefinition,
+            source: SkeletonPose,
+            targetPose: SkeletonPose
+        ): SkeletonPose {
+            val nodes = SkeletonFactory.createStandardSkeleton()
+            val roots = nodes.roots
+            val localMat = LocalMatrixScratch()
+
+            fun SkeletonNode.setup(parentWorldRot: JointRotation) {
+                val parentNode = parent
+                if (parentNode == null) {
+                    localPosition.set(source.getJoint(joint))
+
+                    val chestPos = source.getJoint(Joint.CHEST)
+                    val pelvisPos = source.getJoint(Joint.PELVIS)
+                    tempBoneVec.set(chestPos).subtract(pelvisPos)
+                    SkeletonMath.getRotationToAlign(Vector3(0f, 1f, 0f), tempBoneVec, tempV1, localRotation)
+
+                    worldPosition.set(localPosition)
+                    worldRotation.copyFrom(localRotation)
+                } else {
+                    val parentPos = parentNode.worldPosition
+                    val childPos = source.getJoint(joint)
+
+                    when (joint) {
+                        Joint.HIP_F -> localPosition.set(0f, 0f, -definition.hipWidth)
+                        Joint.HIP_B -> localPosition.set(0f, 0f, definition.hipWidth)
+                        Joint.SHOULDER_A -> localPosition.set(0f, 0f, -definition.shoulderWidth)
+                        Joint.SHOULDER_P -> localPosition.set(0f, 0f, definition.shoulderWidth)
+                        Joint.CLAVICLE_A, Joint.CLAVICLE_P, Joint.SCAPULA_A, Joint.SCAPULA_P ->
+                            localPosition.set(0f, 0f, 0f)
+                        Joint.NECK_END -> localPosition.set(0f, definition.neckLength, 0f)
+                        Joint.HEAD_POS -> localPosition.set(0f, 18f, 0f)
+                        else -> {
+                            tempBoneVec.set(childPos).subtract(parentPos)
+                            SkeletonMath.rotAround(tempBoneVec, parentWorldRot.axis, -parentWorldRot.angle, localPosition)
+                        }
+                    }
+
+                    if (joint == Joint.CHEST) {
+                        val chestPos = source.getJoint(Joint.CHEST)
+                        val pelvisPos = source.getJoint(Joint.PELVIS)
+                        val shoulderA = source.getJoint(Joint.SHOULDER_A)
+                        val shoulderP = source.getJoint(Joint.SHOULDER_P)
+
+                        val lean = tempColY.set(chestPos).subtract(pelvisPos).normalize()
+                        val shVec = tempColZ.set(shoulderA).subtract(shoulderP).normalize()
+                        lean.cross(shVec, tempColX).normalize()
+                        tempColZ.multiply(-1f)
+                        SkeletonMath.getRotationFromMatrix(tempColX, tempColY, tempColZ, worldRotation)
+                    } else {
+                        tempBoneVec.set(childPos).subtract(parentPos)
+                        SkeletonMath.getRotationToAlign(tempBoneVec, worldRotation)
+                    }
+
+                    SkeletonMath.rotationToMatrix(parentWorldRot, localMat.parentMatX, localMat.parentMatY, localMat.parentMatZ)
+                    SkeletonMath.rotationToMatrix(worldRotation, localMat.worldMatX, localMat.worldMatY, localMat.worldMatZ)
+                    SkeletonMath.transposeMultiply(
+                        localMat.parentMatX, localMat.parentMatY, localMat.parentMatZ,
+                        localMat.worldMatX, localMat.worldMatY, localMat.worldMatZ,
+                        localMat.localMatX, localMat.localMatY, localMat.localMatZ
+                    )
+                    SkeletonMath.getRotationFromMatrix(localMat.localMatX, localMat.localMatY, localMat.localMatZ, localRotation)
+
+                    worldPosition.set(childPos)
+                }
+
+                for (child in children) {
+                    child.setup(worldRotation)
+                }
+            }
+
+            roots[0].setup(IDENTITY_ROTATION)
+            return fromHierarchy(roots, targetPose)
+        }
+
+        private class LocalMatrixScratch {
+            val parentMatX = Vector3(); val parentMatY = Vector3(); val parentMatZ = Vector3()
+            val worldMatX = Vector3(); val worldMatY = Vector3(); val worldMatZ = Vector3()
+            val localMatX = Vector3(); val localMatY = Vector3(); val localMatZ = Vector3()
         }
     }
 }
