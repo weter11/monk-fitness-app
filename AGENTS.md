@@ -124,7 +124,7 @@
 
 > [!IMPORTANT]
 > **STATUS: COMPLETE — all stabilization + legacy-engine cleanup done.** M0–M8 of
-> Architecture v2 are complete, and Phases A–G of `RFC_ENGINE_CLEANUP_PLAN.md` have removed
+> Architecture v2 are complete, and Phases A–G of `docs/HISTORICAL/RFC_ENGINE_CLEANUP_PLAN.md` have removed
 > every legacy flag/branch (the `EngineFlags` object, the `finalize` compatibility bridge,
 > `preConvertPoles`, `buildHead`, the five deprecated members, the `ExerciseReview` pipeline).
 > The **only** surviving engine flag is `IK_STAGE_ACTIVE` (default `false`) in `IkStage.kt`,
@@ -132,7 +132,7 @@
 > (**282/0** — see `docs/TEST_BASELINE.md`). The narrative below was written mid-cleanup and
 > still cites the removed flags/`EngineFlags`; read it as a changelog of what was done, not
 > the current code state. The current-state source of truth is `docs/ARCHITECTURE_V2.md` +
-> `docs/ARCHITECTURE_V2_ROADMAP.md` + `docs/TEST_BASELINE.md`.
+> `docs/HISTORICAL/ARCHITECTURE_V2_ROADMAP.md` + `docs/TEST_BASELINE.md`.
 
 - Roadmap: S0 baseline → S1 IK+ConstraintSolver → S2 Validator+stale-constants → S3
   pose authoring. Architecture v2 suspended after M1 until S0–S3 done.
@@ -190,8 +190,8 @@
        hanging regression contract (`ConstraintSolverPhase2Test`) is preserved. `PostureUniversalityTest`
         proves the B3 contract (STANDING poses solver-owned byte-identically; flag-off reverts to authored
         root). **All of M6 (Validator stamp-only), M7 (headTarget), and M8 (cleanup) are now COMPLETE** —
-        see the status banner at the top of this section and `docs/ARCHITECTURE_V2_ROADMAP.md` /
-        `docs/RFC_GAP_CLOSURE.md` (updated to reflect the done state).
+        see the status banner at the top of this section and `docs/HISTORICAL/ARCHITECTURE_V2_ROADMAP.md` /
+        `docs/HISTORICAL/RFC_GAP_CLOSURE.md` (updated to reflect the done state).
 - **B4 (Branch B Pose migration) IN PROGRESS** — step 1 (PR #155) + step 2 (PR #156) landed, both
   mixed-mode byte-identical (full suite **282/0** throughout):
   - Step 1: dead legacy helpers deleted (`buildRigidSegment`, `buildLumbarFlexion`, `buildWristArticulation`,
