@@ -422,6 +422,23 @@ class SkeletonPose(
         private val tempColZ = Vector3()
 
         /**
+         * Factory method to build a pose from a Scene Graph hierarchy.
+         * Updates transforms and flattens into the compatible joint map.
+         */
+        fun fromHierarchy(
+            roots: List<SkeletonNode>,
+            targetPose: SkeletonPose
+        ): SkeletonPose {
+            for (root in roots) {
+                root.updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION)
+                root.flatten(targetPose)
+            }
+            targetPose.roots = roots
+            targetPose.isTransformsUpdated = true
+            return targetPose
+        }
+
+        /**
          * Legacy position-driven migration helper (Phase E, RFC_ENGINE_CLEANUP_PLAN).
          *
          * A pose that authors joints purely as **world positions** (the pre-rotation-driven
