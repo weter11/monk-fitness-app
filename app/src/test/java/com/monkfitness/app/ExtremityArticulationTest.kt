@@ -24,6 +24,16 @@ class ExtremityArticulationTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
 
+    private fun productionPoses(): List<Pair<String, () -> PoseBuilder>> = listOf(
+        "PikePushUp" to { PikePushUpPose() },
+        "JumpSquat" to { JumpSquatPose() },
+        "DynamicWorldsGreatestStretch" to { DynamicWorldsGreatestStretchPose() },
+        "HamstringStretch" to { HamstringStretchPose() },
+        "ThoracicExtension" to { ThoracicExtensionPose() },
+        "StandardPullUp" to { StandardPullUpPose() },
+        "DeadHang" to { DeadHangPose() }
+    )
+
     private fun maxDeviation(a: SkeletonPose, b: SkeletonPose): Float {
         var max = 0f
         for (j in Joint.entries) {
