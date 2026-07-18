@@ -72,6 +72,7 @@ class ExtremityArticulationTest {
                 built.extremityArticulations.clear()
                 val withoutCarrier = SkeletonPipeline(def).produceFrame(built).pose
                 val d = maxDeviation(withCarrier, withoutCarrier)
+                println("BRANCH_C_DEV $name @$p = $d")
                 if (d > maxDev) { maxDev = d; worst = "$name @$p" }
             }
         }
