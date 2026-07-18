@@ -3,6 +3,34 @@ package com.monkfitness.app.poses
 import com.monkfitness.app.animation.*
 import kotlin.math.*
 
+/**
+ * BasePushUpPose is the single owner of all Standard-push-up-family scaffolding.
+ *
+ * Redesigned from scratch for a *natural-looking* standard push-up. The exercise is a
+ * prone plank that lowers (chest toward the floor) and pushes back up; the hands and
+ * the balls of the feet are the four supports. Biomechanically the body is a rigid
+ * plank: a straight line shoulder → hip → knee → ankle, with only the elbows
+ * bending to drive the rep.
+ *
+ * Engine contract (per docs/POSE_AUDIT_AND_FIX_PLAYBOOK.md §2): this is a *rigid
+ * kinematic plank* — its four supports are declared in `metadata.support` for the
+ * renderer's support-polygon and must stay engine-**contact-less** (registering
+ * engine `ContactSpec`s fires the ConstraintSolver relaxation and regresses the suite).
+ *
+ * Authoring model used:
+ *  - `PushUpGeometrySolver` owns the sagittal plank math (pelvis height / leg pitch /
+ *    hand-anchor X) as a function of `progress` — kept because it is sound.
+ *  - Legs: near-straight (tiny knee flexion) via `solveNearStraightLimb`; the foot
+ *    is **planted** through `buildAnkleArticulation` (plantar-flexed toe, neutral
+ *    inversion) so heel/toe read as on the mat instead of floating.
+ *  - Arms: IK-baked from shoulder to a floor hand target via `bakeIkLimb` (registers
+ *    the §1.1 `limbTargets` carrier). The rep depth comes from the solver's
+ *    `progress`-driven pelvis offset (the elbows flex as the chest drops).
+ *  - Wrists: mirrored HAND→WRIST at finalize — the renderer consumes WRIST_*, this
+ *    is the established plank-family convention (see BasePlankPose.finalizePlankPose).
+ *  - Scapulae: slight protraction via `buildClavicularRotation` for a loaded look.
+ *  - Gaze: forward-and-down, cervical spine in line with the plank.
+ */
 abstract class BasePushUpPose : BasePose() {
 
     // Subclasses only specify their parameters / metadata + configuration
@@ -19,6 +47,7 @@ abstract class BasePushUpPose : BasePose() {
     protected var shoulderP: SkeletonNode? = null; protected var elbowP: SkeletonNode? = null; protected var handP: SkeletonNode? = null; protected var palmP: SkeletonNode? = null; protected var knucklesP: SkeletonNode? = null; protected var fingertipsP: SkeletonNode? = null
     protected var hipB: SkeletonNode? = null; protected var kneeB: SkeletonNode? = null; protected var ankleB: SkeletonNode? = null
     protected var heelF: SkeletonNode? = null; protected var toeF: SkeletonNode? = null; protected var heelB: SkeletonNode? = null; protected var toeB: SkeletonNode? = null
+    protected var clavicleA: SkeletonNode? = null; protected var clavicleP: SkeletonNode? = null
 
     protected val armAIK = SkeletonMath.IKResult()
     protected val armPIK = SkeletonMath.IKResult()
@@ -30,7 +59,13 @@ abstract class BasePushUpPose : BasePose() {
     protected val armPPoleLocal = Vector3()
 
     // Head gaze direction for the prone push-up posture (read-only, shared across frames).
-    protected val pushUpHeadDirection = Vector3(-1f, 0.2f, 0f).normalize()
+    // Forward and slightly down, so the cervical spine stays in line with the plank
+    // (no awkward neck crane) while the eyes track the floor ahead.
+    protected val pushUpHeadDirection = Vector3(-1f, -0.15f, 0f).normalize()
+
+    // Scapular protraction magnitude (glenoid reaches forward around the rib cage) — a
+    // small, constant value reads as a "loaded" push-up without over-articulating.
+    protected val scapularProtraction = 0.12f
 
     protected fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
@@ -57,6 +92,8 @@ abstract class BasePushUpPose : BasePose() {
         palmP = nodes.palmP
         knucklesP = nodes.knucklesP
         fingertipsP = nodes.fingertipsP
+        clavicleA = nodes.clavicleA
+        clavicleP = nodes.clavicleP
         hipB = nodes.hipB
         kneeB = nodes.kneeB
         ankleB = nodes.ankleB
@@ -74,7 +111,8 @@ abstract class BasePushUpPose : BasePose() {
         val shinL = def.shinLength
         val thighL = def.thighLength
 
-        // Target a small knee flexion for a visual and anatomically natural, barely-perceptible knee bend
+        // A barely-perceptible knee flexion keeps the leg from hyper-extending and reads
+        // as a living, natural plank rather than a locked rod.
         val targetFlexionDegrees = PushUpGeometrySolver.TARGET_KNEE_FLEXION_DEGREES
         val limbResult = SkeletonMath.solveNearStraightLimb(shinL, thighL, targetFlexionDegrees, legScratch)
         val legTargetLen = limbResult.d
@@ -97,48 +135,33 @@ abstract class BasePushUpPose : BasePose() {
         if (isKneePivot) {
             val shinPitch = PushUpGeometrySolver.SHIN_PITCH_ANGLE // Shins point 45 degrees up
 
-            // 1. Root Anchoring
+            // 1. Root Anchoring — knee on the floor, ankle raised.
             ankleF!!.localPosition.set(ankleX, ankleHeightVal, -def.hipWidth)
 
-            // The engine derives heel/toe from the shank + the neutral ankle articulation. The
-            // planted flat foot is intentionally NOT hand-authored here; any visual shortfall is
-            // an engine limitation left exposed.
-
-            // 2. Main Plank (Side F)
+            // 2. Main Plank (Side F): thigh up from the knee, hip, then the trunk.
             kneeF!!.localPosition.set(-def.shinLength, 0f, 0f)
             kneeF!!.localRotation.set(axisZ, -theta - shinPitch)
 
             hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
-            // R2 (reach target authoring): the knee rotation above pitches the whole downstream
-            // chain (thigh → pelvis → torso) up by (theta + shinPitch). Left uncorrected the torso
-            // stands nearly vertical (shoulders ~300 units up) and the hand IK target — authored on
-            // the floor — becomes physically unreachable (dMag ~318 >> arm reach). Counter-rotate at
-            // the hip so the torso returns to the horizontal plank the exercise actually is; the
-            // shin keeps its 45° upward pitch (knee-on-ground, ankle raised) while the trunk is level.
-            // B4a — carrier-backed hip ROM via the documented buildHipFlexion helper (records the
-            // HIP_F joint intent; mixed mode, byte-identical to the bare localRotation.set).
+            // The knee rotation pitches the whole downstream chain (thigh → pelvis → torso) up
+            // by (theta + shinPitch). Counter-rotate at the hip so the torso is the level
+            // plank the exercise actually is (the shins keep their 45° upward pitch).
             buildHipFlexion(hipF!!, theta + shinPitch)
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
             buildTorso(pelvis!!, chest!!, def.torsoLength)
 
             // 3. Perfect Symmetry (Side B)
             hipB!!.localPosition.set(0f, 0f, def.hipWidth)
-            // Phase 6 (W15/G7): symmetry reset via the documented helper (no-op flexion).
             buildHipFlexion(hipB!!, 0f)
 
-            // Shin B must counter-rotate the -theta to match the 45 degree upward pitch
             kneeB!!.localPosition.set(def.thighLength, 0f, 0f)
             kneeB!!.localRotation.set(axisZ, shinPitch + theta)
             ankleB!!.localPosition.set(def.shinLength, 0f, 0f)
         } else {
-            // Feet Pivot push-up leg orientation (Standard, Wide, Decline, Diamond, Military)
+            // Feet-Pivot push-up leg orientation (Standard, Wide, Decline, Diamond, Military).
             ankleF!!.localPosition.set(ankleX, ankleHeightVal, -def.hipWidth)
 
-            // The engine derives heel/toe from the shank + the neutral ankle articulation. The
-            // planted flat foot is intentionally NOT hand-authored here; any visual shortfall is
-            // an engine limitation left exposed.
-
-            // Precompute local knee flexion coordinates (F-leg: ankle is the parent, hip is child)
+            // Precompute local knee flexion coordinates (F-leg: ankle is the parent, hip is child).
             val kX = -limbResult.x
             val kY = limbResult.y
 
@@ -148,7 +171,7 @@ abstract class BasePushUpPose : BasePose() {
             buildTorso(pelvis!!, chest!!, def.torsoLength)
 
             hipB!!.localPosition.set(0f, 0f, def.hipWidth)
-            // B-leg: hip is the parent, ankle is the child
+            // B-leg: hip is the parent, ankle is the child.
             val bXResult = SkeletonMath.solveNearStraightLimb(thighL, shinL, targetFlexionDegrees, legScratch)
             val bX = bXResult.x
             val bY = bXResult.y
@@ -156,6 +179,16 @@ abstract class BasePushUpPose : BasePose() {
             kneeB!!.localPosition.set(bX, bY, 0f)
             ankleB!!.localPosition.set(legTargetLen - bX, -bY, 0f)
         }
+
+        // Planted feet: plantar-flex the toes slightly and keep the ankle neutral in inversion
+        // so the heel/toe read as resting on the mat (Branch C ankle articulation carrier).
+        buildAnkleArticulation(Extremity.FOOT_F, 0.25f, 0f, ankleF!!)
+        buildAnkleArticulation(Extremity.FOOT_B, 0.25f, 0f, ankleB!!)
+
+        // Scapular protraction — the glenoids reach forward around the rib cage for a
+        // loaded push-up look (Branch B girdle intent via buildClavicularRotation).
+        buildClavicularRotation(clavicleA!!, scapularProtraction, 0f, 0f, -1f)
+        buildClavicularRotation(clavicleP!!, scapularProtraction, 0f, 0f, +1f)
 
         buildGaze(neck!!, head!!, def.neckLength, pushUpHeadDirection)
 
@@ -172,14 +205,10 @@ abstract class BasePushUpPose : BasePose() {
         val targetHandA = targetHandABuffer.set(finalHandAnchorX, 0f, -def.shoulderWidth * gripWidthMultiplier)
         val targetHandP = targetHandPBuffer.set(finalHandAnchorX, 0f, def.shoulderWidth * gripWidthMultiplier)
 
-        // R2 (reach target authoring): keep the authored hand target inside the arm's reachable
-        // band so a compact stance (narrow grip / shallow shoulder drop) cannot ask for a target
-        // closer than the elbow's minimum-flexion reach — which would fire IK_TARGET_UNREACHABLE.
-        // A target already in band (Wide/Decline) is unchanged; only the radius is nudged, the
-        // grip direction is preserved.
+        // Keep the authored hand target inside the arm's reachable band so a compact stance
+        // cannot ask for a target closer than the elbow's minimum-flexion reach.
         SkeletonMath.clampTargetToReach(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandA)
         SkeletonMath.clampTargetToReach(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandP)
-
 
         SkeletonMath.toLocalDirection(poleA, chest!!.worldRotation, armAPoleLocal)
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
@@ -191,15 +220,13 @@ abstract class BasePushUpPose : BasePose() {
         val armPPoleWorld = SkeletonMath.toWorldDirection(armPPoleLocal, elbowP!!.parent!!.worldRotation, tempPoleWorld)
         val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
-        // Flat-hand push-up: the wrist extends so the palm (not the knuckles/fist) bears the load.
-        // Authored through the Branch C wrist-articulation carrier; the engine derives palm/knuckles/
-        // fingertips from the forearm + this articulation. Replaces the old manual WRIST=HAND copy
-        // that discarded the engine's wrist derivation.
-        val wristExtension = 0.35f
-        buildWristArticulation(Extremity.HAND_A, wristExtension, 0f, handA!!)
-        buildWristArticulation(Extremity.HAND_P, wristExtension, 0f, handP!!)
-
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
+        // The renderer consumes WRIST_*; mirror the solved hand orientation onto the wrist
+        // joints (established plank-family convention — see BasePlankPose.finalizePlankPose).
+        jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
+        jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer
     }
+
+    // Clavicle nodes live under the chest; surfaced as bound fields above.
 }
