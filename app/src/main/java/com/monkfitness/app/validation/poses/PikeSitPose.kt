@@ -99,4 +99,3 @@ class PikeSitPose : BaseValidationPose() {
         return finalizePose()
     }
 }
-probe
