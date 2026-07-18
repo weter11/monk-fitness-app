@@ -12,7 +12,8 @@ data class ValidatedFrame(val pose: SkeletonPose, val report: ValidationReport)
 /**
  * Architecture v2 — the ordered engine orchestrator (RFC_ENGINE_PIPELINE §3/§5, Gap 1).
  *
- * **M2 scope (this file):** `PIPELINE_ACTIVE` now defaults to **true** and `produceFrame` drives
+ * **M2 scope (this file):** the pipeline is unconditionally live (Phase B collapsed the
+ * `PIPELINE_ACTIVE` flag to its true branch) and `produceFrame` drives
  * the full ordered stage chain for every consumer:
  *
  * ```
@@ -26,7 +27,7 @@ data class ValidatedFrame(val pose: SkeletonPose, val report: ValidationReport)
  * pre-M2 baseline (Solver still no-ops on contact-less poses; the Finalizer performs exactly the
  * same work it did when it called the Solver itself), so the rendered frame is unchanged.
  *
- * **Legacy bypass:** with [EngineFlags.PIPELINE_ACTIVE] `false`, `produceFrame` falls back to the
+ * **No legacy bypass:** Phase B removed the `PIPELINE_ACTIVE` flag, so `produceFrame` always drives the
  * pre-M0 flow (`pose.build()` → `finalizer.finalize()` with *no* pipeline-owned Solver call) so the
  * old path remains reachable for rollback and the M0 byte-identity guarantee still holds.
  *
@@ -41,13 +42,9 @@ class SkeletonPipeline(
     private val validator: ExerciseValidator? = null
 ) {
     init {
-        // Coherence invariant (RFC_ENGINE_PIPELINE §5.7): a live pipeline requires finalizer-owned
-        // conversion — but only once that flag is itself enabled (M4). M2 keeps
-        // FINALIZER_OWNS_CONVERSION=false by design to stay byte-identical to the pre-M2 baseline,
-        // so the constructor fails fast only when the flag is turned on without the invariant met.
-        require(!EngineFlags.FINALIZER_OWNS_CONVERSION || EngineFlags.PIPELINE_ACTIVE) {
-            "Incoherent flags: FINALIZER_OWNS_CONVERSION requires PIPELINE_ACTIVE (RFC_ENGINE_PIPELINE §5.7)."
-        }
+        // Phase B (RFC_ENGINE_CLEANUP_PLAN): all engine migration flags are collapsed to their
+        // true branch, so the pipeline is unconditionally live and there is no coherence invariant
+        // left to enforce. The constructor is intentionally trivial.
     }
 
     private val finalizer = SkeletonPoseFinalizer(definition)
@@ -71,7 +68,7 @@ class SkeletonPipeline(
     }
 
     /**
-     * Single entry point. When [EngineFlags.PIPELINE_ACTIVE] is `true` (the M2 default) this drives
+     * Single entry point. The pipeline is unconditionally live (Phase B collapsed the flag), so this always drives
      * the full ordered stage pipeline: `pose.build(context)` → `ConstraintSolver.solve` (contacts
      * only) → `finalizer.finalize(...)` → FK flatten. When `false` (legacy bypass) it is exactly the
      * pre-M0 flow (`build` → `finalize`, no pipeline-owned Solver) — byte-identical to invoking the
@@ -90,18 +87,19 @@ class SkeletonPipeline(
      */
     private fun runStages(pose: SkeletonPose): SkeletonPose {
         // B1 (IkStage extraction) — the pipeline-owned limb stage consumes the §1.1 `limbTargets`
-        // carrier and re-derives each limb's local positions on the engine-owned node tree. Gated by
-        // EngineFlags.IK_STAGE_ACTIVE (default false → pure no-op, byte-identical baseline). It runs
+        // carrier and re-derives each limb's local positions on the engine-owned node tree.
+        // (EngineFlags.IK_STAGE_ACTIVE was excluded from Phase B — its flag is a future additive
+        // decision, not legacy removal — so the IkStage no-op gate is preserved as-is.) It runs
         // before the ConstraintSolver so contact limbs are re-baked from their targets ahead of the
         // root-repositioning pass, and before the Finalizer's FK.
         IkStage.apply(pose, definition)
-        // Stage 3 (ConstraintSolver) — posture/contact settling. Runs for contact poses (M3) and,
-        // under B3, for any pose that names a non-CUSTOM posture intent so the engine owns the
-        // coarse root height. A CUSTOM, contact-less production pose is still a pure no-op.
-        val postureDriven = EngineFlags.SOLVER_OWNS_POSTURE &&
-            pose.postureIntent.kind != PostureIntent.Kind.CUSTOM
-        if (EngineFlags.PIPELINE_ACTIVE &&
-            pose.roots.isNotEmpty() && (pose.hasContacts() || postureDriven)) {
+        // Stage 3 (ConstraintSolver) — posture/contact settling. Runs for contact poses (M3) and
+        // for any pose that names a non-CUSTOM posture intent so the engine owns the coarse root
+        // height. A CUSTOM, contact-less production pose is still a pure no-op. (Phase B collapsed
+        // PIPELINE_ACTIVE and SOLVER_OWNS_POSTURE to their true branch: the pipeline is always live
+        // and posture ownership is always on.)
+        val postureDriven = pose.postureIntent.kind != PostureIntent.Kind.CUSTOM
+        if (pose.roots.isNotEmpty() && (pose.hasContacts() || postureDriven)) {
             ConstraintSolver.solve(pose, definition)
         }
         // Stage 4+ (Finalizer) — world↔local conversion, extremity derivation, chest-frame

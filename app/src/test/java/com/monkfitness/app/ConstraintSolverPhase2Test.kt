@@ -2,33 +2,25 @@ package com.monkfitness.app
 
 import com.monkfitness.app.animation.*
 import com.monkfitness.app.validation.poses.*
-import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
 
 /**
  * Phase 2 (F2/F7/F9) — ConstraintSolver owns the root/pelvis transform.
  *
- * These tests verify the engine-owned posture path introduced behind [EngineFlags.SOLVER_OWNS_POSTURE]:
+ * (Phase B flag collapse) SOLVER_OWNS_POSTURE was collapsed to its true branch and the flag
+ * removed, so posture ownership is now unconditional. These tests assert the resulting
+ * engine-owned posture behaviour directly.
  *  - the solver seeds the root pelvis height from the pose's declared [PostureIntent];
  *  - contact conflicts are resolved by `contactPrecedence` (weighted root step);
  *  - the solved root is persisted for inter-frame temporal smoothing.
- *
- * The flag is flipped on for each test and reset afterwards so the suite never leaves the global
- * flag in a non-default state for other tests.
  */
 class ConstraintSolverPhase2Test {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
     private val context = PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)
-    private val originalPosture = EngineFlags.SOLVER_OWNS_POSTURE
 
-    @After
-    fun resetFlag() {
-        EngineFlags.SOLVER_OWNS_POSTURE = originalPosture
-    }
-
-    // M2/M3: route through the pipeline (the production path) so the ordered Solver → Finalizer
+    // Route through the pipeline (the production path) so the ordered Solver → Finalizer
     // chain runs. The Finalizer no longer calls the Solver itself (M2), so a direct
     // `finalizer.finalize(build())` would silently skip the posture solve this suite exists to test.
     private fun finalized(pose: BaseValidationPose): SkeletonPose {
@@ -36,13 +28,7 @@ class ConstraintSolverPhase2Test {
     }
 
     @Test
-    fun postureFlagDefaultsTrue() {
-        assertTrue("SOLVER_OWNS_POSTURE must default to true in M3", originalPosture)
-    }
-
-    @Test
     fun seatedIntentSeedsPelvisNearFloor() {
-        EngineFlags.SOLVER_OWNS_POSTURE = true
         val pose = finalized(DeepOverheadSquatPose())
         assertFinite(pose, "DeepOverheadSquat")
         // SEATED_NEAR_FLOOR seed ~ shinLength*0.35 ≈ 34; the solver then honours the ground
@@ -57,7 +43,6 @@ class ConstraintSolverPhase2Test {
 
     @Test
     fun hangingIntentSeedsPelvisUnderBar() {
-        EngineFlags.SOLVER_OWNS_POSTURE = true
         val pose = finalized(DeadHangPose())
         assertFinite(pose, "DeadHang")
         // The solver seeds the pelvis from the HANGING_UNDER_BAR intent (barY - reach - torsoLength)
@@ -67,31 +52,7 @@ class ConstraintSolverPhase2Test {
     }
 
     @Test
-    fun flagOffPreservesLegacyBehaviour() {
-        // With the flag off the solver must behave exactly as before: DeepOverheadSquat still rests
-        // on the ground (its authored pelvisY path) and the test suite baseline is unchanged.
-        EngineFlags.SOLVER_OWNS_POSTURE = false
-        val pose = finalized(DeepOverheadSquatPose())
-        assertFinite(pose, "DeepOverheadSquat")
-        val pelvisY = pose.getJoint(Joint.PELVIS).y
-        assertTrue("legacy seated pelvis must still rest near floor (was $pelvisY)", pelvisY < 160f)
-    }
-
-    @Test
-    fun seatedSeedDoesNotRegressFootPlacement() {
-        // The Phase 2 seed must not shift the resolved geometry relative to the legacy solver:
-        // the pelvis height and ankle positions are essentially identical with the flag on vs off.
-        EngineFlags.SOLVER_OWNS_POSTURE = false
-        val off = finalized(DeepOverheadSquatPose())
-        EngineFlags.SOLVER_OWNS_POSTURE = true
-        val on = finalized(DeepOverheadSquatPose())
-        assertEquals("pelvis Y must match legacy", off.getJoint(Joint.PELVIS).y, on.getJoint(Joint.PELVIS).y, 1f)
-        assertEquals("ankle F must match legacy", off.getJoint(Joint.ANKLE_F).y, on.getJoint(Joint.ANKLE_F).y, 1f)
-    }
-
-    @Test
     fun determinismAcrossSolves() {
-        EngineFlags.SOLVER_OWNS_POSTURE = true
         val a = finalized(MiddleSplitPose())
         val b = finalized(MiddleSplitPose())
         for (joint in listOf(Joint.PELVIS, Joint.HIP_F, Joint.ANKLE_F, Joint.ANKLE_B, Joint.SHOULDER_A, Joint.HAND_A)) {
@@ -105,7 +66,7 @@ class ConstraintSolverPhase2Test {
 
     @Test
     fun postureIntentDeclaredByPose() {
-        // DeepOverheadSquat now declares SEATED_NEAR_FLOOR via declarePosture, so the raw pose
+        // DeepOverheadSquat declares SEATED_NEAR_FLOOR via declarePosture, so the raw pose
         // carries that intent (the solver reads it). A pose that does not declare keeps CUSTOM.
         val squatted = DeepOverheadSquatPose().build(context)
         assertEquals(PostureIntent.Kind.SEATED_NEAR_FLOOR, squatted.postureIntent.kind)

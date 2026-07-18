@@ -57,7 +57,7 @@ class SkeletonPoseFinalizer(
      * is non-identity the function returns early, leaving the authored frame (and the already-
      * flattened world transforms) intact.
      *
-     * Phase 3 (F1) — read-only chest-frame guarantee. When [EngineFlags.FINALIZER_OWNS_CONVERSION]
+     * Phase 3 (F1) — read-only chest-frame guarantee. The finalizer owns conversion,
      * is enabled AND the pose carries fixed contacts, the reconstruction is a *no-move* operation:
      * the world positions of every Solver-settled contact end-effector are snapshotted before the
      * reconstruction and asserted unchanged afterwards (B5). If applying the reconstructed frame
@@ -102,8 +102,9 @@ class SkeletonPoseFinalizer(
 
         // Phase 3 (F1/B5) — snapshot Solver-settled contact end-effectors BEFORE mutating the
         // chest frame, so we can assert the reconstruction is read-only on them. Only meaningful
-        // when the finalizer owns conversion and the pose actually registered contacts.
-        val guardActive = EngineFlags.FINALIZER_OWNS_CONVERSION && pose.contacts.isNotEmpty()
+        // when the pose actually registered contacts. (Phase B collapsed FINALIZER_OWNS_CONVERSION
+        // to its true branch.)
+        val guardActive = pose.contacts.isNotEmpty()
         if (guardActive) buildContactSnapshot(pose)
 
         val pelvisW = pelvis.worldPosition
@@ -216,11 +217,11 @@ class SkeletonPoseFinalizer(
      * maxDeviation 0.0). The carrier therefore genuinely drives the final geometry while remaining a
      * pure no-op on output until the node-write is deleted in B4.
      *
-     * Gated by [EngineFlags.FINALIZER_CONSUMES_INTENT] (default on); flip off to skip consumption
+     * Always consumes the carriers (Phase B collapsed FINALIZER_CONSUMES_INTENT to its true branch); flip the carrier population off to skip
      * and restore the pre-B2 finalize. No-op when [SkeletonPose.jointIntents] is empty.
      */
     private fun applyIntentCarriers(roots: List<SkeletonNode>, pose: SkeletonPose) {
-        if (!EngineFlags.FINALIZER_CONSUMES_INTENT) return
+        // (Phase B collapsed FINALIZER_CONSUMES_INTENT to its true branch — consumption is always on.)
         if (pose.jointIntents.isEmpty()) return
         // Contact poses are solver-settled: the ConstraintSolver has already honoured the declared
         // trunk/hip intents when it repositions the root to hold every contact. Re-applying the
@@ -485,8 +486,7 @@ class SkeletonPoseFinalizer(
         // Phase 3 (F1/F4): the finalizer is the *exclusive* writer of local transforms. This is
         // the single conversion entry point — any world↔local frame work (pole→world, the
         // `toLocalDirection` limb bakes already performed by the solver, extremity derivation)
-        // is concentrated here. With [EngineFlags.FINALIZER_OWNS_CONVERSION] off this is a
-        // documented no-op so the legacy path is byte-identical.
+        // is concentrated here.
 
         outputPose.copyFrom(pose)
 

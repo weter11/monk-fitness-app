@@ -2,7 +2,6 @@ package com.monkfitness.app
 
 import com.monkfitness.app.animation.*
 import com.monkfitness.app.poses.*
-import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -15,22 +14,12 @@ import org.junit.Test
  * `pelvis.y` to the STANDING seed (== the value the pose used to hand-write as `standH`), so the
  * root is engine-derived and byte-identical to the previously-authored pose.
  *
- * These tests prove the B3 contract:
- *  - every production pose carries a (non-null) posture intent;
- *  - the STANDING poses route their pelvis height through the solver (flag on) and match the
- *    exact STANDING seed;
- *  - flipping the flag off falls back to the authored root (the reversible CUSTOM path), proving
- *    the solver — not the pose — is the root owner when the flag is on.
+ * (Phase B flag collapse) SOLVER_OWNS_POSTURE was collapsed to its true branch and removed, so
+ * the solver unconditionally owns the root for non-CUSTOM intents.
  */
 class PostureUniversalityTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
-    private val originalPosture = EngineFlags.SOLVER_OWNS_POSTURE
-
-    @After
-    fun resetFlag() {
-        EngineFlags.SOLVER_OWNS_POSTURE = originalPosture
-    }
 
     private fun standingPoses(): List<Pair<String, () -> PoseBuilder>> = listOf(
         "ArmCircles" to { ArmCirclesPose() },
@@ -45,8 +34,6 @@ class PostureUniversalityTest {
 
     @Test
     fun everyProductionPoseDeclaresPostureIntent() {
-        // B3 exit criterion: every concrete production pose populates postureIntent (default CUSTOM
-        // counts as a declared intent; the STANDING shapes declare their real kind below).
         val poses: List<Pair<String, () -> PoseBuilder>> = standingPoses() + listOf(
             "AirSquat" to { AirSquatPose() },
             "StandardPushUp" to { StandardPushUpPose() },
@@ -73,13 +60,13 @@ class PostureUniversalityTest {
     }
 
     @Test
-    fun solverOwnsStandingRootWhenFlagOn() {
-        EngineFlags.SOLVER_OWNS_POSTURE = true
+    fun solverOwnsStandingRoot() {
+        // The solver unconditionally pins pelvis.y to the exact STANDING seed (== the old
+        // hand-written standH) for every STANDING pose.
         val standH = def.shinLength + def.thighLength + 25f
         for ((name, factory) in standingPoses()) {
             val pose = finalized(factory)
             assertFinite(pose, name)
-            // The solver pins pelvis.y to the exact STANDING seed (== the old hand-written standH).
             assertEquals(
                 "$name: solver must own the STANDING root height",
                 standH, pose.getJoint(Joint.PELVIS).y, 1e-4f
@@ -88,23 +75,7 @@ class PostureUniversalityTest {
     }
 
     @Test
-    fun flagOffFallsBackToAuthoredRoot() {
-        // With the flag off the solver leaves the authored root untouched; the STANDING poses now
-        // author pelvis.y = 0 (the solver owns the height), so flag-off yields a low root while
-        // flag-on pins standH. This is the reversible B3 boundary.
-        EngineFlags.SOLVER_OWNS_POSTURE = false
-        val off = finalized { ArmCirclesPose() }
-        EngineFlags.SOLVER_OWNS_POSTURE = true
-        val on = finalized { ArmCirclesPose() }
-        val standH = def.shinLength + def.thighLength + 25f
-        assertTrue("flag-off authored root must be near floor (was ${off.getJoint(Joint.PELVIS).y})",
-            off.getJoint(Joint.PELVIS).y < 1f)
-        assertEquals("flag-on solver root must pin standH", standH, on.getJoint(Joint.PELVIS).y, 1e-4f)
-    }
-
-    @Test
     fun standingPoseDeterministic() {
-        EngineFlags.SOLVER_OWNS_POSTURE = true
         val a = finalized { ArmCirclesPose() }
         val b = finalized { ArmCirclesPose() }
         for (joint in listOf(Joint.PELVIS, Joint.CHEST, Joint.HIP_F, Joint.ANKLE_F, Joint.SHOULDER_A, Joint.HAND_A)) {

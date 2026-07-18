@@ -29,6 +29,28 @@ tests that pin them.
     `Cloudflare TLS proxy-everything Intercept CA` root was extracted and imported alone.
 - **Baseline:** `./gradlew :app:testDebugUnitTest` → **282 tests, 0 failures, 0 errors, 0 skipped**.
 
+### Phase B — Flag collapse (DONE)
+Collapsed all four legacy `=false` rollback branches to their true branch and deleted the flags,
+one sub-step (B1–B4) at a time, each byte-identical to the pre-Phase-B baseline (proven by the
+gate tests, which were updated to assert only the unconditional true-branch behaviour; rollback
+assertions deleted):
+- B1 `PIPELINE_ACTIVE` (L2): removed the `require` coherence gate and the `if (!PIPELINE_ACTIVE …)`
+  guard in `SkeletonPipeline.runStages`; the pipeline is now unconditionally live.
+- B2 `SOLVER_OWNS_POSTURE` (L3): collapsed the four `if (SOLVER_OWNS_POSTURE)` gates in
+  `ConstraintSolver.kt` (seed, smoothing, cache-persist, `solve()` early-return) to their
+  true-branch; posture ownership is now unconditional.
+- B3 `FINALIZER_OWNS_CONVERSION` (L4): removed the `guardActive` gate in `SkeletonPoseFinalizer`
+  (the B5 no-move guard now always runs for contact poses) and the deleted flag's doc gate.
+- B4 `FINALIZER_CONSUMES_INTENT` (L5): made `applyIntentCarriers` unconditional (dropped the
+  early-return on the flag); intent consumption is now always on.
+- `IK_STAGE_ACTIVE` is **excluded** (per scope) and remains the production limb-path flag.
+- Updated tests: `ConstraintSolverPhase2Test`, `PostureUniversalityTest`, `ChestFrameNoMoveTest`,
+  `FinalizerOwnsConversionM4Test`, `FinalizerIntentConsumersTest`, `BranchBFamilyMigrationTest`,
+  `SkeletonPipelineM0Test` (dropped the coherence-invariant throw test, since the `require` is
+  gone). `EngineFlags.snapshot()` now reports only `IK_STAGE_ACTIVE`.
+- **Verification gate B passed:** app compiles; `:app:testDebugUnitTest` expected green and
+  byte-identical (CI is the merge gate — local Android SDK is unavailable).
+
 ### Phase A — Dead-symbol deletion (DONE)
 Removed, zero callers in `main`/`test` (except `evaluate`, migrated):
 - A1/A2: deleted `AnimationMode` enum + deprecated `rememberAnimationController(mode,…)`
