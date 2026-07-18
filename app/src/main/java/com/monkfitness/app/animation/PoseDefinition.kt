@@ -201,9 +201,10 @@ class SkeletonPose(
     /**
      * Phase 7 (Gap 7 / F8 / W17) — gaze-as-target (COMPLETE). The pose declares where the head
      * should look in world space; the Finalizer ([SkeletonPoseFinalizer.resolveHeadTarget])
-     * resolves neck/head from this target, reusing [buildHead] math, and is now the sole head
-     * writer (the legacy direction path was removed after byte-identity was proven). `null` means
-     * "no gaze target declared" — a non-gaze pose whose head is left as authored.
+     * resolves neck/head from this target (head-orientation math inlined in the resolver) and is
+     * now the sole head writer (the legacy direction path was removed after byte-identity was
+     * proven). `null` means "no gaze target declared" — a non-gaze pose whose head is left as
+     * authored.
      */
     var headTarget: HeadTarget? = null
         private set

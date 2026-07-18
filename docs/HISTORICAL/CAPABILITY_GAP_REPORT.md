@@ -6,20 +6,28 @@ and the *actually implemented* engine code in `app/src/main/java/com/monkfitness
 **Method:** Static read of engine + pose source; no build executed. Reconciliation only —
 no redesigns, no code.
 
+> [!IMPORTANT]
+> **STATUS: SUPERSEDED (historical).** This 2026-07-16 audit described a mid-cleanup state in
+> which the §1.1 carriers were dead and PHASE 2/3 behaviour was flag-disabled. All of that has
+> since been resolved: the carriers are live (Branch B), the posture/finalizer authority is
+> unconditional, and the `EngineFlags` object was deleted in the cleanup (Phases A–G of
+> `docs/HISTORICAL/RFC_ENGINE_CLEANUP_PLAN.md`). Retained for archaeology only.
+
 ## TL;DR
 
 The spec (`ARCHITECTURE_V2.md` §3) defines a **declarative pipeline** in which the Pose only
 populates the §1.1 intent carrier and the Engine (IK -> ConstraintSolver -> Finalizer -> FK)
-resolves geometry. **That pipeline is not wired in.** Every production pose still *imperatively
-hand-builds* the full `SkeletonNode` hierarchy inside `Pose.build()` and returns a complete pose.
-The §1.1 intent fields (`spineIntent`, `limbTargets`, `jointIntents`) are **declared but never
-written by poses and never read by the engine** (dead carriers). The spec's PHASE 2/3 behavior
-exists as code inside `ConstraintSolver`/`SkeletonPoseFinalizer` but is **globally disabled**
-(`EngineFlags.SOLVER_OWNS_POSTURE = false`, `FINALIZER_OWNS_CONVERSION = false`), so the legacy
-path runs verbatim.
+resolves geometry. **That pipeline was not fully wired at audit time.** Every production pose still
+*imperatively hand-builds* the full `SkeletonNode` hierarchy inside `Pose.build()` and returns a
+complete pose. At audit time the §1.1 intent fields (`spineIntent`, `limbTargets`, `jointIntents`)
+were **declared but never written by poses and never read by the engine** (dead carriers). The
+spec's PHASE 2/3 behavior existed as code inside `ConstraintSolver`/`SkeletonPoseFinalizer` but was
+**globally disabled** (`EngineFlags.SOLVER_OWNS_POSTURE = false`, `FINALIZER_OWNS_CONVERSION = false`
+at the time), so the legacy path ran verbatim. *(All of this is now resolved — see banner above.)*
 
-**Consequence:** the roadmap marks Phases 0–3 (and 4–7) "COMPLETE", but those marks describe
-*structures and helpers that exist*, **not** an integrated architecture-v2 execution model. The
+**Consequence (HISTORICAL):** the roadmap marked Phases 0–3 (and 4–7) "COMPLETE", but those marks
+described *structures and helpers that exist*, **not** an integrated architecture-v2 execution
+model. The
 foundational integration (a Pose->Engine pipeline that consumes §1.1) does not exist. Phases 4–7
 that *were* genuinely done are the **pose-side helper migrations** (counter-rotation deletion,
 single spine-intent call, hip helper, girdle/IK already correct) — real, but pose refactors, not
@@ -69,8 +77,8 @@ evidence of the engine pipeline.
   consume in IK/Solver/Finalizer).
 - **Blocked / partial:** **Partially blocked** — structurally present, behaviorally inert.
 
-## Gap 3 — PHASE 2 posture authority not active (`EngineFlags.SOLVER_OWNS_POSTURE = false`)
-**Status: PARTIALLY BLOCKED (implementation exists, globally disabled, and uncalled by production poses).**
+## Gap 3 — PHASE 2 posture authority not active (HISTORICAL — now resolved)
+**Status (at audit time): PARTIALLY BLOCKED (implementation existed, was flag-disabled, and uncalled by production poses).** *Resolved: the posture seed is now unconditional; the `EngineFlags` object was deleted in the cleanup.*
 
 - **Existing engine support:** `ConstraintSolver.seedRootFromPostureIntent`,
   `postureSeedY(B1.1 formulas)`, `applyRootDelta(…, pose.contactPrecedence)` (F7), inter-frame
@@ -149,9 +157,10 @@ evidence of the engine pipeline.
 
 - **Existing engine support:** `buildHead(neck, head, neckLength, headDir)` consumed by the pose;
   now wrapped by `buildGaze(neck, head, neckLength, gazeDir)` which records a synthetic `HeadTarget`
-  (neck world pos + gazeDir·100) and still calls `buildHead` while `EngineFlags.HEAD_TARGET_ENABLED`
-  is false. The Finalizer's `resolveHeadTarget` consumes `headTarget` (reusing `buildHead` math) when
-  the flag is on.
+   (neck world pos + gazeDir·100) and still called `buildHead` while the `HEAD_TARGET_ENABLED` flag
+   (since removed) was false. The Finalizer's `resolveHeadTarget` consumes `headTarget` (reusing the
+   head-orientation math) when the flag was on. *(Resolved: the flag and `buildHead` branch were
+   deleted in the cleanup; `resolveHeadTarget` is now the sole head/neck writer.)*
 - **Missing APIs:** none (added `HeadTarget` carrier + `headTarget` on `SkeletonPose` §1.1 +
   `copyFrom` propagation; `HeadTarget_ENABLED` flag; `BasePose.buildGaze`; `SkeletonPoseFinalizer.resolveHeadTarget`).
 - **Missing data structures:** none.

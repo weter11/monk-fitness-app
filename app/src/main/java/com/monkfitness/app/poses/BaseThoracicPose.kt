@@ -15,7 +15,7 @@ import kotlin.math.*
  *
  * What is owned here (engine responsibilities, per the architecture mandate):
  *  - Skeleton hierarchy via SkeletonFactory.createStandardSkeleton()
- *  - buildHead / buildPelvis / buildShoulders for the upper body
+ *  - the head / pelvis / shoulders construction for the upper body
  *  - Leg IK via BasePose.bakeIkLimb() (pelvis rotation is always about Z, so the
  *    engine helper's Z counter-rotation is exact for the legs)
  *  - Arm IK via bakeThoracicArm(): the arm root (shoulder) lives under the rotating

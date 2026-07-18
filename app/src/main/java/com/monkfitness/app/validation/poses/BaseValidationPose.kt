@@ -85,14 +85,14 @@ abstract class BaseValidationPose : PoseBuilder {
 
 
     /**
-     * Branch C (buildHead migration) — declares the gaze as a world-space HeadTarget intent that
+     * Gaze-as-target (Gap 7 / Branch C) — declares the gaze as a world-space HeadTarget intent that
      * the Finalizer (SkeletonPoseFinalizer.resolveHeadTarget) resolves into the neck/head local
      * offsets. Mirrors com.monkfitness.app.animation.BasePose.buildGaze. The pose only *declares*
      * the target; the head is written by the engine-owned resolver alone (single source of truth),
-     * which reproduces the identical geometry buildHead authored (proven byte-identical in
-     * HeadTargetBaselineTest). Validation poses are diagnostic instruments and are NOT retuned, so
-     * the migration swaps the node-write for the intent record only — the resulting skeleton is
-     * unchanged.
+     * which reproduces the identical geometry the earlier direction-based gaze authored (proven
+     * byte-identical in HeadTargetBaselineTest). Validation poses are diagnostic instruments and are
+     * NOT retuned, so the migration swaps the node-write for the intent record only — the resulting
+     * skeleton is unchanged.
      *
      * @param gazeDir the authored world-space gaze direction; a synthetic HeadTarget is recorded a
      *   fixed distance along it from the neck's current world position for the Finalizer to resolve.

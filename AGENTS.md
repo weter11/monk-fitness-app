@@ -122,10 +122,24 @@
 
 ## Engine stabilization (RFC_ENGINE_STABILIZATION)
 
+> [!IMPORTANT]
+> **STATUS: COMPLETE — all stabilization + legacy-engine cleanup done.** M0–M8 of
+> Architecture v2 are complete, and Phases A–G of `docs/HISTORICAL/RFC_ENGINE_CLEANUP_PLAN.md` have removed
+> every legacy flag/branch (the `EngineFlags` object, the `finalize` compatibility bridge,
+> `preConvertPoles`, `buildHead`, the five deprecated members, the `ExerciseReview` pipeline).
+> The **only** surviving engine flag is `IK_STAGE_ACTIVE` (default `false`) in `IkStage.kt`,
+> kept intentionally as a future *additive* limb-solver path. The full suite is green
+> (**282/0** — see `docs/TEST_BASELINE.md`). The narrative below was written mid-cleanup and
+> still cites the removed flags/`EngineFlags`; read it as a changelog of what was done, not
+> the current code state. The current-state source of truth is `docs/ARCHITECTURE_V2.md` +
+> `docs/HISTORICAL/ARCHITECTURE_V2_ROADMAP.md` + `docs/TEST_BASELINE.md`.
+
 - Roadmap: S0 baseline → S1 IK+ConstraintSolver → S2 Validator+stale-constants → S3
   pose authoring. Architecture v2 suspended after M1 until S0–S3 done.
 - **STATUS (current):** stabilization + legacy engine remediation **complete** — full suite
-  **251/0**. S0–S3 done; engine defects R1–R4 (`ENGINE_DEFECT_REMEDIATION_PLAN.md`) all fixed;
+  **282/0** (the AGENTS.md body below cites intermittent 251/282/283 counts recorded during
+  the migrations; the verified final baseline is **282/0**). S0–S3 done; engine defects R1–R4
+  (`ENGINE_DEFECT_REMEDIATION_PLAN.md`) all fixed;
   Architecture-v2 **Phase 7 complete** (headTarget resolver is the sole gaze writer, legacy
   `buildHead` branch + `HEAD_TARGET_ENABLED` flag removed), **M0 complete** (`SkeletonPipeline`
   scaffold), **M2 complete** (`PIPELINE_ACTIVE=true`; `SkeletonPipeline.produceFrame` drives the
@@ -159,24 +173,25 @@
      is byte-identical to the pre-B2 baseline. Gated by `EngineFlags.FINALIZER_CONSUMES_INTENT` (default
      **true**); a no-op for contact poses so the ConstraintSolver's settled contacts are never disturbed.
       `FinalizerIntentConsumersTest` proves consumer-on == off (maxDev 0.0); `Section11CarriersTest`
-      flipped to assert `spineIntent`/`jointIntents` populated. **M5 is UNBLOCKED** — the RFC's "automatic
-      once M2 lands" premise was false, but the deferred intent-only migration is no longer required to
-      make the carriers live: B2 (Finalizer) completed the spine/joint carrier dead→live flip, and
-      `extremityOverrides` was already live from W1. All of §1.1 (`contacts`/`contactPrecedence`/
-      `postureIntent`/`limbTargets`/`spineIntent`/`jointIntents`/`extremityOverrides`) is now written and
-      read by the engine. **B3 (Branch B Posture universality) DONE** — every concrete production pose now
-      declares a `postureIntent`; the `ConstraintSolver` (and `SkeletonPipeline.runStages`) runs the
-      posture seed for **any** pose naming a non-`CUSTOM` intent even with no contacts, and
-      `seedRootFromPostureIntent` pins the seed exactly for contact-less poses (the relaxation loop is a
-      no-op for them, so output is byte-identical to the authored height). The five static STANDING
-      shapes (ArmCircles / FacePull / HipCars / ScapularRetraction / WallSlides) declare `STANDING` and no
-      longer hand-write `pelvis.y` — the solver pins `standH` (`shinLength + thighLength + 25f`). All other
-      production poses declare `CUSTOM` (shape-driven roots; the solver leaves the authored root
-      untouched, the reversible B3 fallback). Contact poses keep the M3 damped-ease seed, so the seated/
-      hanging regression contract (`ConstraintSolverPhase2Test`) is preserved. `PostureUniversalityTest`
-       proves the B3 contract (STANDING poses solver-owned byte-identically; flag-off reverts to authored
-       root). **Next safely-landable:** M6 (Validator stamp-only) or M7 (headTarget) or M8 cleanup
-       (B4/B4a and Phase D are done).
+       flipped to assert `spineIntent`/`jointIntents` populated. **M5 is UNBLOCKED** — the RFC's "automatic
+       once M2 lands" premise was false, but the deferred intent-only migration is no longer required to
+       make the carriers live: B2 (Finalizer) completed the spine/joint carrier dead→live flip, and
+       `extremityOverrides` was already live from W1. All of §1.1 (`contacts`/`contactPrecedence`/
+       `postureIntent`/`limbTargets`/`spineIntent`/`jointIntents`/`extremityOverrides`) is now written and
+       read by the engine. **B3 (Branch B Posture universality) DONE** — every concrete production pose now
+       declares a `postureIntent`; the `ConstraintSolver` (and `SkeletonPipeline.runStages`) runs the
+       posture seed for **any** pose naming a non-`CUSTOM` intent even with no contacts, and
+       `seedRootFromPostureIntent` pins the seed exactly for contact-less poses (the relaxation loop is a
+       no-op for them, so output is byte-identical to the authored height). The five static STANDING
+       shapes (ArmCircles / FacePull / HipCars / ScapularRetraction / WallSlides) declare `STANDING` and no
+       longer hand-write `pelvis.y` — the solver pins `standH` (`shinLength + thighLength + 25f`). All other
+       production poses declare `CUSTOM` (shape-driven roots; the solver leaves the authored root
+       untouched, the reversible B3 fallback). Contact poses keep the M3 damped-ease seed, so the seated/
+       hanging regression contract (`ConstraintSolverPhase2Test`) is preserved. `PostureUniversalityTest`
+        proves the B3 contract (STANDING poses solver-owned byte-identically; flag-off reverts to authored
+        root). **All of M6 (Validator stamp-only), M7 (headTarget), and M8 (cleanup) are now COMPLETE** —
+        see the status banner at the top of this section and `docs/HISTORICAL/ARCHITECTURE_V2_ROADMAP.md` /
+        `docs/HISTORICAL/RFC_GAP_CLOSURE.md` (updated to reflect the done state).
 - **B4 (Branch B Pose migration) IN PROGRESS** — step 1 (PR #155) + step 2 (PR #156) landed, both
   mixed-mode byte-identical (full suite **282/0** throughout):
   - Step 1: dead legacy helpers deleted (`buildRigidSegment`, `buildLumbarFlexion`, `buildWristArticulation`,
@@ -281,17 +296,22 @@
     rotates children in place but never translates CHEST/HEAD → `chestX`/`headX` never moved.
     Re-authored the arch to originate at the `lumbar` (thoracolumbar) segment so the chest tips
     up and BACK (-X) carrying neck/head/shoulders. `ThoracicAndHamstringStretchPosesTest` green.
-- **Remaining 9 failures (truthful, see `docs/TEST_BASELINE.md`):** all S1-residual IK/reach
-  (`StandardPushUpPoseTest`, `KettlebellSwingPoseTest`, `BurpeePoseTest`, `KneePushUpPoseTest`,
-  `SquatPosesTest`, `LungePosesTest` ×3, `VerticalPullPosesTest`). `BONE_LENGTH` frame-0 on
-  arm/hand chain + `IK_TARGET_UNREACHABLE`; deferred to a follow-up S1-residual IK pass.
-- `docs/TEST_BASELINE.md` rewritten to the truthful **236 / 9** baseline.
+- **Remaining 9 failures — RESOLVED.** These were S1-residual IK/reach (`StandardPushUpPoseTest`,
+  `KettlebellSwingPoseTest`, `BurpeePoseTest`, `KneePushUpPoseTest`, `SquatPosesTest`,
+  `LungePosesTest` ×3, `VerticalPullPosesTest`) under the historical "236 / 9" baseline. They are
+  now **all green** (engine defects R1–R4 cleared under `docs/ENGINE_DEFECT_REMEDIATION_PLAN.md`);
+  the verified current baseline is **282 / 0** (see `docs/TEST_BASELINE.md`).
+- `docs/TEST_BASELINE.md` rewritten to the truthful **282 / 0** baseline.
 
 ## Git
 
 - Branch: `session/agent_b795bd6c-5a92-47c7-9d9c-5693da550c5a`.
 - Chain: `8e099ff` origin/main → `3aa8aff` (.kilocodeignore + .gitignore) →
   `04b7be2` (refined .kilocodeignore) → `bcbee92` (Issue E, pushed).
+- **Note:** the chain above is historical (stops at Issue E). Subsequent work (Architecture-v2
+  M0–M8 + legacy-engine cleanup Phases A–G) continued well past it; the verified head is
+  `ebab2d6` (merge of PR #172, Phase G review-removal). Trust `git log` / `git rev-parse HEAD`
+  over this static chain.
 - `.kilocodeignore` = precise context-boundary ignore (committed).
 
 ## Config note

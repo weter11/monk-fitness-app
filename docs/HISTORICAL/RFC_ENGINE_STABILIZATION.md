@@ -1,6 +1,16 @@
+> [!IMPORTANT]
+> **STATUS: SUPERSEDED (historical).** This RFC described the pre-cleanup state
+> ("236 executed / 31 failed", "Architecture v2 suspended after M1"). All of its
+> phases (S0–S3) and the engine defects R1–R4 it tracked are **done**, and the
+> legacy-engine cleanup (Phases A–G of `RFC_ENGINE_CLEANUP_PLAN.md`) has since
+> removed every flag/branch this document treats as live. The full suite is green
+> (see `docs/TEST_BASELINE.md`, **282/0**). Keep for archaeology only; do **not**
+> use it as a current-state reference. The live spec is `docs/ARCHITECTURE_V2.md`
+> + `docs/ARCHITECTURE_V2_ROADMAP.md`.
+
 # RFC: Engine Stabilization Plan (pause Architecture v2 after M1)
 
-- **Status:** Proposed
+- **Status:** Proposed → **SUPERSEDED** (all phases completed; see banner above)
 - **Supersedes:** "continue Architecture v2 roadmap immediately after M1"
 - **Author:** Engine Stabilization working group
 - **Date:** 2026-07-17

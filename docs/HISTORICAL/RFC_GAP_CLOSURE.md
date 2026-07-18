@@ -1,6 +1,17 @@
 # RFC — Architecture v2 Gap Closure: Validator Migration · headTarget · bakeIkLimb Removal · Cleanup
 
-**Status:** Draft specification (no code).
+> [!IMPORTANT]
+> **STATUS: SUPERSEDED (historical).** Every milestone this RFC tracks (M0–M8) has been executed,
+> and the legacy-engine cleanup (Phases A–G of `docs/HISTORICAL/RFC_ENGINE_CLEANUP_PLAN.md`) has since deleted the
+> `EngineFlags` object and all the `=false` rollback branches / flags (`PIPELINE_ACTIVE`,
+> `SOLVER_OWNS_POSTURE`, `FINALIZER_OWNS_CONVERSION`, `FINALIZER_CONSUMES_INTENT`,
+> `VALIDATOR_STAMP_ONLY`, `HEAD_TARGET_ENABLED`, `IK_WORLD_ONLY`) this document treats as live gates.
+> The M-status markers in §1 were updated to `[DONE]`. The per-gap flag table and the dependency
+> graph below are retained as a historical record of the planned rollout, not a current state. The
+> live spec is `docs/ARCHITECTURE_V2.md` + `docs/ARCHITECTURE_V2_ROADMAP.md`; the live test baseline
+> is `docs/TEST_BASELINE.md` (**282/0**).
+
+**Status:** Draft specification (no code). → **SUPERSEDED / all milestones done**; see banner above.
 **Author:** Principal Engine Architect.
 **Addresses:** the remaining Architecture v2 gaps from `CAPABILITY_GAP_REPORT.md`:
 - **Gap 5** — deprecated frame-relative `bakeIkLimb` overload removal (spec F4).
@@ -83,14 +94,14 @@ Gap 7 (headTarget) attaches to [IntentLayer] (carrier) + [Finalizer] (resolver).
 
 ```
 M0  scaffold pipeline ............. [Gap 1] PIPELINE_ACTIVE=false      (no behavior change)  [DONE]
-M1  IK extraction ................. [Gap 5] IK_WORLD_ONLY=true          (delete frame-relative overload)
+M1  IK extraction ................. [Gap 5] IK_WORLD_ONLY=true          (delete frame-relative overload)  [DONE]
 M2  pipeline owns stages .......... [Gap 1] PIPELINE_ACTIVE=true        (Finalizer stops calling Solver; renderers re-pointed)  [DONE]
 M3  Solver authority .............. [Gap 3] SOLVER_OWNS_POSTURE=true   (posture seed + F7 precedence + F9 smoothing; no-op for contact-less production poses)  [DONE]
 M4  Finalizer authority ........... [Gap 4] FINALIZER_OWNS_CONVERSION=true (preConvertPoles + F1/B5 chest no-move guard; no-op for contact-less production)  [DONE]
-M5  §1.1 carriers live ............ [Gap 2] BLOCKED — see M5 status (RFC premise wrong; needs deferred IntentBuilder rewrite)
-M6  Validator stamp-only .......... [Gap 6] VALIDATOR_STAMP_ONLY=true  (remove geometry inference)
-M7  headTarget .................... [Gap 7] (carrier + Finalizer resolver; own flag HEAD_TARGET_ENABLED)
-M8  deprecation purge + cleanup ... [all]  remove @Deprecated, legacy bridges, flags→const true
+M5  §1.1 carriers live ............ [Gap 2] DONE — carriers are live (FINALIZER_CONSUMES_INTENT, Branch B B2); the deferred IntentBuilder intent-only authoring is a non-blocking follow-up.
+M6  Validator stamp-only .......... [Gap 6] DONE — validator reads §1.2 stamps / §1.1 intents; geometry inference removed (Branch B B5). No `VALIDATOR_STAMP_ONLY` flag remains (the `EngineFlags` object was deleted in the cleanup).
+M7  headTarget .................... [Gap 7] DONE — `resolveHeadTarget` is the sole head/neck writer; the `HEAD_TARGET_ENABLED` flag and legacy `buildHead` branch were removed in the cleanup.
+M8  deprecation purge + cleanup ... [all] DONE — `EngineFlags` object deleted, all `=false` rollback branches collapsed, dead/deprecated members and `preConvertPoles` removed, `ExerciseReview` pipeline removed (Phases A–G of `docs/HISTORICAL/RFC_ENGINE_CLEANUP_PLAN.md`).
 ```
 > **M2 shipped scope (2026-07-17):** the flip + stage-chain ownership + renderer re-pointing cut
 > described in §M2 STATUS. The RFC prose "Pose becomes intent-only / `BasePose`→`IntentBuilder`" is a
@@ -112,8 +123,8 @@ M8  deprecation purge + cleanup ... [all]  remove @Deprecated, legacy bridges, f
 > `ChestFrameNoMoveTest` was re-pointed through the pipeline so the Solver actually runs and the guard
 > sees solver-settled contacts (its `@After` also stopped hardcoding the flag back to `false`, which
 > had been leaking into other test classes).
-**Per-gap → phase map:**
-| Gap | Phase | Flag flipped | Prereq phases |
+**Per-gap → phase map (HISTORICAL — all phases done; flags no longer exist):**
+| Gap | Phase | Flag flipped (removed in cleanup) | Prereq phases |
 |---|---|---|---|
 | 5 | M1 | `IK_WORLD_ONLY` | M0 |
 | 1+2 | M2 | `PIPELINE_ACTIVE` | M0, M1 |
@@ -125,12 +136,13 @@ M8  deprecation purge + cleanup ... [all]  remove @Deprecated, legacy bridges, f
 
 ---
 
-## 2b. Milestone dependency graph (per-milestone — Issue 3)
+## 2b. Milestone dependency graph (per-milestone — Issue 3) — HISTORICAL
 
 The audit correctly identified that M6 (Validator stamp-only) is **NOT independent**: the Validator
 can only consume stamps once the engine stages *actually produce* them. Under `PIPELINE_ACTIVE=false`
-(M0) the legacy path does not guarantee stamp production, so M6 is **BLOCKED** until M2. Each
-milestone below lists Required / Optional / Independent / Blocked predecessors.
+(M0) the legacy path does not guarantee stamp production, so M6 was **BLOCKED** until M2. All of
+M0–M8 have since been executed and the cleanup deleted the flags; this graph is kept as a record of
+the planned rollout. Each milestone below lists Required / Optional / Independent / Blocked predecessors.
 
 ```
 M0  scaffold pipeline
@@ -157,22 +169,22 @@ M5  §1.1 carriers live (automatic after M2)         [Gap 2]
     Required: M2     Optional: (none)   Independent: M7            Blocked by: (none)
         │
         ▼
-M6  Validator stamp-only (VALIDATOR_STAMP_ONLY)     [Gap 6 / Phase 8]
+M6  Validator stamp-only (VALIDATOR_STAMP_ONLY)     [Gap 6 / Phase 8]  — DONE
     Required: M2     Optional: M3,M4   Independent: (none)
-    Blocked by: M0 with PIPELINE_ACTIVE=false (legacy path does not guarantee stamp production)
+    Was BLOCKED by: M0 with PIPELINE_ACTIVE=false (legacy path does not guarantee stamp production)
         │
         ▼
-M7  headTarget gaze-as-target                       [Gap 7]
+M7  headTarget gaze-as-target                       [Gap 7]  — DONE
     Required: M2     Optional: (none)   Independent: (none)        Blocked by: (none)
         │
         ▼
-M8  deprecation purge + final cleanup
+M8  deprecation purge + final cleanup  — DONE
     Required: M1,M2,M3,M4,M5,M6,M7   Optional: (none)   Independent: (none)   Blocked by: (none)
 ```
 
 **Rollout order (linear, no interleaving):** M0 → M1 → M2 → M3 → M4 → M5 → M6 → M7 → M8. Phases marked
 Independent of each other MAY ship as parallel PRs *after* their Required predecessor merges, but MUST
-NOT ship before it. M6 is explicitly **BLOCKED** until M2 (engine produces stamps).
+NOT ship before it. M6 was explicitly **BLOCKED** until M2 (engine produces stamps) — now resolved.
 
 ---
 

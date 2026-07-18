@@ -91,10 +91,9 @@ never duplicated inside individual poses.
 The shared base class for all production poses. It consolidates:
 
 - reusable scratch buffers (allocation-free),
-- body-construction helpers (`buildTorso`, `buildShoulders`, `buildPelvis`,
-  `buildHead`, `buildRigidSegment`),
-- IK wrappers (`solveArmIK`, `solveLegIK`, `bakeIkLimb`,
-  `solveNearStraightLeg`),
+- body-construction helpers (`buildTorso`, `buildShoulders`, `buildPelvis`),
+- the IK helper (`bakeIkLimb`), which bakes a solved world-space limb chain into
+  the local offsets the FK hierarchy expects,
 - motion-driver and support-contact helpers.
 
 `BasePose` is where cross-exercise commonality lives. Family base classes
@@ -118,9 +117,9 @@ Runs after a pose is built and before projection. It:
   pitch clamping) and hands (wrist/palm/knuckles/fingertips),
 - guarantees the output is a complete, FK-consistent skeleton.
 
-It supports both the modern rotation-driven path (a pose supplies a node
-hierarchy) and a legacy position-driven compatibility bridge. New poses target
-the rotation-driven path.
+It requires a populated node hierarchy (every production pose supplies one via
+`SkeletonFactory` or `roots = nodes.roots`); `finalize` asserts non-empty `roots`,
+so a skeleton is always built through the rotation-driven path.
 
 ### `ExerciseValidator`
 The read-only correctness authority. Given a finished pose (and optionally
@@ -155,14 +154,14 @@ symmetry, hand–shoulder alignment, and IK target reachability. It produces a
 
 Local `JointRotation`s use a single, consistent mapping of the three anatomical
 planes to the local axes. This is the source of truth for every authoring
-helper (`buildChestOrientation`, `buildHipRotation`, the lumbar helpers) and for
+helper (`buildChestTwist`, `buildSpineCurve`, `buildHipFlexion`, `buildHipRotation`) and for
 `ConstraintSolver`'s balance tilt:
 
 | Local axis | Anatomical rotation                     | Examples |
 | ---------- | --------------------------------------- | -------- |
-| **Z**      | sagittal **flexion / extension** (pitch, "lean") | `buildChestOrientation(lean=…)` `Rz`; `buildHipFlexion` (`hip.localRotation` about Z); pelvis lean |
-| **Y**      | transverse **twist / rotation** (vertical spine axis) | `buildChestTwist` / `buildChestOrientation(twist=…)` `Ry`; `buildHipAbduction` (hip about Y, side-mirrored) |
-| **X**      | frontal **side-bend / roll** (lateral) | `buildChestSideBend` / `buildChestOrientation(sideBend=…)` `Rx`; femoral internal/external rotation (`buildHipRotation` about X); `ConstraintSolver` Trendelenburg roll |
+| **Z**      | sagittal **flexion / extension** (pitch, "lean") | `buildChestTwist` trunk lean `Rz`; `buildHipFlexion` (`hip.localRotation` about Z); pelvis lean |
+| **Y**      | transverse **twist / rotation** (vertical spine axis) | `buildChestTwist` twist `Ry`; `buildSpineCurve` (thoracolumbar twist about Y) |
+| **X**      | frontal **side-bend / roll** (lateral) | `buildSpineCurve` side-bend `Rx`; femoral internal/external rotation (`buildHipRotation` about X); `ConstraintSolver` Trendelenburg roll |
 
 Composition order for the composed helpers is `R = Rz · Ry · Rx`
 (flexion, then twist, then side-bend). Note the plane→axis mapping is **not**

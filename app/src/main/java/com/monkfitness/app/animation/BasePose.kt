@@ -33,10 +33,10 @@ abstract class BasePose : PoseBuilder {
      * Phase 7 (Gap 7 / F8 / W17) — declares the gaze as a world-space [HeadTarget] intent that
      * the Finalizer ([SkeletonPoseFinalizer.resolveHeadTarget]) resolves into the neck/head local
      * offsets. The head is written by the Finalizer resolver alone — the pose only *declares* the
-     * target. This flag-on path was verified byte-identical to the legacy direction path
+     * target. This path was verified byte-identical to the legacy direction path
      * (`HeadTargetBaselineTest`, maxDeviation ~6e-5 across every gaze pose family), so the legacy
-     * `buildHead` fallback that used to run when `HEAD_TARGET_ENABLED` was off has been removed
-     * (Phase 7 complete). `buildHead` remains only as the shared math reused by the resolver.
+     * `buildHead` fallback that previously ran when the `HEAD_TARGET_ENABLED` flag was off has been
+     * removed (Phase 7 complete). The head-orientation math is now inlined in the resolver.
      *
      * @param gazeDir the authored world-space gaze direction; a synthetic [HeadTarget] is recorded
      *   a fixed distance along it from the neck's current world position for the Finalizer to resolve.

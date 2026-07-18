@@ -1,14 +1,24 @@
+> [!IMPORTANT]
+> **STATUS: COMPLETE (historical plan).** Phases A–G have all been executed (see the
+> Execution Log below; actual HEAD `ebab2d6`, merge of PR #171 Phase F + PR #172 Phase G).
+> The `EngineFlags` object is gone, the `finalize` compatibility bridge and
+> `preConvertPoles` are removed, `buildHead` and the five deprecated members are deleted,
+> and the `ExerciseReview` pipeline (L8) is removed. The only surviving engine flag is
+> `IK_STAGE_ACTIVE` (default `false`) in `IkStage.kt`. The plan body (§0–§3) is retained as
+> a record of what was done; treat it as closed. Superseded-by note: the audit it executes
+> (`RFC_LEGACY_ENGINE_RETIREMENT.md`) is itself now SUPERSEDED.
+
 # RFC — Engine Cleanup Plan (Legacy Engine Removal)
 
-**Status:** Implementation plan. No code is modified by this document.
-**Depends on:** `RFC_LEGACY_ENGINE_RETIREMENT.md` (the audit that produced the inventory
+- **Status:** Implementation plan. No code is modified by this document. → **EXECUTED (all phases A–G done)**; see banner above.
+- **Depends on:** `RFC_LEGACY_ENGINE_RETIREMENT.md` (the audit that produced the inventory
 this plan executes). All subsystem IDs (`L1`–`L8`) and file:line references below match
 that audit.
-**Baseline:** Branch `session/agent_b795bd6c-5a92-47c7-9d9c-5693da550c5a`, HEAD `038bfae`.
-**Goal:** Reduce the animation engine to *only* the Architecture-v2 runtime
+- **Baseline (HISTORICAL):** Branch `session/agent_b795bd6c-5a92-47c7-9d9c-5693da550c5a`, HEAD `038bfae` — **obsolete**; actual HEAD is `ebab2d6`.
+- **Goal:** Reduce the animation engine to *only* the Architecture-v2 runtime
 (`SkeletonPipeline` → `ConstraintSolver.solve` → `SkeletonPoseFinalizer.finalize` → FK),
 with zero retained legacy branches, dead deprecated members, flag-gated rollback paths, or
-tests that pin them.
+tests that pin them. **Achieved.**
 
 ---
 

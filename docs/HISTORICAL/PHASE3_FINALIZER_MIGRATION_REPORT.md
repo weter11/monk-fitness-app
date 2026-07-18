@@ -1,11 +1,17 @@
 # Phase 3 — Finalizer owns exclusive conversion + read-only chest-frame guarantee
 
-**Status:** COMPLETE (gated by `EngineFlags.FINALIZER_OWNS_CONVERSION`, default `false`).
-**Resolves findings:** F1 (Critical), F4. **Depends on:** Phase 1 (IK world-only), Phase 2 (Solver settled root).
+**Status:** COMPLETE (was gated by `EngineFlags.FINALIZER_OWNS_CONVERSION`; the flag and
+`EngineFlags` object were later deleted in the cleanup, so the finalizer authority is now
+unconditional). **Resolves findings:** F1 (Critical), F4. **Depends on:** Phase 1 (IK world-only), Phase 2 (Solver settled root).
+
+> [!IMPORTANT]
+> **STATUS: SUPERSEDED (historical).** This report was written mid-cleanup, when the behaviour was
+> still flag-gated. The flag is gone; the finalizer is now the unconditional sole writer of local
+> transforms. Retained for archaeology.
 
 This report documents the Phase 3 change to `SkeletonPoseFinalizer` per
-`ARCHITECTURE_V2_ROADMAP.md` and `IMPLEMENTATION_BRIDGE.md` (§B5). Behavior is unchanged while the
-flag is off; the legacy finalize path is byte-identical.
+`ARCHITECTURE_V2_ROADMAP.md` and `IMPLEMENTATION_BRIDGE.md` (§B5). Behavior was unchanged while the
+flag was off; the legacy finalize path was byte-identical.
 
 ## 1. Goal
 
@@ -15,14 +21,15 @@ finalization.
 
 ## 2. Changes
 
-### 2.1 `EngineFlags.FINALIZER_OWNS_CONVERSION` (new flag, `EngineFlags.kt`)
-Master switch mirroring `SOLVER_OWNS_POSTURE`. Default `false` (legacy path preserved). Snapshot in
-`EngineFlags.snapshot()`.
+### 2.1 `FINALIZER_OWWNS_CONVERSION` flag (removed in cleanup; was `EngineFlags.kt`)
+Master switch that mirrored `SOLVER_OWNS_POSTURE`. Default `false` (legacy path preserved) at the time
+this was written; later collapsed to `true` and the `EngineFlags` object deleted. Snapshot previously
+in `EngineFlags.snapshot()`.
 
-### 2.2 `preConvertPoles(pose)` (new method, `SkeletonPoseFinalizer.kt`)
+### 2.2 `preConvertPoles(pose)` (removed in cleanup; was `SkeletonPoseFinalizer.kt`)
 The single local-transform conversion entry point, called at the top of `finalize()`. When the flag
-is off it is a documented no-op. When on, it is where any remaining world↔local frame conversion is
-concentrated — the limb `toLocalDirection` bakes already run in the solver's `bakeIkLimb`; extremity
+was off it was a documented no-op. When on, it was where any remaining world↔local frame conversion was
+concentrated — the limb `toLocalDirection` bakes already ran in the solver's `bakeIkLimb`; extremity
 derivation and the chest frame run later in `finalize()`. The finalizer thus owns 100% of node/local
 mutation after this point.
 
