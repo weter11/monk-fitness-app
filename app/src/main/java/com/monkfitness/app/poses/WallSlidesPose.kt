@@ -1,9 +1,7 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.animation.SkeletonMath.solveIK
 import com.monkfitness.app.animation.SkeletonMath.lerp
-import com.monkfitness.app.animation.SkeletonMath.rotAround
 import kotlin.math.*
 
 class WallSlidesPose : PoseBuilder {
@@ -12,7 +10,19 @@ class WallSlidesPose : PoseBuilder {
         durationSeconds = 3.0f,
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.EASE_IN_OUT,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = EnvironmentDefinition(
+            ground = GroundDefinition(visible = true, level = 0f),
+            props = listOf(
+                // Wall the athlete leans against and slides the forearms up (cf. LatStretchPose).
+                // Centered just behind the -X lean so its +X face meets the back/forearms.
+                WallProp(
+                    center = Vector3(-15f, 90f, 0f),
+                    width = 8f,
+                    height = 180f,
+                    depth = 160f
+                )
+            )
+        )
     )
 
     private var roots: List<SkeletonNode>? = null
@@ -77,7 +87,6 @@ class WallSlidesPose : PoseBuilder {
         val standH = def.shinLength + def.thighLength + 25f
         pelvis!!.localPosition = Vector3(-5f, 0f, 0f)
         declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), 0f)
-        SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.PELVIS, JointRotation(Vector3(0f, 0f, 1f), 0f))
 
         chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)
         neck!!.localPosition = Vector3(0f, def.neckLength, 0f)
@@ -95,14 +104,8 @@ class WallSlidesPose : PoseBuilder {
         val targetAnkleF = Vector3(-5f, def.foot.ankleHeight, -def.hipWidth * 1.2f)
         val targetAnkleB = Vector3(-5f, def.foot.ankleHeight, def.hipWidth * 1.2f)
 
-        val legFIK = solveIK(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, legFBuffer)
-        val legBIK = solveIK(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, legBBuffer)
-
-        kneeF!!.localPosition.set(legFIK.joint).subtract(hipF!!.worldPosition)
-        ankleF!!.localPosition.set(legFIK.end).subtract(legFIK.joint)
-
-        kneeB!!.localPosition.set(legBIK.joint).subtract(hipB!!.worldPosition)
-        ankleB!!.localPosition.set(legBIK.end).subtract(legBIK.joint)
+        val legFIK = bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
+        val legBIK = bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
@@ -117,14 +120,8 @@ class WallSlidesPose : PoseBuilder {
         val targetHandP = Vector3(handX, handY, handZ_P)
 
         // Elbow pole vector points backward and outward to keep contact with the wall plane
-        val armAIK = solveIK(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(-1f, 0f, -1f), def.armIKConstraint, armABuffer)
-        val armPIK = solveIK(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(-1f, 0f, 1f), def.armIKConstraint, armPBuffer)
-
-        elbowA!!.localPosition.set(armAIK.joint).subtract(shoulderA!!.worldPosition)
-        handA!!.localPosition.set(armAIK.end).subtract(armAIK.joint)
-
-        elbowP!!.localPosition.set(armPIK.joint).subtract(shoulderP!!.worldPosition)
-        handP!!.localPosition.set(armPIK.end).subtract(armPIK.joint)
+        val armAIK = bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(-1f, 0f, -1f), def.armIKConstraint, JointRotation(), elbowA!!, handA!!, armABuffer, jointsBuffer)
+        val armPIK = bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(-1f, 0f, 1f), def.armIKConstraint, JointRotation(), elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
