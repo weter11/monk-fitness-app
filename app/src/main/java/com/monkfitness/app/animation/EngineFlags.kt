@@ -13,6 +13,16 @@ package com.monkfitness.app.animation
  *
  */
 object EngineFlags {
+    /**
+     * B1 (Branch B, default **false**) — the pipeline-owned limb stage ([IkStage]) consumes the
+     * §1.1 `limbTargets` carrier (each authoring helper forwards its pole vector / contact
+     * end joint + world target into the carrier) and re-derives the limb local positions on the
+     * engine-owned node tree, registering contacts for any matching [ContactSpec]. When **false**
+     * (the default) `bakeIkLimb` remains the sole limb solver, so every pose is byte-identical to
+     * the pre-B1 baseline — B1 is purely additive and reversible. Flip this on (after the
+     * `IkStageTest` byte-identity check is green) to make the stage the real solver.
+     */
+    var IK_STAGE_ACTIVE: Boolean = false
     // Phase B: PIPELINE_ACTIVE collapsed to its true branch and removed.
 
     // Phase B: SOLVER_OWNS_POSTURE collapsed to its true branch and removed.
