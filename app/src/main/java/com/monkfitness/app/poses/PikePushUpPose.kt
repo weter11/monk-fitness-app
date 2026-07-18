@@ -76,7 +76,7 @@ class PikePushUpPose : BasePushUpPose() {
         hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
 
         pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
-        pelvis!!.localRotation.set(axisZ, torsoGlobalPitch - legPitch)
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, torsoGlobalPitch - legPitch)
         declareJointIntent(Joint.PELVIS, JointRotation(axisZ, torsoGlobalPitch - legPitch))
         chest!!.localPosition.set(-def.torsoLength, 0f, 0f)
 

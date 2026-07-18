@@ -147,7 +147,7 @@ Legend: **R** = read, **W** = write. "Intent" = `SkeletonPose` §1.1; "State" = 
 **Role:** observer. Reads stamped state; never influences geometry.
 
 **Inputs (READ):**
-- `SkeletonPose` State: `maxIkClampAmount`, `straightIntentDropped`, `rootTranslationDelta`, `rootRotationDelta`, `boneLengthsVerified`.
+- `SkeletonPose` State: `maxIkClampAmount`, `straightIntentDropped`, `rootTranslationDelta`, `rootRotationDelta`, `boneLengthsVerified`, `hipRomStamps`, `bilateralSymmetryDelta`, `bilateralOppositeBend`.
 - `SkeletonPose` Intent: `jointIntents` (ROM read).
 
 **Outputs:**
@@ -173,5 +173,7 @@ Legend: **R** = read, **W** = write. "Intent" = `SkeletonPose` §1.1; "State" = 
 - `straightIntentDropped` — **W: IK (primary), Solver (secondary). R: Validation.**
 - `rootTranslationDelta`, `rootRotationDelta` — **W: Solver. R: Validation.**
 - `boneLengthsVerified` — **W: IK. R: Validation.**
+- `hipRomStamps` — **W: Finalizer (computeHipRomStamp). R: Validation.**
+- `bilateralSymmetryDelta`, `bilateralOppositeBend` — **W: Finalizer. R: Validation.**
 
 **Ownership rule:** Pose writes Intent; Engine writes State; Validation reads State. No component edits another's section. This single carrier resolves F2/F3/F10.

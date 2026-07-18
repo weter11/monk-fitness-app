@@ -97,7 +97,7 @@ class ValidatorRomClusterTest {
         pose.setJoint(Joint.KNEE_F, Vector3(0f, 210f + def.thighLength, -def.hipWidth))
 
         val report = ExerciseValidator(ValidatorConfig(checkHipRom = true))
-            .validate(pose, def, env, camera, 1000f, 1000f)
+            .validate(populateHipRom(pose), def, env, camera, 1000f, 1000f)
         val rule = report.results.first { it.ruleId == "HIP_ROM_LIMIT" }
         assertFalse("a femur through the torso must exceed hip ROM", rule.isValid)
         assertTrue(rule.issues.any { it.joint == Joint.HIP_F })
@@ -107,7 +107,7 @@ class ValidatorRomClusterTest {
     fun hipRomPassedForNormalPose() {
         val pose = basePose()
         val report = ExerciseValidator(ValidatorConfig(checkHipRom = true))
-            .validate(pose, def, env, camera, 1000f, 1000f)
+            .validate(populateHipRom(pose), def, env, camera, 1000f, 1000f)
         val rule = report.results.first { it.ruleId == "HIP_ROM_LIMIT" }
         assertTrue(rule.isValid)
     }
@@ -134,8 +134,35 @@ class ValidatorRomClusterTest {
 
     private fun hipReport(pose: SkeletonPose) =
         ExerciseValidator(ValidatorConfig(checkHipRom = true))
-            .validate(pose, def, env, camera, 1000f, 1000f)
+            .validate(populateHipRom(pose), def, env, camera, 1000f, 1000f)
             .results.first { it.ruleId == "HIP_ROM_LIMIT" }
+
+    /**
+     * B5 — drives the engine-produced hip-ROM §1.2 stamp (SkeletonMath.computeHipRomStamp,
+     * the exact femur-direction math the Finalizer runs) so the validator reads it instead of
+     * re-deriving geometry. This is the same stamp the production pipeline writes; feeding it
+     * here keeps the test honest about the engine/validator contract.
+     */
+    private fun populateHipRom(pose: SkeletonPose): SkeletonPose {
+        val empty = HipRomStamp(0f, 0f, 0f, 0f)
+        pose.hipRomStamps[Joint.HIP_F] = SkeletonMath.computeHipRomStamp(
+            pose.getJointRotation(Joint.PELVIS),
+            pose.getJoint(Joint.HIP_F),
+            pose.getJoint(Joint.KNEE_F),
+            -1f,
+            pose.getJointRotation(Joint.HIP_F),
+            empty
+        )
+        pose.hipRomStamps[Joint.HIP_B] = SkeletonMath.computeHipRomStamp(
+            pose.getJointRotation(Joint.PELVIS),
+            pose.getJoint(Joint.HIP_B),
+            pose.getJoint(Joint.KNEE_B),
+            1f,
+            pose.getJointRotation(Joint.HIP_B),
+            empty
+        )
+        return pose
+    }
 
     @Test
     fun hipRomCleanForModeratelyFlexedAndAbductedHip() {

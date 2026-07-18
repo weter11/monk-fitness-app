@@ -40,7 +40,7 @@ class CouchStretchPose : BaseHipFlexorPose() {
         leanAngle = SkeletonMath.lerp(0.2f, -0.05f, context.progress)
 
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, -leanAngle)
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, -leanAngle)
         declareJointIntent(Joint.PELVIS, JointRotation(axisZ, -leanAngle))
 
         setUpperBodyLocal(def)

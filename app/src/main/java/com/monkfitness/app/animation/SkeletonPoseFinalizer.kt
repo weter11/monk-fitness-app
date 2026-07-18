@@ -603,8 +603,68 @@ class SkeletonPoseFinalizer(
             outputPose.roots = roots!!
         }
 
+        // B5 — populate the §1.2 STATE stamps the validator consumes (no geometry inference
+        // left in the validator). Computed from the final solved `outputPose`, so the stamps
+        // reflect exactly the geometry the validator previously re-derived.
+        applyValidationStamps(outputPose)
+
         return outputPose
     }
+
+    // B5 — §1.2 stamp production (engine-owned). Reuses the identical femur-direction math
+    // the validator's old `validateHipRom` used, so the rule's verdicts are byte-identical.
+    private val hipRomStampScratch = HipRomStamp(0f, 0f, 0f, 0f)
+
+    private fun applyValidationStamps(pose: SkeletonPose) {
+        pose.hipRomStamps.clear()
+        for (i in 0 until 2) {
+            val hip = if (i == 0) Joint.HIP_F else Joint.HIP_B
+            val knee = if (i == 0) Joint.KNEE_F else Joint.KNEE_B
+            // Front hip at -Z, back hip at +Z; abduction is toward -Z for the front leg and
+            // +Z for the back leg, so the same mirror sign keeps abduction positive for both.
+            val abductionSign = if (i == 0) -1f else 1f
+            val stamp = SkeletonMath.computeHipRomStamp(
+                pose.getJointRotation(Joint.PELVIS),
+                pose.getJoint(hip),
+                pose.getJoint(knee),
+                abductionSign,
+                pose.getJointRotation(hip),
+                hipRomStampScratch
+            )
+            pose.hipRomStamps[hip] = stamp
+        }
+
+        // B5 — bilateral symmetry stamp: the knee/elbow perpendicular-deviation magnitudes the
+        // old `validateBilateralSymmetry` computed (2-D, parent->foot vs knee). Captured here
+        // so the validator only reads the delta + opposite-bend flag.
+        val kneeF = signedPerpDev(pose, Joint.HIP_F, Joint.ANKLE_F, Joint.KNEE_F)
+        val kneeB = signedPerpDev(pose, Joint.HIP_B, Joint.ANKLE_B, Joint.KNEE_B)
+        val elbowA = signedPerpDev(pose, Joint.SHOULDER_A, Joint.HAND_A, Joint.ELBOW_A)
+        val elbowP = signedPerpDev(pose, Joint.SHOULDER_P, Joint.HAND_P, Joint.ELBOW_P)
+        var delta = 0f
+        var opposite = false
+        if (kotlin.math.abs(kneeF) > 0.1f && kotlin.math.abs(kneeB) > 0.1f) {
+            if (kneeF * kneeB < 0f) opposite = true
+            delta = kotlin.math.max(delta, kotlin.math.abs(kotlin.math.abs(kneeF) - kotlin.math.abs(kneeB)))
+        }
+        if (kotlin.math.abs(elbowA) > 0.1f && kotlin.math.abs(elbowP) > 0.1f) {
+            if (elbowA * elbowP < 0f) opposite = true
+            delta = kotlin.math.max(delta, kotlin.math.abs(kotlin.math.abs(elbowA) - kotlin.math.abs(elbowP)))
+        }
+        pose.bilateralSymmetryDelta = delta
+        pose.bilateralOppositeBend = opposite
+    }
+
+    /** 2-D signed perpendicular deviation of [mid] from the [a]->[b] line (X/Y plane). */
+    private fun signedPerpDev(pose: SkeletonPose, a: Joint, b: Joint, mid: Joint): Float {
+        val pa = pose.getJoint(a); val pb = pose.getJoint(b); val pm = pose.getJoint(mid)
+        val vx = pb.x - pa.x; val vy = pb.y - pa.y
+        val lenSq = vx * vx + vy * vy
+        if (lenSq < 1e-4f) return 0f
+        val cross = vx * (pm.y - pa.y) - vy * (pm.x - pa.x)
+        return cross / kotlin.math.sqrt(lenSq)
+    }
+
 
     /**
      * Resolves [worldRotation] into the rotation *relative to its parent segment frame*

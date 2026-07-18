@@ -64,7 +64,7 @@ class JumpSquatPose : BaseSquatPose() {
         val leanAngle = squatFactor * 0.45f
 
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, -leanAngle)
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, -leanAngle)
         declareJointIntent(Joint.PELVIS, JointRotation(axisZ, -leanAngle))
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)

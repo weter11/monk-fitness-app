@@ -34,7 +34,7 @@ class HalfKneelingStretchPose : BaseHipFlexorPose() {
         leanAngle = SkeletonMath.lerp(0f, -0.1f, context.progress)
 
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, -leanAngle)
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, -leanAngle)
         declareJointIntent(Joint.PELVIS, JointRotation(axisZ, -leanAngle))
 
         setUpperBodyLocal(def)

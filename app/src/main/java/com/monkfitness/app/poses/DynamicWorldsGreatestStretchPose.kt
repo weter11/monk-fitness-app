@@ -45,7 +45,7 @@ class DynamicWorldsGreatestStretchPose : BaseThoracicPose() {
         val pelvisY = 55f
 
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, spinePitch)
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, spinePitch)
         declareJointIntent(Joint.PELVIS, JointRotation(axisZ, spinePitch))
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)

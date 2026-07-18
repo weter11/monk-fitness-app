@@ -57,7 +57,7 @@ class ReverseSnowAngelPose : PoseBuilder {
         val leanAngle = 1.50f // Horizontal lying face down
 
         pelvis!!.localPosition = Vector3(pelvisX, pelvisY, 0f)
-        pelvis!!.localRotation.set(Vector3(0f, 0f, 1f), -leanAngle)
+        declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), -leanAngle)
         SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.PELVIS, JointRotation(Vector3(0f, 0f, 1f), -leanAngle))
 
         chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)

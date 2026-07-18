@@ -71,7 +71,7 @@ class IsometricSidePlankPose : BasePlankPose() {
         val torsoPitch = SkeletonMath.lerp(-1.57f, -1.18f, lift)
 
         pelvis!!.localPosition.set(0f, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, torsoPitch)
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, torsoPitch)
         declareJointIntent(Joint.PELVIS, JointRotation(axisZ, torsoPitch))
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)

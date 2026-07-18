@@ -45,7 +45,7 @@ class ThoracicExtensionPose : BaseThoracicPose() {
         val pelvisY = kneeFloorY + def.thighLength
 
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, 0f)
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, 0f)
         declareJointIntent(Joint.PELVIS, JointRotation(axisZ, 0f))
 
         // Thoracic extension about the lateral (Z) axis. The arch originates in the spine BELOW

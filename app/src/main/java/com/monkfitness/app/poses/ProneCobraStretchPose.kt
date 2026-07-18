@@ -80,7 +80,7 @@ class ProneCobraStretchPose : BasePose() {
         val torsoPitch = SkeletonMath.lerp(-1.57f, -0.9f, context.progress)
 
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
-        pelvis!!.localRotation.set(axisZ, torsoPitch)
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, torsoPitch)
         declareJointIntent(Joint.PELVIS, JointRotation(axisZ, torsoPitch))
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)

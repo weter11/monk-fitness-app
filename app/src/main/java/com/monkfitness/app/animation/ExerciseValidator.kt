@@ -53,11 +53,6 @@ class ExerciseValidator(
 ) {
     private val scratchHeadPoint = ProjectedPoint()
 
-    // Scratch vectors for the UNI-2/UNI-3/UNI-6 intent + ROM rules (no hot-path allocation).
-    private val scratchV1 = Vector3()
-    private val scratchV2 = Vector3()
-    private val scratchV3 = Vector3()
-
     companion object {
         // Pre-allocated static arrays to completely avoid heap allocations at runtime
         private val JOINTS_ARRAY = Joint.values()
@@ -524,81 +519,28 @@ class ExerciseValidator(
         }
     }
 
-    private fun getSignedPerpendicularDeviation2D(a: Vector3, b: Vector3, p: Vector3): Float {
-        val vx = b.x - a.x
-        val vy = b.y - a.y
-        val lenSq = vx * vx + vy * vy
-        if (lenSq < 1e-4f) return 0f
-        val cross = vx * (p.y - a.y) - vy * (p.x - a.x)
-        return cross / kotlin.math.sqrt(lenSq)
-    }
-
     private fun validateBilateralSymmetry(pose: SkeletonPose, issues: MutableList<ValidationIssue>) {
         if (!config.checkBilateralSymmetry) return
 
-        // Validate knees symmetry
-        val kneeF = pose.getJoint(Joint.KNEE_F)
-        val kneeB = pose.getJoint(Joint.KNEE_B)
-        val hipF = pose.getJoint(Joint.HIP_F)
-        val hipB = pose.getJoint(Joint.HIP_B)
-        val ankleF = pose.getJoint(Joint.ANKLE_F)
-        val ankleB = pose.getJoint(Joint.ANKLE_B)
-
-        val devF = getSignedPerpendicularDeviation2D(hipF, ankleF, kneeF)
-        val devB = getSignedPerpendicularDeviation2D(hipB, ankleB, kneeB)
-
-        // Check if both knees exist and deviate
-        if (kotlin.math.abs(devF) > 0.1f && kotlin.math.abs(devB) > 0.1f) {
-            if (devF * devB < 0f) {
-                issues.add(ValidationIssue(
-                    ruleId = "BILATERAL_SYMMETRY",
-                    message = "Knee bilateral symmetry violation: knees bend in opposite directions (devF=$devF, devB=$devB)",
-                    severity = ValidationSeverity.ERROR,
-                    joint = Joint.KNEE_B
-                ))
-            } else {
-                val diff = kotlin.math.abs(kotlin.math.abs(devF) - kotlin.math.abs(devB))
-                if (diff > 5f) { // 5 units of deviation tolerance
-                    issues.add(ValidationIssue(
-                        ruleId = "BILATERAL_SYMMETRY",
-                        message = "Knee bilateral symmetry violation: knee deviations differ in magnitude beyond tolerance (devF=$devF, devB=$devB, diff=$diff)",
-                        severity = ValidationSeverity.ERROR,
-                        joint = Joint.KNEE_B
-                    ))
-                }
-            }
-        }
-
-        // Validate elbows symmetry
-        val elbowA = pose.getJoint(Joint.ELBOW_A)
-        val elbowP = pose.getJoint(Joint.ELBOW_P)
-        val shoulderA = pose.getJoint(Joint.SHOULDER_A)
-        val shoulderP = pose.getJoint(Joint.SHOULDER_P)
-        val handA = pose.getJoint(Joint.HAND_A)
-        val handP = pose.getJoint(Joint.HAND_P)
-
-        val devA = getSignedPerpendicularDeviation2D(shoulderA, handA, elbowA)
-        val devP = getSignedPerpendicularDeviation2D(shoulderP, handP, elbowP)
-
-        if (kotlin.math.abs(devA) > 0.1f && kotlin.math.abs(devP) > 0.1f) {
-            if (devA * devP < 0f) {
-                issues.add(ValidationIssue(
-                    ruleId = "BILATERAL_SYMMETRY",
-                    message = "Elbow bilateral symmetry violation: elbows bend in opposite directions (devA=$devA, devP=$devP)",
-                    severity = ValidationSeverity.ERROR,
-                    joint = Joint.ELBOW_P
-                ))
-            } else {
-                val diff = kotlin.math.abs(kotlin.math.abs(devA) - kotlin.math.abs(devP))
-                if (diff > 5f) {
-                    issues.add(ValidationIssue(
-                        ruleId = "BILATERAL_SYMMETRY",
-                        message = "Elbow bilateral symmetry violation: elbow deviations differ in magnitude beyond tolerance (devA=$devA, devP=$devP, diff=$diff)",
-                        severity = ValidationSeverity.ERROR,
-                        joint = Joint.ELBOW_P
-                    ))
-                }
-            }
+        // B5 — read the engine-produced §1.2 stamp; no geometry re-derivation remains in the
+        // validator. `bilateralSymmetryDelta` is the max knee/elbow deviation-magnitude difference
+        // (2-D perpendicular units); `bilateralOppositeBend` is true when the limbs bend in
+        // opposite directions. Both are written by SkeletonPoseFinalizer.applyValidationStamps.
+        val delta = pose.bilateralSymmetryDelta
+        if (pose.bilateralOppositeBend) {
+            issues.add(ValidationIssue(
+                ruleId = "BILATERAL_SYMMETRY",
+                message = "Bilateral symmetry violation: limbs bend in opposite directions (symmetry delta=$delta)",
+                severity = ValidationSeverity.ERROR,
+                joint = Joint.KNEE_B
+            ))
+        } else if (delta > 5f) { // 5 units of deviation tolerance
+            issues.add(ValidationIssue(
+                ruleId = "BILATERAL_SYMMETRY",
+                message = "Bilateral symmetry violation: limb deviations differ in magnitude beyond tolerance (symmetry delta=$delta)",
+                severity = ValidationSeverity.ERROR,
+                joint = Joint.KNEE_B
+            ))
         }
     }
 
@@ -812,100 +754,64 @@ class ExerciseValidator(
     private fun validateHipRom(pose: SkeletonPose, def: SkeletonDefinition, issues: MutableList<ValidationIssue>) {
         if (!config.checkHipRom) return
         val limits = def.hipRomLimits
-        val pelvisRot = pose.getJointRotation(Joint.PELVIS)
-        // Neutral femur points straight down in the pelvis frame: (0,-1,0).
-        for (i in 0 until 2) {
-            val hip = if (i == 0) Joint.HIP_F else Joint.HIP_B
-            val knee = if (i == 0) Joint.KNEE_F else Joint.KNEE_B
-            // Front hip sits at -Z, back hip at +Z; abduction (away from the mid-line) is toward
-            // -Z for the front leg and +Z for the back leg. This mirror sign keeps abduction
-            // positive and adduction negative for both legs.
-            val abductionSign = if (i == 0) -1f else 1f
-            val hipPos = pose.getJoint(hip)
-            val kneePos = pose.getJoint(knee)
-            scratchV1.set(kneePos.x - hipPos.x, kneePos.y - hipPos.y, kneePos.z - hipPos.z)
-            if (scratchV1.mag() < 1e-5f) continue
-            // Femur direction expressed in the pelvis' local frame (pelvis local == world at root).
-            SkeletonMath.toLocalDirection(scratchV1, pelvisRot, scratchV2)
-            val femurLocal = scratchV2
-            val fMag = femurLocal.mag()
-            if (fMag < 1e-5f) continue
-            val fx = femurLocal.x / fMag
-            val fy = femurLocal.y / fMag
-            val fz = femurLocal.z / fMag
-
-            // (1) Total excursion from the neutral down direction. Axis-label-agnostic so a valid
-            // extreme pose (deep squat / pike / full split, ~90-136°) passes while an over-range
-            // hip (femur through the torso, ~180°) is caught.
-            val excursion = SkeletonMath.angleBetweenDegrees(femurLocal, scratchV3.set(0f, -1f, 0f))
-            if (excursion > limits.maxExcursionDegrees) {
+        // B5 — read the engine-produced §1.2 hip-ROM stamps (SkeletonPoseFinalizer.applyValidationStamps,
+        // which uses the identical femur-direction math the old `validateHipRom` performed inline).
+        // No `toLocalDirection` / `angleBetweenDegrees` / `atan2` remains in the validator.
+        for (entry in pose.hipRomStamps) {
+            val hip = entry.key
+            val stamp = entry.value
+            if (stamp.excursionDegrees > limits.maxExcursionDegrees) {
                 issues.add(ValidationIssue(
                     ruleId = "HIP_ROM_LIMIT",
-                    message = "Hip ${hip.name} femur deviates ${"%.1f".format(excursion)}° from neutral (max anatomical excursion ${limits.maxExcursionDegrees.toInt()}°); hip range of motion exceeded.",
+                    message = "Hip ${hip.name} femur deviates ${"%.1f".format(stamp.excursionDegrees)}° from neutral (max anatomical excursion ${limits.maxExcursionDegrees.toInt()}°); hip range of motion exceeded.",
                     severity = ValidationSeverity.ERROR,
                     joint = hip
                 ))
             }
-
-            // (2) Sagittal elevation: how far the femur tilts toward anterior (+X, flexion) or
-            // behind (-X, extension), independent of any lateral spread. sin(sagittal) = fx.
-            val sagittal = Math.toDegrees(kotlin.math.asin(fx.coerceIn(-1f, 1f).toDouble())).toFloat()
-            if (sagittal > limits.maxFlexionDegrees) {
+            if (stamp.sagittalDegrees > limits.maxFlexionDegrees) {
                 issues.add(ValidationIssue(
                     ruleId = "HIP_ROM_LIMIT",
-                    message = "Hip ${hip.name} flexion ${"%.1f".format(sagittal)}° exceeds max anatomical flexion ${limits.maxFlexionDegrees.toInt()}°.",
+                    message = "Hip ${hip.name} flexion ${"%.1f".format(stamp.sagittalDegrees)}° exceeds max anatomical flexion ${limits.maxFlexionDegrees.toInt()}°.",
                     severity = ValidationSeverity.ERROR,
                     joint = hip
                 ))
             }
-            if (-sagittal > limits.maxExtensionDegrees) {
+            if (-stamp.sagittalDegrees > limits.maxExtensionDegrees) {
                 issues.add(ValidationIssue(
                     ruleId = "HIP_ROM_LIMIT",
-                    message = "Hip ${hip.name} extension ${"%.1f".format(-sagittal)}° exceeds max anatomical extension ${limits.maxExtensionDegrees.toInt()}°.",
+                    message = "Hip ${hip.name} extension ${"%.1f".format(-stamp.sagittalDegrees)}° exceeds max anatomical extension ${limits.maxExtensionDegrees.toInt()}°.",
                     severity = ValidationSeverity.ERROR,
                     joint = hip
                 ))
             }
-
-            // (3) Frontal elevation: how far the femur tilts away from the mid-line (abduction) or
-            // across it (adduction), independent of any flexion. sin(frontal) = fz * abductionSign.
-            val frontal = Math.toDegrees(kotlin.math.asin((fz * abductionSign).coerceIn(-1f, 1f).toDouble())).toFloat()
-            if (frontal > limits.maxAbductionDegrees) {
+            if (stamp.frontalDegrees > limits.maxAbductionDegrees) {
                 issues.add(ValidationIssue(
                     ruleId = "HIP_ROM_LIMIT",
-                    message = "Hip ${hip.name} abduction ${"%.1f".format(frontal)}° exceeds max anatomical abduction ${limits.maxAbductionDegrees.toInt()}°.",
+                    message = "Hip ${hip.name} abduction ${"%.1f".format(stamp.frontalDegrees)}° exceeds max anatomical abduction ${limits.maxAbductionDegrees.toInt()}°.",
                     severity = ValidationSeverity.ERROR,
                     joint = hip
                 ))
             }
-            if (-frontal > limits.maxAdductionDegrees) {
+            if (-stamp.frontalDegrees > limits.maxAdductionDegrees) {
                 issues.add(ValidationIssue(
                     ruleId = "HIP_ROM_LIMIT",
-                    message = "Hip ${hip.name} adduction ${"%.1f".format(-frontal)}° exceeds max anatomical adduction ${limits.maxAdductionDegrees.toInt()}°.",
+                    message = "Hip ${hip.name} adduction ${"%.1f".format(-stamp.frontalDegrees)}° exceeds max anatomical adduction ${limits.maxAdductionDegrees.toInt()}°.",
                     severity = ValidationSeverity.ERROR,
                     joint = hip
                 ))
             }
-
-            // (4) Axial (internal / external) rotation about the femur's own long axis. This is the
-            // twist component of the authored hip rotation (`hip.localRotation` — the real
-            // acetabular ball joint, UNI-10) isolated by a swing-twist decomposition about the
-            // femur's long (local X) axis, so a leg that is only flexed/abducted (pure swing)
-            // reports 0° and never trips a false rotation violation. `abductionSign` mirrors the
-            // twist across the body mid-line so internal/external stay consistent for both legs.
-            val axial = femoralTwistDegrees(pose.getJointRotation(hip)) * abductionSign
-            if (axial > limits.maxInternalRotationDegrees) {
+            if (stamp.axialDegrees > limits.maxInternalRotationDegrees) {
                 issues.add(ValidationIssue(
                     ruleId = "HIP_ROM_LIMIT",
-                    message = "Hip ${hip.name} internal rotation ${"%.1f".format(axial)}° exceeds max anatomical internal rotation ${limits.maxInternalRotationDegrees.toInt()}°.",
+                    message = "Hip ${hip.name} internal rotation ${"%.1f".format(stamp.axialDegrees)}° exceeds max anatomical internal rotation ${limits.maxInternalRotationDegrees.toInt()}°.",
                     severity = ValidationSeverity.ERROR,
                     joint = hip
                 ))
             }
-            if (-axial > limits.maxExternalRotationDegrees) {
+            if (-stamp.axialDegrees > limits.maxExternalRotationDegrees) {
                 issues.add(ValidationIssue(
                     ruleId = "HIP_ROM_LIMIT",
-                    message = "Hip ${hip.name} external rotation ${"%.1f".format(-axial)}° exceeds max anatomical external rotation ${limits.maxExternalRotationDegrees.toInt()}°.",
+                    message = "Hip ${hip.name} external rotation ${"%.1f".format(-stamp.axialDegrees)}° exceeds max anatomical external rotation ${limits.maxExternalRotationDegrees.toInt()}°.",
                     severity = ValidationSeverity.ERROR,
                     joint = hip
                 ))
@@ -913,27 +819,6 @@ class ExerciseValidator(
         }
     }
 
-    /**
-     * Signed femoral axial-rotation angle (degrees): the twist component of the hip's authored
-     * local rotation about the femur's long (local X) axis, isolated by a swing-twist
-     * decomposition. Flexion (about Z) and abduction (about Y) are pure swing and contribute 0°,
-     * so only genuine internal/external rotation authored via `hip.localRotation`
-     * (`SkeletonMath.buildHipRotation(rotation = …)`) is measured. Positive follows the right-hand
-     * rule about +X; the caller mirrors it per side. Allocation-free.
-     */
-    private fun femoralTwistDegrees(hipRotation: JointRotation): Float {
-        val axis = hipRotation.axis
-        val axisMag = kotlin.math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z)
-        if (axisMag < 1e-6f) return 0f
-        // Quaternion (w, x·s) of the rotation, then swing-twist twist angle about X = 2·atan2(qx, qw).
-        val half = hipRotation.angle * 0.5f
-        val s = kotlin.math.sin(half)
-        val qw = kotlin.math.cos(half)
-        val qx = axis.x / axisMag * s
-        return Math.toDegrees((2f * kotlin.math.atan2(qx, qw)).toDouble()).toFloat()
-    }
-
-    /** Interior angle (degrees) at [midJoint] of the chain start->mid->end, from world positions. */
     private fun limbMiddleAngleDegrees(pose: SkeletonPose, start: Joint, mid: Joint, end: Joint): Float {
         val pStart = pose.getJoint(start)
         val pMid = pose.getJoint(mid)

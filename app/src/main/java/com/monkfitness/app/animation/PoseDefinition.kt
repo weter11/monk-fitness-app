@@ -219,6 +219,28 @@ class SkeletonPose(
      */
     var boneLengthsVerified: Boolean = true
 
+    // B5 (RFC_BRANCH_B_IMPLEMENTATION) — §1.2 STATE stamps consumed by the validator.
+    // Produced by the engine (SkeletonMath / Finalizer) from the solved skeleton; the validator
+    // reads them directly and never re-derives geometry (no toLocalDirection/angleBetweenDegrees/atan2).
+
+    /**
+     * Engine-produced hip ROM stamp: the femur direction expressed in the pelvis frame, decomposed
+     * into the four independent anatomical angles the [HipRomLimits] bound. One entry per hip
+     * (Joint.HIP_F / Joint.HIP_B); absent until the engine writes it. Mirrors the validator's old
+     * `validateHipRom` math exactly so the rule is byte-identical when reading the stamp.
+     */
+    val hipRomStamps: MutableMap<Joint, HipRomStamp> = mutableMapOf()
+
+    /**
+     * Engine-produced bilateral-symmetry stamp: the maximum knee-deviation magnitude difference
+     * (left vs right) and the maximum elbow-deviation magnitude difference, in the same 2-D
+     * perpendicular-deviation units the old `validateBilateralSymmetry` used. A sign flip (knees
+     * bending opposite ways) is captured by the `oppositeBend` flag. Absent (0u, no violation)
+     * until the engine writes it.
+     */
+    var bilateralSymmetryDelta: Float = 0f
+    var bilateralOppositeBend: Boolean = false
+
     // W1 — explicit ownership of each extremity's heel/toe or palm/fingertip geometry, derived
     // from [extremityOverrides]. Defaults to AUTOMATIC (engine derives) for every extremity,
     // restoring the pose→engine boundary. Ownership is intentionally NOT inferred from
