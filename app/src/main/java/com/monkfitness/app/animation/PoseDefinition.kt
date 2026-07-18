@@ -135,7 +135,7 @@ data class HeadTarget(
  * `docs/ARCHITECTURE_V2.md`. No component edits another's section.
  *
      * - **Intent section (§1.1):** `jointIntents`, `spineIntent`, `limbTargets`, `contacts`,
-     *   `contactPrecedence`, `postureIntent`, `extremityOverrides`, `headTarget`.
+     *   `contactPrecedence`, `postureIntent`, `extremityOverrides`, `extremityArticulations`, `headTarget`.
  * - **State section (§1.2):** `nodes` (the `joints`/`rotations`/`roots` triple),
  *   `maxIkClampAmount`, `straightIntentDropped`, `rootTranslationDelta`, `rootRotationDelta`,
  *   `boneLengthsVerified`.
@@ -183,6 +183,20 @@ class SkeletonPose(
      * §1.1 carrier; it is the source of truth for the W1 [ExtremityOrientationMode] plumbing below.
      */
     val extremityOverrides: MutableSet<Extremity> = mutableSetOf()
+
+    /**
+     * Branch C (RFC_BRANCH_C_EXTREMITY_ARTICULATION) — the §1.3 **Interaction / Articulation
+     * Intent** carrier: the authored wrist/ankle rotation of each extremity, expressed
+     * *relative to its parent segment* (forearm for the wrist, shank for the ankle), keyed by
+     * [Extremity] (HAND_A / HAND_P / FOOT_F / FOOT_B). This is the single source of truth for the
+     * W1 extremity geometry derivation; the Finalizer ([SkeletonPoseFinalizer]) reads it instead of
+     * reading the [Joint.HAND_*]/[Joint.ANKLE_*] node `localRotation` back (the old Pose-write /
+     * Finalizer-read round-trip through the node is retired). The value is exactly the
+     * `JointRotation` `getJointRotation` used to return for the wrist/ankle node, so reading the
+     * carrier is byte-identical to reading the node for the AUTOMATIC path. Never carries a world
+     * rotation (the ancestor chain is already removed by the authoring helpers).
+     */
+    val extremityArticulations: MutableMap<Extremity, JointRotation> = mutableMapOf()
 
     /**
      * Phase 7 (Gap 7 / F8 / W17) — gaze-as-target (COMPLETE). The pose declares where the head
@@ -293,6 +307,10 @@ class SkeletonPose(
         this.contactPrecedence.addAll(other.contactPrecedence)
         this.extremityOverrides.clear()
         this.extremityOverrides.addAll(other.extremityOverrides)
+        this.extremityArticulations.clear()
+        for (e in other.extremityArticulations) {
+            this.extremityArticulations[e.key] = e.value
+        }
     }
 
     /**
@@ -363,6 +381,17 @@ class SkeletonPose(
         }
 
         /**
+         * Branch C — declares the §1.3 articulation (wrist/ankle rotation, relative to the parent
+         * segment) of [extremity]. Consumed by the Finalizer's W1 derivation in place of the
+         * [Joint.HAND_*]/[Joint.ANKLE_*] node `localRotation` (the sole source of truth for
+         * extremity orientation; replaces the old Pose-write / Finalizer-read node round-trip).
+         */
+        fun extremity(extremity: Extremity, rotation: JointRotation): IntentBuilder {
+            pose.extremityArticulations[extremity] = rotation
+            return this
+        }
+
+        /**
          * Clears every §1.1 intent carrier so a reused [SkeletonPose] buffer starts a build fresh.
          * (Structural `segment`/`clavicle`/`trunk` declarations from §3.2 are added with their
          * consuming stages in B1/B2; until then the carrier-backed surface above is the substrate.)
@@ -372,6 +401,7 @@ class SkeletonPose(
             pose.jointIntents.clear()
             pose.limbTargets.clear()
             pose.extremityOverrides.clear()
+            pose.extremityArticulations.clear()
             pose.postureIntent = PostureIntent(PostureIntent.Kind.CUSTOM)
             pose.contactPrecedence.clear()
             pose.contacts.clear()

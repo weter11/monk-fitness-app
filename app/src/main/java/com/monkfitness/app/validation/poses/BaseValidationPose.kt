@@ -2,6 +2,7 @@ package com.monkfitness.app.validation.poses
 
 import com.monkfitness.app.animation.CameraDefinition
 import com.monkfitness.app.animation.EnvironmentDefinition
+import com.monkfitness.app.animation.Extremity
 import com.monkfitness.app.animation.ContactConstraint
 import com.monkfitness.app.animation.ConstraintSolver
 import com.monkfitness.app.animation.ContactSpec
@@ -118,6 +119,39 @@ abstract class BaseValidationPose : PoseBuilder {
      */
     protected fun declareJointIntent(joint: Joint, rotation: JointRotation) {
         IntentBuilder(jointsBuffer).joint(joint, rotation)
+    }
+
+    /**
+     * Branch C — authors a **wrist articulation** (grip) as the §1.3 [Extremity] intent, mirroring
+     * [com.monkfitness.app.animation.BasePose.buildWristArticulation]. Composes the 2-DOF wrist
+     * rotation via [SkeletonMath.buildWristRotation] (never dropping a DOF), writes the wrist node
+     * `localRotation` for build-time FK, and records `extremityArticulations[HAND_A/HAND_P]` for the
+     * Finalizer (W1) to consume as the single source of truth.
+     */
+    protected fun buildWristArticulation(
+        extremity: Extremity,
+        flexion: Float,
+        deviation: Float,
+        handNode: SkeletonNode
+    ) {
+        SkeletonMath.buildWristRotation(flexion, deviation, handNode.localRotation)
+        IntentBuilder(jointsBuffer).extremity(extremity, JointRotation(handNode.localRotation.axis, handNode.localRotation.angle))
+    }
+
+    /**
+     * Branch C — authors an **ankle articulation** (foot plant) as the §1.3 [Extremity] intent,
+     * mirroring [com.monkfitness.app.animation.BasePose.buildAnkleArticulation]. Composes the 2-DOF
+     * ankle rotation via [SkeletonMath.buildAnkleRotation], writes the ankle node `localRotation` for
+     * build-time FK, and records `extremityArticulations[FOOT_F/FOOT_B]` for W1 to consume.
+     */
+    protected fun buildAnkleArticulation(
+        extremity: Extremity,
+        dorsiflexion: Float,
+        inversion: Float,
+        ankleNode: SkeletonNode
+    ) {
+        SkeletonMath.buildAnkleRotation(dorsiflexion, inversion, ankleNode.localRotation)
+        IntentBuilder(jointsBuffer).extremity(extremity, JointRotation(ankleNode.localRotation.axis, ankleNode.localRotation.angle))
     }
 
     /**

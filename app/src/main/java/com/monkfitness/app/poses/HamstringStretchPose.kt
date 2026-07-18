@@ -104,8 +104,9 @@ class HamstringStretchPose : BasePose() {
         bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, 0f, 2f), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         // Front foot points to sky, back foot lays flat sideways
-        ankleF!!.localRotation.set(axisZ, torsoPitch - 1.57f)
-        ankleB!!.localRotation.set(axisZ, torsoPitch)
+        // Branch C: ankle articulations route through the §1.3 intent carrier.
+        buildAnkleArticulation(Extremity.FOOT_F, torsoPitch - 1.57f, 0f, ankleF!!)
+        buildAnkleArticulation(Extremity.FOOT_B, torsoPitch, 0f, ankleB!!)
         // W1: engine now derives heel/toe from the shank + these intentional ankle articulations.
 
         // 3. Dynamic Forward Reach

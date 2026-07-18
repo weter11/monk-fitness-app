@@ -537,25 +537,25 @@ class SkeletonPoseFinalizer(
             if (pose.isExtremityAutomatic(Extremity.FOOT_F)) {
                 adjustFootOrientation(
                     outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F,
-                    relativeRotation(outputPose.getJointRotation(Joint.ANKLE_F), outputPose.getJointRotation(Joint.KNEE_F), relAnkle)
+                    articulationFor(pose, Extremity.FOOT_F, Joint.ANKLE_F, Joint.KNEE_F, relAnkle)
                 )
             }
             if (pose.isExtremityAutomatic(Extremity.FOOT_B)) {
                 adjustFootOrientation(
                     outputPose, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B,
-                    relativeRotation(outputPose.getJointRotation(Joint.ANKLE_B), outputPose.getJointRotation(Joint.KNEE_B), relAnkle)
+                    articulationFor(pose, Extremity.FOOT_B, Joint.ANKLE_B, Joint.KNEE_B, relAnkle)
                 )
             }
             if (pose.isExtremityAutomatic(Extremity.HAND_A)) {
                 adjustHandOrientation(
                     outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A,
-                    relativeRotation(outputPose.getJointRotation(Joint.HAND_A), outputPose.getJointRotation(Joint.ELBOW_A), relWrist)
+                    articulationFor(pose, Extremity.HAND_A, Joint.HAND_A, Joint.ELBOW_A, relWrist)
                 )
             }
             if (pose.isExtremityAutomatic(Extremity.HAND_P)) {
                 adjustHandOrientation(
                     outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P,
-                    relativeRotation(outputPose.getJointRotation(Joint.HAND_P), outputPose.getJointRotation(Joint.ELBOW_P), relWrist)
+                    articulationFor(pose, Extremity.HAND_P, Joint.HAND_P, Joint.ELBOW_P, relWrist)
                 )
             }
         } else {
@@ -654,6 +654,49 @@ class SkeletonPoseFinalizer(
      * the joint's own articulation instead of re-framing the direction by the whole ancestor
      * chain. Allocation-free: writes into [out].
      */
+    /**
+     * Branch C — resolves the wrist/ankle articulation rotation for [extremity] to feed the W1
+     * geometry derivation. The pose-authored value is the single source of truth: when the pose
+     * populated [SkeletonPose.extremityArticulations] for this extremity the carrier value is
+     * returned verbatim (it already carries the rotation *relative to the parent segment*, so no
+     * ancestor-chain removal is needed). When the carrier is empty (a pose that still authors the
+     * node directly, or a neutral limb) the value is read from the node's **local** rotation in the
+     * authored hierarchy — the exact rotation the legacy helpers wrote via `localRotation.set` /
+     * `buildWristArticulation` / `buildAnkleArticulation`. This is the rotation *relative to the
+     * joint's true parent segment* and is therefore identical to the carrier for every migrated and
+     * legacy pose, keeping the pre-Branch-C path byte-identical.
+     *
+     * NB: the previous implementation derived the fallback via the world-relative
+     * `inverse(parentWorld) ∘ nodeWorld`. That collapses to the identity rotation for a *straight*
+     * limb (where the wrist/ankle world rotation equals its parent's, so the ancestor chain cancels
+     * and the authored local articulation is silently dropped). Reading the node's local rotation
+     * instead recovers the authored articulation even when the limb is straight, which is the
+     * correct, author-intent-preserving behavior — and is what the carrier already carries.
+     */
+    private fun articulationFor(
+        pose: SkeletonPose,
+        extremity: Extremity,
+        nodeId: Joint,
+        parentId: Joint,
+        out: JointRotation
+    ): JointRotation {
+        val carried = pose.extremityArticulations[extremity]
+        if (carried != null) {
+            out.copyFrom(carried)
+            return out
+        }
+        // Mixed-mode / legacy fallback: the authored local rotation of the wrist/ankle node, which
+        // is already expressed relative to the joint's parent segment (forearm / shank).
+        val node = if (pose.roots.isNotEmpty()) findJointNode(pose.roots[0], nodeId) else null
+        if (node != null) {
+            out.copyFrom(node.localRotation)
+            return out
+        }
+        // No hierarchy available (legacy bridge path with empty roots): fall back to the
+        // world-relative composition, which is exact whenever the limb is not straight.
+        return relativeRotation(pose.getJointRotation(nodeId), pose.getJointRotation(parentId), out)
+    }
+
     private fun relativeRotation(worldRotation: JointRotation, parentRotation: JointRotation, out: JointRotation): JointRotation {
         SkeletonMath.rotationToMatrix(parentRotation, parentMatX, parentMatY, parentMatZ)
         SkeletonMath.rotationToMatrix(worldRotation, worldMatX, worldMatY, worldMatZ)

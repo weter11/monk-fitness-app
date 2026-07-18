@@ -70,7 +70,8 @@ class DynamicWorldsGreatestStretchPose : BaseThoracicPose() {
         // W1: the inherited torso/spine tilt is now removed by the engine, so only the intentional
         // back-foot plantar flexion remains (front foot lays flat via engine derivation).
         val footPitchB = 0.6f
-        ankleB!!.localRotation.set(axisZ, -footPitchB)
+        // Branch C: back-foot plantar flexion routes through the §1.3 intent carrier.
+        buildAnkleArticulation(Extremity.FOOT_B, -footPitchB, 0f, ankleB!!)
         // W1: engine now derives heel/toe from the shank + these ankle articulations.
 
         // Support arm (P): planted on the floor beside the front foot -> stable pillar.

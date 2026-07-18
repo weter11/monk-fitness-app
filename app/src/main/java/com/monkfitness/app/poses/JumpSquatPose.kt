@@ -92,8 +92,9 @@ class JumpSquatPose : BaseSquatPose() {
 
         // 3. Plantar Flexion (Toes point down during flight)
         val footPitch = flightFactor * 0.6f
-        ankleF!!.localRotation.set(axisZ, leanAngle - footPitch)
-        ankleB!!.localRotation.set(axisZ, leanAngle - footPitch)
+        // Branch C: ankle plantar-flexion routes through the §1.3 intent carrier.
+        buildAnkleArticulation(Extremity.FOOT_F, leanAngle - footPitch, 0f, ankleF!!)
+        buildAnkleArticulation(Extremity.FOOT_B, leanAngle - footPitch, 0f, ankleB!!)
         // W1: engine now derives heel/toe from the shank + this plantar-flexed ankle.
 
         // 4. Arm Ballistics
@@ -109,8 +110,9 @@ class JumpSquatPose : BaseSquatPose() {
         bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPPole, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         // Slight wrist flick backward during jump apex to match momentum
-        handA!!.localRotation.set(axisZ, leanAngle + (flightFactor * 0.3f))
-        handP!!.localRotation.set(axisZ, leanAngle + (flightFactor * 0.3f))
+        // Branch C: wrist flick routes through the §1.3 intent carrier.
+        buildWristArticulation(Extremity.HAND_A, leanAngle + (flightFactor * 0.3f), 0f, handA!!)
+        buildWristArticulation(Extremity.HAND_P, leanAngle + (flightFactor * 0.3f), 0f, handP!!)
         // W1: engine now derives palm/knuckles/fingertips from the forearm + this wrist flick.
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)

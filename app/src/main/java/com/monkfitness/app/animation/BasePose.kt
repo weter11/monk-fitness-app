@@ -87,6 +87,43 @@ abstract class BasePose : PoseBuilder {
         IntentBuilder(jointsBuffer).joint(joint, rotation)
     }
 
+    /**
+     * Branch C (RFC_BRANCH_C_EXTREMITY_ARTICULATION) — authors a **wrist articulation** (grip) as
+     * the §1.3 [Extremity] intent. Composes the 2-DOF local rotation from [flexion] (flexion/
+     * extension about the mediolateral Z axis) and [deviation] (radial/ulnar deviation about the
+     * antero-posterior Y axis) via [SkeletonMath.buildWristRotation], so combined DOFs never drop
+     * one axis. The mixed-mode contract (mirroring Branch B): the wrist node's `localRotation` is
+     * written for build-time FK (and so the carrier value is byte-identical to the node path), and
+     * the articulation is recorded into `extremityArticulations[HAND_A/HAND_P]` for the Finalizer
+     * (W1) to consume as the single source of truth.
+     */
+    protected fun buildWristArticulation(
+        extremity: Extremity,
+        flexion: Float,
+        deviation: Float,
+        handNode: SkeletonNode
+    ) {
+        SkeletonMath.buildWristRotation(flexion, deviation, handNode.localRotation)
+        IntentBuilder(jointsBuffer).extremity(extremity, JointRotation(handNode.localRotation.axis, handNode.localRotation.angle))
+    }
+
+    /**
+     * Branch C — authors an **ankle articulation** (foot plant) as the §1.3 [Extremity] intent.
+     * Composes the 2-DOF local rotation from [dorsiflexion] (dorsi/plantar-flexion about the
+     * mediolateral Z axis) and [inversion] (inversion/eversion about the long X axis) via
+     * [SkeletonMath.buildAnkleRotation]. Mixed-mode: writes the ankle node `localRotation` for
+     * build-time FK and records `extremityArticulations[FOOT_F/FOOT_B]` for W1 to consume.
+     */
+    protected fun buildAnkleArticulation(
+        extremity: Extremity,
+        dorsiflexion: Float,
+        inversion: Float,
+        ankleNode: SkeletonNode
+    ) {
+        SkeletonMath.buildAnkleRotation(dorsiflexion, inversion, ankleNode.localRotation)
+        IntentBuilder(jointsBuffer).extremity(extremity, JointRotation(ankleNode.localRotation.axis, ankleNode.localRotation.angle))
+    }
+
     protected fun buildChestTwist(chest: SkeletonNode, twistRad: Float) {
         chest.localRotation.set(axisY, twistRad)
         declareJointIntent(Joint.CHEST, JointRotation(axisY, twistRad))

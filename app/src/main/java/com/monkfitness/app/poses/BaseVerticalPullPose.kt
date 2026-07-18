@@ -86,9 +86,6 @@ abstract class BaseVerticalPullPose : BasePose() {
     protected val scratchShoulderA = Vector3(); protected val scratchShoulderP = Vector3()
 
     private val HALF_PI = PI.toFloat() / 2f
-    private val neutralAxisA = SkeletonMath.rotAround(Vector3(0f, 0f, 1f), Vector3(1f, 0f, 0f), HALF_PI, Vector3())
-    private val neutralAxisP = SkeletonMath.rotAround(Vector3(0f, 0f, 1f), Vector3(1f, 0f, 0f), -HALF_PI, Vector3())
-
     protected fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
         val nodes = SkeletonFactory.createStandardSkeleton()
@@ -251,8 +248,9 @@ abstract class BaseVerticalPullPose : BasePose() {
         val legBPoleWorld = SkeletonMath.toWorldDirection(poleB, kneeB!!.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legBPoleWorld, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
-        ankleF!!.localRotation.set(axisZ, -plantarFlexion)
-        ankleB!!.localRotation.set(axisZ, -plantarFlexion)
+        // Branch C: ankle plantar-flexion routes through the §1.3 intent carrier.
+        buildAnkleArticulation(Extremity.FOOT_F, -plantarFlexion, 0f, ankleF!!)
+        buildAnkleArticulation(Extremity.FOOT_B, -plantarFlexion, 0f, ankleB!!)
         // W1: engine now derives heel/toe (removed tilt counter-rotation; plantar flexion retained).
 
         return finalizeVerticalPullPose()
@@ -262,16 +260,21 @@ abstract class BaseVerticalPullPose : BasePose() {
         val angle = chestTilt - HALF_PI
         when (gripStyle) {
             GripStyle.OVERHAND -> {
-                handA!!.localRotation.set(axisZ, angle)
-                handP!!.localRotation.set(axisZ, angle)
+                // Branch C: overhand wrist articulation routes through the §1.3 intent carrier.
+                buildWristArticulation(Extremity.HAND_A, angle, 0f, handA!!)
+                buildWristArticulation(Extremity.HAND_P, angle, 0f, handP!!)
             }
             GripStyle.UNDERHAND -> {
-                handA!!.localRotation.set(axisZ, chestTilt + HALF_PI)
-                handP!!.localRotation.set(axisZ, chestTilt + HALF_PI)
+                // Branch C: underhand wrist articulation routes through the §1.3 intent carrier.
+                buildWristArticulation(Extremity.HAND_A, chestTilt + HALF_PI, 0f, handA!!)
+                buildWristArticulation(Extremity.HAND_P, chestTilt + HALF_PI, 0f, handP!!)
             }
             GripStyle.NEUTRAL -> {
-                handA!!.localRotation.set(neutralAxisA, angle)
-                handP!!.localRotation.set(neutralAxisP, angle)
+                // Branch C: neutral wrist articulation (a pure deviation about the Y axis) routes
+                // through the §1.3 intent carrier. neutralAxis* is ±Y, so flexion=0 and deviation
+                // carries the signed angle (Ry(-angle) for the active hand, Ry(+angle) for passive).
+                buildWristArticulation(Extremity.HAND_A, 0f, -angle, handA!!)
+                buildWristArticulation(Extremity.HAND_P, 0f, angle, handP!!)
             }
         }
     }

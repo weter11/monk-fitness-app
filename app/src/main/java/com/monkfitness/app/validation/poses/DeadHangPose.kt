@@ -11,8 +11,7 @@ import com.monkfitness.app.animation.PivotType
 import com.monkfitness.app.animation.PostureIntent
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPose
-import com.monkfitness.app.animation.Joint
-import com.monkfitness.app.animation.JointRotation
+import com.monkfitness.app.animation.Extremity
 import com.monkfitness.app.animation.SupportContact
 import com.monkfitness.app.animation.SupportDefinition
 import com.monkfitness.app.animation.SupportPoint
@@ -115,10 +114,11 @@ class DeadHangPose : BaseValidationPose() {
         // forward away from the body, the correct overhand hang. The engine derives palm/knuckles/
         // fingertips from the forearm + this wrist articulation, cancelling the inherited torso
         // tilt automatically (no hand-authored heel/toe/palm endpoints, no -torsoPitch term).
-        handA!!.localRotation.set(axisZ, PI.toFloat() / 2f); handP!!.localRotation.set(axisZ, PI.toFloat() / 2f)
-        // B2: record the overhand wrist articulation as a joint intent.
-        declareJointIntent(Joint.HAND_A, JointRotation(axisZ, PI.toFloat() / 2f))
-        declareJointIntent(Joint.HAND_P, JointRotation(axisZ, PI.toFloat() / 2f))
+        // Branch C: the overhand wrist articulation is now the §1.3 intent carried in
+        // `extremityArticulations` (single source of truth), composed via buildWristRotation so the
+        // 2-DOF vocabulary is explicit. flexion = +90° about the mediolateral Z axis (no deviation).
+        buildWristArticulation(Extremity.HAND_A, PI.toFloat() / 2f, 0f, handA!!)
+        buildWristArticulation(Extremity.HAND_P, PI.toFloat() / 2f, 0f, handP!!)
 
         // Legs hang straight down with a slight forward pendulum.
         val ankleX = comX - 18f

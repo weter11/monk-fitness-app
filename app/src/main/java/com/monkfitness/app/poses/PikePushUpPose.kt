@@ -70,8 +70,9 @@ class PikePushUpPose : BasePushUpPose() {
         val torsoGlobalPitch = atan2(-torsoVecY, -torsoVecX)
 
         ankleF!!.localPosition.set(ankleX, ankleHeight, -def.hipWidth)
-        ankleF!!.localRotation.set(axisZ, legPitch)
-        // W1: engine now derives heel/toe from the shank + this ankle articulation.
+        // Branch C: ankle articulation (plantar/dorsi-flexion) routes through the §1.3 intent
+        // carrier via the 2-DOF composer; flexion about the mediolateral Z axis, no inversion.
+        buildAnkleArticulation(Extremity.FOOT_F, legPitch, 0f, ankleF!!)
         kneeF!!.localPosition.set(-def.shinLength, 0f, 0f)
         hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
 
@@ -125,7 +126,9 @@ class PikePushUpPose : BasePushUpPose() {
         val armPPoleWorld = SkeletonMath.toWorldDirection(armPPoleLocal, elbowP!!.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
-        handA!!.localRotation.set(axisZ, -torsoGlobalPitch)
+        // Branch C: wrist articulation (overhand-ish grip + counter torso pitch) routes through
+        // the §1.3 intent carrier; flexion about the mediolateral Z axis, no deviation.
+        buildWristArticulation(Extremity.HAND_A, -torsoGlobalPitch, 0f, handA!!)
         // W1: engine now derives hand orientation (removed tilt counter-rotation + 6/6/10 offsets).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)

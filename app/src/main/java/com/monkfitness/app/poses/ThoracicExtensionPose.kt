@@ -81,8 +81,9 @@ class ThoracicExtensionPose : BaseThoracicPose() {
         ankleB!!.localPosition.set(shinVec)
 
         // Feet flat on the floor, toes pointing back (no plantar flexion, no sky-pointing).
-        ankleF!!.localRotation.set(axisZ, 0f)
-        ankleB!!.localRotation.set(axisZ, 0f)
+        // Branch C: neutral ankle articulation recorded as the §1.3 intent (identity flexion).
+        buildAnkleArticulation(Extremity.FOOT_F, 0f, 0f, ankleF!!)
+        buildAnkleArticulation(Extremity.FOOT_B, 0f, 0f, ankleB!!)
         // W1: engine now derives heel/toe from the (vertical) shank + neutral ankle.
 
         // Arms: hands behind the head, elbows flared outward/up to open the chest.
