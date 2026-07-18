@@ -12,8 +12,8 @@ import kotlin.math.abs
 /**
  * M4 (RFC_GAP_CLOSURE) — `FINALIZER_OWNS_CONVERSION=true`.
  *
- * M4 activates the Finalizer's exclusive local-transform ownership: `preConvertPoles` (a reserved
- * no-op hook) and the `reconstructChestFrame` F1/B5 read-only chest-frame guard. The guard only
+ * M4 activates the Finalizer's exclusive local-transform ownership: the `reconstructChestFrame`
+ * F1/B5 read-only chest-frame guard. The guard only
  * fires for poses that registered an engine [ContactSpec]; the chest reconstruction touches only the
  * chest subtree (shoulders/arms/neck/head), so it can never displace a Solver-settled hand/foot
  * contact, and the guard is a no-op that leaves the output byte-identical.

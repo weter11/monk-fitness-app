@@ -10,6 +10,42 @@ that audit.
 with zero retained legacy branches, dead deprecated members, flag-gated rollback paths, or
 tests that pin them.
 
+---
+
+## Execution Log
+
+### Pre-flight (done)
+- `/tmp/kilo` was **absent**; provisioned the toolchain via `docs/TOOLCHAIN_PROVISIONING.md`
+  §3–§5 fallback:
+  - JDK 17 via `apt-get install openjdk-17-jdk-headless` (`/usr/lib/jvm/java-17-openjdk-amd64`).
+  - Android SDK 34 (`platforms/android-34-ext12`, `build-tools/34.0.0`) downloaded directly
+    (proxy re-signs per host) into `<repo>/android-sdk`; `local.properties` written
+    (`sdk.dir=.../android-sdk`); SDK licenses accepted via `sdkmanager --licenses`.
+  - Gradle 8.7 distribution downloaded directly and invoked via its own binary (wrapper
+    download blocked by the TLS intercept).
+  - **TLS root cause:** the Cloudflare intercept CA must be imported into the **JDK default
+    cacerts** (`/etc/ssl/certs/java/cacerts`). `keytool -importcert` against a multi-cert PEM
+    imports only the first cert (the leaf), not the self-signed root — so the clean
+    `Cloudflare TLS proxy-everything Intercept CA` root was extracted and imported alone.
+- **Baseline:** `./gradlew :app:testDebugUnitTest` → **282 tests, 0 failures, 0 errors, 0 skipped**.
+
+### Phase A — Dead-symbol deletion (DONE)
+Removed, zero callers in `main`/`test` (except `evaluate`, migrated):
+- A1/A2: deleted `AnimationMode` enum + deprecated `rememberAnimationController(mode,…)`
+  overload (`AnimationController.kt`).
+- A3: deleted `PoseBuilder.defaultCamera` (`PoseBuilder.kt`).
+- A4: deleted `PoseBuilder.evaluate`; migrated 8 test callers
+  (`*PoseTest.kt`: ArmCircles, Burpee, FacePull, GluteBridge, HipCars, PelvicTilt,
+  ScapularRetraction, WallSlides) to the equivalent `build(PoseContext(...))` call
+  (byte-identical to the deleted method).
+- A5: deleted the deprecated frame-relative `solveIK` overload + its orphaned
+  `poleWorldScratch` field (`SkeletonMath.kt`).
+- A6: deleted `LegacySkeletonDefinition` typealias (`SkeletonDefinition.kt`).
+- A7: deleted `preConvertPoles` method + call + doc-comment references
+  (`SkeletonPoseFinalizer.kt`, `EngineFlags.kt`, `FinalizerOwnsConversionM4Test.kt`).
+- **Verification gate A passed:** `:app:testDebugUnitTest` → **282 / 0 / 0 / 0**, byte-identical
+  to baseline. App compiles.
+
 **Hard constraints (from `AGENTS.md`):**
 - **Compile-first policy:** every step must keep the app compiling. A non-compiling
   intermediate state is a blocking defect, fixed before the next step.

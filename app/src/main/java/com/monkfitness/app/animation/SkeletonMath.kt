@@ -245,9 +245,6 @@ data class ContactConstraint(
 }
 
     object SkeletonMath {
-    // Static scratch for transforming a frame-relative pole into world space inside solveIK.
-    private val poleWorldScratch = Vector3()
-
     // Scratch for deriving the default world pole (never allocates per solve).
     private val defaultPoleAim = Vector3()
 
@@ -1107,39 +1104,6 @@ data class ContactConstraint(
         val d2x = end.x - mid.x; val d2y = end.y - mid.y; val d2z = end.z - mid.z
         val d2 = sqrt(d2x * d2x + d2y * d2y + d2z * d2z)
         return abs(d1 - L1) <= eps && abs(d2 - L2) <= eps
-    }
-
-    /**
-     * Frame-relative IK overload. The pole is authored in the limb-root's LOCAL frame and is
-     * transformed into world space with [parentRotation] before solving. The analytical solver
-     * itself is unchanged. This keeps the elbow direction stable as the parent frame rotates
-     * (e.g. a twisting thorax), eliminating pole-vector flips and uneven arm motion.
-     *
-     * Phase 1 (F4): DEPRECATED. The IK layer must be strictly world-space — the pose/finalizer
-     * owns any parent-frame→world conversion (or calls [deriveDefaultPole]) before solving.
-     * Retained only so existing callers keep compiling until Phase 3 removes it.
-     */
-    @Deprecated(
-        "Phase 1: IK is world-only. Convert the pole to world space (toWorldDirection) or call " +
-            "deriveDefaultPole before solveIK; the frame-relative overload will be removed in Phase 3.",
-        ReplaceWith(
-            "solveIK(root, target, L1, L2, toWorldDirection(poleLocal, parentRotation, Vector3()), constraint, result, contact)",
-            "com.monkfitness.app.animation.SkeletonMath.toWorldDirection"
-        )
-    )
-    fun solveIK(
-        root: Vector3,
-        target: Vector3,
-        L1: Float,
-        L2: Float,
-        poleLocal: Vector3,
-        parentRotation: JointRotation,
-        constraint: IKConstraint,
-        result: IKResult = IKResult(),
-        contact: ContactConstraint? = null
-    ): IKResult {
-        toWorldDirection(poleLocal, parentRotation, poleWorldScratch)
-        return solveIK(root, target, L1, L2, poleWorldScratch, constraint, result, contact)
     }
 
     // High-fidelity 3D Rotation Matrix utilities for zero-allocation FK propagation

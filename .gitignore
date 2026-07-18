@@ -35,3 +35,7 @@ android-sdk/
 proxy-ca.pem
 custom-cacerts
 git-proxy-ca.pem
+
+# Ephemeral toolchain harvest artifacts (never commit)
+google-chain.pem
+intercept-ca-only.pem

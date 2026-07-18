@@ -59,6 +59,3 @@ data class HumanSkeletonDefinition(
     override val legIKConstraint: IKConstraint = IKConstraint.LegConstraint,
     override val hipRomLimits: HipRomLimits = HipRomLimits.DEFAULT
 ) : SkeletonDefinition
-
-// For backward compatibility during migration
-typealias LegacySkeletonDefinition = HumanSkeletonDefinition
