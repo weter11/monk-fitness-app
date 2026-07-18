@@ -145,7 +145,7 @@
     the Solver+guard). **B1 (Branch B IkStage extraction) DONE** — `limbTargets` is now live: every
     `bakeIkLimb` forwards its end joint + world target into the carrier, and the pipeline-owned
     `IkStage` (`animation/IkStage.kt`, invoked in `SkeletonPipeline.runStages` before the
-    ConstraintSolver) consumes it. Gated by `EngineFlags.IK_STAGE_ACTIVE` (default **false** →
+    ConstraintSolver) consumes it. Gated by the top-level `IK_STAGE_ACTIVE` flag (default **false** →
     `bakeIkLimb` remains the sole solver, byte-identical baseline). The 5 pose-side IK wrappers
     (`solveArmIK`/`solveLegIK`/`solveStraightArmIK`/`solveStraightLegIK`/`solveNearStraightLeg`) are
     deleted; their 3 call sites now call `SkeletonMath` directly. `IkStageTest` proves stage-on == off

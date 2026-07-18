@@ -10,7 +10,7 @@ package com.monkfitness.app.animation
  * path and into the engine.
  *
  * **Reversibility / byte-identity (B1 exit criteria):** the stage is gated by
- * [EngineFlags.IK_STAGE_ACTIVE] (default **false**). When off, `bakeIkLimb` remains the sole limb
+ * [IK_STAGE_ACTIVE] (default **false**). When off, `bakeIkLimb` remains the sole limb
  * solver and every pose renders byte-identical to the pre-B1 baseline. When on, the stage re-solves
  * each limb with the *exact* same `SkeletonMath` calls `bakeIkLimb` uses (it reads the full IK
  * context — pole, straight flag and contact — straight off the [WorldTarget] that `bakeIkLimb`
@@ -25,6 +25,18 @@ package com.monkfitness.app.animation
  * double-registers). For a zero-length `pole` it derives the default world pole, exactly as
  * `bakeIkLimb` does.
  */
+/**
+ * Additive migration flag for the pipeline-owned limb stage ([IkStage]), default **false**.
+ *
+ * When **false** (the default) `bakeIkLimb` remains the sole limb solver, so every pose renders
+ * byte-identical to the pre-B1 baseline - the stage is a no-op. Flip it on (after the
+ * `IkStageTest` byte-identity check is green) to make [IkStage] the real solver. This is the one
+ * remaining engine flag: it is a *future additive* decision (the dead->live flip of B1), not a
+ * legacy rollback branch, so Phase B/F left it in place after deleting the collapsed flags.
+ * It lives beside its sole reader ([IkStage.apply]) rather than in a global flag object.
+ */
+var IK_STAGE_ACTIVE: Boolean = false
+
 object IkStage {
 
     // Reused scratch buffers (allocation-free, single-threaded like the finalizer).
@@ -39,7 +51,7 @@ object IkStage {
      * `SkeletonPose.fromHierarchy` flattens the tree (mirroring where `bakeIkLimb` writes today).
      */
     fun apply(pose: SkeletonPose, definition: SkeletonDefinition) {
-        if (!EngineFlags.IK_STAGE_ACTIVE) return
+        if (!IK_STAGE_ACTIVE) return
         val targets = pose.limbTargets
         if (targets.isEmpty()) return
         val roots = pose.roots

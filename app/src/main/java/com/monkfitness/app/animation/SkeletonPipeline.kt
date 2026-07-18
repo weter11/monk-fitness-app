@@ -87,7 +87,7 @@ class SkeletonPipeline(
     private fun runStages(pose: SkeletonPose): SkeletonPose {
         // B1 (IkStage extraction) — the pipeline-owned limb stage consumes the §1.1 `limbTargets`
         // carrier and re-derives each limb's local positions on the engine-owned node tree.
-        // (EngineFlags.IK_STAGE_ACTIVE was excluded from Phase B — its flag is a future additive
+        // (IK_STAGE_ACTIVE was excluded from Phase B — its flag is a future additive
         // decision, not legacy removal — so the IkStage no-op gate is preserved as-is.) It runs
         // before the ConstraintSolver so contact limbs are re-baked from their targets ahead of the
         // root-repositioning pass, and before the Finalizer's FK.

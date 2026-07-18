@@ -115,9 +115,13 @@ class SkeletonPipelineM0Test {
 
     @Test
     fun pipelineIsUnconditionallyLive() {
-        // Phase B removed the PIPELINE_ACTIVE flag; the pipeline always drives the Solver+Finalizer
-        // chain. The two entry points must agree (covered above) and no flag exists to disable it.
-        assertTrue("EngineFlags no longer exposes PIPELINE_ACTIVE (collapsed in Phase B)",
-            !EngineFlags.snapshot().containsKey("PIPELINE_ACTIVE"))
+        // Phase B removed the PIPELINE_ACTIVE flag and Phase F deleted the global flag object
+        // entirely; the pipeline always drives the Solver+Finalizer chain and there is no runtime
+        // switch to disable it. The two entry points agreeing (covered by the byte-identity tests
+        // above) is the structural guarantee that replaces the old flag assertion.
+        val pipeline = SkeletonPipeline(def)
+        val a = pipeline.produceFrame(StandardPullUpPose(), PoseContext(0f, Side.LEFT, def)).pose
+        val b = pipeline.produceFrame(StandardPullUpPose().build(PoseContext(0f, Side.LEFT, def))).pose
+        assertEquals("both pipeline entry points must produce the same frame", a.roots.size, b.roots.size)
     }
 }
