@@ -164,13 +164,13 @@ class SkeletonPoseFinalizer(
 
     /**
      * Phase 7 (Gap 7 / F8 / W17) — resolves the gaze from the pose-declared `headTarget` intent.
-     * This resolver is the **single writer** of the neck/head local offsets (the legacy
-     * direction-based `buildHead` fallback in `buildGaze` was removed once this path was proven
-     * byte-identical — `HeadTargetBaselineTest`, maxDeviation ~6e-5).
+     * This resolver is the **single writer** of the neck/head local offsets. The legacy
+     * direction-based `buildHead` fallback that previously ran in `buildGaze` was removed once
+     * this path was proven byte-identical (`HeadTargetBaselineTest`, maxDeviation ~6e-5).
      *
      * If the pose declared no `headTarget` (a non-gaze pose), this is a no-op. Otherwise the gaze
      * direction is derived from the neck's current world position toward `headTarget.world`, biased
-     * upright by `headTarget.upBias`, and written with the same math `buildHead` uses
+     * upright by `headTarget.upBias`, and written at the authored bone lengths
      * (`neck.localPosition = dir * neckLength`, `head.localPosition = dir * 18f`). Because the pose
      * records the synthetic target as `neckWorldPos + gazeDir * 100`, resolving here reproduces the
      * identical direction the pose authored — the geometry equals the pre-Phase-7 baseline while the
@@ -189,7 +189,8 @@ class SkeletonPoseFinalizer(
         // Direction from the (FK-current) neck world position toward the gaze target.
         tempV1.set(target.world).subtract(neck.worldPosition)
         if (tempV1.mag() < 1e-4f) tempV1.set(target.upBias) else tempV1.normalize()
-        // Same math as BasePose.buildHead — single source of truth for head orientation.
+        // Single source of truth for head orientation: place neck/head along the gaze direction
+        // at their authored bone lengths, matching the historical buildHead math now inlined here.
         neck.localPosition.set(tempV1.x * definition.neckLength, tempV1.y * definition.neckLength, tempV1.z * definition.neckLength)
         head.localPosition.set(tempV1.x * 18f, tempV1.y * 18f, tempV1.z * 18f)
 

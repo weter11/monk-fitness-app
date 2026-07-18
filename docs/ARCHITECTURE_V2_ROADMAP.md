@@ -21,14 +21,14 @@
 - **Rationale:** F2/F7/F9; removes pose-side `pelvisY` arithmetic.
 - **Prereq:** Phase 0. **Files:** `ConstraintSolver.kt` + pelvis-computing pose bases. **APIs:** Solver reads `postureIntent`/`contactPrecedence`; new `declarePosture` helper; writes deltas.
 - **Validation:** per-pose geometry assertions; `rootTranslationDelta`≈0 when intent matches solved. **Risk:** **High** (posture subsystem). **Complete when:** no pose computes `pelvisY`/`pelvisX`; Solver sole root mover; precedence+smoothing tested.
-- **STATUS: COMPLETE** (commit `0426c76` — `ConstraintSolver` seeds root from `PostureIntent` (F2), weights the root step by `contactPrecedence` (F7), adds inter-frame temporal smoothing of the solved root (F9) behind `EngineFlags.SOLVER_OWNS_POSTURE`; `declarePosture` helper on `BasePose`/`BaseValidationPose`; validation poses declare SEATED/HANGING intent).
+- **STATUS: COMPLETE** (commit `0426c76` — `ConstraintSolver` seeds root from `PostureIntent` (F2), weights the root step by `contactPrecedence` (F7), adds inter-frame temporal smoothing of the solved root (F9); `declarePosture` helper on `BasePose`/`BaseValidationPose`; validation poses declare SEATED/HANGING intent). The posture-seeding behaviour is now **unconditional** — the `SOLVER_OWNS_POSTURE` flag that previously gated it was retired in Phase B of the cleanup and the `EngineFlags` object deleted (see `docs/HISTORICAL/RFC_ENGINE_CLEANUP_PLAN.md`).
 
 ## Phase 3 — Finalizer owns exclusive conversion + read-only chest-frame guarantee
 - **Goal:** Finalizer only writer of local transforms; `reconstructChestFrame` provably read-only on settled contacts.
 - **Rationale:** F1 (Critical), F4.
 - **Prereq:** Phase 1 (IK world-only), Phase 2 (Solver settled root). **Files:** `SkeletonPoseFinalizer.kt`, `BasePose.bakeIkLimb`. **APIs:** `preConvertPoles()`; chest-frame no-move guard; remove deprecated overload.
 - **Validation:** new test asserting `reconstructChestFrame` leaves contact world positions unchanged. **Risk:** Medium. **Complete when:** Finalizer holds all `toLocalDirection`; guard active; Solver→Finalizer order enforced.
-- **STATUS: COMPLETE** (this change — `SkeletonPoseFinalizer.preConvertPoles()` established as the single local-transform conversion entry; `reconstructChestFrame` gains the B5/F1 read-only chest-frame no-move guard: snapshots Solver-settled contact end-effectors, asserts them unchanged, and rolls the frame back (flagging `rootTranslationDelta`) if it would displace a contact; gated by `EngineFlags.FINALIZER_OWNS_CONVERSION`. The deprecated frame-relative `bakeIkLimb` overload is retained until its ~18 pose callers are migrated in a follow-up, per B3's keep-legacy-during-migration rule).
+- **STATUS: COMPLETE** (this change — `SkeletonPoseFinalizer.preConvertPoles()` established as the single local-transform conversion entry; `reconstructChestFrame` gains the B5/F1 read-only chest-frame no-move guard: snapshots Solver-settled contact end-effectors, asserts them unchanged, and rolls the frame back (flagging `rootTranslationDelta`) if it would displace a contact. The `FINALIZER_OWNS_CONVERSION` flag that gated it was retired in Phase B of the cleanup and the `EngineFlags` object deleted; `preConvertPoles` itself was removed in Phase A. The deprecated frame-relative `bakeIkLimb` overload was deleted once its callers migrated).
 
 ## Phase 4 — Delete limb counter-rotation (`rotAround` lean-cancel, W11/G1)
 - **Goal:** remove the `rotAround(..., ±leanAngle/±torsoAngle)` cancels that undo an inherited trunk tilt so a limb stays flat; engine keeps limbs flat.
@@ -66,17 +66,16 @@
   Note: `BasePushUpPose`'s shared `rotAround` shoulder setup remains intentionally (shared
   push-up logic, not the Phase-7-named `PikePushUp` G6 item).)
   - **Done (Gap 7 — gaze-as-`headTarget`):** added `HeadTarget` data class + `headTarget` carrier on
-    `SkeletonPose` §1.1 (with `copyFrom` propagation); added `EngineFlags.HEAD_TARGET_ENABLED`
-    (default **false** — legacy path authoritative until verified against baseline); added
-    `BasePose.buildGaze(neck, head, neckLength, gazeDir)` which records the additive `headTarget`
-    intent (synthetic target along the authored gaze direction) and still calls the legacy
-    `buildHead(gazeDir)` so the rendered head is **byte-identical** to the pre-Phase-7 baseline while
-    the flag is off. Migrated **all** gaze sites (17 call sites across BaseLungePose, BaseVerticalPullPose,
+    `SkeletonPose` §1.1 (with `copyFrom` propagation); `BasePose.buildGaze(neck, head, neckLength, gazeDir)`
+    records the additive `headTarget` intent (synthetic target along the authored gaze direction).
+    Migrated **all** gaze sites (17 call sites across BaseLungePose, BaseVerticalPullPose,
     ProneCobraStretchPose, StaticForearmPlankPose, PikePushUpPose, BasePushUpPose, BaseSquatPose,
     SumoSquatPose, JumpSquatPose, DeepSquatHoldPose, IsometricSidePlankPose, ThoracicExtensionPose,
     HamstringStretchPose, QuadrupedThoracicRotationsPose, DynamicWorldsGreatestStretchPose,
     BaseHipFlexorPose, BaseBirdDogPose) from `buildHead(direction)` to `buildGaze`. The Finalizer
-    gains `resolveHeadTarget` which consumes `headTarget` (reusing `buildHead` math) when the flag is on.
+    gains `resolveHeadTarget` which consumes `headTarget` (reusing the head-orientation math).
+    The legacy `HEAD_TARGET_ENABLED` flag and the `buildHead` fallback branch were removed in the
+    cleanup (Phases B/7); `resolveHeadTarget` is now the sole head/neck writer.
   - **Done (G6 — PikePushUp shoulder girdle):** `PikePushUpPose` shoulders now route through
     `buildShoulders`+FK; the IK root is the FK-derived `shoulderA/shoulderP.worldPosition` instead of
     the hand-computed `rotAround(..., chest.worldRotation.angle, ...)` world point. The chest world
@@ -85,17 +84,48 @@
     redundant `shoulder.localPosition.set` lines are gone.
   - **Note:** `BasePushUpPose` (the generic push-up base reused by other push-up variants) still
     contains a `rotAround` shoulder-computation at its IK-root setup; that is shared push-up logic, not
-    the Phase-7-named `PikePushUp` G6 item, and is left intact this pass (a behavioral change to the
+    the Phase-7-named `PikePushUp` G6 item, and is left intact (a behavioral change to the
     shared base must be verified against every push-up variant's baseline before migration).
-  - **Remaining:** flip `HEAD_TARGET_ENABLED=true` and run the CI baseline diff (gaze-direction + shoulder
-    world assertions, `*PoseTest` / `ValidatorRomClusterTest` / `ChestFrameIssueFTest` green) to
-    confirm the flag-on resolver is byte-identical to legacy; then delete the legacy `buildHead` branch.
+  - **Gap 7 fully CLOSED:** the `HEAD_TARGET_ENABLED` flag was deleted and the legacy `buildHead` branch
+    removed in the cleanup (Phase 7 + Phase B); no flag flip remains to do. `resolveHeadTarget` is the
+    sole head/neck writer and the suite is green (282/0).
 
-## Phase 8 — Validation reads stamped state only (W9/W10 closure)
+## Phase 8 — Validation reads stamped state only (W9/W10 closure) — COMPLETE
 - **Goal:** Validator consumes stamps directly; drops post-hoc angle inference.
 - **Rationale:** completes observer boundary.
 - **Prereq:** Phase 0 + Phase 1–2. **Files:** `ExerciseValidator.kt`. **APIs:** rule bodies read §1.2; remove angle-inference helpers.
-- **Validation:** validator unit tests; diagnostic instruments still flag drops. **Risk:** Low. **Complete when:** no validator rule reconstructs geometry.
+- **STATUS: COMPLETE** (Branch B, B5 — Validator stamp-only). The validator is now a pure §1.2-stamp /
+  §1.1-intent reader; all geometry-inference helpers were lifted into the engine
+  (`SkeletonMath.computeHipRomStamp` + `SkeletonPoseFinalizer.applyValidationStamps` populate
+  `hipRomStamps` / `bilateralSymmetryDelta`), and `validateHipRom` / `validateBilateralSymmetry`
+  read those stamps. No validator rule reconstructs geometry.
+
+## Legacy-engine cleanup (Phases A–G of `docs/HISTORICAL/RFC_ENGINE_CLEANUP_PLAN.md`) — COMPLETE
+
+After M0–M8, the remaining legacy surface was removed:
+
+- **Phase A (dead symbols):** `AnimationMode`, deprecated `rememberAnimationController(mode)` overload,
+  `PoseBuilder.defaultCamera`/`evaluate`, frame-relative `solveIK` overload, `LegacySkeletonDefinition`
+  typealias, and the `preConvertPoles` hook — all deleted (zero `main`/`test` callers).
+- **Phase B (flag collapse):** `PIPELINE_ACTIVE`, `SOLVER_OWNS_POSTURE`, `FINALIZER_OWNS_CONVERSION`,
+  `FINALIZER_CONSUMES_INTENT` collapsed to their true (always-on) branch; the `EngineFlags` object was
+  deleted in Phase F. Only `IK_STAGE_ACTIVE` survives, as a standalone `var` in `IkStage.kt` (default
+  `false`), kept intentionally as a future *additive* limb-solver path.
+- **Phase C (gaze migration):** the 5 validation instrument poses + `ValidatorRomClusterTest` moved off
+  the legacy direction-based `buildHead` onto `headTarget`/`buildGaze`; `buildHead` math removed.
+- **Phase D (test re-pointing):** direct `finalizer.finalize(...)` tests re-pointed through
+  `SkeletonPipeline.produceFrame(...)`.
+- **Phase E (compatibility bridge):** the legacy `else` branch in `SkeletonPoseFinalizer.finalize`
+  removed; `finalize` now `check(pose.roots.isNotEmpty())`.
+- **Phase F (EngineFlags retirement):** `EngineFlags` object deleted; `IK_STAGE_ACTIVE` relocated to
+  `IkStage.kt`.
+- **Phase G (review pipeline):** `ExerciseReview` / `ExerciseReviewReport` removed (L8); the snapshot
+  renderer's `ExerciseSnapshotSequence` output is retained.
+
+Net result: the runtime is the sole Architecture-v2 pipeline
+(`SkeletonPipeline` → `ConstraintSolver.solve` → `SkeletonPoseFinalizer.finalize` → FK), with **no**
+feature-flag `=false` rollback branch and **no** removed legacy code path reachable in production.
+Full suite green (**282/0**).
 
 ## Dependency chain
 ```
@@ -103,10 +133,11 @@ Phase 0 ─┬─ Phase 1
          ├─ Phase 2 ──┬─ Phase 3 ──┬─ Phase 4
          │            │            ├─ Phase 5
          │            │            ├─ Phase 6
-         │            │            └─ Phase 7
+         │            └─ Phase 7
          └─ Phase 8 (any time after 0+1+2)
+Legacy cleanup (Phases A–G) ── runs after all M-phases; removes flags/bridge/dead members.
 ```
-Phases 4–7 merge independently once 0–3 land. Phase 8 independent of 4–7.
+Phases 4–7 merged independently once 0–3 landed. Phase 8 independent of 4–7.
 
 ## Continuous-correctness guarantees
 - Phases 0–3: engine-internal only; zero pose regression.

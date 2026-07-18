@@ -1,6 +1,13 @@
 # RFC — Execution Contract: IK · ConstraintSolver · SkeletonPoseFinalizer · FK
 
-**Status:** Draft specification (no code).
+> [!IMPORTANT]
+> **STATUS: SUPERSEDED (historical).** The execution contract it specifies is now live and the
+> *de facto* runtime path. The feature-flag table in §14 references `EngineFlags` members
+> (`PIPELINE_ACTIVE`, `SOLVER_OWNS_POSTURE`, etc.) that were **deleted in the cleanup** (Phases
+> A–G of `docs/HISTORICAL/RFC_ENGINE_CLEANUP_PLAN.md`); all those flags were collapsed to their `on` (architecture-v2)
+> branch, so the "Off (legacy)" column is obsolete. Retained for archaeology.
+
+**Status:** Draft specification (no code). → **SUPERSEDED / contract now live**; see banner above.
 **Author:** Principal Engine Architect.
 **Addresses:** the execution contract between the four geometry stages of Architecture v2
 (`ARCHITECTURE_V2.md` §2.2–§2.5, §3) — IK, ConstraintSolver, SkeletonPoseFinalizer, FK.
@@ -331,11 +338,13 @@ Solver result stands and Validator flags the residual. This bounds total work to
 
 ---
 
-## 14. Feature flags during migration
+## 14. Feature flags during migration (HISTORICAL — flags deleted in cleanup)
 
-Flags live in `EngineFlags` (`RFC_ENGINE_PIPELINE` §5.7). Their effect on the *execution contract*:
+Flags lived in `EngineFlags` (`RFC_ENGINE_PIPELINE` §5.7); the object was deleted in the cleanup,
+so every flag below is now permanently in its architecture-v2 (`on`) state. Their historical effect
+on the *execution contract*:
 
-| Flag | Off (legacy) | On (architecture-v2) | Execution effect |
+| Flag (removed) | Off (legacy, obsolete) | On (architecture-v2, current) | Execution effect |
 |---|---|---|---|
 | `PIPELINE_ACTIVE` | `Pose.build()`+implicit finalizer (today's path) | pipeline drives all 4 stages in order | switches the *caller*, not the stages |
 | `IK_WORLD_ONLY` | frame-relative pole accepted | only world pole; zero→`deriveDefaultPole` | IK rejects local-frame pole (Gap 5) |

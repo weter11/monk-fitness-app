@@ -10,8 +10,8 @@ import kotlin.math.*
  * manual SkeletonNode construction, manual solveIK + rotAround IK, the camera literal,
  * the hand geometry and the foot-ratio constants. This base consolidates all of that and
  * delegates to the engine: SkeletonFactory for the hierarchy, BasePose.bakeIkLimb() for the
- * front-leg and arm IK (replacing manual solveIK + rotAround), buildHead/buildPelvis for the
- * upper body, and FootDefinition for the heel/toe ratios.
+ * front-leg and arm IK (replacing manual solveIK + rotAround), and the head/pelvis construction
+ * helpers for the upper body, and FootDefinition for the heel/toe ratios.
  *
  * What intentionally remains local (Bird-Dog-style pose biomechanics, not engine knowledge):
  *  - The rigid Pythagorean pelvis solver (pelvis slides along a fixed back-knee constraint).
@@ -92,7 +92,7 @@ abstract class BaseHipFlexorPose : BasePose() {
 
     /**
      * Sets the constant upper-body local offsets after the pelvis has been anchored.
-     * Uses engine helpers buildHead / buildPelvis to remove duplicated head/pelvis construction.
+     * Uses the engine head/pelvis construction helpers to avoid duplicated head/pelvis setup.
      */
     protected fun setUpperBodyLocal(def: SkeletonDefinition) {
         chest!!.localPosition.set(0f, def.torsoLength, 0f)

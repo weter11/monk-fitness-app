@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **STATUS: COMPLETE (historical plan).** Phase E (L1 compatibility-bridge removal) has been
+> executed: `SkeletonPoseFinalizer.finalize` now `check(pose.roots.isNotEmpty())` instead of
+> taking the legacy `else` branch, and `ensureHierarchy`/`setupTransforms`/legacy `roots` are
+> gone (they survive only as the pose-side `build` helpers). This file is retained as a record;
+> the live cleanup spec is `RFC_ENGINE_CLEANUP_PLAN.md` (also executed).
+
 # Phase E — Compatibility bridge removal (L1): Implementation Plan
 
 **RFC:** `RFC_ENGINE_CLEANUP_PLAN.md` §Phase E + `RFC_LEGACY_ENGINE_RETIREMENT.md` §324.

@@ -1,11 +1,20 @@
+> [!IMPORTANT]
+> **STATUS: SUPERSEDED (historical).** This audit's baseline (`HEAD 038bfae`) and its
+> entire inventory (L1–L8: the `EngineFlags` object, the `finalize` compatibility
+> bridge, `preConvertPoles`, `buildHead`, the five deprecated members, `ExerciseReview`)
+> describe a state the code **no longer has**. All of it was removed by Phases A–G of
+> `RFC_ENGINE_CLEANUP_PLAN.md` (actual HEAD `ebab2d6`). The only surviving engine flag
+> is `IK_STAGE_ACTIVE` (default `false`) in `IkStage.kt`, kept intentionally as a future
+> additive path. Keep for archaeology only.
+
 # RFC — Legacy Engine Retirement Audit
 
-**Status:** Inventory / Audit only. No code is modified by this document.
-**Scope:** Determine precisely what prevents the *complete* removal of the legacy
+- **Status:** Inventory / Audit only. No code is modified by this document. → **SUPERSEDED** (see banner above)
+- **Scope:** Determine precisely what prevents the *complete* removal of the legacy
 animation engine following the Architecture-v2 migration
 (`SkeletonPipeline` → `ConstraintSolver.solve` → `SkeletonPoseFinalizer.finalize` → FK).
-**Baseline:** Branch `session/agent_b795bd6c-5a92-47c7-9d9c-5693da550c5a`, HEAD `038bfae`.
-**Method:** Static read of `app/src/main` + `app/src/test`; `EngineFlags` defaults are
+- **Baseline (HISTORICAL):** Branch `session/agent_b795bd6c-5a92-47c7-9d9c-5693da550c5a`, HEAD `038bfae` — **obsolete**; actual HEAD is `ebab2d6`.
+- **Method:** Static read of `app/src/main` + `app/src/test`; `EngineFlags` defaults are
 the live production configuration (`PIPELINE_ACTIVE=true`, `SOLVER_OWNS_POSTURE=true`,
 `FINALIZER_OWNS_CONVERSION=true`, `IK_STAGE_ACTIVE=false`, `FINALIZER_CONSUMES_INTENT=true`).
 

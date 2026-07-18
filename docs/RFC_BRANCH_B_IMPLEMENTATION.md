@@ -93,12 +93,14 @@ The old M5/M6 labels are **not used** — they described flag-flip milestones th
   in `runStages` immediately before the `ConstraintSolver`); consumes `limbTargets`, recovers the
   proximal chain from `ConstraintSolver.chainForEnd` + `SkeletonDefinition` (bone lengths, per-limb IK
   constraint) and, for contact limbs, the exact `straight`/`pole`/`constraint` from the matching
-  `ContactSpec`. Gated by `EngineFlags.IK_STAGE_ACTIVE` (default **false** → pure no-op, byte-identical
-  baseline; flip on once `IkStageTest` is green to make the stage the real solver).
+  `ContactSpec`. Gated by `IK_STAGE_ACTIVE` (now a standalone `var` in `IkStage.kt`, default **false**
+  → pure no-op, byte-identical baseline; flip on once `IkStageTest` is green to make the stage the real
+  solver). The earlier `EngineFlags.IK_STAGE_ACTIVE` location no longer exists — the `EngineFlags` object
+  was deleted in the cleanup and this flag was relocated.
 - **Legacy helpers that disappear:** `solveArmIK`, `solveLegIK`, `solveStraightArmIK`, `solveStraightLegIK`,
   `solveNearStraightLeg` (pose-side wrappers) — **deleted**; their 3 call sites now call `SkeletonMath`
   directly (`BaseThoracicPose.bakeThoracicArm`, `BasePushUpPose.build`, `BaseValidationPose`).
-- **Reversible:** yes — `EngineFlags.IK_STAGE_ACTIVE` off restores the legacy `bakeIkLimb` solver (the
+- **Reversible:** yes — `IK_STAGE_ACTIVE` off restores the legacy `bakeIkLimb` solver (the
   carrier record is additive); the stage is fully additive.
 - **Exit criteria (met):** `limbTargets` transitions dead → live (`Section11CarriersTest` flipped);
   limb/contact poses byte-identical via `IkStageTest`; the 5 IK wrappers deleted; suite green.
@@ -124,7 +126,9 @@ The old M5/M6 labels are **not used** — they described flag-flip milestones th
   `buildChestSideBend`, `buildChestOrientation`, `buildHipFlexion`, `buildHipAbduction`, `buildHipRotation`,
   `buildHipOrientation`, `buildClavicularRotation`, `buildWristArticulation`, `buildAnkleArticulation`
   (became forwards in B2, deleted in B4 once no pose calls them).
-- **Reversible:** yes — `EngineFlags.FINALIZER_CONSUMES_INTENT` (default **true**) gates the consumer; set
+- **Reversible:** yes — `FINALIZER_CONSUMES_INTENT` (was `EngineFlags.FINALIZER_CONSUMES_INTENT`,
+  default **true**) gated the consumer; the flag was collapsed to `true` and the `EngineFlags` object
+  deleted in the cleanup, so the carrier consumer is now unconditional.
   false to restore the pre-B2 finalize (carriers recorded but not consumed — still byte-identical, since
   the helpers keep writing the nodes). The consumer is a no-op for contact poses (`pose.hasContacts()`) so
   the ConstraintSolver's settled contacts are never disturbed.
