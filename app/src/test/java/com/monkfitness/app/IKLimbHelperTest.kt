@@ -12,7 +12,7 @@ class IKLimbHelperTest {
     @Test
     fun testPushUpPoseIKBakeCompliance() {
         val def = SkeletonDefinition.DEFAULT_ADULT
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
         val context = PoseContext(
             progress = 0.5f,
             side = Side.RIGHT,
@@ -23,7 +23,7 @@ class IKLimbHelperTest {
 
         // Verify Standard PushUp compiles, runs, and finalizes correctly with bakeIkLimb helper
         val pushupPose = StandardPushUpPose().build(context)
-        val finalizedPushup = finalizer.finalize(pushupPose)
+        val finalizedPushup = pipeline.produceFrame(pushupPose).pose
 
         assertNotNull(finalizedPushup)
         assertTrue(finalizedPushup.isTransformsUpdated)
@@ -41,7 +41,7 @@ class IKLimbHelperTest {
     @Test
     fun testSquatPoseIKBakeCompliance() {
         val def = SkeletonDefinition.DEFAULT_ADULT
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
         val context = PoseContext(
             progress = 0.5f,
             side = Side.RIGHT,
@@ -52,7 +52,7 @@ class IKLimbHelperTest {
 
         // Verify AirSquat compiles, runs, and finalizes correctly with bakeIkLimb helper
         val squatPose = AirSquatPose().build(context)
-        val finalizedSquat = finalizer.finalize(squatPose)
+        val finalizedSquat = pipeline.produceFrame(squatPose).pose
 
         assertNotNull(finalizedSquat)
         assertTrue(finalizedSquat.isTransformsUpdated)
@@ -69,7 +69,7 @@ class IKLimbHelperTest {
     @Test
     fun testLungePoseIKBakeCompliance() {
         val def = SkeletonDefinition.DEFAULT_ADULT
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
         val context = PoseContext(
             progress = 0.5f,
             side = Side.RIGHT,
@@ -80,7 +80,7 @@ class IKLimbHelperTest {
 
         // Verify Lunge compiles, runs, and finalizes correctly with bakeIkLimb helper
         val lungePose = AlternatingForwardLungesPose().build(context)
-        val finalizedLunge = finalizer.finalize(lungePose)
+        val finalizedLunge = pipeline.produceFrame(lungePose).pose
 
         assertNotNull(finalizedLunge)
         assertTrue(finalizedLunge.isTransformsUpdated)
@@ -95,7 +95,7 @@ class IKLimbHelperTest {
     @Test
     fun testHangPoseIKBakeCompliance() {
         val def = SkeletonDefinition.DEFAULT_ADULT
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
         val context = PoseContext(
             progress = 0.5f,
             side = Side.RIGHT,
@@ -106,7 +106,7 @@ class IKLimbHelperTest {
 
         // Verify HangPose compiles, runs, and finalizes correctly with bakeIkLimb helper
         val hangPose = HangPose().build(context)
-        val finalizedHang = finalizer.finalize(hangPose)
+        val finalizedHang = pipeline.produceFrame(hangPose).pose
 
         assertNotNull(finalizedHang)
         assertTrue(finalizedHang.isTransformsUpdated)
@@ -121,7 +121,7 @@ class IKLimbHelperTest {
     @Test
     fun testPullUpPoseIKBakeCompliance() {
         val def = SkeletonDefinition.DEFAULT_ADULT
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
         val context = PoseContext(
             progress = 0.5f,
             side = Side.RIGHT,
@@ -132,7 +132,7 @@ class IKLimbHelperTest {
 
         // Verify StandardPullUpPose compiles, runs, and finalizes correctly with bakeIkLimb helper
         val pullupPose = StandardPullUpPose().build(context)
-        val finalizedPullup = finalizer.finalize(pullupPose)
+        val finalizedPullup = pipeline.produceFrame(pullupPose).pose
         assertNotNull(finalizedPullup)
         assertTrue(finalizedPullup.isTransformsUpdated)
 

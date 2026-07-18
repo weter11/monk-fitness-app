@@ -13,7 +13,7 @@ class DeclinePushUpPoseTest {
         val def = SkeletonDefinition.DEFAULT_ADULT
         val env = poseBuilder.metadata.environment ?: EnvironmentDefinition()
         val camera = Camera()
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
 
         val config = ValidatorConfig(
             allowFootGroundPenetration = true, // elevated feet can dip slightly
@@ -46,7 +46,7 @@ class DeclinePushUpPoseTest {
                 cycleDuration = 2500f
             )
             val rawPose = poseBuilder.build(context)
-            val finalizedPose = finalizer.finalize(rawPose)
+            val finalizedPose = pipeline.produceFrame(rawPose).pose
             poses.add(finalizedPose)
         }
 
@@ -103,7 +103,7 @@ class DeclinePushUpPoseTest {
     fun testLegBilateralSymmetryCorrectness() {
         val poseBuilder = DeclinePushUpPose()
         val def = SkeletonDefinition.DEFAULT_ADULT
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
         val progressValues = arrayOf(0.0f, 0.25f, 0.5f, 0.75f, 1.0f)
 
         println("=== LEG BILATERAL SYMMETRY VERIFICATION ===")
@@ -116,7 +116,7 @@ class DeclinePushUpPoseTest {
                 cycleDuration = 2500f
             )
             val rawPose = poseBuilder.build(context)
-            val pose = finalizer.finalize(rawPose)
+            val pose = pipeline.produceFrame(rawPose).pose
 
             val hipF = pose.getJoint(Joint.HIP_F)
             val kneeF = pose.getJoint(Joint.KNEE_F)
@@ -151,7 +151,7 @@ class DeclinePushUpPoseTest {
     fun testPrintDeclinePushUpCoordinates() {
         val poseBuilder = DeclinePushUpPose()
         val def = SkeletonDefinition.DEFAULT_ADULT
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
         val progressValues = arrayOf(0.0f, 0.25f, 0.5f, 0.75f, 1.0f)
 
         println("=== DECLINE PUSH-UP COORD COMPARISON ===")
@@ -164,7 +164,7 @@ class DeclinePushUpPoseTest {
                 cycleDuration = 2500f
             )
             val rawPose = poseBuilder.build(context)
-            val pose = finalizer.finalize(rawPose)
+            val pose = pipeline.produceFrame(rawPose).pose
 
             val hipF = pose.getJoint(Joint.HIP_F)
             val kneeF = pose.getJoint(Joint.KNEE_F)
@@ -196,7 +196,7 @@ class DeclinePushUpPoseTest {
     fun testPrintRequiredArmReach() {
         val poseBuilder = DeclinePushUpPose()
         val def = SkeletonDefinition.DEFAULT_ADULT
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
         val progressValues = arrayOf(0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f)
 
         val L1 = def.upperArmLength
@@ -217,7 +217,7 @@ class DeclinePushUpPoseTest {
                 cycleDuration = 2500f
             )
             val rawPose = poseBuilder.build(context)
-            val pose = finalizer.finalize(rawPose)
+            val pose = pipeline.produceFrame(rawPose).pose
 
             // Get shoulder and target hand (during build loop we solve armA using shoulderAW and targetHandA)
             // Let's re-calculate shoulderAW and targetHandA as they are computed in build

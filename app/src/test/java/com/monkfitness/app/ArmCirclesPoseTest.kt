@@ -13,7 +13,7 @@ class ArmCirclesPoseTest {
         val def = SkeletonDefinition.DEFAULT_ADULT
         val env = poseBuilder.metadata.environment ?: EnvironmentDefinition()
         val camera = Camera()
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
         val validator = ExerciseValidator(ValidatorConfig(isStaticExercise = false))
 
         // Create a full rep sequence (smooth cosine trajectory for progress to ensure velocity and acceleration continuity)
@@ -27,7 +27,7 @@ class ArmCirclesPoseTest {
             val progress = 0.5f * (1.0f - kotlin.math.cos(t * 2 * kotlin.math.PI.toFloat()))
 
             val rawPose = poseBuilder.build(PoseContext(MotionCurves.transform(poseBuilder.metadata.motionCurve, progress), Side.LEFT, def))
-            val finalizedPose = finalizer.finalize(rawPose)
+            val finalizedPose = pipeline.produceFrame(rawPose).pose
             poses.add(finalizedPose)
         }
 

@@ -13,7 +13,7 @@ class WidePushUpPoseTest {
         val def = SkeletonDefinition.DEFAULT_ADULT
         val env = poseBuilder.metadata.environment ?: EnvironmentDefinition()
         val camera = Camera()
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
 
         val config = ValidatorConfig(
             allowFootGroundPenetration = false,
@@ -45,7 +45,7 @@ class WidePushUpPoseTest {
                 cycleDuration = 2500f
             )
             val rawPose = poseBuilder.build(context)
-            val finalizedPose = finalizer.finalize(rawPose)
+            val finalizedPose = pipeline.produceFrame(rawPose).pose
             poses.add(finalizedPose)
         }
 
@@ -102,7 +102,7 @@ class WidePushUpPoseTest {
     fun testLegBilateralSymmetryCorrectness() {
         val poseBuilder = WidePushUpPose()
         val def = SkeletonDefinition.DEFAULT_ADULT
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
         val progressValues = arrayOf(0.0f, 0.25f, 0.5f, 0.75f, 1.0f)
 
         println("=== LEG BILATERAL SYMMETRY VERIFICATION ===")
@@ -115,7 +115,7 @@ class WidePushUpPoseTest {
                 cycleDuration = 2500f
             )
             val rawPose = poseBuilder.build(context)
-            val pose = finalizer.finalize(rawPose)
+            val pose = pipeline.produceFrame(rawPose).pose
 
             val hipF = pose.getJoint(Joint.HIP_F)
             val kneeF = pose.getJoint(Joint.KNEE_F)
@@ -150,7 +150,7 @@ class WidePushUpPoseTest {
     fun testPrintWidePushUpCoordinates() {
         val poseBuilder = WidePushUpPose()
         val def = SkeletonDefinition.DEFAULT_ADULT
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
         val progressValues = arrayOf(0.0f, 0.25f, 0.5f, 0.75f, 1.0f)
 
         println("=== WIDE PUSH-UP COORD COMPARISON ===")
@@ -163,7 +163,7 @@ class WidePushUpPoseTest {
                 cycleDuration = 2500f
             )
             val rawPose = poseBuilder.build(context)
-            val pose = finalizer.finalize(rawPose)
+            val pose = pipeline.produceFrame(rawPose).pose
 
             val hipF = pose.getJoint(Joint.HIP_F)
             val kneeF = pose.getJoint(Joint.KNEE_F)

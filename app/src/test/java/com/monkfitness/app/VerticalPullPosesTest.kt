@@ -9,7 +9,7 @@ import kotlin.math.*
 class VerticalPullPosesTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
-    private val finalizer = SkeletonPoseFinalizer(def)
+    private val pipeline = SkeletonPipeline(def)
 
     private data class Case(
         val name: String,
@@ -70,7 +70,7 @@ class VerticalPullPosesTest {
                 )
 
                 val raw = c.pose.build(context)
-                val pose = finalizer.finalize(raw)
+                val pose = pipeline.produceFrame(raw).pose
 
                 val report = ExerciseValidator().validate(
                     pose = pose,
@@ -147,7 +147,7 @@ class VerticalPullPosesTest {
                 // (arms stay ~straight; the body rises via the scapulae first).
                 val firstStage = abs(armReachAt0 - armReachAt1) * 0.4f
                 // measured at i where progress=0.2
-                val p02 = c.pose.build(PoseContext(0.2f, Side.LEFT, def)).let { finalizer.finalize(it) }
+                val p02 = c.pose.build(PoseContext(0.2f, Side.LEFT, def)).let { pipeline.produceFrame(it).pose }
                 val reach02 = dist(p02.getJoint(Joint.SHOULDER_A), p02.getJoint(Joint.HAND_A))
                 assertTrue("${c.name} scapular-first violated: early reach change ${abs(armReachAt0 - reach02)} > firstStage $firstStage", abs(armReachAt0 - reach02) < firstStage)
                 // The body rises across the rep.

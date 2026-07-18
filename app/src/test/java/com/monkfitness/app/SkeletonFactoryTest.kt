@@ -205,7 +205,7 @@ class SkeletonFactoryTest {
     fun testFinalizerCompatibilityWithMigratedPoses() {
         // Run migrated poses (StandardPushUpPose and AirSquatPose) through finalizer and assert valid state
         val def = SkeletonDefinition.DEFAULT_ADULT
-        val finalizer = SkeletonPoseFinalizer(def)
+        val pipeline = SkeletonPipeline(def)
         val context = PoseContext(
             progress = 0.5f,
             side = Side.RIGHT,
@@ -220,7 +220,7 @@ class SkeletonFactoryTest {
         assertTrue(pushupPose.roots.isNotEmpty())
         assertEquals(Joint.ANKLE_F, pushupPose.roots[0].joint)
 
-        val pushupFinalized = finalizer.finalize(pushupPose)
+        val pushupFinalized = pipeline.produceFrame(pushupPose).pose
         assertNotNull(pushupFinalized)
         assertTrue(pushupFinalized.isTransformsUpdated)
 
@@ -230,7 +230,7 @@ class SkeletonFactoryTest {
         assertTrue(squatPose.roots.isNotEmpty())
         assertEquals(Joint.PELVIS, squatPose.roots[0].joint)
 
-        val squatFinalized = finalizer.finalize(squatPose)
+        val squatFinalized = pipeline.produceFrame(squatPose).pose
         assertNotNull(squatFinalized)
         assertTrue(squatFinalized.isTransformsUpdated)
 
@@ -240,7 +240,7 @@ class SkeletonFactoryTest {
         assertTrue(lungePose.roots.isNotEmpty())
         assertEquals(Joint.PELVIS, lungePose.roots[0].joint)
 
-        val lungeFinalized = finalizer.finalize(lungePose)
+        val lungeFinalized = pipeline.produceFrame(lungePose).pose
         assertNotNull(lungeFinalized)
         assertTrue(lungeFinalized.isTransformsUpdated)
     }

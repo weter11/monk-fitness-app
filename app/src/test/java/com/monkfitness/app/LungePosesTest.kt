@@ -9,7 +9,7 @@ import kotlin.math.*
 class LungePosesTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
-    private val finalizer = SkeletonPoseFinalizer(def)
+    private val pipeline = SkeletonPipeline(def)
 
     private data class FrameMetrics(
         var maxArmAsymmetry: Float = 0f,
@@ -50,7 +50,7 @@ class LungePosesTest {
             )
 
             val raw = pose.build(context)
-            val p = finalizer.finalize(raw)
+            val p = pipeline.produceFrame(raw).pose
 
             val report = validator.validate(
                 pose = p,
