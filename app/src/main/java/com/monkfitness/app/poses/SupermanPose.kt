@@ -22,7 +22,15 @@ class SupermanPose : PoseBuilder {
         defaultZoom = 1.3f),
         durationSeconds = 3.0f,
         loopMode = LoopMode.LOOP,
-        motionCurve = MotionCurve.EASE_IN_OUT
+        motionCurve = MotionCurve.EASE_IN_OUT,
+        // M4: prone hold — the body is supported along the front of the torso/pelvis. Declare the
+        // contact and the missing exercise metadata so the validator's CONTACT_PRESERVED/SUPPORT
+        // rules run honestly instead of being silently disabled.
+        pivotType = PivotType.HIPS,
+        supportContacts = setOf(SupportContact.HIPS),
+        exerciseFamily = "core",
+        motionType = "Isometric Hold",
+        bodyOrientation = "Prone"
     )
 
     override fun build(context: PoseContext): SkeletonPose {

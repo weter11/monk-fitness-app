@@ -39,9 +39,14 @@ class IsometricSidePlankPose : BasePlankPose() {
         motionCurve = MotionCurve.EASE_IN_OUT,
         environment = plankEnvironment,
         pivotType = PivotType.ELBOWS,
+        // M2: the body is rolled 90° about the spine (Y) so the DOWN side is the P / B
+        // side — the planted forearm is authored on SHOULDER_P/ELBOW_P/HAND_P and the planted
+        // foot on HIP_B/ANKLE_B. SupportMath maps RIGHT_FOREARM -> {ELBOW_A, HAND_A} (A side)
+        // and RIGHT_FOOT -> {ANKLE_F} (F side), which is the WRONG side. The down side is the
+        // LEFT side, so declare LEFT_FOREARM ({ELBOW_P, HAND_P}) + LEFT_FOOT ({ANKLE_B}).
         supportContacts = setOf(
-            SupportContact.RIGHT_FOREARM, // down-side support forearm
-            SupportContact.RIGHT_FOOT
+            SupportContact.LEFT_FOREARM, // down-side support forearm (P side)
+            SupportContact.LEFT_FOOT
         ),
         exerciseFamily = "plank",
         motionType = "Isometric Hold",

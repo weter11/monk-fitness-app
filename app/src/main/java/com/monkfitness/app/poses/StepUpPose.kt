@@ -32,7 +32,10 @@ class StepUpPose : BaseLungePose() {
                     center = Vector3(12f, stepTop * 0.5f, 0f),
                     width = 44f,
                     height = stepTop,
-                    depth = 44f
+                    // M1: feet land at Z = ±(hipWidth * 1.15) = ±25.3; a depth of 44 only
+                    // spanned Z ∈ [−22, +22], so both feet overhung the step. Widen to 60
+                    // (±30) so the planted feet sit fully on the step surface.
+                    depth = 60f
                 )
             )
         ),

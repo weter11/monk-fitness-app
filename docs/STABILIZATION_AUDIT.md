@@ -103,15 +103,42 @@ limb through `bakeIkLimb` and to declare `supportContacts` where the body is gen
 
 Result: no compilation/runtime errors; 282/0 baseline holds.
 
-### TODO — P1 (next pass, in priority order)
+### IN PROGRESS — P1 (pass 1, committed)
+
+- **M1 (StepUp):** Widened the `StepProp` `depth` 44 → 60 so the planted feet at Z = ±25.3
+  sit fully on the step (previously overhung by 3.3 on each side).
+- **M2 (IsometricSidePlank):** Fixed the `supportContacts` side. The body is rolled 90° so the
+  DOWN side is P/B; the planted forearm is on `SHOULDER_P/ELBOW_P/HAND_P` and the foot on `HIP_B`.
+  `SupportMath` maps `RIGHT_FOREARM → {ELBOW_A, HAND_A}` and `RIGHT_FOOT → {ANKLE_F}` (wrong side),
+  so the contacts are now `LEFT_FOREARM` + `LEFT_FOOT` (which map to the P/B side).
+- **M3 (ProneCobra):** The whole trunk extension no longer lives on `PELVIS`. The pelvis is pinned
+  flat on the mat (`lowerLean = -1.57`) and the arch originates in the chest via
+  `buildSpineCurve(pelvis, chest, -1.57, lerp(0, 0.6, progress), axisZ)` — the same two-segment
+  thoracolumbar-origin pattern as the S3 ThoracicExtension fix — so the chest tips up/back off the
+  floor carrying neck/head/shoulders (the chest/head joints now actually move).
+- **M4 (Superman):** Added the missing contact/metadata. `PoseMetadata` now declares
+  `pivotType = HIPS`, `supportContacts = {HIPS}`, `exerciseFamily = "core"`, `motionType`, and
+  `bodyOrientation = "Prone"`; the build declares `PostureIntent.CUSTOM`. (Note: the deeper
+  "no lumbar articulation / legacy PoseBuilder+fromJointPositions path" item is a larger rewrite
+  tracked under P2 — deferred to a later pass where the suite can be run to guard the migration.)
+
+### TODO — P1 (remaining, needs validation/visual check before landing)
+
+> These items change authored *motion* (not just metadata/contact side) and could not be
+> validated in this pass because the build toolchain was unavailable, so the 282/0 baseline could
+> not be re-run. They are parked until a CI/compile pass can confirm no regression.
 
 1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
 2. H2 complement — migrate LatStretchPose (M11) and CatCowPose (M12) onto `bakeIkLimb`/gaze
    helpers for full carrier coverage; declare `supportContacts` for the stretch family (M9) and the
    core/hip poses (M10) and the upper/dynamic poses (M8).
-3. M1/M2/M3/M4/M6/M7 — pose-specific biomechanical-fidelity bugs (step contact, side-plank contact
-   side, cobra/superman lumbar extension, kettlebell hinge inversion, burpee foot-translation).
-4. M5/M13/M14 — tuning items (snow-angel arc, hamstring reach, decline plank tilt).
+3. M6 (KettlebellSwing) — audit claims the hinge profile is inverted (`pelvisY=lerp(175,210)` makes
+   the deep hike taller than the top). On inspection under the cosine `u`, upright maps to 210 and
+   the deep hike to 175, which reads as *correct*; the inversion claim needs a re-check against the
+   intended swing mechanics before editing.
+4. M7 (Burpee) — during plank phases the feet translate −110 in X while hands stay at X≈25,
+   reversing plank geometry. Requires re-authoring the plank-phase foot/hand targets.
+5. M5/M13/M14 — tuning items (snow-angel arc, hamstring reach, decline plank tilt).
 
 ### TODO — P2
 

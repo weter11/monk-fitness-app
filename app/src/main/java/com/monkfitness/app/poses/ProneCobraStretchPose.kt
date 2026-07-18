@@ -76,12 +76,18 @@ class ProneCobraStretchPose : BasePose() {
         val pelvisX = 0f
         val pelvisY = 15f // Rest perfectly flat on the ground
 
-        // Torso transitions from lying flat (-90 deg) to an arched extension
-        val torsoPitch = SkeletonMath.lerp(-1.57f, -0.9f, context.progress)
+        // M3: previously the WHOLE trunk extension (-1.57 -> -0.9) lived on the PELVIS, so the
+        // chest merely rotated rigidly with the pelvis and never tipped up/back on its own — the
+        // cobra arch was invisible at the CHEST/HEAD joints (same defect class as the S3
+        // ThoracicExtension fix). Now the pelvis stays pinned to the floor (lying flat) and the
+        // arch originates in the chest: buildSpineCurve writes the pelvis (lower) lean and the
+        // chest (thoracic) extension as two segments, so the chest tips UP and BACK (−X) off the
+        // floor, carrying the neck/head/shoulders with it.
+        val lowerLean = -1.57f // pelvis lies flat on the mat
+        val chestArch = SkeletonMath.lerp(0f, 0.6f, context.progress)
 
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
-        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, torsoPitch)
-        declareJointIntent(Joint.PELVIS, JointRotation(axisZ, torsoPitch))
+        buildSpineCurve(pelvis!!, chest!!, lowerLean, chestArch, axisZ)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
 
