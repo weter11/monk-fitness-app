@@ -23,12 +23,11 @@ data class ExerciseGenerationResult(
 )
 
 /**
- * ExerciseGenerationFeedback compiles all biomechanical errors, review recommendations,
- * and specific retry correction guides to help steer the next generation iteration.
+ * ExerciseGenerationFeedback compiles all biomechanical errors and specific retry
+ * correction guides to help steer the next generation iteration.
  */
 data class ExerciseGenerationFeedback(
     val validationReport: ValidationReport,
-    val reviewReport: ExerciseReviewReport,
     val suggestedCorrections: List<String> = emptyList()
 )
 

@@ -131,9 +131,6 @@ class LatStretchPoseTest {
             allIssues = allReports.flatMap { it.allIssues }
         )
 
-        val reviewReport = ExerciseReview.review(finalReport)
-        println("Validated Lat Stretch sequence successfully! Exercise score: ${reviewReport.score}")
-        assertTrue("Exercise review score must be >= 95%, actual is ${reviewReport.score}", reviewReport.score >= 95)
     }
 
     private fun distance(v1: Vector3, v2: Vector3): Float {

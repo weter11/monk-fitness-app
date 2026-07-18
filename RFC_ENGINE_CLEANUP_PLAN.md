@@ -290,4 +290,4 @@ All of the following hold:
 - [ ] No test calls `finalizer.finalize(...)` directly; all go through `SkeletonPipeline`.
 - [ ] Production rendering is byte-identical to the pre-cleanup baseline
       (full `:app:testDebugUnitTest` green, no new failures).
-- [ ] (Optional) `ExerciseReview` pipeline either productised or removed.
+- [x] (Optional) `ExerciseReview` pipeline removed (Phase G, G2).
