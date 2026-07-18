@@ -2,6 +2,7 @@ package com.monkfitness.app.validation.poses
 
 import com.monkfitness.app.animation.CameraDefinition
 import com.monkfitness.app.animation.EnvironmentDefinition
+import com.monkfitness.app.animation.Extremity
 import com.monkfitness.app.animation.ContactConstraint
 import com.monkfitness.app.animation.ConstraintSolver
 import com.monkfitness.app.animation.ContactSpec
