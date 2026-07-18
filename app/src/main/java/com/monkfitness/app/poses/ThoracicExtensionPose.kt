@@ -56,14 +56,12 @@ class ThoracicExtensionPose : BaseThoracicPose() {
         // the CHEST/HEAD joints (the previous defect).
         val extAngle = lerp(0f, 0.5f, progress)
         lumbar!!.localPosition.set(0f, 0f, 0f)
-        lumbar!!.localRotation.set(axisZ, extAngle)
-        declareJointIntent(Joint.LUMBAR, JointRotation(axisZ, extAngle))
-
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        // A small additional chest-local extension keeps the upper rib cage opening relative to
-        // the lower spine (the thorax is not perfectly rigid with the lumbar segment).
-        chest!!.localRotation.set(axisZ, extAngle * 0.4f)
-        declareJointIntent(Joint.CHEST, JointRotation(axisZ, extAngle * 0.4f))
+        // B4a — carrier-backed two-segment spine curve (lumbar + thoracic about the lateral Z axis).
+        // The arch originates below the chest (thoracolumbar junction) so the chest tips up and BACK
+        // carrying neck/head/shoulders. buildSpineCurve writes the nodes for build-time FK AND records
+        // the LUMBAR/CHEST joint intents (mixed mode, byte-identical to the bare localRotation.set).
+        buildSpineCurve(lumbar!!, chest!!, extAngle, extAngle * 0.4f, axisZ)
 
         buildGaze(neck!!, head!!, def.neckLength, headDir)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)

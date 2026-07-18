@@ -132,21 +132,6 @@ abstract class BaseValidationPose : PoseBuilder {
     // so authoring can express hip rotation, scapular/clavicular girdle motion and 2-DOF
     // wrist/ankle articulation without raw, ambiguous localRotation writes.
 
-    protected fun buildChestOrientation(
-        chest: SkeletonNode,
-        leanRad: Float,
-        twistRad: Float,
-        sideBendRad: Float
-    ) {
-        val z = JointRotation(axisZ, leanRad)
-        val y = JointRotation(axisY, twistRad)
-        val x = JointRotation(axisX, sideBendRad)
-        SkeletonMath.composeRotations(z, y, chest.localRotation)
-        SkeletonMath.composeRotations(chest.localRotation, x, chest.localRotation)
-        // B2: chest thoracic orientation intent (jointIntents).
-        declareJointIntent(chest.joint, JointRotation(chest.localRotation.axis, chest.localRotation.angle))
-    }
-
     protected fun buildHipRotation(hip: SkeletonNode, rotationRad: Float, sideSign: Float) {
         hip.localRotation.set(axisX, rotationRad * sideSign)
         declareJointIntent(hip.joint, JointRotation(axisX, rotationRad * sideSign))

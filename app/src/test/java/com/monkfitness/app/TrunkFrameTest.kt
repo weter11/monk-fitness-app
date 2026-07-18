@@ -33,7 +33,16 @@ class TrunkFrameTest {
             node.localRotation.set(1f, 0f, 0f, s)
             declareJointIntent(Joint.CHEST, JointRotation(Vector3(1f, 0f, 0f), s))
         }
-        fun orient(node: SkeletonNode, l: Float, t: Float, s: Float) = buildChestOrientation(node, l, t, s)
+        // B4a — buildChestOrientation was purged (0 callers); inline its lean+twist+side-bend
+        // composition here so the helper's semantics stay asserted.
+        fun orient(node: SkeletonNode, l: Float, t: Float, s: Float) {
+            val z = JointRotation(Vector3(0f, 0f, 1f), l)
+            val y = JointRotation(Vector3(0f, 1f, 0f), t)
+            val x = JointRotation(Vector3(1f, 0f, 0f), s)
+            SkeletonMath.composeRotations(z, y, node.localRotation)
+            SkeletonMath.composeRotations(node.localRotation, x, node.localRotation)
+            declareJointIntent(Joint.CHEST, JointRotation(node.localRotation.axis, node.localRotation.angle))
+        }
         override fun build(context: PoseContext): SkeletonPose = SkeletonPose()
     }
 
