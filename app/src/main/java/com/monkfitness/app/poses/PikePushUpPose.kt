@@ -129,10 +129,12 @@ class PikePushUpPose : BasePushUpPose() {
         // Branch C: wrist articulation (overhand-ish grip + counter torso pitch) routes through
         // the §1.3 intent carrier; flexion about the mediolateral Z axis, no deviation.
         buildWristArticulation(Extremity.HAND_A, -torsoGlobalPitch, 0f, handA!!)
+        buildWristArticulation(Extremity.HAND_P, -torsoGlobalPitch, 0f, handP!!)
         // W1: engine now derives hand orientation (removed tilt counter-rotation + 6/6/10 offsets).
+        // Flat-hand pike: the wrist is authored via the carrier above (replaces the old manual
+        // WRIST=HAND copy that discarded the engine's wrist articulation).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
-        jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer
     }
 }
