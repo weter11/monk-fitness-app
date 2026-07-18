@@ -206,10 +206,18 @@
      remain as the carrier-backed authoring surface (their node-writes stay per the mixed-mode contract),
      and B4b is doc-only (Shape Constraints / Articulation recognized, not migrated).
    - Remaining (post-B4a, per replan §7): all structural-offset helpers (`buildTorso`, `buildPelvis`,
-     `buildShoulders`, `buildHead`-offset, `buildRigidSegment`) and knee/segment + hand/ankle writes are
-     **Shape Constraints / Articulation**, recognized valid direct node writes that must NOT migrate
-     (Branch C carries the articulation carrier).
-- **B5 (Branch B Validator stamp-only) DONE** — the validator is now a pure §1.2-stamp / §1.1-intent
+      `buildShoulders`, `buildHead`-offset, `buildRigidSegment`) and knee/segment writes are
+      **Shape Constraints**, recognized valid direct node writes that must NOT migrate.
+   - **Branch C (Extremity Articulation) DONE** — §1.3 Interaction/Articulation Intent now carried in
+      `SkeletonPose.extremityArticulations` (`MutableMap<Extremity, JointRotation>`, the RFC hypothesis
+      carrier). The Finalizer's `articulationFor` reads it (falling back to the legacy node read while
+      empty); `buildWristArticulation`/`buildAnkleArticulation` (BasePose + BaseValidationPose) are the
+      sole 2-DOF authoring vocabulary (composers `buildWristRotation`/`buildAnkleRotation`); all 17 bare
+      `HAND_*`/`ANKLE_*` `localRotation.set` sites + DeadHang's overhand grip migrated off `jointIntents`
+      onto the carrier. `MANUAL_OVERRIDE` opt-out preserved (skip derivation = preserve authored
+      endpoints). `ExtremityArticulationTest` pins carrier live + byte-identity (maxDev 0) + opt-out +
+      2-DOF combine. Validation/IK/Contact transparent (AUTOMATIC path byte-identical).
+ - **B5 (Branch B Validator stamp-only) DONE** — the validator is now a pure §1.2-stamp / §1.1-intent
   reader; every geometry-inference path was lifted into the **engine** and the validator only consumes the
   resulting stamps (full suite **282/0**, byte-identical):
   - New §1.2 STATE stamps on `SkeletonPose`: `hipRomStamps` (per-hip `HipRomStamp` with

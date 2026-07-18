@@ -1,13 +1,45 @@
 # RFC — Branch C: Extremity Articulation
 
-> **Status:** PROPOSED (architectural, normative).
+> **Status:** ACCEPTED + IMPLEMENTED (architectural decision: hypothesis carrier `MutableMap<Extremity, JointRotation>` adopted).
 > **Scope:** determine whether a *Branch C* should exist at all, what its scope is, and — critically —
 > whether an `extremityArticulation` carrier is the correct architectural solution for wrist/ankle/hand/
 > foot orientation. This RFC is an **investigation**, not a justification. The name `extremityArticulation`
 > is a **working hypothesis** used for legibility; §6 and §10 explicitly weigh alternatives and may reject it.
-> **Non-goals:** no code, no new carrier implementation, no Pipeline rewrite. Architecture only.
+> **Non-goals:** no new Pipeline stage. The carrier rides the existing Finalizer stage (§7).
 
 ---
+
+## Implementation record (Branch C complete)
+
+The decision in §6.3 resolved to the **hypothesis**: a `MutableMap<Extremity, JointRotation>` carrier
+keyed by `Extremity` (HAND_A / HAND_P / FOOT_F / FOOT_B), value = the authored wrist/ankle rotation
+*relative to the parent segment* (forearm for the wrist, shank for the ankle). Implementation:
+
+- **§1.1 carrier** `extremityArticulations: MutableMap<Extremity, JointRotation>` added to
+  `SkeletonPose`; handled in `copyFrom` (value-copy per entry, matching the `jointIntents` reference
+  convention) and `IntentBuilder.reset()`.
+- **Sole-mutator writer** `IntentBuilder.extremity(extremity, rotation)`; the `extremityOverrides`
+  opt-out set and `overrideExtremity` are retained as the mode flag (§6.1 key-space compatibility).
+- **Finalizer consumer** `SkeletonPoseFinalizer.articulationFor` reads the carrier when populated and
+  falls back to the legacy node `relativeRotation` read when empty (mixed-mode, byte-identical during
+  migration). The four `adjustHand/FootOrientation` calls are re-pointed through it; the `MANUAL_OVERRIDE`
+  dispatch is unchanged (skipping derivation = preserving the authored endpoint nodes).
+- **Authoring vocabulary** `buildWristArticulation` / `buildAnkleArticulation` (BasePose +
+  BaseValidationPose) compose the 2-DOF rotation via `SkeletonMath.buildWristRotation` /
+  `buildAnkleRotation`, write the node `localRotation` for build-time FK (mixed-mode), and record the
+  carrier — the single anatomical vocabulary (§1.1.3).
+- **Migration** all 17 bare `HAND_*`/`ANKLE_*` `localRotation.set` sites (PikePushUp, ThoracicExtension,
+  JumpSquat, BaseVerticalPull ×3 grips, DynamicWorldsGreatestStretch, HamstringStretch, DeadHang) now
+  route through the helpers; DeadHang's overhand grip moved from a `jointIntents(HAND_*)` ROM entry to
+  the articulation carrier (correct §1.3 vs §1.1 boundary).
+- **Tests** `ExtremityArticulationTest` pins (a) carrier populated, (b) carrier vs node-path
+  byte-identity (maxDev 0), (c) MANUAL_OVERRIDE preserves authored endpoints, (d) 2-DOF composer exact.
+
+Exit criteria (§12) met: single owner (Pose writes, Finalizer reads); opt-out real; one vocabulary;
+Validation/IK/Contact transparent (AUTOMATIC path unchanged); no semantic mismatch (articulation never
+in `jointIntents`).
+
+
 
 ## 0. Trigger and context
 

@@ -537,25 +537,25 @@ class SkeletonPoseFinalizer(
             if (pose.isExtremityAutomatic(Extremity.FOOT_F)) {
                 adjustFootOrientation(
                     outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F,
-                    relativeRotation(outputPose.getJointRotation(Joint.ANKLE_F), outputPose.getJointRotation(Joint.KNEE_F), relAnkle)
+                    articulationFor(pose, Extremity.FOOT_F, Joint.ANKLE_F, Joint.KNEE_F, relAnkle)
                 )
             }
             if (pose.isExtremityAutomatic(Extremity.FOOT_B)) {
                 adjustFootOrientation(
                     outputPose, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B,
-                    relativeRotation(outputPose.getJointRotation(Joint.ANKLE_B), outputPose.getJointRotation(Joint.KNEE_B), relAnkle)
+                    articulationFor(pose, Extremity.FOOT_B, Joint.ANKLE_B, Joint.KNEE_B, relAnkle)
                 )
             }
             if (pose.isExtremityAutomatic(Extremity.HAND_A)) {
                 adjustHandOrientation(
                     outputPose, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A,
-                    relativeRotation(outputPose.getJointRotation(Joint.HAND_A), outputPose.getJointRotation(Joint.ELBOW_A), relWrist)
+                    articulationFor(pose, Extremity.HAND_A, Joint.HAND_A, Joint.ELBOW_A, relWrist)
                 )
             }
             if (pose.isExtremityAutomatic(Extremity.HAND_P)) {
                 adjustHandOrientation(
                     outputPose, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P,
-                    relativeRotation(outputPose.getJointRotation(Joint.HAND_P), outputPose.getJointRotation(Joint.ELBOW_P), relWrist)
+                    articulationFor(pose, Extremity.HAND_P, Joint.HAND_P, Joint.ELBOW_P, relWrist)
                 )
             }
         } else {
@@ -654,6 +654,32 @@ class SkeletonPoseFinalizer(
      * the joint's own articulation instead of re-framing the direction by the whole ancestor
      * chain. Allocation-free: writes into [out].
      */
+    /**
+     * Branch C — resolves the wrist/ankle articulation rotation for [extremity] to feed the W1
+     * geometry derivation. The pose-authored value is the single source of truth: when the pose
+     * populated [SkeletonPose.extremityArticulations] for this extremity the carrier value is
+     * returned verbatim (it already carries the rotation *relative to the parent segment*, so no
+     * ancestor-chain removal is needed). When the carrier is empty (a pose that still authors the
+     * node directly, or a neutral limb) the value is derived from the node `localRotations` exactly
+     * as before (`inverse(parent) ∘ node`), keeping the pre-Branch-C path byte-identical. The
+     * result is written into [out].
+     */
+    private fun articulationFor(
+        pose: SkeletonPose,
+        extremity: Extremity,
+        nodeId: Joint,
+        parentId: Joint,
+        out: JointRotation
+    ): JointRotation {
+        val carried = pose.extremityArticulations[extremity]
+        return if (carried != null) {
+            out.copyFrom(carried)
+            out
+        } else {
+            relativeRotation(pose.getJointRotation(nodeId), pose.getJointRotation(parentId), out)
+        }
+    }
+
     private fun relativeRotation(worldRotation: JointRotation, parentRotation: JointRotation, out: JointRotation): JointRotation {
         SkeletonMath.rotationToMatrix(parentRotation, parentMatX, parentMatY, parentMatZ)
         SkeletonMath.rotationToMatrix(worldRotation, worldMatX, worldMatY, worldMatZ)
