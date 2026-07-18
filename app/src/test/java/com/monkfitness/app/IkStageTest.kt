@@ -14,7 +14,7 @@ import kotlin.math.abs
  *
  * B1 introduces the pipeline-owned `IkStage` that consumes the §1.1 `limbTargets` carrier (now
  * populated by every `bakeIkLimb` forward) and re-derives each limb's local positions on the
- * engine-owned node tree. The stage is gated by `EngineFlags.IK_STAGE_ACTIVE` (default **false**,
+ * engine-owned node tree. The stage is gated by `IK_STAGE_ACTIVE` (default **false**,
  * so the legacy `bakeIkLimb` remains the sole solver and the baseline is byte-identical).
  *
  * This suite proves the B1 exit criterion: when the stage is switched on it reproduces the legacy
@@ -27,11 +27,11 @@ import kotlin.math.abs
 class IkStageTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
-    private val originalStage = EngineFlags.IK_STAGE_ACTIVE
+    private val originalStage = IK_STAGE_ACTIVE
 
     @After
     fun restore() {
-        EngineFlags.IK_STAGE_ACTIVE = originalStage
+        IK_STAGE_ACTIVE = originalStage
     }
 
     private fun poseFactories(): List<Pair<String, () -> PoseBuilder>> = listOf(
@@ -92,9 +92,9 @@ class IkStageTest {
                 val p = i / 20f
                 val ctx = PoseContext(p, Side.LEFT, def)
 
-                EngineFlags.IK_STAGE_ACTIVE = false
+                IK_STAGE_ACTIVE = false
                 val off = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
-                EngineFlags.IK_STAGE_ACTIVE = true
+                IK_STAGE_ACTIVE = true
                 val on = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
 
                 val d = maxDeviation(off, on)
@@ -113,9 +113,9 @@ class IkStageTest {
             for (p in listOf(0f, 0.5f, 1f)) {
                 val ctx = PoseContext(p, Side.LEFT, def)
 
-                EngineFlags.IK_STAGE_ACTIVE = false
+                IK_STAGE_ACTIVE = false
                 val off = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
-                EngineFlags.IK_STAGE_ACTIVE = true
+                IK_STAGE_ACTIVE = true
                 val on = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
 
                 val d = maxDeviation(off, on)

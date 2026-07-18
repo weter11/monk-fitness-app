@@ -258,7 +258,7 @@ abstract class BaseValidationPose : PoseBuilder {
     ) {
         // B1 (IkStage extraction) — forward the end joint + full IK context into the §1.1
         // `limbTargets` carrier so the engine-owned IkStage can reproduce this solve byte-for-byte
-        // (dead→live flip). `bakeIkLimb` remains the sole solver while EngineFlags.IK_STAGE_ACTIVE is
+        // (dead→live flip). `bakeIkLimb` remains the sole solver while IK_STAGE_ACTIVE is
         // false.
         jointsBuffer.limbTargets.add(
             WorldTarget(

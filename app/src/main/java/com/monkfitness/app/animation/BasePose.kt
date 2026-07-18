@@ -243,11 +243,11 @@ abstract class BasePose : PoseBuilder {
         }
         // B1 (IkStage extraction) — forward the end joint + world target into the §1.1
         // `limbTargets` carrier so the engine-owned IkStage can consume it (dead→live flip).
-        // `bakeIkLimb` remains the sole solver while EngineFlags.IK_STAGE_ACTIVE is false, so
+        // `bakeIkLimb` remains the sole solver while IK_STAGE_ACTIVE is false, so
         // this record is additive and byte-identical on its own.
         // B1 (IkStage extraction) — forward the end joint + full IK context into the §1.1
         // `limbTargets` carrier so the engine-owned IkStage can reproduce this solve byte-for-byte
-        // (dead→live flip). `bakeIkLimb` remains the sole solver while EngineFlags.IK_STAGE_ACTIVE is
+        // (dead→live flip). `bakeIkLimb` remains the sole solver while IK_STAGE_ACTIVE is
         // false, so this record is additive and byte-identical on its own.
         jointsBuffer.limbTargets.add(
             WorldTarget(
