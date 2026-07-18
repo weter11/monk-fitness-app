@@ -57,8 +57,8 @@ class SkeletonPoseFinalizer(
      * is non-identity the function returns early, leaving the authored frame (and the already-
      * flattened world transforms) intact.
      *
-     * Phase 3 (F1) — read-only chest-frame guarantee. When the finalizer owns conversion AND the
-     * pose carries fixed contacts, the reconstruction is a *no-move* operation:
+     * Phase 3 (F1) — read-only chest-frame guarantee. The finalizer owns conversion,
+     * is enabled AND the pose carries fixed contacts, the reconstruction is a *no-move* operation:
      * the world positions of every Solver-settled contact end-effector are snapshotted before the
      * reconstruction and asserted unchanged afterwards (B5). If applying the reconstructed frame
      * would displace a contact, the chest frame is rolled back to the Solver-settled value
