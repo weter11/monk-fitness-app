@@ -88,6 +88,9 @@ class GluteBridgePose : PoseBuilder {
         // Since chest world rotation is torsoAngle, localRotation of neck is set to -angleOffset.
         neck!!.localPosition = Vector3(0f, def.neckLength, 0f)
         neck!!.localRotation.set(Vector3(0f, 0f, 1f), -angleOffset)
+        // B4a — carrier-backed neck ROM: record the neck articulation as a joint intent so the
+        // Finalizer (B2) consumes it idempotently (mixed mode, byte-identical to the bare write).
+        SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.NECK_END, JointRotation(Vector3(0f, 0f, 1f), -angleOffset))
         head!!.localPosition = Vector3(0f, 18f, 0f)
 
         hipF!!.localPosition = Vector3(0f, 0f, -def.hipWidth)

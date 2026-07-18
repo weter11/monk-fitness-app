@@ -115,7 +115,9 @@ abstract class BasePushUpPose : BasePose() {
             // the floor — becomes physically unreachable (dMag ~318 >> arm reach). Counter-rotate at
             // the hip so the torso returns to the horizontal plank the exercise actually is; the
             // shin keeps its 45° upward pitch (knee-on-ground, ankle raised) while the trunk is level.
-            hipF!!.localRotation.set(axisZ, theta + shinPitch)
+            // B4a — carrier-backed hip ROM via the documented buildHipFlexion helper (records the
+            // HIP_F joint intent; mixed mode, byte-identical to the bare localRotation.set).
+            buildHipFlexion(hipF!!, theta + shinPitch)
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
             buildTorso(pelvis!!, chest!!, def.torsoLength)
 

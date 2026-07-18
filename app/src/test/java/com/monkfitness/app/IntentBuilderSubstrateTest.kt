@@ -83,16 +83,6 @@ class IntentBuilderSubstrateTest {
     }
 
     @Test
-    fun builderPopulatesMetadataHints() {
-        val pose = SkeletonPose()
-        val cam = CameraDefinition.DEFAULT
-        SkeletonPose.IntentBuilder(pose).camera(cam).motion("m").environment("e")
-        assertSame(cam, pose.camera)
-        assertEquals("m", pose.motion)
-        assertEquals("e", pose.environment)
-    }
-
-    @Test
     fun resetRestoresDefaults() {
         val pose = SkeletonPose()
         val b = SkeletonPose.IntentBuilder(pose)

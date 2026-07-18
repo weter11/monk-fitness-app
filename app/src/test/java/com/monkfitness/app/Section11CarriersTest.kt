@@ -130,4 +130,37 @@ class Section11CarriersTest {
             assertTrue("$name: jointIntents retained through pipeline got=${out.pose.jointIntents.size}", out.pose.jointIntents.isNotEmpty())
         }
     }
+
+    /**
+     * B4a (RFC_BRANCH_B_REPLAN §3) — the last 5 bare ROM writes are now carrier-backed. Every
+     * ROM-bearing joint (spine/neck/hip) records a `jointIntents` entry via the documented helpers
+     * (`buildSpineCurve` / `buildHipFlexion`) or `declareJointIntent`, so no bare ROM
+     * `localRotation.set` remains. This pins that the ROM carriers are live for the migrated families.
+     */
+    @Test
+    fun romCarriersLiveAfterB4a() {
+        val romPoses: List<Pair<String, () -> PoseBuilder>> = listOf(
+            "ThoracicExtension" to { ThoracicExtensionPose() },
+            "GluteBridge" to { GluteBridgePose() },
+            "PelvicTilt" to { PelvicTiltPose() },
+            "KneePushUp" to { KneePushUpPose() }
+        )
+        for ((name, factory) in romPoses) {
+            val pose = factory().build(PoseContext(0.5f, Side.LEFT, def))
+            assertTrue("$name must record ROM joint intents after B4a (got ${pose.jointIntents.size})", pose.jointIntents.isNotEmpty())
+        }
+        // ThoracicExtension records the two-segment spine curve on LUMBAR + CHEST.
+        val te = ThoracicExtensionPose().build(PoseContext(0.5f, Side.LEFT, def))
+        assertTrue("ThoracicExtension must record LUMBAR ROM intent", te.jointIntents.any { it.joint == Joint.LUMBAR })
+        assertTrue("ThoracicExtension must record CHEST ROM intent", te.jointIntents.any { it.joint == Joint.CHEST })
+        // GluteBridge / PelvicTilt record the neck ROM intent (neck node carries Joint.NECK_END).
+        val gb = GluteBridgePose().build(PoseContext(0.5f, Side.LEFT, def))
+        assertTrue("GluteBridge must record NECK_END ROM intent", gb.jointIntents.any { it.joint == Joint.NECK_END })
+        val pt = PelvicTiltPose().build(PoseContext(0.5f, Side.LEFT, def))
+        assertTrue("PelvicTilt must record NECK_END ROM intent", pt.jointIntents.any { it.joint == Joint.NECK_END })
+        // KneePushUp exercises the knee-pivot branch, which records the HIP_F flexion ROM intent
+        // (via buildHipFlexion) at BasePushUpPose.kt:118.
+        val pu = KneePushUpPose().build(PoseContext(0.5f, Side.LEFT, def))
+        assertTrue("KneePushUp must record HIP_F ROM intent", pu.jointIntents.any { it.joint == Joint.HIP_F })
+    }
 }

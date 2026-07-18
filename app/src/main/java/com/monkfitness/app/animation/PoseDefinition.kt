@@ -134,9 +134,8 @@ data class HeadTarget(
  * Engine) and derived **state** (§1.2, written by Engine, read by Validation). See
  * `docs/ARCHITECTURE_V2.md`. No component edits another's section.
  *
- * - **Intent section (§1.1):** `jointIntents`, `spineIntent`, `limbTargets`, `contacts`,
- *   `contactPrecedence`, `postureIntent`, `extremityOverrides`, `motion`, `camera`,
- *   `environment`.
+     * - **Intent section (§1.1):** `jointIntents`, `spineIntent`, `limbTargets`, `contacts`,
+     *   `contactPrecedence`, `postureIntent`, `extremityOverrides`, `headTarget`.
  * - **State section (§1.2):** `nodes` (the `joints`/`rotations`/`roots` triple),
  *   `maxIkClampAmount`, `straightIntentDropped`, `rootTranslationDelta`, `rootRotationDelta`,
  *   `boneLengthsVerified`.
@@ -184,18 +183,6 @@ class SkeletonPose(
      * §1.1 carrier; it is the source of truth for the W1 [ExtremityOrientationMode] plumbing below.
      */
     val extremityOverrides: MutableSet<Extremity> = mutableSetOf()
-
-    /** Motion driver describing how the pose interpolates across the frame (§1.1). */
-    var motion: Any? = null
-        private set
-
-    /** Camera framing hint authored by the pose (§1.1). */
-    var camera: Any? = null
-        private set
-
-    /** Environment hint authored by the pose (§1.1). */
-    var environment: Any? = null
-        private set
 
     /**
      * Phase 7 (Gap 7 / F8 / W17) — gaze-as-target (COMPLETE). The pose declares where the head
@@ -295,9 +282,6 @@ class SkeletonPose(
         this.boneLengthsVerified = other.boneLengthsVerified
         this.spineIntent = other.spineIntent
         this.postureIntent = other.postureIntent
-        this.motion = other.motion
-        this.camera = other.camera
-        this.environment = other.environment
         this.headTarget = other.headTarget
         this.contacts.clear()
         this.contacts.addAll(other.contacts)
@@ -314,7 +298,7 @@ class SkeletonPose(
     /**
      * Branch B (RFC_DECLARATIVE_POSE_AUTHORING §3) — the **sole mutator** of the §1.1 intent
      * carriers. A pose declares intent exclusively through this builder; it never assigns
-     * `spineIntent` / `postureIntent` / `headTarget` / `motion` / `camera` / `environment` directly
+     * `spineIntent` / `postureIntent` / `headTarget` directly
      * (those setters are `private set` on [SkeletonPose], so any `pose.spineIntent = …` outside this
      * builder fails to compile — the B0 compile-time guard, RFC_BRANCH_B_IMPLEMENTATION §2 B0).
      *
@@ -378,24 +362,6 @@ class SkeletonPose(
             return this
         }
 
-        /** Motion hint (§1.1). */
-        fun motion(driver: Any?): IntentBuilder {
-            pose.motion = driver
-            return this
-        }
-
-        /** Camera framing hint (§1.1). */
-        fun camera(hint: Any?): IntentBuilder {
-            pose.camera = hint
-            return this
-        }
-
-        /** Environment hint (§1.1). */
-        fun environment(hint: Any?): IntentBuilder {
-            pose.environment = hint
-            return this
-        }
-
         /**
          * Clears every §1.1 intent carrier so a reused [SkeletonPose] buffer starts a build fresh.
          * (Structural `segment`/`clavicle`/`trunk` declarations from §3.2 are added with their
@@ -410,9 +376,6 @@ class SkeletonPose(
             pose.contactPrecedence.clear()
             pose.contacts.clear()
             pose.headTarget = null
-            pose.motion = null
-            pose.camera = null
-            pose.environment = null
         }
     }
 
