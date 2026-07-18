@@ -660,9 +660,18 @@ class SkeletonPoseFinalizer(
      * populated [SkeletonPose.extremityArticulations] for this extremity the carrier value is
      * returned verbatim (it already carries the rotation *relative to the parent segment*, so no
      * ancestor-chain removal is needed). When the carrier is empty (a pose that still authors the
-     * node directly, or a neutral limb) the value is derived from the node `localRotations` exactly
-     * as before (`inverse(parent) ∘ node`), keeping the pre-Branch-C path byte-identical. The
-     * result is written into [out].
+     * node directly, or a neutral limb) the value is read from the node's **local** rotation in the
+     * authored hierarchy — the exact rotation the legacy helpers wrote via `localRotation.set` /
+     * `buildWristArticulation` / `buildAnkleArticulation`. This is the rotation *relative to the
+     * joint's true parent segment* and is therefore identical to the carrier for every migrated and
+     * legacy pose, keeping the pre-Branch-C path byte-identical.
+     *
+     * NB: the previous implementation derived the fallback via the world-relative
+     * `inverse(parentWorld) ∘ nodeWorld`. That collapses to the identity rotation for a *straight*
+     * limb (where the wrist/ankle world rotation equals its parent's, so the ancestor chain cancels
+     * and the authored local articulation is silently dropped). Reading the node's local rotation
+     * instead recovers the authored articulation even when the limb is straight, which is the
+     * correct, author-intent-preserving behavior — and is what the carrier already carries.
      */
     private fun articulationFor(
         pose: SkeletonPose,
@@ -672,12 +681,20 @@ class SkeletonPoseFinalizer(
         out: JointRotation
     ): JointRotation {
         val carried = pose.extremityArticulations[extremity]
-        return if (carried != null) {
+        if (carried != null) {
             out.copyFrom(carried)
-            out
-        } else {
-            relativeRotation(pose.getJointRotation(nodeId), pose.getJointRotation(parentId), out)
+            return out
         }
+        // Mixed-mode / legacy fallback: the authored local rotation of the wrist/ankle node, which
+        // is already expressed relative to the joint's parent segment (forearm / shank).
+        val node = if (pose.roots.isNotEmpty()) findJointNode(pose.roots[0], nodeId) else null
+        if (node != null) {
+            out.copyFrom(node.localRotation)
+            return out
+        }
+        // No hierarchy available (legacy bridge path with empty roots): fall back to the
+        // world-relative composition, which is exact whenever the limb is not straight.
+        return relativeRotation(pose.getJointRotation(nodeId), pose.getJointRotation(parentId), out)
     }
 
     private fun relativeRotation(worldRotation: JointRotation, parentRotation: JointRotation, out: JointRotation): JointRotation {

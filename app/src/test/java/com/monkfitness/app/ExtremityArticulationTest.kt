@@ -67,7 +67,7 @@ class ExtremityArticulationTest {
             val d = maxDeviation(withCarrier, withoutCarrier)
             if (d > maxDev) { maxDev = d; worst = "@$p" }
         }
-        assertEquals("$name carrier must reproduce node-read path (maxDev=$maxDev at $worst)", 0f, maxDev, 1e-3f)
+        assertEquals("$name carrier must reproduce node-read path (maxDev=$maxDev at $worst)", 0f, maxDev, 1e-4f)
     }
 
     @Test fun pikePushUpCarrierMatchesNodePath() = assertCarrierMatchesNodePath("PikePushUp") { PikePushUpPose() }
