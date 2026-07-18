@@ -296,7 +296,7 @@ abstract class BasePose : PoseBuilder {
      * pose-side half of moving root ownership into the engine: instead of hand-computing `pelvisY`/
      * `pelvisX`, the pose names the posture (SEATED_NEAR_FLOOR / HANGING_UNDER_BAR / STANDING /
      * CUSTOM) and lets the solver derive the exact pelvis; when the solver owns posture
-     * ([EngineFlags.SOLVER_OWNS_POSTURE]) the seed replaces the authored root arithmetic.
+     * the solver (when it owns posture) seeds the pelvis from the declared PostureIntent, replacing the authored root arithmetic.
      *
      * [precedence] lists contact end-joint names in priority order (index 0 wins); an empty list
      * means all contacts are equal. [tolerance] scopes how strictly the solver must honour the

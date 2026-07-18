@@ -78,7 +78,7 @@ object ConstraintSolver {
     private const val DEFAULT_BAR_Y = 500f
 
     // Phase 2 (F2/F7/F9) — the solver is the sole mover of the root/pelvis transform. When
-    // [EngineFlags.SOLVER_OWNS_POSTURE] is enabled the root is *seeded* from the pose's declared
+    // the solver owns posture, the root is *seeded* from the pose's declared
     // [PostureIntent] (B1.1 formulas) and contact conflicts are resolved by `contactPrecedence`
     // instead of the pose hand-computing `pelvisY`/`pelvisX`. When the flag is off the solver
     // behaves exactly as before (relaxation + CCD on whatever root the pose authored), so the
@@ -204,7 +204,7 @@ object ConstraintSolver {
      * contact limb from the moved root. Mutates the supplied [pose] (its node local
      * transforms and, at the end, runs a fresh FK + flatten).
      *
-     * Branch B3 — posture universality: when [EngineFlags.SOLVER_OWNS_POSTURE] is on and the pose
+     * Branch B3 — posture universality: when the solver owns posture and the pose
      * declares a non-[PostureIntent.Kind.CUSTOM] intent, the solver runs even with **no** contacts,
      * so it can seed/pin the coarse pelvis height from the intent (the relaxation loop below is a
      * strict no-op for contact-less poses, so production standing shapes are untouched apart from
@@ -213,8 +213,8 @@ object ConstraintSolver {
      */
     fun solve(pose: SkeletonPose, definition: SkeletonDefinition) {
         val contacts = pose.contacts
-        val postureDriven = EngineFlags.SOLVER_OWNS_POSTURE &&
-            pose.postureIntent.kind != PostureIntent.Kind.CUSTOM
+        // Phase B collapsed SOLVER_OWNS_POSTURE to its true branch (always on).
+        val postureDriven = pose.postureIntent.kind != PostureIntent.Kind.CUSTOM
         if (contacts.isEmpty() && !postureDriven) return
         val roots = pose.roots
         if (roots.isEmpty()) return
@@ -253,18 +253,17 @@ object ConstraintSolver {
             if (c != null && abs(c.normal.y) > 0.5f) { hasGroundContact = true; break }
         }
 
-        // Phase 2 (F2) — when the solver owns posture, seed the root/pelvis from the pose's
-        // declared PostureIntent before relaxing. This replaces the pose's hand-computed `pelvisY`
-        // with an engine-derived exact value (B1.1 / B4). For CUSTOM or when the flag is off the
-        // authored root is left untouched, so non-posture poses are unchanged.
-        if (EngineFlags.SOLVER_OWNS_POSTURE) {
-            seedRootFromPostureIntent(pose, definition, pelvis)
-        }
+        // Phase 2 (F2) — seed the root/pelvis from the pose's declared PostureIntent before
+        // relaxing. This replaces the pose's hand-computed `pelvisY` with an engine-derived exact
+        // value (B1.1 / B4). For CUSTOM intents the seed is a no-op, so non-posture poses are
+        // unchanged. (Phase B collapsed SOLVER_OWNS_POSTURE to its true branch.)
+        seedRootFromPostureIntent(pose, definition, pelvis)
 
         // Phase 2 (F9) — inter-frame temporal smoothing. Ease the seeded/solved root toward the
         // root produced for this same pose on the previous frame, so marginally inconsistent
         // contacts don't jitter frame-to-frame. Disabled (gain 0) leaves the per-frame solve exact.
-        if (EngineFlags.SOLVER_OWNS_POSTURE && SMOOTH_GAIN > 0f) {
+        // (Phase B collapsed SOLVER_OWNS_POSTURE to its true branch.)
+        if (SMOOTH_GAIN > 0f) {
             val prev = lastSolvedRoot[pose]
             if (prev != null) {
                 pelvis.localPosition.x = SkeletonMath.lerp(prev.x, pelvis.localPosition.x, 1f - SMOOTH_GAIN)
@@ -410,14 +409,13 @@ object ConstraintSolver {
         pose.rootRotationDelta = kotlin.math.abs(rootDeltaRot.angle)
 
         // Phase 2 (F9) — persist the solved root for inter-frame temporal smoothing on the next
-        // build of this same pose instance (see [lastSolvedRoot]).
-        if (EngineFlags.SOLVER_OWNS_POSTURE) {
-            val cached = lastSolvedRoot[pose]
-            if (cached != null) {
-                cached.set(pelvis.localPosition)
-            } else {
-                lastSolvedRoot[pose] = pelvis.localPosition.copy()
-            }
+        // build of this same pose instance (see [lastSolvedRoot]). (Phase B collapsed
+        // SOLVER_OWNS_POSTURE to its true branch.)
+        val cached = lastSolvedRoot[pose]
+        if (cached != null) {
+            cached.set(pelvis.localPosition)
+        } else {
+            lastSolvedRoot[pose] = pelvis.localPosition.copy()
         }
 
         // Final FK + flatten so the finalized pose reflects the solved root placement.

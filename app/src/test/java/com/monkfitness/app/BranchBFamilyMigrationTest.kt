@@ -2,37 +2,27 @@ package com.monkfitness.app
 
 import com.monkfitness.app.animation.*
 import com.monkfitness.app.poses.*
-import org.junit.After
 import org.junit.Assert.assertTrue
-import org.junit.Assert.assertEquals
 import org.junit.Test
 import kotlin.math.abs
 
 /**
- * Branch B — B4 (Pose migration, family-by-family, mixed mode).
+ * Branch B — B4 (Pose migration, family-by-family).
  *
  * B4 is the per-family migration from raw node-writing authoring to declarative intent: each
- * trunk/hip/girdle/extremity pose now records its authored rotation as a `jointIntents` carrier
+ * trunk/hip/girdle/extremity pose records its authored rotation as a `jointIntents` carrier
  * (via `declareJointIntent` / `IntentBuilder.joint`) while still setting the local node during
- * `build()` so build-time FK (e.g. limb IK under a rotating chest) keeps working. The
- * [SkeletonPoseFinalizer] then consumes the carrier (B2, `FINALIZER_CONSUMES_INTENT` on) and
- * re-derives the node rotation, idempotently.
+ * `build()` so build-time FK keeps working. The [SkeletonPoseFinalizer] then consumes the carrier
+ * (B2) and re-derives the node rotation, idempotently.
  *
- * This suite locks in the B4 contract for the migrated families:
- *  - every migrated family records a `jointIntents` entry for the joints it authors (PELVIS /
- *    LUMBAR / CHEST / hips), proving the carrier is live (the dead→live flip for that family);
- *  - the Finalizer consumer reproduces the node-authored geometry byte-identically (maxDeviation
- *    0.0) with the flag on vs off, so the migration is a strict no-op on rendered output.
+ * (Phase B flag collapse) FINALIZER_CONSUMES_INTENT was collapsed to its true branch and removed,
+ * so consumption is now unconditional. This suite locks in the B4 contract for the migrated
+ * families: every migrated family records a `jointIntents` entry, and the rendered frame is finite
+ * and deterministic.
  */
 class BranchBFamilyMigrationTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
-    private val originalConsume = EngineFlags.FINALIZER_CONSUMES_INTENT
-
-    @After
-    fun restore() {
-        EngineFlags.FINALIZER_CONSUMES_INTENT = originalConsume
-    }
 
     private fun migratedFamilies(): List<Pair<String, () -> PoseBuilder>> = listOf(
         "ThoracicExtension" to { ThoracicExtensionPose() },
@@ -66,24 +56,19 @@ class BranchBFamilyMigrationTest {
     }
 
     @Test
-    fun migratedFamiliesByteIdenticalConsumerOnVsOff() {
+    fun migratedFamiliesRenderDeterministic() {
         var maxDev = 0f
         var worst = ""
         for ((name, factory) in migratedFamilies()) {
             for (i in 0..20) {
                 val p = i / 20f
                 val ctx = PoseContext(p, Side.LEFT, def)
-
-                EngineFlags.FINALIZER_CONSUMES_INTENT = false
-                val off = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
-                EngineFlags.FINALIZER_CONSUMES_INTENT = true
-                val on = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
-
-                val d = maxDeviation(off, on)
+                val a = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
+                val b = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
+                val d = maxDeviation(a, b)
                 if (d > maxDev) { maxDev = d; worst = "$name @$p" }
             }
         }
-        assertEquals("B4 migration must not change migrated families at $worst", 0f, maxDev, 1e-4f)
-        println("BranchBFamilyMigrationTest.migratedFamiliesByteIdenticalConsumerOnVsOff: OK maxDev=$maxDev")
+        assertEquals("B4 migration must render migrated families deterministically at $worst", 0f, maxDev, 1e-4f)
     }
 }
