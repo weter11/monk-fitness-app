@@ -77,11 +77,9 @@ object ConstraintSolver {
     // registered no explicit bar contact. Mirrors the validation/vertical-pull convention (bar at 500).
     private const val DEFAULT_BAR_Y = 500f
 
-    // Phase 2 (F2/F7/F9) — the solver is the sole mover of the root/pelvis transform. When
-    // the solver owns posture, the root is *seeded* from the pose's declared
-    // [PostureIntent] (B1.1 formulas) and contact conflicts are resolved by `contactPrecedence`
-    // instead of the pose hand-computing `pelvisY`/`pelvisX`. When the flag is off the solver
-    // behaves exactly as before (relaxation + CCD on whatever root the pose authored), so the
+    // Phase 2 (F2/F7/F9) — the solver is the sole mover of the root/pelvis transform: the root is
+    // *seeded* from the pose's declared [PostureIntent] (B1.1 formulas) and contact conflicts are
+    // resolved by `contactPrecedence` instead of the pose hand-computing `pelvisY`/`pelvisX`.
     // legacy path is preserved verbatim until the global flip.
     private const val POSTURE_SEED_RELAX = 0.5f
     // Inter-frame temporal smoothing gain (F9): how strongly each frame eases the solved root
