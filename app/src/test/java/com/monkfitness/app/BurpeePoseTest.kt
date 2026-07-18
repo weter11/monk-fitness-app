@@ -26,7 +26,7 @@ class BurpeePoseTest {
             val t = i.toFloat() / (frameCount - 1)
             val progress = 0.5f * (1.0f - kotlin.math.cos(t * 2 * kotlin.math.PI.toFloat()))
 
-            val rawPose = poseBuilder.evaluate(progress, Side.LEFT, def)
+            val rawPose = poseBuilder.build(PoseContext(MotionCurves.transform(poseBuilder.metadata.motionCurve, progress), Side.LEFT, def))
             val finalizedPose = finalizer.finalize(rawPose)
             poses.add(finalizedPose)
         }

@@ -4,12 +4,6 @@ import androidx.compose.animation.core.*
 import androidx.compose.runtime.*
 import kotlin.math.*
 
-@Deprecated("Use LoopMode", ReplaceWith("LoopMode"))
-enum class AnimationMode {
-    LOOP, // Repeats progress 0 -> 1 -> 0
-    HOLD  // Progress driven by breathing cycle 0 -> 1 -> 0
-}
-
 @Stable
 interface AnimationController {
     val progress: Float
@@ -137,21 +131,4 @@ fun rememberAnimationController(
         }
     }
     return controller
-}
-
-@Deprecated("Use PoseMetadata version", ReplaceWith("rememberAnimationController(PoseMetadata(loopMode = mode, durationSeconds = durationMs / 1000f), alternating)"))
-@Composable
-fun rememberAnimationController(
-    mode: AnimationMode,
-    durationMs: Int = 3000,
-    alternating: Boolean = false
-): AnimationController {
-    val loopMode = when(mode) {
-        AnimationMode.LOOP -> LoopMode.LOOP
-        AnimationMode.HOLD -> LoopMode.HOLD
-    }
-    return rememberAnimationController(
-        PoseMetadata(loopMode = loopMode, durationSeconds = durationMs / 1000f),
-        alternating
-    )
 }

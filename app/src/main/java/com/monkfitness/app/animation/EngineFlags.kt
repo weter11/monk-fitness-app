@@ -16,8 +16,7 @@ package com.monkfitness.app.animation
  *   contact-less poses, so every production pose (none register engine contacts today) is
  *   byte-identical regardless of this flag.
  * - [FINALIZER_OWNS_CONVERSION] — Phase 3 / **M4 (default-on)**: the [SkeletonPoseFinalizer] is the
- *   *exclusive* writer of local transforms (world↔local frame conversion, `preConvertPoles`,
- *   `toLocalDirection` bakes, extremity derivation, `reconstructChestFrame`) and enforces the
+ *   *exclusive* writer of local transforms (world↔local frame conversion,
  *   read-only chest-frame no-move guard (F1/B5): a Solver-settled contact end-effector must never
  *   move during finalization. When false the legacy finalize path runs unchanged. The guard only
  *   activates for poses that registered an engine [ContactSpec]; the reconstruction touches only
@@ -60,8 +59,8 @@ object EngineFlags {
     /**
      * M4 (default-on) — the [SkeletonPoseFinalizer] is the *exclusive* writer of local transforms and
      * enforces the F1/B5 read-only chest-frame guard: a Solver-settled contact end-effector must not
-     * move during finalization. Activates `preConvertPoles` (a reserved no-op hook today) and the
-     * `reconstructChestFrame` no-move guard. The guard only fires for contact poses and never
+     * move during finalization. Enforces the `reconstructChestFrame` no-move guard. The guard only
+     * fires for contact poses and never
      * displaces hand/foot contacts (the chest reconstruction touches only the chest subtree), so it
      * is byte-identical for all production poses. Set `false` to restore the pre-M4 finalize.
      */

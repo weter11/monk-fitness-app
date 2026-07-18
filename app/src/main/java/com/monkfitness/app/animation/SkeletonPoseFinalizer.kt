@@ -40,24 +40,6 @@ class SkeletonPoseFinalizer(
     }
 
     /**
-     * Phase 3 (F1) — the finalizer's single local-transform conversion entry point. When
-     * [EngineFlags.FINALIZER_OWNS_CONVERSION] is off this is intentionally a no-op so the legacy
-     * finalize path is byte-identical and the global flip is purely opt-in. When on, this is where
-     * any remaining world↔local frame conversion would be concentrated (the limb `toLocalDirection`
-     * bakes already happen in the solver's `bakeIkLimb`; extremity derivation and the chest frame
-     * run later in [finalize]). The finalizer is the *exclusive* writer of every local transform —
-     * no other component mutates `nodes`/`localPosition`/`localRotation` after this point.
-     */
-    private fun preConvertPoles(pose: SkeletonPose) {
-        if (!EngineFlags.FINALIZER_OWNS_CONVERSION) return
-        // Reserved hook: with the flag on, pole→world conversion and any deferred frame work is
-        // asserted to live here. The deprecated frame-relative `bakeIkLimb` overload (Phase 1 F4)
-        // is the only remaining caller that converts its own pole; it will be deleted in the
-        // follow-up that migrates its ~18 pose callers, after which this method owns 100% of
-        // conversion. No behaviour change today.
-    }
-
-    /**
      * Fallback chest-frame reconstruction for the modern rotation-driven path.
      *
      * When the pose author has NOT explicitly authored a chest rotation (the chest's `localRotation`
@@ -505,7 +487,6 @@ class SkeletonPoseFinalizer(
         // `toLocalDirection` limb bakes already performed by the solver, extremity derivation)
         // is concentrated here. With [EngineFlags.FINALIZER_OWNS_CONVERSION] off this is a
         // documented no-op so the legacy path is byte-identical.
-        preConvertPoles(pose)
 
         outputPose.copyFrom(pose)
 
