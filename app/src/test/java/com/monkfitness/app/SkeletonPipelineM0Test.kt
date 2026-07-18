@@ -51,7 +51,12 @@ class SkeletonPipelineM0Test {
                 val p = i / frames.toFloat()
 
                 val built = refPose.build(PoseContext(p, Side.LEFT, def))
-                if (built.roots.isNotEmpty() && built.hasContacts()) {
+                // Mirror SkeletonPipeline.runStages exactly (Phase B collapsed the flags to their
+                // true branch): the pipeline-owned IkStage is a no-op while IK_STAGE_ACTIVE is false,
+                // and the solver runs for contact poses AND for any non-CUSTOM posture intent.
+                IkStage.apply(built, def)
+                val postureDriven = built.postureIntent.kind != PostureIntent.Kind.CUSTOM
+                if (built.roots.isNotEmpty() && (built.hasContacts() || postureDriven)) {
                     ConstraintSolver.solve(built, def)
                 }
                 val ref = refFinalizer.finalize(built)
