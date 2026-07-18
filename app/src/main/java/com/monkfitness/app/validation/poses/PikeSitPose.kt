@@ -44,7 +44,7 @@ class PikeSitPose : BaseValidationPose() {
 
         // Head follows the folded thorax, gaze forward/down.
         val gaze = tempV3.set(1f, 0.2f, 0f).normalize()
-        buildHead(neck!!, head!!, def.neckLength, gaze)
+        buildGaze(neck!!, head!!, def.neckLength, gaze)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 
@@ -99,3 +99,4 @@ class PikeSitPose : BaseValidationPose() {
         return finalizePose()
     }
 }
+probe

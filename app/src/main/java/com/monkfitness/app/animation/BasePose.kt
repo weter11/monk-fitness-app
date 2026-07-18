@@ -28,10 +28,6 @@ abstract class BasePose : PoseBuilder {
         chest.localPosition.set(-torsoLength, 0f, 0f)
     }
 
-    protected fun buildHead(neck: SkeletonNode, head: SkeletonNode, neckLength: Float, headDir: Vector3) {
-        neck.localPosition.set(headDir.x * neckLength, headDir.y * neckLength, headDir.z * neckLength)
-        head.localPosition.set(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
-    }
 
     /**
      * Phase 7 (Gap 7 / F8 / W17) — declares the gaze as a world-space [HeadTarget] intent that

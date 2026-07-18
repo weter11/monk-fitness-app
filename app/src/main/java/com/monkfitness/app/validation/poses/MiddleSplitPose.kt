@@ -56,7 +56,7 @@ class MiddleSplitPose : BaseValidationPose() {
         // B2: route the (neutral) trunk through the declarative spine curve so carriers populate.
         buildSpineCurve(pelvis!!, chest!!, 0f, 0f, axisZ)
 
-        buildHead(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
+        buildGaze(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 

@@ -52,7 +52,7 @@ class DeepOverheadSquatPose : BaseValidationPose() {
         // B2: route the trunk through the declarative spine curve so carriers are populated.
         buildSpineCurve(pelvis!!, chest!!, -leanAngle, -leanAngle * 0.3f, axisZ)
 
-        buildHead(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
+        buildGaze(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 

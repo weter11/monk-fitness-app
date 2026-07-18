@@ -331,7 +331,7 @@ class ValidatorRomClusterTest {
             pelvis!!.localRotation.set(axisZ, 0f)
             chest!!.localPosition.set(0f, def.torsoLength, 0f)
             chest!!.localRotation.set(axisZ, 0f)
-            buildHead(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
+            buildGaze(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
             buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
             buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
             roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }

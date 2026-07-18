@@ -86,7 +86,7 @@ class DeadHangPose : BaseValidationPose() {
         // carriers are populated (spineIntent + jointIntents).
         buildSpineCurve(pelvis!!, chest!!, torsoPitch, 0f, axisZ)
 
-        buildHead(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
+        buildGaze(neck!!, head!!, def.neckLength, Vector3(0f, 1f, 0f))
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 
