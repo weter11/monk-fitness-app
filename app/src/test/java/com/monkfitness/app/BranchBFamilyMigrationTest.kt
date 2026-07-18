@@ -2,6 +2,7 @@ package com.monkfitness.app
 
 import com.monkfitness.app.animation.*
 import com.monkfitness.app.poses.*
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
