@@ -2,6 +2,11 @@ package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
 
+/**
+ * Standard push-up — hands shoulder-width, full prone plank.
+ * The benchmark of the family: a straight shoulder→hip→knee→ankle line,
+ * elbows bending to drive the rep.
+ */
 class StandardPushUpPose : BasePushUpPose() {
 
     override val gripWidthMultiplier = 1.5f

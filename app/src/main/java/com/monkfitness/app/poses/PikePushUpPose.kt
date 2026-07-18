@@ -4,13 +4,31 @@ import com.monkfitness.app.animation.*
 import com.monkfitness.app.animation.SkeletonMath.lerp
 import kotlin.math.*
 
+/**
+ * Pike push-up — hips driven high so the body forms an inverted V; the
+ * work is shoulder-flexion pressing the chest toward the hands. Distinct
+ * geometry from the prone family (hips high, legs straight back), so it
+ * owns its build() while reusing the same natural-looking conventions:
+ *  - feet PLANTED via buildAnkleArticulation (toes plantar-flexed),
+ *  - arm IK roots read from the ACTUAL shoulder node (IkStage-safe),
+ *  - wrists mirrored HAND→WRIST at finalize (renderer convention),
+ *  - forward-down gaze, slight scapular protraction.
+ *
+ * Engine-contact-less rigid shape (per playbook §2): the four supports
+ * are declared in metadata for the renderer only.
+ */
 class PikePushUpPose : BasePushUpPose() {
 
     override val gripWidthMultiplier = 1.2f
 
+    // Elbow-bend plane points up-and-out so the arms frame the pike.
+    override val poleA: Vector3 = Vector3(1f, 1f, -2f)
+    override val poleP: Vector3 = Vector3(1f, 1f, 2f)
+
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
-        durationSeconds = 2.5f, loopMode = LoopMode.LOOP,
+        durationSeconds = 2.5f,
+        loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.EASE_IN_OUT,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
         support = SupportDefinition(
@@ -27,20 +45,17 @@ class PikePushUpPose : BasePushUpPose() {
     override fun build(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
-        // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 
         val totalLegLen = def.shinLength + def.thighLength
 
-        val ankleX = 135f // Moved feet further back to widen the V-angle
+        // Feet set back to widen the V; chest sweeps forward-and-down across the rep.
+        val ankleX = 135f
         val ankleHeight = 25f
-
-        // Chest trajectory pulled forward slightly to give arms breathing room
         val chestX = lerp(-40f, 10f, context.progress)
         val chestY = lerp(130f, 35f, context.progress)
 
-        // Kinematic Triangle Solver
+        // Triangle solver: ankle → hip → chest must close with leg + torso lengths.
         val dx = chestX - ankleX
         val dy = chestY - ankleHeight
         val d = sqrt(dx * dx + dy * dy).coerceAtLeast(0.001f)
@@ -55,6 +70,7 @@ class PikePushUpPose : BasePushUpPose() {
         val dirX = dx / dClamped
         val dirY = dy / dClamped
 
+        // Perpendicular to the leg direction → apex of the triangle.
         val nx = dirY
         val ny = -dirX
 
@@ -69,43 +85,39 @@ class PikePushUpPose : BasePushUpPose() {
         val torsoVecY = chestY - py
         val torsoGlobalPitch = atan2(-torsoVecY, -torsoVecX)
 
+        // Plant the feet (toes plantar-flexed); the hip carries the leg pitch.
         ankleF!!.localPosition.set(ankleX, ankleHeight, -def.hipWidth)
-        // Branch C: ankle articulation (plantar/dorsi-flexion) routes through the §1.3 intent
-        // carrier via the 2-DOF composer; flexion about the mediolateral Z axis, no inversion.
         buildAnkleArticulation(Extremity.FOOT_F, legPitch, 0f, ankleF!!)
         kneeF!!.localPosition.set(-def.shinLength, 0f, 0f)
         hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
 
         pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
+        // Pelvis tilt = torso pitch minus leg pitch keeps both sides sharing one global leg line.
         declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, torsoGlobalPitch - legPitch)
         declareJointIntent(Joint.PELVIS, JointRotation(axisZ, torsoGlobalPitch - legPitch))
         chest!!.localPosition.set(-def.torsoLength, 0f, 0f)
 
-        // 1. Correcting the Right-Side (Side B) Floating Leg Asymmetry
-        // By subtracting the torso pitch, we isolate and enforce the exact same global leg pitch on both sides.
+        // Symmetry: identical global leg pitch on side B.
         hipB!!.localPosition.set(0f, 0f, def.hipWidth)
-        // Phase 6 (W15/G7): route hip through the documented helper.
         buildHipFlexion(hipB!!, legPitch - torsoGlobalPitch)
         kneeB!!.localPosition.set(def.thighLength, 0f, 0f)
         kneeB!!.localRotation.set(axisZ, 0f)
         ankleB!!.localPosition.set(def.shinLength, 0f, 0f)
 
+        // Scapular protraction for a loaded look; gaze forward-down.
+        buildClavicularRotation(clavicleA!!, 0.12f, 0f, 0f, -1f)
+        buildClavicularRotation(clavicleP!!, 0.12f, 0f, 0f, +1f)
         val headDir = tempV1.set(-1f, -0.6f, 0f).normalize()
         buildGaze(neck!!, head!!, def.neckLength, headDir)
 
         val rSize = roots!!.size
-        for (i in 0 until rSize) {
-            roots!![i].updateWorldTransforms(zeroVector, identityRotation)
-        }
+        for (i in 0 until rSize) roots!![i].updateWorldTransforms(zeroVector, identityRotation)
 
-        // Phase 7 (G6) — route the shoulder girdle through buildShoulders + FK instead of the
-        // hand-computed rotAround world-position. The chest world rotation already carries the torso
-        // pitch, so FK-derived shoulderA/shoulderP.worldPosition equals the old rotAround result
-        // (geometry unchanged), and the IK root now sits where the engine owns it.
-        buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
-        for (i in 0 until rSize) {
-            roots!![i].updateWorldTransforms(zeroVector, identityRotation)
-        }
+        // Arm IK roots read from the ACTUAL shoulder nodes (after scapular
+        // protraction moved them) — matches the engine-owned IkStage source.
+        shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
+        shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
+        for (i in 0 until rSize) roots!![i].updateWorldTransforms(zeroVector, identityRotation)
         val shoulderAW = shoulderA!!.worldPosition
         val shoulderPW = shoulderP!!.worldPosition
 
@@ -113,28 +125,23 @@ class PikePushUpPose : BasePushUpPose() {
         val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * gripWidthMultiplier)
         val targetHandP = targetHandPBuffer.set(handAnchorX, 0f, def.shoulderWidth * gripWidthMultiplier)
 
-        // Pole vectors (1, 1, ±2) perfectly orient the shoulder joints outwards.
-        // bakeIkLimb owns the IK-solve + local-space bake orchestration used by the whole family.
-        // Shoulders already positioned by buildShoulders + FK above.
-        armAPoleLocal.set(1f, 1f, -2f)
+        armAPoleLocal.set(poleA.x, poleA.y, poleA.z)
         SkeletonMath.toLocalDirection(armAPoleLocal, chest!!.worldRotation, armAPoleLocal)
         val armAPoleWorld = SkeletonMath.toWorldDirection(armAPoleLocal, elbowA!!.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, armAPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK)
 
-        armPPoleLocal.set(1f, 1f, 2f)
+        armPPoleLocal.set(poleP.x, poleP.y, poleP.z)
         SkeletonMath.toLocalDirection(armPPoleLocal, chest!!.worldRotation, armPPoleLocal)
         val armPPoleWorld = SkeletonMath.toWorldDirection(armPPoleLocal, elbowP!!.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
-        // Branch C: wrist articulation (overhand-ish grip + counter torso pitch) routes through
-        // the §1.3 intent carrier; flexion about the mediolateral Z axis, no deviation.
+        // Neutral wrist (overhand-ish); mirrored to WRIST for the renderer.
         buildWristArticulation(Extremity.HAND_A, -torsoGlobalPitch, 0f, handA!!)
         buildWristArticulation(Extremity.HAND_P, -torsoGlobalPitch, 0f, handP!!)
-        // W1: engine now derives hand orientation (removed tilt counter-rotation + 6/6/10 offsets).
-        // Flat-hand pike: the wrist is authored via the carrier above (replaces the old manual
-        // WRIST=HAND copy that discarded the engine's wrist articulation).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
+        jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
+        jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer
     }
 }
