@@ -13,7 +13,6 @@ abstract class BasePushUpPose : BasePose() {
     open val handDirA: Vector3 = Vector3(-1f, 0f, -0.2f).normalize()
     open val handDirP: Vector3 = Vector3(-1f, 0f, 0.2f).normalize()
 
-    protected var contextDefinition: SkeletonDefinition? = null
     protected var roots: List<SkeletonNode>? = null
     protected var ankleF: SkeletonNode? = null; protected var kneeF: SkeletonNode? = null; protected var hipF: SkeletonNode? = null; protected var pelvis: SkeletonNode? = null; protected var chest: SkeletonNode? = null; protected var neck: SkeletonNode? = null; protected var head: SkeletonNode? = null
     protected var shoulderA: SkeletonNode? = null; protected var elbowA: SkeletonNode? = null; protected var handA: SkeletonNode? = null; protected var palmA: SkeletonNode? = null; protected var knucklesA: SkeletonNode? = null; protected var fingertipsA: SkeletonNode? = null
@@ -69,7 +68,7 @@ abstract class BasePushUpPose : BasePose() {
     // Mirrors the ContactSpec a bakeIkLimb(contact=...) call would add for a 1-bone foot
     // (ANKLE -> TOE). The toe target is the toe node's current world position projected to the
     // floor plane (y = 0); the ConstraintSolver then pins it there and re-bakes the leg.
-    protected fun registerToeContact(toe: SkeletonNode, ankle: SkeletonNode, constraint: IKConstraint) {
+    protected fun registerToeContact(toe: SkeletonNode, ankle: SkeletonNode, footLength: Float, constraint: IKConstraint) {
         val chain = ConstraintSolver.chainForEnd(toe.joint) ?: return
         val tw = toe.worldPosition
         jointsBuffer.contacts.add(
@@ -80,7 +79,7 @@ abstract class BasePushUpPose : BasePose() {
                 middleJoint = chain.middleJoint,
                 targetWorld = Vector3(tw.x, 0f, tw.z),
                 pole = Vector3(0f, -1f, 0f),
-                length1 = contextDefinition.footLength,
+                length1 = footLength,
                 length2 = 0f,
                 constraint = constraint,
                 straight = false,
@@ -91,7 +90,6 @@ abstract class BasePushUpPose : BasePose() {
 
     override fun build(context: PoseContext): SkeletonPose {
         val def = context.definition
-        contextDefinition = def
         ensureHierarchy(def)
         // B3 — every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
@@ -230,8 +228,8 @@ abstract class BasePushUpPose : BasePose() {
         // Toes are planted on the ground: register foot ContactSpecs so the solver pins all four
         // supports (hands via bakeIkLimb above, toes here). Without this hasContacts() stays false
         // and the declared toe contacts are never honoured by the engine.
-        registerToeContact(toeF!!, ankleF!!, def.legIKConstraint)
-        registerToeContact(toeB!!, ankleB!!, def.legIKConstraint)
+        registerToeContact(toeF!!, ankleF!!, def.footLength, def.legIKConstraint)
+        registerToeContact(toeB!!, ankleB!!, def.footLength, def.legIKConstraint)
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         return jointsBuffer
