@@ -197,9 +197,13 @@ abstract class BasePushUpPose : BasePose() {
             roots!![i].updateWorldTransforms(zeroVector, identityRotation)
         }
 
-        val chestW = chest!!.worldPosition
-        val shoulderAW = SkeletonMath.rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV2).add(chestW)
-        val shoulderPW = SkeletonMath.rotAround(tempV1.set(0f, 0f, def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV3).add(chestW)
+        // Shoulder world positions are read from the ACTUAL node tree (after the clavicular
+        // protraction above moved the scapula/shoulder), so the IK root the pose feeds
+        // bakeIkLimb matches the engine-owned IkStage (which reads the shoulder node's
+        // world position). Using a hand-rolled rotAround here would diverge from IkStage
+        // and break the byte-identical on/off stage contract.
+        val shoulderAW = shoulderA!!.worldPosition
+        val shoulderPW = shoulderP!!.worldPosition
 
         val finalHandAnchorX = handAnchorX + handAnchorXOffset
         val targetHandA = targetHandABuffer.set(finalHandAnchorX, 0f, -def.shoulderWidth * gripWidthMultiplier)
