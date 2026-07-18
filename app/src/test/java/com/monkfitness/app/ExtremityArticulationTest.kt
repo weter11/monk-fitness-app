@@ -24,16 +24,6 @@ class ExtremityArticulationTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
 
-    private fun productionPoses(): List<Pair<String, () -> PoseBuilder>> = listOf(
-        "PikePushUp" to { PikePushUpPose() },
-        "JumpSquat" to { JumpSquatPose() },
-        "DynamicWorldsGreatestStretch" to { DynamicWorldsGreatestStretchPose() },
-        "HamstringStretch" to { HamstringStretchPose() },
-        "ThoracicExtension" to { ThoracicExtensionPose() },
-        "StandardPullUp" to { StandardPullUpPose() },
-        "DeadHang" to { DeadHangPose() }
-    )
-
     private fun maxDeviation(a: SkeletonPose, b: SkeletonPose): Float {
         var max = 0f
         for (j in Joint.entries) {
@@ -55,29 +45,28 @@ class ExtremityArticulationTest {
         }
     }
 
-    @Test
-    fun carrierRenderingIsByteIdenticalToNodePath() {
+    private fun assertCarrierMatchesNodePath(name: String, factory: () -> PoseBuilder) {
         var maxDev = 0f
         var worst = ""
-        for ((name, factory) in productionPoses()) {
-            for (p in listOf(0f, 0.5f, 1f)) {
-                val ctx = PoseContext(p, Side.LEFT, def)
-                val withCarrier = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
-                // Build again, clear the carrier but keep the authored node rotations: the
-                // Finalizer falls back to the node-read `relativeRotation`, which must reproduce
-                // the carrier's value. The two computation paths (exact composer value vs the
-                // world-relative matrix round-trip) differ only by floating point, so bound the
-                // comparison at 1e-3 (sub-millimetre across the ~100-unit skeleton).
-                val built = factory().build(ctx)
-                built.extremityArticulations.clear()
-                val withoutCarrier = SkeletonPipeline(def).produceFrame(built).pose
-                val d = maxDeviation(withCarrier, withoutCarrier)
-                println("BRANCH_C_DEV $name @$p = $d")
-                if (d > maxDev) { maxDev = d; worst = "$name @$p" }
-            }
+        for (p in listOf(0f, 0.5f, 1f)) {
+            val ctx = PoseContext(p, Side.LEFT, def)
+            val withCarrier = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
+            val built = factory().build(ctx)
+            built.extremityArticulations.clear()
+            val withoutCarrier = SkeletonPipeline(def).produceFrame(built).pose
+            val d = maxDeviation(withCarrier, withoutCarrier)
+            if (d > maxDev) { maxDev = d; worst = "@$p" }
         }
-        assertEquals("Branch C carrier must reproduce the node-read path within floating point at $worst (maxDev=$maxDev)", 0f, maxDev, 1e-3f)
+        assertEquals("$name carrier must reproduce node-read path (maxDev=$maxDev at $worst)", 0f, maxDev, 1e-3f)
     }
+
+    @Test fun pikePushUpCarrierMatchesNodePath() = assertCarrierMatchesNodePath("PikePushUp") { PikePushUpPose() }
+    @Test fun jumpSquatCarrierMatchesNodePath() = assertCarrierMatchesNodePath("JumpSquat") { JumpSquatPose() }
+    @Test fun dynamicStretchCarrierMatchesNodePath() = assertCarrierMatchesNodePath("DynamicWorldsGreatestStretch") { DynamicWorldsGreatestStretchPose() }
+    @Test fun hamstringStretchCarrierMatchesNodePath() = assertCarrierMatchesNodePath("HamstringStretch") { HamstringStretchPose() }
+    @Test fun thoracicExtensionCarrierMatchesNodePath() = assertCarrierMatchesNodePath("ThoracicExtension") { ThoracicExtensionPose() }
+    @Test fun standardPullUpCarrierMatchesNodePath() = assertCarrierMatchesNodePath("StandardPullUp") { StandardPullUpPose() }
+    @Test fun deadHangCarrierMatchesNodePath() = assertCarrierMatchesNodePath("DeadHang") { DeadHangPose() }
 
     @Test
     fun manualOverridePreservesAuthoredEndpoints() {
