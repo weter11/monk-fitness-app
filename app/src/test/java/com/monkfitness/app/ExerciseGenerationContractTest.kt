@@ -19,7 +19,7 @@ class ExerciseGenerationContractTest {
         )
 
         // 2. Mock generation result showing the loop parameters:
-        // Generate -> Validate -> Review -> Score -> Retry
+        // Generate -> Validate -> Score -> Retry
         val snapshots = emptyList<ExerciseSnapshot>()
         val result = ExerciseGenerationResult(
             poses = emptyList(),
@@ -33,20 +33,16 @@ class ExerciseGenerationContractTest {
             allIssues = emptyList()
         )
 
-        // Review
-        val reviewReport = ExerciseReview.review(validationReport, result.sequence)
-
-        // Score
+        // Score (derived from validation only; the standalone review pipeline was removed in Phase G)
         val score = GenerationScore(
-            overallScore = reviewReport.score,
+            overallScore = if (validationReport.isValid) 100 else 0,
             isValid = validationReport.isValid
         )
 
         // Feedback
         val feedback = ExerciseGenerationFeedback(
             validationReport = validationReport,
-            reviewReport = reviewReport,
-            suggestedCorrections = reviewReport.recommendations
+            suggestedCorrections = emptyList()
         )
 
         // Iteration coupling

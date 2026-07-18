@@ -139,9 +139,6 @@ class LungePosesTest {
         assertTrue("Leg asymmetry ${m.maxLegAsymmetry}", m.maxLegAsymmetry < 15f)
         assertTrue("Foot slide ${m.maxFootSlide}", m.maxFootSlide < 0.5f)
         assertTrue("Support foot drift ${m.supportFootDrift}", m.supportFootDrift < 0.5f)
-        val review = ExerciseReview.review(report)
-        println("[Forward] score=${review.score}")
-        assertTrue("Score ${review.score}", review.score >= 95)
     }
 
     @Test
@@ -152,9 +149,6 @@ class LungePosesTest {
         assertTrue("Leg asymmetry ${m.maxLegAsymmetry}", m.maxLegAsymmetry < 15f)
         assertTrue("Foot slide ${m.maxFootSlide}", m.maxFootSlide < 0.5f)
         assertTrue("Support foot drift ${m.supportFootDrift}", m.supportFootDrift < 0.5f)
-        val review = ExerciseReview.review(report)
-        println("[Reverse] score=${review.score}")
-        assertTrue("Score ${review.score}", review.score >= 95)
     }
 
     @Test
@@ -165,9 +159,6 @@ class LungePosesTest {
         assertTrue("Leg asymmetry ${m.maxLegAsymmetry}", m.maxLegAsymmetry < 15f)
         assertTrue("Foot slide ${m.maxFootSlide}", m.maxFootSlide < 0.5f)
         assertTrue("Support foot drift ${m.supportFootDrift}", m.supportFootDrift < 0.5f)
-        val review = ExerciseReview.review(report)
-        println("[Side] score=${review.score}")
-        assertTrue("Score ${review.score}", review.score >= 95)
     }
 
     @Test
@@ -178,8 +169,5 @@ class LungePosesTest {
         assertTrue("Leg asymmetry ${m.maxLegAsymmetry}", m.maxLegAsymmetry < 15f)
         assertTrue("Foot slide ${m.maxFootSlide}", m.maxFootSlide < 0.5f)
         assertTrue("Support foot drift ${m.supportFootDrift}", m.supportFootDrift < 0.5f)
-        val review = ExerciseReview.review(report)
-        println("[StepUp] score=${review.score}")
-        assertTrue("Score ${review.score}", review.score >= 95)
     }
 }

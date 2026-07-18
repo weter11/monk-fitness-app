@@ -89,8 +89,6 @@ class VerticalPullPosesTest {
                     report.isValid
                 )
 
-                val review = ExerciseReview.review(report)
-                assertTrue("${c.name} frame $i score ${review.score} < 95", review.score >= 95)
 
                 val handA = pose.getJoint(Joint.HAND_A)
                 val handP = pose.getJoint(Joint.HAND_P)
