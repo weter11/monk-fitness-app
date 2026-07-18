@@ -11,7 +11,7 @@
 
 - **Status:** Inventory / Audit only. No code is modified by this document. → **SUPERSEDED** (see banner above)
 - **Scope:** Determine precisely what prevents the *complete* removal of the legacy
-animation engine following the Architecture-v2 migration
+MonkEngine following the Architecture-v2 migration
 (`SkeletonPipeline` → `ConstraintSolver.solve` → `SkeletonPoseFinalizer.finalize` → FK).
 - **Baseline (HISTORICAL):** Branch `session/agent_b795bd6c-5a92-47c7-9d9c-5693da550c5a`, HEAD `038bfae` — **obsolete**; actual HEAD is `ebab2d6`.
 - **Method:** Static read of `app/src/main` + `app/src/test`; `EngineFlags` defaults are
@@ -43,7 +43,7 @@ categories:
    and one test (`ValidatorRomClusterTest`).
 5. **`ExerciseReview` / `ExerciseReviewReport` / `ExerciseSnapshotSequence`** pipeline has
    **no production caller** — it is wired only through `ExerciseGenerationContract` (a data
-   class) and exercised solely by tests. It is removable *independently* of the engine, but
+   class) and exercised solely by tests. It is removable *independently* of the MonkEngine runtime, but
    its symbols are still compile-live via renderers (`SkeletonSnapshotRenderer`).
 
 Additionally, the `PIPELINE_ACTIVE=false` "legacy bypass" documented in
@@ -137,7 +137,7 @@ Symbols that gate or represent the legacy engine, with compile status.
 **Conclusion:** Of the probed symbols, only `AnimationMode`, the deprecated
 `rememberAnimationController` overload, `PoseBuilder.defaultCamera`/`evaluate`,
 `SkeletonMath.solveIK` (frame-relative), and `LegacySkeletonDefinition` are genuine legacy
-removals. Everything else is live Architecture-v2 runtime code.
+removals. Everything else is live MonkEngine runtime code.
 
 ---
 
@@ -294,7 +294,7 @@ Legend: **R**emovable now · **M**igratable · **P**ermanent (intentionally kept
   producers of empty-`roots` instances are eliminated (or the bridge is guarded/removed and
   tests re-pointed), it can be deleted. Note production never reaches it today.
 - `ExerciseReview` (L8) is orthogonal — remove whenever convenient, before or after,
-  without affecting the engine.
+  without affecting the MonkEngine runtime.
 
 ---
 

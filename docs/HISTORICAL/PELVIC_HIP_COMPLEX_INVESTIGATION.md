@@ -58,7 +58,7 @@ the **pivot** the global solver moves.
 
 ---
 
-## Q2. Hip joint model — what does the engine believe a hip is?
+## Q2. Hip joint model — what does the MonkEngine runtime believe a hip is?
 
 The hip **is a real 3-DOF ball-and-socket joint**, realized by the `HIP_F`/`HIP_B`
 `SkeletonNode` (a `JointRotation` local to the acetabulum) plus the femur length
@@ -76,7 +76,7 @@ The hip **is a real 3-DOF ball-and-socket joint**, realized by the `HIP_F`/`HIP_
   `knee/ankle` offsets relative to the pelvis frame). So in the references the femur is
   IK-driven, but the explicit ball joint is present and used in production.
 
-**Verdict:** the engine has a genuine hip ball joint. It is **NOT** "pelvis → leg IK →
+**Verdict:** the MonkEngine runtime has a genuine hip ball joint. It is **NOT** "pelvis → leg IK →
 foot without a real hip model." The femur genuinely rotates from the acetabulum. The only
 caveat (see P3) is that hip motion is expressed inconsistently (some poses set
 `hip.localRotation`, most let IK define the femur) and there is **no independent hip ROM
@@ -267,7 +267,7 @@ Consequences:
 | Thoracic | real `CHEST` segment, 3-D rotation, couples to lumbar/pelvis via `reconstructChestFrame` | Correct. |
 
 **Biggest real divergence:** the hip is biomechanically a *limited* ball-and-socket with
-documented ROM per axis, but the engine treats it as an *unbounded* ball joint limited only
+documented ROM per axis, but the MonkEngine runtime treats it as an *unbounded* ball joint limited only
 by a knee-flexion distance floor. There is no hip-level anatomical constraint anywhere.
 
 ---
@@ -337,7 +337,7 @@ fires for an asymmetric closed-chain pose, it tilts the pelvis forward/back inst
 side-to-side. The KDoc even calls it "Small roll about the world Z axis" — confirming the
 author believed `Z` was the roll axis (the coordinate-label drift of engine report Issue J).
 
-**Root Cause:** axis convention confusion — `Z` is the flexion/pitch axis in this engine, not
+**Root Cause:** axis convention confusion — `Z` is the flexion/pitch axis in this MonkEngine runtime, not
 the lateral/roll axis; the tilt was coded to the imbalance's measurement axis, not the
 anatomically correct correction axis.
 
@@ -500,12 +500,12 @@ No issue, no fix needed.
 ### P6 — Middle Split straight-leg gap is a reference error, not an engine limitation
 
 **Title:** A straight-legged middle split with feet at `±79.2` from a grounded pelvis is
-geometrically impossible with `thigh+shin = 210`; the engine correctly bends the limbs.
+geometrically impossible with `thigh+shin = 210`; the MonkEngine runtime correctly bends the limbs.
 
 **Description:** `hip→foot = 58.9 ≪ 112` (thigh). Real straight-leg splits place the feet at
-≈`±230` (full leg length). The engine *can* render a straight-leg split if the target is at
+≈`±230` (full leg length). the MonkEngine runtime *can* render a straight-leg split if the target is at
 full reach — the reference's `spread = hipWidth*3.6` is ~3× too small. Per `VALIDATION.md §9`
-the reference is anatomically wrong; under the task's freeze the engine simply cannot satisfy
+the reference is anatomically wrong; under the task's freeze the MonkEngine runtime simply cannot satisfy
 it (engine report G/M).
 
 **Engine Components:** `ConstraintSolver` (limb re-bake), `SkeletonMath.solveStraightLimb`

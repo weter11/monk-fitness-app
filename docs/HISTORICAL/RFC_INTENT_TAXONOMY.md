@@ -1,7 +1,7 @@
 # RFC — Intent Taxonomy
 
 **Status:** PROPOSED (architectural, normative)
-**Scope:** defines every class of *Author Intent* and related produced data in the animation engine, and the ownership / carrier rules that govern them.
+**Scope:** defines every class of *Author Intent* and related produced data in the MonkEngine, and the ownership / carrier rules that govern them.
 **Blocks:** further Branch B implementation (B4 re-audit and continuation) until approved.
 **Non-goals of this RFC:** no code change, no new carrier implementation, no Pipeline rewrite. This is a purely architectural specification.
 
@@ -9,7 +9,7 @@
 
 ## 1. Full Intent Taxonomy
 
-The engine distinguishes six data classes. Three are **Author Intent** (authored by the pose); three are **engine-produced** (written by Solver/Finalizer and read by Validation/rendering).
+the MonkEngine runtime distinguishes six data classes. Three are **Author Intent** (authored by the pose); three are **engine-produced** (written by Solver/Finalizer and read by Validation/rendering).
 
 ### 1.1 ROM Intent (joint motion)
 
@@ -67,7 +67,7 @@ The engine distinguishes six data classes. Three are **Author Intent** (authored
 
 ### 1.7 Validation-only data
 
-- **Meaning:** §1.2 STATE stamps (`maxIkClampAmount`, `straightIntentDropped`, `rootTranslationDelta`, `rootRotationDelta`, `boneLengthsVerified`, `hipRomStamps`, `bilateralSymmetryDelta`, `bilateralOppositeBend`) produced by the engine and read by the validator. Also contact specs / `limbTargets` consumed by the Solver.
+- **Meaning:** §1.2 STATE stamps (`maxIkClampAmount`, `straightIntentDropped`, `rootTranslationDelta`, `rootRotationDelta`, `boneLengthsVerified`, `hipRomStamps`, `bilateralSymmetryDelta`, `bilateralOppositeBend`) produced by the MonkEngine runtime and read by the validator. Also contact specs / `limbTargets` consumed by the Solver.
 - **Owner:** Engine (IK / Solver / Finalizer produce; Pose may declare `contacts`/`limbTargets`).
 - **Write access:** engine stages (and Pose for `contacts`/`limbTargets` declarations).
 - **Read access:** Validator, Solver.

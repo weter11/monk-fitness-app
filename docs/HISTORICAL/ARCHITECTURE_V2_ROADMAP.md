@@ -35,7 +35,7 @@
 - **Rationale:** G1 — largest residual leak.
 - **Prereq:** Phase 2 + Phase 3. **Files:** the 9 pose files that still drove IK with manual `solveIK` + a Z-lean-cancel `rotAround` (Burpee, GluteBridge, PelvicTilt, KettlebellSwing, LatStretch, MountainClimber, ReverseSnowAngel, CouchStretch, HalfKneelingStretch). **APIs:** none (deletion). The other roadmap-named files (BaseThoracic, BaseLunge, BaseVerticalPull, StaticForearmPlank, ProneCobraStretch, BasePushUp, PikePushUp, IsometricSidePlank) had already migrated to engine `bakeIkLimb` / legitimate frame conversions (W1) — they contain no W11/G1 lean-cancel and were left intact. Flat-foot-on-horizontal-shin retained via `extremityOverrides`.
 - **Validation:** `ChestFrameIssueFTest`, `ValidatorRomClusterTest`, per-pose diff; watch `FOOT_GROUND_PENETRATION`. **Risk:** **High** (sign-sensitive). **Complete when:** zero `rotAround` lean-cancel sites; geometry matches baseline or stamped override.
-- **STATUS: COMPLETE** (this change — 60 `rotAround(..., ±leanAngle/±torsoAngle)` lean-cancel calls deleted across 9 pose files; each IK offset is now written directly to the joint local position and the limb stays flat via the engine. `ValidatorRomClusterTest` (18/20, the 2 failures are pre-existing on `main` and unrelated) and `ChestFrameIssueFTest` (green) match baseline).
+- **STATUS: COMPLETE** (this change — 60 `rotAround(..., ±leanAngle/±torsoAngle)` lean-cancel calls deleted across 9 pose files; each IK offset is now written directly to the joint local position and the limb stays flat via the MonkEngine runtime. `ValidatorRomClusterTest` (18/20, the 2 failures are pre-existing on `main` and unrelated) and `ChestFrameIssueFTest` (green) match baseline).
 
 ## Phase 5 — Collapse pelvis+chest dual writes into single spine intent (W13/G4, W14/G5)
 - **Goal:** route trunk lean through `buildSpineCurve`; remove coupled dual writes.
@@ -95,7 +95,7 @@
 - **Rationale:** completes observer boundary.
 - **Prereq:** Phase 0 + Phase 1–2. **Files:** `ExerciseValidator.kt`. **APIs:** rule bodies read §1.2; remove angle-inference helpers.
 - **STATUS: COMPLETE** (Branch B, B5 — Validator stamp-only). The validator is now a pure §1.2-stamp /
-  §1.1-intent reader; all geometry-inference helpers were lifted into the engine
+  §1.1-intent reader; all geometry-inference helpers were lifted into the MonkEngine runtime
   (`SkeletonMath.computeHipRomStamp` + `SkeletonPoseFinalizer.applyValidationStamps` populate
   `hipRomStamps` / `bilateralSymmetryDelta`), and `validateHipRom` / `validateBilateralSymmetry`
   read those stamps. No validator rule reconstructs geometry.

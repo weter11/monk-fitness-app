@@ -122,4 +122,4 @@ No `MotionCurve` was changed where it already served its purpose; the only motio
 - ✅ **No speculative abstractions** — only the needed `BaseBirdDogPose` was added.
 - ✅ **Existing engine components preferred** — `SkeletonFactory`, `bakeIkLimb`, `buildHead`, `buildPelvis`, `MotionDrivers`, `FootDefinition`, `PoseMetadata`, `CameraDefinition`, `EnvironmentDefinition` all used.
 
-> **Note:** The sandbox has no JVM, so the project could not be compiled/run here. Correctness was verified by exhaustive API cross-checking against the engine sources and an independent review pass; the existing `BirdDogPosesTest` geometry/alternation assertions are preserved by construction.
+> **Note:** The sandbox has no JVM, so the project could not be compiled/run here. Correctness was verified by exhaustive API cross-checking against the MonkEngine runtime sources and an independent review pass; the existing `BirdDogPosesTest` geometry/alternation assertions are preserved by construction.

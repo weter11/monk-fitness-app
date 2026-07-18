@@ -13,7 +13,7 @@
 ## Method & evidence basis
 
 - Exact world-space numbers below come from a standalone, offline numeric replica
-  of the engine's FK + IK + `ConstraintSolver` + finalizer completion, built
+  of the MonkEngine's FK + IK + `ConstraintSolver` + finalizer completion, built
   directly from the Kotlin source (`SkeletonMath`, `SkeletonNode`, `ConstraintSolver`,
   `SkeletonPoseFinalizer`, `PoseDefinition`). Bone lengths from `HumanSkeletonDefinition`:
   **thigh 112, shin 98, upper-arm 80, forearm 66, shoulderWidth 46, hipWidth 22,
@@ -53,7 +53,7 @@ Authoring: pelvis `(0,14,0)`, spread = `hipWidth*3.6 = 79.2` along ±Z, legs/arm
 - **Fixable in pose?** Yes — reduce spread so `dist ≥ L1` (e.g. a real middle-split
   geometry: hips abducted, femur pointing outward+down so target distance ≥112), or
   drop `straight` and author a realistic abduction. **Primary fix is authoring.**
-- **Fixable only in engine?** Only if the engine should *reject* an unsatisfiable
+- **Fixable only in engine?** Only if the MonkEngine runtime should *reject* an unsatisfiable
   `straight` target differently; UNI-9 is working as designed (keeps bone lengths by
   bending). Engine is not the defect.
 - **Future impact:** UNI-2 `STRAIGHT_LIMB_INTENT` validation will flag this; the pose
@@ -354,13 +354,13 @@ The engineering validation rules (`STRAIGHT_LIMB_INTENT` UNI-2, `BONE_LENGTH`,
 `FOOT_GROUND_PENETRATION`, `IK_TARGET_UNREACHABLE`, `HIP_ROM_LIMIT` UNI-3) are exactly
 what would surface Middle Split (§1) and Pike Sit (§2.1) as failures. The validator is
 working as designed; it is **not** the source of any defect. The contract ("engine
-satisfies validation; validation never bends to the engine", `VALIDATION.md` §2) holds —
+satisfies validation; validation never bends to the MonkEngine runtime", `VALIDATION.md` §2) holds —
 these are authoring/geometry defects the validator is meant to catch.
 
 ### 5.4 ENGINE — no engine bugs; UNI-9 and IK clamp behave as designed
 Every "broken" limb in Middle Split and Pike Sit is the **correct, intended behavior** of
 `solveStraightLimb` (UNI-9 fallback when `dist < L1`) and `solveIK` (distance clamp when
-target unreachable). The engine preserves bone lengths and never invents motion. The
+target unreachable). the MonkEngine runtime preserves bone lengths and never invents motion. The
 defects are unsatisfiable authored targets, not engine faults.
 
 ---
@@ -389,5 +389,5 @@ defects are unsatisfiable authored targets, not engine faults.
 
 **No ENGINE bug, no RENDERER bug, no CAMERA bug, and no VALIDATION bug** was found.
 Every remaining visible defect originates in **pose authoring** (unsatisfiable IK
-targets, missing joint-DOF authoring, grip/foot orientation). The engine, renderer,
+targets, missing joint-DOF authoring, grip/foot orientation). the MonkEngine runtime, renderer,
 camera, and validator all behave correctly and are the right tools to surface these.

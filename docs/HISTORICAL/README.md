@@ -1,7 +1,7 @@
 # docs/HISTORICAL/ — Historical Investigation Archive
 
 > **This folder holds historical records only.** These documents are retained as
-> the original source of record for the engine's investigation/audit era. They are
+> the original source of record for the MonkEngine's investigation/audit era. They are
 > **not** kept in sync with the live code. When they conflict with the current
 > code, the code wins.
 

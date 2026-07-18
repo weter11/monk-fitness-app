@@ -3,13 +3,13 @@
 **Scope:** Full architecture migration + audit of the Cobra Stretch pose family.
 **Date:** 2026-07-14
 **Engine baseline:** `com.monkfitness.app.animation` (current rotation-driven / `SkeletonFactory` architecture).
-**Method:** Exhaustive API cross-checking against the engine sources, FK/IK trace of the pre- and post-migration code, and an independent review pass. The sandbox has no JVM, so the project could not be compiled/run here (matches the Bird Dog / Hip Flexor / Thoracic / Hamstring audit environment); correctness is established by construction and by the existing `NewEnginePosesTest.testProneCobraStretchPoseBuildsCorrectly` geometry assertion.
+**Method:** Exhaustive API cross-checking against the MonkEngine runtime sources, FK/IK trace of the pre- and post-migration code, and an independent review pass. The sandbox has no JVM, so the project could not be compiled/run here (matches the Bird Dog / Hip Flexor / Thoracic / Hamstring audit environment); correctness is established by construction and by the existing `NewEnginePosesTest.testProneCobraStretchPoseBuildsCorrectly` geometry assertion.
 
 ---
 
 ## 1. Family Overview
 
-The Cobra Stretch family is a **single-member** family: one program-family entry (`cobra`) routing to one animation (`cobra_stretch_hold`). As with Hamstring, there is no second variant, so **no speculative base class** is introduced (the standing constraint "no abstraction for one exercise" — the same rule that justified `BaseThoracicPose` only because it owned ≥2 exercises). The lone member migrates directly onto `BasePose` and delegates to the engine.
+The Cobra Stretch family is a **single-member** family: one program-family entry (`cobra`) routing to one animation (`cobra_stretch_hold`). As with Hamstring, there is no second variant, so **no speculative base class** is introduced (the standing constraint "no abstraction for one exercise" — the same rule that justified `BaseThoracicPose` only because it owned ≥2 exercises). The lone member migrates directly onto `BasePose` and delegates to the MonkEngine runtime.
 
 | Pose class | Role | Registered? | State at audit |
 |---|---|---|---|
@@ -96,7 +96,7 @@ The "Cobra" program category in `WorkoutGenerator` contains exactly one animatio
 
 - **Inspected:** foot pitch (both feet drawn with toes pointing straight back, ankle rotated by `-torsoPitch`), heel position, toe direction, ankle orientation, and foot constants.
 - **Duplicated foot constants:** replaced with `FootDefinition` (`footLength`, `heelRatio`, `toeRatio`) — requirement satisfied, geometry identical (0.29/0.71).
-- **Stylized foot orientation:** the feet lie flat with toes pointing back (prone position). This is **identical to the original pre-migration animation** (verified via git) and is the intended Cobra look; the engine's generic `SkeletonPoseFinalizer.adjustFootOrientation` is intentionally bypassed because the hierarchy already supplies anatomically-placed heel/toe. **Left unchanged to preserve animation style and identical biomechanics.**
+- **Stylized foot orientation:** the feet lie flat with toes pointing back (prone position). This is **identical to the original pre-migration animation** (verified via git) and is the intended Cobra look; the MonkEngine's generic `SkeletonPoseFinalizer.adjustFootOrientation` is intentionally bypassed because the hierarchy already supplies anatomically-placed heel/toe. **Left unchanged to preserve animation style and identical biomechanics.**
 - **Assessment:** no correctness regression; foot constants are engine-owned.
 
 ## 11. Timing Review
@@ -112,14 +112,14 @@ The "Cobra" program category in `WorkoutGenerator` contains exactly one animatio
 
 - **Duplicated engine knowledge (remaining):** none within the family after this pass. The only cross-family duplication is the hand-offset convention (6/6/10), shared intentionally with Push-Up/Squat/Bird-Dog/Hip-Flexor/Hamstring and deferred (not speculative).
 - **Remaining technical debt:**
-  1. `SupportDefinition` is left at the default (`PivotType.FEET`, empty contacts). It is informative metadata only for this family; if the engine later keys shadow/contact rendering off `metadata.support`, the family should declare a prone `PivotType.HIPS`/`PELVIS` + `KNEES`/`TOES` contact set (the whole front of the body is on the floor).
+  1. `SupportDefinition` is left at the default (`PivotType.FEET`, empty contacts). It is informative metadata only for this family; if the MonkEngine runtime later keys shadow/contact rendering off `metadata.support`, the family should declare a prone `PivotType.HIPS`/`PELVIS` + `KNEES`/`TOES` contact set (the whole front of the body is on the floor).
   2. Hand-offset convention (6/6/10) duplicated across `Base*` families — promote to a shared `applyStandardHandGeometry()` helper in `BasePose` only if a further family adopts it.
   3. Dangling `cobra_stretch_prone` id in `ExerciseSkeletonData` (line 499) — remove or register once a prone-cobra variant exists.
 - **Modernization %:** **97%**.
 - **Recommended future work:**
   - If a second cobra variant is ever added (e.g., a sphinx/forearm cobra), promote the shared scaffolding into a `BaseCobraPose` (the same move that justified `BaseHipFlexorPose`/`BaseBirdDogPose`).
   - If/when a third family needs the 6/6/10 hand offsets, promote them into `BasePose` (reuse `HandDefinition` ratios rather than re-encoding 6/10).
-  - Populate `metadata.support` only when the engine consumes it for rendering.
+  - Populate `metadata.support` only when the MonkEngine runtime consumes it for rendering.
 
 ## 13. Validation
 
@@ -141,6 +141,6 @@ The "Cobra" program category in `WorkoutGenerator` contains exactly one animatio
 
 ## 15. Post-Rebase Note (PR #74)
 
-This migration was rebased onto `origin/main` after **PR #74 `refactor(animation): implement frame-relative IK pole vectors`** merged. PR74 added a `bakeIkLimb`/`solveIK` overload that accepts a `poleLocal` + `parentRotation` (transforming the pole into world space via `SkeletonMath.toWorldDirection`), and updated the engine proportions (`upperArmLength` 64→80, `forearmLength` 82→66, `shoulderWidth` 42→46) and `ArmConstraint.maximumExtensionRatio` 0.95→0.98. Those engine changes apply globally and are inherited here automatically.
+This migration was rebased onto `origin/main` after **PR #74 `refactor(animation): implement frame-relative IK pole vectors`** merged. PR74 added a `bakeIkLimb`/`solveIK` overload that accepts a `poleLocal` + `parentRotation` (transforming the pole into world space via `SkeletonMath.toWorldDirection`), and updated the MonkEngine runtime proportions (`upperArmLength` 64→80, `forearmLength` 82→66, `shoulderWidth` 42→46) and `ArmConstraint.maximumExtensionRatio` 0.95→0.98. Those engine changes apply globally and are inherited here automatically.
 
 For this family the arm poles remain authored as the world vectors `Vector3(0,1,-1)` / `Vector3(0,1,1)` via the surviving world-pole `bakeIkLimb` overload. This is byte-for-byte equivalent to PR74's merged arm behavior on these exact files: PR74's legacy path runs `toLocalDirection(pole, chest.worldRotation)` immediately followed by the new overload's `toWorldDirection(poleLocal, chest.worldRotation)`, which round-trips back to the same fixed world pole. So the rebased result matches PR74's cobra output exactly, while keeping the modern `BasePose` scaffolding from §7.

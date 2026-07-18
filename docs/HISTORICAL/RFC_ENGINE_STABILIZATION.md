@@ -1,7 +1,7 @@
 > [!IMPORTANT]
 > **STATUS: SUPERSEDED (historical).** This RFC described the pre-cleanup state
 > ("236 executed / 31 failed", "Architecture v2 suspended after M1"). All of its
-> phases (S0–S3) and the engine defects R1–R4 it tracked are **done**, and the
+> phases (S0–S3) and the MonkEngine runtime defects R1–R4 it tracked are **done**, and the
 > legacy-engine cleanup (Phases A–G of `RFC_ENGINE_CLEANUP_PLAN.md`) has since
 > removed every flag/branch this document treats as live. The full suite is green
 > (see `docs/TEST_BASELINE.md`, **282/0**). Keep for archaeology only; do **not**
@@ -36,7 +36,7 @@ That was a pure compile fix — no production code changed — but it had a stru
   **236 executed / 31 failed**, not 168 / 30.
 
 So PR #134 did not *introduce* the 31 failures. It removed the curtain that was hiding
-them. For the first time we have a truthful, executable view of the engine's actual state.
+them. For the first time we have a truthful, executable view of the MonkEngine's actual state.
 
 ### 1.2 These failures are now architectural blockers
 
@@ -67,7 +67,7 @@ that must be honest before we build on top of it.
 
 Therefore the priority inverts. The correct sequence is:
 
-> **Stabilize the engine (make the 31 failures legible and then zero them by subsystem)
+> **Stabilize the MonkEngine runtime (make the 31 failures legible and then zero them by subsystem)
 > → THEN resume Architecture v2 from M2.**
 
 This RFC defines that stabilization effort. It explicitly **suspends Architecture v2 after
@@ -151,15 +151,15 @@ modified. Therefore no test's pass/fail could have been altered by this PR. **Co
 
 ### 2.5 Why each category requires different handling
 
-- **Newly visible (5):** the engine defect may be historical, but the *test* is new
+- **Newly visible (5):** the MonkEngine runtime defect may be historical, but the *test* is new
   evidence. Handle by triaging the underlying engine defect alongside the historical work,
   but keep them visible separately so we do not mistake "we fixed a compile blocker" for
-  "we improved the engine."
+  "we improved the MonkEngine runtime."
 - **Historical documented (25):** these are the known drift. Handle by subsystem fix
   (§3) and by *correcting the tests where they encode stale constants* vs. *fixing the
-  engine where the pose is genuinely wrong*. The test, not just the engine, may be the
+  engine where the pose is genuinely wrong*. The test, not just the MonkEngine runtime, may be the
   bug.
-- **Historical undocumented (2):** handle by (a) fixing the engine defect and (b)
+- **Historical undocumented (2):** handle by (a) fixing the MonkEngine runtime defect and (b)
   **updating `docs/TEST_BASELINE.md`** so the baseline is truthful. The doc gap is a
   process failure that must not recur.
 - **Regression (0):** none to handle. If any appear during stabilization, they are
@@ -219,7 +219,7 @@ messages recorded in `docs/TEST_BASELINE.md` and the failing assertions themselv
      threshold is wrong for the authored pose).
   2. Expected-position drift — tests encode stale constants (pelvis hang `230` vs actual
      `~240.9`; pelvis X/Z shift off by ~10–14 units). Here the **test** is often the bug,
-     not the engine.
+     not the MonkEngine runtime.
   3. (undocumented) `PELVIS_INTENT` / `CONTACT_PRESERVED` rules not firing for the
      authored inputs — rule logic or config default regression on `main`.
 - **Estimated fixes:** 4–6 (split bone-length threshold tuning from genuine FK defects;
@@ -312,7 +312,7 @@ unit with explicit objective, subsystem, expected-green tests, rollback, and val
 - **Rollback strategy:** each rule/threshold change is one commit. If a threshold change
   masks a real defect (test goes green for the wrong reason), the Fix Matrix's blocking
   level (§6) forces a revert and an engine fix instead. Stale-constant corrections to tests
-  are safe to keep only when the engine output is verified correct.
+  are safe to keep only when the MonkEngine runtime output is verified correct.
 - **Validation strategy:** full suite dropped 31 → 11. `ValidatorRomClusterTest` all-green.
   `docs/TEST_BASELINE.md` updated to list every remaining failure with a root cause.
 
@@ -348,7 +348,7 @@ unit with explicit objective, subsystem, expected-green tests, rollback, and val
 
 ## 5. Dependency-ordered prioritization
 
-The true dependency graph is not file order; it is data-flow through the engine:
+The true dependency graph is not file order; it is data-flow through the MonkEngine runtime:
 
 ```
 Pose authoring (build)          ← produces raw SkeletonPose
@@ -424,7 +424,7 @@ For each stabilization phase, the effect on the suspended Architecture v2 roadma
   resolver (`HEAD_TARGET_ENABLED`) become safely verifiable** — today they sit on top of a
   solver whose ground/chest-frame behavior is unproven. **Blocked until S1:** M2, and the
   pending `HEAD_TARGET_ENABLED=true` gate (its gating suites `*PoseTest` /
-  `ValidatorRomClusterTest` / `ChestFrameIssueFTest` cannot be trusted while the engine is
+  `ValidatorRomClusterTest` / `ChestFrameIssueFTest` cannot be trusted while the MonkEngine runtime is
   red).
 - **S2 (Validator):** once the rule set and stale constants are corrected, Architecture v2
   phases that add new validation rules or migrate validator logic (e.g. RFC intent-layer

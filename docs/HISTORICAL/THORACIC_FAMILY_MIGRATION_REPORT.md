@@ -3,7 +3,7 @@
 **Scope:** Rewrite the Thoracic Mobility family for correct human movement, then modernize its architecture.
 **Date:** 2026-07-13
 **Engine baseline:** `com.monkfitness.app.animation` (rotation-driven / `SkeletonFactory` architecture).
-**Method:** Source cross-checking against the engine, FK/IK trace of the old and new implementations, and reuse of the proven `BaseHipFlexorPose`/`BaseBirdDogPose` migration pattern. The sandbox has no JVM, so the project was not compiled here; correctness is established by construction and by the existing geometry tests (updated where the movement itself changed).
+**Method:** Source cross-checking against the MonkEngine runtime, FK/IK trace of the old and new implementations, and reuse of the proven `BaseHipFlexorPose`/`BaseBirdDogPose` migration pattern. The sandbox has no JVM, so the project was not compiled here; correctness is established by construction and by the existing geometry tests (updated where the movement itself changed).
 
 **Priority order followed:** (1) fix biomechanics, (2) validate the visual movement, (3) modernize architecture. No modern architecture was built around the old incorrect motion.
 
@@ -75,7 +75,7 @@ Unregistered and never rendered. Its correct "rotate about the spine axis / head
 
 ## 3. Architecture Modernization
 
-Introduced **`BaseThoracicPose`** (a `BaseXXXPose`, used by all three active exercises — satisfies "no abstraction for one exercise"). It now owns, via the engine:
+Introduced **`BaseThoracicPose`** (a `BaseXXXPose`, used by all three active exercises — satisfies "no abstraction for one exercise"). It now owns, via the MonkEngine runtime:
 
 | Engine component | Usage |
 |---|---|
@@ -161,8 +161,8 @@ Suggested additional (visual) checks (no JVM here to run them): confirm the rib 
 
 ## 9. Remaining Technical Debt
 
-1. The `bakeThoracicArm` helper is thoracic-family-specific (arms root under a rotating chest); it is intentionally not promoted into the engine `BasePose` (would be a single-family abstraction). Acceptable.
-2. `SupportDefinition` left at default (informational only, as in every other modern family); populate only if the engine later keys contact rendering off `metadata.support`.
+1. The `bakeThoracicArm` helper is thoracic-family-specific (arms root under a rotating chest); it is intentionally not promoted into the MonkEngine runtime `BasePose` (would be a single-family abstraction). Acceptable.
+2. `SupportDefinition` left at default (informational only, as in every other modern family); populate only if the MonkEngine runtime later keys contact rendering off `metadata.support`.
 3. Exact reaching-hand paths (thread→sky) are tuned approximations; visual testing may refine the `reachLocal` endpoints/poles for maximal naturalness, but the underlying thorax-led model is correct.
 4. The support shoulder orbits slightly with the rib cage (coherent rotation) rather than staying perfectly stacked; the planted hand keeps it a stable pillar. A future refinement could counter-rotate only the support shoulder, but current motion reads as natural.
 

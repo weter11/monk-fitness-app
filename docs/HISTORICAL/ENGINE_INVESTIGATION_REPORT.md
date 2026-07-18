@@ -26,7 +26,7 @@
 
 ---
 
-## 0. Context — the engine has been heavily reworked
+## 0. Context — the MonkEngine runtime has been heavily reworked
 
 The previous investigation listed 11 issues then 6 (A–F). A large rework has landed and the
 **current** tree is *ahead* of the stale write-up. Resolved-in-code prior issues:
@@ -116,11 +116,11 @@ length; `IK_CONSTRAINT_LIMIT`/`ANGULAR_JOINT_LIMIT` ok — bent knee `≈31.6°`
 `30°` floor; no `IK_TARGET_UNREACHABLE` since bake `clampAmount=0`).
 
 **Conclusion:** the reference is internally inconsistent — `straight=true` + grounded pelvis +
-feet/arms at `≈3×` hip/shoulder-width cannot coexist with conserved bone length. The engine
+feet/arms at `≈3×` hip/shoulder-width cannot coexist with conserved bone length. the MonkEngine runtime
 conserves bones and keeps contacts; the cost is silently-bent limbs and a validator that
 reports the pose **clean** (UNI-2). Per `VALIDATION.md §9` the *reference* is anatomically
 wrong (a real straight-leg split puts feet at `≈±230`, not `±79.2`); under the task's freeze
-the engine cannot satisfy it. **Front Split, by contrast, is naturally supportable** (feet at
+the MonkEngine runtime cannot satisfy it. **Front Split, by contrast, is naturally supportable** (feet at
 ≈full reach).
 
 ---
@@ -223,7 +223,7 @@ get a true posture solve instead of a pelvis-only correction.
 ---
 
 ### UNI-2 — `straight=true` intent silently dropped; Middle Split reference is impossible (was G, P6) — RESOLVED (validator/ROM cluster)
-**Title:** When a limb is authored `straight=true` but the target is `< L1`, the engine silently
+**Title:** When a limb is authored `straight=true` but the target is `< L1`, the MonkEngine runtime silently
 produces a **bent** limb and **no validator rule flags it**; the Middle Split reference is
 geometrically impossible (straight limbs + grounded pelvis + feet at `≈3×` hip-width).
 **Description:** `ConstraintSolver.solve` computes `canBeStraight = spec.straight && reachMag ≥
@@ -458,7 +458,7 @@ keep it near-neutral by default (matching the scapula), so the frozen references
 ### UNI-8 — Wrist and ankle are single-DOF; no combined articulation (was I)
 **Title:** Hand/foot completion applies a **single axis-angle** wrist/ankle rotation. Real wrist
 is 2-DOF (flexion/extension + radial/ulnar deviation, + forearm pronation/supination); ankle is
-a hinge + inversion/eversion. The engine represents only one combined rotation.
+a hinge + inversion/eversion. the MonkEngine runtime represents only one combined rotation.
 **Description:** `HandDefinition.computeHandJoints(dir, wristRotation)` and
 `FootDefinition.computeHeelToe(ankle, neutralForward, ankleRotation)` each take one
 `JointRotation`. After the Issue C fix the rotation is correctly *relative to the parent
@@ -630,7 +630,7 @@ UNI-4 for full fidelity.
   sub-unit pelvis shift from the shared `30°` flexion floor).
 - **Middle Split still cannot be reproduced** with straight limbs: `straight=true` + grounded
   pelvis + feet/arms at `≈3×` hip/shoulder-width is geometrically impossible with conserved bone
-  length. The engine correctly bends the limbs and keeps the pelvis grounded, but **no rule
+  length. the MonkEngine runtime correctly bends the limbs and keeps the pelvis grounded, but **no rule
   flags that the straight intent was dropped** (UNI-2). Per the constitution (`VALIDATION.md
   §9`) the *reference* is anatomically wrong (real straight-leg splits put feet at `≈±230`, not
   `±79.2`); Front Split is naturally supportable.

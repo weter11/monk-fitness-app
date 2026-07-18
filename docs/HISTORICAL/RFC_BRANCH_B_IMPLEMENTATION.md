@@ -2,7 +2,7 @@
 
 > **Branch:** Architecture v2 — **Phase II / Branch B: Declarative Pose Authoring** (implementation plan).
 > **Status:** Migration plan only. **No code, no implementation, no optimization, no Runtime modification.**
-> **Source of truth:** Engine Runtime (Branch A) is the production baseline — M0–M4 complete, all three
+> **Source of truth:** MonkEngine runtime (Branch A) is the production baseline — M0–M4 complete, all three
 > flags `true`, 258/0 suite. Every Branch B migration is measured against Runtime-produced geometry;
 > Runtime itself is never modified.
 > **Companion RFCs:** `RFC_DECLARATIVE_POSE_AUTHORING.md` (Branch B design, B0–B6 phases),
@@ -152,14 +152,14 @@ The old M5/M6 labels are **not used** — they described flag-flip milestones th
     and keeps the damped ease for contact poses (preserving the M3 seated/hanging regression contract).
   - `ConstraintSolver.solve` and `SkeletonPipeline.runStages` now run the posture seed for **any** pose
     that names a non-`CUSTOM` intent, even with no contacts (previously the solver was skipped entirely
-    for contact-less poses), so the engine genuinely owns the root universally rather than only for
+    for contact-less poses), so the MonkEngine runtime genuinely owns the root universally rather than only for
     instruments.
   - Every concrete production pose declares a `postureIntent`. The five static STANDING shapes
     (ArmCircles / FacePull / HipCars / ScapularRetraction / WallSlides) declare `STANDING` and no longer
     hand-write `pelvis.y` — the solver pins `standH`. All other production poses author shape-driven
     roots and declare `CUSTOM` (the deliberate, reversible B3 fallback); the solver leaves their authored
     root untouched. The vertical-pull (hanging) family is rep-dependent and stays `CUSTOM` for now (its
-    root is not a static template), leaving the engine-owned hang path to the `DeadHang` instrument.
+    root is not a static template), leaving the MonkEngine runtime-owned hang path to the `DeadHang` instrument.
   - **Exit criteria (met):** every production pose declares a posture; the Solver owns the coarse root
     height for every non-`CUSTOM` intent (universal); the static STANDING poses no longer write root
     arithmetic; `PostureUniversalityTest` proves byte-identity; full suite green.
@@ -251,9 +251,9 @@ The old M5/M6 labels are **not used** — they described flag-flip milestones th
     so the Finalizer populates the stamps exactly as production does; their verdicts are unchanged.
 - **Independent migration:** **not independent** — depends on B4 producing the stamps. B5 produced the
   stamps itself (the B1/B2/B4 "produce" wording was aspirational; the stamps had not been created, so B5
-  created them in the engine and consumed them in the same step).
+  created them in the MonkEngine runtime and consumed them in the same step).
 - **Semantic-equivalence tests:** satisfied — `ValidatorRomClusterTest` + `ExerciseValidatorTest` unchanged in
-  verdict; the hip-ROM cases now feed the engine-produced stamp. Full suite **282/0**.
+  verdict; the hip-ROM cases now feed the MonkEngine runtime-produced stamp. Full suite **282/0**.
 - **Exit criteria:** validator contains none of the geometry-inference symbols (`toLocalDirection`,
   `angleBetweenDegrees`, `atan2`); every rule reads ≥1 stamp/intent; `ValidationReport` identical to
   pre-B5; suite green. (A compile-time guard that fails the build if inference symbols reappear in the
@@ -397,7 +397,7 @@ and keeping every PR safe to revert.
 
 **Global gate (all phases):** the migrated §1.2 world state matches the Runtime baseline within epsilon;
 any geometry deviation is a defect (Rule 5) unless that PR explicitly documents and approves it. No PR
-modifies Engine Runtime. No PR changes biomechanics.
+modifies MonkEngine runtime. No PR changes biomechanics.
 
 ---
 

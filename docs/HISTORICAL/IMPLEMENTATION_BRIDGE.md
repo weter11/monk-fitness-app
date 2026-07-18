@@ -44,7 +44,7 @@ data class SpineCurve(
     val axis: Vector3 = Vector3(0f, 0f, 1f)   // sagittal Z by default; +X lateral, +Y axial
 )
 ```
-Replaces the dual `pelvis.localRotation.set` + `chest.localRotation.set` pattern. The engine composes
+Replaces the dual `pelvis.localRotation.set` + `chest.localRotation.set` pattern. the MonkEngine runtime composes
 lumbar (parent of chest) then thoracic; equal values reproduce a single overall bend.
 
 ### B1.3 `RelativeArticulation` (Pose intent; all joints)
@@ -76,7 +76,7 @@ data class WorldTarget(
 // Map<Joint(end), WorldTarget> — hands/feet/knees/elbows/HEAD (gaze) as end joints.
 ```
 Gaze is expressed as `WorldTarget(HEAD, position = gazePoint, isContact = false)` — unifies gaze with
-the limb-target model (F8 resolution). The engine resolves neck/head articulation from this target
+the limb-target model (F8 resolution). the MonkEngine runtime resolves neck/head articulation from this target
 via the existing IK/constraint path (no new solver).
 
 ### B1.6 `Extremity` — REUSED, not redefined

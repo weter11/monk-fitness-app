@@ -1,6 +1,6 @@
 # ENGINE_HISTORY.md — Historical Investigation Archive
 
-> **Historical archive.** This file is an *index* to the engine's investigation,
+> **Historical archive.** This file is an *index* to the MonkEngine's investigation,
 > audit, and fix-prompt records. It is **not** needed for day-to-day development
 > and is **not** kept in sync with the live code. Read it only when you need the
 > original reasoning behind a past decision, the full UNI-* issue narratives, or
@@ -9,7 +9,7 @@
 > - The detailed original records live in **`docs/HISTORICAL/`** (see
 >   `docs/HISTORICAL/README.md` for the inventory).
 > - **Live future work** (what is left to do) lives in `docs/ENGINE_ROADMAP.md`.
-> - **Current architecture** (what the engine is now) lives in
+> - **Current architecture** (what the MonkEngine runtime is now) lives in
 >   `docs/ENGINE_ARCHITECTURE.md` and `docs/ENGINE.md`.
 > - The detailed original records are retained as the source of record and are
 >   linked below. Each is now banner-labeled **HISTORICAL**.
@@ -68,7 +68,7 @@ work** — the live, de-duplicated list is `docs/ENGINE_ROADMAP.md`.
 - **Pike Sit** — REPRODUCIBLE (clean).
 - **Middle Split** — CANNOT be reproduced with straight limbs: `straight=true` +
   grounded pelvis + feet/arms at ≈3× hip/shoulder-width is geometrically impossible
-  with conserved bone length. The engine correctly bends the limbs and keeps the
+  with conserved bone length. the MonkEngine runtime correctly bends the limbs and keeps the
   pelvis grounded; no rule flags the dropped straight intent (UNI-2). Per
   `VALIDATION.md §9` the *reference* is anatomically wrong (a real straight-leg
   split puts feet at ≈±230, not ±79.2). Front Split is naturally supportable.

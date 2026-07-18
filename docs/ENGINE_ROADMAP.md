@@ -12,7 +12,7 @@
 
 ## 1. How to read this
 
-The engine went through a four-phase evolution (see `docs/ENGINE_ARCHITECTURE.md`
+the MonkEngine runtime went through a four-phase evolution (see `docs/ENGINE_ARCHITECTURE.md`
 §8). The big architectural gaps found during the investigation era have largely
 been closed (ConstraintSolver posture pass, hip ROM, validator authored-intent
 rules, clavicle/scapula DOF, two-segment spine). This document tracks only the
@@ -31,7 +31,7 @@ still OPEN in the register *and* has not been clearly superseded.
 
 | Id | Item | Layer | Notes |
 | --- | --- | --- | --- |
-| UNI-9 | True straight-limb reach when the target sits inside the proximal-bone length (`dist < L1`). The degenerate bent-limb fallback is correct behaviour, but a `straight=true` limb that cannot be honored should be **surfaced**, not silently bent. | Engine + Validation | The Middle Split validation pose deliberately keeps this as a regression reference (`docs/VALIDATION.md` §11.1). Fix the engine, not the pose. |
+| UNI-9 | True straight-limb reach when the target sits inside the proximal-bone length (`dist < L1`). The degenerate bent-limb fallback is correct behaviour, but a `straight=true` limb that cannot be honored should be **surfaced**, not silently bent. | Engine + Validation | The Middle Split validation pose deliberately keeps this as a regression reference (`docs/VALIDATION.md` §11.1). Fix the MonkEngine runtime, not the pose. |
 | UNI-12 | Future-exercise supportability. Confirm the natural-supportability claim for Front Split, Cossack, Bulgarian, Pistol, Single-leg RDL, Horse Stance, etc. (per `docs/ENGINE_HISTORY.md` §4) by exercising them through the pipeline. | Pose / Validation | Not a defect; a coverage/confirmation task. |
 | Trunk DOFs in solver | `ConstraintSolver` distributes residual across *limb* free angles only; `CHEST`/`LUMBAR` are carried rigidly for limb contacts. Making the trunk itself a free DOF for trunk-contact poses is explicitly future work (UNI-1 fix notes). | Engine | Lower priority; only matters for poses where the trunk is a contact. |
 | Generalized contacts | Contacts today map to 2-bone (or degenerate 1-bone) chains. A principled way to express more complex support topologies (e.g. seated hip + planted hands) would broaden native multi-contact reconciliation. | Engine | Architectural; see `docs/ENGINE_ARCHITECTURE.md` §R7. |
@@ -79,7 +79,7 @@ not re-litigate them:
 - Treat the four-layer boundary (`docs/CODING_RULES.md`) as fixed: math →
   `SkeletonMath`, topology → `SkeletonFactory`, authoring → `BasePose`,
   correctness → `ExerciseValidator`.
-- The engine satisfies validation; never soften a validation pose to pass
+- the MonkEngine runtime satisfies validation; never soften a validation pose to pass
   (`docs/VALIDATION.md` §2, §9).
 - Prefer an engine fix that benefits the whole family over a per-pose hack
   (`docs/CODING_RULES.md` §2–3).

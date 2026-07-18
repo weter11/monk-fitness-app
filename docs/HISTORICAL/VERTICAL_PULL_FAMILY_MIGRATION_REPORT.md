@@ -33,7 +33,7 @@ A vertical pull (hanging bar pull) is driven by the **shoulder girdle**, not the
 | `HangPose` | Closest to correct (static hang) but the hand targets were derived from `pelvisX` (moving), so the hands *drifted* with the body instead of staying fixed; also still subject to the same reach/clamp geometry that can float the hands. |
 | `ScapularPullUpPose` | Authored a small scapular *cosine* but, because the body was still a rigid block that lifted via pelvis-Y lerp, the "scapular" motion was just a small rigid translation — no genuine scapular depression/retraction, and the hands again floated off the bar. |
 
-**Root cause (all of them):** the motion was parameterised as *pelvis height*, and the arm reach was allowed to exceed the engine's `ArmConstraint` max extension (`0.98 × 146 ≈ 143`). When the requested shoulder→bar distance exceeded 143, `solveIK` clamped and **the hand was placed short of the bar** — i.e. the hand visibly detached. The fix is to *derive pelvis height from a valid arm reach*, so the hands stay glued.
+**Root cause (all of them):** the motion was parameterised as *pelvis height*, and the arm reach was allowed to exceed the MonkEngine's `ArmConstraint` max extension (`0.98 × 146 ≈ 143`). When the requested shoulder→bar distance exceeded 143, `solveIK` clamped and **the hand was placed short of the bar** — i.e. the hand visibly detached. The fix is to *derive pelvis height from a valid arm reach*, so the hands stay glued.
 
 ---
 

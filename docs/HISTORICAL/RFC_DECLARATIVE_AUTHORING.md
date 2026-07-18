@@ -26,7 +26,7 @@ Three Architecture v2 principles decide the semantic fate of each helper:
   articulation, a limb world target, a posture, a contact, a head target, an extremity override). It may
   not *compute* the transform that realizes it.
 - **P2 — Engine owns geometry.** Every `SkeletonNode` transform (`localPosition` / `localRotation`) is
-  written by an engine stage (IkStage / Finalizer / Solver), never by a pose. The engine derives shape
+  written by an engine stage (IkStage / Finalizer / Solver), never by a pose. the MonkEngine runtime derives shape
   and placement from intent.
 - **P3 — Validation observes.** Validation reads §1.2 + §1.1 ROM only; it never writes a transform.
 
@@ -34,9 +34,9 @@ A helper's classification falls into exactly one of four buckets:
 
 | Bucket | Meaning |
 |--------|---------|
-| **Engine helper** | stays an engine-stage responsibility; the pose never calls it to write a transform. It is geometry/FK/IK/solver work the engine owns under P2. |
+| **Engine helper** | stays an engine-stage responsibility; the pose never calls it to write a transform. It is geometry/FK/IK/solver work the MonkEngine runtime owns under P2. |
 | **Becomes intent** | the pose's *call* is reclassified as a declaration; the geometry it currently writes moves to an engine stage that consumes the declared carrier. |
-| **Becomes obsolete** | the helper expresses something the engine should own or that has no place in declarative authoring; it is removed, not migrated. |
+| **Becomes obsolete** | the helper expresses something the MonkEngine runtime should own or that has no place in declarative authoring; it is removed, not migrated. |
 | **Splits into engine + intent** | part of the helper is a declaration (pose side, P1) and part is geometry (engine side, P2); the two are separated. |
 
 ---
@@ -84,14 +84,14 @@ Helpers already on intent are noted as such; the rest are classified by the boun
 - **Why:** it is the composed form of the three chest articulations above. Under P1 the pose declares one
   CHEST relative articulation (the three components are the *intent*, not three node writes); under P2 the
   Finalizer derives the exact chest rotation from that single declaration. The matrix-math that builds the
-  rotation belongs to the engine (P2), not the pose.
+  rotation belongs to the MonkEngine runtime (P2), not the pose.
 
 ### 1.2 Hip
 
 #### `buildHipFlexion(hip, flexionRad)`
 - **Today:** writes `hip.localRotation` (sagittal hip flexion about local +Z).
 - **Classification:** **Becomes intent** (folded into `jointIntents` as a HIP relative articulation).
-- **Why:** a single hip DOF is intent (P1 → `jointIntents`); the engine writes the rotation (P2). Pose must
+- **Why:** a single hip DOF is intent (P1 → `jointIntents`); the MonkEngine runtime writes the rotation (P2). Pose must
   not hand-write `hip.localRotation` (P2).
 
 #### `buildHipAbduction(hip, abductionRad, sideSign)`
@@ -109,7 +109,7 @@ Helpers already on intent are noted as such; the rest are classified by the boun
 - **Today:** composes a 3-DOF hip rotation and writes `hip.localRotation` directly via `SkeletonMath.buildHipRotation`.
 - **Classification:** **Becomes intent** (folded into `jointIntents` as a single HIP relative articulation).
 - **Why:** the composed form of the three hip DOFs. Under P1 the pose declares one HIP relative articulation;
-  under P2 the engine derives the exact hip rotation (the `SkeletonMath.buildHipRotation` composition is
+  under P2 the MonkEngine runtime derives the exact hip rotation (the `SkeletonMath.buildHipRotation` composition is
   engine geometry, P2). The pose must not write `hip.localRotation` (P2).
 
 ### 1.3 Shoulder girdle / clavicle
@@ -118,16 +118,16 @@ Helpers already on intent are noted as such; the rest are classified by the boun
 - **Today:** composes a 3-DOF clavicle rotation and writes `clavicle.localRotation` directly via
   `SkeletonMath.buildClavicularRotation` (UNI-7: closes the dead-clavicle gap).
 - **Classification:** **Becomes intent** (folded into `jointIntents` as a CLAVICLE relative articulation).
-- **Why:** a girdle articulation is a relative joint articulation (P1 → `jointIntents`); the engine writes
-  the composed rotation (P2). The pose declares the three components; the engine owns the composition (P2).
+- **Why:** a girdle articulation is a relative joint articulation (P1 → `jointIntents`); the MonkEngine runtime writes
+  the composed rotation (P2). The pose declares the three components; the MonkEngine runtime owns the composition (P2).
 
 ### 1.4 Extremities (wrist / ankle)
 
 #### `buildWristArticulation(hand, flexion, deviation)`
 - **Today:** writes `hand.localRotation` (2-DOF wrist via `SkeletonMath.buildWristRotation`, UNI-8).
 - **Classification:** **Becomes intent** (folded into `jointIntents` as a HAND relative articulation).
-- **Why:** a distal joint articulation is intent (P1 → `jointIntents`); the engine writes the composed
-  rotation (P2). The pose declares flexion+deviation; the engine composes (P2).
+- **Why:** a distal joint articulation is intent (P1 → `jointIntents`); the MonkEngine runtime writes the composed
+  rotation (P2). The pose declares flexion+deviation; the MonkEngine runtime composes (P2).
 
 #### `buildAnkleArticulation(ankle, dorsiflexion, inversion)`
 - **Today:** writes `ankle.localRotation` (2-DOF ankle via `SkeletonMath.buildAnkleRotation`, UNI-8).
@@ -140,14 +140,14 @@ Helpers already on intent are noted as such; the rest are classified by the boun
 - **Today:** writes `child.localPosition` directly from a fixed offset.
 - **Classification:** **Becomes intent** (declared as a structural segment offset).
 - **Why:** a fixed parent→child offset is *intent* (the pose declares the skeleton's proportions/attachment
-  points, P1); the engine writes `child.localPosition` from that declaration during tree construction (P2).
-  A rigid offset is geometry the engine owns (P2), but the *offset value* is a declaration the pose authors.
+  points, P1); the MonkEngine runtime writes `child.localPosition` from that declaration during tree construction (P2).
+  A rigid offset is geometry the MonkEngine runtime owns (P2), but the *offset value* is a declaration the pose authors.
 
 #### `buildTorso(pelvis, chest, torsoLength)`
 - **Today:** writes `chest.localPosition` from a fixed torso length.
 - **Classification:** **Becomes intent** (declared as a structural segment offset).
-- **Why:** same as `buildRigidSegment` — a fixed offset is intent (P1); the engine writes the
-  `localPosition` (P2). The pose declares the torso length; the engine places the chest.
+- **Why:** same as `buildRigidSegment` — a fixed offset is intent (P1); the MonkEngine runtime writes the
+  `localPosition` (P2). The pose declares the torso length; the MonkEngine runtime places the chest.
 
 #### `buildPelvis(pelvis, hipF, hipB, hipWidth)`
 - **Today:** writes `hipF.localPosition` / `hipB.localPosition` from hip width.
@@ -192,7 +192,7 @@ Helpers already on intent are noted as such; the rest are classified by the boun
     optional contact. This is `limbTargets` (+ `contacts` when a contact is declared). The pose must stop
     solving and stop writing nodes.
   - **Engine half (P2):** the IK solve, the `toLocalDirection` conversion, and the bone-length stamp are
-    geometry the engine owns — extracted into the Branch B `IkStage` (already deferred per
+    geometry the MonkEngine runtime owns — extracted into the Branch B `IkStage` (already deferred per
     `RFC_GAP_CLOSURE.md` M2 note). The `contacts` carrier is **live** today (consumed by the Solver); only
     the `limbTargets` carrier is dead and must become the intent vehicle replacing the node writes.
   So `bakeIkLimb` splits: its declaration arguments become an intent call; its solve+write+stamp body
@@ -221,7 +221,7 @@ Helpers already on intent are noted as such; the rest are classified by the boun
 - **Classification:** **Remains an engine helper / already intent (no change in kind); its consumer must be
   made real.**
 - **Why:** it is already a declaration (P1 → `extremityOverrides`). The bug is not its classification but
-  that the engine consumer is dormant. Under Branch B the Finalizer honors `extremityOverrides` (skips
+  that the MonkEngine runtime consumer is dormant. Under Branch B the Finalizer honors `extremityOverrides` (skips
   derivation for declared extremities), making the dormant carrier live. The helper itself stays.
 
 ### 1.9 Motion / support helpers (non-transform)
@@ -230,7 +230,7 @@ Helpers already on intent are noted as such; the rest are classified by the boun
 - **Today:** stateless motion-driver computations returning a scalar/progress; write no transform.
 - **Classification:** **Remain engine helpers (unchanged).**
 - **Why:** they are pure functions over `progress` (motion math), not authoring of body geometry. They
-  belong to the engine/runtime math layer, not to pose→node writing. P1/P2/P3 do not reclassify them; the
+  belong to the MonkEngine runtime/runtime math layer, not to pose→node writing. P1/P2/P3 do not reclassify them; the
   pose may keep calling them to compute *intent parameters* (e.g. how far through a rep), which is still
   intent, not geometry.
 
@@ -299,6 +299,6 @@ declaration and the geometry solve in one call, and Branch B's entire purpose is
 halves. `buildHead` is the second Split: offset (intent) + direction (already `headTarget` intent).
 
 This classification is the contract `RFC_DECLARATIVE_POSE_AUTHORING.md` must honour: every "Becomes intent"
-helper maps to a carrier the engine consumes; every "Splits" helper separates into a declaration + an
-engine stage; every "Becomes obsolete" wrapper is deleted once the engine owns the solve. No new API is
+helper maps to a carrier the MonkEngine runtime consumes; every "Splits" helper separates into a declaration + an
+engine stage; every "Becomes obsolete" wrapper is deleted once the MonkEngine runtime owns the solve. No new API is
 specified here — only the semantic fate of each existing helper.

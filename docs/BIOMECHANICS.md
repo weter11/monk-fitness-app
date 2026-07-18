@@ -62,7 +62,7 @@ the chest lead toward the hands.
 
 > **Reasoning:** starting a pull with elbow flexion produces the classic "arm
 > curl on a bar" error. Scapular initiation is what makes a pull-up read as a
-> pull-up. The engine expresses this by driving the pull from a shrinking
+> pull-up. the MonkEngine runtime expresses this by driving the pull from a shrinking
 > shoulder-to-target reach rather than from an elbow angle.
 
 ---
@@ -111,7 +111,7 @@ load or provide support.
 - A support that slides is a defect (validation flags hand sliding and ground
   penetration).
 
-This is why the engine can re-root the skeleton at a fixed contact: the plant
+This is why the MonkEngine runtime can re-root the skeleton at a fixed contact: the plant
 is a real constraint, not a cosmetic one.
 
 ---

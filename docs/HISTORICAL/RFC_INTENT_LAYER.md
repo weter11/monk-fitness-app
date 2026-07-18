@@ -38,11 +38,11 @@ val extremityOverrides: MutableSet<Extremity>
 Plus `contacts: MutableList<ContactSpec>` and `motion/camera/environment` (typed `Any?` today).
 
 **Why dead:** production `Pose.build()` never populates `spineIntent`/`limbTargets`/`jointIntents`
-(it calls helpers that write the live node tree instead), and the engine never reads them — `copyFrom`
+(it calls helpers that write the live node tree instead), and the MonkEngine runtime never reads them — `copyFrom`
 just copies them. Only `postureIntent`/`contactPrecedence` are written (via `declarePosture`) and read
 (inside `ConstraintSolver.solve`), and only by *validation* poses; production poses set neither.
 
-**Goal of this RFC:** make these carriers the **sole, authoritative, typed input** to the engine, with
+**Goal of this RFC:** make these carriers the **sole, authoritative, typed input** to the MonkEngine runtime, with
 a real builder API, real ownership, real validation, and a real migration from imperative
 `Pose.build()`.
 
@@ -127,13 +127,13 @@ t5  Validator READS §1.1 (ROM vocabulary) + §1.2 (stamps) → ValidationReport
 t6  Render reads §1.2 only
 ```
 **Invariant:** §1.1 is **write-once** (Pose, t0). After t1 it is read-only for the rest of the frame.
-The engine never writes §1.1; if an engine stage needs to "correct" intent (e.g. Solver relaxes a
+the MonkEngine runtime never writes §1.1; if an engine stage needs to "correct" intent (e.g. Solver relaxes a
 posture), it writes §1.2 (the resolved geometry) + stamps (`rootTranslationDelta`), never the intent.
 This keeps intent as a **permanent record of authorial will** — essential for debugging and for the
 Validator's ROM checks.
 
 **Cross-frame:** `SkeletonPose` may be reused across frames (F9 smoothing cache keyed by identity).
-On reuse, `build()` is called again with a new `PoseContext`, producing a **fresh §1.1**; the engine
+On reuse, `build()` is called again with a new `PoseContext`, producing a **fresh §1.1**; the MonkEngine runtime
 re-resolves. §1.1 is therefore per-`build`, not per-instance — the instance is a reusable carrier, the
 §1.1 *content* is per-frame.
 
@@ -153,7 +153,7 @@ re-resolves. §1.1 is therefore per-`build`, not per-instance — the instance i
   serialized for debugging, never fed back as input.
 - **Intent manifest:** a single `IntentManifest` value object = the complete §1.1 snapshot. `SkeletonPose`
   gains `fun toIntentManifest(): IntentManifest` and `fun applyIntentManifest(m): Unit` (the latter only
-  valid pre-pipeline, i.e. by a loader, not by the engine).
+  valid pre-pipeline, i.e. by a loader, not by the MonkEngine runtime).
 - **Versioning:** `IntentManifest.schemaVersion: Int` (bump on carrier shape change). The pipeline
   rejects manifests whose schema version it does not understand (fail-fast, not silent).
 
@@ -225,8 +225,8 @@ release. A failed intent aborts the frame (all-or-nothing, per `RFC_ENGINE_PIPEL
 
 - **Inside `build()`**: the `IntentBuilder` is mutable (fluent). The pose accumulates intent.
 - **At `build()` return**: the builder produces a `SkeletonPose` whose §1.1 is presented as
-  **read-only** to the engine. Setters are package-private / `val` from the engine's viewpoint.
-- **Rationale:** intent is authorial will — it must not be silently mutated by the engine (that would
+  **read-only** to the MonkEngine runtime. Setters are package-private / `val` from the MonkEngine's viewpoint.
+- **Rationale:** intent is authorial will — it must not be silently mutated by the MonkEngine runtime (that would
   hide the author's actual request from the Validator's ROM checks). Immutability also makes the
   `copyFrom`/manifest semantics trivially correct (no aliasing bugs across frames).
 - **§1.2 is mutable by design** (it is derived state, written stage-by-stage). Only §1.1 is frozen.
@@ -290,7 +290,7 @@ Render ──read──▶ §1.2 only
 - **`spineIntent` resolution:** the Finalizer (or IK, by division of labor) expands `SpineCurve` into
   the pelvis+chest local rotations about the shared axis. This is the *real* consumption of
   `spineIntent` — replacing today's `buildSpineCurve(pelvis, chest, …)` which writes nodes directly.
-  Under the intent layer, `buildSpineCurve` records `spineIntent`; the engine expands it. (One
+  Under the intent layer, `buildSpineCurve` records `spineIntent`; the MonkEngine runtime expands it. (One
   subtlety from Phase 5: the lower segment lands on PELVIS because hips attach there — the expansion
   logic must preserve that; documented in `RFC_ENGINE_PIPELINE` + Phase 5 retro.) 
 - **`headTarget` resolution (Gap 7):** Finalizer derives neck/head from `headTarget` when non-null;

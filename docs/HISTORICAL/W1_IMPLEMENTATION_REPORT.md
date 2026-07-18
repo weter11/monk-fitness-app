@@ -2,7 +2,7 @@
 
 > Scope: **W1 only** from `docs/ENGINE_RESPONSIBILITY_AUDIT_NEW.md` (the "Engine Workarounds
 > Audit"). The goal is architectural — restore the ownership boundary *"pose authors describe
-> anatomy, the engine derives extremity geometry"* — **not** to improve any pose.
+> anatomy, the MonkEngine runtime derives extremity geometry"* — **not** to improve any pose.
 >
 > No validation pose was modified. No production pose was modified. No constants were tuned. IK,
 > the solver, and the validator rules are untouched.
@@ -11,7 +11,7 @@
 
 ## 1. Previous ownership model (the bug)
 
-The engine already contained the correct anatomy-solving machinery in
+the MonkEngine runtime already contained the correct anatomy-solving machinery in
 `SkeletonPoseFinalizer`:
 
 - `adjustFootOrientation(...)` — derives heel/toe from the shank (knee→ankle) direction, the
@@ -32,14 +32,14 @@ if (!cachedHasHandDetailA) { adjustHandOrientation(...) }  // derive ONLY if nod
 
 `SkeletonFactory.createStandardSkeleton()` / `createPushUpSkeleton()` **always** create
 `HEEL_F/TOE_F/PALM_A/KNUCKLES_A/FINGERTIPS_A` (and the mirror side) as children of every
-ankle/hand. So the presence check was **always true** and the engine's derivation **never ran**
+ankle/hand. So the presence check was **always true** and the MonkEngine's derivation **never ran**
 for any real pose.
 
 **Ownership was therefore inferred from node existence — a signal that is always "present",
 so ownership silently and permanently defaulted to the pose.** Every pose had to author the
 endpoint local positions by hand and cancel inherited torso tilt by hand (the W2/W3/W4 smells:
 magic `0.29/0.71` heel/toe ratios, `6/6/10` hand offsets, `-parentRotation.angle` / `-torsoPitch`
-counter-rotations). The engine owned the *code* but never the *behaviour*.
+counter-rotations). the MonkEngine runtime owned the *code* but never the *behaviour*.
 
 ```
 Pose ──(anatomy + heel/toe + palm/fingertips + counter-rotations)──▶ Engine (derivation skipped) ──▶ Skeleton
@@ -89,7 +89,7 @@ if (pose.isExtremityAutomatic(Extremity.HAND_P)) { adjustHandOrientation(...) }
 ```
 
 The relative ankle/wrist rotation is still passed in, so inherited limb/torso tilt is removed
-inside the engine; identity articulation lays the foot/hand flat along the limb.
+inside the MonkEngine runtime; identity articulation lays the foot/hand flat along the limb.
 
 ### Authoring surface — `BasePose.kt` / `BaseValidationPose.kt`
 
@@ -113,18 +113,18 @@ Pose ──(anatomy: limb target + ankle/wrist articulation)──▶ Engine (de
 
 ## 3. Why Rule #2 is now satisfied
 
-> **Rule #2:** *Poses describe anatomy. The engine derives geometry.*
+> **Rule #2:** *Poses describe anatomy. the MonkEngine runtime derives geometry.*
 
-- **Extremity geometry is now derived by the engine by default.** The four
+- **Extremity geometry is now derived by the MonkEngine runtime by default.** The four
   `adjustFootOrientation`/`adjustHandOrientation` calls run for every pose unless it explicitly
-  declares `MANUAL_OVERRIDE`. The engine's own machinery is finally the live code path, not dead
+  declares `MANUAL_OVERRIDE`. the MonkEngine's own machinery is finally the live code path, not dead
   code behind an always-true gate.
 - **Ownership is explicit, never inferred from structure.** The bug was that node existence — a
   structural artefact the factory always produces — was used as the ownership signal. Ownership
   is now a first-class, intentional declaration on the pose (`ExtremityOrientationMode`), so the
   engine can never again be silently switched off by the factory building a node.
-- **Inherited torso tilt is removed by the engine.** Because derivation consumes the ankle/wrist
-  rotation *relative to the parent segment* (`relativeRotation(...)`), the engine — not the pose —
+- **Inherited torso tilt is removed by the MonkEngine runtime.** Because derivation consumes the ankle/wrist
+  rotation *relative to the parent segment* (`relativeRotation(...)`), the MonkEngine runtime — not the pose —
   performs the tilt compensation that poses previously re-implemented by hand (`-torsoPitch`,
   `-parentRotation.angle`). The relative-rotation path was already correct; W1 makes it actually
   execute.
@@ -147,7 +147,7 @@ bakeIkLimb(hipF, target = footTarget, ...)                          // where the
 // NO ankleF.localRotation.set(axisZ, -torsoPitch) counter-rotation
 ```
 
-The engine then, unconditionally:
+the MonkEngine runtime then, unconditionally:
 
 1. **Derives heel/toe** from the shank direction + the *net* ankle articulation + `FootDefinition`
    ratios (`adjustFootOrientation` → `FootDefinition.computeHeelToe`). No pose needs the magic
@@ -159,8 +159,8 @@ The engine then, unconditionally:
    author sets only the *net* desired articulation and never `-parentRotation.angle` /
    `-torsoPitch`.
 
-Because the ratios/offsets and the tilt math are owned by the engine, future poses cannot drift
-from the anatomical truth by copying a magic literal, and the engine-internal knowledge
+Because the ratios/offsets and the tilt math are owned by the MonkEngine runtime, future poses cannot drift
+from the anatomical truth by copying a magic literal, and the MonkEngine runtime-internal knowledge
 (*"why does the foot inherit the torso tilt and how do I undo it"*) no longer leaks into content.
 This is what makes the model scale to hundreds of exercises (audit §5).
 
@@ -189,9 +189,9 @@ at once."*
 
 **Follow-on migrations (out of scope for W1, tracked by the audit):** the now-redundant
 per-pose compensations (W2 heel/toe writes, W3 palm/fingertip writes, W4 counter-rotations,
-magic `0.29/0.71` and `6/6/10` literals) can be *deleted* from ~70 pose files, since the engine
+magic `0.29/0.71` and `6/6/10` literals) can be *deleted* from ~70 pose files, since the MonkEngine runtime
 now produces the geometry. W1 deliberately does not touch them (the task forbids modifying poses),
-so they currently sit as dead/duplicate authoring that the engine overrides.
+so they currently sit as dead/duplicate authoring that the MonkEngine runtime overrides.
 
 ---
 
@@ -224,13 +224,13 @@ restoring engine ownership:
 **Root cause of the 3 regressions.** These are floor-contact poses that previously laid the foot
 flat on the ground by **manually compensating**: e.g. `PelvicTiltPose` sets
 `ankleF.localRotation = -torsoAngle` (a W4 counter-rotation) *and* hand-authors
-`heelF/toeF.localPosition` with the magic `0.29/0.71` ratios (W2). Now that the engine derives the
+`heelF/toeF.localPosition` with the magic `0.29/0.71` ratios (W2). Now that the MonkEngine runtime derives the
 foot from the shank + the *relative* ankle articulation, the pose's leftover manual compensation
 double-counts, and the derived toe dips ~2.3–2.6 units below the ground plane, tripping the
 validator's ground check.
 
-This is exactly the coupling W1 exposes: the poses were doing the engine's job and cancelling a
-tilt the engine now cancels itself. The correct resolution is the **W2/W3/W4 pose migration**
+This is exactly the coupling W1 exposes: the poses were doing the MonkEngine's job and cancelling a
+tilt the MonkEngine runtime now cancels itself. The correct resolution is the **W2/W3/W4 pose migration**
 (delete the manual endpoints and counter-rotations), which is **out of scope for W1** and
 explicitly forbidden by the task ("do not modify production poses"). Until that migration runs,
 these three poses read a genuine, small ground-penetration — an honest reading of the residual

@@ -10,7 +10,7 @@
 
 ## 0. TL;DR verdict
 
-The engine **already contains** the correct anatomy-solving machinery
+the MonkEngine runtime **already contains** the correct anatomy-solving machinery
 (`adjustFootOrientation`, `adjustHandOrientation`, `buildAnkleArticulation`,
 `buildWristArticulation`, the relative-rotation math). It is **dead for every IK-authored
 pose** because a presence-gate in `SkeletonPoseFinalizer` (`cachedHasHeelToeF =
@@ -20,7 +20,7 @@ skeleton factory unconditionally builds `HEEL_F/TOE_F/PALM_A/FINGERTIPS_A` nodes
 pose's hand-authored local positions, forcing ~70 production/validation poses to author
 foot/hand endpoints and to negate inherited torso tilt by hand.
 
-**The responsibility boundary has already drifted from the engine to the content.** This is
+**The responsibility boundary has already drifted from the MonkEngine runtime to the content.** This is
 the central finding. The fix direction (not implemented here) is: poses should author only
 *intent* (ankle/wrist articulation, limb target, `straight` flag); the finalizer should
 *always* derive heel/toe/palm/fingertips from that, treating author-written endpoints as an
@@ -37,10 +37,10 @@ and reads only the baked result, so the dropped intent is invisible except to th
 ## 1. Limb-orientation responsibility: explicit authoring vs. engine derivation
 
 **Question:** should a pose author specify heel/toe/palm/knuckles/fingertips explicitly, or
-should the engine derive them from limb orientation, wrist/ankle local rotations, and
+should the MonkEngine runtime derive them from limb orientation, wrist/ankle local rotations, and
 anatomical defaults?
 
-### What the engine is *already* designed to do
+### What the MonkEngine runtime is *already* designed to do
 
 Two completion methods exist in `SkeletonPoseFinalizer`:
 
@@ -58,7 +58,7 @@ Both are fed a **relative** rotation (`relativeRotation(ankle, knee, relAnkle)`,
 isolate the author's intended wrist/ankle articulation from the inherited parent (torso)
 orientation. **This is the right design.** It means a pose author should only set
 `ankle.localRotation`/`hand.localRotation` (via `buildAnkleArticulation`/
-`buildWristArticulation`) and let the engine lay the foot/hand flat against the limb.
+`buildWristArticulation`) and let the MonkEngine runtime lay the foot/hand flat against the limb.
 
 ### What actually happens (the bypass)
 
@@ -90,11 +90,11 @@ is **always true** for every pose. The completion is **never run**; the pose's h
 
 **Explicit authoring of heel/toe/palm/fingertips is NOT required and should not be the
 default.** It is required *only* as an optional override for stylized cases (e.g. a pointed
-toe, a curled grip) that the default derivation cannot express. The engine already has the
+toe, a curled grip) that the default derivation cannot express. the MonkEngine runtime already has the
 derivation; it is just gated off by a factory always emitting the nodes.
 
 The `6/6/10` and `0.29/0.71` literals are duplicated copies of `HandDefinition` /
-`FootDefinition` ratios owned by the engine — a fragility smell.
+`FootDefinition` ratios owned by the MonkEngine runtime — a fragility smell.
 
 ---
 
@@ -133,7 +133,7 @@ straight = true
 ### Is this the correct contract?
 
 **For the *silent bend itself* — yes, and it is consistent with the diagnostic-instrument
-rule.** When geometry makes a straight limb impossible, the engine must not crash or collapse
+rule.** When geometry makes a straight limb impossible, the MonkEngine runtime must not crash or collapse
 a bone to zero; returning a valid bent limb is the right fallback. Bending is the *reading*,
 and `STRAIGHT_LIMB_INTENT` is the *meter*. That is exactly what Middle Split is for.
 
@@ -151,16 +151,16 @@ and `STRAIGHT_LIMB_INTENT` is the *meter*. That is exactly what Middle Split is 
 
 **Correct contract (recommendation, no implementation):**
 
-> The engine guarantees a valid limb and *preserves bone lengths* either way. When
-> `straight=true` cannot be honored geometrically, the engine **bends** (correct) **and
+> the MonkEngine runtime guarantees a valid limb and *preserves bone lengths* either way. When
+> `straight=true` cannot be honored geometrically, the MonkEngine runtime **bends** (correct) **and
 > stamps the drop onto the limb's spec at bake time** (new: introspectable, not just
 > validator-post-hoc). The validator's `STRAIGHT_LIMB_INTENT` remains the *meter* but reads
-> the engine's own `intentPreserved` flag (plus a geometry check) rather than reverse-
+> the MonkEngine's own `intentPreserved` flag (plus a geometry check) rather than reverse-
 > engineering it from joint angles, and is **not** limited to contacts. No exception is
 > thrown — a validation pose is a diagnostic, and bending is a legitimate reading.
 
 This preserves the diagnostic-instrument model (the instrument still reads the fault) while
-fixing the asymmetry that the engine hides the drop from the author.
+fixing the asymmetry that the MonkEngine runtime hides the drop from the author.
 
 ---
 
@@ -190,7 +190,7 @@ the kinematics. "Derive" = engine computes endpoints from intent + anatomy.
 | **Ground contact / penetration** | **B (derive)** | `resolveContactPlane`, `ContactConstraint.ground` |
 | **L/R mirror symmetry** | A (intent: sideSign) | engine propagates via FK |
 
-**The two cells that are wrong today** (author doing engine's job): **Foot direction** and
+**The two cells that are wrong today** (author doing MonkEngine's job): **Foot direction** and
 **Palm direction** — both should be `B (derive)` but are currently `A` because the
 completion path is gated off.
 
@@ -240,7 +240,7 @@ engine behavior** — the architectural smell this investigation targets.
   `HandDefinition` constants.
 
 ### 4.4 Inverse-tilt compensation (counter-rotating ankle/wrist to "undo" inherited torso tilt)
-This is the clearest smell: authors negate the engine's FK-inherited parent orientation by
+This is the clearest smell: authors negate the MonkEngine's FK-inherited parent orientation by
 hand, duplicating `SkeletonPoseFinalizer.relativeRotation()` math.
 
 - `BaseLungePose.kt:82–105` — `bakeLeg`: `val localAngle = -parentRotation.angle; ...
@@ -269,7 +269,7 @@ hand, duplicating `SkeletonPoseFinalizer.relativeRotation()` math.
   (`leanAngle - footPitch`), `BaseHipFlexorPose.kt:136,145` (`leanAngle`).
 - **Belongs in engine:** yes. `adjustFootOrientation`/`adjustHandOrientation` already take the
   *relative* rotation precisely so this negation is automatic. The author should set only the
-  *net* ankle/wrist articulation; the engine removes the inherited parent tilt.
+  *net* ankle/wrist articulation; the MonkEngine runtime removes the inherited parent tilt.
 
 ### 4.5 Designed escape hatches unused by IK poses
 - `BasePose.buildAnkleArticulation` / `buildWristArticulation` (`BasePose.kt:167/177`) exist
@@ -303,9 +303,9 @@ gymnastics, rehab, stretching).
    and ~30 palm/fingertips sites across ~70 files** doing exactly this.
 2. **Fragility.** Magic literals (`0.29/0.71`, `6/6/10`) duplicate `FootDefinition` /
    `HandDefinition` constants. Change the definition's ratios and dozens of poses silently
-   diverge from the engine truth.
+   diverge from the MonkEngine runtime truth.
 3. **Duplicated logic.** The inverse-tilt negation re-implements `relativeRotation()` by hand
-   in ~15 places. Any refinement to the engine's relative-rotation convention must be copied
+   in ~15 places. Any refinement to the MonkEngine's relative-rotation convention must be copied
    into every pose.
 4. **The straight-intent gap is invisible at author time.** With no bake-time signal and a
    contact-scoped, post-hoc validator, an author of a new stretch (often contact-less) can ship
@@ -324,7 +324,7 @@ bakeIkLimb(hipF, target = footTarget, straight = true)              // engine ho
 // NO invTorsoZ / -parentRotation.angle counter-rotations
 ```
 
-The engine then:
+the MonkEngine runtime then:
 - derives heel/toe/palm/fingertips from limb orientation + wrist/ankle articulation
   (always, treating author endpoints as optional override);
 - removes inherited parent tilt automatically via the relative-rotation path;
@@ -349,7 +349,7 @@ preserves the diagnostic-instrument role (the validator still reads engine-stamp
    rotation of opposed pelvis/chest. Today the solver only tilts on a wrong axis (P1 in
    `PELVIC_HIP_COMPLEX_INVESTIGATION.md`).
 5. **Straight-limb contract → ENGINE bends (correct) + stamps the drop at bake time**;
-   validator `STRAIGHT_LIMB_INTENT` reads the engine stamp + geometry, not contact-scoped
+   validator `STRAIGHT_LIMB_INTENT` reads the MonkEngine runtime stamp + geometry, not contact-scoped
    angle reverse-engineering. No exception thrown (diagnostic model preserved).
 6. **Hip/clavicle/scapular → AUTHOR (intent)** via named DOF helpers (already correct).
 
@@ -357,11 +357,11 @@ preserves the diagnostic-instrument role (the validator still reads engine-stamp
 
 - `PikeSitPose.kt:72–76` should become: `buildAnkleArticulation(ankleF, dorsiflexion = 0f,
   inversion = 0f)` and **delete** the `ankle.localRotation.set(axisZ, fold)` counter-rotation
-  and the `heel/toe.localPosition` writes — the engine lays the foot flat.
+  and the `heel/toe.localPosition` writes — the MonkEngine runtime lays the foot flat.
 - `BaseLungePose.bakeLeg` (`:82–105`) should drop `localAngle = -parentRotation.angle` and the
   `heel/toe` writes; the relative-rotation completion does it.
 - `MiddleSplitPose.kt:81–100` should drop the explicit `heel/toe/palm/knuckles/fingertips`
-  local positions; the engine derives them from the (bent, by design) limb.
+  local positions; the MonkEngine runtime derives them from the (bent, by design) limb.
 
 ---
 

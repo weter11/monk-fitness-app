@@ -7,8 +7,8 @@
 ## Governing rule — validation poses are DIAGNOSTIC INSTRUMENTS (not dev targets)
 
 - **Validation poses are no longer development targets. They are diagnostic instruments.**
-  A pose is a probe you point at the engine to read its true state; its reading must stay
-  honest whether the engine passes or fails. You **fix the engine** or **record the reading** —
+  A pose is a probe you point at the MonkEngine runtime to read its true state; its reading must stay
+  honest whether the MonkEngine runtime passes or fails. You **fix the MonkEngine runtime** or **record the reading** —
   you never retune a pose to make it read green (that is instrument tampering). This reverses the
   old `VALIDATION.md §2` "engine satisfies validation" wording; §2/§8/§9/§10/§11 are updated.
 - **Middle Split** is the canonical instrument for the `straight=true` dropped-intent limitation:
@@ -178,7 +178,7 @@
        make the carriers live: B2 (Finalizer) completed the spine/joint carrier dead→live flip, and
        `extremityOverrides` was already live from W1. All of §1.1 (`contacts`/`contactPrecedence`/
        `postureIntent`/`limbTargets`/`spineIntent`/`jointIntents`/`extremityOverrides`) is now written and
-       read by the engine. **B3 (Branch B Posture universality) DONE** — every concrete production pose now
+       read by the MonkEngine runtime. **B3 (Branch B Posture universality) DONE** — every concrete production pose now
        declares a `postureIntent`; the `ConstraintSolver` (and `SkeletonPipeline.runStages`) runs the
        posture seed for **any** pose naming a non-`CUSTOM` intent even with no contacts, and
        `seedRootFromPostureIntent` pins the seed exactly for contact-less poses (the relaxation loop is a
@@ -269,7 +269,7 @@
   - `validateHipRom` now reads `pose.hipRomStamps`; `validateBilateralSymmetry` reads the symmetry
     stamp; the removed inference helpers (`femoralTwistDegrees`, `getSignedPerpendicularDeviation2D`,
     `toLocalDirection`/`angleBetweenDegrees`/`atan2` usage) are gone from the validator. `ValidatorRomClusterTest`
-    drives the engine stamp for the hip-ROM cases; end-to-end fixtures still route through the pipeline.
+    drives the MonkEngine runtime stamp for the hip-ROM cases; end-to-end fixtures still route through the pipeline.
   - A B0-style compile guard asserting no inference symbols reappear in the validator is left as a
     follow-up (the symbols are removed today; see RFC_BRANCH_B_IMPLEMENTATION §B5).
 - **S1 (DONE):** IK angular-clamp recording, chest-frame → shoulder propagation,
