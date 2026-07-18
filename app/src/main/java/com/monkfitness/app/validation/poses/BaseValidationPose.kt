@@ -82,9 +82,32 @@ abstract class BaseValidationPose : PoseBuilder {
 
     // --- Shared body construction helpers -----------------------------------------
 
-    protected fun buildHead(neck: SkeletonNode, head: SkeletonNode, neckLength: Float, headDir: Vector3) {
-        neck.localPosition.set(headDir.x * neckLength, headDir.y * neckLength, headDir.z * neckLength)
-        head.localPosition.set(headDir.x * 18f, headDir.y * 18f, headDir.z * 18f)
+
+    /**
+     * Branch C (buildHead migration) — declares the gaze as a world-space HeadTarget intent that
+     * the Finalizer (SkeletonPoseFinalizer.resolveHeadTarget) resolves into the neck/head local
+     * offsets. Mirrors com.monkfitness.app.animation.BasePose.buildGaze. The pose only *declares*
+     * the target; the head is written by the engine-owned resolver alone (single source of truth),
+     * which reproduces the identical geometry buildHead authored (proven byte-identical in
+     * HeadTargetBaselineTest). Validation poses are diagnostic instruments and are NOT retuned, so
+     * the migration swaps the node-write for the intent record only — the resulting skeleton is
+     * unchanged.
+     *
+     * @param gazeDir the authored world-space gaze direction; a synthetic HeadTarget is recorded a
+     *   fixed distance along it from the neck's current world position for the Finalizer to resolve.
+     */
+    protected fun buildGaze(
+        neck: SkeletonNode,
+        head: SkeletonNode,
+        neckLength: Float,
+        gazeDir: Vector3,
+        targetDistance: Float = 100f
+    ) {
+        tempV1.set(gazeDir)
+        if (tempV1.mag() < 1e-4f) tempV1.set(0f, 1f, 0f) else tempV1.normalize()
+        val nw = neck.worldPosition
+        tempV2.set(nw.x + tempV1.x * targetDistance, nw.y + tempV1.y * targetDistance, nw.z + tempV1.z * targetDistance)
+        IntentBuilder(jointsBuffer).headTarget(tempV2.copy())
     }
 
     /**
