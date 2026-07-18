@@ -137,10 +137,40 @@ Visual polish    — optional enhancements
 - **Layer 1: FAIL**
   - Wrist bypass: `WRIST_A.set(HAND_A)` discarded engine wrist articulation → fixed
     with `buildWristArticulation(HAND_A/HAND_P, 0.35f, 0f, hand)`.
-  - Contacts unregistered: metadata declared 4 supports but `hasContacts()` was false →
-    fixed by passing `contact = ContactConstraint.ground(0f)` to the hand `bakeIkLimb`
-    calls and adding `ContactSpec`s for `TOE_F`/`TOE_B`.
-- **Layer 2: ~6.5/10** — reads as a push-up; wrist/hand handling and unpinned
-  contacts were the weak points (both addressed by the Layer-1 fixes).
+  - Contacts unregistered: metadata declared 4 supports but `hasContacts()` was false.
+    **Reverted** — registering 4 `ContactSpec`s fired the ConstraintSolver relaxation
+    on a rigid kinematic plank, throwing `IllegalArgumentException` across every
+    push-up family + infra tests (20 failures). The push-up is a *rigid plank*:
+    contacts in metadata are for the renderer's support-polygon display and must stay
+    contact-less (see §2 decision rule). The "unregistered contacts" finding was a
+    **misread** for this pose class.
+- **Layer 2: ~6.5/10** — reads as a push-up; wrist/hand handling was the weak
+  point (addressed by the wrist fix).
 - **CI compile fix:** `registerToeContact` originally read a nullable
   `contextDefinition.footLength` → changed to take `footLength` as a parameter.
+
+## 5. Family audit — Push-Up family
+
+All extend `BasePushUpPose` (which owns `build()`) except `PikePushUpPose`
+(overrides `build()`).
+
+| Pose | Own build? | Layer-1 status | Notes |
+|---|---|---|---|
+| StandardPushUpPose | inherits base | **PASS** (post-fix) | wrist fix kept; contacts contact-less |
+| WidePushUpPose | inherits | PASS | only overrides grip/poles/metadata |
+| MilitaryPushUpPose | inherits | PASS | grip=1.0, narrow hand offset |
+| DiamondPushUpPose | inherits | PASS | grip=0.1 (hands together) |
+| DeclinePushUpPose | inherits | PASS | `supportHeight=40` (box prop) consumed by `PushUpGeometrySolver` |
+| KneePushUpPose | inherits | PASS | `PivotType.KNEES`; knee contacts declarative metadata (rigid plank → contact-less) |
+| PikePushUpPose | **overrides** | **FAIL→fixed** (PR push) | had `WRIST=HAND` copy (line 135) → replaced with `buildWristArticulation(HAND_A/HAND_P, -torsoGlobalPitch, 0f, hand)`; contacts contact-less |
+
+**Outcome:** the wrist bypass (the genuine, safe architectural defect) is now fixed in
+both code paths (`BasePushUpPose.build` and `PikePushUpPose.build`). The other
+5 subclasses inherit the fixed base and needed no change. The `WRIST=HAND` copy is
+a **repo-wide legacy convention** (~30 poses); migrating all of them is a separate
+Branch-C-scale effort and is OUT OF SCOPE for per-pose auditing.
+
+**Test command (CI/local):**
+```
+./gradlew :app:testDebugUnitTest --tests '*PushUp*'
+```
