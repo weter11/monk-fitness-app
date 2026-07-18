@@ -152,7 +152,7 @@ put and above ground.
 
 ## PR-04 — Add a global contact-constraint / root-repositioning layer
 
-**Issue**: #4 (HIGH, root cause of #2/#3). The engine is purely local (per-limb 2-bone IK +
+**Issue**: #4 (HIGH, root cause of #2/#3). the MonkEngine runtime is purely local (per-limb 2-bone IK +
 FK). It cannot satisfy "fixed contacts + posture" simultaneously, so inconsistent authored
 geometry produces penetration/folded limbs/floating contacts instead of redistributing the
 error upstream.

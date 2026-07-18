@@ -44,9 +44,9 @@ production/validation pose calls helpers in `BasePose.kt` that write `SkeletonNo
   `middleNode`/`endNode.localPosition` via `toLocalDirection`.
 
 There are **16 direct `localRotation`/`localPosition` write sites** in `BasePose.kt` alone, plus the IK
-solve embedded in `bakeIkLimb`. The pose, not the engine, builds the node tree; the Runtime then merely
+solve embedded in `bakeIkLimb`. The pose, not the MonkEngine runtime, builds the node tree; the Runtime then merely
 *settles* and *converts* what the pose already constructed. Authoring is therefore the sole remaining
-imperative subsystem: it is the only place where transforms are computed outside the engine's single-writer
+imperative subsystem: it is the only place where transforms are computed outside the MonkEngine's single-writer
 model.
 
 ### 1.2 Why the Runtime is architecture-v2 compliant but authoring is not
@@ -59,12 +59,12 @@ The architecture-v2 ownership rule (per `RFC_ENGINE_PIPELINE.md` and `RFC_PHASE_
   role in the Runtime is only to *emit a built tree*; it does not own root/posture/conversion.
 - **Authoring violates this** in two distinct ways:
   1. **It writes transforms it does not own.** Limb placement, trunk lean, hip orientation, extremities
-     are all computed by the pose as concrete node rotations/positions. The engine's single-writer model
+     are all computed by the pose as concrete node rotations/positions. the MonkEngine's single-writer model
      is bypassed at authoring time.
   2. **Its declared intent is dead.** The §1.1 carriers meant to carry authoring intent —
      `spineIntent`, `jointIntents`, `limbTargets` — are **never written and never read**
      (`RFC_INTENT_BUILDER_REWRITE.md` §2; `Section11CarriersTest` pins this). The pose authors via nodes,
-     and the engine reads nodes, so the intent layer is a no-op. The live §1.1 subset
+     and the MonkEngine runtime reads nodes, so the intent layer is a no-op. The live §1.1 subset
      (`contacts`, `contactPrecedence`, `postureIntent`, `headTarget`) is the only part actually flowing
      pose→engine.
 
@@ -83,14 +83,14 @@ satisfy; each is checkable against the Runtime guarantees in §6.
 |---|------|---------|
 | G1 | **Poses describe intent only** | A pose's `build()` populates §1.1 declarations (spine curve, joint articulations, limb targets, posture, contacts, head target, extremity overrides, motion/camera/environment hints). It never emits or mutates a `SkeletonNode` tree. |
 | G2 | **Engine owns geometry** | The shape of the skeleton (segment offsets, extremity orientation) is derived by engine stages from intent, not hand-placed by the pose. |
-| G3 | **Engine owns FK** | Forward kinematics is performed exclusively by the Runtime (Finalizer/FK stage) on the engine-built tree; the pose never propagates transforms. |
+| G3 | **Engine owns FK** | Forward kinematics is performed exclusively by the Runtime (Finalizer/FK stage) on the MonkEngine runtime-built tree; the pose never propagates transforms. |
 | G4 | **Engine owns IK** | Limb end-effector placement is solved by an engine IK stage from `limbTargets` on a pipeline-owned tree, not by `bakeIkLimb` inside the pose. |
 | G5 | **Engine owns posture** | Root/pelvis seeding from `postureIntent` (already true for contact poses via M3) extends to all poses; the pose names posture, the Solver derives the root. |
 | G6 | **Engine owns constraints** | Contact honoring, contact-conflict precedence, straight-limb intent, and the chest-frame no-move guarantee are enforced by engine stages (Solver / Finalizer), never approximated by pose-authored node arithmetic. |
 | G7 | **Pose never computes transforms** | No `localRotation.set` / `localPosition.set` / `solveIK` call inside a pose. The pose's only writes are §1.1 declarations via the authoring API (§3). |
 
-> G1–G7 collectively state the inversion: today the pose *is* the geometry computer and the engine *settles*
-> it; after Branch B the pose is a *declaration* and the engine *is* the geometry computer.
+> G1–G7 collectively state the inversion: today the pose *is* the geometry computer and the MonkEngine runtime *settles*
+> it; after Branch B the pose is a *declaration* and the MonkEngine runtime *is* the geometry computer.
 
 ---
 
@@ -114,11 +114,11 @@ implementation). It is the authoring counterpart of the `RFC_INTENT_LAYER.md` §
 | `builder.overrideExtremity(extremity)` | `extremityOverrides` | `overrideExtremityOrientation(pose, …)` (already intent API; currently never called) |
 | `builder.motion(driver)` / `builder.camera(hint)` / `builder.environment(hint)` | `motion` / `camera` / `environment` | metadata hints (already separate from `SkeletonPose` tree) |
 
-### 3.2 Structural declarations (segment geometry the engine builds)
+### 3.2 Structural declarations (segment geometry the MonkEngine runtime builds)
 
 | Declaration (example) | Meaning |
 |-----------------------|---------|
-| `builder.segment(parent, child, offset)` | declares a rigid offset between two joints; the engine writes `child.localPosition` from intent (replaces `buildRigidSegment` / `buildTorso` / `buildPelvis` / `buildShoulders` / `buildHead`). |
+| `builder.segment(parent, child, offset)` | declares a rigid offset between two joints; the MonkEngine runtime writes `child.localPosition` from intent (replaces `buildRigidSegment` / `buildTorso` / `buildPelvis` / `buildShoulders` / `buildHead`). |
 | `builder.clavicle(elevation, protraction, axialRotation, sideSign)` | declares girdle articulation (replaces `buildClavicularRotation`). |
 | `builder.trunk(lowerJoint, axis, lowerRad, thoracicRad)` | unified trunk declaration consumed by the Finalizer's spine expansion (replaces `buildSpineCurve` + `buildLumbarFlexion`). |
 
@@ -127,7 +127,7 @@ implementation). It is the authoring counterpart of the `RFC_INTENT_LAYER.md` §
 - **The pose never imports `SkeletonNode` for writing.** Its only dependency is `IntentBuilder` +
   `SkeletonDefinition` (proportions for hints).
 - **§1.1 is frozen after `build()`** (per `RFC_INTENT_LAYER.md` lifecycle): the `IntentBuilder` is mutable
-  inside `build()` and immutable afterwards; the engine reads it, never the pose.
+  inside `build()` and immutable afterwards; the MonkEngine runtime reads it, never the pose.
 - **Compile-time guard:** only `IntentBuilder` may mutate §1.1 (carriers become `val` /
   package-private-setter); a direct `pose.spineIntent = …` is rejected.
 

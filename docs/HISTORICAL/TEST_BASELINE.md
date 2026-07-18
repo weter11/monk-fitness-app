@@ -75,7 +75,7 @@ failures** apart from **regressions they introduced**.
   the band behaviour. Passing variants (`WidePushUp` grip 1.9, `Decline`, `AirSquat`) are unchanged
   — the clamp is a no-op for already-in-band targets.
 
-  **R1 (DONE):** two facets in the engine foot derivation — (R1a) `FootDefinition.applyPitchClamp`
+  **R1 (DONE):** two facets in the MonkEngine runtime foot derivation — (R1a) `FootDefinition.applyPitchClamp`
   produced a non-unit direction for a purely-vertical foot (`|sin 45°| = 0.707`), scaling
   derived heel/toe bones ~29% short → fixed by falling back to a stable horizontal heading so
   the clamped direction stays unit; (R1b) a *neutral* (un-articulated) foot inherited a downward
@@ -119,7 +119,7 @@ committed; the tests pass:
 
 These are **not** Validator-rule or pose-authoring bugs. Each is an upstream **S1-residual
 IK/reach** defect (`BONE_LENGTH` frame-0 on the arm/hand chain, or `IK_TARGET_UNREACHABLE`).
-Do **not** mute them by weakening the engine or the validator thresholds — they are
+Do **not** mute them by weakening the MonkEngine runtime or the validator thresholds — they are
 diagnostic instruments and must be fixed at the IK/solver source (per RFC §5 the Validator
 is the last layer).
 
@@ -167,7 +167,7 @@ camera framing (R4). See `ENGINE_DEFECT_REMEDIATION_PLAN.md` for the full analys
    the only family still red (the 9 above).
 2. **Expected-position drift** — RESOLVED in S2 by correcting the stale test constants
    (pelvis hang `220/230` vs actual `~240-243`; pelvis X/Z step amplitude `40/50` vs actual
-   `~54/36`). The engine output was verified correct before the test constants were updated.
+   `~54/36`). the MonkEngine runtime output was verified correct before the test constants were updated.
 
 ## Regression check
 

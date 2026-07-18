@@ -1,4 +1,4 @@
-# ENGINE.md — Animation Engine Architecture
+# ENGINE.md — MonkEngine Architecture
 
 > Part of the project constitution. This document describes how the animation
 > engine is *intended* to work. It is the source of truth for architectural
@@ -9,15 +9,15 @@
 
 ## 1. Philosophy
 
-The engine exists to **solve motion**, not to describe it.
+the MonkEngine runtime exists to **solve motion**, not to describe it.
 
 A skeleton is a hierarchy of joints. A pose is a request for where certain
-parts of the body should be. The engine's job is to turn that request into a
+parts of the body should be. the MonkEngine's job is to turn that request into a
 complete, anatomically consistent, physically plausible skeleton every frame,
 without the caller having to reason about forward kinematics, world transforms,
 foot/hand geometry, or projection.
 
-The engine is:
+the MonkEngine runtime is:
 
 - **Deterministic** — the same inputs produce the same skeleton.
 - **Allocation-conscious** — hot paths reuse scratch buffers and never allocate
@@ -27,7 +27,7 @@ The engine is:
 - **Data-driven at the pose layer** — exercises are configuration on top of
   shared, reusable engine primitives.
 
-The engine never knows *why* a body is moving. It only knows *how* to make a
+the MonkEngine runtime never knows *why* a body is moving. It only knows *how* to make a
 requested configuration real and correct.
 
 ---
@@ -66,7 +66,7 @@ the surrounding catalog. It never contains motion math.
 
 ### Validation — *verifies correctness*
 A read-only observer (`ExerciseValidator`) that inspects a finished
-`SkeletonPose` and reports whether it obeys the rules of the engine and of
+`SkeletonPose` and reports whether it obeys the rules of the MonkEngine runtime and of
 anatomy. It never mutates the pose and never participates in producing it.
 
 ---
@@ -179,14 +179,14 @@ The skeleton is a single-plane silhouette with a near and a far limb per pair:
 - **F = foreground**, **B = background** for the legs and feet.
 
 Named aliases (`shoulderB == shoulderP`, `hipA == hipF`, etc.) exist so poses
-can use whichever convention is clearer. The engine treats both members of a
+can use whichever convention is clearer. the MonkEngine runtime treats both members of a
 pair identically.
 
 ---
 
 ## 5. Local vs World Space
 
-The engine is authored in **local space** and resolved into **world space** by
+the MonkEngine runtime is authored in **local space** and resolved into **world space** by
 forward kinematics.
 
 - Each `SkeletonNode` carries a `localPosition` and `localRotation` relative to
@@ -196,7 +196,7 @@ forward kinematics.
 - Poses set **local** transforms (often via IK helpers that *bake* an IK result
   into local offsets). The finalizer performs the traversal.
 
-The rule: **poses describe the body relative to its own frame; the engine
+The rule: **poses describe the body relative to its own frame; the MonkEngine runtime
 places that frame in the world.** This keeps poses stable when a parent frame
 (a leaning torso, a twisting thorax, a re-rooted foot) moves.
 
@@ -285,7 +285,7 @@ pivots around — feet, hands, etc.) in its `PoseMetadata`. Support declarations
 - express the biomechanical fact "these parts are planted",
 - inform which topology / rooting is appropriate.
 
-Support is *declared* by the pose and *enforced* by validation. The engine does
+Support is *declared* by the pose and *enforced* by validation. the MonkEngine runtime does
 not invent contacts.
 
 ---
@@ -300,14 +300,14 @@ engine core and not by the rendering surface.
 - `PoseMetadata.environment` (`EnvironmentDefinition`) defines ground, props
   (box/step/bench/wall), and anchors.
 
-The engine *consumes* these to project and to validate (e.g. head-in-viewport,
+the MonkEngine runtime *consumes* these to project and to validate (e.g. head-in-viewport,
 ground penetration, support on props), but it does not define them. This keeps
 each exercise self-describing: the same engine renders a hanging pull-up and a
 grounded squat purely from metadata differences.
 
 ---
 
-## 11. What Belongs Inside the Engine
+## 11. What Belongs Inside the MonkEngine runtime
 
 - Vector / rotation / matrix math.
 - Forward kinematics traversal and world-transform computation.
@@ -318,7 +318,7 @@ grounded squat purely from metadata differences.
 - Shared, reusable pose scaffolding in `BasePose`.
 - Read-only validation rules.
 
-## 12. What NEVER Belongs Inside the Engine
+## 12. What NEVER Belongs Inside the MonkEngine runtime
 
 - Knowledge of a specific exercise (no "if push-up" branches in the math core).
 - Workout, statistics, progression, achievement, or scheduling logic.
@@ -339,5 +339,5 @@ grounded squat purely from metadata differences.
 - **Validation verifies correctness.**
 
 Keep these responsibilities separate, author in local space, drive IK with
-honest frame-relative targets, and let the engine — not individual poses — own
+honest frame-relative targets, and let the MonkEngine runtime — not individual poses — own
 the hard geometry.

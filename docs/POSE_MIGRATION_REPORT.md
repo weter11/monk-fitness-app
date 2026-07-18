@@ -2,7 +2,7 @@
 
 **Scope:** `app/src/main/java/com/monkfitness/app/poses/` (production) **and**
 `app/src/main/java/com/monkfitness/app/validation/poses/` (diagnostic instruments).
-**Prerequisite:** W1 (`docs/W1_IMPLEMENTATION_REPORT.md`) — the engine now owns extremity
+**Prerequisite:** W1 (`docs/W1_IMPLEMENTATION_REPORT.md`) — the MonkEngine runtime now owns extremity
 orientation and derives heel/toe and palm/knuckles/fingertips by default (AUTOMATIC),
 skipping derivation only when a pose explicitly opts an extremity into `MANUAL_OVERRIDE`.
 **Goal:** remove pose-side code that compensated for the old engine limitation; keep explicit
@@ -19,14 +19,14 @@ For every extremity the pose previously:
 2. wrote `heel*/toe*` and `palm*/knuckles*/fingertips*` `localPosition` to **lay out the foot/hand
    endpoints by hand**.
 
-Both are now done by the engine. The migration therefore:
+Both are now done by the MonkEngine runtime. The migration therefore:
 
-- **Deletes** the tilt-cancellation rotations (the foot/hand now inherits the engine-cancelled tilt,
+- **Deletes** the tilt-cancellation rotations (the foot/hand now inherits the MonkEngine runtime-cancelled tilt,
   so a neutral/identity ankle or wrist lays the extremity flat along the limb).
 - **Deletes** the manual endpoint authoring (dead code — the finalizer overwrites it anyway).
 - **Keeps** genuine articulation that is *not* a pure tilt-cancel (plantar flexion, dorsal/ventral
-  flexion, grips, toe flares) and expresses it as the net wrist/ankle rotation the engine consumes.
-- **Converts** poses whose foot/hand orientation the engine derivation provably cannot reproduce
+  flexion, grips, toe flares) and expresses it as the net wrist/ankle rotation the MonkEngine runtime consumes.
+- **Converts** poses whose foot/hand orientation the MonkEngine runtime derivation provably cannot reproduce
   (near-horizontal shins, side-rolled frames, precisely authored push-up geometry) into **explicit
   `MANUAL_OVERRIDE`** via `overrideExtremityOrientation(...)`, preserving the authored geometry
   verbatim instead of relying on implicit node-gating.
@@ -44,7 +44,7 @@ No anatomy, targets, IK calls, or segment lengths were changed.
 | C — grip / articulation kept, tilt-cancel removed | Keep grip/articulation; drop `invChestZ`/`invTorsoZ` term | BaseVerticalPull (grip), DynamicWorldsGreatestStretch (back-foot plantar flexion), PikePushUp (leg-pitch foot + palms-down hands), HamstringStretch (front foot to sky, back foot flat) |
 
 > Note: several Category-B poses (MountainClimber, KettlebellSwing, LatStretch, ReverseSnowAngel)
-> were first migrated per Category A, which *regressed* `FOOT_GROUND_PENETRATION` (the engine lays the
+> were first migrated per Category A, which *regressed* `FOOT_GROUND_PENETRATION` (the MonkEngine runtime lays the
 > foot perpendicular to a near-horizontal shin, driving the toe below the floor). They were re-classified
 > to Category B — the flat planted foot is an intentional orientation the default derivation cannot
 > express, so it is preserved via explicit override.
@@ -57,7 +57,7 @@ No anatomy, targets, IK calls, or segment lengths were changed.
 
 **GluteBridgePose** — `ankleF/B.localRotation = -torsoAngle` (supine counter-rotation) + manual
 `0.29/0.71` heel/toe + `handA/P.localRotation = -torsoAngle` + `6/6/10` hand.
-*Why it existed:* the engine used to inherit the ~90° supine torso tilt into the foot/hand.
+*Why it existed:* the MonkEngine runtime used to inherit the ~90° supine torso tilt into the foot/hand.
 *Why gone:* engine cancels inherited tilt; identity ankle/wrist lays foot/hand flat. **Result: test passes** (was failing pre-migration).
 
 **PelvicTiltPose** — same pattern (`-torsoAngle` on ankle/hand + `0.29/0.71` + `6/6/10`). **Result: test passes** (was failing).
@@ -79,14 +79,14 @@ intentional `ankleF = torsoPitch - 1.57f` (front foot points to sky) and `ankleB
 (back foot flat) — those are deliberate foot articulations, not tilt-cancels.
 
 **BaseLungePose (`bakeLeg`/`bakeArm`)** — the shared helpers wrote `localAngle = -parentRotation.angle`
-on the ankle/hand plus manual heel/toe/`6/6/10`. Both helpers now just call `bakeIkLimb`; the engine
+on the ankle/hand plus manual heel/toe/`6/6/10`. Both helpers now just call `bakeIkLimb`; the MonkEngine runtime
 derives the extremity. (The `heel/toe/palm/knuckles/fingertips` params are retained for signature
 compatibility with callers.)
 
 ### 3.2 Kept as explicit override (Category B)
 
 **MountainClimber / KettlebellSwing / LatStretch / ReverseSnowAngel** — flat planted foot restored and
-`overrideExtremityOrientation(FOOT_F/B)` called; the engine derivation drove the toe below the floor
+`overrideExtremityOrientation(FOOT_F/B)` called; the MonkEngine runtime derivation drove the toe below the floor
 for these near-horizontal-shin poses.
 
 **IsometricSidePlankPose** — the whole body is side-rolled 90°, so stacked/planted feet and the support
@@ -104,7 +104,7 @@ the wall / flat back) and marks `FOOT_B` override; the front foot and hands go t
 
 **BasePushUpPose** — the planted flat foot (counter-rotated to the plank pitch) and the flat palm are
 precisely authored geometry; pure removal regressed 5+ push-up tests by 60 validation errors because the
-engine's perpendicular-to-limb derivation does not reproduce the tuned plank. All four extremities are
+MonkEngine's perpendicular-to-limb derivation does not reproduce the tuned plank. All four extremities are
 marked `MANUAL_OVERRIDE` so the authored heel/toe and palm/knuckles/fingertips are preserved verbatim.
 This is the intended "explicit override where the exercise requires a specific foot/hand orientation".
 
@@ -166,8 +166,8 @@ heel/toe and palm/knuckles/fingertips *and* counter-rotated the ankle/wrist to "
 torso tilt. That hand-authoring was already dead code (the finalizer overwrote it) and is exactly the
 smell the task asks to remove. This pass deletes it.
 
-Because a validation pose must **read** the engine's true state, deleting the compensation makes the
-instrument more honest: the rendered foot/hand is now the engine derivation, not a duplicated
+Because a validation pose must **read** the MonkEngine's true state, deleting the compensation makes the
+instrument more honest: the rendered foot/hand is now the MonkEngine runtime derivation, not a duplicated
 hand-authored copy. Nothing the validator measures changes — `STRAIGHT_LIMB_INTENT` and `HIP_ROM_LIMIT`
 inspect knee/elbow interior angles and hip ROM, not foot/hand endpoints (`ValidatorRomClusterTest`).
 
@@ -180,7 +180,7 @@ inspect knee/elbow interior angles and hip ROM, not foot/hand endpoints (`Valida
   it by hand and laid out the extremities.
 - **Why no longer necessary:** `torsoPitch = 0f` here, so both `invChestZ`/`invTorsoZ` reduce to `0`
   (the counter-rotation was a no-op). The genuine overhand grip is just `+π/2` (a wrist articulation
-  the engine consumes), and the engine derives heel/toe/palm/fingertips from the limb + neutral
+  the MonkEngine runtime consumes), and the MonkEngine runtime derives heel/toe/palm/fingertips from the limb + neutral
   articulation.
 - **Before:**
   ```kotlin
@@ -210,9 +210,9 @@ inspect knee/elbow interior angles and hip ROM, not foot/hand endpoints (`Valida
 - **Workaround existed:** `ankleF/B.localRotation.set(axisZ, fold)` to "cancel the inherited fold"
   (the comment noted the old `-fold` *doubled* the tilt); manual `heel/toe` and `6/6/10` hand; and
   `handA/P.localRotation.set(axisZ, -fold * 0.6f)` (chest-tilt counter-rotation).
-- **Why it existed:** compensating for the old engine's inherited trunk tilt before the engine cancelled
+- **Why it existed:** compensating for the old MonkEngine's inherited trunk tilt before the MonkEngine runtime cancelled
   it automatically.
-- **Why no longer necessary:** the engine cancels the inherited fold via the relative ankle/wrist
+- **Why no longer necessary:** the MonkEngine runtime cancels the inherited fold via the relative ankle/wrist
   rotation, so a neutral (identity) articulation lays the foot/hand flat. `fold` is still used for the
   legitimate pelvis/chest authoring.
 - **Before:**
@@ -245,8 +245,8 @@ inspect knee/elbow interior angles and hip ROM, not foot/hand endpoints (`Valida
 - **Workaround existed:** `ankleF/B.localRotation.set(axisZ, leanAngle)` (lean counter-rotation) + manual
   `heel/toe`; `handA/P.localRotation.set(axisZ, leanAngle * 0.4f)` (chest-lean counter-rotation) + manual
   `6/6/10` hand.
-- **Why it existed:** cancelling the inherited `leanAngle` torso lean before the engine did it.
-- **Why no longer necessary:** the engine cancels the inherited lean via the relative rotation; a neutral
+- **Why it existed:** cancelling the inherited `leanAngle` torso lean before the MonkEngine runtime did it.
+- **Why no longer necessary:** the MonkEngine runtime cancels the inherited lean via the relative rotation; a neutral
   ankle/wrist lays the foot/hand flat. `leanAngle` is still used for the legitimate pelvis/chest authoring.
 - **Before / After:** both counter-rotations and all manual `heel/toe/palm/knuckles/fingertips` writes were
   deleted; no replacement code is needed.
@@ -256,7 +256,7 @@ inspect knee/elbow interior angles and hip ROM, not foot/hand endpoints (`Valida
 Two production poses still carried a leftover tilt-cancel that the first pass had missed:
 
 - **`HamstringStretchPose`** (not an override; engine derives the hand): `handA/P.localRotation.set(
-  axisZ, -torsoPitch)` double-counted the chest tilt the engine now cancels automatically, twisting
+  axisZ, -torsoPitch)` double-counted the chest tilt the MonkEngine runtime now cancels automatically, twisting
   the reaching hand backward. Removed — a neutral wrist now lays the hand flat along the forearm. The
   genuine foot articulations (`ankleF = torsoPitch - 1.57f` point-to-sky, `ankleB = torsoPitch` flat)
   were kept.
@@ -267,10 +267,10 @@ Two production poses still carried a leftover tilt-cancel that the first pass ha
 ### 6.6 Magic-ratio consolidation (explicit-override poses)
 
 Four explicit-override production poses (`KettlebellSwingPose`, `LatStretchPose`, `ReverseSnowAngelPose`,
-`MountainClimberPose`) keep authored flat-foot geometry because the engine's perpendicular-to-shank
+`MountainClimberPose`) keep authored flat-foot geometry because the MonkEngine's perpendicular-to-shank
 derivation cannot reproduce a flat foot on a forward-leaning shank. Their authored endpoints used the
 **magic literals** `0.29f`/`0.71f`, which duplicate `def.foot.heelRatio`/`def.foot.toeRatio` (defaults
-0.29/0.71). Those literals were replaced with the engine-owned constants, keeping geometry byte-for-byte
+0.29/0.71). Those literals were replaced with the MonkEngine runtime-owned constants, keeping geometry byte-for-byte
 identical while removing the fragile duplication flagged in `docs/POSE_ENGINE_RESPONSIBILITY.md §4.2`.
 The `leanAngle` ankle counter-rotation and the `overrideExtremityOrientation(...)` opt-out are retained,
 since they are the intentional override the task permits.

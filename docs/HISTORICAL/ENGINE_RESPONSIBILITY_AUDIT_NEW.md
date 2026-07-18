@@ -1,12 +1,12 @@
 # Engine Responsibility Audit (Rule №2)
 
-> **Rule №2:** *Poses describe anatomy. The engine derives geometry. The engine has reached
+> **Rule №2:** *Poses describe anatomy. the MonkEngine runtime derives geometry. the MonkEngine runtime has reached
 > the stage where architecture matters more than individual poses.*
 >
 > **This document is an architecture investigation only. Nothing is implemented, fixed, or
 > tuned.** In particular, no validation pose is retuned and no production pose is edited.
 > The goal is a **complete responsibility audit** that moves every piece of anatomical
-> *derivation* from pose authoring into the engine.
+> *derivation* from pose authoring into the MonkEngine runtime.
 >
 > Desired data flow:
 >
@@ -15,7 +15,7 @@
 > ```
 >
 > Pose authoring should describe **intent only** (where a joint should go, what articulation
-> is wanted, what contacts are fixed). The engine owns all geometry *derivation*: foot/hand
+> is wanted, what contacts are fixed). the MonkEngine runtime owns all geometry *derivation*: foot/hand
 > orientation, inherited-tilt compensation, pelvis compensation, limb completion, frame
 > conversions, IK compensation.
 
@@ -51,8 +51,8 @@ exists / why it belongs in engine or pose / migration plan / risk. No code is ch
 - **Why it exists:** the gate was added as a *legacy compatibility bridge* — if a pose did
   not author endpoints, the finalizer would derive them from the limb. It made sense when
   some skeletons lacked those nodes.
-- **Why it belongs in the engine:** it **is** in the engine — the bug is the gate is *always
-  true*, so the engine's own derivation (`adjustFootOrientation`/`adjustHandOrientation`,
+- **Why it belongs in the MonkEngine runtime:** it **is** in the MonkEngine runtime — the bug is the gate is *always
+  true*, so the MonkEngine's own derivation (`adjustFootOrientation`/`adjustHandOrientation`,
   `:442–513`) never runs. The factory unconditionally creating the nodes defeats the gate.
 - **Migration plan:** change the gate semantics from "node present → skip" to "node *explicitly
   authored with non-default intent* → treat as override; otherwise always derive". Concretely:
@@ -60,10 +60,10 @@ exists / why it belongs in engine or pose / migration plan / risk. No code is ch
   "engine-derived" and clear the hand-authored endpoint local positions, or (b) give
   `SkeletonPoseFinalizer` an explicit `deriveFoot(pose, side)` / `deriveHand(pose, side)` call
   that runs unconditionally after IK/FK, with author endpoints only applied when a pose opts
-  in. The engine derivation already accepts an optional `ankleRotation`/`wristRotation`
+  in. the MonkEngine runtime derivation already accepts an optional `ankleRotation`/`wristRotation`
   (relative to the parent) so intent is preserved.
 - **Risk:** **High blast radius.** Flipping the gate changes every pose's rendered foot/hand
-  at once. Mitigation: the engine derivation with *identity* ankle/wrist articulation is
+  at once. Mitigation: the MonkEngine runtime derivation with *identity* ankle/wrist articulation is
   designed to equal the FK frame for neutral limbs (`computeHeelToe` doc, `FootDefinition.kt:37`,
   `adjustFootOrientation` `IDENTITY_ROTATION` path), so neutral poses should be unchanged; only
   poses that relied on hand-tuned endpoints will shift. Must be verified pose-by-pose against
@@ -86,17 +86,17 @@ author endpoints and cancel inherited tilt by hand.
   `KettlebellSwingPose.kt:88–89`, `LatStretchPose.kt:99–100`, `MountainClimberPose.kt:130–131`,
   `PelvicTiltPose.kt:113–116`, `ReverseSnowAngelPose.kt:86–87`, `ScapularRetractionPose.kt:103–106`,
   `WallSlidesPose.kt:103–106`, `FacePullPose.kt:103–106`, `GluteBridgePose.kt:117–120`.
-- **Why it exists:** the engine derivation is gated off (W1), so the only way to give the foot a
+- **Why it exists:** the MonkEngine runtime derivation is gated off (W1), so the only way to give the foot a
   forward direction is to write `heelX/toeX.localPosition` directly.
-- **Why it belongs in the engine:** heel/toe direction is pure anatomy (shank direction +
-  ankle articulation + foot ratios owned by `FootDefinition`). The engine already derives it in
+- **Why it belongs in the MonkEngine runtime:** heel/toe direction is pure anatomy (shank direction +
+  ankle articulation + foot ratios owned by `FootDefinition`). the MonkEngine runtime already derives it in
   `adjustFootOrientation` → `FootDefinition.computeHeelToe`. Poses should only set
   `buildAnkleArticulation(ankle, dorsiflexion, inversion)` (intent).
 - **Migration plan:** delete the `heelX/toeX.localPosition.set(...)` lines; rely on W1's fixed
   gate; author foot orientation via `buildAnkleArticulation`. The `0.29/0.71` literals should be
   removed entirely (they duplicate `def.foot.heelRatio/toeRatio` and can diverge).
 - **Risk:** Low–Medium per pose, **High aggregate** (≈40 sites). Each deletion must be checked
-  that the engine-derived foot matches the intended look; stylized toes (pointed, curled) become
+  that the MonkEngine runtime-derived foot matches the intended look; stylized toes (pointed, curled) become
   the *only* legitimate use of explicit endpoints (override path).
 
 ### W3 — explicit palm/fingertips/knuckles authoring (hand-set hand endpoints)
@@ -109,7 +109,7 @@ author endpoints and cancel inherited tilt by hand.
   `DeepOverheadSquatPose.kt:83`, `DeadHangPose.kt:110`, `PikeSitPose.kt:100–101`. `BasePushUpPose.kt:185–188`
   derives offsets from a unit `handDir` but still hand-authors.
 - **Why it exists:** same as W2 — derivation gated off (W1).
-- **Why it belongs in the engine:** palm/knuckles/fingertips are pure anatomy (forearm direction
+- **Why it belongs in the MonkEngine runtime:** palm/knuckles/fingertips are pure anatomy (forearm direction
   + wrist articulation + `HandDefinition` offsets). Derived in `adjustHandOrientation` →
   `HandDefinition.computeHandJoints`.
 - **Migration plan:** delete the `palm/knuckles/fingertips.localPosition` writes; author via
@@ -134,10 +134,10 @@ author endpoints and cancel inherited tilt by hand.
   squat family `BaseSquatPose.kt:86,97`, `JumpSquatPose.kt:91–92`, `BaseHipFlexorPose.kt:136,145`.
 - **Why it exists:** FK propagates the parent (pelvis/chest) world rotation down to ankle/wrist;
   to keep the foot flat / hand aligned the author must *negate* the inherited tilt by hand. This
-  duplicates the relative-rotation math the engine already performs in
+  duplicates the relative-rotation math the MonkEngine runtime already performs in
   `SkeletonPoseFinalizer` (`relativeRotation(ankle, knee, relAnkle)`, `:377/383`, and the hand
   equivalents `:389/395`).
-- **Why it belongs in the engine:** the engine's completion helpers already consume a
+- **Why it belongs in the MonkEngine runtime:** the MonkEngine's completion helpers already consume a
   **relative** rotation (articulation w.r.t. the parent segment), so inherited tilt is removed
   *automatically*. The author should set only the **net** ankle/wrist articulation (intent),
   never `-parentRotation.angle`.
@@ -145,7 +145,7 @@ author endpoints and cancel inherited tilt by hand.
   replaced by `buildAnkleArticulation`/`buildWristArticulation` with the *net* desired
   articulation. The relative-rotation removal happens inside `adjustFootOrientation`/
   `adjustHandOrientation` (no pose code needed).
-- **Risk:** **High** — this is the most safety-critical smell. A wrong sign in the engine's
+- **Risk:** **High** — this is the most safety-critical smell. A wrong sign in the MonkEngine's
   relative-rotation (e.g. the single-arg `cross` bug fixed in Issue F) would flip every foot/
   hand. Existing `ChestFrameIssueFTest` and limb-symmetry tests are the guardrails; run them per
   pose.
@@ -167,7 +167,7 @@ author endpoints and cancel inherited tilt by hand.
   author must pre-compute pelvis translation/tilt by hand (e.g. `DeadHang` pelvis height is
   derived from bar height minus arm length). The solver only *corrects* residual reach, it does
   not author the base posture.
-- **Why it belongs in the engine vs pose:** **split.** The *base* posture intent (seated vs
+- **Why it belongs in the MonkEngine runtime vs pose:** **split.** The *base* posture intent (seated vs
   standing, how far the trunk leans) is **pose** (anatomical intent). But the *compensation*
   that reconciles fixed contacts (translate/tilt the root so feet/hands land exactly, distribute
   residual across the limb via CCD) is **engine** — and already partially implemented in
@@ -175,11 +175,11 @@ author endpoints and cancel inherited tilt by hand.
   pelvis Y math, opposed pelvis/chest rotations in `DeepOverheadSquat` §3.1 of
   `VALIDATION.md`).
 - **Migration plan:** poses should declare **contacts + target reach**, not a solved pelvis
-  transform. The engine's solver (which already supports translation + tilt + CCD posture pass)
+  transform. the MonkEngine's solver (which already supports translation + tilt + CCD posture pass)
   should own the reconciliation. Poses keep a *coarse* pelvis intent (e.g. "seated near floor")
-  and the engine derives the exact compensated transform. Opposed pelvis/chest authoring should
-  become a single `buildTrunkLean` intent the engine reconciles.
-- **Risk:** **High.** Posture solving is the hardest part of the engine (see P1/P2/P4 in
+  and the MonkEngine runtime derives the exact compensated transform. Opposed pelvis/chest authoring should
+  become a single `buildTrunkLean` intent the MonkEngine runtime reconciles.
+- **Risk:** **High.** Posture solving is the hardest part of the MonkEngine runtime (see P1/P2/P4 in
   `PELVIC_HIP_COMPLEX_INVESTIGATION.md`: solver tilt uses the wrong axis for lateral imbalance;
   no true posture solve; pelvis-only compensation). Migrating pose pre-compensation into the
   engine requires maturing the solver first, or poses will regress.
@@ -193,9 +193,9 @@ author endpoints and cancel inherited tilt by hand.
 - **Location:** `SkeletonMath.solveStraightLimb`/`solveIK`/`solveTriangleJoint`
   (`SkeletonMath.kt:598–683, 400–476`) and `bakeIkLimb` (`BasePose.kt:301–360`,
   `BaseValidationPose.kt:177–229`).
-- **Why it exists:** analytical 2-bone IK + FK is the engine's core job; poses only pass a
+- **Why it exists:** analytical 2-bone IK + FK is the MonkEngine's core job; poses only pass a
   target + pole.
-- **Why it belongs in the engine:** it **is** in the engine. **No migration needed.** This is the
+- **Why it belongs in the MonkEngine runtime:** it **is** in the MonkEngine runtime. **No migration needed.** This is the
   model the rest of the audit wants to extend to foot/hand/pelvis.
 - **Risk:** none. Listed to confirm the audit's scope: limb *joint placement* is correctly
   engine-owned; only the *endpoint orientation* and *compensation* leak into poses.
@@ -211,9 +211,9 @@ author endpoints and cancel inherited tilt by hand.
   same (`:246–248`). Production poses call these with `pelvis.worldRotation` /
   `chest.worldRotation` and a local-space pole (e.g. `BasePushUpPose` `legFPole` in chest frame).
 - **Why it exists:** the analytical IK needs a **world-space** pole, but authoring a pole in the
-  parent (chest/pelvis) local frame is more intuitive, so the engine converts it
+  parent (chest/pelvis) local frame is more intuitive, so the MonkEngine runtime converts it
   (`toWorldDirection`, `SkeletonMath.kt:691`). This conversion is **already engine-owned**.
-- **Why it belongs in the engine:** it **is** in the engine. The remaining smell is that poses
+- **Why it belongs in the MonkEngine runtime:** it **is** in the MonkEngine runtime. The remaining smell is that poses
   still *think* in `parentRotation` terms (they pass `pelvis!!.worldRotation`) — a small leak of
   engine frame knowledge into authoring. The cleaner intent API is "author the pole in the limb's
   own root frame; engine handles all conversion."
@@ -228,7 +228,7 @@ author endpoints and cancel inherited tilt by hand.
   SkeletonMath.toLocalDirection(tempV1, parentRot, middleNode.localPosition)` (and end node).
 - **Why it exists:** stores the solved limb as *local* offsets so they survive the parent's full
   3D world rotation (the "no hand-fed inverse-Z scalar" note, `:328–329`).
-- **Why it belongs in the engine:** it **is** in the engine. **No migration needed.**
+- **Why it belongs in the MonkEngine runtime:** it **is** in the MonkEngine runtime. **No migration needed.**
 - **Risk:** none. Listed for completeness — frame conversion of IK results is correctly engine-owned.
 
 ---
@@ -242,12 +242,12 @@ author endpoints and cancel inherited tilt by hand.
   propagates author-bake `clampAmount` to `pose.maxIkClampAmount`; the **global re-bake does not**
   write its clamp back; `ExerciseValidator.validateStraightLimbIntent` (`:709–726`,
   tolerance `175°`) is **post-hoc, contact-scoped**.
-- **Why it exists:** the engine must not crash or collapse a bone when a straight limb is
+- **Why it exists:** the MonkEngine runtime must not crash or collapse a bone when a straight limb is
   geometrically impossible; bending is the safe fallback. Detection was layered on as a validator
   rule later.
-- **Why it belongs in the engine:** the *bend* is correctly engine behavior (and, under the
+- **Why it belongs in the MonkEngine runtime:** the *bend* is correctly engine behavior (and, under the
   diagnostic-instrument rule, the correct reading for a validation pose). But the **signal** that
-  the intent was dropped is currently a validator concern, not an engine stamp. The engine should
+  the intent was dropped is currently a validator concern, not an engine stamp. the MonkEngine runtime should
   own the fact ("this `straight=true` limb could not be honored") at bake time.
 - **Migration plan (architecture only):** add `ContactSpec.intentPreserved` (or a per-limb
   `straightIntentDropped` flag) set by both `solveStraightLimb` and `ConstraintSolver` at bake
@@ -265,7 +265,7 @@ author endpoints and cancel inherited tilt by hand.
   .validateIkTargetReachability` (`:622–633`, flags when `maxIkClampAmount > 0.1f`).
 - **Why it exists:** the solver was added later (PR-04) and its re-bake path does not feed the
   shared `maxIkClampAmount` accumulator.
-- **Why it belongs in the engine:** reachability accounting is engine state; the gap means a
+- **Why it belongs in the MonkEngine runtime:** reachability accounting is engine state; the gap means a
   solver-induced bend is invisible to `IK_TARGET_UNREACHABLE`. Engine-internal fix.
 - **Migration plan:** in `ConstraintSolver`, after each re-bake, fold `ikResult.clampAmount` into
   `pose.maxIkClampAmount` (and surface any straight-intent drop per W9). No pose change.
@@ -278,7 +278,7 @@ author endpoints and cancel inherited tilt by hand.
 1. **W1 (gate)** — make foot/hand derivation always run; author endpoints become opt-in override.
    This alone eliminates the *need* for W2/W3/W4. Highest leverage, highest risk → gate behind a
    flag and verify pose-by-pose against the validator baseline.
-2. **W4 (counter-rotation)** — deleted as a side effect of W1; verify the engine's relative-
+2. **W4 (counter-rotation)** — deleted as a side effect of W1; verify the MonkEngine's relative-
    rotation path with `ChestFrameIssueFTest` + symmetry tests.
 3. **W2/W3 (endpoints)** — delete explicit `heel/toe/palm/knuckles/fingertips` writes; author via
    `buildAnkleArticulation`/`buildWristArticulation`. Remove magic `0.29/0.71` and `6/6/10` literals.
@@ -302,7 +302,7 @@ author endpoints and cancel inherited tilt by hand.
 | W7 | frame API simplification | Low | authoring ergonomics |
 | W9/W10 | IK intent/clamp signal | Med | validator contract |
 
-**Cross-cutting:** the engine derivation with *identity* ankle/wrist articulation is designed to
+**Cross-cutting:** the MonkEngine runtime derivation with *identity* ankle/wrist articulation is designed to
 equal the FK frame for neutral limbs, so neutral poses should be unchanged once W1 flips — but
 this must be verified, not assumed. The existing test suite (`ValidatorRomClusterTest`,
 `ChestFrameIssueFTest`, `*PoseTest` family, limb-symmetry assertions) is the guardrail.

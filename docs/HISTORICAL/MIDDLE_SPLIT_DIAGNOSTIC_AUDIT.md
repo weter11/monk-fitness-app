@@ -3,9 +3,9 @@
 > **New governing rule (this audit):**
 > **Validation poses are no longer development targets. They are diagnostic instruments.**
 >
-> A development *target* is something the engine is dragged toward until it goes green.
-> A diagnostic *instrument* is something you point at the engine to read its true state —
-> its reading must stay honest whether the engine passes or fails. You never adjust the
+> A development *target* is something the MonkEngine runtime is dragged toward until it goes green.
+> A diagnostic *instrument* is something you point at the MonkEngine runtime to read its true state —
+> its reading must stay honest whether the MonkEngine runtime passes or fails. You never adjust the
 > instrument to change the reading; that would be tampering with the thermometer to lower
 > the fever.
 
@@ -17,14 +17,14 @@ Middle Split is the one validation pose whose history contains a **direct contra
 and it is the clearest test of the new rule.
 
 Two verdicts co-exist in the repo, reached under the *old* contract
-(`VALIDATION.md §2`: "the engine must satisfy validation; validation never bends to the
+(`VALIDATION.md §2`: "the MonkEngine runtime must satisfy validation; validation never bends to the
 engine"):
 
 1. **Middle Split is a deliberate broken reference** (`VALIDATION.md §11.1`,
    `ENGINE_INVESTIGATION_REPORT` UNI-2). Its foot targets sat *inside* the thigh bone, so
-   `straight = true` could not be honoured; the engine fell back to a bent limb; a test
+   `straight = true` could not be honoured; the MonkEngine runtime fell back to a bent limb; a test
    (`middleSplitDetectableUnderEngineeringValidation`) **asserted the pose stays bent** so
-   the engine defect stayed visible. In this reading the pose is doing its job precisely by
+   the MonkEngine runtime defect stayed visible. In this reading the pose is doing its job precisely by
    *failing* — it is an instrument.
 
 2. **Middle Split is a reference error that must be fixed in the pose**
@@ -54,15 +54,15 @@ reference") against the current `MiddleSplitPose.kt`:
 | Hip external rotation | none | `buildHipRotation(0.8, ∓1)` | knees face up |
 | Poles | forward+lateral | pure lateral | knee tracks foot |
 
-The decisive change is the target distances. At `58.9 < 112` the engine's
+The decisive change is the target distances. At `58.9 < 112` the MonkEngine's
 `solveStraightLimb` takes the `dist < L1` branch (`SkeletonMath.kt:660`) and returns a
 **bent** triangle limb — the straight intent is silently dropped. That is the reading the
 instrument exists to produce. Moving the targets to full reach (`210` / `146`) puts them in
-`[L1, L1+L2]`, so the same function returns a genuinely straight limb. **The engine was not
+`[L1, L1+L2]`, so the same function returns a genuinely straight limb. **the MonkEngine runtime was not
 changed; the instrument was moved off the fault so the fault stopped registering.**
 
 This is green-tuning: the pose was adjusted until `STRAIGHT_LIMB_INTENT` reported valid,
-not because the engine learned to honour a straight limb at an in-proximal-radius target,
+not because the MonkEngine runtime learned to honour a straight limb at an in-proximal-radius target,
 but because the pose stopped asking it to.
 
 ---
@@ -74,12 +74,12 @@ Widening the spread from `79.2` to `232` changed the *reading* (bent → straigh
 changing the *engine* being measured. A diagnostic instrument must not be moved to produce
 a passing reading. This is the core violation of the new rule.
 
-### F2 — The engine limitation it used to measure still exists (High)
+### F2 — the MonkEngine runtime limitation it used to measure still exists (High)
 `solveStraightLimb` still silently drops `straight = true` when `dist < L1` (the UNI-9
-fallback). Nothing in the engine changed. By retargeting, the project lost its
+fallback). Nothing in the MonkEngine runtime changed. By retargeting, the project lost its
 *named reference case* for that limitation. The `BrokenStraightLimbPose` fixture inside
 `ValidatorRomClusterTest` was introduced as a stand-in, which is good coverage — but it is a
-private test fixture, not a first-class, viewer-inspectable diagnostic pose, so the engine
+private test fixture, not a first-class, viewer-inspectable diagnostic pose, so the MonkEngine runtime
 gap is no longer visible in the Engineering Validation surface a human opens.
 
 ### F3 — Two docs now contradict the code (High)
@@ -92,7 +92,7 @@ one and the code drifted away from it.
 ### F4 — "Anatomically wrong reference" was a category error (Medium)
 `§P6` justified the retarget by calling the `79.2` spread "anatomically wrong". But the
 instrument was never claiming *"a human sits with feet 79 units apart"*; it was claiming
-*"a straight limb was requested at a target the engine cannot straighten, show me what the
+*"a straight limb was requested at a target the MonkEngine runtime cannot straighten, show me what the
 engine does"*. Judging a diagnostic probe by anatomical realism is the wrong axis — a probe
 is judged by whether its reading is faithful, not whether the configuration is a pose a
 gymnast would hold. Under the new rule this distinction is explicit.
@@ -110,7 +110,7 @@ Restore Middle Split to an **honest diagnostic instrument** and make every doc/t
 
 1. **Pose (`MiddleSplitPose.kt`):** put the straight-limb targets back inside the proximal
    bone (the original `79.2`-class spread) so the pose once again *requests* a straight
-   split the engine cannot currently deliver, and reads out the bent fallback. Keep the pose
+   split the MonkEngine runtime cannot currently deliver, and reads out the bent fallback. Keep the pose
    honestly labelled as a straight-intent probe in its KDoc. Do **not** re-tune it to green.
 2. **Test (`ValidatorRomClusterTest`):** the Middle Split assertion must reflect the
    instrument's true reading — the straight intent is **detected as dropped** (invalid), the
@@ -118,7 +118,7 @@ Restore Middle Split to an **honest diagnostic instrument** and make every doc/t
    `BrokenStraightLimbPose` too; it is complementary coverage, but Middle Split itself is
    the named, viewer-visible instrument.
 3. **Docs:** rewrite `VALIDATION.md §2`/§8/§9 so the responsibility direction is expressed
-   as *"the instrument reports the engine's true state; you fix the engine or you record the
+   as *"the instrument reports the MonkEngine's true state; you fix the MonkEngine runtime or you record the
    reading, you never retune the instrument to green"*, and reconcile `§11.1` with the code
    (it returns to "keep as the straight-intent reference"). Flag
    `ENGINEERING_VALIDATION_AUDIT §1` and `PELVIC_HIP §P6` as **superseded** — their "fix the

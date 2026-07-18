@@ -1,8 +1,8 @@
 # RFC_PHASE_I_CLOSURE
 
-> **Purpose:** canonical reference for the completed **Architecture v2 — Phase I (Engine Runtime)**
+> **Purpose:** canonical reference for the completed **Architecture v2 — Phase I (MonkEngine runtime)**
 > before any Intent Authoring work begins. It closes the documentation loop for M0–M4 and formally
-> splits Architecture v2 into two branches: **Branch A (Engine Runtime, done)** and **Branch B
+> splits Architecture v2 into two branches: **Branch A (MonkEngine runtime, done)** and **Branch B
 > (Intent Authoring Rewrite, future)**.
 >
 > **Companion RFCs:** `RFC_ENGINE_PIPELINE.md` (stage design), `RFC_GAP_CLOSURE.md` (milestone gates),
@@ -18,7 +18,7 @@
 
 ## 1. Phase I Scope
 
-**Architecture v2 Phase I = the Engine Runtime.** Its objective was to establish a single, ordered,
+**Architecture v2 Phase I = the MonkEngine runtime.** Its objective was to establish a single, ordered,
 flag-governed execution pipeline that owns the Solver↔Finalizer call order and makes engine ownership
 of root posture and final conversion explicit — **without changing any production pose's rendered
 output**. Every Phase I milestone was a *flag flip* or *re-pointing* over the existing imperative
@@ -138,7 +138,7 @@ tree. That is a different kind of change (new architecture) than a flag flip, so
 
 Architecture v2 is officially divided into two branches.
 
-### Branch A — Engine Runtime (Phase I, COMPLETE)
+### Branch A — MonkEngine runtime (Phase I, COMPLETE)
 - **Responsibilities:** the ordered execution pipeline; explicit engine ownership of Solver (root/
   posture) and Finalizer (local-transform conversion + chest-frame guard); contact settling; FK flatten;
   read-only validation; renderer re-pointing. All delivered as M0–M4.
@@ -253,7 +253,7 @@ SkeletonPose (§1.2 world state)    // single source of truth for rendering + va
   do not exist. Treating "M5 is automatic once M2 lands" as a flag flip was the core error: M2 only
   re-pointed the pipeline over the existing imperative authoring; it did not create the intent consumers.
   Distinguishing the two prevents fake-closing a milestone.
-- **Production stabilization preceded migration.** M0–M4 were landed only after the engine was stabilized
+- **Production stabilization preceded migration.** M0–M4 were landed only after the MonkEngine runtime was stabilized
   and the legacy engine remediated (S0–S3, R1–R4), with a green/byte-identical baseline. Migrating pose
   authoring onto an unstable engine would have hidden regressions behind intent-plumbing churn. The
   "byte-identical" invariant (every flag flip must not change any production pose) is what made each Phase

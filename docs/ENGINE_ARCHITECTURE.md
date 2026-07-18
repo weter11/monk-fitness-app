@@ -1,7 +1,7 @@
 # ENGINE_ARCHITECTURE.md — Engine Entry Point
 
 > **Start here.** This document is the map of the Monk Fitness procedural animation
-> engine. It explains how the engine is organized as a whole and points you to the
+> engine. It explains how the MonkEngine runtime is organized as a whole and points you to the
 > document that owns each topic. The first sections are the orientation every new
 > engineer should read; the **Reference** section at the end preserves the detailed
 > class-, joint-, and file-level facts that are *not* duplicated in the subsystem
@@ -11,9 +11,9 @@
 
 ## 1. Engine Philosophy and Design Goals
 
-The engine exists to **solve motion**, not to describe it (`docs/ENGINE.md` §1).
+the MonkEngine runtime exists to **solve motion**, not to describe it (`docs/ENGINE.md` §1).
 A skeleton is a hierarchy of joints; a pose is a request for where parts of the
-body should be; the engine turns that request into a complete, anatomically
+body should be; the MonkEngine runtime turns that request into a complete, anatomically
 consistent, physically plausible skeleton every frame. It never reasons about
 forward kinematics, world transforms, foot/hand geometry, or projection — the
 caller only expresses *intent*.
@@ -85,10 +85,10 @@ different facets of the same build step, not separate stages in time.
 | **Projector / Camera / Renderer** | `SkeletonProjector` converts the 3D pose to screen space via the pose-owned `CameraDefinition`; `SkeletonRenderer` draws depth-sorted bones/joints/ground. Camera and environment are owned by `PoseMetadata`. | `docs/ENGINE.md` §10 (camera/environment ownership); `docs/VALIDATION.md` §11.6 (camera framing) |
 | **Biomechanics** | The engineering interpretation of human movement that decides whether a pose is *correct* (honest motion, joint sequencing, pelvis stabilizes, planted parts stay planted). | `docs/BIOMECHANICS.md` |
 | **Pelvic / Hip Complex** | Focused architectural investigation of the pelvis and hip joints, ROM limits, and the ConstraintSolver tilt axis. The historical Q&A and issue list live in the archive; the consolidated status is in the history index. (Note: there is no separate `HIP_COMPLEX.md`; hip material is `docs/HISTORICAL/PELVIC_HIP_COMPLEX_INVESTIGATION.md`, reached via `docs/ENGINE_HISTORY.md`.) | `docs/ENGINE_HISTORY.md` §4; `docs/ENGINE_ROADMAP.md` |
-| **Engineering Validation** | The hidden developer category of frozen reference poses used to verify the engine. Includes the four-pose defect audit and camera framing pass. | `docs/VALIDATION.md` §4–5, §11; `docs/ENGINE_HISTORY.md` §3, §5 |
+| **Engineering Validation** | The hidden developer category of frozen reference poses used to verify the MonkEngine runtime. Includes the four-pose defect audit and camera framing pass. | `docs/VALIDATION.md` §4–5, §11; `docs/ENGINE_HISTORY.md` §3, §5 |
 | **History / Archive** | The full historical investigation, audit, and fix-prompt records (UNI-1…12, per-pose audits, pelvic/hip Q&A, PR prompts). Retained as evidence, not kept in sync with code. | `docs/ENGINE_HISTORY.md` |
 | **Roadmap / Future work** | The live list of remaining engine work (open UNI items, trunk DOFs, generalized contacts). | `docs/ENGINE_ROADMAP.md` |
-| **Coding Rules** | Permanent, standing rules for all development on the engine, poses, and validation. | `docs/CODING_RULES.md` |
+| **Coding Rules** | Permanent, standing rules for all development on the MonkEngine runtime, poses, and validation. | `docs/CODING_RULES.md` |
 
 > **On `HIP_COMPLEX.md` / `CAMERA.md`:** the project lists these as existing docs.
 > In the current tree they do not exist as standalone files. The hip material lives
@@ -104,7 +104,7 @@ These principles are non-negotiable and are enforced by the coding rules
 (`docs/CODING_RULES.md`) and the validator.
 
 - **Procedural.** Motion is described by rules and math, not sampled keyframes. A
-  pose is a *function* of progress; the engine computes the body at any progress.
+  pose is a *function* of progress; the MonkEngine runtime computes the body at any progress.
 - **Deterministic.** The same inputs (pose, progress, side, definition) always
   produce the same skeleton. No randomness, no frame-order dependence.
 - **Allocation-free.** Hot paths reuse persistent scratch buffers (`Vector3`,
@@ -113,10 +113,10 @@ These principles are non-negotiable and are enforced by the coding rules
 - **Bone-length preserving.** Segment lengths are invariants. The solver clamps
   targets to the reachable band rather than stretching a bone; validation flags any
   length change (`BONE_LENGTH`).
-- **Authoring-first.** Poses author in *local space*; the engine places the frame
+- **Authoring-first.** Poses author in *local space*; the MonkEngine runtime places the frame
   in the world via FK. This keeps poses stable when a parent frame (leaning torso,
   twisting thorax, re-rooted foot) moves (`docs/ENGINE.md` §5).
-- **Validation-first.** The engine satisfies validation; validation never adapts
+- **Validation-first.** the MonkEngine runtime satisfies validation; validation never adapts
   to engine limitations. A failing validation pose is an engine defect to
   investigate, never a target to retune (`docs/VALIDATION.md` §2, §8–9).
 
@@ -192,7 +192,7 @@ and §R7; the pre-existing test-baseline context (30 known failures) is in
 
 ## 7. Documentation Map
 
-How the engine documents relate. Read in the order that matches your task.
+How the MonkEngine runtime documents relate. Read in the order that matches your task.
 
 ```
                          AGENTS.md (session memory anchor)
@@ -223,7 +223,7 @@ Reading paths:
 - **New engineer onboarding:** this doc → `ENGINE.md` → `BIOMECHANICS.md` →
   `CODING_RULES.md` → `VALIDATION.md`.
 - **Adding/fixing a pose:** `CODING_RULES.md` → `ENGINE.md` (§3–7) →
-  `BIOMECHANICS.md`. If a validation pose fails, assume the engine is wrong
+  `BIOMECHANICS.md`. If a validation pose fails, assume the MonkEngine runtime is wrong
   (`VALIDATION.md` §8).
 - **Engine/core change:** `ENGINE.md` §11–12 (what belongs inside) → relevant
   subsystem section in `ENGINE_ARCHITECTURE.md` → `TEST_BASELINE.md` to avoid
@@ -247,7 +247,7 @@ Reading paths:
 
 ## 8. Evolution / History
 
-The engine did not start as a clean four-layer system. Understanding the
+the MonkEngine runtime did not start as a clean four-layer system. Understanding the
 trajectory prevents repeating old mistakes.
 
 **Phase 1 — Exercise implementation first.** Early work built concrete exercises
@@ -263,10 +263,10 @@ four-layer boundary (Exercise / Pose / Engine / Validation) was written down as
 the architecture (`docs/ENGINE.md`) and the standing rules (`docs/CODING_RULES.md`)
 were established to forbid compensations.
 
-**Phase 3 — Validation poses.** Once the engine could be trusted to reproduce
+**Phase 3 — Validation poses.** Once the MonkEngine runtime could be trusted to reproduce
 intent, the team introduced frozen reference anatomy ("validation poses") and the
-hidden Engineering Validation category. The contract was fixed: *the engine
-satisfies validation; validation never adapts to the engine* (`docs/VALIDATION.md`
+hidden Engineering Validation category. The contract was fixed: *the MonkEngine runtime
+satisfies validation; validation never adapts to the MonkEngine runtime* (`docs/VALIDATION.md`
 §2). Failures are treated as engine defects, not retuned targets.
 
 **Phase 4 — Biomechanical subsystem audits.** With a stable validator, the team
@@ -292,7 +292,7 @@ any code. When in doubt about whether a shape is *correct*, consult
 
 # Reference — class, joint, and file-level facts
 
-> This section is the engine's detailed reference. It is kept here because no other
+> This section is the MonkEngine's detailed reference. It is kept here because no other
 > document duplicates it. The "see X" pointers in the sections above resolve to
 > these anchors.
 
@@ -328,7 +328,7 @@ PELVIS(0)
 - The FK traversal composes parent transforms down the tree to produce
   `worldPosition`/`worldRotation`. `updateWorldTransforms()` does full 3×3 matrix
   concatenation; `flatten()` copies world data into the `SkeletonPose`.
-- **Authoring happens in local space; the engine places the frame in the world.**
+- **Authoring happens in local space; the MonkEngine runtime places the frame in the world.**
   This keeps poses stable when a parent frame (leaning torso, twisting thorax,
   re-rooted foot) moves.
 
@@ -357,7 +357,7 @@ The skeleton is a single-plane silhouette with a near and far limb per pair:
 - **A = active / foreground** (left), **P = passive / background** (right) for
   arms/hands. **F = foreground**, **B = background** for legs/feet.
 - Named aliases exist (`shoulderB == shoulderP`, `hipA == hipF`, `wristA == handA`)
-  so poses use whichever is clearer. The engine treats both members of a pair
+  so poses use whichever is clearer. the MonkEngine runtime treats both members of a pair
   identically.
 
 ### Stage details (the pipeline from §2)
@@ -484,7 +484,7 @@ consistent. **All new poses use frame-relative poles.**
 
 ## R4. ConstraintSolver in detail
 
-`ConstraintSolver` exists because the engine is otherwise **purely local**: each
+`ConstraintSolver` exists because the MonkEngine runtime is otherwise **purely local**: each
 limb is solved in isolation by two-bone IK, and FK composes it into the body. That
 is sufficient for a single free limb, but not when several body parts are declared
 **fixed in contact** (planted hands and feet in a plank, or a hanging pull-up with
@@ -535,9 +535,9 @@ pose and never participates in producing it.**
 band).
 
 ### Validator philosophy
-The engine **satisfies** validation; validation never adapts to engine limitations
+the MonkEngine runtime **satisfies** validation; validation never adapts to engine limitations
 (`docs/VALIDATION.md` §2). A validation pose is a frozen reference of correct
-anatomy. If the engine cannot reproduce it cleanly, the **engine is wrong** and is
+anatomy. If the MonkEngine runtime cannot reproduce it cleanly, the **engine is wrong** and is
 fixed at the root cause — the pose is never softened to dodge the failure.
 
 ### `ENGINEERING_VALIDATION`
@@ -548,11 +548,11 @@ is gated behind the hidden **Engineering Validation** developer category
 category and its poses are completely invisible and inert.
 
 ### Physical validity vs. authored intent
-- **Physical validity** — does the skeleton obey the laws the engine must always
+- **Physical validity** — does the skeleton obey the laws the MonkEngine runtime must always
   honor? Finite coordinates, constant bone lengths, no ground penetration, no hand
   sliding on fixed contacts, IK within limits, balanced support, symmetric where
   required, continuous motion. These run always.
-- **Authored intent** — did the engine preserve *what the author asked for*, even
+- **Authored intent** — did the MonkEngine runtime preserve *what the author asked for*, even
   when physically valid? Examples: a `straight` limb must resolve straight
   (UNI-2, `STRAIGHT_LIMB_INTENT`); an end-effector must land on its declared anchor
   (`CONTACT_PRESERVED`, UNI-6); the pelvis must not have been shoved beyond
@@ -601,7 +601,7 @@ Architectural directions only — no speculative redesigns.
   topologies (e.g. a seated hip + planted hands) would broaden the multi-contact
   poses the solver can reconcile natively.
 - **Expand authored-intent validation.** More intent rules (beyond UNI-2/-3/-6) that
-  catch the engine silently dropping author intent, runnable in the engineering
+  catch the MonkEngine runtime silently dropping author intent, runnable in the engineering
   config.
 - **Deeper motion continuity.** A first-class motion model (eased drivers shared
   across families) would centralize easing instead of per-pose curve choices.

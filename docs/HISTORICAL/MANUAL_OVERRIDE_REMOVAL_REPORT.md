@@ -1,13 +1,13 @@
 # MANUAL_OVERRIDE Removal — Production Poses
 
-**Goal:** the engine is fully responsible for extremity orientation. All temporary
+**Goal:** the MonkEngine runtime is fully responsible for extremity orientation. All temporary
 `MANUAL_OVERRIDE` usage was removed from the production pose library. Poses now express
 only anatomical intent (limb targets, pelvis/chest lean, grip/wrist articulation where the
-exercise genuinely intends it); the engine derives heel/toe and palm/knuckles/fingertips.
+exercise genuinely intends it); the MonkEngine runtime derives heel/toe and palm/knuckles/fingertips.
 
 No new ankle/wrist rotations were added and no heel/toe or palm/fingertip positions were
 hand-authored. Where removing the override leaves a pose visually worse, it was left that
-way on purpose — exposing the engine limitation rather than hiding it.
+way on purpose — exposing the MonkEngine runtime limitation rather than hiding it.
 
 ## Overrides removed
 
@@ -31,21 +31,21 @@ way on purpose — exposing the engine limitation rather than hiding it.
 These regressions are the *intended* exposure of engine limitations — not bugs to fix:
 
 - **KettlebellSwing / LatStretch / ReverseSnowAngel / MountainClimber** — the planted foot on
-  the forward-leaning shank was the whole reason for the override; the engine's
+  the forward-leaning shank was the whole reason for the override; the MonkEngine's
   perpendicular-to-shank derivation will not lay the foot flat, so it may tilt/penetrate.
 - **SumoSquat** — loses the intentional 45° sumo toe flare; feet align with the shank.
 - **StaticForearmPlank** — loses the plantar-flexed (heels-lifted) foot; foot derives flat.
 - **IsometricSidePlank** — the side-rolled frame's stacked/planted feet and flat forearm are
-  no longer hand-authored; the engine derivation cannot reproduce the side-rolled orientation.
+  no longer hand-authored; the MonkEngine runtime derivation cannot reproduce the side-rolled orientation.
 - **BasePushUp (and subclasses: Standard/Wide/Decline/Diamond/Military/Knee)** — loses the
-  precisely tuned plank foot and flat planted palm; the engine derivation replaces them.
+  precisely tuned plank foot and flat planted palm; the MonkEngine runtime derivation replaces them.
 - **HalfKneelingStretch / CouchStretch** (via `BaseHipFlexorPose`) — the back foot no longer
   points up-the-wall / flat-backward; it is engine-derived from the shank.
 
 ## No fixes yet
 
 No compensating code, no new rotations, no hand-authored endpoints were added. Regressions
-are left as-is per instructions. No attempt was made to make the engine derivation match the
+are left as-is per instructions. No attempt was made to make the MonkEngine runtime derivation match the
 old authored geometry.
 
 ## Verification

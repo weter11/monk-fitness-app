@@ -9,7 +9,7 @@ exercise.
 - **8-Week Program**: Dynamic workout generation across 4 phases (intensity
   increases every 2 weeks).
 - **Daily Workouts**: Strength A, Strength B, Mobility, and Functional training.
-- **Animated Exercise Demos**: A skeletal animation engine renders each
+- **Animated Exercise Demos**: A skeletal MonkEngine renders each
   movement from a biomechanical description of the pose.
 - **Posture Correction**: Dedicated exercises for better posture.
 - **Progress Tracking**: Weekly completion chart and streak counter.
@@ -31,7 +31,7 @@ exercise.
 ## Architecture at a Glance
 
 The app pairs a standard MVVM Android application with a purpose-built animation
-engine. The engine is organized around four separated responsibilities:
+engine. the MonkEngine runtime is organized around four separated responsibilities:
 
 - **Engine** solves motion (kinematics, IK, geometry).
 - **Pose** describes biomechanics (how the body should move).
@@ -40,17 +40,17 @@ engine. The engine is organized around four separated responsibilities:
 
 ## Engineering Documentation
 
-The engine's design, principles, and rules are the project's source of truth.
+the MonkEngine's design, principles, and rules are the project's source of truth.
 See `docs/`:
 
-- [`docs/ENGINE.md`](docs/ENGINE.md) — animation engine architecture.
+- [`docs/ENGINE.md`](docs/ENGINE.md) — MonkEngine architecture.
 - [`docs/BIOMECHANICS.md`](docs/BIOMECHANICS.md) — biomechanical philosophy.
 - [`docs/VALIDATION.md`](docs/VALIDATION.md) — validation poses and the
   Engineering Validation subsystem.
 - [`docs/CODING_RULES.md`](docs/CODING_RULES.md) — permanent engineering rules
   for contributors.
 
-Contributors should read these before working on the engine or poses.
+Contributors should read these before working on the MonkEngine runtime or poses.
 
 ## Build Instructions
 
@@ -75,7 +75,7 @@ available in the repository's "Actions" tab.
 
 ## Project Structure
 
-- `animation/`: Skeletal animation engine (see `docs/`).
+- `animation/`: Skeletal MonkEngine (see `docs/`).
 - `poses/`: Biomechanical pose descriptions for each exercise.
 - `validation/`: Engineering Validation subsystem (developer tool).
 - `data/`: Room entities, DAOs, and DataStore management.

@@ -16,11 +16,11 @@ no redesigns, no code.
 ## TL;DR
 
 The spec (`ARCHITECTURE_V2.md` §3) defines a **declarative pipeline** in which the Pose only
-populates the §1.1 intent carrier and the Engine (IK -> ConstraintSolver -> Finalizer -> FK)
+populates the §1.1 intent carrier and the MonkEngine runtime (IK -> ConstraintSolver -> Finalizer -> FK)
 resolves geometry. **That pipeline was not fully wired at audit time.** Every production pose still
 *imperatively hand-builds* the full `SkeletonNode` hierarchy inside `Pose.build()` and returns a
 complete pose. At audit time the §1.1 intent fields (`spineIntent`, `limbTargets`, `jointIntents`)
-were **declared but never written by poses and never read by the engine** (dead carriers). The
+were **declared but never written by poses and never read by the MonkEngine runtime** (dead carriers). The
 spec's PHASE 2/3 behavior existed as code inside `ConstraintSolver`/`SkeletonPoseFinalizer` but was
 **globally disabled** (`EngineFlags.SOLVER_OWNS_POSTURE = false`, `FINALIZER_OWNS_CONVERSION = false`
 at the time), so the legacy path ran verbatim. *(All of this is now resolved — see banner above.)*
@@ -28,14 +28,14 @@ at the time), so the legacy path ran verbatim. *(All of this is now resolved —
 **Consequence (HISTORICAL):** the roadmap marked Phases 0–3 (and 4–7) "COMPLETE", but those marks
 described *structures and helpers that exist*, **not** an integrated architecture-v2 execution
 model. The
-foundational integration (a Pose->Engine pipeline that consumes §1.1) does not exist. Phases 4–7
+foundational integration (a Pose->MonkEngine pipeline that consumes §1.1) does not exist. Phases 4–7
 that *were* genuinely done are the **pose-side helper migrations** (counter-rotation deletion,
 single spine-intent call, hip helper, girdle/IK already correct) — real, but pose refactors, not
-evidence of the engine pipeline.
+evidence of the MonkEngine pipeline.
 
 ---
 
-## Gap 1 — Engine pipeline / orchestrator (spec §3, PHASE 0–5)
+## Gap 1 — MonkEngine pipeline / orchestrator (spec §3, PHASE 0–5)
 **Status: BLOCKED (entire execution model missing).**
 
 - **Existing engine support:**
@@ -191,7 +191,7 @@ evidence of the engine pipeline.
 The roadmap's per-phase "COMPLETE" labels are **structural**, not **behavioral**: they mark that a
 helper, data structure, or flag-gated module corresponding to the phase *exists in the tree*. They
 do **not** mean the architecture-v2 execution model is live. The single biggest reconciliation
-finding is **Gap 1**: until a Pose->Engine pipeline consumes §1.1, the spec's foundational contract
+finding is **Gap 1**: until a Pose->MonkEngine pipeline consumes §1.1, the spec's foundational contract
 ("Pose = intent, Engine = geometry") is not realized, and Gaps 2–4 are direct consequences of it.
 
 ## Blocker summary (for planning)

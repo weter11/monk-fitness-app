@@ -11,7 +11,7 @@ until its Exit Criteria are met, after which work returns to **Architecture v2 /
 
 ## 1. Purpose
 
-Architecture v2 answers *"what should the engine look like?"*. This document answers a
+Architecture v2 answers *"what should the MonkEngine runtime look like?"*. This document answers a
 different, narrower question: *"what must be fixed in the **existing** engine before the
 migration can safely continue?"*
 
@@ -242,7 +242,7 @@ R4  Camera framing
    family need both R1 (feet) and R2 (arm reach) to go fully green; doing R1 then R2 lets
    KneePushUp flip in a clean two-step and isolates any interaction.
 3. **R3 third — independent, medium isolation.** Lunges are unrelated to R1/R2 but share the
-   "contact should stay fixed" theme; sequencing after the engine-level fixes keeps the
+   "contact should stay fixed" theme; sequencing after the MonkEngine runtime-level fixes keeps the
    diff attributable.
 4. **R4 last — smallest, fully isolated, zero coupling.** Camera-only; trivially verifiable
    once the geometry beneath it is correct (fixing R1–R3 could shift head height, so framing

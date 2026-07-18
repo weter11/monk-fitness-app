@@ -20,7 +20,7 @@ These are the legacy engine-compensation leaks removed by the W1 audit and the t
 
 ### A3. `rotAround` limb counter-rotation (W11/G1 — CLOSED in Phase 4)
 - `rotAround(..., ±leanAngle)`, `rotAround(..., -torsoAngle)`, `rotAround(..., ±spinePitch)` on knee/ankle/elbow/hand to undo inherited trunk tilt.
-- **Status:** all 60 remaining W11/G1 lean-cancel sites were deleted in Phase 4; limbs now stay flat via the engine (Solver residual distribution + Finalizer relative-rotation). Any new `rotAround` that re-cancels an inherited trunk tilt on a limb is a regression of this rule.
+- **Status:** all 60 remaining W11/G1 lean-cancel sites were deleted in Phase 4; limbs now stay flat via the MonkEngine runtime (Solver residual distribution + Finalizer relative-rotation). Any new `rotAround` that re-cancels an inherited trunk tilt on a limb is a regression of this rule.
 - **Owner instead:** Solver residual distribution + Finalizer relative-rotation. Limb stays flat automatically.
 
 ### A4. Raw hip writes (W15/G7)
@@ -84,7 +84,7 @@ Poles are authored in the limb's own root frame; the Finalizer converts them to 
 ### B7. No dual spine writes
 Never write both `pelvis.localRotation` and `chest.localRotation` as independent angles. One `buildSpineCurve(lower, chest, lowerRad, thoracicRad, axis)` call expresses the whole trunk lean (Phase 5 / W13/G4, W14/G5). `lower` = PELVIS so the hips inherit the bend.
 
-### B8. Leave geometry to the engine
+### B8. Leave geometry to the MonkEngine runtime
 After declaring intent + targets + contacts, a pose calls the bake/finalize pipeline and returns `SkeletonPose`. It does not compute knee/ankle/elbow/hand/shoulder/heel/toe transforms.
 
 ---

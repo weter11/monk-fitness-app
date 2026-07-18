@@ -33,7 +33,7 @@ The four Phase-B flags (`PIPELINE_ACTIVE`, `SOLVER_OWNS_POSTURE`,
 `FINALIZER_OWNS_CONVERSION`, `FINALIZER_CONSUMES_INTENT`) were collapsed to
 their true branch and deleted in Phase B; only narrative "collapsed ..." comments
 remain (no code reads them). `HEAD_TARGET_ENABLED` was removed with Phase 7.
-No `object *Flags` gate exists in the engine.
+No `object *Flags` gate exists in the MonkEngine runtime.
 
 ### 3. No global runtime ownership switches
 There is exactly **one** remaining engine-level runtime flag -
@@ -44,7 +44,7 @@ production limb path is unchanged, and no architecture ownership is decided by
 it. It is co-located with its consumer rather than in a global flag object, so
 it is not a cross-cutting global switch.
 
-(Flags outside the animation engine - `TIMER_TICKS_ENABLED`,
+(Flags outside the MonkEngine - `TIMER_TICKS_ENABLED`,
 `VIBRATION_ENABLED`, `ADDITIONAL_POSTURE_TRAINING_ENABLED`,
 `ValidationSettings.DEFAULT_ENABLED` - are user-facing app *preferences*, not
 architecture/engine-ownership flags, and are out of scope.)

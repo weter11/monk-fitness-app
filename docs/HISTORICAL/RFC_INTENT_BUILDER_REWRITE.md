@@ -111,7 +111,7 @@ owner" = the component that today is responsible for populating it.
 **Classification definitions used above:**
 
 - **Live production carrier** — written by a pose/helper and read by an engine stage today.
-- **Dormant carrier** — a read path exists in the engine but no producer populates it, so the engine
+- **Dormant carrier** — a read path exists in the MonkEngine runtime but no producer populates it, so the MonkEngine runtime
   sees a constant; the feature is not reachable from current poses.
 - **Dead carrier** — neither written nor read anywhere; pure leftover fields.
 - **Obsolete carrier** — declared on `SkeletonPose` but the real data lives on `PoseBuilder.metadata`;

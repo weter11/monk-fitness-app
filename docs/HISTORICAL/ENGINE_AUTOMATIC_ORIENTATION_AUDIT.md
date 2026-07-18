@@ -113,7 +113,7 @@ not cancellations:
 | `ThoracicExtensionPose` | `ankle = 0f` | neutral (no-op) | No — explicit neutrality |
 
 Every one of these sets the **extremity's own** orientation (a grip, a pointed
-toe, a flat foot) expressed as a *net* rotation the engine consumes via the
+toe, a flat foot) expressed as a *net* rotation the MonkEngine runtime consumes via the
 relative-rotation path. **None negates a parent frame to undo inheritance**
 (the defining signature of the old compensation). The word `torsoPitch`/`leanAngle`
 appears inside some of these only as the *target* the foot is meant to reach, not
@@ -142,7 +142,7 @@ would not change a single rendered extremity.
 - The opt-out was a deliberate escape hatch for the *leaning-shank / side-rolled /
 planted-push-up* poses whose flat foot the perpendicular-to-shank derivation
 could not reproduce. PR #121 intentionally removed those overrides to *expose*
-the engine limitation rather than hide it. With the overrides gone, the opt-out
+the MonkEngine runtime limitation rather than hide it. With the overrides gone, the opt-out
 has zero callers.
 - The `ExtremityOrientationMode` array + `getExtremityOrientationMode` /
   `isExtremityAutomatic` / `overrideExtremityOrientation` / `copyFrom` propagation
@@ -219,7 +219,7 @@ A new production pose now needs to express, per limb:
 
 The developer does **not** write heel/toe/palm/knuckles/fingertips positions, and
 does **not** negate `torsoPitch` / `parentRotation.angle` / `leanAngle`. If they
-set a neutral ankle/wrist (or set nothing beyond the IK target), the engine lays
+set a neutral ankle/wrist (or set nothing beyond the IK target), the MonkEngine runtime lays
 the foot/hand flat along the limb with the inherited tilt already removed.
 
 **Caveats a new developer must still know (the residual engine limits):**
@@ -228,11 +228,11 @@ the foot/hand flat along the limb with the inherited tilt already removed.
   floor" — it follows the limb. PR #121 deliberately left this exposed rather than
   re-introducing an override, so a developer should expect the foot to track the
   shin and not be surprised if a leaning pose's foot looks off. (This is the one
-  place the engine is *not* yet smart enough to "do the right thing" automatically.)
+  place the MonkEngine runtime is *not* yet smart enough to "do the right thing" automatically.)
 - The foot direction is derived from the **shank**, the hand from the **forearm**.
   If a pose wants a stylized extremity the shank/forearm cannot express (e.g. a
   curled fist, a pointed ballet toe, the planted push-up palm), the *only* supported
-  mechanism is `overrideExtremityOrientation` — which still exists in the engine
+  mechanism is `overrideExtremityOrientation` — which still exists in the MonkEngine runtime
   (Q3 cleanup is optional). So a developer who needs a truly stylized extremity
   must learn that one escape hatch.
 - Genuine articulations (grip, dorsi/plantar, point-to-sky) are still authored as
@@ -242,5 +242,5 @@ the foot/hand flat along the limb with the inherited tilt already removed.
 torso/parent/lean/pitch compensation entirely for the vast majority of exercises.
 They only need to think about extremities when they want a *specific grip or foot
 orientation*, and even then they author the net articulation, not a parent cancel.
-The single remaining sharp edge is the near-horizontal-shank foot, where the engine
+The single remaining sharp edge is the near-horizontal-shank foot, where the MonkEngine runtime
 derivation intentionally mirrors the limb rather than forcing a floor-flat foot.

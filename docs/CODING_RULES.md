@@ -1,7 +1,7 @@
 # CODING_RULES.md — Permanent Engineering Rules
 
 > Part of the project constitution. These are the standing rules for all future
-> development on the animation engine, poses, and validation. Pull requests are
+> development on the MonkEngine, poses, and validation. Pull requests are
 > expected to comply with this document and may reference it instead of
 > restating its contents. Rules here are stable defaults; they are superseded
 > only by an explicit, documented decision that updates this file.
@@ -18,7 +18,7 @@ poses **data-driven**, and **never fake motion**.
 ## 2. Do
 
 ### Reuse existing engine systems
-Before writing new math or geometry, look for an existing primitive. The engine
+Before writing new math or geometry, look for an existing primitive. the MonkEngine runtime
 already provides vector/rotation math, an analytical IK solver, FK traversal,
 foot/hand completion, and shared pose scaffolding. Extend and reuse these rather
 than re-deriving them locally.
@@ -28,7 +28,7 @@ Prefer the smallest change that solves the real problem. Fewer moving parts,
 clearer boundaries, less state. Simplicity is a feature.
 
 ### Prefer engine solutions over pose hacks
-If a shape is hard to achieve, the fix almost always belongs in the engine (a
+If a shape is hard to achieve, the fix almost always belongs in the MonkEngine runtime (a
 better solve, a correct pole, a proper root) so the whole family of exercises
 benefits. A local hack in one pose fixes one thing and rots everything around
 it.
@@ -56,7 +56,7 @@ helpers). This keeps every limb flowing through the same, tested path.
 
 ### Use frame-relative pole vectors
 Author elbow/knee poles in the limb root's local frame (chest/pelvis) and let
-the engine transform them to world space. This keeps joints anatomically stable
+the MonkEngine runtime transform them to world space. This keeps joints anatomically stable
 as parent frames rotate.
 
 ### Keep allocations minimal
@@ -79,7 +79,7 @@ justified, named where meaningful, and belong to a general rule — not a
 one-off patch.
 
 ### Do not compensate for engine bugs
-If the engine produces a wrong result, fix the engine. Never paper over a solver
+If the MonkEngine runtime produces a wrong result, fix the MonkEngine runtime. Never paper over a solver
 or FK defect in a pose. A compensation is a hidden bug that will resurface
 everywhere else.
 
@@ -122,18 +122,18 @@ When you hit a hard case, ask in order:
 1. **Which layer owns this?** Motion → engine. Biomechanics → pose. Naming/
    presentation → metadata. Correctness → validation.
 2. **Does a primitive already exist?** If yes, use it. If no, does it belong in
-   the engine so others can reuse it?
+   the MonkEngine runtime so others can reuse it?
 3. **Am I about to add a constant, offset, or target nudge?** If yes, stop —
    find the real joint or the real engine cause.
 4. **Will this shared change affect other poses?** If yes, verify them.
-5. **Is a validation pose failing?** Assume the engine is wrong first (see
+5. **Is a validation pose failing?** Assume the MonkEngine runtime is wrong first (see
    VALIDATION.md).
 
 ---
 
 ## 5. Companion Documents
 
-- **ENGINE.md** — how the engine is architected and what belongs where.
+- **ENGINE.md** — how the MonkEngine runtime is architected and what belongs where.
 - **BIOMECHANICS.md** — the movement principles poses must honor.
 - **VALIDATION.md** — how validation poses and the Engineering Validation
   subsystem work.

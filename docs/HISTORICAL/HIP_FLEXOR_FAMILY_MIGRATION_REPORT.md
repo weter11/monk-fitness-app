@@ -3,7 +3,7 @@
 **Scope:** Full architecture migration + audit of the Hip Flexor pose family.
 **Date:** 2026-07-13
 **Engine baseline:** `com.monkfitness.app.animation` (current rotation-driven / `SkeletonFactory` architecture).
-**Method:** Exhaustive API cross-checking against the engine sources, git archaeology of the pre-migration code, and an independent review pass. The sandbox has no JVM, so the project could not be compiled/run here (matches the Bird Dog audit environment); correctness is established by construction and by the existing `StretchPosesTest` geometry assertions.
+**Method:** Exhaustive API cross-checking against the MonkEngine runtime sources, git archaeology of the pre-migration code, and an independent review pass. The sandbox has no JVM, so the project could not be compiled/run here (matches the Bird Dog audit environment); correctness is established by construction and by the existing `StretchPosesTest` geometry assertions.
 
 ---
 
@@ -101,7 +101,7 @@ The "Hip Flexor" program category in `WorkoutGenerator` contains exactly these t
 ## 7. Architecture Review (ownership & duplication)
 
 - **Single owner restored:** `BaseHipFlexorPose` owns the hierarchy (`SkeletonFactory`), upper-body anchoring (`buildHead`/`buildPelvis`/`buildShoulders`), front-leg + arm IK (`bakeIkLimb`), extremity foot orientation (`FootDefinition` ratios), camera, environment, and the finalize step (`fromHierarchy` + wrist copy + `maxIkClampAmount`).
-- **Shoulder offset consolidation (this pass):** the `(0,0,±shoulderWidth)` shoulder placement was duplicated across `BaseHipFlexorPose.setUpperBodyLocal`, `BaseBirdDogPose.anchorTabletop`, `BasePushUpPose`, **and** the engine's own `SkeletonPoseFinalizer.setupTransforms` (lines 156-161). This is engine knowledge living in pose code. A `buildShoulders(shoulderA, shoulderP, shoulderWidth)` helper was added to `BasePose` (symmetric to `buildPelvis`) and applied in `BaseHipFlexorPose` **and** `BaseBirdDogPose` (≥2 families → satisfies the "no speculative abstraction" rule). Behavior is identical (verified the replaced lines are exactly the helper's body).
+- **Shoulder offset consolidation (this pass):** the `(0,0,±shoulderWidth)` shoulder placement was duplicated across `BaseHipFlexorPose.setUpperBodyLocal`, `BaseBirdDogPose.anchorTabletop`, `BasePushUpPose`, **and** the MonkEngine's own `SkeletonPoseFinalizer.setupTransforms` (lines 156-161). This is engine knowledge living in pose code. A `buildShoulders(shoulderA, shoulderP, shoulderWidth)` helper was added to `BasePose` (symmetric to `buildPelvis`) and applied in `BaseHipFlexorPose` **and** `BaseBirdDogPose` (≥2 families → satisfies the "no speculative abstraction" rule). Behavior is identical (verified the replaced lines are exactly the helper's body).
 - **Back-leg / pelvis biomechanics kept local:** the rigid Pythagorean pelvis solver and the pinned-knee fixed kinematics are Hip Flexor–specific and are **not** engine knowledge; moving them into shared engine code is explicitly forbidden.
 - **Hand palm/knuckles/fingertips offsets (6/6/10):** kept local and **intentionally matched** to the `BasePushUpPose`/`BaseSquatPose`/`BaseBirdDogPose` family convention. Because the hierarchy already supplies `PALM_A`/`FINGERTIPS_A`/etc., `SkeletonPoseFinalizer` skips its procedural `HandDefinition.computeHandJoints` and uses the pose's values. Switching to `HandDefinition` would move fingertips to 22 and alter rendering, so the established convention is preferred. Flagged as minor cross-family duplication but **not** abstraction-worthy (same conclusion as the Bird Dog audit).
 - **No new abstractions beyond the needed `buildShoulders`; no single-exercise `GeometrySolver`.**
@@ -123,7 +123,7 @@ The "Hip Flexor" program category in `WorkoutGenerator` contains exactly these t
 
 - **Inspected:** foot pitch (front foot drawn with heel-up / toe-down along the `(0,-1,0)` axis rotated by `leanAngle`), heel position, toe direction, ankle orientation (`ankleF/P.localRotation = axisZ * leanAngle`), support stability, and foot constants.
 - **Duplicated foot constants:** already replaced with `FootDefinition` (`footLength`, `heelRatio`, `toeRatio`) — requirement satisfied.
-- **Stylized foot orientation:** the front foot is rendered vertical (heel above ankle, toe below) and the back foot along its per-variant world direction (`backFootUpDir` up the wall / `backFootBackDir` flat backward). This is **identical to the original pre-migration animation** (verified via git) and is the intended Hip Flexor look; the engine's generic `SkeletonPoseFinalizer.adjustFootOrientation` is intentionally bypassed because the hierarchy already supplies anatomically-placed heel/toe. **Left unchanged to preserve animation style and identical biomechanics.**
+- **Stylized foot orientation:** the front foot is rendered vertical (heel above ankle, toe below) and the back foot along its per-variant world direction (`backFootUpDir` up the wall / `backFootBackDir` flat backward). This is **identical to the original pre-migration animation** (verified via git) and is the intended Hip Flexor look; the MonkEngine's generic `SkeletonPoseFinalizer.adjustFootOrientation` is intentionally bypassed because the hierarchy already supplies anatomically-placed heel/toe. **Left unchanged to preserve animation style and identical biomechanics.**
 - **Assessment:** no correctness regression; foot constants are engine-owned.
 
 ## 11. Timing Review
@@ -142,13 +142,13 @@ The "Hip Flexor" program category in `WorkoutGenerator` contains exactly these t
 
 - **Duplicated engine knowledge (remaining):** none within the family after this pass. The only cross-family duplication is the hand-offset convention (6/6/10), shared intentionally with Push-Up/Squat/Bird-Dog and deferred (not speculative).
 - **Remaining technical debt:**
-  1. `SupportDefinition` is left at the default (`PivotType.FEET`, empty contacts). It is informative metadata only for this family (the validator derives the support polygon from actual ground-contact joints, not the declared set), so it is harmless; if the engine later keys shadow/contact rendering off `metadata.support`, the family should declare `PivotType.KNEES` with `LEFT_KNEE`/`RIGHT_KNEE`/`LEFT_TOES`/`RIGHT_TOES` contacts.
+  1. `SupportDefinition` is left at the default (`PivotType.FEET`, empty contacts). It is informative metadata only for this family (the validator derives the support polygon from actual ground-contact joints, not the declared set), so it is harmless; if the MonkEngine runtime later keys shadow/contact rendering off `metadata.support`, the family should declare `PivotType.KNEES` with `LEFT_KNEE`/`RIGHT_KNEE`/`LEFT_TOES`/`RIGHT_TOES` contacts.
   2. Hand-offset convention (6/6/10) duplicated across `Base*` families — promote to a shared `applyStandardHandGeometry()` helper in `BasePose` only if a further family adopts it.
 - **Modernization %:** **97%**.
 - **Recommended future work:**
   - Decide whether adjacent hip-flexor-flavored exercises (`HipCarsPose`, `WorldGreatestStretchPose`, `DynamicWorldsGreatestStretchPose`) share the kneeling-front-leg scaffold enough to extend `BaseHipFlexorPose`; today they are separate families and correctly out of scope.
   - If/when a third family needs the 6/6/10 hand offsets, promote them into `BasePose` (reuse `HandDefinition` ratios rather than re-encoding 6/10).
-  - Populate `metadata.support` only when the engine consumes it for rendering.
+  - Populate `metadata.support` only when the MonkEngine runtime consumes it for rendering.
 
 ---
 

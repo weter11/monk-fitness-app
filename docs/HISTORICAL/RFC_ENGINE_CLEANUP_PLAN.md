@@ -15,7 +15,7 @@
 this plan executes). All subsystem IDs (`L1`–`L8`) and file:line references below match
 that audit.
 - **Baseline (HISTORICAL):** Branch `session/agent_b795bd6c-5a92-47c7-9d9c-5693da550c5a`, HEAD `038bfae` — **obsolete**; actual HEAD is `ebab2d6`.
-- **Goal:** Reduce the animation engine to *only* the Architecture-v2 runtime
+- **Goal:** Reduce the MonkEngine to *only* the MonkEngine runtime
 (`SkeletonPipeline` → `ConstraintSolver.solve` → `SkeletonPoseFinalizer.finalize` → FK),
 with zero retained legacy branches, dead deprecated members, flag-gated rollback paths, or
 tests that pin them. **Achieved.**
@@ -229,7 +229,7 @@ among engine removals.
 
 **Scope:** The `ExerciseReview` / `ExerciseReviewReport` / `ExerciseSnapshotSequence`
 pipeline has no production caller (verified in audit §4/§5). It is removable
-**independently** of the engine — do it before, after, or never, per product decision.
+**independently** of the MonkEngine runtime — do it before, after, or never, per product decision.
 
 | Step | Action | Target |
 |------|--------|--------|
@@ -293,7 +293,7 @@ Pre-flight ──► Phase A (dead symbols) ──┐
 ## 3. Exit criteria (legacy engine fully removed)
 
 All of the following hold:
-- [ ] No `EngineFlags` object; no feature-flag `=false` branch remains in the engine.
+- [ ] No `EngineFlags` object; no feature-flag `=false` branch remains in the MonkEngine runtime.
 - [ ] `SkeletonPoseFinalizer.finalize` has a single (modern rotation-driven) path; no
       legacy `else`/compatibility bridge.
 - [ ] `buildHead` and all `@Deprecated` members from the audit (§3) are gone.

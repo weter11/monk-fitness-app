@@ -2,7 +2,7 @@
 
 > Part of the project constitution. This document describes how validation poses
 > are intended to work and how the Engineering Validation subsystem is used to
-> verify the engine. It describes intent and workflow, not a specific
+> verify the MonkEngine runtime. It describes intent and workflow, not a specific
 > implementation.
 
 ---
@@ -12,13 +12,13 @@
 A **validation pose is not an exercise.**
 
 A validation pose is a *frozen reference configuration of anatomy* used to test
-whether the engine can reproduce a known-correct skeleton. It is a static
+whether the MonkEngine runtime can reproduce a known-correct skeleton. It is a static
 snapshot: it ignores animation progress, side, mirroring, and breathing, and
 returns the same skeleton every time it is built.
 
 - An **exercise** describes a movement the user performs and is part of the
   training product.
-- A **validation pose** describes reference anatomy the engine must be able to
+- A **validation pose** describes reference anatomy the MonkEngine runtime must be able to
   satisfy, and is a developer tool.
 
 They are deliberately implemented as **parallel** systems. A validation pose is
@@ -33,15 +33,15 @@ and does not reuse animation drivers, breathing, or loops.
 > **Validation poses are no longer development targets. They are diagnostic
 > instruments.**
 
-A validation pose is an instrument you point at the engine to **read its true
-state**. Its reading must stay honest whether the engine passes or fails.
+A validation pose is an instrument you point at the MonkEngine runtime to **read its true
+state**. Its reading must stay honest whether the MonkEngine runtime passes or fails.
 
 The direction of responsibility that follows is fixed and must never be reversed:
 
-> **A validation pose reports the engine's true state. You fix the engine, or you
+> **A validation pose reports the MonkEngine's true state. You fix the MonkEngine runtime, or you
 > record the reading — you never retune the instrument to make it read green.**
 
-A development *target* is something the engine is dragged toward until it goes
+A development *target* is something the MonkEngine runtime is dragged toward until it goes
 green. A diagnostic *instrument* is the opposite: you do not adjust the instrument
 to change the reading. Retuning a pose (widening an IK target so a bent limb
 resolves straight, raising a root so feet stop penetrating, softening an angle so a
@@ -49,11 +49,11 @@ ROM rule stops firing) to get a green result is **instrument tampering** — it 
 adjusting the thermometer to lower the fever. It hides exactly the defect the pose
 exists to expose.
 
-If the engine cannot reproduce a pose cleanly — the IK clamps, a bone stretches, a
+If the MonkEngine runtime cannot reproduce a pose cleanly — the IK clamps, a bone stretches, a
 limb flips, a support slides — the correct responses are:
 
-1. **fix the root cause in the engine**, or
-2. **record the reading** (leave the pose as the faithful probe and track the engine
+1. **fix the root cause in the MonkEngine runtime**, or
+2. **record the reading** (leave the pose as the faithful probe and track the MonkEngine runtime
    limitation it surfaces).
 
 The one thing you must never do is move the instrument off the fault so the fault
@@ -99,7 +99,7 @@ category is never counted, scheduled, or aggregated with real families.
 ## 5. Purpose of Static Validation Poses
 
 The current validation poses are **static reference postures**, each chosen to
-stress a specific part of the engine at a known-correct configuration — for
+stress a specific part of the MonkEngine runtime at a known-correct configuration — for
 example: a full straight-arm dead hang, a deep overhead squat, a seated pike,
 and a wide middle split. Collectively they exercise:
 
@@ -118,13 +118,13 @@ is wrong.
 ## 6. Purpose of Future Validation Poses
 
 The subsystem is designed to grow. Additional validation poses may be added to
-cover configurations the engine has trouble with, or to lock in behavior once a
+cover configurations the MonkEngine runtime has trouble with, or to lock in behavior once a
 defect is fixed (a regression guard). Any future validation pose must obey the
 same contract as the current ones:
 
 - it is a frozen reference of correct anatomy,
 - it is fully isolated from the training product,
-- it defines the target the engine must meet.
+- it defines the target the MonkEngine runtime must meet.
 
 This document does not enumerate specific future poses; it establishes that any
 future pose inherits these rules.
@@ -138,13 +138,13 @@ When adding or reviewing a validation pose:
 1. Enable the **Show Engineering Validation** developer setting.
 2. Open the pose in the validation viewer.
 3. Confirm the rendered skeleton matches the intended reference anatomy.
-4. Confirm the pose reports clean against the engine's validation rules
+4. Confirm the pose reports clean against the MonkEngine's validation rules
    (finite coordinates, constant bone lengths, IK within limits, no ground
    penetration, no sliding supports, balanced support polygon, etc.).
 5. Confirm the pose remains fully invisible with the setting **off**.
 
 A validation pose is "done" when it is a **faithful instrument**: it renders the
-configuration it claims to probe, and its reading against the engine's rules is
+configuration it claims to probe, and its reading against the MonkEngine's rules is
 truthful — whether that reading is clean (engine reproduces it) or a recorded defect
 (engine limitation the pose surfaces). A pose is *not* required to read green to be
 done; it is required to read *honestly*.
@@ -160,10 +160,10 @@ When a validation pose does **not** reproduce cleanly:
    unreachable target, pole flip, support slide, etc.).
 3. Trace the failure back through the pipeline: pose intent → IK solve → bake →
    FK traversal → finalization → projection.
-4. Either **fix the root cause in the engine** so the whole family of exercises
+4. Either **fix the root cause in the MonkEngine runtime** so the whole family of exercises
    benefits (not just this pose), **or record the reading** as a known engine
    limitation the instrument now guards.
-5. If you fixed the engine, re-run the pose to confirm it now reproduces cleanly and
+5. If you fixed the MonkEngine runtime, re-run the pose to confirm it now reproduces cleanly and
    that no other pose regressed. If you recorded the reading, keep a test that
    asserts the instrument still detects the limitation.
 
@@ -172,7 +172,7 @@ tampers with the instrument (see §2).
 
 ---
 
-## 9. When to Modify a Pose vs. the Engine
+## 9. When to Modify a Pose vs. the MonkEngine runtime
 
 Because a validation pose is a **diagnostic instrument**, the bar for touching the
 pose is high and narrow.
@@ -180,20 +180,20 @@ pose is high and narrow.
 **Modify a validation pose only when the instrument itself is miscalibrated** — i.e.
 the probe is not measuring what it claims to measure. Examples: a typo'd axis so it
 reads the wrong joint, a support attached to the wrong point, a coordinate sign that
-makes the reading meaningless. In that case the instrument is lying about the engine
+makes the reading meaningless. In that case the instrument is lying about the MonkEngine runtime
 and must be corrected so it reads truthfully again.
 
-**Do not modify a pose to change what it reads about the engine.** If the reference
+**Do not modify a pose to change what it reads about the MonkEngine runtime.** If the reference
 configuration the probe requests is faithful to its stated purpose (e.g. "request a
-straight limb at this target and show me what the engine does"), and the engine
-produces a defect, the defect is the reading. Fix the engine, or record the reading
+straight limb at this target and show me what the MonkEngine runtime does"), and the MonkEngine runtime
+produces a defect, the defect is the reading. Fix the MonkEngine runtime, or record the reading
 — never retune the probe to green.
 
 The test to apply:
 
-> "Is the instrument measuring the engine truthfully?"
+> "Is the instrument measuring the MonkEngine runtime truthfully?"
 > - **No (it's miscalibrated / measuring the wrong thing)** → fix the pose.
-> - **Yes, and the reading is a defect** → fix the engine (or record the reading).
+> - **Yes, and the reading is a defect** → fix the MonkEngine runtime (or record the reading).
 
 Note that "the configuration is not a pose a human would hold" is **not** grounds to
 retune it. A diagnostic probe is judged by whether its reading is faithful, not by
@@ -206,14 +206,14 @@ to make a broken engine read green.
 
 - Validation poses are **diagnostic instruments**, not exercises and not
   development targets.
-- A pose reports the engine's true state; you fix the engine or record the reading,
+- A pose reports the MonkEngine's true state; you fix the MonkEngine runtime or record the reading,
   you never retune the instrument to read green.
 - Validation poses are fully isolated from workouts, stats, progression, and
   achievements, and are invisible unless Engineering Validation is enabled.
 - Failures are engine measurements — defects to fix or limitations to record — not
   targets to retune away.
 - Change a pose only when the instrument is miscalibrated (measuring the wrong
-  thing); otherwise fix the engine or record the reading.
+  thing); otherwise fix the MonkEngine runtime or record the reading.
 
 ---
 
@@ -231,7 +231,7 @@ to make a broken engine read green.
 A visual / biomechanical audit was performed by rendering each frozen pose
 through the real engine (`SkeletonPoseFinalizer` + `ConstraintSolver`) and
 inspecting world-space joint positions as if reviewing a medical illustration.
-Coordinates below use the engine frame: **+Y up, +X forward, ±Z lateral**
+Coordinates below use the MonkEngine runtime frame: **+Y up, +X forward, ±Z lateral**
 (`-Z` = front/active side `F`/`A`, `+Z` = back/passive side `B`/`P`). Knee/elbow
 angles are the interior joint angle (180° = perfectly straight).
 
@@ -256,7 +256,7 @@ angles are the interior joint angle (180° = perfectly straight).
   like a true split would tamper with the instrument and hide the limitation it
   exists to read (see §2).
 - **Proposed fix:** **None (keep as-is).** Document it as the straight-intent
-  reference. If a true-straight middle split is ever wanted, the engine must
+  reference. If a true-straight middle split is ever wanted, the MonkEngine runtime must
   first honour `straight = true` at in-proximal-radius targets (UNI-9 / straight
   limb reach), not the pose.
 - **Complexity:** N/A (no change).
@@ -276,7 +276,7 @@ angles are the interior joint angle (180° = perfectly straight).
   trunk's ~54° forward pitch. The original code then set `ankle = −fold`, which
   *doubled* the tilt (pelvis −0.95 + ankle −0.95) and drove the toe through the
   floor. The pelvis height of 40 was simply too high for a seated reference.
-- **Engine vs pose:** **Pose (authoring) bug.** The engine reproduced exactly
+- **Engine vs pose:** **Pose (authoring) bug.** the MonkEngine runtime reproduced exactly
   what was authored; the authored reference anatomy was wrong. Per §9 this is a
   pose fix, not an engine fix.
 - **Proposed fix (applied):** counter-rotate the ankle by **+fold** so it cancels

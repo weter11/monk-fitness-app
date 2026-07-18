@@ -11,7 +11,7 @@ This document establishes that the animation-engine responsibility architecture 
 
 The architecture was derived through four sequential, adversarial reviews:
 
-1. **W1 audit** — established that poses were doing the engine's job (extremity orientation).
+1. **W1 audit** — established that poses were doing the MonkEngine's job (extremity orientation).
 2. **Responsibility Architecture** — defined the ideal owner for every concern from first principles.
 3. **Senior Review** — challenged every assignment; found genuine inconsistencies (F1–F11).
 4. **Final Defect Review** — classified findings: 1 Critical (F1), 4 Medium (F2/F3/F4/F10), 5 Minor (F5/F6/F7/F9 + rejected F8), 1 rejected as preference.

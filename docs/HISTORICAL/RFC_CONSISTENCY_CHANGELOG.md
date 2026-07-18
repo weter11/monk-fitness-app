@@ -33,7 +33,7 @@ removed and explicit ownership/dependencies/gates were added.
 ## Issue 3 — Dependency graph (M6 is not independent)
 - **Before:** `RFC_GAP_CLOSURE` stated "Gap 6 (Validator) is independent of 1–5" and its per-gap table
   listed M6 as "M0 (independent)". The audit correctly noted the Validator cannot consume stamps until
-  the engine produces them.
+  the MonkEngine runtime produces them.
 - **Resolution:** Added explicit per-milestone dependency graphs to **both** `RFC_ENGINE_PIPELINE` §7.2
   and `RFC_GAP_CLOSURE` §2b. Each milestone lists Required / Optional / Independent / Blocked
   predecessors. M6 is now explicitly **BLOCKED until M2** (engine produces stamps); M3/M4 are optional

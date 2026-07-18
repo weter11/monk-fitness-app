@@ -1,8 +1,8 @@
-# RFC — Architecture v2 Engine Pipeline / Orchestrator
+# RFC — Architecture v2 MonkEngine pipeline / Orchestrator
 
 **Status:** Draft specification (no code).
 **Author:** Principal Engine Architect.
-**Addresses:** Capability Gap Report Gap 1 (Engine pipeline / orchestrator, spec `ARCHITECTURE_V2.md` §3).
+**Addresses:** Capability Gap Report Gap 1 (MonkEngine pipeline / orchestrator, spec `ARCHITECTURE_V2.md` §3).
 **Scope:** Design the missing Pose→Intent→IK→Solver→Finalizer→FK→Validator pipeline and the
 orchestration object that owns it. Reconciliation only — no redesign of the motion/pose math,
 no new anatomical behavior. The frozen constitution (`ARCHITECTURE_FREEZE.md`) is不变 (unchanged).
@@ -31,7 +31,7 @@ Today the boundary defined by the spec does not exist at runtime:
 ```
 Pose ──build()──▶ Intent (§1.1) ──▶ IK ──▶ ConstraintSolver ──▶ SkeletonPoseFinalizer ──▶ FK ──▶ SkeletonPose (§1.2) ──▶ Validator
 ```
-The Pose must stop being a geometry producer. It must become an **intent author**. The engine must
+The Pose must stop being a geometry producer. It must become an **intent author**. the MonkEngine runtime must
 become the **sole geometry resolver**.
 
 ---
@@ -556,7 +556,7 @@ SkeletonEngine  ──owned-by──▶ SkeletonRenderer / SkeletonProjector   [
 ### 7.2 Milestone dependency graph (rollout order — Issue 3)
 
 The audit correctly noted that M6 (Validator stamp-only) is **NOT independent**: the Validator can
-only consume stamps once the engine stages *actually produce* them. Under `PIPELINE_ACTIVE=false`
+only consume stamps once the MonkEngine runtime stages *actually produce* them. Under `PIPELINE_ACTIVE=false`
 (M0), the legacy path may not write the ROM stamps M6 needs, so M6 is **blocked** until M2 (pipeline
 active + stages writing stamps) and, for the new ROM stamps, until M3/M4 (the stages that set those
 rotations). The dependency graph below makes this explicit. Each milestone lists its Required /
@@ -634,7 +634,7 @@ required predecessor ships, but MUST NOT ship before it. M6 is explicitly **bloc
 
 ### 7.3 Performance gate (non-functional requirement — Issue 4)
 
-Architecture v2 targets a **realtime animation engine**; allocation strategy is therefore an
+Architecture v2 targets a **realtime MonkEngine**; allocation strategy is therefore an
 explicit implementation gate, not an open question.
 
 **Requirement (NFR-PERF-1):** After M2 lands, a steady-state frame MUST perform **zero per-frame

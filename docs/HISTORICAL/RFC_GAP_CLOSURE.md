@@ -139,7 +139,7 @@ M8  deprecation purge + cleanup ... [all] DONE — `EngineFlags` object deleted,
 ## 2b. Milestone dependency graph (per-milestone — Issue 3) — HISTORICAL
 
 The audit correctly identified that M6 (Validator stamp-only) is **NOT independent**: the Validator
-can only consume stamps once the engine stages *actually produce* them. Under `PIPELINE_ACTIVE=false`
+can only consume stamps once the MonkEngine runtime stages *actually produce* them. Under `PIPELINE_ACTIVE=false`
 (M0) the legacy path does not guarantee stamp production, so M6 was **BLOCKED** until M2. All of
 M0–M8 have since been executed and the cleanup deleted the flags; this graph is kept as a record of
 the planned rollout. Each milestone below lists Required / Optional / Independent / Blocked predecessors.
@@ -300,7 +300,7 @@ NOT ship before it. M6 was explicitly **BLOCKED** until M2 (engine produces stam
 > **STATUS: BLOCKED — NOT a flag flip.** The RFC asserted M5 was "automatic once M2 lands", i.e. that
 > flipping the pipeline on would make `spineIntent`/`limbTargets`/`jointIntents` the live engine input.
 > That is **false**. Verified by source audit (2026-07-17): of the §1.1 carriers, only the
-> posture/contact subset is consumed by the engine — `pose.contacts`, `pose.contactPrecedence`, and
+> posture/contact subset is consumed by the MonkEngine runtime — `pose.contacts`, `pose.contactPrecedence`, and
 > `pose.postureIntent` are read by `ConstraintSolver` (this is what M3/M4 actually exercise). The spine /
 > limb / joint intent carriers — `spineIntent`, `jointIntents`, `limbTargets` — have **zero reads and
 > zero writes** anywhere in `app/src` (only their declaration + `copyFrom` in `PoseDefinition.kt`).
@@ -321,7 +321,7 @@ NOT ship before it. M6 was explicitly **BLOCKED** until M2 (engine produces stam
 > carrier dead/dormant/obsolete table, files/helpers/stages, migration order, and M5/M6/M7 classification).
 1. Requires the deferred `BasePose`→`IntentBuilder` intent-only migration (RFC_ENGINE_PIPELINE §8/§9),
    NOT a flag flip. Out of scope for the M2–M4 flag-driven flips.
-2. **Gate (currently unmet):** `spineIntent`/`limbTargets`/`jointIntents` are read by the engine after
+2. **Gate (currently unmet):** `spineIntent`/`limbTargets`/`jointIntents` are read by the MonkEngine runtime after
    a pose authors them; lint proves zero unused §1.1 writes. Today both sides fail (unwritten + unread).
 
 ### M6 — Validator stamp-only (Gap 6 / Phase 8)
@@ -385,7 +385,7 @@ NOT ship before it. M6 was explicitly **BLOCKED** until M2 (engine produces stam
   live and verified (`ChestFrameNoMoveTest` through the pipeline + `FinalizerOwnsConversionM4Test`
   proving flag-on == flag-off for production + contact poses). Output byte-identical for every
   production pose (none register engine contacts, so the guard never runs for them).
-- **M5 complete when (BLOCKED):** `spineIntent`/`limbTargets`/`jointIntents` consumed by the engine
+- **M5 complete when (BLOCKED):** `spineIntent`/`limbTargets`/`jointIntents` consumed by the MonkEngine runtime
   (no dead carrier). NOT a flag flip — requires the deferred `BasePose`→`IntentBuilder` intent-only
   migration. Verified 2026-07-17 that these three carriers are currently unwritten AND unread
   (`Section11CarriersTest` pins this), so the gate is unmet. The live §1.1 subset (`contacts`,
@@ -489,7 +489,7 @@ compile-checks and merges per the established workflow.
 7. **Gaze is a target** (`headTarget`), not a counter-rotated direction, when `HEAD_TARGET_ENABLED`. (Gap 7/F8.)
 8. **Contact end-effector immovable after Solver settle** (F1/B5 no-move). (Exec Contract §9.)
 9. **All iterations bounded** (Jacobi 16, CCD 12, F1 re-pass ≤2). Deterministic finiteness. (Exec Contract §13.)
-10. **Flag coherence:** `PIPELINE_ACTIVE ⇒ IK_WORLD_ONLY && FINALIZER_OWNS_CONVERSION`. (Engine Pipeline §5.7 / Exec §14.)
+10. **Flag coherence:** `PIPELINE_ACTIVE ⇒ IK_WORLD_ONLY && FINALIZER_OWNS_CONVERSION`. (MonkEngine pipeline §5.7 / Exec §14.)
 11. **No deprecated API survives M8**: zero `@Deprecated` on the migrated surface; zero `EngineFlags`
     boolean in source. (M8.)
 12. **Pose is pluggable:** engine depends on `SkeletonPose` + carriers, never on a concrete pose class.
