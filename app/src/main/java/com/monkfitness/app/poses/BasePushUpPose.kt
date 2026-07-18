@@ -64,30 +64,6 @@ abstract class BasePushUpPose : BasePose() {
         toeB = nodes.toeB
     }
 
-    // Registers a planted-toe floor contact so the engine honours the declared support.
-    // Mirrors the ContactSpec a bakeIkLimb(contact=...) call would add for a 1-bone foot
-    // (ANKLE -> TOE). The toe target is the toe node's current world position projected to the
-    // floor plane (y = 0); the ConstraintSolver then pins it there and re-bakes the leg.
-    protected fun registerToeContact(toe: SkeletonNode, ankle: SkeletonNode, footLength: Float, constraint: IKConstraint) {
-        val chain = ConstraintSolver.chainForEnd(toe.joint) ?: return
-        val tw = toe.worldPosition
-        jointsBuffer.contacts.add(
-            ContactSpec(
-                endJoint = toe.joint,
-                rootJoint = chain.rootJoint,
-                parentRotationJoint = chain.parentRotationJoint,
-                middleJoint = chain.middleJoint,
-                targetWorld = Vector3(tw.x, 0f, tw.z),
-                pole = Vector3(0f, -1f, 0f),
-                length1 = footLength,
-                length2 = 0f,
-                constraint = constraint,
-                straight = false,
-                contact = ContactConstraint.ground(0f)
-            )
-        )
-    }
-
     override fun build(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
@@ -208,28 +184,20 @@ abstract class BasePushUpPose : BasePose() {
         SkeletonMath.toLocalDirection(poleA, chest!!.worldRotation, armAPoleLocal)
         shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
         val armAPoleWorld = SkeletonMath.toWorldDirection(armAPoleLocal, elbowA!!.parent!!.worldRotation, tempPoleWorld)
-        // Floor contact: hands are planted on the ground, so the engine owns keeping them there
-        // (registers a ContactSpec so the ConstraintSolver runs and honours the declared contact).
-        val groundContact = ContactConstraint.ground(0f)
-        val armA = bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, armAPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK, contact = groundContact)
+        val armA = bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, armAPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK)
 
         shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
         SkeletonMath.toLocalDirection(poleP, chest!!.worldRotation, armPPoleLocal)
         val armPPoleWorld = SkeletonMath.toWorldDirection(armPPoleLocal, elbowP!!.parent!!.worldRotation, tempPoleWorld)
-        val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK, contact = groundContact)
+        val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
         // Flat-hand push-up: the wrist extends so the palm (not the knuckles/fist) bears the load.
         // Authored through the Branch C wrist-articulation carrier; the engine derives palm/knuckles/
-        // fingertips from the forearm + this articulation. No manual WRIST=HAND copy.
+        // fingertips from the forearm + this articulation. Replaces the old manual WRIST=HAND copy
+        // that discarded the engine's wrist derivation.
         val wristExtension = 0.35f
         buildWristArticulation(Extremity.HAND_A, wristExtension, 0f, handA!!)
         buildWristArticulation(Extremity.HAND_P, wristExtension, 0f, handP!!)
-
-        // Toes are planted on the ground: register foot ContactSpecs so the solver pins all four
-        // supports (hands via bakeIkLimb above, toes here). Without this hasContacts() stays false
-        // and the declared toe contacts are never honoured by the engine.
-        registerToeContact(toeF!!, ankleF!!, def.footLength, def.legIKConstraint)
-        registerToeContact(toeB!!, ankleB!!, def.footLength, def.legIKConstraint)
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         return jointsBuffer

@@ -50,10 +50,30 @@ For each item, confirm the pose uses the documented helper and that no bypass ex
    articulation. Fix: `buildWristArticulation(Extremity.HAND_X, flexion, deviation, handX)`.
 2. **Declared-but-unregistered contacts.** Metadata lists supports but no `ContactSpec`
    exists → `hasContacts()` false → solver skips → floating/penetrating contacts.
-   Fix: pass `contact = ContactConstraint.ground(0f)` into the `bakeIkLimb` for end
-   joints, and for 1-bone foot ends (TOE_F/B) add an explicit `ContactSpec`
-   (`ConstraintSolver.chainForEnd(toe.joint)`, `length1 = footLength`, `length2 = 0`,
-   `targetWorld = toe world pos projected to y = level`, `contact = ground(level)`).
+
+   **Do NOT blindly register `ContactSpec`s for every declared support.** Registering
+   contacts *fires the ConstraintSolver relaxation pass*, which re-bakes every contact
+   limb and can destabilize a pose that was carefully authored as a rigid kinematic shape.
+   This is a known regression trap: the standard push-up (a rigid plank) was green at
+   baseline as contact-less; registering 4 contacts (hands + toes, incl. a hand-built
+   `length2 = 0` degenerate 1-bone toe chain) threw `IllegalArgumentException` across
+   every push-up family + infra tests.
+
+   **Decision rule for this finding:**
+   - If the pose is a *contact-relaxed* shape (squats, hangs, kneeling) where the
+     solver is expected to honor planted limbs → register `ContactSpec`s via
+     `bakeIkLimb(contact = ground(level))` for multi-bone ends, and for 1-bone foot
+     ends add an explicit `ContactSpec` (`chainForEnd(toe.joint)`, proper `length1`,
+     `length2 = 0` only if the chain truly is 1-bone — prefer routing through the
+     documented helper).
+   - If the pose is a *rigid kinematic plank/shape* that declares contacts only for the
+     **renderer's support-polygon display** (not for engine relaxation) → leave it
+     contact-less. The metadata `SupportDefinition.contacts` is the correct, intended
+     declaration; engine `ContactSpec` registration is NOT required and would break it.
+     In this case the "unregistered contacts" audit finding is a **misread** — record it
+     as a known pattern, do not "fix" it.
+   When in doubt, register contacts behind a quick `./gradlew :app:testDebugUnitTest`
+   check; if it regresses, the pose is in the rigid-shape class above.
 3. **Direct `SkeletonMath.solveIK`.** Re-route through `bakeIkLimb` so carriers populate.
 
 ### Compile-first gate
