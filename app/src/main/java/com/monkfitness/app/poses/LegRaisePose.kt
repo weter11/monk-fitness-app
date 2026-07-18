@@ -90,6 +90,9 @@ class LegRaisePose : PoseBuilder {
         jointsBuffer.setJoint(Joint.ELBOW_P, armP.joint)
         jointsBuffer.setJoint(Joint.HAND_P, armP.end)
 
+        // Phase E (L1 bridge removal): this pose authors joints as world positions; populate the
+        // roots hierarchy from them so finalize no longer takes the deleted legacy bridge.
+        SkeletonPose.fromJointPositions(def, jointsBuffer, jointsBuffer)
         return jointsBuffer
     }
 }
