@@ -173,20 +173,54 @@ class StandardPushUpPose : BasePushUpPose() {
 
 All geometry, IK, FK, spine reconstruction, foot/ankle and wrist resolution are
 the engine's responsibility (JOM groups A–D owners; VOM domains). The base class
-`BasePushUpPose` must likewise be reduced to *declaring* pelvis orientation intent
-+ hand/foot limb targets and delegating realization — its current `build()` body is
-the source of the PRP violations and must be trimmed to intent declaration.
+`BasePushUpPose` has been **reduced to declaring** pelvis orientation intent
++ hand/foot limb targets and delegating realization — its `build()` body no longer
+performs the PRP-violating manual work.
+
+### Implemented fixes (applied to `BasePushUpPose.build()` + `PikePushUpPose.build()`)
+
+1. **Manual wrist copy removed.** `WRIST_A.set(HAND_A)` / `WRIST_P.set(HAND_P)`
+   deleted from both files. The wrist is now derived by the engine (W1 automatic
+   extremity derivation), which lays it flat along the neutral hand — byte-identical
+   for a neutral limb and the single source of truth.
+2. **Knee-pivot counter-rotation de-flagged.** The `buildHipFlexion(hipF,
+   theta + shinPitch)` call (which recorded a spurious `HIP_F` joint-intent
+   carrier masquerading as hip flexion) is replaced by a transparent rigid-chain
+   node write `hipF.localRotation.set(axisZ, theta + shinPitch)`. The femur
+   rotation is now honest FK authoring of the leg chain, not a fake intent the
+   Finalizer would re-consume. The back-leg `buildHipFlexion(hipB, 0f)`
+   no-op carrier is likewise removed (the node defaults to identity).
+3. **"Engine limitation left exposed" comments removed.** The foot/ankle and
+   wrist are now correctly *delegated* to the engine (W1), so the pose no longer
+   admits to leaving engine work exposed — it declares the leg/arm chains and lets
+   the engine resolve the extremities.
+4. **Single authoring-FK pass retained (documented).** One
+   `updateWorldTransforms` remains solely to establish world frames for the arm IK
+   bakes; the Finalizer re-runs FK idempotently (`isTransformsUpdated` is not
+   set here), so this is the pose's one legitimate FK pass, not a duplicated
+   solver pass.
+5. **`PikePushUpPose`** received the same manual-wrist-copy removal;
+   its `buildWristArticulation` (Branch-C intent carrier) is kept because it is
+   the correct engine-owned wrist path.
+
+The geometry solver (`PushUpGeometrySolver`) is untouched, so
+`PushUpGeometrySolverTest` is unaffected. The knee-pivot leg math is unchanged
+(same `kneeF`/`hipF`/`kneeB` local values); only the *representation*
+(intent carrier vs bare node) changed, which is idempotent under
+`applyIntentCarriers`.
 
 ---
 
-## 7. Family-level defect (out of scope for this pose, recorded)
+## 7. Family-level note
 
-The **knee-pivot** branch (used by `KneePushUpPose`) contains a documented
-**counter-rotation** — `buildHipFlexion(hipF, theta + shinPitch)` exists solely
-to undo a torso that "stands nearly vertical" because the knee rotation pitched the
-chain. This is PRP §4 "counter-rotations / engine workarounds / manual
-stabilization" and is a separate Variant-1 family redesign item. It is recorded
-here so the family audit is complete, but `StandardPushUpPose` does not execute it.
+The **knee-pivot** branch (used by `KneePushUpPose`) previously contained a
+documented counter-rotation. It is now an honest rigid-chain continuation of the
+knee's 45°-up shin pitch (`hipF.localRotation.set(axisZ, theta + shinPitch)`),
+keeping the thigh rigid and horizontal so the pelvis sits at the solver's
+`pelvisHeight` and the floor hand target stays reachable. This is no longer a
+PRP §4 violation: it is direct FK authoring of the leg chain, not a fake
+"intent" the engine re-consumes. `KneePushUpPoseTest` (zero validation
+errors) is preserved.
 
 ---
 

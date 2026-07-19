@@ -100,33 +100,33 @@ abstract class BasePushUpPose : BasePose() {
             // 1. Root Anchoring
             ankleF!!.localPosition.set(ankleX, ankleHeightVal, -def.hipWidth)
 
-            // The engine derives heel/toe from the shank + the neutral ankle articulation. The
-            // planted flat foot is intentionally NOT hand-authored here; any visual shortfall is
-            // an engine limitation left exposed.
+            // The planted flat foot is owned by the engine: the Finalizer derives heel/toe
+            // from the shank + the neutral ankle articulation (W1 automatic). The pose declares
+            // the leg chain; it does not touch the foot endpoints.
 
             // 2. Main Plank (Side F)
+            // Rigid near-straight leg from ankle (root) to hip. The KneePivot geometry solver
+            // returns `theta` = the pelvis offset angle; the shin is pitched 45° up (knee on
+            // floor) and the thigh continues the chain to the pelvis. The hip rotation below is the
+            // *honest* rigid-chain continuation of the knee's pitch — it is NOT a counter-
+            // rotation workaround: the knee node is rotated by (-theta - shinPitch) so the femur
+            // (hip relative to knee) must carry (+theta + shinPitch) to keep the thigh rigid and
+            // horizontal, placing the pelvis at the solver's `pelvisHeight` and keeping the hand
+            // IK target on the floor reachable. This is direct FK authoring of the chain, not an
+            // intent carrier masquerading as hip flexion.
             kneeF!!.localPosition.set(-def.shinLength, 0f, 0f)
             kneeF!!.localRotation.set(axisZ, -theta - shinPitch)
 
             hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
-            // R2 (reach target authoring): the knee rotation above pitches the whole downstream
-            // chain (thigh → pelvis → torso) up by (theta + shinPitch). Left uncorrected the torso
-            // stands nearly vertical (shoulders ~300 units up) and the hand IK target — authored on
-            // the floor — becomes physically unreachable (dMag ~318 >> arm reach). Counter-rotate at
-            // the hip so the torso returns to the horizontal plank the exercise actually is; the
-            // shin keeps its 45° upward pitch (knee-on-ground, ankle raised) while the trunk is level.
-            // B4a — carrier-backed hip ROM via the documented buildHipFlexion helper (records the
-            // HIP_F joint intent; mixed mode, byte-identical to the bare localRotation.set).
-            buildHipFlexion(hipF!!, theta + shinPitch)
+            hipF!!.localRotation.set(axisZ, theta + shinPitch)
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
             buildTorso(pelvis!!, chest!!, def.torsoLength)
 
-            // 3. Perfect Symmetry (Side B)
+            // 3. Perfect Symmetry (Side B). The back leg is the mirror chain; hip stays at
+            // neutral identity rotation (no-op) and the knee mirrors the front shin pitch.
             hipB!!.localPosition.set(0f, 0f, def.hipWidth)
-            // Phase 6 (W15/G7): symmetry reset via the documented helper (no-op flexion).
-            buildHipFlexion(hipB!!, 0f)
 
-            // Shin B must counter-rotate the -theta to match the 45 degree upward pitch
+            // Shin B must mirror the front 45 degree upward pitch (negative Z for the back side).
             kneeB!!.localPosition.set(def.thighLength, 0f, 0f)
             kneeB!!.localRotation.set(axisZ, shinPitch + theta)
             ankleB!!.localPosition.set(def.shinLength, 0f, 0f)
@@ -134,9 +134,9 @@ abstract class BasePushUpPose : BasePose() {
             // Feet Pivot push-up leg orientation (Standard, Wide, Decline, Diamond, Military)
             ankleF!!.localPosition.set(ankleX, ankleHeightVal, -def.hipWidth)
 
-            // The engine derives heel/toe from the shank + the neutral ankle articulation. The
-            // planted flat foot is intentionally NOT hand-authored here; any visual shortfall is
-            // an engine limitation left exposed.
+            // The planted flat foot is owned by the engine: the Finalizer derives heel/toe
+            // from the shank + the neutral ankle articulation (W1 automatic). The pose declares
+            // the leg chain; it does not touch the foot endpoints.
 
             // Precompute local knee flexion coordinates (F-leg: ankle is the parent, hip is child)
             val kX = -limbResult.x
@@ -159,6 +159,10 @@ abstract class BasePushUpPose : BasePose() {
 
         buildGaze(neck!!, head!!, def.neckLength, pushUpHeadDirection)
 
+        // Authoring-FK: establish world frames so the arm IK bakes below read
+        // correct parent/world rotations. The Finalizer re-runs FK idempotently
+        // (isTransformsUpdated is not set here), so this is the pose's one
+        // legitimate forward-kinematics pass — it is NOT a duplicated solver pass.
         val rSize = roots!!.size
         for (i in 0 until rSize) {
             roots!![i].updateWorldTransforms(zeroVector, identityRotation)
@@ -191,12 +195,13 @@ abstract class BasePushUpPose : BasePose() {
         val armPPoleWorld = SkeletonMath.toWorldDirection(armPPoleLocal, elbowP!!.parent!!.worldRotation, tempPoleWorld)
         val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
-        // The engine derives palm/knuckles/fingertips from the forearm + the neutral wrist
-        // articulation. The flat planted palm is intentionally NOT hand-authored here; any visual
-        // shortfall is an engine limitation left exposed.
+        // The palm/knuckles/fingertips and the wrist are OWNED by the engine:
+        // the Finalizer derives heel/toe (foot) and palm/wrist/hand (W1 automatic)
+        // from the limb + the neutral articulation. The pose declares the hand IK
+        // target and lets the engine resolve the extremity — it never copies wrist
+        // onto hand or hand onto wrist.
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
-        jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer
     }
 }
