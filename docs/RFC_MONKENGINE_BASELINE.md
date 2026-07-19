@@ -60,6 +60,13 @@ Every other document is derived from, archived under, or removed by this set.
 | `docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` | Pose-development workflow. |
 | `docs/architecture/RFC_MONKENGINE_EXECUTION_MODES.md` | Execution strategy. |
 
+> **Biomechanical specification system (seven documents).** The pose-development RFCs above
+> operate on a coherent seven-document set: **BPS** (Biomechanical Pose Specification — per-exercise
+> files under `docs/Biomechanical Pose Specification (BPS)/`), **JOM** (Joint Ownership Matrix),
+> **VOM** (Validation Ownership Matrix), **PRP** (Pose Responsibility Protocol), **PAC** (Pose
+> Acceptance Criteria), **MOM** (Movement Ownership Matrix), **MSS** (Movement Sequence
+> Specification). These are the canonical reference inputs for every pose task. |
+
 ---
 
 ## 4. Document Classification
