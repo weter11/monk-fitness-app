@@ -20,7 +20,7 @@
                    
 # Monk Fitness App
 
-A production-ready Android application for an 8-week structured fitness program,
+Android application for an 8-week structured fitness program,
 featuring an animated, biomechanically-driven skeleton that demonstrates each
 exercise.
 
