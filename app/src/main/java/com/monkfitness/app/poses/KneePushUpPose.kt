@@ -19,6 +19,14 @@ class KneePushUpPose : BasePushUpPose() {
                 SupportContact(SupportPoint.LEFT_KNEE),
                 SupportContact(SupportPoint.RIGHT_KNEE)
             )
-        )
+        ),
+        pivotType = PivotType.KNEES,
+        supportContacts = setOf(
+            SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND,
+            SupportContact.LEFT_KNEE, SupportContact.RIGHT_KNEE
+        ),
+        exerciseFamily = "push-up",
+        motionType = "Press",
+        bodyOrientation = "Prone"
     )
 }

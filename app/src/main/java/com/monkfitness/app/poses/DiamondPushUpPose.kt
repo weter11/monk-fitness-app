@@ -7,8 +7,6 @@ class DiamondPushUpPose : BasePushUpPose() {
     override val gripWidthMultiplier = 0.1f
     override val poleA = Vector3(0.5f, 0.5f, -2.0f)
     override val poleP = Vector3(0.5f, 0.5f, 2.0f)
-    override val handDirA: Vector3 = Vector3(-1f, 0f, 0.7f).normalize()
-    override val handDirP: Vector3 = Vector3(-1f, 0f, -0.7f).normalize()
 
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
@@ -24,6 +22,14 @@ class DiamondPushUpPose : BasePushUpPose() {
                 SupportContact(SupportPoint.LEFT_TOES),
                 SupportContact(SupportPoint.RIGHT_TOES)
             )
-        )
+        ),
+        pivotType = PivotType.FEET,
+        supportContacts = setOf(
+            SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND,
+            SupportContact.LEFT_TOES, SupportContact.RIGHT_TOES
+        ),
+        exerciseFamily = "push-up",
+        motionType = "Press",
+        bodyOrientation = "Prone"
     )
 }
