@@ -35,7 +35,7 @@ exercise.
 - **Progress Tracking**: Weekly completion chart and streak counter.
 - **Interactive Timers**: Countdown timers with completion sounds.
 - **Daily Reminders**: Configurable notifications.
-- **Multi-language**: English and Russian.
+- **Multi-language**: English, Ukrainian, Russian.
 - **Dark Theme**: Modern fitness-style UI.
 
 ## Tech Stack
