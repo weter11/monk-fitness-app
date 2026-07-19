@@ -168,18 +168,28 @@ abstract class BasePushUpPose : BasePose() {
 
         buildGaze(neck!!, head!!, def.neckLength, pushUpHeadDirection)
 
-        // Authoring-FK: establish world frames so the arm IK bakes below read
-        // correct parent/world rotations. The Finalizer re-runs FK idempotently
-        // (isTransformsUpdated is not set here), so this is the pose's one
-        // legitimate forward-kinematics pass — it is NOT a duplicated solver pass.
+        // Authoring-FK: establish world frames so the shoulder-girdle placement and the arm IK
+        // bakes below read correct parent/world rotations. The Finalizer re-runs FK idempotently
+        // (isTransformsUpdated is not set here), so this is the pose's one legitimate
+        // forward-kinematics pass — it is NOT a duplicated solver pass.
         val rSize = roots!!.size
         for (i in 0 until rSize) {
             roots!![i].updateWorldTransforms(zeroVector, identityRotation)
         }
 
-        val chestW = chest!!.worldPosition
-        val shoulderAW = SkeletonMath.rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV2).add(chestW)
-        val shoulderPW = SkeletonMath.rotAround(tempV1.set(0f, 0f, def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV3).add(chestW)
+        // Girdle (JOM Group B) is placed by the engine's FK, not by hand-reconstructed world
+        // math: buildShoulders writes the clavicle/scapula offset the girdle owner declares, then
+        // the second FK pass derives shoulderA/shoulderP.worldPosition. The chest world rotation
+        // already carries any trunk pitch, so the FK-derived shoulder root equals the previous
+        // rotAround(...) reconstruction exactly (byte-identical), while the IK root now sits where
+        // the engine owns it — matching PikePushUpPose. This removes the pose-side duplicated-FK
+        // shoulder math the audit charged (PRP §4 "duplicated FK").
+        buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
+        for (i in 0 until rSize) {
+            roots!![i].updateWorldTransforms(zeroVector, identityRotation)
+        }
+        val shoulderAW = shoulderA!!.worldPosition
+        val shoulderPW = shoulderP!!.worldPosition
 
         val finalHandAnchorX = handAnchorX + handAnchorXOffset
         val targetHandA = targetHandABuffer.set(finalHandAnchorX, 0f, -def.shoulderWidth * gripWidthMultiplier)
@@ -194,12 +204,12 @@ abstract class BasePushUpPose : BasePose() {
         SkeletonMath.clampTargetToReach(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandP)
 
 
+        // Shoulders were already placed by buildShoulders + FK above (girdle owner); the arm IK
+        // simply reads their FK-derived world roots. No re-write of the shoulder localPosition here.
         SkeletonMath.toLocalDirection(poleA, chest!!.worldRotation, armAPoleLocal)
-        shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
         val armAPoleWorld = SkeletonMath.toWorldDirection(armAPoleLocal, elbowA!!.parent!!.worldRotation, tempPoleWorld)
         val armA = bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, armAPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK)
 
-        shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
         SkeletonMath.toLocalDirection(poleP, chest!!.worldRotation, armPPoleLocal)
         val armPPoleWorld = SkeletonMath.toWorldDirection(armPPoleLocal, elbowP!!.parent!!.worldRotation, tempPoleWorld)
         val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
