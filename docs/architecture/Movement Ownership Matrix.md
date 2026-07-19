@@ -266,7 +266,7 @@ Followers
 
 ## §7 Relationship to BPS, JOM, and VOM
 
-These four documents are complementary and non-overlapping:
+These seven documents are complementary and non-overlapping:
 
 - **BPS** (Biomechanical Pose Specification) defines *what correct posture looks
   like* — the human-biomechanics target for each exercise, with checkpoints.

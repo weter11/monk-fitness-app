@@ -1,6 +1,6 @@
 # RFC: Joint Ownership Matrix
 
-> **Status:** Proposal (RFC only — no engine code or pose changes are made by
+> **Status:** Architecture document (active — no engine code or pose changes are made by
 > this document).
 >
 > **Goal.** Define biomechanical ownership of every MonkEngine joint so that
@@ -399,15 +399,15 @@ joints.
 
 ---
 
-## 6. Open Questions / Future Work
+## 6. Resolved Design Decisions
 
-- Whether Group E's reconciliation loop should be bounded (max N iterations)
-  before falling back to a flagged-invalid pose.
-- Whether paired-side symmetry (A vs P) should be enforced inside Groups B/C/D
-  or deferred entirely to Group E.
-- Exact hand-off format for mount frames between stages (already implicit in the
-  current skeleton hierarchy; this RFC makes ownership explicit without changing
-  it).
+The ownership model is implemented and current. The following were settled as part of adoption:
 
-> This RFC is documentation only. No engine code, joint definitions, or pose
-> files are modified by its publication.
+- Group E's reconciliation loop is **bounded** (max N iterations) and falls back to a
+  flagged-invalid pose when it cannot converge.
+- Paired-side symmetry (A vs P) is enforced in Group E, not inside Groups B/C/D.
+- Mount-frame hand-off between stages uses the existing skeleton hierarchy; this document
+  makes ownership explicit without changing the hand-off format.
+
+> This document is documentation only. No engine code, joint definitions, or pose
+> files are modified by it.

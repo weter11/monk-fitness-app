@@ -12,14 +12,17 @@
 > Every pose must pass **measurable acceptance criteria** tied to the canonical
 > reference documents. A review is a checklist verdict, not a feeling.
 >
-> **Reference set (six documents).** A pose is judged against all of:
+> **Reference set (seven documents).** A pose is judged against all of:
 > - **BPS** — Biomechanical Pose Specification (per-exercise target)
 > - **JOM** — Joint Ownership Matrix
 > - **MOM** — Movement Ownership Matrix
 > - **MSS** — Movement Sequence Specification
 > - **VOM** — Validation Ownership Matrix
 > - **PRP** — Pose Responsibility Protocol
-> (PAC itself is the acceptance gate, not a reference input.)
+> - **PAC** — Pose Acceptance Criteria (this document; the acceptance gate)
+>
+> The seven documents (BPS, JOM, VOM, PRP, PAC, MOM, MSS) form one coherent
+> specification system. PAC is the acceptance gate, not a separate reference input.
 
 ---
 

@@ -462,7 +462,7 @@ A sequence that violates ordering is rejected even if its endpoints match BPS.
 
 ## §9 Relationship to the Architecture
 
-The complete biomechanical specification is formed by five complementary documents:
+The complete biomechanical specification is formed by seven complementary documents:
 
 - **BPS** defines the *destination* — what the correct final posture looks like.
 - **JOM** defines *joint ownership* — who builds each joint.

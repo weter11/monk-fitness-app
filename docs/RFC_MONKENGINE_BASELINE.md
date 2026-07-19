@@ -84,8 +84,7 @@ alongside them. Retained as retrievable evidence of past decisions; they do not 
 
 ### 4.2 OBSOLETE (superseded; do not influence design)
 Prior-generation plans and redesign notes whose content is now shipped and described by the ACTIVE
-set, including the standard-push-up audit/redesign note. Their decisions are reflected in the ACTIVE
-architecture; the plan text no longer steers.
+set. Their decisions are reflected in the ACTIVE architecture; the plan text no longer steers.
 
 ### 4.3 MERGE (fold into ACTIVE, then retire)
 The pipeline-design note folds into `ARCHITECTURE_V2.md` §3; the execution-contract note folds into
