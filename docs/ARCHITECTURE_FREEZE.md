@@ -92,6 +92,6 @@ Until then, Architecture v2 is the law.
 - `docs/ARCHITECTURE_V2.md` — definitive implementation specification (phases, ownership tables, contracts, pipeline).
 - `docs/API_CONTRACTS.md` — per-component inputs/outputs/read-write/prohibited.
 - `docs/MIGRATION_RULES.md` — prohibited patterns + mandatory rules for new poses.
-- `docs/ARCHITECTURE_V2_ROADMAP.md` — 9-phase implementation roadmap (Phases 0–8).
 
-All four are version-locked to this freeze.
+All three are version-locked to this freeze. The implementation roadmap (formerly the
+9-phase plan) is now carried forward as the forward-work list in `docs/RFC_MONKENGINE_BASELINE.md` §6.
