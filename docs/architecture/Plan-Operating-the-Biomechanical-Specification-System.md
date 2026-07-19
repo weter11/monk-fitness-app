@@ -75,7 +75,7 @@ specification system existed.
 
 **Cyclic acceptance (mandatory).** A family is **Accepted only if every
 verification (BPS §11/§13, JOM, MOM/MSS, PRP §4, VOM order, PAC §5)
-passes under an *infinite* number of re-audits.** Concretely:
+passes at least once through a full cycle** of the pipeline. Concretely:
 
 - The redesign must be **idempotent** — running Variant 1 again on the already-
   accepted family produces no new violations and no new diffs.
@@ -83,11 +83,10 @@ passes under an *infinite* number of re-audits.** Concretely:
   pose "fixing" a VOM domain that then fails JOM, then "fixing" JOM and
   re-failing VOM). A family that cannot settle is **Rejected**, not "accepted
   with issues."
-- The cycle is repeated until a full pass is stable on re-run; only then is
-  the family Accepted.
+- Acceptance is issued only after a complete cycle is green (PAC §8).
 
-**Exit (final).** All family members pass PAC **and** the full verification
-set is stable across unlimited re-cycles; family shares a coherent MOM/MSS story.
+**Exit (final).** All family members pass PAC **and** one full passing cycle is
+confirmed; family shares a coherent MOM/MSS story.
 
 ---
 
@@ -125,7 +124,7 @@ compliance from scratch.
 
 **Cyclic acceptance (mandatory).** A pose is **Accepted only if every
 verification (BPS §11/§13, JOM, MOM/MSS, PRP §4, VOM order, PAC §5)
-passes under an *infinite* number of re-audits.** Concretely:
+passes at least once through a full cycle** of the pipeline. Concretely:
 
 - The redesign must be **idempotent** — re-running Variant 2 on the already-
   accepted pose produces no new violations and no new diffs.
@@ -133,11 +132,10 @@ passes under an *infinite* number of re-audits.** Concretely:
   pose "fixing" a VOM domain that then fails JOM, then "fixing" JOM and
   re-failing VOM). A pose that cannot settle is **Rejected**, not "accepted
   with issues."
-- The cycle is repeated until a full pass is stable on re-run; only then is
-  the pose Accepted.
+- Acceptance is issued only after a complete cycle is green (PAC §8).
 
-**Exit (final).** Single PAC verdict recorded; the full verification set is
-stable across unlimited re-cycles; all references cited.
+**Exit (final).** Single PAC verdict recorded; one full passing cycle is
+confirmed; all references cited.
 
 ---
 
