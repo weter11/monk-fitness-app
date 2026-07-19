@@ -43,6 +43,7 @@ object AnimationRegistry {
         register("pullup_wide", WideGripPullUpPose())
         register("dead_hang", HangPose())
         register("arm_circles_hold", ArmCirclesPose())
+        register("jumping_jacks", JumpingJacksPose())
         register("hip_cars_standard", HipCarsPose())
         register("lunge_forward", AlternatingForwardLungesPose())
         register("lunge_reverse", AlternatingReverseLungesPose())
