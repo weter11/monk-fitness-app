@@ -118,13 +118,22 @@ abstract class BasePushUpPose : BasePose() {
             kneeF!!.localRotation.set(axisZ, -theta - shinPitch)
 
             hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
+            // Record the actual authored rigid-chain rotation (NOT a fake "flexion intent"
+            // carrier): the knee node is rotated by (-theta - shinPitch) so the femur
+            // (hip relative to knee) must carry (+theta + shinPitch) to keep the thigh
+            // rigid and horizontal. declareJointIntent records the true node rotation for
+            // the B4a ROM carrier (idempotent Finalizer consume), with no misleading
+            // "hip flexion" semantics.
             hipF!!.localRotation.set(axisZ, theta + shinPitch)
+            declareJointIntent(Joint.HIP_F, JointRotation(axisZ, theta + shinPitch))
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
             buildTorso(pelvis!!, chest!!, def.torsoLength)
 
             // 3. Perfect Symmetry (Side B). The back leg is the mirror chain; hip stays at
-            // neutral identity rotation (no-op) and the knee mirrors the front shin pitch.
+            // neutral identity rotation. Record the (zero) ROM carrier so both legs are
+            // symmetric in carrier terms.
             hipB!!.localPosition.set(0f, 0f, def.hipWidth)
+            declareJointIntent(Joint.HIP_B, JointRotation(axisZ, 0f))
 
             // Shin B must mirror the front 45 degree upward pitch (negative Z for the back side).
             kneeB!!.localPosition.set(def.thighLength, 0f, 0f)
