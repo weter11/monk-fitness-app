@@ -19,6 +19,15 @@ abstract class BasePushUpPose : BasePose() {
     // variants (STABILIZATION_AUDIT M14). 0 for all flat-planar members.
     open val declineTrunkPitch: Float = 0f
 
+    // Standard-descent trunk pitch (radians, about the spine's mediolateral Z axis),
+    // authored per progress so the rigid plank pitches as ONE unit (chest leads the
+    // descent, MSS §5/§7; BIOMECHANICS §11) instead of only translating the pelvis
+    // down a fixed horizontal trunk. This is what brings the chest to within ~10 cm of
+    // the floor at the bottom (BPS §9/§13) — the fidelity gap the old horizontal-
+    // trunk model could not express. 0 = no pitch (legacy horizontal-trunk behaviour),
+    // kept for every variant that has not been redesigned to the trunk-led model.
+    open val trunkDescentBottomPitch: Float = 0f
+
     protected var roots: List<SkeletonNode>? = null
     protected var ankleF: SkeletonNode? = null; protected var kneeF: SkeletonNode? = null; protected var hipF: SkeletonNode? = null; protected var pelvis: SkeletonNode? = null; protected var chest: SkeletonNode? = null; protected var neck: SkeletonNode? = null; protected var head: SkeletonNode? = null
     protected var shoulderA: SkeletonNode? = null; protected var elbowA: SkeletonNode? = null; protected var handA: SkeletonNode? = null; protected var palmA: SkeletonNode? = null; protected var knucklesA: SkeletonNode? = null; protected var fingertipsA: SkeletonNode? = null
@@ -158,16 +167,24 @@ abstract class BasePushUpPose : BasePose() {
             kneeF!!.localPosition.set(kX, kY, 0f)
             hipF!!.localPosition.set(-legTargetLen - kX, -kY, 0f)
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
-            buildTorso(pelvis!!, chest!!, def.torsoLength)
 
-            // M14 — Decline tilt: slope the head-to-heels plank downward for feet-elevated
-            // variants by pitching the chest (and the whole shoulder/neck/head chain it carries)
-            // about the spine's mediolateral Z axis. The pelvis is left untouched so the
-            // planted legs stay on the box; the IK below re-solves the hands to the floor, so
-            // both contacts are preserved. 0 for every flat-planar member.
-            if (declineTrunkPitch != 0f) {
-                chest!!.localRotation.set(axisZ, declineTrunkPitch)
-                declareJointIntent(Joint.CHEST, JointRotation(axisZ, declineTrunkPitch))
+            // Trunk-led descent (Level-4 redesign from BPS/MSS/BIOMECHANICS): the
+            // rigid plank PITCHES as one unit about the planted hand/foot line so the chest
+            // leads the descent and reaches near the floor at the bottom (BPS §9/§13)
+            // — instead of a fixed horizontal trunk that only drops the pelvis 60→40 and
+            // leaves the chest ~40 cm off the floor. The pelvis stays NEUTRAL (BPS §5
+            // "Pelvis: Neutral, level"); the whole shoulder/neck/head chain it carries
+            // rotates down with the chest. The arm IK below re-solves the hands to the
+            // floor from the pitched shoulder, so both contacts are preserved.
+            // Authorized via buildSpineCurve (MIGRATION_RULES B7/A2): lower=pelvis at
+            // 0 rad, chest at the progress-driven pitch. 0 for every variant not yet
+            // redesigned to the trunk-led model (keeps the legacy horizontal trunk).
+            val trunkPitch = trunkDescentBottomPitch * context.progress
+            if (trunkPitch != 0f || declineTrunkPitch != 0f) {
+                // Single rigid trunk: pelvis neutral, chest carries the descent + decline tilt.
+                buildSpineCurve(pelvis!!, chest!!, 0f, trunkPitch + declineTrunkPitch, axisZ)
+            } else {
+                buildTorso(pelvis!!, chest!!, def.torsoLength)
             }
 
             hipB!!.localPosition.set(0f, 0f, def.hipWidth)
