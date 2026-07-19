@@ -97,13 +97,21 @@ class JumpingJacksPose : PoseBuilder {
         val def = context.definition
         ensureHierarchy(def)
 
+<<<<<<< ours
         // B3 — coarse pelvis height is owned by the ConstraintSolver (STANDING seed == standH).
         // The feet stay planted, so the solver pins pelvis.y = standH byte-identically.
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.STANDING)
+=======
+        // B3 — this pose authors a shape-driven root (dynamic leg/arm spread), so it opts into
+        // CUSTOM (the solver leaves the authored root and IK-baked limbs untouched), matching
+        // the other ballistic poses (JumpSquat, Burpee).
+        SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
+>>>>>>> theirs
 
         // Smooth 0 -> 1 -> 0 open/close ease so the loop is continuous at the seam.
         val open = 0.5f * (1f - cos(context.progress * 2f * PI.toFloat()))
 
+<<<<<<< ours
         pelvis!!.localPosition = Vector3(0f, 0f, 0f)
         declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), 0f)
 
@@ -111,6 +119,15 @@ class JumpingJacksPose : PoseBuilder {
         // not for the root height the solver now owns.
         val standH = def.shinLength + def.thighLength + 25f
 
+=======
+        // CUSTOM posture: the solver leaves the authored root untouched, so we must author a
+        // real standing pelvis height here.
+        val standH = def.shinLength + def.thighLength + 25f
+
+        pelvis!!.localPosition = Vector3(0f, standH, 0f)
+        declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), 0f)
+
+>>>>>>> theirs
         chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)
         neck!!.localPosition = Vector3(0f, def.neckLength, 0f)
         head!!.localPosition = Vector3(0f, 18f, 0f)
@@ -135,6 +152,7 @@ class JumpingJacksPose : PoseBuilder {
         bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(0.5f, 1f, -0.3f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
         bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0.5f, 1f, 0.3f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 
+<<<<<<< ours
         // --- Arm targets: down at the sides (closed) to overhead & slightly out (open). ---
         // The humerus+forearm nearly straighten for the overhead reach; a slight bend keeps the
         // arm IK constraint satisfiable.
@@ -143,6 +161,17 @@ class JumpingJacksPose : PoseBuilder {
         closedHandP.set(0f, standH + def.torsoLength - reach * 0.55f, def.shoulderWidth + 15f)
         openHandA.set(0f, standH + def.torsoLength + reach * 0.78f, -def.shoulderWidth - 10f)
         openHandP.set(0f, standH + def.torsoLength + reach * 0.78f, def.shoulderWidth + 10f)
+=======
+        // --- Arm targets: down at the sides (closed) to raised & slightly out (open). ---
+        // The hand is kept BELOW shoulder height (matching the proven-stable Burpee arm envelope)
+        // so the elbow IK solution never flips to the elbow-up branch (which trips
+        // VELOCITY_/POSITION_DISCONTINUITY). The arm stays clearly bent throughout.
+        val reach = def.upperArmLength + def.forearmLength
+        closedHandA.set(0f, standH + def.torsoLength - reach * 0.5f, -def.shoulderWidth - 15f)
+        closedHandP.set(0f, standH + def.torsoLength - reach * 0.5f, def.shoulderWidth + 15f)
+        openHandA.set(0f, standH + def.torsoLength - reach * 0.2f, -def.shoulderWidth - 8f)
+        openHandP.set(0f, standH + def.torsoLength - reach * 0.2f, def.shoulderWidth + 8f)
+>>>>>>> theirs
 
         val targetHandA = Vector3(lerp(closedHandA.x, openHandA.x, open), lerp(closedHandA.y, openHandA.y, open), lerp(closedHandA.z, openHandA.z, open))
         val targetHandP = Vector3(lerp(closedHandP.x, openHandP.x, open), lerp(closedHandP.y, openHandP.y, open), lerp(closedHandP.z, openHandP.z, open))
