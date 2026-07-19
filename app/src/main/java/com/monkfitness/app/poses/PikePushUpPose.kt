@@ -21,7 +21,15 @@ class PikePushUpPose : BasePushUpPose() {
                 SupportContact(SupportPoint.LEFT_TOES),
                 SupportContact(SupportPoint.RIGHT_TOES)
             )
-        )
+        ),
+        pivotType = PivotType.FEET,
+        supportContacts = setOf(
+            SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND,
+            SupportContact.LEFT_TOES, SupportContact.RIGHT_TOES
+        ),
+        exerciseFamily = "push-up",
+        motionType = "Press",
+        bodyOrientation = "Prone"
     )
 
     override fun build(context: PoseContext): SkeletonPose {
@@ -77,8 +85,9 @@ class PikePushUpPose : BasePushUpPose() {
         hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
 
         pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
+        // `declarePelvisTilt` already records the Joint.PELVIS intent on the carrier
+        // (STABILIZATION_AUDIT P2: no duplicate joint intent line).
         declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, torsoGlobalPitch - legPitch)
-        declareJointIntent(Joint.PELVIS, JointRotation(axisZ, torsoGlobalPitch - legPitch))
         chest!!.localPosition.set(-def.torsoLength, 0f, 0f)
 
         // 1. Correcting the Right-Side (Side B) Floating Leg Asymmetry
@@ -113,17 +122,13 @@ class PikePushUpPose : BasePushUpPose() {
         val targetHandA = targetHandABuffer.set(handAnchorX, 0f, -def.shoulderWidth * gripWidthMultiplier)
         val targetHandP = targetHandPBuffer.set(handAnchorX, 0f, def.shoulderWidth * gripWidthMultiplier)
 
-        // Pole vectors (1, 1, ±2) perfectly orient the shoulder joints outwards.
-        // bakeIkLimb owns the IK-solve + local-space bake orchestration used by the whole family.
-        // Shoulders already positioned by buildShoulders + FK above.
-        armAPoleLocal.set(1f, 1f, -2f)
-        SkeletonMath.toLocalDirection(armAPoleLocal, chest!!.worldRotation, armAPoleLocal)
-        val armAPoleWorld = SkeletonMath.toWorldDirection(armAPoleLocal, elbowA!!.parent!!.worldRotation, tempPoleWorld)
+        // Elbow poles are authored in WORLD space (MIGRATION_RULES A8: the pose never converts
+        // frames — `bakeIkLimb` consumes the pole as world). The (1, 1, ±2) vectors seat the
+        // elbow outward/upward. Shoulders already positioned by buildShoulders + FK above.
+        val armAPoleWorld = Vector3(1f, 1f, -2f)
         bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, armAPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK)
 
-        armPPoleLocal.set(1f, 1f, 2f)
-        SkeletonMath.toLocalDirection(armPPoleLocal, chest!!.worldRotation, armPPoleLocal)
-        val armPPoleWorld = SkeletonMath.toWorldDirection(armPPoleLocal, elbowP!!.parent!!.worldRotation, tempPoleWorld)
+        val armPPoleWorld = Vector3(1f, 1f, 2f)
         bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
         // Branch C: wrist articulation (overhand-ish grip + counter torso pitch) routes

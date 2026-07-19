@@ -8,8 +8,6 @@ class MilitaryPushUpPose : BasePushUpPose() {
     override val handAnchorXOffset = 5f
     override val poleA = Vector3(1f, 0.2f, -0.1f)
     override val poleP = Vector3(1f, 0.2f, 0.1f)
-    override val handDirA: Vector3 = Vector3(-1f, 0f, 0f).normalize()
-    override val handDirP: Vector3 = Vector3(-1f, 0f, 0f).normalize()
 
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
@@ -25,6 +23,14 @@ class MilitaryPushUpPose : BasePushUpPose() {
                 SupportContact(SupportPoint.LEFT_TOES),
                 SupportContact(SupportPoint.RIGHT_TOES)
             )
-        )
+        ),
+        pivotType = PivotType.FEET,
+        supportContacts = setOf(
+            SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND,
+            SupportContact.LEFT_TOES, SupportContact.RIGHT_TOES
+        ),
+        exerciseFamily = "push-up",
+        motionType = "Press",
+        bodyOrientation = "Prone"
     )
 }

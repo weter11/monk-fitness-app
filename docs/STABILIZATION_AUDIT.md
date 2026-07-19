@@ -103,6 +103,32 @@ limb through `bakeIkLimb` and to declare `supportContacts` where the body is gen
 
 Result: no compilation/runtime errors; 282/0 baseline holds.
 
+### DONE — Push-Up Family (PDP-Family, Level 6)
+
+- **M14:** `DeclinePushUpPose` now slopes the head-to-heels plank downward via a `declineTrunkPitch`
+  (chest pitch about the mediolateral Z axis, pelvis untouched so feet stay on the box, hands
+  re-solve to the floor through IK). The leg chain remains horizontal (residual noted); the upper
+  body now visibly declines instead of staying flat.
+- **P2 (dead `handDirA`/`handDirP`):** removed the unused `handDirA`/`handDirP` fields from
+  `BasePushUpPose` and the `Wide`/`Military`/`Diamond` overrides (never referenced).
+- **P2 (redundant PELVIS intent):** removed the duplicate `declareJointIntent(Joint.PELVIS, …)` in
+  `PikePushUpPose` — `declarePelvisTilt` already records the carrier.
+- **A8 (pole frame-conversion):** `BasePushUpPose` and `PikePushUpPose` now pass world-space elbow
+  poles directly to `bakeIkLimb` (the old `toLocalDirection`→`toWorldDirection` round-trip was
+  identity for the identity clavicle/scapula) — no pose-side frame conversion.
+- **A6 (hand-computed shoulder placement):** `BasePushUpPose` now reads `shoulderA.worldPosition` /
+  `shoulderP.worldPosition` after `buildShoulders` + FK instead of `rotAround` (geometry identical).
+  Added the missing `buildShoulders` call to `BasePushUpPose` so the girdle is seated before the
+  authoring-FK pass.
+- **Family consistency:** every member now declares `pivotType`, `supportContacts`,
+  `exerciseFamily = "push-up"`, `motionType = "Press"`, `bodyOrientation = "Prone"` alongside the
+  existing `support`, matching the Plank family metadata contract.
+
+NOTE: this pass could not be compiled/validated in-session — the build toolchain (JDK + Android SDK)
+was absent from the sandbox. Geometry-preserving changes (poles, shoulder placement, dead-field
+removal, metadata) are expected byte-identical; the M14 decline tilt is a deliberate geometry change
+that requires the `:app:testDebugUnitTest` push-up suite to confirm before marking M14 fully resolved.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
@@ -115,8 +141,9 @@ Result: no compilation/runtime errors; 282/0 baseline holds.
 
 ### TODO — P2
 
-Cleanup pass: redundant PELVIS intent, dead fields, WRIST mirror, stale comments, dead
-`applyBirdDogExtremities`, JumpSquat dead vals.
+Cleanup pass (remaining): WRIST mirror, stale comments, dead `applyBirdDogExtremities`,
+JumpSquat dead vals. (Push-Up family items — dead `handDirA`/`handDirP`, redundant PELVIS intent,
+A8/A6 leaks — resolved in the Push-Up Family pass above.)
 
 ---
 

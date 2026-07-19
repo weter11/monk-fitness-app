@@ -8,10 +8,16 @@ abstract class BasePushUpPose : BasePose() {
     // Subclasses only specify their parameters / metadata + configuration
     abstract val gripWidthMultiplier: Float
     open val handAnchorXOffset: Float = 0f
+    // IK elbow poles are authored in WORLD space (MIGRATION_RULES B6: the pose never
+    // converts frames — `bakeIkLimb` treats the pole as world, the Finalizer owns any
+    // local→world conversion). A positive Z component seats the elbow outward; the
+    // Y component biases the bend plane upward (never sagging through the floor).
     open val poleA: Vector3 = Vector3(1f, 0.5f, -1f)
     open val poleP: Vector3 = Vector3(1f, 0.5f, 1f)
-    open val handDirA: Vector3 = Vector3(-1f, 0f, -0.2f).normalize()
-    open val handDirP: Vector3 = Vector3(-1f, 0f, 0.2f).normalize()
+    // Decline tilt: a downward trunk pitch (radians, about the spine's mediolateral Z
+    // axis) so the head-to-heels plank slopes downward for feet-elevated decline
+    // variants (STABILIZATION_AUDIT M14). 0 for all flat-planar members.
+    open val declineTrunkPitch: Float = 0f
 
     protected var roots: List<SkeletonNode>? = null
     protected var ankleF: SkeletonNode? = null; protected var kneeF: SkeletonNode? = null; protected var hipF: SkeletonNode? = null; protected var pelvis: SkeletonNode? = null; protected var chest: SkeletonNode? = null; protected var neck: SkeletonNode? = null; protected var head: SkeletonNode? = null
@@ -26,8 +32,6 @@ abstract class BasePushUpPose : BasePose() {
 
     protected val targetHandABuffer = Vector3()
     protected val targetHandPBuffer = Vector3()
-    protected val armAPoleLocal = Vector3()
-    protected val armPPoleLocal = Vector3()
 
     // Head gaze direction for the prone push-up posture (read-only, shared across frames).
     protected val pushUpHeadDirection = Vector3(-1f, 0.2f, 0f).normalize()
@@ -156,6 +160,16 @@ abstract class BasePushUpPose : BasePose() {
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
             buildTorso(pelvis!!, chest!!, def.torsoLength)
 
+            // M14 — Decline tilt: slope the head-to-heels plank downward for feet-elevated
+            // variants by pitching the chest (and the whole shoulder/neck/head chain it carries)
+            // about the spine's mediolateral Z axis. The pelvis is left untouched so the
+            // planted legs stay on the box; the IK below re-solves the hands to the floor, so
+            // both contacts are preserved. 0 for every flat-planar member.
+            if (declineTrunkPitch != 0f) {
+                chest!!.localRotation.set(axisZ, declineTrunkPitch)
+                declareJointIntent(Joint.CHEST, JointRotation(axisZ, declineTrunkPitch))
+            }
+
             hipB!!.localPosition.set(0f, 0f, def.hipWidth)
             // B-leg: hip is the parent, ankle is the child
             val bXResult = SkeletonMath.solveNearStraightLimb(thighL, shinL, targetFlexionDegrees, legScratch)
@@ -168,6 +182,11 @@ abstract class BasePushUpPose : BasePose() {
 
         buildGaze(neck!!, head!!, def.neckLength, pushUpHeadDirection)
 
+        // Seat the shoulder girdle on the chest (clavicle/scapula are identity, so this places
+        // shoulderA/P at chest ± shoulderWidth). Required before the FK pass so the arm IK reads
+        // the correct world shoulder root (MIGRATION_RULES A6: no hand-computed rotAround).
+        buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
+
         // Authoring-FK: establish world frames so the arm IK bakes below read
         // correct parent/world rotations. The Finalizer re-runs FK idempotently
         // (isTransformsUpdated is not set here), so this is the pose's one
@@ -177,9 +196,12 @@ abstract class BasePushUpPose : BasePose() {
             roots!![i].updateWorldTransforms(zeroVector, identityRotation)
         }
 
-        val chestW = chest!!.worldPosition
-        val shoulderAW = SkeletonMath.rotAround(tempV1.set(0f, 0f, -def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV2).add(chestW)
-        val shoulderPW = SkeletonMath.rotAround(tempV1.set(0f, 0f, def.shoulderWidth), axisZ, chest!!.worldRotation.angle, tempV3).add(chestW)
+        // Shoulder world positions are read straight from the FK-updated hierarchy
+        // (MIGRATION_RULES A6: no hand-computed rotAround — the clothed clavicle/scapula
+        // are identity, so shoulderA.worldPosition equals the old rotAround result, geometry
+        // unchanged). The arm IK roots now sit where the engine owns them.
+        val shoulderAW = shoulderA!!.worldPosition
+        val shoulderPW = shoulderP!!.worldPosition
 
         val finalHandAnchorX = handAnchorX + handAnchorXOffset
         val targetHandA = targetHandABuffer.set(finalHandAnchorX, 0f, -def.shoulderWidth * gripWidthMultiplier)
@@ -193,16 +215,11 @@ abstract class BasePushUpPose : BasePose() {
         SkeletonMath.clampTargetToReach(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandA)
         SkeletonMath.clampTargetToReach(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandP)
 
-
-        SkeletonMath.toLocalDirection(poleA, chest!!.worldRotation, armAPoleLocal)
-        shoulderA!!.localPosition.set(0f, 0f, -def.shoulderWidth)
-        val armAPoleWorld = SkeletonMath.toWorldDirection(armAPoleLocal, elbowA!!.parent!!.worldRotation, tempPoleWorld)
-        val armA = bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, armAPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK)
-
-        shoulderP!!.localPosition.set(0f, 0f, def.shoulderWidth)
-        SkeletonMath.toLocalDirection(poleP, chest!!.worldRotation, armPPoleLocal)
-        val armPPoleWorld = SkeletonMath.toWorldDirection(armPPoleLocal, elbowP!!.parent!!.worldRotation, tempPoleWorld)
-        val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
+        // Elbow poles are authored in WORLD space (MIGRATION_RULES A8: the pose never converts
+        // frames — `bakeIkLimb` consumes the pole as world, the Finalizer owns any local→world
+        // conversion). `armA`/`armP` carries the IK result for reachability bookkeeping.
+        val armA = bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK)
+        val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
         // The palm/knuckles/fingertips and the wrist are OWNED by the engine:
         // the Finalizer derives heel/toe (foot) and palm/wrist/hand (W1 automatic)
