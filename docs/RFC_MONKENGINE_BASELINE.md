@@ -21,6 +21,31 @@ This document resets governance. It:
 3. For each, states **why**.
 4. Retires the migration framing so future work is driven by the current architecture.
 
+### 0.1 Governing Principles (override any migration-era assumption)
+
+These principles are the lens for every classification below and for all future design. They take
+precedence over any historical document, comment, or "we've always done it this way" argument.
+
+1. **Historical migration decisions are not design constraints.** A choice made to land a migration
+   step (a Branch/Phase workaround, a flag-gated path, a temporary bridge) is evidence of *what was
+   done*, never of *what must be done next*. Do not cite migration history to justify a future design.
+2. **Prefer the simpler solution on the current architecture.** Whenever the current MonkEngine
+   (Architecture v2) already provides a clean primitive, use it. Do not reproduce a more complex
+   construction that only existed because the engine lacked the capability during migration.
+3. **Do not preserve old constructions solely because they existed during migration.** A pattern that
+   survives only as a fossil of the migration (e.g. a manual override kept "because the pose used it
+   mid-migration") is a candidate for simplification or removal, not preservation.
+4. **Backward compatibility with previous authoring patterns is not a design goal.** New poses and
+   refactors are written against the current carrier/intent model. Do not retain legacy authoring
+   shapes to avoid touching existing poses unless a concrete, current-architecture reason requires it.
+5. **The current MonkEngine architecture is the only source of truth.** `ARCHITECTURE_V2.md` (and the
+   ACTIVE set in §1) decides correctness. When any document — including this one's HISTORICAL/OBSOLETE
+   lists — conflicts with the live code, the code wins.
+
+> Consequence for this audit: documents are classified by what they *mean for future design*, not by
+> sentiment. Anything kept is kept only because it adds value under the current architecture; anything
+> migration-only is MERGED or DELETED without sentiment.
+
 ---
 
 ## 1. Single Source of Truth (ACTIVE)
@@ -60,6 +85,11 @@ derived, historical, or removed.
 
 Useful for understanding *why* a decision was made. May be read, but must **not** constrain new
 design unless explicitly referenced. These are evidence/archive, not source of truth.
+
+> Under §0.1, retention here is **only** because the document explains a current-architecture
+> decision (e.g. the diagnostic-instrument rule, the explicit-override rationale). A HISTORICAL
+> document is **not** a license to keep a complex construction alive. Where a simpler current-architecture
+> solution exists, prefer it; do not preserve an old pattern just because a HISTORICAL report describes it.
 
 | Document | Why HISTORICAL |
 | --- | --- |
@@ -109,6 +139,11 @@ design unless explicitly referenced. These are evidence/archive, not source of t
 
 Superseded by newer architecture. Reading them to justify a future decision is an error. They may
 be deleted or moved to a frozen archive; they must not be cited as guidance.
+
+> Under §0.1 principles 2–4, anything an OBSOLETE document describes that still exists in code is a
+> candidate for **simplification or removal** — not preservation. Do not retain a migration-era
+> construction for backward-compatibility or "because it was there." If the current architecture
+> offers a simpler path, take it.
 
 | Document | Why OBSOLETE |
 | --- | --- |
@@ -166,6 +201,12 @@ paper trail is legally desired — but they should not appear in the docs naviga
 > `docs/HISTORICAL/` plus `docs/POSE_MIGRATION_REPORT.md` into a single `docs/archive/` folder that
 > is excluded from the documentation map and from AGENTS.md references, so they remain retrievable
 > but never "live."
+>
+> **Simplification mandate (§0.1):** deleting the migration docs is the documentation half. The same
+> principle applies to *code and poses*: once the migration framing is gone, any pose/engine
+> construction that survived only as a migration fossil (manual overrides, flag-gated paths, bridge
+> shims, dual-write shapes) should be simplified to the current-architecture equivalent or removed.
+> Prefer the simpler solution; backward compatibility with previous authoring patterns is not a goal.
 
 ---
 
@@ -180,7 +221,8 @@ Issues E/F, Compile-first policy, Toolchain, Test baseline). After this reset:
   > *Architecture is frozen (ARCHITECTURE_FREEZE.md / ARCHITECTURE_V2.md). Full migration history
   > is archived under `docs/archive/`; the governing source of truth is `docs/RFC_MONKENGINE_BASELINE.md`.*
 - **Remove:** references to `RFC_BRANCH_B_REPLAN`, `RFC_ENGINE_STABILIZATION`, and the per-RFC
-  migration status as if they were live steering docs.
+  migration status as if they were live steering docs. State plainly that migration history is not a
+  design constraint (§0.1) and that new work is written against the current architecture only.
 
 ---
 
@@ -222,6 +264,12 @@ These were closed during the migration and must not be re-opened unless regresse
    govern: fix the engine, never retune the probe.
 5. **Single forward tracker.** `STABILIZATION_AUDIT.md` (live pose work) + §7 of this document
    (architecture work) are the only open-work lists.
+6. **Migration history is not a constraint (§0.1).** A past migration decision justifies nothing
+   about future design. Do not preserve a construction just because it existed during migration.
+7. **Prefer the simpler current-architecture solution.** Where the current MonkEngine already provides
+   a clean primitive, use it; do not reproduce a more complex migration-era pattern.
+8. **No backward-compatibility goal.** New and refactored poses are written against the current
+   carrier/intent model. Legacy authoring shapes are simplified or dropped, not retained to avoid churn.
 
 ---
 
