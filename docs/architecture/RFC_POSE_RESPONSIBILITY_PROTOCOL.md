@@ -5,14 +5,18 @@
 > **Purpose.** Define exactly how future pose development must be performed inside
 > MonkEngine. This document governs *responsibilities and ownership boundaries*.
 > It is **not** about implementation. It draws the line between what a pose is
-> allowed to do and what only the engine is allowed to do, and it binds both to
-> the three canonical reference documents:
+> allowed to do and what only the engine is allowed to do, and it binds both to the
+> canonical reference documents:
 >
 > - **BPS** — Biomechanical Pose Specification (the human-biomechanics target).
 > - **JOM** — Joint Ownership Matrix (who builds each joint).
 > - **VOM** — Validation Ownership Matrix (who certifies each feature).
+> - **MOM** — Movement Ownership Matrix (who drives each movement).
+> - **MSS** — Movement Sequence Specification (the order motion propagates).
+> - **PAC** — Pose Acceptance Criteria (the measurable acceptance gate).
+> - **PRP** — Pose Responsibility Protocol (this document; the responsibility contract).
 >
-> Together these define a single, decomposable contract for pose development.
+> Together these seven documents define a single, decomposable contract for pose development.
 
 ---
 
