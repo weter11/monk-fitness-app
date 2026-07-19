@@ -57,7 +57,8 @@ object PoseRegistry {
         "lunge_forward" to false,
         "lunge_reverse" to false,
         "lunge_side" to false,
-        "step_up_standard" to false
+        "step_up_standard" to false,
+        "jumping_jacks" to false
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? {

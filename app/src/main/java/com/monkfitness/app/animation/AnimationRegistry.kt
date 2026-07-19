@@ -48,6 +48,7 @@ object AnimationRegistry {
         register("lunge_reverse", AlternatingReverseLungesPose())
         register("lunge_side", AlternatingSideLungesPose())
         register("step_up_standard", StepUpPose())
+        register("jumping_jacks", JumpingJacksPose())
         register("dead_bug_standard", DeadBugPose())
         register("leg_raise_standard", LegRaisePose())
         register("mountain_climber_standard", MountainClimberPose())
