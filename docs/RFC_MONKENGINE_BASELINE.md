@@ -1,234 +1,126 @@
-# RFC_MONKENGINE_BASELINE.md — MonkEngine Governance Reset & Architectural Source of Truth
+# RFC_MONKENGINE_BASELINE.md — MonkEngine Document Governance & Source of Truth
 
-**Status:** PROPOSED baseline (governance reset).
-**Author:** governance audit of the migration-era documentation.
-**Scope:** documentation governance only. No engine, pose, or validator code is modified by this document.
+**Status:** ACTIVE
+**Position in graph:** root — the governance source of truth all other MonkEngine RFCs extend.
+**Scope:** documentation governance only. No engine, pose, or validator code is described or modified by this document.
 
 ---
 
-## 0. Purpose
+## 1. Purpose
 
-MonkEngine has completed its architecture migration. Architecture v2 is frozen and its
-legacy-cleanup (Phases A–G) and Branch A/B/C work are merged and green (baseline **282 / 0**).
-The migration produced a large body of RFCs, audits, migration reports, roadmaps, and temporary
-rules. That corpus is now a liability: it constrains future design with historical migration
-assumptions and duplicate/contradictory source-of-truth claims.
+MonkEngine has a fixed architecture and a fixed set of governing documents. Over time a large
+corpus of prior-generation design notes, audits, and plans accumulated. That corpus is now a
+liability: it can contradict the live architecture and create duplicate or stale claims about what
+is authoritative.
 
-This document resets governance. It:
+This document establishes a single, current **source of truth** and a clean classification of every
+governing document so that future work is driven by the live architecture, not by superseded plans.
 
-1. Names a single, current **source of truth** for architecture.
-2. Classifies every migration-era document into **ACTIVE / HISTORICAL / OBSOLETE / MERGE / DELETE**.
-3. For each, states **why**.
-4. Retires the migration framing so future work is driven by the current architecture.
+---
 
-### 0.1 Governing Principles (override any migration-era assumption)
+## 2. Scope and Boundaries
 
-These principles are the lens for every classification below and for all future design. They take
-precedence over any historical document, comment, or "we've always done it this way" argument.
+**This RFC defines:**
+- the canonical ACTIVE document set (the source of truth),
+- the classification of every other document (ARCHIVE / OBSOLETE / MERGE / DELETE),
+- the standing governance principles that override any prior-generation note,
+- the single forward-work list.
 
-1. **Historical migration decisions are not design constraints.** A choice made to land a migration
-   step (a Branch/Phase workaround, a flag-gated path, a temporary bridge) is evidence of *what was
-   done*, never of *what must be done next*. Do not cite migration history to justify a future design.
-2. **Prefer the simpler solution on the current architecture.** Whenever the current MonkEngine
-   (Architecture v2) already provides a clean primitive, use it. Do not reproduce a more complex
-   construction that only existed because the engine lacked the capability during migration.
-3. **Do not preserve old constructions solely because they existed during migration.** A pattern that
-   survives only as a fossil of the migration (e.g. a manual override kept "because the pose used it
-   mid-migration") is a candidate for simplification or removal, not preservation.
+**This RFC does NOT define:**
+- biomechanics — see `BIOMECHANICS.md` and the BPS specs,
+- architecture — see `ARCHITECTURE_V2.md` and its companions,
+- pose-development workflow — see `RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`,
+- execution strategy (levels, strictness) — see `RFC_MONKENGINE_EXECUTION_MODES.md`.
+
+---
+
+## 3. Active Document Set (Source of Truth)
+
+Every other document is derived from, archived under, or removed by this set.
+
+| Document | Role |
+| --- | --- |
+| `docs/ARCHITECTURE_V2.md` | Definitive implementation spec (pipeline, ownership, invariants). |
+| `docs/ARCHITECTURE_FREEZE.md` | Constitutional freeze of the architecture. |
+| `docs/ENGINE_ARCHITECTURE.md` | Entry-point map + reference (joints, stages, file map). |
+| `docs/ENGINE.md` | Philosophy, four layers, coordinate/axis/IK conventions. |
+| `docs/CODING_RULES.md` | Permanent standing rules for all development. |
+| `docs/BIOMECHANICS.md` | Human-movement correctness principles. |
+| `docs/VALIDATION.md` | Validation-pose contract + Engineering Validation subsystem. |
+| `docs/API_CONTRACTS.md` | Per-component read/write/prohibited contracts. |
+| `docs/MIGRATION_RULES.md` | Prohibited patterns + mandatory pose rules (the enforced pose coding standard). |
+| `docs/STABILIZATION_AUDIT.md` | Live per-family production-exercise stabilization tracker (forward work). |
+| `docs/TOOLCHAIN_PROVISIONING.md` | Build/CI toolchain recipe (operational, required each session). |
+| `docs/architecture/Movement Ownership Matrix.md` | Biomechanical movement ownership (driver/contributor/follower). |
+| `docs/architecture/Movement Sequence Specification.md` | Canonical movement ordering. |
+| `docs/architecture/Validation_Ownership_Matrix.md` | Which subsystem certifies each feature. |
+| `docs/architecture/RFC_JOINT_OWNERSHIP_MATRIX.md` | Per-joint biomechanical ownership. |
+| `docs/architecture/RFC_POSE_ACCEPTANCE_CRITERIA.md` | Measurable pose acceptance criteria (PAC). |
+| `docs/architecture/Plan-Operating-the-Biomechanical-Specification-System.md` | Usage manual for the BPS/JOM/VOM/PRP/PAC system. |
+| `docs/RFC_MONKENGINE_BASELINE.md` | This document (governance source of truth). |
+| `docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` | Pose-development workflow. |
+| `docs/architecture/RFC_MONKENGINE_EXECUTION_MODES.md` | Execution strategy. |
+
+---
+
+## 4. Document Classification
+
+Every document outside §3 is classified into exactly one of:
+
+| Class | Meaning | Treatment |
+| --- | --- | --- |
+| **ARCHIVE** | Prior-generation record kept for context. Explains *why* a decision was made. | Read-only. May inform understanding; never constrains new design. |
+| **OBSOLETE** | Superseded by the current architecture. | Do not cite as guidance. A construction it describes that still exists in code is a candidate for simplification. |
+| **MERGE** | Content worth keeping should be folded into an ACTIVE document, then the original retired. | Merge, then delete. |
+| **DELETE** | Completed prior-generation work or temporary planning with no forward value. | Remove from the active tree. |
+
+> The ARCHIVE is never auto-loaded by agents (see `RFC_MONKENGINE_EXECUTION_MODES.md` §5). When an
+> archived or obsolete document conflicts with live code, the code wins.
+
+### 4.1 ARCHIVE (retained for context, not normative)
+The prior-generation record set: the engine-history index, its inventory readme, and the
+investigation reports, family rewrite records, implementation reports, and audit reports held
+alongside them. Retained as retrievable evidence of past decisions; they do not govern future design.
+
+### 4.2 OBSOLETE (superseded; do not influence design)
+Prior-generation plans and redesign notes whose content is now shipped and described by the ACTIVE
+set, including the standard-push-up audit/redesign note. Their decisions are reflected in the ACTIVE
+architecture; the plan text no longer steers.
+
+### 4.3 MERGE (fold into ACTIVE, then retire)
+The pipeline-design note folds into `ARCHITECTURE_V2.md` §3; the execution-contract note folds into
+`API_CONTRACTS.md`; the implementation-bridge note folds into `ARCHITECTURE_V2.md` / `API_CONTRACTS.md`;
+the engine roadmap folds into §6 of this document; the engine-history index folds into §4.1 of this
+document.
+
+### 4.4 DELETE (completed prior-generation work)
+One-shot plans, audits, and reports whose work is merged and whose content is captured elsewhere.
+Remove from the active tree.
+
+---
+
+## 5. Standing Governance Principles
+
+These principles override any prior-generation note, comment, or habit.
+
+1. **Prior-generation decisions are not design constraints.** A choice made to land an earlier plan
+   is evidence of what was done, never of what must be done next.
+2. **Prefer the simpler solution on the current architecture.** Use the clean primitive the engine
+   already provides; do not reproduce a more complex construction that only existed because the
+   engine lacked the capability at an earlier time.
+3. **Do not preserve old constructions solely because they predate the current architecture.** A
+   pattern that survives only as a fossil of an earlier era is a candidate for simplification or
+   removal.
 4. **Backward compatibility with previous authoring patterns is not a design goal.** New poses and
-   refactors are written against the current carrier/intent model. Do not retain legacy authoring
-   shapes to avoid touching existing poses unless a concrete, current-architecture reason requires it.
-5. **The current MonkEngine architecture is the only source of truth.** `ARCHITECTURE_V2.md` (and the
-   ACTIVE set in §1) decides correctness. When any document — including this one's HISTORICAL/OBSOLETE
-   lists — conflicts with the live code, the code wins.
-
-> Consequence for this audit: documents are classified by what they *mean for future design*, not by
-> sentiment. Anything kept is kept only because it adds value under the current architecture; anything
-> migration-only is MERGED or DELETED without sentiment.
+   refactors are written against the current carrier/intent model.
+5. **The current architecture is the only source of truth.** `ARCHITECTURE_V2.md` (and the ACTIVE
+   set in §3) decides correctness. When any document conflicts with live code, the code wins.
 
 ---
 
-## 1. Single Source of Truth (ACTIVE)
+## 6. Forward Work
 
-The following documents are the canonical, current architecture/working-set. Everything else is
-derived, historical, or removed.
-
-| Document | Role | Why ACTIVE |
-| --- | --- | --- |
-| `docs/ARCHITECTURE_V2.md` | Definitive implementation spec (pipeline, ownership, invariants). | Frozen by `ARCHITECTURE_FREEZE.md`; the live engine implements it. |
-| `docs/ARCHITECTURE_FREEZE.md` | Constitutional freeze of the architecture. | Binds all future work to v2; no re-litigation allowed. |
-| `docs/ENGINE_ARCHITECTURE.md` | Entry-point map + reference (joints, stages, file map). | Current orientation doc; points to the ACTIVE set. **Needs a small accuracy pass** (see §5). |
-| `docs/ENGINE.md` | Philosophy, four layers, coordinate/axis/IK conventions. | Current architectural constitution. |
-| `docs/CODING_RULES.md` | Permanent standing rules for all development. | Stable defaults; superseded only by explicit update. |
-| `docs/BIOMECHANICS.md` | Human-movement correctness principles. | Engine-agnostic; remains valid. |
-| `docs/VALIDATION.md` | Validation-pose contract + Engineering Validation subsystem. | Current correctness contract. |
-| `docs/API_CONTRACTS.md` | Per-component R/W/prohibited contracts. | Frozen with v2; the live contract object. |
-| `docs/MIGRATION_RULES.md` | Prohibited patterns (A1–A10) + mandatory pose rules (B1–B8). | Frozen with v2; enforced coding standard. Still useful as the live "do/don't" for poses. |
-| `docs/STABILIZATION_AUDIT.md` | Live per-family production-exercise stabilization tracker. | ACTIVE, ongoing (P1/P2 TODOs remain). The one forward-looking work tracker post-migration. |
-| `docs/TOOLCHAIN_PROVISIONING.md` | Build/CI toolchain recipe. | Operational, not architectural; still required for every session. |
-| `docs/architecture/Movement Ownership Matrix.md` | Biomechanical *movement* ownership (driver/contributor/follower). | Engine-agnostic biomechanics; valid even if engine rewritten. |
-| `docs/architecture/Movement Sequence Specification.md` | Canonical movement ordering (prep→init→propagate→…). | Engine-agnostic biomechanics. |
-| `docs/architecture/Validation_Ownership_Matrix.md` | Which subsystem certifies each feature. | Engine-agnostic validation domain; consistent with current validator. |
-| `docs/architecture/RFC_JOINT_OWNERSHIP_MATRIX.md` | Per-joint biomechanical ownership. | Engine-agnostic; still accurate (33-joint set). |
-| `docs/architecture/RFC_POSE_ACCEPTANCE_CRITERIA.md` | Measurable pose acceptance criteria (PAC). | Target acceptance process; consistent with intent-carrier model. |
-| `docs/architecture/Plan-Operating-the-Biomechanical-Specification-System.md` | Usage manual for the BPS/JOM/VOM/PRP/PAC system. | Operational methodology; consistent with current ownership model. |
-| `docs/HISTORICAL/ARCHITECTURE_V2_ROADMAP.md` | The 9-phase implementation roadmap (Phases 0–8). | The roadmap is **complete** (282/0) and is the narrative of how v2 was built; retained as the canonical build record. |
-
-> **Note on AGENTS.md:** `AGENTS.md` is the session memory anchor (auto-injected), not a docs/
-> governance file. Its migration-era narrative (Engine stabilization, Branch A/B/C, Issues E/F)
-> is now superseded by this reset. **Action:** trim AGENTS.md to point at `RFC_MONKENGINE_BASELINE.md`
-> as the governance source of truth and drop the per-RFC migration narrative (see §6).
-
----
-
-## 2. HISTORICAL — retained for context, no longer normative
-
-Useful for understanding *why* a decision was made. May be read, but must **not** constrain new
-design unless explicitly referenced. These are evidence/archive, not source of truth.
-
-> Under §0.1, retention here is **only** because the document explains a current-architecture
-> decision (e.g. the diagnostic-instrument rule, the explicit-override rationale). A HISTORICAL
-> document is **not** a license to keep a complex construction alive. Where a simpler current-architecture
-> solution exists, prefer it; do not preserve an old pattern just because a HISTORICAL report describes it.
-
-| Document | Why HISTORICAL |
-| --- | --- |
-| `docs/ENGINE_HISTORY.md` | Investigation-archive index. Self-labeled HISTORICAL; evidence only. |
-| `docs/HISTORICAL/README.md` | Inventory of the archive. Self-labeled HISTORICAL. |
-| `docs/HISTORICAL/ENGINE_INVESTIGATION_REPORT.md` | UNI-1…12 register. All resolved; retained as source-of-record. |
-| `docs/HISTORICAL/ENGINEERING_VALIDATION_AUDIT.md` | Per-pose defect audit; verdicts now match code. Evidence. |
-| `docs/HISTORICAL/ENGINE_RESPONSIBILITY_AUDIT_NEW.md` | W1–W10 workaround inventory. Superseded by W1/W4. Evidence. |
-| `docs/HISTORICAL/ENGINE_AUTOMATIC_ORIENTATION_AUDIT.md` | Traces W1 automatic derivation. Superseded. Evidence. |
-| `docs/HISTORICAL/PELVIC_HIP_COMPLEX_INVESTIGATION.md` | Q1–Q14 pelvis/hip deep-dive. Resolved; retained as reasoning. |
-| `docs/HISTORICAL/MIDDLE_SPLIT_DIAGNOSTIC_AUDIT.md` | Applies the diagnostic-instrument rule; reverts green-tuning. Retained — carries a *live governing rule* that still applies to validation poses. |
-| `docs/HISTORICAL/W1_IMPLEMENTATION_REPORT.md` | W1 report. Merged. Record. |
-| `docs/HISTORICAL/TEST_BASELINE.md` | Test-baseline progression snapshot. Useful as a regression reference; not normative. |
-| `docs/HISTORICAL/POSE_ENGINE_RESPONSIBILITY.md` | Pre-W1 pose↔engine boundary investigation. Resolved by W1. Evidence. |
-| `docs/HISTORICAL/CAPABILITY_GAP_REPORT.md` | Gaps 1–7 reconciliation. All closed. Record. |
-| `docs/HISTORICAL/RFC_INTENT_LAYER.md` | §1.1 intent model design. Carriers now live. Record. |
-| `docs/HISTORICAL/RFC_INTENT_TAXONOMY.md` | ROM/Shape/Articulation taxonomy. Adopted. Record. |
-| `docs/HISTORICAL/RFC_INTENT_BUILDER_REWRITE.md` | Current-state audit proving Branch B is a rewrite. Done. Record. |
-| `docs/HISTORICAL/RFC_DECLARATIVE_AUTHORING.md` | `BasePose` helper inventory (intent/obsolete). Done. Record. |
-| `docs/HISTORICAL/RFC_DECLARATIVE_POSE_AUTHORING.md` | Branch B design (G1–G7, B0–B6). Done. Record. |
-| `docs/HISTORICAL/RFC_EXECUTION_CONTRACT.md` | Execution contract for IK/Solver/Finalizer/FK. Live but subsumed by `API_CONTRACTS.md`. Record. |
-| `docs/HISTORICAL/RFC_CONSISTENCY_CHANGELOG.md` | Resolved 8 contradictions across v2 RFCs. Done. Record. |
-| `docs/HISTORICAL/RFC_LEGACY_ENGINE_RETIREMENT.md` | Legacy blocker inventory (L1–L8). All removed. Record. |
-| `docs/HISTORICAL/RFC_PHASE_I_CLOSURE.md` | Closed Branch A; split Branch B. Done. Record. |
-| `docs/HISTORICAL/RFC_ENGINE_PIPELINE.md` | `SkeletonPipeline` design. Merged; `ARCHITECTURE_V2.md` is the live spec. Record. |
-| `docs/HISTORICAL/RFC_ENGINE_STABILIZATION.md` | Stabilization plan S0–S3. All phases done; redundant with v2. Record. |
-| `docs/HISTORICAL/ENGINE_DEFECT_REMEDIATION_PLAN.md` | R1–R4 remediation. Exit met (282/0). Record. |
-| `docs/HISTORICAL/IMPLEMENTATION_BRIDGE.md` | Type/field bridge for W1 `SkeletonPose`. Merged; detail superseded by v2. Record. |
-| `docs/HISTORICAL/PHASE_D_DIRECT_FINALIZE_REPOINTING.md` | Test re-pointing audit. Merged (283/0). Record. |
-| `docs/HISTORICAL/PHASE3_FINALIZER_MIGRATION_REPORT.md` | Finalizer-conversion report. Merged. Record. |
-| `docs/HISTORICAL/PHASE_E_PLAN.md` | L1 bridge deletion plan. Merged. Record. |
-| `docs/HISTORICAL/PHASE_F_FLAG_RETIREMENT_AUDIT.md` | Flag-retirement audit. Matches current code. Record. |
-| `docs/HISTORICAL/ENGINE_FIX_PR_PROMPTS.md` | 11 early PR prompts. Mostly implemented; retained as history. |
-| `docs/HISTORICAL/THORACIC_FAMILY_MIGRATION_REPORT.md` | Thoracic-family rewrite record. Concrete per-pose record; not normative. |
-| `docs/HISTORICAL/VERTICAL_PULL_FAMILY_MIGRATION_REPORT.md` | Vertical-pull rewrite record. Concrete record. |
-| `docs/HISTORICAL/HIP_FLEXOR_FAMILY_MIGRATION_REPORT.md` | Hip-flexor migration record. Concrete record. |
-| `docs/HISTORICAL/LUNGES_STEPUPS_FAMILY_MIGRATION_REPORT.md` | Lunge/step-up rewrite record. Concrete record. |
-| `docs/HISTORICAL/HAMSTRING_FAMILY_MIGRATION_REPORT.md` | Hamstring migration record. Concrete record. |
-| `docs/HISTORICAL/BIRD_DOG_FAMILY_MIGRATION_REPORT.md` | Bird-dog migration record. Concrete record. |
-| `docs/HISTORICAL/COBRA_STRETCH_FAMILY_MIGRATION_REPORT.md` | Cobra migration record. Concrete record. |
-| `docs/HISTORICAL/MANUAL_OVERRIDE_REMOVAL_REPORT.md` | `MANUAL_OVERRIDE` removal record. Concrete record. |
-| `docs/POSE_MIGRATION_REPORT.md` | Orientation-workaround removal report (W1-class). Merged; retained as the canonical "explicit override" rationale. |
-
----
-
-## 3. OBSOLETE — superseded; should no longer influence design
-
-Superseded by newer architecture. Reading them to justify a future decision is an error. They may
-be deleted or moved to a frozen archive; they must not be cited as guidance.
-
-> Under §0.1 principles 2–4, anything an OBSOLETE document describes that still exists in code is a
-> candidate for **simplification or removal** — not preservation. Do not retain a migration-era
-> construction for backward-compatibility or "because it was there." If the current architecture
-> offers a simpler path, take it.
-
-| Document | Why OBSOLETE |
-| --- | --- |
-| `docs/HISTORICAL/RFC_BRANCH_B_IMPLEMENTATION.md` | Branch B plan (B0–B6). Superseded in full by `RFC_BRANCH_B_REPLAN.md`, which is itself done. No new guidance. |
-| `docs/HISTORICAL/RFC_BRANCH_B_REPLAN.md` | Re-scoped Branch B. **Completed and merged**; its re-scoping is now the shipped behavior in `ARCHITECTURE_V2.md`. The plan text no longer constrains anything. |
-| `docs/HISTORICAL/RFC_BRANCH_C_EXTREMITY_ARTICULATION.md` | Branch C design. **Completed and merged** (`extremityArticulations` live, 283/0). Superseded by `ARCHITECTURE_V2.md` / `API_CONTRACTS.md`. |
-| `docs/HISTORICAL/RFC_ENGINE_CLEANUP_PLAN.md` | Legacy-engine deletion plan (Phases A–G). **Completed and merged** (HEAD ebab2d6). The legacy is gone; the plan is spent. |
-| `docs/HISTORICAL/RFC_GAP_CLOSURE.md` | Gap 1–7 → M0–M8 rollout. **All milestones done; flags deleted.** Spent. |
-| `docs/HISTORICAL/RFC_LEGACY_ENGINE_RETIREMENT.md` | (also listed under HISTORICAL above by type) — legacy blockers all removed; the live engine has none. Treating as OBSOLETE for governance clarity. |
-| `docs/architecture/Audit-Redesign-Standard-PushUp.md` | Mid-migration variant-2 audit/redesign of `StandardPushUpPose`. Written before Branch B/C and v2 M0–M8 landed; its "accepted-with-issues" verdict reflects pre-finalization pose code. The helpers it flags (`buildTorso`, bare `WRIST.set`) were later reclassified as legitimate **Shape Constraints** / carrier-backed. Effectively superseded by the completed v2 work. |
-
-> The Branch A/B/C plans, `RFC_BRANCH_B_REPLAN`, `RFC_ENGINE_STABILIZATION`, and all migration RFCs
-> are the documents the reset targets most directly. They were the migration's steering docs; the
-> migration is over, so they no longer steer.
-
----
-
-## 4. MERGE — fold into a newer RFC, then retire the original
-
-Content worth keeping should be merged into the canonical source; the standalone original is then
-deleted (or moved to HISTORICAL).
-
-| Document | Merge target | Why MERGE |
-| --- | --- | --- |
-| `docs/HISTORICAL/RFC_ENGINE_PIPELINE.md` | `docs/ARCHITECTURE_V2.md` §3 (pipeline) | Its `SkeletonPipeline` design is already the live §3 pipeline. Any nuance not in v2 should be folded in; then retire. |
-| `docs/HISTORICAL/RFC_EXECUTION_CONTRACT.md` | `docs/API_CONTRACTS.md` | Per-stage contract is already the live `API_CONTRACTS.md`. Fold any missing clause, then retire. |
-| `docs/HISTORICAL/IMPLEMENTATION_BRIDGE.md` | `docs/ARCHITECTURE_V2.md` §1 / `API_CONTRACTS.md` | The field/flag mapping it bridged is now the shipped shape. Fold remaining notes, then retire. |
-| `docs/HISTORICAL/ENGINE_FIX_PR_PROMPTS.md` | `docs/ENGINE_ROADMAP.md` (or this baseline's appendix) | The still-relevant subset (UNI-9 surfacing, future-exercise confirmation) already lives in `ENGINE_ROADMAP.md`; merge the residual and retire. |
-| `docs/ENGINE_ROADMAP.md` | this baseline (§7 "Future Work") | The live roadmap's open items (UNI-9, UNI-12, trunk DOFs, generalized contacts, motion continuity) should be carried forward into `RFC_MONKENGINE_BASELINE.md` as the single forward-work list, and `ENGINE_ROADMAP.md` retired to avoid two "live" trackers. |
-| `docs/ENGINE_HISTORY.md` | this baseline (§2 index) | Its archive index duplicates this document's HISTORICAL list. Fold the narrative into §2, then retire. |
-
----
-
-## 5. DELETE — completed migration / temporary planning only
-
-Contains only finished migration work or temporary planning. No forward-looking design value.
-Safe to remove from the active tree (optionally gzip into a `docs/archive-raw/` tombstone if a
-paper trail is legally desired — but they should not appear in the docs navigation or searches).
-
-| Document | Why DELETE |
-| --- | --- |
-| `docs/HISTORICAL/RFC_BRANCH_B_IMPLEMENTATION.md` | (alternative to OBSOLETE) Pure migration plan, fully done; no residual design content. Delete. |
-| `docs/HISTORICAL/PHASE_E_PLAN.md` | One-shot flag-deletion plan; executed. No residual value. |
-| `docs/HISTORICAL/PHASE_F_FLAG_RETIREMENT_AUDIT.md` | One-shot audit; matches current code. Delete. |
-| `docs/HISTORICAL/PHASE3_FINALIZER_MIGRATION_REPORT.md` | One-shot migration report; merged. Delete. |
-| `docs/HISTORICAL/PHASE_D_DIRECT_FINALIZE_REPOINTING.md` | One-shot test-hygiene audit; merged (283/0). Delete. |
-| `docs/HISTORICAL/RFC_INTENT_BUILDER_REWRITE.md` | Proved carriers were dead → triggered Branch B. Branch B done; proof spent. Delete. |
-| `docs/HISTORICAL/RFC_CONSISTENCY_CHANGELOG.md` | Resolved contradictions in now-retired RFCs. Spent. Delete. |
-| `docs/HISTORICAL/RFC_PHASE_I_CLOSURE.md` | Administrative closure of Branch A. Spent. Delete. |
-| `docs/HISTORICAL/CAPABILITY_GAP_REPORT.md` | Gap closure record; all closed. Delete (or fold summary into HISTORICAL note). |
-| `docs/HISTORICAL/ENGINE_FIX_PR_PROMPTS.md` | (if not merged) Eleven prompts, all implemented. Delete after merge. |
-| `docs/HISTORICAL/TEST_BASELINE.md` | (optional) A moving baseline snapshot; the truth is `./gradlew :app:testDebugUnitTest`. If kept, demote to HISTORICAL. Recommend DELETE to prevent stale "282/0" claims from being treated as normative. |
-
-> **Recommendation:** DELETE the above 11. MERGE-then-retire the §4 set. Move the entire rest of
-> `docs/HISTORICAL/` plus `docs/POSE_MIGRATION_REPORT.md` into a single `docs/archive/` folder that
-> is excluded from the documentation map and from AGENTS.md references, so they remain retrievable
-> but never "live."
->
-> **Simplification mandate (§0.1):** deleting the migration docs is the documentation half. The same
-> principle applies to *code and poses*: once the migration framing is gone, any pose/engine
-> construction that survived only as a migration fossil (manual overrides, flag-gated paths, bridge
-> shims, dual-write shapes) should be simplified to the current-architecture equivalent or removed.
-> Prefer the simpler solution; backward compatibility with previous authoring patterns is not a goal.
-
----
-
-## 6. AGENTS.md governance reset
-
-`AGENTS.md` currently carries a long migration narrative (Engine stabilization, Branch A/B/C,
-Issues E/F, Compile-first policy, Toolchain, Test baseline). After this reset:
-
-- **Keep:** Compile-first policy (still valid), Toolchain provisioning pointer, Git/branch notes.
-- **Replace:** the entire "Engine stabilization (RFC_ENGINE_STABILIZATION)" block and the
-  Issue E/F detail with a single pointer:
-  > *Architecture is frozen (ARCHITECTURE_FREEZE.md / ARCHITECTURE_V2.md). Full migration history
-  > is archived under `docs/archive/`; the governing source of truth is `docs/RFC_MONKENGINE_BASELINE.md`.*
-- **Remove:** references to `RFC_BRANCH_B_REPLAN`, `RFC_ENGINE_STABILIZATION`, and the per-RFC
-  migration status as if they were live steering docs. State plainly that migration history is not a
-  design constraint (§0.1) and that new work is written against the current architecture only.
-
----
-
-## 7. Future Work (carried from ENGINE_ROADMAP.md)
-
-The only live forward-looking list. Future design is driven by this, not by migration RFCs.
+The single live forward-looking list. Future design is driven by this, not by prior-generation plans.
 
 | Id | Item | Layer |
 | --- | --- | --- |
@@ -241,35 +133,47 @@ The only live forward-looking list. Future design is driven by this, not by migr
 
 ---
 
-## 8. Resolved, do-not-re-litigate
+## 7. Relationship to Other MonkEngine RFCs
 
-These were closed during the migration and must not be re-opened unless regressed:
+```
+ARCHITECTURE_FREEZE.md ── freezes ──► ARCHITECTURE_V2.md
+        │
+        ├──── CODING_RULES.md / MIGRATION_RULES.md / API_CONTRACTS.md
+        │
+        └──── RFC_MONKENGINE_BASELINE.md  (governance source of truth, document classification)  ◄ ROOT
+                    │
+                    ├── RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md  (workflow: what to do, in order)
+                    └── RFC_MONKENGINE_EXECUTION_MODES.md            (execution strategy: how far to go)
+```
 
-- UNI-1 (pelvis-only solver → posture pass), UNI-2/UNI-6 (straight/intent fidelity rules),
-  UNI-3 (hip ROM), UNI-4 (solver tilt axis), UNI-5 (axis-label drift), UNI-7 (clavicle/scapula),
-  UNI-11 (hip-center consistency), Issue E (two-segment spine), Issue F (chest-frame no-overwrite),
-  Branch A/B/C (all carriers live), legacy-engine cleanup (Phases A–G), R1–R4 (engine defects).
+- **BASELINE** defines *what is authoritative* and *how documents are classified*.
+- **POSE_DEVELOPMENT_PROTOCOL** defines the *workflow* an agent follows; it loads the ACTIVE set
+  named here and obeys the §5 principles.
+- **EXECUTION_MODES** defines the *degree of freedom* (levels, strictness) available to a task; it
+  references the workflow and the source of truth defined here.
+
+All three reference each other; none duplicates the others' concepts (governance vs. workflow vs.
+strategy).
 
 ---
 
-## 9. Rules for the new baseline
+## 8. Terms
 
-1. **One source of truth.** `ARCHITECTURE_V2.md` (+ `API_CONTRACTS.md`, `MIGRATION_RULES.md`,
-   `CODING_RULES.md`) governs architecture. No migration RFC may override it.
-2. **Archive is read-only memory.** `docs/archive/` (formerly `HISTORICAL/` + migration reports)
-   is evidence. When it conflicts with code, code wins.
-3. **No migration framing.** Future RFCs are written against the current architecture, never as
-   "Branch X" or "Phase Y" migration steps.
-4. **Validation poses stay instruments.** `VALIDATION.md` §2 and `MIDDLE_SPLIT_DIAGNOSTIC_AUDIT.md`
-   govern: fix the engine, never retune the probe.
-5. **Single forward tracker.** `STABILIZATION_AUDIT.md` (live pose work) + §7 of this document
-   (architecture work) are the only open-work lists.
-6. **Migration history is not a constraint (§0.1).** A past migration decision justifies nothing
-   about future design. Do not preserve a construction just because it existed during migration.
-7. **Prefer the simpler current-architecture solution.** Where the current MonkEngine already provides
-   a clean primitive, use it; do not reproduce a more complex migration-era pattern.
-8. **No backward-compatibility goal.** New and refactored poses are written against the current
-   carrier/intent model. Legacy authoring shapes are simplified or dropped, not retained to avoid churn.
+- **ACTIVE set** — the documents in §3; the current source of truth.
+- **ARCHIVE** — prior-generation records retained read-only for context (§4.1).
+- **OBSOLETE / MERGE / DELETE** — classification outcomes for documents outside the ACTIVE set (§4).
+- **Forward work** — the open-item list in §6; the only live tracker of future design.
+
+(Terms specific to workflow are defined in `RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`; terms
+specific to execution strategy are defined in `RFC_MONKENGINE_EXECUTION_MODES.md`.)
+
+---
+
+## 9. Status
+
+**ACTIVE.** Root of the MonkEngine documentation graph. All other MonkEngine RFCs extend this
+document. It supersedes any informal "source of truth" or document-classification guidance found in
+prior-generation notes. It is the canonical governance specification.
 
 ---
 

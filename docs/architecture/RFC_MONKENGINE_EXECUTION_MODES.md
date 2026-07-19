@@ -1,138 +1,86 @@
 # RFC_MONKENGINE_EXECUTION_MODES.md — MonkEngine Pose Development Execution Modes
 
 **Status:** ACTIVE
-**Part of:** MonkEngine governance hierarchy (extends `RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`).
-**Scope:** execution strategy only. This document describes **HOW** an agent performs pose work.
-It does **not** describe biomechanics (`BIOMECHANICS.md`, BPS) and does **not** describe
-architecture (`ARCHITECTURE_V2.md`, `ENGINE_ARCHITECTURE.md`). It defines the degree of freedom
-an agent is allowed for a given task.
+**Part of:** MonkEngine governance graph (extends `RFC_MONKENGINE_BASELINE.md`; pairs with
+`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`).
+**Scope:** execution strategy only. Defines **HOW** an agent performs pose work — the degree of
+freedom a task allows. Does not describe biomechanics (`BIOMECHANICS.md`, BPS) and does not describe
+architecture (`ARCHITECTURE_V2.md`). The workflow those freedoms operate on is defined by
+`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`.
 
 ---
 
 ## 1. Purpose
 
-Execution modes exist because different tasks require different levels of freedom. A single
-"fix the pose" instruction can mean very different things:
-
-- Sometimes we only need to **understand** a pose without touching it.
-- Sometimes we must **audit** it against every governing document.
-- Sometimes we **clean up** dead code without altering motion.
-- Sometimes we **upgrade** it onto the current carrier/intent model.
-- Sometimes the existing implementation is wrong enough that we **redesign** from first principles.
-- Sometimes there is **no** implementation and we **create** one.
-- Sometimes the unit of work is a whole **family**, not one pose.
-- Sometimes the goal is to **retire pose-side logic** that the engine already owns.
-- Sometimes we only **certify** whether a pose passes.
-
-The Pose Development Protocol (PDP) must describe this explicitly so that an agent does not, for
-example, silently rewrite a pose when the user only asked for discovery, nor tiptoe around dead
-code when the task is a full upgrade. Execution modes make the permitted freedom unambiguous.
+Different tasks require different levels of freedom. A single "fix the pose" instruction can mean
+very different things: only understand it, audit it, clean it up, upgrade it, redesign it from
+first principles, create it fresh, work a whole family, retire duplicated logic, or merely certify
+it. Execution modes make the permitted freedom unambiguous so an agent neither over-reaches nor
+under-reaches.
 
 ---
 
-## 2. Levels
+## 2. Scope and Boundaries
 
-Official execution levels. Each level is cumulative in capability but scoped by its stated intent.
-An agent must not exceed the level granted by the protocol directive.
+**This RFC defines:** the execution levels (0–8), the strictness settings, the protocol syntax, and
+the mandatory document-loading matrix.
 
-### Level 0 — Discovery
-**Read-only.** Understand the pose. No code changes.
-
-**Output:**
-- Current implementation (what the pose does, how it is structured).
-- Dependencies (base classes, helpers, carriers, BPS reference).
-- Architecture usage (which engine stages / carriers / contracts it exercises).
-- Improvement opportunities (listed, not acted on).
-
-### Level 1 — Audit
-**Read-only.** Use all governing documents. Produce four audits. No implementation.
-
-**Output:**
-- **Biomechanical audit** — against `BIOMECHANICS.md` and the relevant BPS spec.
-- **Architecture audit** — against `ARCHITECTURE_V2.md`, `API_CONTRACTS.md`, `MIGRATION_RULES.md`.
-- **Engine integration audit** — does the pose use engine primitives (IK/FK/Solver/Finalizer) or
-  duplicate them? Any manual logic the engine now owns?
-- **Validation audit** — does it pass `ExerciseValidator` / Engineering Validation? Why or why not?
-
-### Level 2 — Cleanup
-Remove: dead code, legacy code, duplicate code, obsolete hacks.
-**Do NOT change biomechanics.** Motion output must be unchanged (within tolerance).
-
-### Level 3 — Upgrade
-**Default mode.** Workflow:
-
-```
-Audit
-  ↓
-Cleanup
-  ↓
-Rewrite (onto current carrier/intent model — Shape Constraints & Articulation recognized, not migrated)
-  ↓
-Validation (ExerciseValidator + Engineering Validation)
-  ↓
-Acceptance (per PAC / STABILIZATION_AUDIT criteria)
-```
-
-### Level 4 — Redesign
-Ignore previous implementation whenever necessary. The existing pose is **no longer authoritative**.
-Sources of truth become:
-- **BPS** (Biomechanical Pose Specification)
-- **MSS** (Movement Sequence Specification)
-- **MonkEngine** (current architecture: `ARCHITECTURE_V2.md` + carriers)
-
-The existing pose may be completely rewritten.
-
-### Level 5 — New Pose
-No existing implementation. Create from:
-
-```
-BPS
- ↓
-MSS
- ↓
-MonkEngine
-```
-
-### Level 6 — Family Upgrade
-Work on an entire movement family (e.g. Push-Up, Lunge, Pull-Up, Plank, Squat, Bird Dog, Thoracic,
-Vertical Pull, Hip Flexor, Cobra, Hamstring, Stretch). Guarantee **consistency** across all family
-members: shared base class, shared helpers, uniform carrier usage, uniform validation behavior.
-
-### Level 7 — Engine Integration
-Inventory MonkEngine capabilities **first**. Then remove manual implementations that duplicate
-engine functionality.
-
-**Rule:** *Use the engine before creating pose-specific logic.* If `SkeletonMath`, `ConstraintSolver`,
-`SkeletonPoseFinalizer`, or a `BasePose` helper already does it, the pose must call it — not re-implement it.
-
-### Level 8 — Certification
-**Read-only.** Return only **PASS / FAIL** with justification. No implementation changes.
+**This RFC does NOT define:**
+- biomechanics or architecture — see `RFC_MONKENGINE_BASELINE.md` §3,
+- the workflow (ordered steps) — see `RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`,
+- document classification — see `RFC_MONKENGINE_BASELINE.md` §4.
 
 ---
 
-## 3. Strictness
+## 3. Levels
 
-Execution strictness governs *how much* change a level is permitted to make.
+| Level | Name | Freedom |
+| --- | --- | --- |
+| 0 | Discovery | Read-only. Understand the pose; no code changes. |
+| 1 | Audit | Read-only. Produce biomechanical, architecture, engine-integration, validation audits. |
+| 2 | Cleanup | Remove dead/duplicate/obsolete code. No biomechanics change. |
+| 3 | Upgrade | Default. Audit → Cleanup → Transform → Validate → Accept. |
+| 4 | Redesign | Prior implementation not authoritative. Rewrite from BPS + MSS + MonkEngine. |
+| 5 | New Pose | No existing implementation. Create from BPS → MSS → MonkEngine. |
+| 6 | Family Upgrade | Whole movement family; guarantee cross-member consistency. |
+| 7 | Engine Integration | Inventory engine capabilities; remove pose-side logic that duplicates the engine. |
+| 8 | Certification | Read-only. Return PASS/FAIL with justification. |
+
+Level detail:
+
+- **Level 0 — Discovery.** Output: current implementation, dependencies, architecture usage,
+  improvement opportunities (listed, not acted on).
+- **Level 1 — Audit.** Output: Biomechanical audit, Architecture audit, Engine-integration audit,
+  Validation audit. No implementation.
+- **Level 2 — Cleanup.** Remove dead/legacy/duplicate/obsolete code. Motion output unchanged.
+- **Level 3 — Upgrade (default).** Full PDP chain (`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` §3).
+- **Level 4 — Redesign.** Sources of truth become BPS, MSS, MonkEngine. Existing pose may be fully
+  rewritten.
+- **Level 5 — New Pose.** Created from BPS → MSS → MonkEngine.
+- **Level 6 — Family Upgrade.** Examples: Push-Up, Lunge, Pull-Up, Plank, Squat, Bird Dog, Thoracic,
+  Vertical Pull, Hip Flexor, Cobra, Hamstring, Stretch. Consistency across all members.
+- **Level 7 — Engine Integration.** Rule: *use the engine before creating pose-specific logic.*
+- **Level 8 — Certification.** Read-only PASS/FAIL with justification.
+
+---
+
+## 4. Strictness
 
 | Strictness | Definition |
 | --- | --- |
-| **Conservative** | Minimal change. Touch only what the task names. Preserve everything else. |
+| **Conservative** | Minimal change. Touch only what the task names. |
 | **Balanced** | Normal mode. Make the change correctly; clean obvious dead/duplicate code in the touched area. |
-| **Aggressive** | Large refactors allowed. Restructure the pose/family for correctness and consistency. |
-| **Zero-Legacy** | Anything existing solely because of the old engine must be removed. No migration fossils retained. **Expected to be the preferred mode after the Architecture-v2 migration** (see `RFC_MONKENGINE_BASELINE.md` §0.1). |
+| **Aggressive** | Large refactors allowed. Restructure for correctness and consistency. |
+| **Zero-Legacy** | Anything existing solely because of an earlier era must be removed. **Preferred default after the
+  architecture reached its current fixed state** (`RFC_MONKENGINE_BASELINE.md` §5). |
 
-> **Zero-Legacy** is the governance-aligned default: historical migration constructions are not
-> design constraints, and backward compatibility with previous authoring patterns is not a goal.
-> Where the current MonkEngine provides a simpler primitive, it is used.
+If `//Strictness:` is omitted, **Balanced** is assumed.
 
 ---
 
-## 4. Protocol syntax
+## 5. Protocol Syntax
 
-Official syntax for directing an agent. The protocol prefix is `PDP-` followed by the level name
-(or `PDP-Family` for Level 6).
-
-**Example A — single pose upgrade:**
+Official directive syntax. Protocol token = `PDP-<LevelName>` (or `PDP-Family` for Level 6).
 
 ```
 //Task:
@@ -148,8 +96,6 @@ PDP-Upgrade
 Zero-Legacy
 ```
 
-**Example B — family work:**
-
 ```
 //Task:
 Push-Up Family
@@ -164,8 +110,6 @@ PDP-Family
 Aggressive
 ```
 
-**Accepted protocol tokens:**
-
 | Token | Level |
 | --- | --- |
 | `PDP-Discovery` | 0 |
@@ -178,90 +122,54 @@ Aggressive
 | `PDP-EngineIntegration` | 7 |
 | `PDP-Certification` | 8 |
 
-If `//Strictness:` is omitted, **Balanced** is assumed. If `//Level:` is omitted on a `PDP-` token,
-the level is implied by the token.
+---
+
+## 6. Mandatory Document Loading
+
+Agents auto-load the governing documents for their level; the user never lists them. Missing a
+governing doc is a protocol violation. The ARCHIVE (`RFC_MONKENGINE_BASELINE.md` §4.1) is **never**
+auto-loaded.
+
+| Level | Documents loaded |
+| --- | --- |
+| 0 Discovery | BPS (relevant spec), MSS |
+| 1 Audit | BPS, JOM, VOM, MOM, MSS, PRP, PAC |
+| 2 Cleanup | `MIGRATION_RULES.md` (prohibited patterns), `CODING_RULES.md` §3, relevant pose file(s) |
+| 3+ | All ACTIVE MonkEngine RFCs (`RFC_MONKENGINE_BASELINE.md` §3) **plus** the full Level-1 set for the
+  specific pose/family, **plus** `STABILIZATION_AUDIT.md` when a registered production exercise is touched |
 
 ---
 
-## 5. Mandatory document loading
+## 7. Relationship to Other MonkEngine RFCs
 
-Agents must **automatically** load the governing documents for their level. The user should never
-have to list them. Missing a governing doc is a protocol violation.
-
-### Level 0 — Discovery
-- BPS (relevant pose spec)
-- MSS (Movement Sequence Specification)
-
-### Level 1 — Audit
-- BPS
-- JOM (Joint Ownership Matrix)
-- VOM (Validation Ownership Matrix)
-- MOM (Movement Ownership Matrix)
-- MSS
-- PRP (Pose Responsibility Protocol)
-- PAC (Pose Acceptance Criteria)
-
-### Level 2 — Cleanup
-- `MIGRATION_RULES.md` (prohibited patterns A1–A10)
-- `CODING_RULES.md` §3 (Don't)
-- Relevant pose file(s)
-
-### Level 3+ — Upgrade and above
-- **All active MonkEngine RFCs**, at minimum:
-  - `ARCHITECTURE_V2.md`, `ARCHITECTURE_FREEZE.md`
-  - `ENGINE_ARCHITECTURE.md`, `ENGINE.md`
-  - `API_CONTRACTS.md`, `MIGRATION_RULES.md`, `CODING_RULES.md`
-  - `BIOMECHANICS.md`, `VALIDATION.md`
-  - `RFC_MONKENGINE_BASELINE.md` (governance source of truth)
-  - `RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` (workflow)
-  - This document (`RFC_MONKENGINE_EXECUTION_MODES.md`)
-- Plus the full Level 1 set (BPS, JOM, VOM, MOM, MSS, PRP, PAC) for the specific pose/family.
-- `STABILIZATION_AUDIT.md` when the task touches a registered production exercise.
-
-> The `docs/archive/` (formerly `HISTORICAL/`) folder is **never** auto-loaded. It is retrievable
-> evidence only; reading it to justify a design choice violates `RFC_MONKENGINE_BASELINE.md` §0.1.
+- **BASELINE** (`RFC_MONKENGINE_BASELINE.md`) is the root: it names the ACTIVE set loaded in §6 and
+  the §5 principles (including the Zero-Legacy preference) this RFC expresses as strictness.
+- **POSE_DEVELOPMENT_PROTOCOL** (`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`) defines the *workflow*
+  (steps). This RFC defines the *degree of freedom* (levels, strictness) that selects which steps run.
+- A directive combines both: `PDP-Upgrade` (workflow) at `Level 3` with `Strictness: Zero-Legacy`
+  (freedom). The three RFCs form one coherent graph with no duplicated concepts.
 
 ---
 
-## 6. Relationship to PDP
+## 8. Terms
 
-- **PDP (Pose Development Protocol)** defines the *workflow* — the ordered steps an agent follows
-  to take a pose from request to accepted result.
-- **Execution Modes (this RFC)** define the *degree of freedom* — how much an agent is allowed to
-  change, and whether the prior implementation is authoritative.
+- **Execution mode** — the combination of a Level (0–8) and a Strictness that bounds an agent's
+  freedom on a task.
+- **Strictness** — how much change a level is permitted to make (Conservative / Balanced / Aggressive
+  / Zero-Legacy).
+- **PDP token** — the `PDP-<LevelName>` directive that selects a workflow level.
 
-PDP says *what to do in what order*. Execution Modes say *how far you may go*. A protocol directive
-combines both: e.g. `PDP-Upgrade` (workflow = audit→cleanup→rewrite→validation→acceptance) at
-`Level 3` with `Strictness: Zero-Legacy` (freedom = remove all migration fossils).
-
-This RFC extends `RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`; together they form the complete
-pose-development governance. Where this RFC and any migration-era note disagree, this RFC and the
-current MonkEngine architecture win.
+(Governance terms are defined in `RFC_MONKENGINE_BASELINE.md`; workflow terms in
+`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`.)
 
 ---
 
-## 7. Status
+## 9. Status
 
-**ACTIVE.** Part of the MonkEngine governance hierarchy.
-
-This document supersedes any informal descriptions of "rewrite", "audit", "cleanup", or "redesign"
-that previously lived in migration-era reports, AGENTS.md narrative, or ad-hoc agent instructions.
-It is the **canonical execution specification for all future pose work.**
-
-Governance hierarchy (current):
-
-```
-ARCHITECTURE_FREEZE.md  ── freezes ──►  ARCHITECTURE_V2.md
-        │                                      │
-        ├──── CODING_RULES.md (standing rules) ┤
-        ├──── MIGRATION_RULES.md (pose do/don't) ┤
-        ├──── API_CONTRACTS.md (component contracts) ┤
-        │                                      │
-        └──── RFC_MONKENGINE_BASELINE.md (governance source of truth)
-                    │
-                    ├── RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md  (workflow)
-                    └── RFC_MONKENGINE_EXECUTION_MODES.md            (execution strategy)  ◄ ACTIVE
-```
+**ACTIVE.** Part of the MonkEngine governance graph, extending `RFC_MONKENGINE_BASELINE.md`. With
+`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` it supersedes any informal descriptions of
+"rewrite", "audit", "cleanup", or "redesign" in prior-generation notes. It is the canonical
+**execution-strategy** specification for all future pose work.
 
 ---
 
