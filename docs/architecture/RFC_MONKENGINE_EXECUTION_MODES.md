@@ -122,6 +122,68 @@ Aggressive
 | `PDP-EngineIntegration` | 7 |
 | `PDP-Certification` | 8 |
 
+### 4.1 User request examples
+
+These show how a user phrases a pose task and the directive it maps to. The user
+need not know the token names — any clear request is resolved to the matching
+Level/Strictness. Equivalent natural-language requests are accepted.
+
+**Audit a single pose (read-only).**
+```
+//Task: Standard Push-Up
+//Protocol: PDP-Audit
+//Level: 1
+```
+> "Audit the Standard Push-Up pose against BPS/JOM/MOM/MSS/VOM/PAC and report
+> findings — do not change anything."
+
+**Redesign a single pose from first principles.**
+```
+//Task: Standard Push-Up
+//Protocol: PDP-Redesign
+//Level: 4
+//Strictness: Zero-Legacy
+```
+> "Rewrite Standard Push-Up from BPS + MSS + MonkEngine; the current code is not
+> authoritative."
+
+**Upgrade a pose onto the current carrier/intent model (default).**
+```
+//Task: Standard Push-Up
+//Protocol: PDP-Upgrade
+//Level: 3
+//Strictness: Zero-Legacy
+```
+> "Upgrade Standard Push-Up: clean it up, rewrite onto the intent carriers, and
+> pass validation."
+
+**Redesign a whole family (consistency required).**
+```
+//Task: Push-Up Family
+//Protocol: PDP-Family
+//Level: 6
+//Strictness: Aggressive
+```
+> "Redesign the entire Push-Up family so every member shares one MOM/MSS story and
+> passes PAC."
+
+**Audit only one domain of a pose.**
+```
+//Task: Squat — shoulder girdle only
+//Protocol: PDP-Audit
+//Level: 1
+```
+> "Check only the shoulder girdle on Squat." (maps to Variant-style domain audit;
+> resolves to Level 1 scoped to the relevant VOM domain.)
+
+**Certify a pose (pass/fail only).**
+```
+//Task: Dead Hang
+//Protocol: PDP-Certification
+//Level: 8
+```
+> "Certify Dead Hang: return PASS/FAIL with justification, no changes."
+
 ---
 
 ## 6. Mandatory Document Loading

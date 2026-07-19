@@ -42,6 +42,11 @@ A pose is accepted **only if it satisfies, in order:**
    no §7 failure pattern occurs).
 5. **VOM** — the Validation Ownership Matrix (every feature certified by
    exactly its assigned validation domain, in the deterministic order).
+6. **Engine integration** — the engine performed all computation (IK, FK,
+   contacts, balance, spine/head/foot/hand reconstruction) with no pose-side
+   duplication.
+7. **Visual inspection** — the last input; it may only flag a possible
+   reference violation, never accept or reject on aesthetics.
 
 **No visual judgement alone is sufficient to accept or reject a pose.** Visual
 impression is the *last* input, and it may only flag a possible reference
@@ -167,14 +172,14 @@ A pose is **COMPLETE** only if **all** of the following are true:
 - ✓ **Visual review agrees** (stage 7 reports no open BPS/JOM/MOM/MSS/VOM
   violation).
 
-Completeness is a boolean over these six conditions. If any is false, the pose is
+Completeness is a boolean over all of the above conditions. If any is false, the pose is
 not complete.
 
 ---
 
 ## 6. Visual Review
 
-Visual inspection (stage 5) is permitted **only** to report:
+Visual inspection (stage 7) is permitted **only** to report:
 
 - a **possible BPS violation** (a rendered feature disagrees with the BPS
   checkpoints),
@@ -216,36 +221,29 @@ referenced sections, is itself incomplete and must be redone.
 
 ---
 
-## 8. Cyclic / Infinite-Iteration Acceptance
+## 8. Cyclic Acceptance
 
-A pose or family is **Accepted only if every verification passes under an
-*infinite* number of re-cycles.** A single green pass is not sufficient;
-the verification set must be **stable** when the full pipeline (§2: BPS →
-JOM → MOM → MSS → VOM → Engine → Visual) is repeated without limit.
-
-**Idempotence.** Every redesign step must be idempotent: re-running the
-Variant (1 or 2) on an already-accepted pose or family produces **no new
-violations and no new diffs**. If a second pass finds a new defect, the
-first pass was incomplete and the pose is **not** accepted.
-
-**No oscillation.** A verification must not flip between pass and fail across
-cycles — e.g. the pose "fixing" a VOM domain that then fails JOM,
-then "fixing" JOM and re-failing VOM. A pose or family that cannot
-*settle* into a stable all-pass state is **Rejected**, never "accepted with
-issues" used to paper over the instability.
+A pose or family is **Accepted only if every verification passes at least once
+through a full cycle** of the §2 pipeline (BPS → JOM → MOM → MSS → VOM → Engine
+integration → Visual). A single partial run is not sufficient; the complete
+verification set must be exercised end-to-end and reach a passing verdict.
 
 **Procedure.**
 1. Run the full §2 pipeline; record every stage pass/fail.
-2. If all pass, **re-run the pipeline** (fresh cycle).
-3. Repeat until either (a) a full pass is stable across cycles → **Accepted**,
-   or (b) a cycle introduces a new fail / oscillation → **Rejected** (or
-   **Accepted with biomechanical issues** only if the residual is a documented
-   engine-realization defect, never an unstable pose-side loop).
-4. The acceptance verdict is only issued after the cycle is confirmed stable.
+2. If every stage passes, the pose has completed **one full passing cycle** →
+   **Accepted**.
+3. If any stage fails, resolve it through the correct owner (BPS/JOM/MOM/MSS/VOM
+   or the engine) and re-run the full pipeline. Re-acceptance requires another
+   full passing cycle, not a patched single stage.
+4. The acceptance verdict is issued only after a complete cycle is green.
 
-This rule binds Variant 1 (family) and Variant 2 (single pose) of the
-Operating Plan: the "Exit" of each requires the verification set to be
-stable across unlimited re-cycles, not merely green on one run.
+Oscillation across re-runs (a fix in one domain re-breaking another) is a
+§4 failure condition: the pose is **Rejected**, never accepted with issues used
+to paper over instability.
+
+This rule binds both the single-pose and family workflows defined by
+`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`: acceptance always requires one
+full passing cycle, never a single green stage.
 
 ---
 
@@ -270,8 +268,8 @@ applied in isolation:
 
 If any document in this set is missing, ambiguous, or disagrees with the
 pose code, the document is resolved **first** (PRP §5) before the pose is
-judged. A pose that satisfies five of six and contradicts the sixth is
-**Rejected**, not partially accepted.
+judged. A pose that satisfies the set in part but contradicts any single
+document is **Rejected**, not partially accepted.
 
 > Documentation only. No engine code, pose files, carriers, or other RFCs are
 > modified by this document.

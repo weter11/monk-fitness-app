@@ -56,7 +56,6 @@ Every other document is derived from, archived under, or removed by this set.
 | `docs/architecture/Validation_Ownership_Matrix.md` | Which subsystem certifies each feature. |
 | `docs/architecture/RFC_JOINT_OWNERSHIP_MATRIX.md` | Per-joint biomechanical ownership. |
 | `docs/architecture/RFC_POSE_ACCEPTANCE_CRITERIA.md` | Measurable pose acceptance criteria (PAC). |
-| `docs/architecture/Plan-Operating-the-Biomechanical-Specification-System.md` | Usage manual for the BPS/JOM/VOM/PRP/PAC system. |
 | `docs/RFC_MONKENGINE_BASELINE.md` | This document (governance source of truth). |
 | `docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` | Pose-development workflow. |
 | `docs/architecture/RFC_MONKENGINE_EXECUTION_MODES.md` | Execution strategy. |
@@ -85,6 +84,12 @@ alongside them. Retained as retrievable evidence of past decisions; they do not 
 ### 4.2 OBSOLETE (superseded; do not influence design)
 Prior-generation plans and redesign notes whose content is now shipped and described by the ACTIVE
 set. Their decisions are reflected in the ACTIVE architecture; the plan text no longer steers.
+
+- `docs/architecture/Plan-Operating-the-Biomechanical-Specification-System.md` — an early-stage
+  usage manual with its own Variant 1–4 workflow and user-request examples. Superseded by
+  `RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` (workflow) and
+  `RFC_MONKENGINE_EXECUTION_MODES.md` (levels, strictness, directive syntax, and user-request
+  examples in §4.1). Its example prompts were folded into `RFC_MONKENGINE_EXECUTION_MODES.md` §4.1.
 
 ### 4.3 MERGE (fold into ACTIVE, then retire)
 The pipeline-design note folds into `ARCHITECTURE_V2.md` §3; the execution-contract note folds into
