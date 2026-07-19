@@ -123,7 +123,7 @@ class JumpingJacksPose : PoseBuilder {
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
         // --- Leg targets: feet stay on the ground; spread laterally with the open factor. ---
-        val spread = lerp(def.hipWidth * 0.6f, def.hipWidth * 2.4f, open)
+        val spread = lerp(def.hipWidth * 0.6f, def.hipWidth * 2.0f, open)
         closedAnkleF.set(0f, def.foot.ankleHeight, -def.hipWidth * 0.6f)
         closedAnkleB.set(0f, def.foot.ankleHeight, def.hipWidth * 0.6f)
         openAnkleF.set(0f, def.foot.ankleHeight, -spread)
