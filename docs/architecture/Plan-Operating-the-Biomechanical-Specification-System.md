@@ -73,6 +73,22 @@ specification system existed.
 
 **Exit.** All family members pass PAC; family shares a coherent MOM/MSS story.
 
+**Cyclic acceptance (mandatory).** A family is **Accepted only if every
+verification (BPS §11/§13, JOM, MOM/MSS, PRP §4, VOM order, PAC §5)
+passes under an *infinite* number of re-audits.** Concretely:
+
+- The redesign must be **idempotent** — running Variant 1 again on the already-
+  accepted family produces no new violations and no new diffs.
+- No verification may *oscillate* between pass/fail across cycles (e.g. the
+  pose "fixing" a VOM domain that then fails JOM, then "fixing" JOM and
+  re-failing VOM). A family that cannot settle is **Rejected**, not "accepted
+  with issues."
+- The cycle is repeated until a full pass is stable on re-run; only then is
+  the family Accepted.
+
+**Exit (final).** All family members pass PAC **and** the full verification
+set is stable across unlimited re-cycles; family shares a coherent MOM/MSS story.
+
 ---
 
 ## Variant 2 — Audit and redesign a pose (full MonkEngine methodology)
@@ -106,6 +122,22 @@ compliance from scratch.
    biomechanical issues / Rejected, citing BPS/JOM/VOM sections.
 
 **Exit.** Single PAC verdict recorded; all references cited.
+
+**Cyclic acceptance (mandatory).** A pose is **Accepted only if every
+verification (BPS §11/§13, JOM, MOM/MSS, PRP §4, VOM order, PAC §5)
+passes under an *infinite* number of re-audits.** Concretely:
+
+- The redesign must be **idempotent** — re-running Variant 2 on the already-
+  accepted pose produces no new violations and no new diffs.
+- No verification may *oscillate* between pass/fail across cycles (e.g. the
+  pose "fixing" a VOM domain that then fails JOM, then "fixing" JOM and
+  re-failing VOM). A pose that cannot settle is **Rejected**, not "accepted
+  with issues."
+- The cycle is repeated until a full pass is stable on re-run; only then is
+  the pose Accepted.
+
+**Exit (final).** Single PAC verdict recorded; the full verification set is
+stable across unlimited re-cycles; all references cited.
 
 ---
 
