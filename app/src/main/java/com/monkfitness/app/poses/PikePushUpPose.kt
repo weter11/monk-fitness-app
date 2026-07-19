@@ -126,13 +126,13 @@ class PikePushUpPose : BasePushUpPose() {
         val armPPoleWorld = SkeletonMath.toWorldDirection(armPPoleLocal, elbowP!!.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
-        // Branch C: wrist articulation (overhand-ish grip + counter torso pitch) routes through
-        // the §1.3 intent carrier; flexion about the mediolateral Z axis, no deviation.
+        // Branch C: wrist articulation (overhand-ish grip + counter torso pitch) routes
+        // through the §1.3 intent carrier; flexion about the mediolateral Z axis, no
+        // deviation. The engine (W1) derives the WRIST_* nodes from the hand + this
+        // articulation, so the pose must NOT also copy wrist onto hand.
         buildWristArticulation(Extremity.HAND_A, -torsoGlobalPitch, 0f, handA!!)
-        // W1: engine now derives hand orientation (removed tilt counter-rotation + 6/6/10 offsets).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
-        jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer
     }
 }
