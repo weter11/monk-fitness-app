@@ -2,6 +2,8 @@ package com.monkfitness.app
 
 import com.monkfitness.app.animation.*
 import com.monkfitness.app.poses.*
+import com.monkfitness.app.domain.usecase.WorkoutGenerator
+import com.monkfitness.app.ui.components.animation.exerciseSkeletonAnimation
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -175,4 +177,19 @@ class CossackSquatPoseTest {
         // Slack beyond ~14% of leg length means the "straight" leg is visibly bending.
         assertTrue("Cossack straight leg bends (not extended).\n$report", worstSlack < legLen * 0.14f)
     }
+    @Test
+    fun testCossackSquatIsVisibleInUiAndResolves() {
+        // Catalog: the exercise is present and its animationId resolves in the live registry.
+        val ex = WorkoutGenerator().getExerciseLibrary(emptySet())
+            .firstOrNull { it.id == "cossack_squat" }
+        assertNotNull("cossack_squat must be in the exercise catalog (WorkoutGenerator.allExercises)", ex)
+        assertEquals("cossack_squat", ex!!.animationId)
+        // Live pose registry resolves the animation.
+        val anim = AnimationRegistry.get("cossack_squat")
+        assertNotNull("cossack_squat must resolve in AnimationRegistry", anim)
+        // UI skeleton silhouette resolves (ExerciseSkeletonData).
+        val skel = exerciseSkeletonAnimation("cossack_squat")
+        assertNotNull("cossack_squat must have a UI skeleton silhouette", skel)
+    }
+
 }

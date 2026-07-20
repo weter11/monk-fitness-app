@@ -339,6 +339,12 @@
     <string name="ex_squats_tech">Keep your chest up and back flat. Your knees should track in line with your toes. Distribute weight evenly on your heels and mid-foot.</string>
     <string name="ex_squats_mistakes">Knees caving inward, heels lifting off the floor, rounding the lower back, and not going deep enough.</string>
 
+    <string name="ex_cossack_squat">Cossack Squat</string>
+    <string name="ex_cossack_squat_desc">A lateral squat that builds single-leg strength, hip mobility, and adductor flexibility by shifting weight onto one leg while the other stays extended.</string>
+    <string name="ex_cossack_squat_tech">Keep the chest upright and the working knee tracking over the foot. The straight leg stays long with the foot flat and toes up. Control the descent; the pelvis drops on the working side, not by bending sideways.</string>
+    <string name="ex_cossack_squat_steps">1. Stand with feet wide, toes pointing slightly outward.\n2. Shift your weight onto one leg and bend that knee, sitting the hip back and down.\n3. Keep the other leg straight with the foot flat and toes lifted toward the ceiling.\n4. Lower until the working thigh is near parallel, then press back up and alternate sides.</string>
+    <string name="ex_cossack_squat_mistakes">Lifting the straight-leg heel, rounding the torso forward, letting the working knee cave inward, and bouncing instead of controlling the bottom.</string>
+
     <string name="ex_pullups">Standard Overhand Pullup</string>
     <string name="ex_pullups_chin">Underhand Chin-up</string>
     <string name="ex_pullups_neutral">Neutral Grip Pullup</string>
