@@ -80,34 +80,29 @@ If `//Strictness:` is omitted, **Balanced** is assumed.
 
 ## 5. Protocol Syntax
 
-Official directive syntax. Protocol token = `PDP-<LevelName>` (or `PDP-Family` for Level 6).
+Official directive syntax. A directive names the task, its capability level, and the PDP
+workflow it runs. The Development Orchestrator resolves a natural request into this form.
 
 ```
-//Task:
+Task:
 Standard Push-Up
 
-//Protocol:
+Capability:
+Level 3
+
+Workflow:
 PDP-Upgrade
-
-//Level:
-3
-
-//Strictness:
-Zero-Legacy
 ```
 
 ```
-//Task:
+Task:
 Push-Up Family
 
-//Protocol:
+Capability:
+Level 6
+
+Workflow:
 PDP-Family
-
-//Level:
-6
-
-//Strictness:
-Aggressive
 ```
 
 | Token | Level |
@@ -124,63 +119,132 @@ Aggressive
 
 ### 4.1 User request examples
 
-These show how a user phrases a pose task and the directive it maps to. The user
-need not know the token names — any clear request is resolved to the matching
-Level/Strictness. Equivalent natural-language requests are accepted.
+These show how a user phrases a task and the directive the **Development Orchestrator**
+resolves it into. The user need not know the token names — any clear request is classified,
+assigned a **Capability Level**, and mapped to a **PDP** workflow. Every example below is then
+judged by the **Definition of Done** and, for pose work, executed through the **Engineering
+Playbook** against the **Pose Development Protocol (PDP)**. Equivalent natural-language requests
+are accepted.
 
-**Audit a single pose (read-only).**
+**Biomechanical audit of a single pose (read-only).**
 ```
-//Task: Standard Push-Up
-//Protocol: PDP-Audit
-//Level: 1
+Task:
+Standard Push-Up
+
+Capability:
+Level 1
+
+Workflow:
+PDP-Audit
 ```
-> "Audit the Standard Push-Up pose against BPS/JOM/MOM/MSS/VOM/PAC and report
-> findings — do not change anything."
+> "Audit the Standard Push-Up pose against BPS/JOM/MOM/MSS/VOM/PAC and report findings —
+> do not change anything."
 
 **Redesign a single pose from first principles.**
 ```
-//Task: Standard Push-Up
-//Protocol: PDP-Redesign
-//Level: 4
-//Strictness: Zero-Legacy
+Task:
+Standard Push-Up
+
+Capability:
+Level 4
+
+Workflow:
+PDP-Redesign
 ```
-> "Rewrite Standard Push-Up from BPS + MSS + MonkEngine; the current code is not
-> authoritative."
+> "Rewrite Standard Push-Up from BPS + MSS + MonkEngine; the current code is not authoritative."
 
 **Upgrade a pose onto the current carrier/intent model (default).**
 ```
-//Task: Standard Push-Up
-//Protocol: PDP-Upgrade
-//Level: 3
-//Strictness: Zero-Legacy
+Task:
+Standard Push-Up
+
+Capability:
+Level 3
+
+Workflow:
+PDP-Upgrade
 ```
-> "Upgrade Standard Push-Up: clean it up, rewrite onto the intent carriers, and
-> pass validation."
+> "Upgrade Standard Push-Up: clean it up, rewrite onto the intent carriers, and pass validation."
+
+**Create a new exercise.**
+```
+Task:
+Cossack Squat
+
+Capability:
+Level 5
+
+Workflow:
+PDP-NewPose
+```
+> "Add Cossack Squat as a new exercise authored from BPS → MSS → MonkEngine and registered in
+> the pose registry."
 
 **Redesign a whole family (consistency required).**
 ```
-//Task: Push-Up Family
-//Protocol: PDP-Family
-//Level: 6
-//Strictness: Aggressive
-```
-> "Redesign the entire Push-Up family so every member shares one MOM/MSS story and
-> passes PAC."
+Task:
+Push-Up Family
 
-**Audit only one domain of a pose.**
+Capability:
+Level 6
+
+Workflow:
+PDP-Family
 ```
-//Task: Squat — shoulder girdle only
-//Protocol: PDP-Audit
-//Level: 1
+> "Redesign the entire Push-Up family so every member shares one MOM/MSS story and passes PAC."
+
+**Improve a validator.**
 ```
-> "Check only the shoulder girdle on Squat." (maps to Variant-style domain audit;
-> resolves to Level 1 scoped to the relevant VOM domain.)
+Task:
+Hip range-of-motion stamp
+
+Capability:
+Level 6
+
+Workflow:
+PDP-EngineIntegration
+```
+> "Add a VOM-owned hip ROM measurement that stamps the realized excursion; the validator
+> measures, it does not retune the pose to pass."
+
+**Engine feature / architecture change.**
+```
+Task:
+Trunk-contact DOFs in the solver
+
+Capability:
+Level 7
+
+Workflow:
+PDP-EngineIntegration
+```
+> "Make CHEST/LUMBAR free DOFs for trunk-contact poses; preserve every pose's realized behavior
+> and keep the engine as the sole owner of realization."
+
+**Documentation update.**
+```
+Task:
+Clarify the ownership-audit section in CODING_RULES
+
+Capability:
+Level 1
+
+Workflow:
+PDP-Audit
+```
+> "Revise the ownership-audit guidance in CODING_RULES so it matches the ACTIVE set; no code
+> change."
 
 **Certify a pose (pass/fail only).**
 ```
-//Task: Dead Hang
-//Protocol: PDP-Certification
-//Level: 8
+Task:
+Dead Hang
+
+Capability:
+Level 8
+
+Workflow:
+PDP-Certification
 ```
 > "Certify Dead Hang: return PASS/FAIL with justification, no changes."
 
