@@ -223,7 +223,9 @@ RFC_MONKENGINE_DEVELOPMENT_SYSTEM.md          (the system map; this contract is 
         │
 RFC_MONKENGINE_TASK_EXECUTION.md            (this document — the mandatory entry point)
         │
-RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md    (receives the task; the decision engine within this contract — §2, §3, §6, §7)
+RFC_MONKENGINE_ENGINEERING_TARGET_SPECIFICATION.md  (transforms the admitted request into an explicit target)
+        │
+RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md    (receives the target; the decision engine within this contract — §2, §3, §6, §7)
         │
 RFC_MONKENGINE_CAPABILITY_LEVELS.md           (classifies the task; bounds the plan — §3, §6)
         │
@@ -238,7 +240,11 @@ RFC_MONKENGINE_DEFINITION_OF_DONE.md          (the Required DoD + Verification t
 - **DEVELOPMENT_SYSTEM** — this contract is an execution-order node within the system it maps.
 - **TASK_EXECUTION** — this document. It is the mandatory entry point: no implementation before
   an approved Execution Plan. It sequences the documents below; it does not decide, classify, or judge.
-- **DEVELOPMENT_ORCHESTRATOR** — the sole receiver (§2); the decision engine that produces and
+- **ENGINEERING_TARGET_SPECIFICATION (ETS)** — transforms the admitted request into an explicit
+  target (WHAT the result is) before the Orchestrator classifies it. Task Execution hands the
+  raw request to ETS; ETS hands the finished target to the Orchestrator. ETS owns target
+  shape only; it does not implement, validate, accept, plan, schedule, or review.
+- **DEVELOPMENT_ORCHESTRATOR** — the sole receiver of the *target* (§2); the decision engine that produces and
   approves the Execution Plan (§6–§7) *within* this contract. This contract adds no decision
   content; it makes the Orchestrator's plan *mandatory before implementation*.
 - **CAPABILITY_LEVELS** — supplies the classification and capability the plan must contain (§6.1).

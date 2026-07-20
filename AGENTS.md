@@ -93,6 +93,7 @@ The authoritative source of truth is `docs/RFC_MONKENGINE_BASELINE.md` §3. The 
 | `docs/RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md` | The nine-stage task spine. |
 | `docs/RFC_MONKENGINE_DEFINITION_OF_DONE.md` | The acceptance gate. |
 | `docs/RFC_MONKENGINE_TASK_EXECUTION.md` | The execution contract. |
+| `docs/RFC_MONKENGINE_ENGINEERING_TARGET_SPECIFICATION.md` | Engineering Target Specification (ETS) — transforms a request into an explicit target. |
 
 The **seven-document biomechanical specification system** — BPS, JOM, VOM, PRP, PAC, MOM, MSS — is the
 canonical reference input for every pose task.

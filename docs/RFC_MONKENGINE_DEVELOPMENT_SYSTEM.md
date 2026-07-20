@@ -77,6 +77,9 @@ MonkEngine Development System
 ├── Task Execution
 │     docs/RFC_MONKENGINE_TASK_EXECUTION.md
 │
+├── Engineering Target Specification (ETS)
+│     docs/RFC_MONKENGINE_ENGINEERING_TARGET_SPECIFICATION.md
+│
 ├── Development Lifecycle
 │     docs/RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md
 │
@@ -132,6 +135,7 @@ MonkEngine Development System
 | Coding Rules | `docs/CODING_RULES.md`, `docs/MIGRATION_RULES.md` | CR |
 | Capability Levels | `docs/architecture/RFC_MONKENGINE_EXECUTION_MODES.md` | CL |
 | Task Execution | `docs/RFC_MONKENGINE_TASK_EXECUTION.md` | TE |
+| Engineering Target Specification (ETS) | `docs/RFC_MONKENGINE_ENGINEERING_TARGET_SPECIFICATION.md` | ETS |
 | Development Lifecycle | `docs/RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md` | LC |
 | Pose Development Protocol (PDP) | `docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` | PDP |
 | Engineering Playbook | `docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md` | PB |
@@ -147,15 +151,18 @@ MonkEngine Development System
 
 > Note: "Task Execution" (`RFC_MONKENGINE_TASK_EXECUTION.md`) is the **mandatory entry
 > point** — the execution-order contract that binds a submitted task to the point at which
-> implementation is permitted. "Development Lifecycle" (`RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md`)
-> is the nine-stage workflow spine; "Development Orchestrator"
-> (`RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md`) is the decision engine that
-> receives the task and runs the lifecycle. "Pose Development Protocol (PDP)"
-> (`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`) is the *workflow* (the ordered
-> steps); "Engineering Playbook" (`RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md`) is the
-> *practical how-to* handbook that maps each task class onto those steps. The "Pose
-> Responsibility Protocol" (`RFC_POSE_RESPONSIBILITY_PROTOCOL.md`; PRP) is the
-> pose-vs-engine *boundary*. All are distinct nodes; none duplicates another.
+> implementation is permitted. "Engineering Target Specification" (ETS,
+> `RFC_MONKENGINE_ENGINEERING_TARGET_SPECIFICATION.md`) is the **target transformer** — it
+> turns the admitted request into an explicit statement of *WHAT the result is* (objective, scope,
+> constraints, expected result, definition of success) before the Orchestrator classifies it. "Development
+> Lifecycle" (`RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md`) is the nine-stage workflow spine;
+> "Development Orchestrator" (`RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md`) is the decision
+> engine that receives the task and runs the lifecycle. "Pose Development Protocol (PDP)"
+> (`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`) is the *workflow* (the ordered steps);
+> "Engineering Playbook" (`RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md`) is the *practical how-to*
+> handbook that maps each task class onto those steps. The "Pose Responsibility Protocol"
+> (`RFC_POSE_RESPONSIBILITY_PROTOCOL.md`; PRP) is the pose-vs-engine *boundary*. All are
+> distinct nodes; none duplicates another.
 
 ---
 
@@ -169,6 +176,8 @@ Design Principles
 Baseline
         ↓
 Task Execution              (the mandatory entry point — what MUST happen, in what order, before any implementation)
+        ↓
+Engineering Target Specification (ETS)  (transforms the admitted request into an explicit target — WHAT the result is)
         ↓
 Development Orchestrator   (the decision engine — classifies, decides capability, picks docs/experts, sequences)
         ↓
@@ -197,7 +206,10 @@ Pose Specifications          (BPS, MSS, MOM, JOM, VOM, PRP, PAC — the specific
 3. **Task Execution** is the mandatory entry point: no implementation begins before its contract is
    satisfied (the task is received by the Orchestrator, classified, planned, and the Execution Plan is
    approved). It sequences the documents below; it does not override any of them.
-4. **Development Orchestrator** decides and sequences every task. It applies the
+4. **Engineering Target Specification (ETS)** transforms the admitted request into an explicit target —
+   objective, scope, out-of-scope, constraints, expected result, definition of success. It owns
+   *WHAT the result is*; it does not implement, validate, accept, plan, schedule, or review.
+5. **Development Orchestrator** decides and sequences every task. It applies the
    authority chain; it is not above the Principles or the Baseline, but it is the authority that
    *executes* the chain for a given task.
 5. **Development Lifecycle** is the nine-stage spine (Idea → Classification → Planning → Expert
@@ -225,6 +237,8 @@ The order in which a task is actually carried out, from request to shipped imple
 User task
         ↓
 Task Execution               (the mandatory entry point: receive → classify → plan → approve before any code)
+        ↓
+Engineering Target Specification (ETS)  (transform the request into an explicit target)
         ↓
 Development Orchestrator        (classify, decide capability, pick docs/experts, sequence)
         ↓
@@ -291,6 +305,11 @@ Every document has exactly one job. Overlapping responsibility is a defect (Desi
   mandatory entry point. Fixes *what MUST happen, in what order, before any implementation begins*
   (receive → classify → specify inputs → Execution Plan exists → Execution Plan approved →
   implement). Sequences the documents below; it does not decide, classify, or judge.
+- **Engineering Target Specification (ETS)** (`RFC_MONKENGINE_ENGINEERING_TARGET_SPECIFICATION.md`) —
+  the target transformer. Turns the admitted request into an explicit engineering target: objective,
+  scope, out-of-scope, expected result, constraints, references, category, capability level,
+  affected subsystems, expected deliverables, and definition of success. Owns *WHAT the result is*;
+  it does not implement, validate, accept, plan, schedule, or review.
 - **Development Orchestrator** — the decision engine. Classifies any task, decides required
   capability/RFCs/specs/experts/plan/DoD, sequences experts (which run, which in parallel, merge
   strategy, conflict resolution), and runs mandatory final verification. The brain of the system.
@@ -330,9 +349,10 @@ required to read a document that reads it back — the graph is acyclic.
 Design Principles                (depends on: nothing — root law)
 Baseline                        (depends on: Design Principles)
 Task Execution                 (depends on: Design Principles, Baseline, Development System map)
+Engineering Target Specification (ETS) (depends on: Design Principles, Baseline, Task Execution)
 Development Orchestrator        (depends on: Design Principles, Baseline, Task Execution,
-                                   Capability Levels, Definition of Done, Pose Development Protocol,
-                                   Engineering Playbook)
+                                   Engineering Target Specification, Capability Levels, Definition of Done,
+                                   Pose Development Protocol, Engineering Playbook)
 Development Lifecycle           (depends on: Design Principles, Baseline, Task Execution,
                                    Development Orchestrator, Capability Levels)
 Pose Development Protocol (PDP)  (depends on: Baseline, Capability Levels, Definition of Done)
@@ -354,10 +374,11 @@ Implementation (code)          (depends on: ALL of the above that apply to its t
 - The specification layer (BPS/MSS/MOM/JOM/VOM/PAC) forms a DAG: BPS is the target; MSS/MOM describe
   its dynamics; JOM/VOM describe ownership of building/checking; PAC binds them. PAC depends on all
   six; none depends on PAC. No cycle.
-- The governance/control layer (Principles → Baseline → Task Execution → Capability Levels →
-  Orchestrator → Lifecycle → PDP → Engineering Playbook → DoD) is strictly top-down. Task
-  Execution reads the System map and feeds the Orchestrator; the Orchestrator reads DoD, PDP, and
-  the Engineering Playbook; none of those reads the Orchestrator or Task Execution. No cycle.
+- The governance/control layer (Principles → Baseline → Task Execution → ETS →
+  Capability Levels → Orchestrator → Lifecycle → PDP → Engineering Playbook → DoD) is
+  strictly top-down. Task Execution feeds ETS; ETS feeds the Orchestrator; the Orchestrator
+  reads DoD, PDP, and the Engineering Playbook; none of those reads the Orchestrator,
+  ETS, or Task Execution. No cycle.
 - Cross-layer edges only point *downward* (control reads specification; specification reads
   Principles/Baseline). No specification document depends on a control document.
 
@@ -380,6 +401,9 @@ task. This is the onboarding path; it is not the execution order (§4).
  7b. **Task Execution** (`RFC_MONKENGINE_TASK_EXECUTION.md`) — learn the mandatory entry
    contract: receive → classify → plan → approve before any implementation. This is the gate every
    task enters through.
+ 7c. **Engineering Target Specification (ETS)** (`RFC_MONKENGINE_ENGINEERING_TARGET_SPECIFICATION.md`)
+   — learn how a free-form request is transformed into an explicit target (WHAT the result is)
+   before classification. Every task passes through this shape.
  8. **Pose Development Protocol (PDP)** — learn the workflow steps.
  8b. **Engineering Playbook** — learn the practical how-to for each task class.
  9. **Definition of Done** — learn the acceptance bar before writing anything.
