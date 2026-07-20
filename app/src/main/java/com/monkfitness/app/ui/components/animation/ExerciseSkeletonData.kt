@@ -255,6 +255,57 @@ private val exerciseSkeletonAnimations: Map<String, SkeletonAnimation> = buildMa
     )
 
     register(
+        ids = setOf("cossack_squat"),
+        animation = animation(
+            2200,
+            true,
+            emptySet(),
+            frame(0f, uprightPose(
+                head = xy(0.50f, 0.18f),
+                neck = xy(0.50f, 0.27f),
+                sternum = xy(0.50f, 0.36f),
+                spineMid = xy(0.50f, 0.45f),
+                spineLow = xy(0.50f, 0.53f),
+                pelvis = xy(0.50f, 0.61f),
+                leftHand = xy(0.34f, 0.56f),
+                rightHand = xy(0.66f, 0.56f),
+                leftToe = xy(0.30f, 0.92f),
+                rightToe = xy(0.70f, 0.92f),
+                leftLegBend = 0.05f,
+                rightLegBend = 0.05f
+            )),
+            frame(0.5f, uprightPose(
+                head = xy(0.50f, 0.24f),
+                neck = xy(0.50f, 0.33f),
+                sternum = xy(0.50f, 0.42f),
+                spineMid = xy(0.50f, 0.50f),
+                spineLow = xy(0.50f, 0.57f),
+                pelvis = xy(0.44f, 0.66f),
+                leftHand = xy(0.34f, 0.61f),
+                rightHand = xy(0.66f, 0.61f),
+                leftToe = xy(0.34f, 0.92f),
+                rightToe = xy(0.80f, 0.92f),
+                leftLegBend = 0.45f,
+                rightLegBend = 0.02f
+            )),
+            frame(1f, uprightPose(
+                head = xy(0.50f, 0.18f),
+                neck = xy(0.50f, 0.27f),
+                sternum = xy(0.50f, 0.36f),
+                spineMid = xy(0.50f, 0.45f),
+                spineLow = xy(0.50f, 0.53f),
+                pelvis = xy(0.50f, 0.61f),
+                leftHand = xy(0.34f, 0.56f),
+                rightHand = xy(0.66f, 0.56f),
+                leftToe = xy(0.30f, 0.92f),
+                rightToe = xy(0.70f, 0.92f),
+                leftLegBend = 0.05f,
+                rightLegBend = 0.05f
+            ))
+        )
+    )
+
+    register(
         ids = setOf("squat_standard", "squat_sumo", "squat_jump", "lunge_forward", "lunge_reverse", "lunge_side", "step_up_standard", "wall_sit_hold", "deep_squat_hold", "ankle_mobility_standard", "hamstring_stretch_hold", "calf_stretch_hold"),
         animation = animation(
             1800,
