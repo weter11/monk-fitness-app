@@ -28,7 +28,7 @@ abstract class BasePushUpPose : BasePose() {
 
     protected val armAIK = SkeletonMath.IKResult()
     protected val armPIK = SkeletonMath.IKResult()
-    protected val geometryResult = PushUpSolverResult()
+    protected val geometryResult = PushUpPlankResult()
 
     protected val targetHandABuffer = Vector3()
     protected val targetHandPBuffer = Vector3()
@@ -79,11 +79,11 @@ abstract class BasePushUpPose : BasePose() {
         val thighL = def.thighLength
 
         // Target a small knee flexion for a visual and anatomically natural, barely-perceptible knee bend
-        val targetFlexionDegrees = PushUpGeometrySolver.TARGET_KNEE_FLEXION_DEGREES
+        val targetFlexionDegrees = PushUpPlank.TARGET_KNEE_FLEXION_DEGREES
         val limbResult = SkeletonMath.solveNearStraightLimb(shinL, thighL, targetFlexionDegrees, legScratch)
         val legTargetLen = limbResult.d
 
-        val solverGeometry = PushUpGeometrySolver.solve(
+        val solverGeometry = PushUpPlank.solve(
             definition = def,
             support = metadata.support,
             gripWidthMultiplier = gripWidthMultiplier,
@@ -99,7 +99,7 @@ abstract class BasePushUpPose : BasePose() {
         val isKneePivot = metadata.support.pivot == PivotType.KNEES
 
         if (isKneePivot) {
-            val shinPitch = PushUpGeometrySolver.SHIN_PITCH_ANGLE // Shins point 45 degrees up
+            val shinPitch = PushUpPlank.SHIN_PITCH_ANGLE // Shins point 45 degrees up
 
             // 1. Root Anchoring
             ankleF!!.localPosition.set(ankleX, ankleHeightVal, -def.hipWidth)

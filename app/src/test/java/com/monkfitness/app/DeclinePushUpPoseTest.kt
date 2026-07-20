@@ -227,8 +227,8 @@ class DeclinePushUpPoseTest {
             val boxHeight = 40f
             val ankleHeight = boxHeight + 25f
 
-            val solverResult = PushUpSolverResult()
-            PushUpGeometrySolver.solve(
+            val solverResult = PushUpPlankResult()
+            PushUpPlank.solve(
                 definition = def,
                 support = poseBuilder.metadata.support,
                 gripWidthMultiplier = poseBuilder.gripWidthMultiplier,
