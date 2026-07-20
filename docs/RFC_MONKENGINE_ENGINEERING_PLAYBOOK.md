@@ -13,13 +13,17 @@ companion to the governing RFCs and contains **no implementation, no algorithms,
 Every engineering task in MonkEngine resolves through one governance graph. This handbook is the
 *how-to* layer on top of that graph. When you pick up a task, follow this order:
 
-1. **Identify the task class** (one of the six workflows below).
-2. **Run it through the Development Orchestrator mentally** — it decides category, Capability Level,
+1. **Enter through the execution contract.** Every task first passes through
+   `RFC_MONKENGINE_TASK_EXECUTION.md` — the Orchestrator receives it, classifies it, and only
+   after an approved Execution Plan may implementation begin. This handbook is the *how-to* you run
+   **after** that contract is satisfied.
+2. **Identify the task class** (one of the six workflows below).
+3. **Run it through the Development Orchestrator mentally** — it decides category, Capability Level,
    experts, required specs, execution plan, review plan, acceptance plan, knowledge capture.
-3. **Walk the Development Lifecycle** (Idea → Classification → Planning → Expert Review →
+4. **Walk the Development Lifecycle** (Idea → Classification → Planning → Expert Review →
    Implementation → Verification → Acceptance → Knowledge Capture).
-4. **Clear the Definition of Done** (Universal + category-specific) as the binding gate.
-5. **For pose tasks, obey the Pose Development Protocol (PDP)** and the Pose Responsibility Protocol
+5. **Clear the Definition of Done** (Universal + category-specific) as the binding gate.
+6. **For pose tasks, obey the Pose Development Protocol (PDP)** and the Pose Responsibility Protocol
    (PRP) at every step.
 
 The five documents you must always keep in view (this handbook references them on every page):
@@ -377,7 +381,9 @@ four PRP review questions answered, #4 = no.
 ## 9. Relationship to other MonkEngine RFCs
 
 ```
-RFC_MONKENGINE_DEVELOPMENT_SYSTEM.md          (ROOT — the system map; this handbook is a node under it)
+RFC_MONKENGINE_DEVELOPMENT_SYSTEM.md          (ROOT — the system map)
+        │
+        ├── RFC_MONKENGINE_TASK_EXECUTION.md        (mandatory entry point — no implementation before its contract)
         │
         ├── RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md   (the decision engine this handbook obeys)
         ├── RFC_MONKENGINE_CAPABILITY_LEVELS.md          (the level every workflow assigns)

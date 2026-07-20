@@ -221,7 +221,9 @@ This contract sequences the documents it depends on; it does not duplicate them.
 ```
 RFC_MONKENGINE_DEVELOPMENT_SYSTEM.md          (the system map; this contract is a node under it)
         │
-RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md    (receives the task; produces & approves the plan — §2, §3, §6, §7)
+RFC_MONKENGINE_TASK_EXECUTION.md            (this document — the mandatory entry point)
+        │
+RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md    (receives the task; the decision engine within this contract — §2, §3, §6, §7)
         │
 RFC_MONKENGINE_CAPABILITY_LEVELS.md           (classifies the task; bounds the plan — §3, §6)
         │
@@ -234,12 +236,15 @@ RFC_MONKENGINE_DEFINITION_OF_DONE.md          (the Required DoD + Verification t
 ```
 
 - **DEVELOPMENT_SYSTEM** — this contract is an execution-order node within the system it maps.
-- **DEVELOPMENT_ORCHESTRATOR** — the sole receiver (§2); the producer and approver of the Execution
-  Plan (§6–§7). This contract adds no decision content; it makes the Orchestrator's plan *mandatory
-  before implementation*.
+- **TASK_EXECUTION** — this document. It is the mandatory entry point: no implementation before
+  an approved Execution Plan. It sequences the documents below; it does not decide, classify, or judge.
+- **DEVELOPMENT_ORCHESTRATOR** — the sole receiver (§2); the decision engine that produces and
+  approves the Execution Plan (§6–§7) *within* this contract. This contract adds no decision
+  content; it makes the Orchestrator's plan *mandatory before implementation*.
 - **CAPABILITY_LEVELS** — supplies the classification and capability the plan must contain (§6.1).
-- **DEVELOPMENT_LIFECYCLE** — the nine-stage spine (Idea → Classification → Planning → Expert Review →
-  Implementation → Verification → Acceptance → Knowledge Capture) this contract maps the order onto.
+- **DEVELOPMENT_LIFECYCLE** — the nine-stage spine (Idea → Classification → Planning → Expert
+  Review → Implementation → Verification → Acceptance → Knowledge Capture) this contract maps the
+  order onto.
 - **ENGINEERING_PLAYBOOK** — supplies the Required Workflow the approved plan executes (§8).
 - **DEFINITION_OF_DONE** — supplies the Required DoD and Verification the plan targets and Acceptance
   enforces (§9–§10).

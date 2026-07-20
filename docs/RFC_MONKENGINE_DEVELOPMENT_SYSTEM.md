@@ -74,7 +74,13 @@ MonkEngine Development System
 ├── Capability Levels
 │     docs/architecture/RFC_MONKENGINE_EXECUTION_MODES.md
 │
+├── Task Execution
+│     docs/RFC_MONKENGINE_TASK_EXECUTION.md
+│
 ├── Development Lifecycle
+│     docs/RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md
+│
+├── Development Orchestrator
 │     docs/RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md
 │
 ├── Pose Development Protocol (PDP)
@@ -125,7 +131,8 @@ MonkEngine Development System
 | API Contracts | `docs/API_CONTRACTS.md` | API |
 | Coding Rules | `docs/CODING_RULES.md`, `docs/MIGRATION_RULES.md` | CR |
 | Capability Levels | `docs/architecture/RFC_MONKENGINE_EXECUTION_MODES.md` | CL |
-| Development Lifecycle | `docs/RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md` | LC |
+| Task Execution | `docs/RFC_MONKENGINE_TASK_EXECUTION.md` | TE |
+| Development Lifecycle | `docs/RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md` | LC |
 | Pose Development Protocol (PDP) | `docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` | PDP |
 | Engineering Playbook | `docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md` | PB |
 | Definition of Done | `docs/RFC_MONKENGINE_DEFINITION_OF_DONE.md` | DoD |
@@ -138,14 +145,17 @@ MonkEngine Development System
 | Pose Acceptance Criteria | `docs/architecture/RFC_POSE_ACCEPTANCE_CRITERIA.md` | PAC |
 | Development Orchestrator | `docs/RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md` | ORCH |
 
-> Note: "Development Lifecycle" and "Development Orchestrator" are the same document
-> (`RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md`); it is named twice in the tree because it plays
-> both roles — it owns the lifecycle (§3 of that document) and it is the controller that executes
-> it. "Pose Rules & Patterns" is satisfied by `MIGRATION_RULES.md` (enforced coding standard) and
-> `RFC_POSE_RESPONSIBILITY_PROTOCOL.md` (responsibility boundary); both are listed so neither is
-> missed. "Engineering Playbook" (`RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md`) is the practical how-to
-> handbook; "Pose Development Protocol (PDP)" (`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`) is the
-> workflow it follows. The two are distinct and must not be conflated.
+> Note: "Task Execution" (`RFC_MONKENGINE_TASK_EXECUTION.md`) is the **mandatory entry
+> point** — the execution-order contract that binds a submitted task to the point at which
+> implementation is permitted. "Development Lifecycle" (`RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md`)
+> is the nine-stage workflow spine; "Development Orchestrator"
+> (`RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md`) is the decision engine that
+> receives the task and runs the lifecycle. "Pose Development Protocol (PDP)"
+> (`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`) is the *workflow* (the ordered
+> steps); "Engineering Playbook" (`RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md`) is the
+> *practical how-to* handbook that maps each task class onto those steps. The "Pose
+> Responsibility Protocol" (`RFC_POSE_RESPONSIBILITY_PROTOCOL.md`; PRP) is the
+> pose-vs-engine *boundary*. All are distinct nodes; none duplicates another.
 
 ---
 
@@ -158,18 +168,20 @@ Design Principles
         ↓
 Baseline
         ↓
-Development Lifecycle        (the Orchestrator — defines how a task is decided & sequenced)
+Task Execution              (the mandatory entry point — what MUST happen, in what order, before any implementation)
         ↓
-Development Orchestrator     (same document; the controller that runs the task)
-         ↓
+Development Orchestrator   (the decision engine — classifies, decides capability, picks docs/experts, sequences)
+        ↓
+Development Lifecycle     (the nine-stage spine the Orchestrator runs)
+        ↓
 Pose Development Protocol (PDP)   (the workflow — what to do, in order)
-         ↓
+        ↓
 Engineering Playbook         (the practical how-to handbook that follows the PDP)
-         ↓
+        ↓
 Definition of Done          (the acceptance gate the controller enforces)
-         ↓
+        ↓
 Pose Responsibility Protocol (PRP)   (responsibility boundary: pose vs engine)
-         ↓
+        ↓
 Pose Specifications          (BPS, MSS, MOM, JOM, VOM, PRP, PAC — the specification layer)
 ```
 
@@ -182,13 +194,18 @@ Pose Specifications          (BPS, MSS, MOM, JOM, VOM, PRP, PAC — the specific
    every other document (ARCHIVE / OBSOLETE / MERGE / DELETE). When a document conflicts with the
    live code, the code wins (Baseline §5); when an ARCHIVE/OBSOLETE doc conflicts with an ACTIVE
    one, the ACTIVE one wins.
-3. **Development Lifecycle / Orchestrator** decides and sequences every task. It applies the
+3. **Task Execution** is the mandatory entry point: no implementation begins before its contract is
+   satisfied (the task is received by the Orchestrator, classified, planned, and the Execution Plan is
+   approved). It sequences the documents below; it does not override any of them.
+4. **Development Orchestrator** decides and sequences every task. It applies the
    authority chain; it is not above the Principles or the Baseline, but it is the authority that
    *executes* the chain for a given task.
-4. **Pose Development Protocol (PDP)** defines the workflow steps; the Orchestrator selects which run. The Engineering Playbook is the practical handbook that applies them.
-5. **Definition of Done** is the bar the Orchestrator applies at acceptance. It does not override
+5. **Development Lifecycle** is the nine-stage spine (Idea → Classification → Planning → Expert
+   Review → Implementation → Verification → Acceptance → Knowledge Capture) the Orchestrator runs.
+6. **Pose Development Protocol (PDP)** defines the workflow steps; the Orchestrator selects which run. The Engineering Playbook is the practical handbook that applies them.
+7. **Definition of Done** is the bar the Orchestrator applies at acceptance. It does not override
    the Principles/Baseline, but every task must clear it.
-6. **Pose Development Protocol (PDP)** defines the workflow steps the task follows; **Pose
+8. **Pose Development Protocol (PDP)** defines the workflow steps the task follows; **Pose
    Responsibility Protocol (PRP)** fixes the pose-vs-engine responsibility boundary. Both are
    enforced inside the workflow and at acceptance.
 7. **Pose Specifications (BPS/MSS/MOM/JOM/VOM/PRP/PAC)** are the specification layer judged at
@@ -207,32 +224,36 @@ The order in which a task is actually carried out, from request to shipped imple
 ```
 User task
         ↓
+Task Execution               (the mandatory entry point: receive → classify → plan → approve before any code)
+        ↓
 Development Orchestrator        (classify, decide capability, pick docs/experts, sequence)
         ↓
 Capability Levels               (assign the Level 0–8 + Strictness that bounds freedom)
-         ↓
+        ↓
+Development Lifecycle           (run the stages the Orchestrator sequenced)
+        ↓
 Pose Development Protocol (PDP)  (run the workflow steps selected by the level)
-         ↓
+        ↓
 Engineering Playbook            (the practical how-to handbook that follows the PDP)
-         ↓
+        ↓
 Definition of Done             (the gate checked at acceptance)
-         ↓
+        ↓
 Pose Responsibility Protocol (PRP)  (enforce pose-vs-engine responsibility during the work)
-        ↓
+       ↓
 BPS                             (what correct biomechanics looks like — the target)
-        ↓
+       ↓
 MSS                             (the order motion propagates — sequence)
-        ↓
+       ↓
 MOM                             (which segment drives each movement — ownership of motion)
-        ↓
+       ↓
 JOM                             (which expert builds each joint — ownership of structure)
-        ↓
+       ↓
 VOM                             (which domain certifies each feature — ownership of checking)
-        ↓
+       ↓
 PRP                             (the responsibility boundary the pose must respect)
-        ↓
+       ↓
 PAC                             (the acceptance gate over the whole specification)
-        ↓
+       ↓
 Implementation                 (code/pose/validator — written only after the above are satisfied)
 ```
 
@@ -266,9 +287,16 @@ Every document has exactly one job. Overlapping responsibility is a defect (Desi
   pose/engine coding standard (Pose Rules & Patterns). What code must never do.
 - **Capability Levels** — execution strategy. Defines the Levels 0–8 and Strictness that bound how
   far a task may go.
-- **Development Lifecycle / Orchestrator** — the controller. Classifies any task, decides required
-  capability/RFCs/specs/experts/reports/DoD, sequences experts (which run, which in parallel, merge
+- **Task Execution** (`RFC_MONKENGINE_TASK_EXECUTION.md`) — the execution-order contract and
+  mandatory entry point. Fixes *what MUST happen, in what order, before any implementation begins*
+  (receive → classify → specify inputs → Execution Plan exists → Execution Plan approved →
+  implement). Sequences the documents below; it does not decide, classify, or judge.
+- **Development Orchestrator** — the decision engine. Classifies any task, decides required
+  capability/RFCs/specs/experts/plan/DoD, sequences experts (which run, which in parallel, merge
   strategy, conflict resolution), and runs mandatory final verification. The brain of the system.
+- **Development Lifecycle** (`RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md`) — the workflow spine.
+  The nine stages (Idea → Classification → Planning → Expert Review → Implementation →
+  Verification → Acceptance → Knowledge Capture) every task walks; the Orchestrator runs it.
 - **Pose Development Protocol (PDP)** — the workflow. The ordered steps (LOAD → ORIENT → AUDIT →
   CLEANUP → TRANSFORM → INTEGRATE → VALIDATE → ACCEPT → REPORT) an agent follows; the level selects
   which run.
@@ -301,12 +329,12 @@ required to read a document that reads it back — the graph is acyclic.
 ```
 Design Principles                (depends on: nothing — root law)
 Baseline                        (depends on: Design Principles)
-Engine Architecture             (depends on: Design Principles, Baseline)
-API Contracts                   (depends on: Engine Architecture, Baseline)
-Coding Rules                    (depends on: Design Principles, Baseline, Engine Architecture)
-Capability Levels               (depends on: Baseline, Design Principles)
-Development Orchestrator        (depends on: Design Principles, Baseline, Capability Levels,
-                                   Definition of Done, Pose Development Protocol, Engineering Playbook)
+Task Execution                 (depends on: Design Principles, Baseline, Development System map)
+Development Orchestrator        (depends on: Design Principles, Baseline, Task Execution,
+                                   Capability Levels, Definition of Done, Pose Development Protocol,
+                                   Engineering Playbook)
+Development Lifecycle           (depends on: Design Principles, Baseline, Task Execution,
+                                   Development Orchestrator, Capability Levels)
 Pose Development Protocol (PDP)  (depends on: Baseline, Capability Levels, Definition of Done)
 Engineering Playbook            (depends on: Baseline, Capability Levels, Definition of Done,
                                    Pose Development Protocol)
@@ -326,9 +354,10 @@ Implementation (code)          (depends on: ALL of the above that apply to its t
 - The specification layer (BPS/MSS/MOM/JOM/VOM/PAC) forms a DAG: BPS is the target; MSS/MOM describe
   its dynamics; JOM/VOM describe ownership of building/checking; PAC binds them. PAC depends on all
   six; none depends on PAC. No cycle.
-- The governance/control layer (Principles → Baseline → Capability Levels → Orchestrator → PDP →
-  Engineering Playbook → DoD) is strictly top-down. The Orchestrator reads DoD, PDP, and the
-  Engineering Playbook; none of those reads the Orchestrator. No cycle.
+- The governance/control layer (Principles → Baseline → Task Execution → Capability Levels →
+  Orchestrator → Lifecycle → PDP → Engineering Playbook → DoD) is strictly top-down. Task
+  Execution reads the System map and feeds the Orchestrator; the Orchestrator reads DoD, PDP, and
+  the Engineering Playbook; none of those reads the Orchestrator or Task Execution. No cycle.
 - Cross-layer edges only point *downward* (control reads specification; specification reads
   Principles/Baseline). No specification document depends on a control document.
 
@@ -347,7 +376,10 @@ task. This is the onboarding path; it is not the execution order (§4).
 5. **Coding Rules** + **Pose Rules & Patterns** (`CODING_RULES`, `MIGRATION_RULES`) — learn what code
    must never do.
 6. **Capability Levels** — learn the degrees of freedom (Levels 0–8, Strictness).
-7. **Development Orchestrator** — learn how any task is classified, sequenced, and verified.
+ 7. **Development Orchestrator** — learn how any task is classified, sequenced, and verified.
+ 7b. **Task Execution** (`RFC_MONKENGINE_TASK_EXECUTION.md`) — learn the mandatory entry
+   contract: receive → classify → plan → approve before any implementation. This is the gate every
+   task enters through.
  8. **Pose Development Protocol (PDP)** — learn the workflow steps.
  8b. **Engineering Playbook** — learn the practical how-to for each task class.
  9. **Definition of Done** — learn the acceptance bar before writing anything.

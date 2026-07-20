@@ -223,21 +223,19 @@ A branch may never intentionally leave the repository in a non-compiling state.
 ## 8. Relationship to other MonkEngine RFCs
 
 ```
-RFC_MONKENGINE_DESIGN_PRINCIPLES.md            (constitution — outranks the gate)
+RFC_MONKENGINE_DESIGN_PRINCIPLES.md      (the constitution — what is always true)
         │
-RFC_MONKENGINE_BASELINE.md                    (governance source of truth — ACTIVE set)
+RFC_MONKENGINE_BASELINE.md              (governance source of truth — what is authoritative)
         │
-RFC_MONKENGINE_DEVELOPMENT_SYSTEM.md          (system map; this is the acceptance-gate node)
+RFC_MONKENGINE_TASK_EXECUTION.md       (the mandatory entry point — Acceptance is its §10 stage)
         │
-RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md    (decides + sequences; applies this gate)
+RFC_MONKENGINE_EXECUTION_MODES.md       (freedom: levels + strictness)
         │
-RFC_MONKENGINE_CAPABILITY_LEVELS.md           (assigns the level whose §5 additions apply)
+RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md  (the controller: how a task is decided & sequenced)
         │
-RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md        (runs this gate at Stage 5/6)
+RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md   (the spine Acceptance/Verification live on)
         │
-docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md         (the how-to; this document does not duplicate it)
-         │
-docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md    (PDP — workflow steps judged at acceptance)
+RFC_MONKENGINE_DEFINITION_OF_DONE.md    (this document — the acceptance gate)
 ```
 
 - **DESIGN_PRINCIPLES** outranks everything; this gate enforces it.
