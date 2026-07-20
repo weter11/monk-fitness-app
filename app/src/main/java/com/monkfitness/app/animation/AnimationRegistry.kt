@@ -47,6 +47,7 @@ object AnimationRegistry {
         register("lunge_forward", AlternatingForwardLungesPose())
         register("lunge_reverse", AlternatingReverseLungesPose())
         register("lunge_side", AlternatingSideLungesPose())
+        register("cossack_squat", CossackSquatPose())
         register("step_up_standard", StepUpPose())
         register("dead_bug_standard", DeadBugPose())
         register("leg_raise_standard", LegRaisePose())
