@@ -32,11 +32,13 @@ The five documents you must always keep in view (this handbook references them o
 | **Definition of Done** (`RFC_MONKENGINE_DEFINITION_OF_DONE.md`) | The objective acceptance gate (Universal + category-specific). One failing item blocks Done. |
 | **Pose Development Protocol** (`docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`; PDP) | The ordered workflow steps (LOAD→ORIENT→AUDIT→CLEANUP→TRANSFORM→INTEGRATE→VALIDATE→ACCEPT→REPORT) for any pose/engine task. Pairs with the Capability Levels ("Execution Modes") which define freedom. |
 
-> **Note on naming.** The system calls the PDP the "Engineering Playbook" in the hierarchy, but the
-> task of *authoring the work* (intent vs realization) is governed by the **Pose Responsibility
-> Protocol** (`docs/architecture/RFC_POSE_RESPONSIBILITY_PROTOCOL.md`; PRP). This handbook treats the
-> **PDP** as the workflow to follow and the **PRP** as the boundary to respect. Both are loaded
-> automatically by the levels below.
+> **Note on naming.** The Development System distinguishes two documents that are easy to
+> conflate: the **Pose Development Protocol** (`docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`;
+> PDP) is the *workflow* (the ordered steps), and this **Engineering Playbook**
+> (`docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md`) is the *practical how-to* that maps each task class
+> onto those steps. The **Pose Responsibility Protocol** (`docs/architecture/RFC_POSE_RESPONSIBILITY_PROTOCOL.md`;
+> PRP) is the pose-vs-engine *boundary* every pose workflow respects. All three are distinct nodes in
+> `RFC_MONKENGINE_DEVELOPMENT_SYSTEM.md`.
 
 ---
 
