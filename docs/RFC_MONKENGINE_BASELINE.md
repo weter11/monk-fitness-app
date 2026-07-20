@@ -57,8 +57,9 @@ Every other document is derived from, archived under, or removed by this set.
 | `docs/architecture/RFC_JOINT_OWNERSHIP_MATRIX.md` | Per-joint biomechanical ownership. |
 | `docs/architecture/RFC_POSE_ACCEPTANCE_CRITERIA.md` | Measurable pose acceptance criteria (PAC). |
 | `docs/RFC_MONKENGINE_BASELINE.md` | This document (governance source of truth). |
-| `docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` | Pose-development workflow. |
-| `docs/architecture/RFC_MONKENGINE_EXECUTION_MODES.md` | Execution strategy. |
+| `docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` | Pose-development workflow (PDP). |
+| `docs/architecture/RFC_MONKENGINE_EXECUTION_MODES.md` | Execution strategy (levels, strictness). |
+| `docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md` | Practical engineering handbook (how-to for each task class). |
 
 > **Biomechanical specification system (seven documents).** The pose-development RFCs above
 > operate on a coherent seven-document set: **BPS** (Biomechanical Pose Specification — per-exercise

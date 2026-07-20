@@ -209,8 +209,10 @@ RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md   (the authority that runs this lifec
 RFC_MONKENGINE_CAPABILITY_LEVELS.md          (Classification picks the level here)
         │
 RFC_MONKENGINE_DEFINITION_OF_DONE.md         (the gate applied at Acceptance / Verification)
-        │
-RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md   (the workflow steps realized inside the stages)
+         │
+docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md   (PDP — the workflow steps realized inside the stages)
+         │
+docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md   (the practical how-to handbook that applies the PDP)
 ```
 
 - **DESIGN_PRINCIPLES** binds every stage; no stage may suspend a principle.
@@ -219,7 +221,10 @@ RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md   (the workflow steps realized insid
 - **ORCHESTRATOR** owns running the lifecycle and deciding stage order/parallelism.
 - **CAPABILITY_LEVELS** is what Stage 1 (Classification) decides.
 - **DEFINITION_OF_DONE** is the bar at Stage 5 (Verification) and Stage 6 (Acceptance).
-- **PLAYBOOK (PDP)** is the workflow content executed inside the stages.
+- **PDP** (`docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`) is the workflow content
+  executed inside the stages.
+- **ENGINEERING_PLAYBOOK** (`docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md`) is the practical how-to
+  handbook that maps task classes onto the PDP steps.
 
 ---
 
