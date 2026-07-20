@@ -118,6 +118,16 @@ the Orchestrator's decision (`RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md` §2).
   domains. If a validation pose fails, the reading is recorded or the engine is fixed — the pose is
   never retuned to pass (PRP §4; PAC §4).
 
+  **Motion-range contract (mandatory for any moving pose).** The `ExerciseValidator` only checks
+  per-frame *validity* (bone lengths, joint ROM, contacts, alignment). A perfectly valid but *static*
+  pose therefore passes with 0 errors yet animates nothing — the validator cannot see motion. Every
+  pose family that is supposed to move (push-ups, squats, lunges, etc.) MUST also pass a motion-range
+  test that asserts the body actually travels through the rep (e.g. chest/torso Y delta across
+  `progress` 0→1 exceeds a meaningful floor-to-top threshold). **If the family has no motion test,
+  create one before acceptance — do not accept a moving pose on validator-passing alone.** This is
+  the behavioural contract the validator cannot provide; it is what would have caught a static-body
+  regression directly (see PR #195).
+
 - **[8] ACCEPT** — walk the pose through the PAC pipeline (BPS → JOM → MOM → MSS → VOM → Engine
   integration → Visual) as one full passing cycle, then confirm against the Definition of Done. A
   single failing stage blocks acceptance; the gate is never lowered.
@@ -138,6 +148,10 @@ that gate. The pose is accepted only when:
 - it satisfies the Definition of Done universal + pose requirements (intent declared, engine realizes,
   no forbidden PRP logic, no duplicated ownership),
 - the four PRP review questions are answered and the "any engine workaround?" answer is **no** (PRP §6).
+- **motion is demonstrated, not assumed** — any pose family that is specified to move MUST have a
+  passing motion-range test (chest/torso travel through the rep), created first if absent. Validator
+  green alone is not sufficient for a moving pose (the validator asserts per-frame validity, not
+  motion).
 
 The PDP does not redefine these bars; it delivers the pose to them.
 

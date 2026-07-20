@@ -117,6 +117,7 @@ records **pass** or **fail** (no omission, no "n/a" without justification):
 | **Contacts** | BPS §8, MOM, MSS, VOM Contact | Each contact surface/pressure/stability matches BPS; MOM: contact is anchor; VOM Contact passes. |
 | **Balance** | BPS §3, MOM, MSS, VOM Balance | COM within base of support; MOM/MSS: balance before reach; VOM Balance passes. |
 | **Symmetry** | BPS §3/§11, MOM, MSS, VOM Symmetry | Left/right mirror equivalence; VOM Symmetry passes. |
+| **Motion** | BPS (motion/rep), PDP §5 [7], this §4 | For any pose specified to move, a motion-range test passes: the body actually travels through the rep (e.g. chest/torso Y delta across `progress` 0→1 exceeds a meaningful floor-to-top threshold). If no motion test exists for the family, it MUST be created first; validator green alone does not satisfy Motion. |
 
 Every row must show an explicit **pass** or **fail**. A single fail blocks
 acceptance until resolved through the correct owner (BPS/JOM/VOM), never through a
@@ -145,6 +146,10 @@ A pose is **immediately rejected** if any of the following hold:
 - **Manual stabilization** — the pose forces pelvis/spine/wrist/foot stabilization
   with transforms instead of declaring intent.
 - (any other forbidden logic from the Pose Responsibility Protocol §4).
+- **Static or motion-untested moving pose** — a pose specified to move either animates nothing
+  (chest/torso travel through the rep is ~0) or has no motion-range test. Validator green is not
+  sufficient: the `ExerciseValidator` asserts per-frame validity, not motion (PDP §5 [7]; see PR #195).
+  Accept only with a passing motion-range test.
 
 Rejection is unconditional: a "looks fine otherwise" does not rescue a pose that
 triggers any failure condition.
