@@ -133,6 +133,17 @@ abstract class BasePushUpPose : BasePose() {
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
             buildTorso(pelvis!!, chest!!, def.torsoLength)
 
+            // Knee-pivot descent: the knee is the floor pivot, the hip stays at knee-pivot height,
+            // and the chest/shoulders lower toward the hands as the elbows bend (arm-driven depth,
+            // per the BPS). Pitch the whole torso (pelvis -> chest -> shoulders -> head) forward
+            // with progress so the shoulders descend and the arm IK bends the elbows — a real rep,
+            // not a static horizontal plank. The thigh is near-vertical so the forward pitch swings
+            // the knee forward, not up, keeping it near the floor.
+            val kneeDepth = 0.5f - 0.5f * cos(context.progress * 2f * PI.toFloat())
+            val torsoPitch = kneeDepth * 0.42f
+            pelvis!!.localRotation.set(axisZ, torsoPitch)
+            declareJointIntent(Joint.CHEST, JointRotation(axisZ, torsoPitch))
+
             // 3. Perfect Symmetry (Side B). The back leg is the mirror chain; hip stays at
             // neutral identity rotation. Record the (zero) ROM carrier so both legs are
             // symmetric in carrier terms.
