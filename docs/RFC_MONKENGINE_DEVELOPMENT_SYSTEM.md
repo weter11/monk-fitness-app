@@ -77,14 +77,17 @@ MonkEngine Development System
 ├── Development Lifecycle
 │     docs/RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md
 │
-├── Engineering Playbook
+├── Pose Development Protocol (PDP)
 │     docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md
+│
+├── Engineering Playbook
+│     docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md
 │
 ├── Definition of Done
 │     docs/RFC_MONKENGINE_DEFINITION_OF_DONE.md
 │
-├── Pose Development Protocol
-│     docs/architecture/RFC_POSE_RESPONSIBILITY_PROTOCOL.md   (PRP)
+├── Pose Responsibility Protocol (PRP)
+│     docs/architecture/RFC_POSE_RESPONSIBILITY_PROTOCOL.md
 │
 ├── Biomechanical Pose Specifications
 │     docs/Biomechanical Pose Specification (BPS)/<Exercise>.md
@@ -123,9 +126,10 @@ MonkEngine Development System
 | Coding Rules | `docs/CODING_RULES.md`, `docs/MIGRATION_RULES.md` | CR |
 | Capability Levels | `docs/architecture/RFC_MONKENGINE_EXECUTION_MODES.md` | CL |
 | Development Lifecycle | `docs/RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md` | LC |
-| Engineering Playbook | `docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` | PB |
+| Pose Development Protocol (PDP) | `docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` | PDP |
+| Engineering Playbook | `docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md` | PB |
 | Definition of Done | `docs/RFC_MONKENGINE_DEFINITION_OF_DONE.md` | DoD |
-| Pose Development Protocol | `docs/architecture/RFC_POSE_RESPONSIBILITY_PROTOCOL.md` | PRP |
+| Pose Responsibility Protocol (PRP) | `docs/architecture/RFC_POSE_RESPONSIBILITY_PROTOCOL.md` | PRP |
 | Biomechanical Pose Specifications | `docs/Biomechanical Pose Specification (BPS)/<Exercise>.md` | BPS |
 | Movement Sequence Specification | `docs/architecture/Movement Sequence Specification.md` | MSS |
 | Movement Ownership Matrix | `docs/architecture/Movement Ownership Matrix.md` | MOM |
@@ -139,7 +143,9 @@ MonkEngine Development System
 > both roles — it owns the lifecycle (§3 of that document) and it is the controller that executes
 > it. "Pose Rules & Patterns" is satisfied by `MIGRATION_RULES.md` (enforced coding standard) and
 > `RFC_POSE_RESPONSIBILITY_PROTOCOL.md` (responsibility boundary); both are listed so neither is
-> missed.
+> missed. "Engineering Playbook" (`RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md`) is the practical how-to
+> handbook; "Pose Development Protocol (PDP)" (`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`) is the
+> workflow it follows. The two are distinct and must not be conflated.
 
 ---
 
@@ -155,13 +161,15 @@ Baseline
 Development Lifecycle        (the Orchestrator — defines how a task is decided & sequenced)
         ↓
 Development Orchestrator     (same document; the controller that runs the task)
-        ↓
-Engineering Playbook         (the workflow — what to do, in order)
-        ↓
+         ↓
+Pose Development Protocol (PDP)   (the workflow — what to do, in order)
+         ↓
+Engineering Playbook         (the practical how-to handbook that follows the PDP)
+         ↓
 Definition of Done          (the acceptance gate the controller enforces)
-        ↓
-Pose Development Protocol     (responsibility boundary: pose vs engine)
-        ↓
+         ↓
+Pose Responsibility Protocol (PRP)   (responsibility boundary: pose vs engine)
+         ↓
 Pose Specifications          (BPS, MSS, MOM, JOM, VOM, PRP, PAC — the specification layer)
 ```
 
@@ -177,10 +185,11 @@ Pose Specifications          (BPS, MSS, MOM, JOM, VOM, PRP, PAC — the specific
 3. **Development Lifecycle / Orchestrator** decides and sequences every task. It applies the
    authority chain; it is not above the Principles or the Baseline, but it is the authority that
    *executes* the chain for a given task.
-4. **Engineering Playbook (PDP)** defines the workflow steps; the Orchestrator selects which run.
+4. **Pose Development Protocol (PDP)** defines the workflow steps; the Orchestrator selects which run. The Engineering Playbook is the practical handbook that applies them.
 5. **Definition of Done** is the bar the Orchestrator applies at acceptance. It does not override
    the Principles/Baseline, but every task must clear it.
-6. **Pose Development Protocol (PRP)** fixes the pose-vs-engine responsibility boundary; it is
+6. **Pose Development Protocol (PDP)** defines the workflow steps the task follows; **Pose
+   Responsibility Protocol (PRP)** fixes the pose-vs-engine responsibility boundary. Both are
    enforced inside the workflow and at acceptance.
 7. **Pose Specifications (BPS/MSS/MOM/JOM/VOM/PRP/PAC)** are the specification layer judged at
    acceptance. They outrank implementation code, never the documents above them.
@@ -201,12 +210,14 @@ User task
 Development Orchestrator        (classify, decide capability, pick docs/experts, sequence)
         ↓
 Capability Levels               (assign the Level 0–8 + Strictness that bounds freedom)
-        ↓
-Engineering Playbook            (run the PDP steps selected by the level)
-        ↓
+         ↓
+Pose Development Protocol (PDP)  (run the workflow steps selected by the level)
+         ↓
+Engineering Playbook            (the practical how-to handbook that follows the PDP)
+         ↓
 Definition of Done             (the gate checked at acceptance)
-        ↓
-Pose Development Protocol        (enforce pose-vs-engine responsibility during the work)
+         ↓
+Pose Responsibility Protocol (PRP)  (enforce pose-vs-engine responsibility during the work)
         ↓
 BPS                             (what correct biomechanics looks like — the target)
         ↓
@@ -258,12 +269,15 @@ Every document has exactly one job. Overlapping responsibility is a defect (Desi
 - **Development Lifecycle / Orchestrator** — the controller. Classifies any task, decides required
   capability/RFCs/specs/experts/reports/DoD, sequences experts (which run, which in parallel, merge
   strategy, conflict resolution), and runs mandatory final verification. The brain of the system.
-- **Engineering Playbook (PDP)** — the workflow. The ordered steps (LOAD → ORIENT → AUDIT →
+- **Pose Development Protocol (PDP)** — the workflow. The ordered steps (LOAD → ORIENT → AUDIT →
   CLEANUP → TRANSFORM → INTEGRATE → VALIDATE → ACCEPT → REPORT) an agent follows; the level selects
   which run.
+- **Engineering Playbook** (`RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md`) — the practical how-to handbook.
+  Maps each recurring task class onto the PDP steps, the Capability Levels, the Lifecycle, the
+  Definition of Done, and the PRP boundary.
 - **Definition of Done** — the objective acceptance bar. Universal + category-specific criteria,
   Compile-First policy, and the acceptance procedure the Orchestrator runs.
-- **Pose Development Protocol (PRP)** — the responsibility boundary: a pose declares intent; the
+- **Pose Responsibility Protocol (PRP)** — the responsibility boundary: a pose declares intent; the
   engine realizes it. Forbids the pose from solving FK/IK/constraints/balance.
 - **BPS** — the biomechanical target per exercise: what correct posture and its checkpoints look
   like.
@@ -292,10 +306,12 @@ API Contracts                   (depends on: Engine Architecture, Baseline)
 Coding Rules                    (depends on: Design Principles, Baseline, Engine Architecture)
 Capability Levels               (depends on: Baseline, Design Principles)
 Development Orchestrator        (depends on: Design Principles, Baseline, Capability Levels,
-                                  Definition of Done, Engineering Playbook)
-Engineering Playbook            (depends on: Baseline, Capability Levels, Definition of Done)
+                                   Definition of Done, Pose Development Protocol, Engineering Playbook)
+Pose Development Protocol (PDP)  (depends on: Baseline, Capability Levels, Definition of Done)
+Engineering Playbook            (depends on: Baseline, Capability Levels, Definition of Done,
+                                   Pose Development Protocol)
 Definition of Done             (depends on: Design Principles, Baseline, Capability Levels)
-Pose Development Protocol (PRP) (depends on: Design Principles, Baseline, Engine Architecture)
+Pose Responsibility Protocol (PRP) (depends on: Design Principles, Baseline, Engine Architecture)
 BPS                             (depends on: Design Principles, Baseline, BIOMECHANICS)
 MSS                             (depends on: Design Principles, Baseline, BPS, MOM)
 MOM                             (depends on: Design Principles, Baseline, BPS)
@@ -310,9 +326,9 @@ Implementation (code)          (depends on: ALL of the above that apply to its t
 - The specification layer (BPS/MSS/MOM/JOM/VOM/PAC) forms a DAG: BPS is the target; MSS/MOM describe
   its dynamics; JOM/VOM describe ownership of building/checking; PAC binds them. PAC depends on all
   six; none depends on PAC. No cycle.
-- The governance/control layer (Principles → Baseline → Capability Levels → Orchestrator → Playbook
-  → DoD) is strictly top-down. The Orchestrator reads DoD and Playbook; neither reads the
-  Orchestrator. No cycle.
+- The governance/control layer (Principles → Baseline → Capability Levels → Orchestrator → PDP →
+  Engineering Playbook → DoD) is strictly top-down. The Orchestrator reads DoD, PDP, and the
+  Engineering Playbook; none of those reads the Orchestrator. No cycle.
 - Cross-layer edges only point *downward* (control reads specification; specification reads
   Principles/Baseline). No specification document depends on a control document.
 
@@ -332,9 +348,10 @@ task. This is the onboarding path; it is not the execution order (§4).
    must never do.
 6. **Capability Levels** — learn the degrees of freedom (Levels 0–8, Strictness).
 7. **Development Orchestrator** — learn how any task is classified, sequenced, and verified.
-8. **Engineering Playbook (PDP)** — learn the workflow steps.
-9. **Definition of Done** — learn the acceptance bar before writing anything.
-10. **Pose Development Protocol (PRP)** — learn the pose-vs-engine boundary.
+ 8. **Pose Development Protocol (PDP)** — learn the workflow steps.
+ 8b. **Engineering Playbook** — learn the practical how-to for each task class.
+ 9. **Definition of Done** — learn the acceptance bar before writing anything.
+10. **Pose Responsibility Protocol (PRP)** — learn the pose-vs-engine boundary.
 11. **BPS** — read one or two exercise specs to see the biomechanical target shape.
 12. **MSS** — learn the canonical movement sequence.
 13. **MOM** — learn movement ownership (driver/contributors/followers).

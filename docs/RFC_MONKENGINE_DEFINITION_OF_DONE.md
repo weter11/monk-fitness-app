@@ -235,9 +235,9 @@ RFC_MONKENGINE_CAPABILITY_LEVELS.md           (assigns the level whose §5 addit
         │
 RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md        (runs this gate at Stage 5/6)
         │
-RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md         (the how-to; this document does not duplicate it)
-        │
-RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md    (PDP — workflow steps judged at acceptance)
+docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md         (the how-to; this document does not duplicate it)
+         │
+docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md    (PDP — workflow steps judged at acceptance)
 ```
 
 - **DESIGN_PRINCIPLES** outranks everything; this gate enforces it.
@@ -246,7 +246,9 @@ RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md    (PDP — workflow steps judged at
 - **ORCHESTRATOR** runs the procedure in §6 and references this document as the final bar.
 - **CAPABILITY_LEVELS** supplies the level whose §5 additions the gate applies.
 - **LIFECYCLE** owns the stages; this gate is the bar at Verification/Acceptance.
-- **PLAYBOOK** owns the workflow; this document defines only acceptance and must not duplicate it.
+- **ENGINEERING_PLAYBOOK** owns the how-to; this document defines only acceptance and must not
+  duplicate it.
+- **PDP** owns the workflow steps; this document defines only the gate applied to them.
 
 ---
 

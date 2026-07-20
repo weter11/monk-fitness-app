@@ -263,7 +263,10 @@ RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md (workflow; the level selects which s
 - **ORCHESTRATOR** consumes these levels: it decides the level, then the level decides experts,
   specs, validation, and DoD.
 - **DEFINITION_OF_DONE** is the bar every level's "Required Definition of Done" points to.
-- **PLAYBOOK (PDP)** is the workflow the level's freedom is expressed through.
+- **PDP** (`docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`) is the workflow the level's
+  freedom is expressed through.
+- **ENGINEERING_PLAYBOOK** (`docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md`) is the practical how-to
+  handbook built on the PDP.
 
 ---
 
