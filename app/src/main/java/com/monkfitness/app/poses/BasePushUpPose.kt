@@ -28,7 +28,7 @@ abstract class BasePushUpPose : BasePose() {
 
     protected val armAIK = SkeletonMath.IKResult()
     protected val armPIK = SkeletonMath.IKResult()
-    protected val geometryResult = PushUpSolverResult()
+    protected val geometryResult = PushUpPlankResult()
 
     protected val targetHandABuffer = Vector3()
     protected val targetHandPBuffer = Vector3()
@@ -79,11 +79,11 @@ abstract class BasePushUpPose : BasePose() {
         val thighL = def.thighLength
 
         // Target a small knee flexion for a visual and anatomically natural, barely-perceptible knee bend
-        val targetFlexionDegrees = PushUpGeometrySolver.TARGET_KNEE_FLEXION_DEGREES
+        val targetFlexionDegrees = PushUpPlank.TARGET_KNEE_FLEXION_DEGREES
         val limbResult = SkeletonMath.solveNearStraightLimb(shinL, thighL, targetFlexionDegrees, legScratch)
         val legTargetLen = limbResult.d
 
-        val solverGeometry = PushUpGeometrySolver.solve(
+        val solverGeometry = PushUpPlank.solve(
             definition = def,
             support = metadata.support,
             gripWidthMultiplier = gripWidthMultiplier,
@@ -99,7 +99,7 @@ abstract class BasePushUpPose : BasePose() {
         val isKneePivot = metadata.support.pivot == PivotType.KNEES
 
         if (isKneePivot) {
-            val shinPitch = PushUpGeometrySolver.SHIN_PITCH_ANGLE // Shins point 45 degrees up
+            val shinPitch = PushUpPlank.SHIN_PITCH_ANGLE // Shins point 45 degrees up
 
             // 1. Root Anchoring
             ankleF!!.localPosition.set(ankleX, ankleHeightVal, -def.hipWidth)
@@ -133,6 +133,17 @@ abstract class BasePushUpPose : BasePose() {
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
             buildTorso(pelvis!!, chest!!, def.torsoLength)
 
+            // Knee-pivot descent: the knee is the floor pivot, the hip stays at knee-pivot height,
+            // and the chest/shoulders lower toward the hands as the elbows bend (arm-driven depth,
+            // per the BPS). Pitch the whole torso (pelvis -> chest -> shoulders -> head) forward
+            // with progress so the shoulders descend and the arm IK bends the elbows — a real rep,
+            // not a static horizontal plank. The thigh is near-vertical so the forward pitch swings
+            // the knee forward, not up, keeping it near the floor.
+            val kneeDepth = 0.5f - 0.5f * cos(context.progress * 2f * PI.toFloat())
+            val torsoPitch = kneeDepth * 0.42f
+            pelvis!!.localRotation.set(axisZ, torsoPitch)
+            declareJointIntent(Joint.CHEST, JointRotation(axisZ, torsoPitch))
+
             // 3. Perfect Symmetry (Side B). The back leg is the mirror chain; hip stays at
             // neutral identity rotation. Record the (zero) ROM carrier so both legs are
             // symmetric in carrier terms.
@@ -144,42 +155,51 @@ abstract class BasePushUpPose : BasePose() {
             kneeB!!.localRotation.set(axisZ, shinPitch + theta)
             ankleB!!.localPosition.set(def.shinLength, 0f, 0f)
         } else {
-            // Feet Pivot push-up leg orientation (Standard, Wide, Decline, Diamond, Military)
+            // Feet Pivot push-up (Standard, Wide, Decline, Diamond, Military).
+            // BPS: the body is a rigid plank supported on straight arms; depth is created by the
+            // ARMS (elbow flexion), not by dropping the pelvis. So the plank (hips -> chest ->
+            // head) rides at ARM height and descends with progress, while the feet stay planted
+            // on the floor and the (near-straight) legs slope up from the floor to the raised hips.
+            val depth = 0.5f - 0.5f * cos(context.progress * 2f * PI.toFloat())
+            val armLen = def.upperArmLength + def.forearmLength
+            val topH = armLen * 0.92f            // shoulders near full extension at the top
+            val botH = def.shinLength * 0.55f     // chest just above the floor at the bottom
+            val bodyH = topH + (botH - topH) * depth   // shoulder/chest/hip height this frame
+
+            // Foot stays planted on the floor (engine owns heel/toe).
             ankleF!!.localPosition.set(ankleX, ankleHeightVal, -def.hipWidth)
 
-            // The planted flat foot is owned by the engine: the Finalizer derives heel/toe
-            // from the shank + the neutral ankle articulation (W1 automatic). The pose declares
-            // the leg chain; it does not touch the foot endpoints.
-
-            // Precompute local knee flexion coordinates (F-leg: ankle is the parent, hip is child)
-            val kX = -limbResult.x
-            val kY = limbResult.y
-
-            kneeF!!.localPosition.set(kX, kY, 0f)
-            hipF!!.localPosition.set(-legTargetLen - kX, -kY, 0f)
+            // Rigid (near-straight) front leg: ankle (root) -> knee (shin, length shinL) -> hip
+            // (thigh, length thighL), each segment along the ankle->hip unit direction, so
+            // |ankle->hip| == legTargetLen and BONE_LENGTH stays constant.
+            val riseF = bodyH - ankleHeightVal
+            val runF = -sqrt(max(legTargetLen * legTargetLen - riseF * riseF, 1f))
+            val lenF = sqrt(runF * runF + riseF * riseF)
+            val uxF = runF / lenF; val uyF = riseF / lenF
+            kneeF!!.localPosition.set(uxF * def.shinLength, uyF * def.shinLength, 0f)
+            hipF!!.localPosition.set(uxF * def.thighLength, uyF * def.thighLength, 0f)
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
             buildTorso(pelvis!!, chest!!, def.torsoLength)
 
             // M14 — Decline tilt: slope the head-to-heels plank downward for feet-elevated
-            // variants by pitching the chest (and the whole shoulder/neck/head chain it carries)
-            // about the spine's mediolateral Z axis. The pelvis is left untouched so the
-            // planted legs stay on the box; the IK below re-solves the hands to the floor, so
-            // both contacts are preserved. 0 for every flat-planar member.
+            // variants by pitching the chest about the spine's mediolateral Z axis. The pelvis is
+            // left untouched so the planted legs stay on the box; the IK below re-solves the hands
+            // to the floor, so both contacts are preserved. 0 for every flat-planar member.
             if (declineTrunkPitch != 0f) {
                 chest!!.localRotation.set(axisZ, declineTrunkPitch)
                 declareJointIntent(Joint.CHEST, JointRotation(axisZ, declineTrunkPitch))
             }
 
+            // Back leg mirrors the slope but is rooted at the raised hip: hip (root) -> knee (thigh)
+            // -> ankle (shin), each segment along the hip->ankle unit direction down to the floor.
             hipB!!.localPosition.set(0f, 0f, def.hipWidth)
-            // B-leg: hip is the parent, ankle is the child
-            val bXResult = SkeletonMath.solveNearStraightLimb(thighL, shinL, targetFlexionDegrees, legScratch)
-            val bX = bXResult.x
-            val bY = bXResult.y
-
-            kneeB!!.localPosition.set(bX, bY, 0f)
-            ankleB!!.localPosition.set(legTargetLen - bX, -bY, 0f)
+            val riseB = bodyH - ankleHeightVal
+            val runB = sqrt(max(legTargetLen * legTargetLen - riseB * riseB, 1f))
+            val lenB = sqrt(runB * runB + riseB * riseB)
+            val uxB = runB / lenB; val uyB = -riseB / lenB
+            kneeB!!.localPosition.set(uxB * def.thighLength, uyB * def.thighLength, 0f)
+            ankleB!!.localPosition.set(uxB * def.shinLength, uyB * def.shinLength, 0f)
         }
-
         buildGaze(neck!!, head!!, def.neckLength, pushUpHeadDirection)
 
         // Seat the shoulder girdle on the chest (clavicle/scapula are identity, so this places

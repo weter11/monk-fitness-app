@@ -229,8 +229,8 @@ class StandardPushUpPoseTest {
             val legTargetLen = (def.shinLength + def.thighLength) * 0.99757f // post-fix d
             val boxHeight = 0f
 
-            val solverResult = PushUpSolverResult()
-            PushUpGeometrySolver.solve(
+            val solverResult = PushUpPlankResult()
+            PushUpPlank.solve(
                 definition = def,
                 support = poseBuilder.metadata.support,
                 gripWidthMultiplier = poseBuilder.gripWidthMultiplier,

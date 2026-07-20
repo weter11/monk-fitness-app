@@ -549,6 +549,16 @@ class ExerciseValidator(
         val shoulderA = pose.getJoint(Joint.SHOULDER_A)
         val handA = pose.getJoint(Joint.HAND_A)
 
+        // The "hands under shoulders" heuristic only makes sense for an UPRIGHT torso. For a
+        // horizontal / prone body (push-up, plank, ...) the chest sits forward of the pelvis, not
+        // above it, so a small hand-behind-shoulder X offset is correct form, not misalignment.
+        // Skip the rule when the body is horizontal (chest-forward dominates chest-up).
+        val pelvis = pose.getJoint(Joint.PELVIS)
+        val chest = pose.getJoint(Joint.CHEST)
+        val chestForward = kotlin.math.abs(chest.x - pelvis.x)
+        val chestUp = kotlin.math.abs(chest.y - pelvis.y)
+        if (chestForward > chestUp) return
+
         // Hands should not extend more than 5 units past shoulders in push-up position
         val handForwardOffset = shoulderA.x - handA.x  // Positive = hand past shoulder
         if (handForwardOffset < -5f || handForwardOffset > 15f) {

@@ -2,7 +2,7 @@ package com.monkfitness.app.animation
 
 import kotlin.math.*
 
-class PushUpSolverResult {
+class PushUpPlankResult {
     var pelvisHeight: Float = 0f
     var theta: Float = 0f
     var ankleX: Float = 0f
@@ -19,7 +19,7 @@ class PushUpSolverResult {
         handAnchorX: Float,
         kneeHeight: Float,
         kneeX: Float
-    ): PushUpSolverResult {
+    ): PushUpPlankResult {
         this.pelvisHeight = pelvisHeight
         this.theta = theta
         this.ankleX = ankleX
@@ -31,7 +31,7 @@ class PushUpSolverResult {
     }
 }
 
-object PushUpGeometrySolver {
+object PushUpPlank {
 
     // Biomechanical alignment and spacing constants
     const val PELVIS_ANCHOR_X = 60f
@@ -52,8 +52,8 @@ object PushUpGeometrySolver {
         support: SupportDefinition,
         gripWidthMultiplier: Float,
         progress: Float,
-        result: PushUpSolverResult
-    ): PushUpSolverResult {
+        result: PushUpPlankResult
+    ): PushUpPlankResult {
         val pivot = support.pivot
         val supportElevation = support.supportHeight
 
