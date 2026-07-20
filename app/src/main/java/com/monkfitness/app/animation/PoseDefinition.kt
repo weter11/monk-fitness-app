@@ -155,6 +155,22 @@ class SkeletonPose(
     val contacts: MutableList<ContactSpec> = mutableListOf()
 ) {
 
+    /**
+     * W1b — declared support planes for extremities the engine orients automatically (feet/hands).
+     *
+     * The extremity-orientation pass in [SkeletonPoseFinalizer] already flattens a *foot* onto a
+     * support plane, but it reads that plane from [contacts] — which is only populated by
+     * contact-bearing `bakeIkLimb` calls. Poses that author their limbs by FK or by plain
+     * (contact-less) IK (every push-up: the plank is authored, the hands are baked with no
+     * `ContactConstraint`) register nothing there, so their planted feet float above the floor and
+     * their palms slope into it. This map is the direct, additive channel a pose uses to tell the
+     * engine "this extremity rests on this plane" without pretending it drove the global contact
+     * solver. Keyed by [Extremity]; empty for every pose that does not opt in, so all existing
+     * geometry stays byte-identical. The Finalizer consumes it as the support plane for the
+     * matching hand/foot when [contacts] carries no plane for that extremity.
+     */
+    val extremitySupportPlanes: MutableMap<Extremity, ContactConstraint> = mutableMapOf()
+
     // ---- §1.1 INTENT SECTION (written by Pose, read by Engine) ----------------------------
 
     /** Per-joint relative articulations (chest/hip/girdle/ankle/wrist) declared by the pose. */
@@ -312,6 +328,10 @@ class SkeletonPose(
         for (e in other.extremityArticulations) {
             this.extremityArticulations[e.key] = e.value
         }
+        this.extremitySupportPlanes.clear()
+        for (e in other.extremitySupportPlanes) {
+            this.extremitySupportPlanes[e.key] = e.value
+        }
     }
 
     /**
@@ -403,6 +423,7 @@ class SkeletonPose(
             pose.limbTargets.clear()
             pose.extremityOverrides.clear()
             pose.extremityArticulations.clear()
+            pose.extremitySupportPlanes.clear()
             pose.postureIntent = PostureIntent(PostureIntent.Kind.CUSTOM)
             pose.contactPrecedence.clear()
             pose.contacts.clear()

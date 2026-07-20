@@ -547,6 +547,37 @@ class SkeletonPoseFinalizer(
 
         tempDir.set(wrist).subtract(elbow).normalize()
 
+        // W1b (hand extremity derivation): a hand resting on a support plane (the floor for a
+        // push-up, a bar, a box) must lie *in* that plane, not slope into it. The neutral hand
+        // direction is the forearm direction, which points down-and-forward to a planted hand, so
+        // the palm/knuckles/fingertips inherit that downward slope and dig through the floor. When
+        // the pose declares a support plane for this hand, project the forearm direction onto the
+        // plane so the completed hand lies flat on its support. Genuine wrist articulation is
+        // applied AFTER this (via [wristRotation]), so intent is never overridden; a hand with no
+        // declared support plane is untouched, preserving every non-support pose exactly.
+        val handSupportNormal = supportPlaneNormalForHand(pose, handId)
+        if (handSupportNormal != null) {
+            val nd = handSupportNormal.dot(tempDir)
+            tempDir.set(
+                tempDir.x - handSupportNormal.x * nd,
+                tempDir.y - handSupportNormal.y * nd,
+                tempDir.z - handSupportNormal.z * nd
+            )
+            // A forearm perpendicular to the support (hand straight down) has no in-plane
+            // component; fall back to a world-forward heading laid into the plane so the hand
+            // still lies flat instead of collapsing to a zero-length direction.
+            if (tempDir.mag() < 1e-3f) {
+                tempDir.set(1f, 0f, 0f)
+                val nd2 = handSupportNormal.dot(tempDir)
+                tempDir.set(
+                    tempDir.x - handSupportNormal.x * nd2,
+                    tempDir.y - handSupportNormal.y * nd2,
+                    tempDir.z - handSupportNormal.z * nd2
+                )
+            }
+            tempDir.normalize()
+        }
+
         // Promote the wrist to a real joint: compose the authored wrist orientation with
         // the forearm direction so grips (pronation / supination / wrist flexion) are
         // honored by the completed hand. The passed [wristRotation] is the hand's rotation
@@ -662,14 +693,56 @@ class SkeletonPoseFinalizer(
      * nothing is invented here. Allocation-free: reuses [tempFootNormal] scratch.
      */
     private fun supportPlaneNormalForFoot(pose: SkeletonPose, ankleId: Joint): Vector3? {
+        // Primary: a plane registered by a contact-bearing bakeIkLimb (PR-04 global solver path).
+        // The foot chain roots at the ankle, but a pose may declare the contact on the ankle OR on
+        // the distal toe/heel node (push-ups declare TOES). Match any contact whose end joint
+        // belongs to this foot so a toe/heel-declared plane still flattens the foot.
+        val footEnds = footContactJointsFor(ankleId)
         for (spec in pose.contacts) {
-            if (spec.endJoint == ankleId && spec.contact != null) {
-                val n = spec.contact.normal
-                val nMag = sqrt(n.x * n.x + n.y * n.y + n.z * n.z)
-                if (nMag < 1e-4f) return null
-                return tempFootNormal.set(n.x / nMag, n.y / nMag, n.z / nMag)
+            if (spec.contact != null && footEnds.contains(spec.endJoint)) {
+                return normalizeInto(spec.contact.normal, tempFootNormal)
             }
         }
-        return null
+        // Fallback: a plane declared directly on the extremity (W1b — FK/contact-less poses).
+        val ext = footExtremityFor(ankleId) ?: return null
+        val plane = pose.extremitySupportPlanes[ext] ?: return null
+        return normalizeInto(plane.normal, tempFootNormal)
+    }
+
+    /** Joints that belong to a given foot's contact chain (ankle + its heel/toe endpoints). */
+    private fun footContactJointsFor(ankleId: Joint): Set<Joint> = when (ankleId) {
+        Joint.ANKLE_F -> setOf(Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
+        Joint.ANKLE_B -> setOf(Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
+        else -> setOf(ankleId)
+    }
+
+    private fun footExtremityFor(ankleId: Joint): Extremity? = when (ankleId) {
+        Joint.ANKLE_F -> Extremity.FOOT_F
+        Joint.ANKLE_B -> Extremity.FOOT_B
+        else -> null
+    }
+
+    private fun handExtremityFor(handId: Joint): Extremity? = when (handId) {
+        Joint.HAND_A -> Extremity.HAND_A
+        Joint.HAND_P -> Extremity.HAND_P
+        else -> null
+    }
+
+    /** Support-plane normal for a hand, from a declared contact or an extremity plane (W1b). */
+    private fun supportPlaneNormalForHand(pose: SkeletonPose, handId: Joint): Vector3? {
+        for (spec in pose.contacts) {
+            if (spec.endJoint == handId && spec.contact != null) {
+                return normalizeInto(spec.contact.normal, tempFootNormal)
+            }
+        }
+        val ext = handExtremityFor(handId) ?: return null
+        val plane = pose.extremitySupportPlanes[ext] ?: return null
+        return normalizeInto(plane.normal, tempFootNormal)
+    }
+
+    private fun normalizeInto(n: Vector3, out: Vector3): Vector3? {
+        val nMag = sqrt(n.x * n.x + n.y * n.y + n.z * n.z)
+        if (nMag < 1e-4f) return null
+        return out.set(n.x / nMag, n.y / nMag, n.z / nMag)
     }
 }
