@@ -169,7 +169,7 @@ Results (JUnit XML) land in `app/build/test-results/testDebugUnitTest/`.
   (6/6), `IKLimbHelperTest`, `TrunkFrameTest` all pass. the MonkEngine runtime BONE_LENGTH
   (NECK_END→HEAD_POS) defect is fixed.
 - Remaining failures (~24) are Validator (S2) / pose-authoring (S3) concerns per
-  `RFC_ENGINE_STABILIZATION.md` — not engine defects. Re-measure after each subsystem.
+  `docs/HISTORICAL/RFC_ENGINE_STABILIZATION.md` — not engine defects. Re-measure after each subsystem.
 
 ---
 

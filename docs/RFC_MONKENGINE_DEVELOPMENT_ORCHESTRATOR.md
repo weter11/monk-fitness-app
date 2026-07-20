@@ -3,7 +3,8 @@
 **Status:** ACTIVE
 **Position in graph:** the Development Orchestrator node of the MonkEngine Development System
 (`RFC_MONKENGINE_DEVELOPMENT_SYSTEM.md`). It is the **decision engine** of the system, not a
-workflow. Pairs with `RFC_MONKENGINE_CAPABILITY_LEVELS.md`,
+workflow. Reached only through the mandatory entry contract
+(`RFC_MONKENGINE_TASK_EXECUTION.md`). Pairs with `RFC_MONKENGINE_CAPABILITY_LEVELS.md`,
 `RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md`, `RFC_MONKENGINE_DEFINITION_OF_DONE.md`, and
 `docs/architecture/RFC_POSE_RESPONSIBILITY_PROTOCOL.md` (PRP).
 **Scope:** orchestration only. For every incoming task the Orchestrator *decides*; it does not
@@ -184,6 +185,10 @@ restate PRP's rules — it treats them as binding on every decision it makes abo
 ```
 RFC_MONKENGINE_DESIGN_PRINCIPLES.md            (constitution — outranks the Orchestrator)
         │
+RFC_MONKENGINE_BASELINE.md                  (governance source of truth)
+        │
+RFC_MONKENGINE_TASK_EXECUTION.md           (the mandatory entry point — no implementation before its contract)
+        │
 RFC_MONKENGINE_DEVELOPMENT_SYSTEM.md          (the system map; this is the "Development
         │                                        Orchestrator" node)
         │
@@ -194,10 +199,13 @@ RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md        (the sequence the Orchestrator dr
 RFC_MONKENGINE_DEFINITION_OF_DONE.md          (the gate the Orchestrator's Acceptance plan targets)
         │
 docs/architecture/RFC_POSE_RESPONSIBILITY_PROTOCOL.md  (PRP — the pose/engine boundary the
-                                                        Orchestrator enforces on pose tasks)
+                                                         Orchestrator enforces on pose tasks)
 ```
 
 - **DESIGN_PRINCIPLES** outranks every Orchestrator decision.
+- **BASELINE** names the ACTIVE set the Orchestrator loads.
+- **TASK_EXECUTION** is the mandatory entry point: the Orchestrator receives the task only
+  *through* it, and may not permit implementation until its contract (Execution Plan approved) is met.
 - **DEVELOPMENT_SYSTEM** places this document and defines the authority hierarchy used for
   conflicts.
 - **CAPABILITY_LEVELS** is the source of the level the Orchestrator assigns in §2.2.
@@ -213,6 +221,9 @@ docs/architecture/RFC_POSE_RESPONSIBILITY_PROTOCOL.md  (PRP — the pose/engine 
 
 To keep ownership clean:
 
+- It is **not** the entry point. `RFC_MONKENGINE_TASK_EXECUTION.md` owns the mandatory
+  ordering (receive → classify → plan → approve) that the Orchestrator executes; the Orchestrator
+  is the decision engine *within* that contract, not the contract itself.
 - It is **not** a workflow. The Lifecycle owns stage mechanics.
 - It is **not** an acceptance gate. The Definition of Done owns the bar.
 - It is **not** a capability scale. Capability Levels owns the maturity definitions.

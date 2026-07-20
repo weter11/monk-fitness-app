@@ -59,6 +59,8 @@ Every other document is derived from, archived under, or removed by this set.
 | `docs/RFC_MONKENGINE_BASELINE.md` | This document (governance source of truth). |
 | `docs/architecture/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md` | Pose-development workflow (PDP). |
 | `docs/architecture/RFC_MONKENGINE_EXECUTION_MODES.md` | Execution strategy (levels, strictness). |
+| `docs/RFC_MONKENGINE_TASK_EXECUTION.md` | Execution-order contract; the mandatory entry point (no implementation before an approved Execution Plan). |
+| `docs/RFC_MONKENGINE_ENGINEERING_TARGET_SPECIFICATION.md` | Engineering Target Specification (ETS); transforms a request into an explicit target (WHAT the result is). |
 | `docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md` | Practical engineering handbook (how-to for each task class). |
 
 > **Biomechanical specification system (seven documents).** The pose-development RFCs above
@@ -154,6 +156,8 @@ ARCHITECTURE_FREEZE.md ── freezes ──► ARCHITECTURE_V2.md
         │
         └──── RFC_MONKENGINE_BASELINE.md  (governance source of truth, document classification)  ◄ ROOT
                     │
+                    ├── RFC_MONKENGINE_TASK_EXECUTION.md        (mandatory entry point: execution-order contract)
+                    ├── RFC_MONKENGINE_ENGINEERING_TARGET_SPECIFICATION.md (transforms a request into an explicit target)
                     ├── RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md  (workflow: what to do, in order)
                     └── RFC_MONKENGINE_EXECUTION_MODES.md            (execution strategy: how far to go)
 ```

@@ -226,7 +226,7 @@ to make a broken engine read green.
 > **diagnostic-instrument rule** (§2) that retarget was instrument tampering and has
 > been reverted — the pose is restored to the straight-intent probe described in §11.1
 > below. Those two documents' "fix the pose" verdicts are **superseded**; the audit of
-> the reversal is in `MIDDLE_SPLIT_DIAGNOSTIC_AUDIT.md`.
+> the reversal is in `docs/HISTORICAL/MIDDLE_SPLIT_DIAGNOSTIC_AUDIT.md`.
 
 A visual / biomechanical audit was performed by rendering each frozen pose
 through the real engine (`SkeletonPoseFinalizer` + `ConstraintSolver`) and

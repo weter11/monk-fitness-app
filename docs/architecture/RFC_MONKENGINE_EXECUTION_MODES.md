@@ -268,6 +268,9 @@ auto-loaded.
 
 ## 7. Relationship to Other MonkEngine RFCs
 
+- **TASK_EXECUTION** (`RFC_MONKENGINE_TASK_EXECUTION.md`) is the mandatory entry point: the
+  Orchestrator resolves a natural request into a directive only within its contract, and implementation
+  is forbidden until the Execution Plan it produces is approved.
 - **BASELINE** (`RFC_MONKENGINE_BASELINE.md`) is the root: it names the ACTIVE set loaded in §6 and
   the §5 principles (including the Zero-Legacy preference) this RFC expresses as strictness.
 - **POSE_DEVELOPMENT_PROTOCOL** (`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`) defines the *workflow*

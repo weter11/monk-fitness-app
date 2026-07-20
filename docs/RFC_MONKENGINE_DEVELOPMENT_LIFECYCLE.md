@@ -202,6 +202,8 @@ RFC_MONKENGINE_DESIGN_PRINCIPLES.md           (constitution — outranks the lif
         │
 RFC_MONKENGINE_BASELINE.md                   (source of truth; document classification)
         │
+RFC_MONKENGINE_TASK_EXECUTION.md           (the mandatory entry point — no stage runs before its contract)
+        │
 RFC_MONKENGINE_DEVELOPMENT_SYSTEM.md         (system map; this is the "Development Lifecycle" node)
         │
 RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md   (the authority that runs this lifecycle per task)
@@ -217,6 +219,8 @@ docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md   (the practical how-to handbook tha
 
 - **DESIGN_PRINCIPLES** binds every stage; no stage may suspend a principle.
 - **BASELINE** supplies the ACTIVE set and the classification of documents.
+- **TASK_EXECUTION** is the mandatory entry point: the lifecycle's stages run only after its
+  contract (Execution Plan approved) is satisfied.
 - **DEVELOPMENT_SYSTEM** places this document as the Development Lifecycle node.
 - **ORCHESTRATOR** owns running the lifecycle and deciding stage order/parallelism.
 - **CAPABILITY_LEVELS** is what Stage 1 (Classification) decides.

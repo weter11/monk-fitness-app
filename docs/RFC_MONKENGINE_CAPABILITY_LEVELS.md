@@ -247,18 +247,26 @@ RFC_MONKENGINE_DESIGN_PRINCIPLES.md          (constitution — outranks all)
         │
 RFC_MONKENGINE_BASELINE.md                  (governance source of truth)
         │
+RFC_MONKENGINE_TASK_EXECUTION.md           (the mandatory entry point — classification happens within its contract)
+        │
 RFC_MONKENGINE_DEVELOPMENT_SYSTEM.md        (the system map; this level set is the
         │                                      "Capability Levels" node)
         │
 RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md  (uses these levels to classify every task)
         │
+RFC_MONKENGINE_DEVELOPMENT_LIFECYCLE.md    (the spine these levels run on)
+        │
 RFC_MONKENGINE_DEFINITION_OF_DONE.md        (the gate each level's DoD column cites)
         │
 RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md (workflow; the level selects which steps run)
+        │
+docs/RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md  (the practical how-to built on the PDP)
 ```
 
 - **DESIGN_PRINCIPLES** outranks every level's decisions.
 - **BASELINE** names the ACTIVE set each level's "required specifications" draws from.
+- **TASK_EXECUTION** is the mandatory entry point: the Orchestrator classifies the task (assigns
+  its level) only within this contract; implementation is forbidden until the Execution Plan is approved.
 - **DEVELOPMENT_SYSTEM** places this document as the Capability Levels node.
 - **ORCHESTRATOR** consumes these levels: it decides the level, then the level decides experts,
   specs, validation, and DoD.

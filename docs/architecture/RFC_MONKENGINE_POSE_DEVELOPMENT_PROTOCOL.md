@@ -148,6 +148,7 @@ The PDP does not redefine these bars; it delivers the pose to them.
 ```
 RFC_MONKENGINE_DEVELOPMENT_SYSTEM.md        (system map; this is the Pose Development Protocol node)
         │
+        ├── RFC_MONKENGINE_TASK_EXECUTION.md           (mandatory entry point — PDP steps run only after its contract)
         ├── RFC_MONKENGINE_DEVELOPMENT_ORCHESTRATOR.md   (decides category/level; selects which steps run)
         ├── RFC_MONKENGINE_ENGINEERING_PLAYBOOK.md        (maps each task class onto these steps)
         ├── RFC_MONKENGINE_DEFINITION_OF_DONE.md          (the acceptance gate this workflow is judged against)
