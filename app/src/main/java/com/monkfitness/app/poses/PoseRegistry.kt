@@ -57,6 +57,7 @@ object PoseRegistry {
         "lunge_forward" to false,
         "lunge_reverse" to false,
         "lunge_side" to false,
+        "cossack_squat" to false,
         "step_up_standard" to false
     )
 
