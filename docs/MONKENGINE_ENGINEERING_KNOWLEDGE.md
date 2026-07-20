@@ -94,7 +94,7 @@ runtime or record the reading. You NEVER retune the pose to make it green.
 I cannot stress this enough because it is counter-intuitive and everyone's first instinct is the
 opposite. When a validation pose fails, the failure is *information*. The Middle Split diagnostic
 was briefly retargeted to full reach to make it pass — that was explicitly reverted and is now an
-anti-pattern enshrined in an audit doc (`MIDDLE_SPLIT_DIAGNOSTIC_AUDIT.md`). The pose must READ
+anti-pattern enshrined in an audit doc (`docs/HISTORICAL/MIDDLE_SPLIT_DIAGNOSTIC_AUDIT.md`). The pose must READ
 honestly whether the runtime passes or fails.
 
 ### 1.8 Frozen Architecture v2

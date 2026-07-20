@@ -101,7 +101,7 @@ After declaring intent + targets + contacts, a pose calls the bake/finalize pipe
 ## Part D — Legacy references (historical, do not imitate)
 
 The following documents describe the *old* leaky patterns and why they were removed. They are evidence, not guidance:
-- `docs/ENGINE_RESPONSIBILITY_AUDIT_NEW.md` (W1–W10 workarounds)
-- `docs/POSE_MIGRATION_REPORT.md` (extremity workaround removal)
-- `docs/ENGINE_AUTOMATIC_ORIENTATION_AUDIT.md`
+- `docs/HISTORICAL/ENGINE_RESPONSIBILITY_AUDIT_NEW.md` (W1–W10 workarounds)
+- `docs/HISTORICAL/POSE_MIGRATION_REPORT.md` (extremity workaround removal)
+- `docs/HISTORICAL/ENGINE_AUTOMATIC_ORIENTATION_AUDIT.md`
 - `docs/HISTORICAL/` (UNI-* investigation)
