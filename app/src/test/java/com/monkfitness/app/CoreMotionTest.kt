@@ -21,7 +21,9 @@ class CoreMotionTest {
             "SupermanPose" to 40f,
             "MountainClimberPose" to 40f,
             "BurpeePose" to 70f,
-            "KettlebellSwingPose" to 60f
+            "KettlebellSwingPose" to 60f,
+            "IsometricSidePlankPose" to 40f,
+            "StaticForearmPlankPose" to 30f
         )
         val failures = mutableListOf<String>()
         for ((name, floor) in cases) {

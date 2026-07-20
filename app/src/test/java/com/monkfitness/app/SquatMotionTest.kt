@@ -18,7 +18,8 @@ class SquatMotionTest {
             "SquatPose" to 50f,
             "SumoSquatPose" to 50f,
             "CossackSquatPose" to 50f,
-            "JumpSquatPose" to 35f
+            "JumpSquatPose" to 35f,
+            "StepUpPose" to 8f
         )
         val failures = mutableListOf<String>()
         for ((name, floor) in cases) {
