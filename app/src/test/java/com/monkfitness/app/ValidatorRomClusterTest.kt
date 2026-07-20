@@ -19,6 +19,57 @@ class ValidatorRomClusterTest {
     private val env = EnvironmentDefinition()
     private val camera = Camera()
 
+    /**
+     * HAND_SHOULDER_ALIGNMENT must NOT fire for a prone/horizontal body (push-up, plank): the
+     * hands legitimately sit slightly behind/under the shoulder in X, which is correct form, not
+     * misalignment. The rule is an upright-torso heuristic and is skipped when the chest is
+     * forward of (rather than above) the pelvis.
+     */
+    @Test
+    fun handShoulderAlignmentSkippedForHorizontalBody() {
+        val poseBuilder = StandardPushUpPose()
+        val pipeline = SkeletonPipeline(def)
+        val config = ValidatorConfig.ENGINEERING_VALIDATION.copy(
+            checkIkTargetReachability = true,
+            checkBilateralSymmetry = true,
+            checkHandShoulderAlignment = true,
+            expectedSupportJoints = setOf(
+                Joint.HAND_A, Joint.HAND_P, Joint.WRIST_A, Joint.WRIST_P,
+                Joint.TOE_F, Joint.TOE_B, Joint.HEEL_F, Joint.HEEL_B,
+                Joint.ANKLE_F, Joint.ANKLE_B
+            )
+        )
+        val validator = ExerciseValidator(config)
+        for (i in 0..20) {
+            val progress = i.toFloat() / 20f
+            val ctx = PoseContext(progress = progress, side = Side.RIGHT, definition = def,
+                deltaTime = 0.0166f, cycleDuration = 2500f)
+            val fin = pipeline.produceFrame(poseBuilder.build(ctx)).pose
+            val report = validator.validate(fin, def, env, camera, 1080f, 1920f, null, null, 0.0166f)
+            assertTrue(
+                "push-up at progress $progress must not trip HAND_SHOULDER_ALIGNMENT (prone body)",
+                report.results.none { it.ruleId == "HAND_SHOULDER_ALIGNMENT" && !it.isValid }
+            )
+        }
+    }
+
+    /**
+     * Guard against over-suppression: an UPRIGHT pose whose hands are genuinely far behind the
+     * shoulders must still be flagged. This confirms the horizontal-skip only affects prone bodies.
+     */
+    @Test
+    fun handShoulderAlignmentStillFiresForUprightMisalignment() {
+        val pose = basePose()
+        // Upright torso: chest straight above pelvis (chestUp > chestForward), hands far behind shoulders.
+        pose.setJoint(Joint.CHEST, Vector3(0f, 330f, 0f))
+        pose.setJoint(Joint.SHOULDER_A, Vector3(0f, 320f, -def.shoulderWidth))
+        pose.setJoint(Joint.HAND_A, Vector3(-80f, 320f, -def.shoulderWidth))
+        val report = ExerciseValidator(ValidatorConfig(checkHandShoulderAlignment = true))
+            .validate(pose, def, env, camera, 1000f, 1000f)
+        val rule = report.results.first { it.ruleId == "HAND_SHOULDER_ALIGNMENT" }
+        assertFalse("upright pose with hands 80u behind shoulders must still be flagged", rule.isValid)
+    }
+
     private fun basePose(): SkeletonPose {
         val pose = SkeletonPose()
         val pelvisY = 210f
