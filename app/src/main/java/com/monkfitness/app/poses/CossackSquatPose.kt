@@ -79,8 +79,12 @@ class CossackSquatPose : BaseLungePose() {
         val plantAnkle = targetF.set(0f, footRestY, workingZ)
         val straightAnkle = targetB.set(0f, footRestY, straightZ)
 
-        // COM shifts toward the working foot; pelvis sits between the two feet in Z.
-        val pelvisX = comX(workingZ, straightZ, d)
+        // Both feet sit at X=0 (a frontal straddle); the load/weight shift is in Z, not X.
+        // Feeding the Z-anchors into comX() previously produced a large bogus +X pelvis shift
+        // that yanked the root off the working foot and inverted the working thigh (knee ended
+        // up ABOVE the hip). The pelvis therefore stays centred in X; the side bias is carried
+        // purely in Z (pelvisZ above).
+        val pelvisX = 0f
         val pelvisY = SkeletonMath.lerp(standH, bottomH, d)
         val lean = SkeletonMath.lerp(0f, leanMax, d)
         val pelvisAngle = -lean
