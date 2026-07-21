@@ -62,7 +62,22 @@ class SkeletonPipeline(
      * already been `build()`-constructed. The Solver is skipped when the pose registered no contacts
      * (the common production case), so non-contact poses are untouched.
      */
-    fun produceFrame(builtPose: SkeletonPose): PipelineResult {
+    /**
+     * Entry point for an already-built pose (renderer path). Runs the stage chain on [builtPose].
+     * The caller supplies the engine-owned support model ([environment] + [supportedPoints]) because
+     * this overload receives a bare SkeletonPose with no metadata; the PoseBuilder overload derives
+     * both from `metadata` itself. Both paths stamp the SAME carriers so the Finalizer derives
+     * support planes identically. A default (empty) environment is byte-identical for a pose that
+     * declares none.
+     */
+    fun produceFrame(
+        builtPose: SkeletonPose,
+        environment: EnvironmentDefinition = EnvironmentDefinition(),
+        supportedPoints: Set<SupportPoint> = emptySet()
+    ): PipelineResult {
+        builtPose.environment = environment
+        builtPose.supportedPoints.clear()
+        builtPose.supportedPoints.addAll(supportedPoints)
         val finalized = runStages(builtPose)
         return PipelineResult(finalized, null)
     }
@@ -76,6 +91,16 @@ class SkeletonPipeline(
      */
     fun produceFrame(pose: PoseBuilder, context: PoseContext): PipelineResult {
         val built = pose.build(context)
+        // W1b — stamp the engine-owned support model onto the pose so the Finalizer can derive
+        // support planes for EVERY pose from the environment (ground + props) and the declared
+        // support contacts, instead of any per-pose hardcoded plane. Declarative: the pose only
+        // says WHICH points rest on WHAT; the engine decides the geometry. No-op for a pose with no
+        // environment/support declared (byte-identical geometry elsewhere).
+        built.environment = pose.metadata.environment
+        built.supportedPoints.clear()
+        for (contact in pose.metadata.support.contacts) {
+            built.supportedPoints.add(contact.point)
+        }
         return PipelineResult(runStages(built), null)
     }
 

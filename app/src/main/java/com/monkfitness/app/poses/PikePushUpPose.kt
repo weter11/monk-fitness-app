@@ -137,6 +137,13 @@ class PikePushUpPose : BasePushUpPose() {
         // articulation, so the pose must NOT also copy wrist onto hand.
         buildWristArticulation(Extremity.HAND_A, -torsoGlobalPitch, 0f, handA!!)
 
+        // PikePushUp authors its own hand orientation (the grip tracks the inverted-V torso pitch),
+        // so it opts both hands out of the engine's environment-driven flattening via the existing
+        // MANUAL_OVERRIDE mechanism. Without this the Finalizer would re-flatten the planted hands
+        // and change Pike's established geometry.
+        jointsBuffer.extremityOverrides.add(Extremity.HAND_A)
+        jointsBuffer.extremityOverrides.add(Extremity.HAND_P)
+
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         return jointsBuffer
     }

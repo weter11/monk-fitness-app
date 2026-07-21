@@ -155,6 +155,27 @@ class SkeletonPose(
     val contacts: MutableList<ContactSpec> = mutableListOf()
 ) {
 
+    /**
+     * The environment the pose rests in, derived from `metadata.environment` once by the pipeline.
+     * The [SkeletonPoseFinalizer] reads this — NOT a per-pose hardcoded plane — to derive the
+     * support surface every declared [com.monkfitness.app.animation.contacts] extremity (and every
+     * hand/foot in a [com.monkfitness.app.animation.support]) rests on, and flattens the extremity
+     * onto it. Because it comes from the engine-owned environment model (ground + box/step/wall
+     * props), the same Finalizer logic prevents palms from slicing into the floor, feet from
+     * floating, and limbs from penetrating a box/wall in EVERY pose — there is no per-pose
+     * "the floor is at y=0" duplication. Defaults to a flat ground at y=0 so a pose with no
+     * environment description is unaffected and every pre-existing geometry stays byte-identical.
+     */
+    /**
+     * The set of body points declared as environment support contacts (`metadata.support.contacts`).
+     * The Finalizer reads this (not a per-pose hardcoded plane) to decide which extremities to
+     * flatten onto their support surface. Empty for every pose that declares no support, so all
+     * pre-existing geometry is byte-identical.
+     */
+    val supportedPoints: MutableSet<SupportPoint> = mutableSetOf()
+
+    var environment: EnvironmentDefinition = EnvironmentDefinition()
+
     // ---- §1.1 INTENT SECTION (written by Pose, read by Engine) ----------------------------
 
     /** Per-joint relative articulations (chest/hip/girdle/ankle/wrist) declared by the pose. */
@@ -312,6 +333,9 @@ class SkeletonPose(
         for (e in other.extremityArticulations) {
             this.extremityArticulations[e.key] = e.value
         }
+        this.environment = other.environment
+        this.supportedPoints.clear()
+        this.supportedPoints.addAll(other.supportedPoints)
     }
 
     /**
@@ -403,6 +427,8 @@ class SkeletonPose(
             pose.limbTargets.clear()
             pose.extremityOverrides.clear()
             pose.extremityArticulations.clear()
+            pose.environment = EnvironmentDefinition()
+            pose.supportedPoints.clear()
             pose.postureIntent = PostureIntent(PostureIntent.Kind.CUSTOM)
             pose.contactPrecedence.clear()
             pose.contacts.clear()
@@ -534,4 +560,8 @@ class SkeletonPose(
             val localMatX = Vector3(); val localMatY = Vector3(); val localMatZ = Vector3()
         }
     }
+
+    /** True when [point] is declared as an environment support contact. */
+    fun isSupported(point: SupportPoint): Boolean = supportedPoints.contains(point)
+
 }

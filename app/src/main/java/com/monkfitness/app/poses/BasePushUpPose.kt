@@ -247,6 +247,13 @@ abstract class BasePushUpPose : BasePose() {
         // target and lets the engine resolve the extremity — it never copies wrist
         // onto hand or hand onto wrist.
 
+        // W1b — declare the support planes for the engine's automatic extremity orientation.
+        // The hands rest on the floor (feet-pivot push-ups) or on the same plane the plank rides;
+        // the planted feet/knee rest on the floor. The Finalizer flattens palm and foot geometry
+        // onto these planes so palms lie flat instead of slicing into the ground and feet plant
+        // instead of floating. Declared here (not via a contact-bearing bake) because the push-up
+        // authors its plank by FK and bakes the arms without a ContactConstraint.
+
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         return jointsBuffer
     }
