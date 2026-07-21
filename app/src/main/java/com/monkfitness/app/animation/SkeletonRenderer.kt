@@ -26,6 +26,7 @@ fun SkeletonRenderer(
     engine: SkeletonEngine,
     modifier: Modifier = Modifier,
     environment: EnvironmentDefinition = EnvironmentDefinition(),
+    supportedPoints: Set<SupportPoint> = emptySet(),
     showGround: Boolean = true,
     highlightedJoint: Joint? = null,
     screenSpaceSettings: ScreenSpaceSettings = ScreenSpaceSettings.DEFAULT
@@ -47,7 +48,7 @@ fun SkeletonRenderer(
         val width = size.width
         val height = size.height
 
-        val finalizedPose = pipeline.produceFrame(pose).pose
+        val finalizedPose = pipeline.produceFrame(pose, environment, supportedPoints).pose
         projector.project(
             pose = finalizedPose,
             camera = camera,

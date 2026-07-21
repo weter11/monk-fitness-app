@@ -80,6 +80,7 @@ fun ExerciseAnimatedVisual(
             camera = camera,
             engine = engine,
             environment = metadata.environment,
+            supportedPoints = metadata.support.contacts.map { it.point }.toSet(),
             modifier = modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {

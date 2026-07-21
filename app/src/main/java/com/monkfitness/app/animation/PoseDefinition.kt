@@ -156,20 +156,25 @@ class SkeletonPose(
 ) {
 
     /**
-     * W1b — declared support planes for extremities the engine orients automatically (feet/hands).
-     *
-     * The extremity-orientation pass in [SkeletonPoseFinalizer] already flattens a *foot* onto a
-     * support plane, but it reads that plane from [contacts] — which is only populated by
-     * contact-bearing `bakeIkLimb` calls. Poses that author their limbs by FK or by plain
-     * (contact-less) IK (every push-up: the plank is authored, the hands are baked with no
-     * `ContactConstraint`) register nothing there, so their planted feet float above the floor and
-     * their palms slope into it. This map is the direct, additive channel a pose uses to tell the
-     * engine "this extremity rests on this plane" without pretending it drove the global contact
-     * solver. Keyed by [Extremity]; empty for every pose that does not opt in, so all existing
-     * geometry stays byte-identical. The Finalizer consumes it as the support plane for the
-     * matching hand/foot when [contacts] carries no plane for that extremity.
+     * The environment the pose rests in, derived from `metadata.environment` once by the pipeline.
+     * The [SkeletonPoseFinalizer] reads this — NOT a per-pose hardcoded plane — to derive the
+     * support surface every declared [com.monkfitness.app.animation.contacts] extremity (and every
+     * hand/foot in a [com.monkfitness.app.animation.support]) rests on, and flattens the extremity
+     * onto it. Because it comes from the engine-owned environment model (ground + box/step/wall
+     * props), the same Finalizer logic prevents palms from slicing into the floor, feet from
+     * floating, and limbs from penetrating a box/wall in EVERY pose — there is no per-pose
+     * "the floor is at y=0" duplication. Defaults to a flat ground at y=0 so a pose with no
+     * environment description is unaffected and every pre-existing geometry stays byte-identical.
      */
-    val extremitySupportPlanes: MutableMap<Extremity, ContactConstraint> = mutableMapOf()
+    /**
+     * The set of body points declared as environment support contacts (`metadata.support.contacts`).
+     * The Finalizer reads this (not a per-pose hardcoded plane) to decide which extremities to
+     * flatten onto their support surface. Empty for every pose that declares no support, so all
+     * pre-existing geometry is byte-identical.
+     */
+    val supportedPoints: MutableSet<SupportPoint> = mutableSetOf()
+
+    var environment: EnvironmentDefinition = EnvironmentDefinition()
 
     // ---- §1.1 INTENT SECTION (written by Pose, read by Engine) ----------------------------
 
@@ -328,10 +333,9 @@ class SkeletonPose(
         for (e in other.extremityArticulations) {
             this.extremityArticulations[e.key] = e.value
         }
-        this.extremitySupportPlanes.clear()
-        for (e in other.extremitySupportPlanes) {
-            this.extremitySupportPlanes[e.key] = e.value
-        }
+        this.environment = other.environment
+        this.supportedPoints.clear()
+        this.supportedPoints.addAll(other.supportedPoints)
     }
 
     /**
@@ -423,7 +427,8 @@ class SkeletonPose(
             pose.limbTargets.clear()
             pose.extremityOverrides.clear()
             pose.extremityArticulations.clear()
-            pose.extremitySupportPlanes.clear()
+            pose.environment = EnvironmentDefinition()
+            pose.supportedPoints.clear()
             pose.postureIntent = PostureIntent(PostureIntent.Kind.CUSTOM)
             pose.contactPrecedence.clear()
             pose.contacts.clear()
@@ -555,4 +560,8 @@ class SkeletonPose(
             val localMatX = Vector3(); val localMatY = Vector3(); val localMatZ = Vector3()
         }
     }
+
+    /** True when [point] is declared as an environment support contact. */
+    fun isSupported(point: SupportPoint): Boolean = supportedPoints.contains(point)
+
 }

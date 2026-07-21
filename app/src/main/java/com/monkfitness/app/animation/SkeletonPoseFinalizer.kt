@@ -555,7 +555,25 @@ class SkeletonPoseFinalizer(
         // plane so the completed hand lies flat on its support. Genuine wrist articulation is
         // applied AFTER this (via [wristRotation]), so intent is never overridden; a hand with no
         // declared support plane is untouched, preserving every non-support pose exactly.
-        val handSupportNormal = supportPlaneNormalForHand(pose, handId)
+        // W1b (environment-driven): flatten the hand onto the surface its declared support
+        // contact rests on (ground by default; a box/wall if the pose declares one). Driven entirely
+        // by `pose.environment` + `metadata.support.contacts` — no per-pose hardcoded plane, so the
+        // same logic keeps palms flat in every pose that rests a hand on a surface. A hand that is
+        // not declared as a support contact is untouched (e.g. hanging/pull-up grips on a bar).
+        val handExt = if (handId == Joint.HAND_A) Extremity.HAND_A else Extremity.HAND_P
+        // Only auto-flatten when the engine owns the hand. Skip when the pose has ALREADY authored a
+        // wrist articulation for this hand (recorded in `extremityArticulations`, e.g. PikePushUp's
+        // deliberate grip) — flattening would fight that intent. Also skip when the hand is not
+        // actually PLANTED: a supporting hand rests BELOW its elbow (palm on the floor); a gripping
+        // hand on an overhead bar sits ABOVE the elbow and must not be driven down to the ground.
+        // This geometric test distinguishes "hand on the floor" from "hand on a bar" without a magic
+        // distance threshold.
+        val handPoint = if (handId == Joint.HAND_A) SupportPoint.LEFT_HAND else SupportPoint.RIGHT_HAND
+        val planted = pose.getJoint(handId).y <= pose.getJoint(elbowId).y + 1.0f
+        val poseOwnsWrist = pose.extremityArticulations.containsKey(handExt)
+        val handSupportNormal = if (pose.isSupported(handPoint) && !poseOwnsWrist && planted) {
+            supportPlaneNormalFor(pose, handPoint)
+        } else null
         if (handSupportNormal != null) {
             val nd = handSupportNormal.dot(tempDir)
             tempDir.set(
@@ -651,7 +669,11 @@ class SkeletonPoseFinalizer(
         // no-penetration check. Projecting the direction onto the contact plane keeps the planted
         // foot flat on its support (generic support-plane reasoning — no per-pose special casing).
         // Free-hanging feet (no contact) are untouched, so non-support poses are unchanged.
-        val supportNormal = supportPlaneNormalForFoot(pose, ankleId)
+        // W1b (environment-driven): flatten the foot onto the surface its declared support
+        // contact rests on (ground, or a box/step top). Derived from pose.environment + declared
+        // support — no per-pose special casing; the same code plants feet in every pose.
+        val footPoint = footSupportPointFor(ankleId)
+        val supportNormal = if (pose.isSupported(footPoint)) supportPlaneNormalFor(pose, footPoint) else null
         if (supportNormal != null) {
             val nd = supportNormal.dot(tempFootDir)
             tempFootDir.set(
@@ -692,57 +714,78 @@ class SkeletonPoseFinalizer(
      * exactly the support the pose asked the solver to honor — ground, wall, prop or bar — and
      * nothing is invented here. Allocation-free: reuses [tempFootNormal] scratch.
      */
-    private fun supportPlaneNormalForFoot(pose: SkeletonPose, ankleId: Joint): Vector3? {
-        // Primary: a plane registered by a contact-bearing bakeIkLimb (PR-04 global solver path).
-        // The foot chain roots at the ankle, but a pose may declare the contact on the ankle OR on
-        // the distal toe/heel node (push-ups declare TOES). Match any contact whose end joint
-        // belongs to this foot so a toe/heel-declared plane still flattens the foot.
-        val footEnds = footContactJointsFor(ankleId)
-        for (spec in pose.contacts) {
-            if (spec.contact != null && footEnds.contains(spec.endJoint)) {
-                return normalizeInto(spec.contact.normal, tempFootNormal)
+    /** Maps an ankle joint to the front/back foot support point. */
+    private fun footSupportPointFor(ankleId: Joint): SupportPoint = when (ankleId) {
+        Joint.ANKLE_F -> SupportPoint.RIGHT_FOOT
+        Joint.ANKLE_B -> SupportPoint.LEFT_FOOT
+        else -> SupportPoint.RIGHT_FOOT
+    }
+
+    // ---------------------------------------------------------------------------
+    // Environment-driven support-plane derivation (W1b, replaces per-pose hardcoded planes).
+    //
+    // The pose declares WHICH extremities rest on WHAT via `metadata.environment` (a ground plane
+    // plus optional box/step/wall props) and `metadata.support.contacts` (which support points).
+    // From those two declarative facts the engine derives, for every supported extremity, the
+    // surface normal it should rest on — so palms lie flat on the floor, feet plant on the floor
+    // or a box, and a wall-slide hand lies flat on a wall. This is the SAME logic for every pose;
+    // no pose re-declares "the floor is at y=0". A pose with no environment is byte-identical.
+    // ---------------------------------------------------------------------------
+
+    /** Maps a support point to the joints that physically touch the surface for that extremity. */
+    private fun contactJointsFor(point: SupportPoint): List<Joint> = when (point) {
+        SupportPoint.LEFT_FOOT, SupportPoint.LEFT_TOES -> listOf(Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
+        SupportPoint.RIGHT_FOOT, SupportPoint.RIGHT_TOES -> listOf(Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
+        SupportPoint.LEFT_KNEE -> listOf(Joint.KNEE_F)
+        SupportPoint.RIGHT_KNEE -> listOf(Joint.KNEE_B)
+        SupportPoint.LEFT_HAND -> listOf(Joint.HAND_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A)
+        SupportPoint.RIGHT_HAND -> listOf(Joint.HAND_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
+        SupportPoint.LEFT_FOREARM, SupportPoint.RIGHT_FOREARM -> listOf(Joint.ELBOW_A, Joint.ELBOW_P)
+        SupportPoint.HIPS, SupportPoint.BACK, SupportPoint.PELVIS -> listOf(Joint.HIP_F, Joint.HIP_B, Joint.PELVIS)
+        SupportPoint.CUSTOM -> emptyList()
+        SupportPoint.LEFT_ELBOW, SupportPoint.RIGHT_ELBOW -> emptyList()
+    }
+
+    /** For each supported extremity, the surface normal it should rest flat against. */
+    private fun supportPlaneNormalFor(pose: SkeletonPose, point: SupportPoint): Vector3? {
+        val env = pose.environment
+        val joints = contactJointsFor(point).map { pose.getJoint(it) }
+        if (joints.isEmpty()) return null
+        val cx = joints.sumOf { it.x.toDouble() }.toFloat() / joints.size
+        val cy = joints.sumOf { it.y.toDouble() }.toFloat() / joints.size
+        val cz = joints.sumOf { it.z.toDouble() }.toFloat() / joints.size
+        // Default support = the ground plane (normal +Y). A prop overrides it when the contact lies
+        // within the prop's horizontal footprint (box/step/bench: on its top; wall: on its face).
+        var bestNormal: Vector3? = groundNormal(tempFootNormal)
+        var bestDist = kotlin.math.abs(cy - env.ground.level)
+        for (prop in env.props) {
+            val footprint = propFootprint(prop) ?: continue
+            val within = cx in (footprint.cx - footprint.hw)..(footprint.cx + footprint.hw) &&
+                cz in (footprint.cz - footprint.hd)..(footprint.cz + footprint.hd)
+            if (!within) continue
+            when (prop) {
+                is BoxProp, is StepProp, is BenchProp -> {
+                    val top = footprint.cy + footprint.hh
+                    val d = kotlin.math.abs(cy - top)
+                    if (d < bestDist) { bestDist = d; bestNormal = groundNormal(tempFootNormal) }
+                }
+                is WallProp -> {
+                    val side = if (cx >= footprint.cx) 1f else -1f
+                    bestNormal = tempFootNormal.set(-side, 0f, 0f)
+                }
             }
         }
-        // Fallback: a plane declared directly on the extremity (W1b — FK/contact-less poses).
-        val ext = footExtremityFor(ankleId) ?: return null
-        val plane = pose.extremitySupportPlanes[ext] ?: return null
-        return normalizeInto(plane.normal, tempFootNormal)
+        return bestNormal
     }
 
-    /** Joints that belong to a given foot's contact chain (ankle + its heel/toe endpoints). */
-    private fun footContactJointsFor(ankleId: Joint): Set<Joint> = when (ankleId) {
-        Joint.ANKLE_F -> setOf(Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
-        Joint.ANKLE_B -> setOf(Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
-        else -> setOf(ankleId)
+    /** Uniform footprint (center + half-extents) for the box-like props that can support a contact. */
+    private data class PropFootprint(val cx: Float, val cy: Float, val cz: Float, val hw: Float, val hh: Float, val hd: Float)
+    private fun propFootprint(prop: EnvironmentProp): PropFootprint? = when (prop) {
+        is BoxProp -> PropFootprint(prop.center.x, prop.center.y, prop.center.z, prop.width * 0.5f, prop.height * 0.5f, prop.depth * 0.5f)
+        is StepProp -> PropFootprint(prop.center.x, prop.center.y, prop.center.z, prop.width * 0.5f, prop.height * 0.5f, prop.depth * 0.5f)
+        is BenchProp -> PropFootprint(prop.center.x, prop.center.y, prop.center.z, prop.width * 0.5f, prop.height * 0.5f, prop.depth * 0.5f)
+        is WallProp -> PropFootprint(prop.center.x, prop.center.y, prop.center.z, prop.width * 0.5f, prop.height * 0.5f, prop.depth * 0.5f)
     }
 
-    private fun footExtremityFor(ankleId: Joint): Extremity? = when (ankleId) {
-        Joint.ANKLE_F -> Extremity.FOOT_F
-        Joint.ANKLE_B -> Extremity.FOOT_B
-        else -> null
-    }
-
-    private fun handExtremityFor(handId: Joint): Extremity? = when (handId) {
-        Joint.HAND_A -> Extremity.HAND_A
-        Joint.HAND_P -> Extremity.HAND_P
-        else -> null
-    }
-
-    /** Support-plane normal for a hand, from a declared contact or an extremity plane (W1b). */
-    private fun supportPlaneNormalForHand(pose: SkeletonPose, handId: Joint): Vector3? {
-        for (spec in pose.contacts) {
-            if (spec.endJoint == handId && spec.contact != null) {
-                return normalizeInto(spec.contact.normal, tempFootNormal)
-            }
-        }
-        val ext = handExtremityFor(handId) ?: return null
-        val plane = pose.extremitySupportPlanes[ext] ?: return null
-        return normalizeInto(plane.normal, tempFootNormal)
-    }
-
-    private fun normalizeInto(n: Vector3, out: Vector3): Vector3? {
-        val nMag = sqrt(n.x * n.x + n.y * n.y + n.z * n.z)
-        if (nMag < 1e-4f) return null
-        return out.set(n.x / nMag, n.y / nMag, n.z / nMag)
-    }
+    private fun groundNormal(out: Vector3): Vector3 = out.set(0f, 1f, 0f)
 }

@@ -51,6 +51,13 @@ class SkeletonPipelineM0Test {
                 val p = i / frames.toFloat()
 
                 val built = refPose.build(PoseContext(p, Side.LEFT, def))
+                // Stamp the environment-driven support model so the Finalizer derives support
+                // planes identically to the active pipeline path (which stamps these from
+                // metadata.environment / metadata.support.contacts inside produceFrame).
+                built.environment = refPose.metadata.environment
+                for (contact in refPose.metadata.support.contacts) {
+                    built.supportedPoints.add(contact.point)
+                }
                 if (built.roots.isNotEmpty() && built.hasContacts()) {
                     ConstraintSolver.solve(built, def)
                 }

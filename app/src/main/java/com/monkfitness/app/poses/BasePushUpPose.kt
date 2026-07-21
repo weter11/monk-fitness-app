@@ -253,25 +253,8 @@ abstract class BasePushUpPose : BasePose() {
         // onto these planes so palms lie flat instead of slicing into the ground and feet plant
         // instead of floating. Declared here (not via a contact-bearing bake) because the push-up
         // authors its plank by FK and bakes the arms without a ContactConstraint.
-        declareSupportPlanes(def)
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         return jointsBuffer
-    }
-
-    /**
-     * Registers the floor (or box-elevated) support planes for the hands and the planted lower-body
-     * contact. Overridable so feet-elevated variants (decline) can raise the foot plane onto a box.
-     * The hand plane is the floor at y=0 for every flat push-up; the foot/knee plane is the floor
-     * unless a subclass elevates it.
-     */
-    protected open fun declareSupportPlanes(def: SkeletonDefinition) {
-        // Hands rest on the floor for every flat push-up, so the palm/knuckles/fingertips lie flat
-        // on the ground instead of slicing into it. (Foot planting is a separate plank-geometry
-        // concern — the ankle height and toe-plant live in PushUpPlank, not the orientation pass —
-        // and is addressed by the knee/decline plank rework, not here.)
-        val floor = ContactConstraint.ground(0f)
-        jointsBuffer.extremitySupportPlanes[Extremity.HAND_A] = floor
-        jointsBuffer.extremitySupportPlanes[Extremity.HAND_P] = floor
     }
 }
