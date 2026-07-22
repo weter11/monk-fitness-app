@@ -96,60 +96,37 @@ abstract class BasePushUpPose : BasePose() {
         val isKneePivot = metadata.support.pivot == PivotType.KNEES
 
         if (isKneePivot) {
-            val shinPitch = PushUpPlank.SHIN_PITCH_ANGLE // Shins point 45 degrees up
+            // Knee-pivot push-up (KneePushUpPose): rigid plank, arm-driven depth.
+            // The torso rotates as one unit via buildSpineCurve (B7-compliant).
+            // The old code wrote pelvis.localRotation + chest.localRotation independently
+            // (B7 violation) which caused shoulders to lurch past hands.
+            val depth = 0.5f - 0.5f * cos(context.progress * 2f * PI.toFloat())
+            val shinPitch = PushUpPlank.SHIN_PITCH_ANGLE
 
-            // 1. Root Anchoring
+            // 1. Root Anchoring - knee on the floor.
             ankleF!!.localPosition.set(ankleX, ankleHeightVal, -def.hipWidth)
 
-            // The planted flat foot is owned by the engine: the Finalizer derives heel/toe
-            // from the shank + the neutral ankle articulation (W1 automatic). The pose declares
-            // the leg chain; it does not touch the foot endpoints.
-
-            // 2. Main Plank (Side F)
-            // Rigid near-straight leg from ankle (root) to hip. The KneePivot geometry solver
-            // returns `theta` = the pelvis offset angle; the shin is pitched 45° up (knee on
-            // floor) and the thigh continues the chain to the pelvis. The hip rotation below is the
-            // *honest* rigid-chain continuation of the knee's pitch — it is NOT a counter-
-            // rotation workaround: the knee node is rotated by (-theta - shinPitch) so the femur
-            // (hip relative to knee) must carry (+theta + shinPitch) to keep the thigh rigid and
-            // horizontal, placing the pelvis at the solver's `pelvisHeight` and keeping the hand
-            // IK target on the floor reachable. This is direct FK authoring of the chain, not an
-            // intent carrier masquerading as hip flexion.
+            // 2. Front leg: ankle -> knee (shin, 45 deg up) -> hip (thigh, rigid).
             kneeF!!.localPosition.set(-def.shinLength, 0f, 0f)
-            kneeF!!.localRotation.set(axisZ, -theta - shinPitch)
+            kneeF!!.localRotation.set(axisZ, -shinPitch)
 
             hipF!!.localPosition.set(-def.thighLength, 0f, 0f)
-            // Record the actual authored rigid-chain rotation (NOT a fake "flexion intent"
-            // carrier): the knee node is rotated by (-theta - shinPitch) so the femur
-            // (hip relative to knee) must carry (+theta + shinPitch) to keep the thigh
-            // rigid and horizontal. declareJointIntent records the true node rotation for
-            // the B4a ROM carrier (idempotent Finalizer consume), with no misleading
-            // "hip flexion" semantics.
-            hipF!!.localRotation.set(axisZ, theta + shinPitch)
-            declareJointIntent(Joint.HIP_F, JointRotation(axisZ, theta + shinPitch))
+            hipF!!.localRotation.set(axisZ, shinPitch)
+            declareJointIntent(Joint.HIP_F, JointRotation(axisZ, shinPitch))
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
             buildTorso(pelvis!!, chest!!, def.torsoLength)
 
-            // Knee-pivot descent: the knee is the floor pivot, the hip stays at knee-pivot height,
-            // and the chest/shoulders lower toward the hands as the elbows bend (arm-driven depth,
-            // per the BPS). Pitch the whole torso (pelvis -> chest -> shoulders -> head) forward
-            // with progress so the shoulders descend and the arm IK bends the elbows — a real rep,
-            // not a static horizontal plank. The thigh is near-vertical so the forward pitch swings
-            // the knee forward, not up, keeping it near the floor.
-            val kneeDepth = 0.5f - 0.5f * cos(context.progress * 2f * PI.toFloat())
-            val torsoPitch = kneeDepth * 0.42f
-            pelvis!!.localRotation.set(axisZ, torsoPitch)
-            declareJointIntent(Joint.CHEST, JointRotation(axisZ, torsoPitch))
+            // B7: single spine curve - rigid plank rotating as one unit.
+            // Top (depth=0): 0 deg pitch. Bottom (depth=1): ~12 deg.
+            // Shoulders descend via spine rotation; arm IK bends elbows.
+            val torsoAngle = depth * 0.35f
+            buildSpineCurve(pelvis!!, chest!!, torsoAngle, torsoAngle)
 
-            // 3. Perfect Symmetry (Side B). The back leg is the mirror chain; hip stays at
-            // neutral identity rotation. Record the (zero) ROM carrier so both legs are
-            // symmetric in carrier terms.
+            // 3. Back leg - mirror chain, neutral hip.
             hipB!!.localPosition.set(0f, 0f, def.hipWidth)
             declareJointIntent(Joint.HIP_B, JointRotation(axisZ, 0f))
-
-            // Shin B must mirror the front 45 degree upward pitch (negative Z for the back side).
             kneeB!!.localPosition.set(def.thighLength, 0f, 0f)
-            kneeB!!.localRotation.set(axisZ, shinPitch + theta)
+            kneeB!!.localRotation.set(axisZ, shinPitch)
             ankleB!!.localPosition.set(def.shinLength, 0f, 0f)
         } else {
             // Feet Pivot push-up (Standard, Wide, Decline, Diamond, Military).
