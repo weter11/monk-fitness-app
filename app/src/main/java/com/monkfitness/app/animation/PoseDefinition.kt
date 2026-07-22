@@ -220,6 +220,19 @@ class SkeletonPose(
     val extremityArticulations: MutableMap<Extremity, JointRotation> = mutableMapOf()
 
     /**
+     * Heading — the intended root-relative (pelvis-frame) forward direction of each extremity.
+     * Exercise intent: the exercise declares which way the hand/foot faces when the constraint
+     * system admits multiple valid orientations (e.g. a planted hand on the floor). The Finalizer
+     * transforms root-relative heading into world space and projects it onto the support plane.
+     * `null` per extremity means no heading is declared — the Finalizer falls back to the
+     * existing derivation chain (forearm projection / toe hint). Keyed by [Extremity].
+     */
+    val headings: MutableMap<Extremity, Vector3> = mutableMapOf()
+
+    /** Returns the declared root-relative heading for [extremity], or null if none. */
+    fun getHeading(extremity: Extremity): Vector3? = headings[extremity]
+
+    /**
      * Phase 7 (Gap 7 / F8 / W17) — gaze-as-target (COMPLETE). The pose declares where the head
      * should look in world space; the Finalizer ([SkeletonPoseFinalizer.resolveHeadTarget])
      * resolves neck/head from this target (head-orientation math inlined in the resolver) and is
@@ -336,6 +349,10 @@ class SkeletonPose(
         this.environment = other.environment
         this.supportedPoints.clear()
         this.supportedPoints.addAll(other.supportedPoints)
+        this.headings.clear()
+        for ((k, v) in other.headings) {
+            this.headings[k] = v.copy()
+        }
     }
 
     /**
@@ -427,12 +444,26 @@ class SkeletonPose(
             pose.limbTargets.clear()
             pose.extremityOverrides.clear()
             pose.extremityArticulations.clear()
+            pose.headings.clear()
             pose.environment = EnvironmentDefinition()
             pose.supportedPoints.clear()
             pose.postureIntent = PostureIntent(PostureIntent.Kind.CUSTOM)
             pose.contactPrecedence.clear()
             pose.contacts.clear()
             pose.headTarget = null
+        }
+    }
+
+    /**
+     * Declares root-relative (pelvis-frame) heading for an extremity. Exercise intent:
+     * use when the constraint system admits multiple valid orientations and the exercise
+     * selects one. The Finalizer transforms root-relative heading into world space and
+     * projects it onto the support plane.
+     */
+    class HeadingBuilder(private val pose: SkeletonPose) {
+        fun set(extremity: Extremity, rootRelativeDirection: Vector3): HeadingBuilder {
+            pose.headings[extremity] = rootRelativeDirection.copy()
+            return this
         }
     }
 
