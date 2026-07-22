@@ -198,6 +198,17 @@ abstract class BasePose : PoseBuilder {
     }
 
     /**
+     * Declares the root-relative (pelvis-frame) forward direction of an extremity.
+     * Exercise intent: use when the constraint system admits multiple valid orientations
+     * and the exercise needs to select one (e.g. planted hand on the floor). The Finalizer
+     * transforms this to world space using the solved pelvis rotation and projects it onto
+     * the support plane.
+     */
+    protected fun setHeading(extremity: Extremity, rootRelativeDir: Vector3) {
+        SkeletonPose.HeadingBuilder(jointsBuffer).set(extremity, rootRelativeDir)
+    }
+
+    /**
      * Authors hip **flexion/extension** (sagittal plane, about the mediolateral Z axis) on a hip
      * ball-joint node (UNI-10). This is the acetabular ball joint; FK carries the whole leg with it.
      * The single, documented authoring path replaces ad-hoc raw `hip.localRotation` writes.

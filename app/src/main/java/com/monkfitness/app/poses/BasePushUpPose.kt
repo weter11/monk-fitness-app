@@ -254,6 +254,14 @@ abstract class BasePushUpPose : BasePose() {
         // instead of floating. Declared here (not via a contact-bearing bake) because the push-up
         // authors its plank by FK and bakes the arms without a ContactConstraint.
 
+        // Heading (exercise intent): for planted push-up hands, declare the forward
+        // direction in root-relative space. The Finalizer transforms this to world space
+        // using the pelvis rotation and projects it onto the support plane (floor).
+        // BODY_FORWARD = -X in pelvis frame (skeleton faces -X).
+        val bodyForward = Vector3(-1f, 0f, 0f)
+        setHeading(Extremity.HAND_A, bodyForward)
+        setHeading(Extremity.HAND_P, bodyForward)
+
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         return jointsBuffer
     }

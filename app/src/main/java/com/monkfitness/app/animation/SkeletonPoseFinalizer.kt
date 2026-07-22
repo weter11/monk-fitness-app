@@ -574,7 +574,38 @@ class SkeletonPoseFinalizer(
         val handSupportNormal = if (pose.isSupported(handPoint) && !poseOwnsWrist && planted) {
             supportPlaneNormalFor(pose, handPoint)
         } else null
-        if (handSupportNormal != null) {
+
+        // Heading (exercise intent): if the exercise declared a root-relative forward
+        // direction for this extremity, transform it to world space and project onto
+        // the support plane. This replaces the forearm-derived direction entirely —
+        // the hand faces the declared heading, not the current forearm angle.
+        val declaredHeading = pose.getHeading(handExt)
+        if (declaredHeading != null && handSupportNormal != null) {
+            // Transform root-relative heading to world space via pelvis rotation.
+            val pelvisRot = pose.getJointRotation(Joint.PELVIS)
+            SkeletonMath.rotAround(declaredHeading, pelvisRot.axis, pelvisRot.angle, tempDir)
+            tempDir.normalize()
+            // Project onto the support plane so the hand lies flat on the surface.
+            val nd = handSupportNormal.dot(tempDir)
+            tempDir.set(
+                tempDir.x - handSupportNormal.x * nd,
+                tempDir.y - handSupportNormal.y * nd,
+                tempDir.z - handSupportNormal.z * nd
+            )
+            if (tempDir.mag() < 1e-3f) {
+                tempDir.set(1f, 0f, 0f)
+                val nd2 = handSupportNormal.dot(tempDir)
+                tempDir.set(
+                    tempDir.x - handSupportNormal.x * nd2,
+                    tempDir.y - handSupportNormal.y * nd2,
+                    tempDir.z - handSupportNormal.z * nd2
+                )
+            }
+            tempDir.normalize()
+        } else if (handSupportNormal != null) {
+            // Legacy fallback: project the forearm direction onto the support plane.
+            // Used when no heading is declared — preserves byte-identical behavior
+            // for all existing exercises.
             val nd = handSupportNormal.dot(tempDir)
             tempDir.set(
                 tempDir.x - handSupportNormal.x * nd,
@@ -673,17 +704,40 @@ class SkeletonPoseFinalizer(
         // contact rests on (ground, or a box/step top). Derived from pose.environment + declared
         // support — no per-pose special casing; the same code plants feet in every pose.
         val footPoint = footSupportPointFor(ankleId)
+        val footExt = if (ankleId == Joint.ANKLE_F) Extremity.FOOT_F else Extremity.FOOT_B
         val supportNormal = if (pose.isSupported(footPoint)) supportPlaneNormalFor(pose, footPoint) else null
-        if (supportNormal != null) {
+
+        // Heading (exercise intent): same pattern as hands. If the exercise declared a
+        // root-relative forward direction for this foot, use it instead of the toe hint.
+        val declaredFootHeading = pose.getHeading(footExt)
+        if (declaredFootHeading != null && supportNormal != null) {
+            val pelvisRot = pose.getJointRotation(Joint.PELVIS)
+            SkeletonMath.rotAround(declaredFootHeading, pelvisRot.axis, pelvisRot.angle, tempFootDir)
+            tempFootDir.normalize()
             val nd = supportNormal.dot(tempFootDir)
             tempFootDir.set(
                 tempFootDir.x - supportNormal.x * nd,
                 tempFootDir.y - supportNormal.y * nd,
                 tempFootDir.z - supportNormal.z * nd
             )
-            // A purely normal shank direction (foot perpendicular to the support) has no in-plane
-            // component to project onto; fall back to the (already world-flat) +X heading so the
-            // foot still lies in the plane instead of collapsing to a zero vector.
+            if (tempFootDir.mag() < 1e-3f) {
+                tempFootDir.set(1f, 0f, 0f)
+                val nd2 = supportNormal.dot(tempFootDir)
+                tempFootDir.set(
+                    tempFootDir.x - supportNormal.x * nd2,
+                    tempFootDir.y - supportNormal.y * nd2,
+                    tempFootDir.z - supportNormal.z * nd2
+                )
+            }
+            tempFootDir.normalize()
+        } else if (supportNormal != null) {
+            // Legacy fallback: project the toe-hint-derived direction onto the support plane.
+            val nd = supportNormal.dot(tempFootDir)
+            tempFootDir.set(
+                tempFootDir.x - supportNormal.x * nd,
+                tempFootDir.y - supportNormal.y * nd,
+                tempFootDir.z - supportNormal.z * nd
+            )
             if (tempFootDir.mag() < 1e-3f) {
                 tempFootDir.set(1f, 0f, 0f)
                 val nd2 = supportNormal.dot(tempFootDir)
