@@ -33,9 +33,6 @@ abstract class BasePushUpPose : BasePose() {
     protected val targetHandABuffer = Vector3()
     protected val targetHandPBuffer = Vector3()
 
-    // Head gaze direction for the prone push-up posture (read-only, shared across frames).
-    protected val pushUpHeadDirection = Vector3(-1f, 0.2f, 0f).normalize()
-
     protected fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
         val nodes = SkeletonFactory.createPushUpSkeleton()
@@ -200,8 +197,6 @@ abstract class BasePushUpPose : BasePose() {
             kneeB!!.localPosition.set(uxB * def.thighLength, uyB * def.thighLength, 0f)
             ankleB!!.localPosition.set(uxB * def.shinLength, uyB * def.shinLength, 0f)
         }
-        buildGaze(neck!!, head!!, def.neckLength, pushUpHeadDirection)
-
         // Seat the shoulder girdle on the chest (clavicle/scapula are identity, so this places
         // shoulderA/P at chest ± shoulderWidth). Required before the FK pass so the arm IK reads
         // the correct world shoulder root (MIGRATION_RULES A6: no hand-computed rotAround).
@@ -215,6 +210,17 @@ abstract class BasePushUpPose : BasePose() {
         for (i in 0 until rSize) {
             roots!![i].updateWorldTransforms(zeroVector, identityRotation)
         }
+
+        // Head gaze: derive from the spine orientation (chest world rotation).
+        // The head looks along the spine direction — forward when the spine is horizontal,
+        // tilted when the spine pitches (decline push-up). Geometry-driven, not time-driven.
+        // The neck position is now correct after FK, so buildGaze reads the right parent.
+        val spineForward = Vector3(-1f, 0f, 0f)
+        val chestRot = chest!!.worldRotation
+        val headDir = Vector3()
+        SkeletonMath.rotAround(spineForward, chestRot.axis, chestRot.angle, headDir)
+        headDir.normalize()
+        buildGaze(neck!!, head!!, def.neckLength, headDir)
 
         // Shoulder world positions are read straight from the FK-updated hierarchy
         // (MIGRATION_RULES A6: no hand-computed rotAround — the clothed clavicle/scapula
