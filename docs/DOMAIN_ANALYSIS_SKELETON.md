@@ -13,7 +13,7 @@
 
 **What it belongs to:** The anatomical body. A segment is a physical object — it has mass, it occupies space, it has a beginning and an end.
 
-**What it does not belong to:** A segment does not have its own rotational freedom. It does not decide how to move. It is moved by the joints at its ends. A segment is not a coordinate system, though it has a position and orientation in space.
+**What it does not belong to:** A segment does not have its own rotational freedom. It does not decide how to move. It is moved by the joints at its ends. A segment is not a global coordinate system, though it has a position and orientation in space. Every segment has its own local coordinate system, relative to which attachments, mass, center of mass, and local geometry are defined.
 
 **Natural operations:**
 - Measure its length (the distance between its two endpoints when joints are at zero)
@@ -61,7 +61,9 @@
 
 ### 3. Attachment
 
-**What it means:** A fixed point on a segment's surface. An attachment is where the segment interacts with the environment or where other structures connect. The palm of the hand, the tip of the finger, the heel of the foot, the top of the head — these are attachments. They have no volume, no rotational freedom, and no independent existence. They are points.
+**What it means:** A fixed point on a segment's surface where the segment interacts with the environment or where other structures connect. The palm of the hand, the tip of the finger, the heel of the foot, the top of the head — these are attachments. They have no volume, no rotational freedom, and no independent existence. They are points.
+
+> **Terminology note:** In anatomy, "attachment" typically refers to the insertion site of a muscle, tendon, or ligament. In this document, "Attachment" is used as an engineering term for a geometric reference point on a segment — it is not the anatomical sense. Alternative engineering terms that could be used include *Surface Point*, *Anatomical Point*, or *Endpoint*.
 
 **What it belongs to:** The segment it is attached to. An attachment cannot exist without a segment — it is a point on the surface of a segment.
 
@@ -76,7 +78,7 @@
 **How it differs from neighboring entities:**
 - An attachment differs from an articulation because an attachment has no rotational DOF. An articulation can rotate; an attachment is fixed.
 - An attachment differs from a segment because an attachment is a dimensionless point, while a segment is a volumetric body with length.
-- An attachment differs from an IK effector because an attachment is a passive point on a segment, while an IK effector is an active target that the solver tries to reach.
+- An attachment differs from an IK effector role because an attachment is a permanent structural point on a segment, while the IK effector role is a transient solver role that the same attachment plays during IK resolution. The Palm is always an Attachment; it becomes an Effector only while the solver is working.
 
 **Current classes that mix this entity with others:**
 - `SkeletonNode` — attachment nodes (HEAD_POS, HEEL_F, PALM_A) are full `SkeletonNode` instances with `localPosition`, `localRotation`, `worldPosition`, `worldRotation`, even though they have no rotation and no independent DOF
@@ -87,7 +89,7 @@
 
 ### 4. Coordinate Frame
 
-**What it means:** A position and orientation in 3D space. A coordinate frame describes where something is and which direction it faces. It is a mathematical construct — it has no physical substance, no mass, no length. It is the language through which the skeleton describes its configuration in the world.
+**What it means:** A full-fledged coordinate system in 3D space. A coordinate frame consists of an origin, an orthogonal basis (three mutually perpendicular axes), and an orientation. It describes where something is and which direction it faces. It is a mathematical construct — it has no physical substance, no mass, no length. It is the language through which the skeleton describes its configuration in the world.
 
 **What it belongs to:** The kinematic state of the system. A coordinate frame is the result of FK computation — it is derived from the parent frame and the local transform.
 
@@ -112,24 +114,26 @@
 
 ---
 
-### 5. IK Effector
+### 5. IK Effector (Solver Role)
 
-**What it means:** The terminal point of a limb chain that the solver tries to position at a specific world-space location. The hand, the foot, the fingertip — these are IK effectors when they are being positioned by the solver. An IK effector is the goal of an IK solve.
+**Status:** Not a fundamental entity. An IK Effector is a *solver role* temporarily played by an Attachment during IK resolution.
 
-**What it belongs to:** The constraint solving system. An IK effector is a solver concept — it is the target that the IK algorithm tries to reach.
+**What it means:** When an Attachment serves as the target for an IK solver, it takes on the role of an IK Effector. For example, the Palm is normally an Attachment — a fixed point on the hand segment. During IK resolution, the Palm becomes an IK Effector: the solver computes joint angles to position it at a desired world-space target. Once resolution is complete, the Palm remains simply an Attachment. The Effector is not a separate object; it is the same Attachment viewed through the lens of the solver.
 
-**What it does not belong to:** An IK effector does not belong to the anatomical model. It is not a body part. It is a solver goal. An IK effector does not have a fixed position — it moves as the solver repositions the limb.
+**What it belongs to:** The constraint solving system, but only as a transient role. An Attachment is a permanent structural entity; the Effector role is temporary and context-dependent.
 
-**Natural operations:**
+**What it does not belong to:** An IK Effector does not belong to the anatomical model. It is not a body part. It is a solver role that an Attachment plays for the duration of a solve.
+
+**Natural operations (when an Attachment is in Effector role):**
 - Define a target position in world space
 - Determine whether the target is reachable given the limb's bone lengths
 - Compute the joint angles that place the effector at the target
 - Clamp the target to the reachable workspace if it is unreachable
 
 **How it differs from neighboring entities:**
-- An IK effector differs from an attachment because an attachment is a fixed point on a segment (the palm is always at the end of the hand), while an IK effector is a solver goal that can move. The palm is an attachment; the hand's target position is an IK effector.
-- An IK effector differs from a contact because a contact is a fixed support point (the hand is on the floor), while an IK effector is a target that may or may not be reachable. A contact is always honored; an IK effector may be clamped.
-- An IK effector differs from an articulation because an articulation has a fixed relationship to its parent segment, while an IK effector's position is computed by the solver.
+- An IK Effector differs from an Attachment because an Attachment is a permanent structural point on a segment, while an IK Effector is a transient solver role that the same Attachment plays during IK resolution. The Palm is always an Attachment; it becomes an Effector only while the solver is working.
+- An IK Effector differs from a contact because a contact is a fixed constraint (the point does not move), while an IK effector is a target that the solver moves to reach. A contact is always honored; an IK effector may be clamped.
+- An IK Effector differs from an articulation because an articulation has a fixed relationship to its parent segment, while an IK effector's position is computed by the solver.
 
 **Current classes that mix this entity with others:**
 - `ContactSpec` — carries both the end-effector identity (`endJoint`) and the contact metadata (`targetWorld`, `contact`). The effector and the contact are merged.
@@ -138,39 +142,43 @@
 
 ---
 
-### 6. Contact Point
+### 6. Contact (Constraint)
 
-**What it means:** A specific point on the body that is in fixed contact with the environment. The foot on the floor, the hand on a bar, the knee on the ground — these are contact points. A contact point is a physical fact: this part of the body is touching this part of the world, and it is not moving relative to it.
+**Status:** Not a fundamental entity. A Contact is a constraint — a relationship between an Attachment and the Environment. It is a state, not an independent anatomical object.
 
-**What it belongs to:** The environment interaction system. A contact point is the bridge between the biomechanical model and the physical world.
+**What it means:** A Contact arises when an Attachment on a body segment comes into fixed contact with a surface in the environment. For example, the Heel is an Attachment; when the Heel touches the floor, a Contact exists. The Contact is not a separate body object — it is the physical constraint that the Heel is resting on the floor. It describes a constraint on movement, not merely the point of contact.
 
-**What it does not belong to:** A contact point does not belong to the kinematic chain in the same way an articulation does. It is not a degree of freedom. It is a constraint — it removes degrees of freedom by fixing a point in space.
+**What it belongs to:** The environment interaction system. A Contact is the bridge between the biomechanical model (the Attachment) and the physical world (the Environment).
+
+**What it does not belong to:** A Contact does not belong to the anatomical model. It is not a body part. It is a relationship — a constraint that restricts how the body can move. A Contact has no independent existence; it exists only as long as the Attachment remains in contact with the Environment.
 
 **Natural operations:**
-- Register a body point as being in contact with a surface
-- Define the surface normal and friction properties
-- Determine whether the contact is still valid (has the body point moved off the surface?)
+- Register an Attachment as being in contact with an Environment surface
+- Define the surface normal and friction properties of the contact
+- Determine whether the contact is still valid (has the Attachment moved off the surface?)
 - Resolve conflicts when multiple contacts compete for the same root position
 
 **How it differs from neighboring entities:**
-- A contact point differs from an IK effector because a contact is a fixed constraint (the point does not move), while an IK effector is a target (the point moves to reach the target). A contact is always honored; an IK effector may be clamped.
-- A contact point differs from an attachment because an attachment is a geometric point on a segment, while a contact point is a physical interaction between a segment and the environment. All contact points are attachments, but not all attachments are contact points.
-- A contact point differs from an articulation because a contact removes DOF, while an articulation provides DOF.
+- A Contact differs from an IK Effector because a Contact is a fixed constraint (the Attachment does not move relative to the surface), while an IK Effector is a solver target (the Attachment moves to reach the target). A Contact is always honored; an IK Effector may be clamped.
+- A Contact differs from an Attachment because an Attachment is a geometric point on a segment, while a Contact is a physical interaction between that point and the environment. An Attachment can exist without a Contact; a Contact cannot exist without an Attachment.
+- A Contact differs from an articulation because a Contact removes DOF, while an articulation provides DOF.
 
 **Current classes that mix this entity with others:**
-- `ContactSpec` — merges the contact point (endJoint, targetWorld) with the IK chain context (rootJoint, parentRotationJoint, middleJoint, pole, constraint, straight) and the contact metadata (contact field with surface normal)
+- `ContactSpec` — merges the contact (endJoint, targetWorld) with the IK chain context (rootJoint, parentRotationJoint, middleJoint, pole, constraint, straight) and the contact metadata (contact field with surface normal)
 - `SkeletonPose.contacts` — stores contact specs alongside the pose state, mixing the contact declaration with the kinematic state
 - `SupportPoint` enum — maps contact points to body joints, but the mapping is hardcoded rather than derived from the biomechanical model
 
 ---
 
-### 7. Landmark
+### 7. Landmark (Observation/Tracking Entity)
 
-**What it means:** A recognizable, named point on the body used for reference, tracking, or validation. Landmarks are not necessarily articulations — they are points of interest. The head position (for viewport validation), the wrist (for hand sliding detection), the knee (for bilateral symmetry) — these are landmarks.
+**Status:** Not a fundamental entity of the biomechanical domain. A Landmark is an Observation/Tracking-level entity that exists in motion capture, computer vision, and validation systems — not in biomechanics itself.
 
-**What it belongs to:** The validation and tracking system. Landmarks are used to check whether the skeleton is in a valid configuration and to detect anomalies.
+**What it means:** A recognizable, named point used for reference, tracking, or validation in observation systems. Landmarks are points of interest identified by tracking systems (e.g., Motion Capture markers, Computer Vision detections). The head position (for viewport validation), the wrist (for hand sliding detection), the knee (for bilateral symmetry) — these are landmarks. A Landmark is not a biomechanical entity; it is a measurement or observation artifact.
 
-**What it does not belong to:** A landmark does not have its own DOF. It does not drive the kinematics. It is a reference point, not a driver of motion.
+**What it belongs to:** The observation, analysis, and validation systems. Landmarks are used to check whether the skeleton is in a valid configuration and to detect anomalies. They exist in the tracking and validation layer, not in the biomechanical model.
+
+**What it does not belong to:** A Landmark does not belong to the anatomical body. It is not a body part. It has no biomechanical meaning — it is a reference point for external systems. A Landmark does not have its own DOF. It does not drive the kinematics. It is a reference point, not a driver of motion.
 
 **Natural operations:**
 - Project to screen space for viewport validation
@@ -179,9 +187,9 @@
 - Check whether the landmark is in a valid region (e.g., head inside viewport, feet above ground)
 
 **How it differs from neighboring entities:**
-- A landmark differs from an articulation because a landmark has no rotational DOF. It is a reference point, not a joint.
-- A landmark differs from an attachment because an attachment is a structural point on a segment (where something connects), while a landmark is a reference point used for validation or tracking. An attachment can be a landmark, but a landmark is not necessarily an attachment.
-- A landmark differs from a coordinate frame because a landmark is a single point of interest, while a coordinate frame describes a full pose (position + orientation).
+- A Landmark differs from an articulation because a landmark has no rotational DOF. It is a reference point, not a joint.
+- A Landmark differs from an attachment because an attachment is a structural point on a segment (where something connects), while a landmark is a reference point used for validation or tracking in observation systems. An attachment can be a landmark, but a landmark is not necessarily an attachment.
+- A Landmark differs from a coordinate frame because a landmark is a single point of interest, while a coordinate frame describes a full pose (position + orientation).
 
 **Current classes that mix this entity with others:**
 - `HEAD_POS` — serves as both an attachment (the head's position on the neck chain) and a landmark (used for viewport validation)
@@ -262,7 +270,7 @@
 **How it differs from neighboring entities:**
 - The environment differs from pose intent because the environment is the world the body is in, while intent is what the body wants to do. The environment is context; intent is goal.
 - The environment differs from the biomechanical model because the environment is external and variable, while the model is internal and fixed.
-- The environment differs from a contact point because the environment defines the surfaces, while a contact point is the specific body-surface interaction.
+- The environment differs from a Contact because the environment defines the surfaces, while a Contact is the specific body-surface interaction.
 
 **Current classes that mix this entity with others:**
 - `EnvironmentDefinition` — carries both the ground plane and the props list, mixing two different environmental concepts (flat ground vs. 3D props)
@@ -337,8 +345,8 @@
 | `SkeletonDefinition` | **Biomechanical Model** (primary) + Constraint Data + Measurement Data | **Mixture** — carries anatomy, constraints, and proportions |
 | `SkeletonFactory` | **Topology Builder** | **Proper entity** — builds the fixed tree structure |
 | `SkeletonNodes` | **Topology Convenience Container** | **Technical container** — exposes node references by name for authoring |
-| `ContactSpec` | **Contact Point** (primary) + IK Effector Context + Solver Configuration | **Mixture** — carries biomechanical contact, IK chain context, and solver parameters |
-| `WorldTarget` | **IK Effector** (primary) + Contact Constraint | **Mixture** — carries the IK target and optionally a contact constraint |
+| `ContactSpec` | **Contact** (constraint) + IK Effector Context + Solver Configuration | **Mixture** — carries biomechanical contact, IK chain context, and solver parameters |
+| `WorldTarget` | **IK Effector** (solver role, played by an Attachment) + Contact Constraint | **Mixture** — carries the IK target role and optionally a contact constraint |
 | `RelativeArticulation` | **Pose Intent** (articulation declaration) | **Proper entity** — a single intent declaration |
 | `SpineCurve` | **Pose Intent** (spine declaration) | **Proper entity** — a single intent declaration |
 | `PostureIntent` | **Pose Intent** (posture declaration) | **Proper entity** — a single intent declaration |
@@ -385,20 +393,27 @@
 
 ## Summary
 
-The system contains 12 distinct semantic entities:
+The system contains 12 semantic entities organized into three tiers:
 
+**Fundamental biomechanical entities:**
 1. **Segment** — a rigid body in the biomechanical chain
 2. **Articulation** — a joint with rotational DOF and limits
 3. **Attachment** — a fixed point on a segment
-4. **Coordinate Frame** — a position and orientation in 3D space
-5. **IK Effector** — the solver's target for a limb end-effector
-6. **Contact Point** — a body point in fixed contact with the environment
-7. **Landmark** — a reference point used for validation and tracking
-8. **Pose Intent** — what the pose author declares
-9. **Pose State** — the engine's computed result
-10. **Environment** — the physical world the body exists in
-11. **Skeleton Topology** — the fixed structural relationships
-12. **Orientation Constraint** — limits on joint rotation
+4. **Coordinate Frame** — a full coordinate system (origin, orthogonal basis, orientation) in 3D space
+5. **Pose Intent** — what the pose author declares
+6. **Pose State** — the engine's computed result
+7. **Environment** — the physical world the body exists in
+8. **Skeleton Topology** — the fixed structural relationships
+9. **Orientation Constraint** — limits on joint rotation
+
+**Solver roles (transient, played by Attachments):**
+10. **IK Effector** — a role an Attachment plays during IK resolution
+
+**Constraint/state relationships:**
+11. **Contact** — a constraint between an Attachment and the Environment
+
+**Observation/Tracking entities:**
+12. **Landmark** — a reference point used in motion capture, computer vision, and validation systems
 
 Of the 35 current runtime objects, 19 are proper entities (each maps cleanly to one semantic entity), 10 are mixtures (each merges two or more semantic entities), and 6 are technical containers (purely computational, no semantic meaning).
 
