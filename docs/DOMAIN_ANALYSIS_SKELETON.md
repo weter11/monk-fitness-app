@@ -6,6 +6,9 @@
 > This is an ontology document — it describes what exists in the domain, not how to implement it.
 > One entity may map to multiple classes, and one class may carry multiple entities.
 > Mixture is not inherently wrong; the goal is clarity about which aspect of reality each class represents.
+>
+> A runtime class may intentionally combine several ontological entities if they always share the same lifecycle.
+> The purpose of this document is not to require one class per entity, but to make the different semantic aspects explicit.
 
 ---
 
@@ -14,7 +17,7 @@
 This document analyzes the human skeleton as a biomechanical domain. It identifies what entities exist in the domain (the ontology), what computational roles those entities play in algorithms, and how they are represented in code. The analysis is organized into three layers:
 
 1. **Domain Ontology** — what exists in the human body (permanent, physical, independent of any algorithm).
-2. **Computational Roles** — what roles domain objects play within a computational system (solver targets, observation references, relationship states).
+2. **Computational Concepts** — what mathematical, algorithmic, and application-level constructs operate on the domain (solver targets, observation references, relationship states, coordinate systems).
 3. **Representations** — how domain entities and computational roles are stored and serialized in code.
 
 A separate **Processes** section describes the pipeline stages that transform representations.
@@ -117,36 +120,7 @@ The domain ontology describes the human body as a physical structure. These enti
 
 ---
 
-#### 4. Skeleton Topology
-
-**What it means:** The fixed graph structure of the skeleton — which segments connect to which articulations, which attachment points hang off which joints, and the parent-child relationships that define the kinematic chain. Topology is the skeleton's anatomy as a graph; it does not contain measurements, limits, or parameters. The skeleton definition supplies the parameters (lengths, proportions, constraint limits); the topology supplies the connectivity.
-
-**What it belongs to:** The anatomical model. Topology is permanent for a given skeleton definition.
-
-**What it does not belong to:** Topology does not belong to the kinematic state. Topology does not change between frames. Topology does not contain positions or rotations — it contains only relationships. Topology is not the same as the skeleton definition: the definition includes measurements and constraints, while topology is only the structural graph.
-
-**Natural operations:**
-- Traverse the tree (FK computation)
-- Look up the parent of any joint
-- Look up the children of any joint
-- Determine the chain from any joint to the root
-- Determine the IK chain for a given end-effector
-
-**How it differs from neighboring entities:**
-- Topology differs from the skeleton definition because the definition includes measurements (lengths, proportions) and constraints, while topology is only the structural relationships (parent-child, joint-to-segment mapping).
-- Topology differs from kinematic state because topology is fixed, while state changes every frame.
-- Topology differs from rendering because topology defines the skeleton's structure, while rendering defines how it is drawn.
-
-**Current classes that mix this entity with others:**
-- `SkeletonFactory` — hardcodes the tree topology in `createStandardSkeleton()` and `createPushUpSkeleton()`
-- `SkeletonNode` — carries topology information (parent, children) alongside transform data (localPosition, localRotation, worldPosition, worldRotation)
-- `SkeletonEngine.bones` — hardcodes the rendering bone list, which duplicates the topology
-- `ConstraintSolver.chainForEnd()` — hardcodes the IK chain mapping, which is topology
-- `ExerciseValidator.validateBoneLengths()` — hardcodes the bone-length validation pairs, which is topology
-
----
-
-#### 5. Anatomical Mobility
+#### 4. Anatomical Mobility
 
 **What it means:** A declaration of the limits on how far a joint can rotate — the body's physical boundaries. Every articulation has physical limits — the elbow cannot hyperextend, the knee cannot bend backward, the hip has a limited range of motion in every direction. Anatomical mobility is a rule about the body, not an algorithm. It declares what the body is allowed to do; it does not enforce it.
 
@@ -172,7 +146,7 @@ The domain ontology describes the human body as a physical structure. These enti
 
 ---
 
-#### 6. Environment
+#### 5. Environment
 
 **What it means:** The physical world that the body exists in and interacts with. The environment defines what surfaces are available for contact — the ground plane, walls, boxes, steps, benches. It defines where the body can touch and what those surfaces are like.
 
@@ -199,15 +173,15 @@ The domain ontology describes the human body as a physical structure. These enti
 
 ---
 
-### Layer 2: Computational Roles — What Domain Objects Do in Algorithms
+### Layer 2: Computational Concepts — Mathematical, Algorithmic, and Application-Level Constructs
 
-The computational roles describe the mathematical, algorithmic, and application-level constructs that operate on the domain. These entities do not exist in the human body — they are roles, representations, and states that domain objects play within a computational system. A single domain object can simultaneously play multiple computational roles.
+The computational concepts describe the mathematical, algorithmic, and application-level constructs that operate on the domain. These entities do not exist in the human body — they are coordinate systems, roles, states, and constructs that domain objects play within a computational system. A single domain object can simultaneously play multiple computational roles.
 
 #### 7. Coordinate Frame
 
 **What it means:** A mathematical frame of reference consisting of an origin point and an orthogonal basis (three mutually perpendicular axes) that defines a position and orientation in 3D space. A coordinate frame is a purely mathematical construct — it has no physical substance, no mass, no length, and no anatomical meaning. It is the language through which the kinematic model describes the body's configuration in the world.
 
-**What it belongs to:** The computational model. A coordinate frame is a mathematical representation, not a physical entity.
+**What it belongs to:** The computational model. A coordinate frame is a mathematical construct, not a physical entity and not a role.
 
 **What it does not belong to:** A coordinate frame does not belong to the anatomical model. It is not a body part. It has no physical meaning — it is a mathematical description of pose. A coordinate frame does not have limits, does not have length, and does not have mass. It is not an anatomical structure; it is a coordinate system.
 
@@ -312,11 +286,11 @@ The computational roles describe the mathematical, algorithmic, and application-
 
 #### 11. Contact (State of Attachment Point + Environment)
 
-**What it means:** A computational relationship between an attachment point and an environmental surface. The foot on the floor, the hand on a bar, the knee on the ground — these describe a contact relationship. A contact is a state: this attachment point is touching this surface, and it is not moving relative to it. Contact is not a separate physical point — it is a relationship between a domain object (attachment point) and an environmental object (surface).
+**What it means:** The state of an Attachment Point relative to an Environment Surface. The foot on the floor, the hand on a bar, the knee on the ground — these describe a contact state. A contact is a state: this attachment point is touching this surface, and it is not moving relative to it. Contact is not a separate physical point — it is the state of a domain object (attachment point) relative to an environmental object (surface).
 
-**What it belongs to:** The computational model. Contact is a relationship state computed by the engine, not a domain entity.
+**What it belongs to:** The computational model. Contact is a state computed by the engine, not a domain entity.
 
-**What it does not belong to:** Contact does not belong to the anatomical model. It is not a body part. It is a relationship between the body and the environment. Contact does not belong to the kinematic chain in the same way an articulation does — it is not a degree of freedom.
+**What it does not belong to:** Contact does not belong to the anatomical model. It is not a body part. It is the state of a relationship between the body and the environment. Contact does not belong to the kinematic chain in the same way an articulation does — it is not a degree of freedom.
 
 **Natural operations:**
 - Register an attachment point as being in contact with a surface
@@ -397,12 +371,14 @@ Representations are the concrete data structures that store domain entities and 
 
 **What it means:** The runtime object that holds the transform data for a single joint in the skeleton hierarchy. A `SkeletonNode` stores `localPosition`, `localRotation`, `worldPosition`, and `worldRotation` for one entry in the joint tree.
 
-**What it represents:** A `SkeletonNode` is a representation that conflates multiple domain entities and computational roles into a single runtime object. It simultaneously represents:
+**What it represents:** A `SkeletonNode` is a representation that stores runtime state associated with multiple entities. It stores runtime state for:
 - A **Segment** (via `localPosition` — the bone offset from parent)
 - An **Articulation** (via `localRotation` — the joint angle)
 - A **Coordinate Frame** (via `worldPosition` and `worldRotation` — the computed pose)
 - An **Attachment Point host** (via its children list)
 - **Skeleton Topology** (via parent/child links)
+
+A `SkeletonNode` is not a Segment. A Node is not an Articulation. A Node is not a Coordinate Frame. It stores the runtime state that these entities have at a given moment.
 
 **Current classes that use this representation:**
 - `SkeletonNode` — the primary runtime joint representation
@@ -457,9 +433,9 @@ Representations are the concrete data structures that store domain entities and 
 
 #### 18. SkeletonDefinition (Serialization Representation)
 
-**What it means:** The data object that defines a skeleton's parameters — bone lengths, proportions, constraint limits, and topology. It is the serialized form of the domain model.
+**What it means:** The data object that parameterizes a skeleton model — bone lengths, proportions, constraint limits, and topology. It is the serialized form of the domain model's parameters. A SkeletonDefinition is not the skeleton itself; it is the parameterization of a skeleton model. Skeleton != SkeletonDefinition. Definition is parameters.
 
-**What it represents:** `SkeletonDefinition` is a representation that conflates multiple domain entities:
+**What it represents:** `SkeletonDefinition` is a representation that parameterizes the skeleton model:
 - **Segment** data (bone lengths like `torsoLength`, `upperArmLength`)
 - **Anatomical Mobility** data (constraint limits like `effectiveExtensionRatio`, `minimumFlexionAngle`)
 - **Skeleton Topology** data (the parent-child relationships)
@@ -475,11 +451,12 @@ Representations are the concrete data structures that store domain entities and 
 
 **What it means:** A data object that represents a contact relationship — which attachment point is touching which surface, and with what metadata.
 
-**What it represents:** `ContactSpec` is a representation that conflates multiple computational roles:
-- **Contact** (the body-surface relationship)
-- **IK Effector** context (the end-effector identity and target)
-- **Solver Constraint** (the contact surface normal and friction)
-- **IK Chain** context (the proximal chain for the contact)
+**What it represents:** `ContactSpec` is a representation that mixes several concerns:
+- **Contact declaration** (which attachment point is touching which surface)
+- **Solver target** (the end-effector identity and target position)
+- **Solver-specific metadata** (surface normal, friction, and other parameters the solver needs)
+
+It does not carry IK chain context, pole vectors, or other implementation details — those belong to the solver's internal logic, not the ontology.
 
 **Current classes that use this representation:**
 - `ContactSpec` — the primary contact representation
@@ -585,16 +562,16 @@ Processes are the ordered stages of the skeleton pipeline. Each stage takes one 
 
 ### Mapping Table: Current Runtime Object → Domain Entity + Computational Role
 
-| Current Runtime Object | Domain Entity (Layer 1) | Computational Role(s) (Layer 2) | Representation (Layer 3) | Classification |
+| Current Runtime Object | Domain Entity (Layer 1) | Computational Concept(s) (Layer 2) | Representation (Layer 3) | Classification |
 |---|---|---|---|---|
-| `SkeletonNode` | Segment + Articulation + Attachment Point | Coordinate Frame | `SkeletonNode` | **Mixture** — carries 4 distinct concepts in one class |
+| `SkeletonNode` | Segment + Articulation + Attachment Point | Coordinate Frame | `SkeletonNode` | **Mixture** — stores runtime state for multiple entities in one class |
 | `SkeletonPose` | — | Pose State + Pose Intent + Contact State | `SkeletonPose` | **Mixture** — carries state, intent, and transport in one object |
 | `Joint` enum | Semantic Label for all of: Articulation, Segment, Attachment Point, Helper | — | `Joint` enum | **Mixture** — 4 biomechanical categories in one namespace |
 | `Bone` | Segment (visual representation) | — | `Bone` | **Mixture** — carries visual and structural concerns |
-| `SkeletonDefinition` | Segment + Articulation + Anatomical Mobility + Topology parameters | — | `SkeletonDefinition` | **Mixture** — carries anatomy, constraints, and proportions |
+| `SkeletonDefinition` | Segment + Articulation + Anatomical Mobility + Topology parameters | — | `SkeletonDefinition` | **Mixture** — parameterizes anatomy, constraints, and proportions |
 | `SkeletonFactory` | Topology Builder | — | `SkeletonFactory` | **Proper entity** — builds the fixed tree structure |
 | `SkeletonNodes` | Topology Convenience Container | — | `SkeletonNodes` | **Technical container** — exposes node references by name for authoring |
-| `ContactSpec` | Attachment Point + Environment (Surface) | Contact + IK Effector Context + Solver Constraint | `ContactSpec` | **Mixture** — carries biomechanical contact, IK chain context, and solver parameters |
+| `ContactSpec` | Attachment Point + Environment (Surface) | Contact + IK Effector Context + Solver Constraint | `ContactSpec` | **Mixture** — carries contact declaration, solver target, and solver metadata |
 | `WorldTarget` | Attachment Point + Environment (Surface) | IK Effector + Contact Constraint | `WorldTarget` | **Mixture** — carries the IK target and optionally a contact constraint |
 | `RelativeArticulation` | — | Pose Goal (articulation declaration) | `RelativeArticulation` | **Proper entity** — a single goal declaration |
 | `SpineCurve` | — | Pose Goal (spine declaration) | `SpineCurve` | **Proper entity** — a single goal declaration |
