@@ -29,7 +29,6 @@ Key principles:
 - Coordinate Frame is mathematical, not anatomical.
 - IK Effector and Contact Point are roles/states, not independent entities.
 - Landmark and Attachment Point can coincide; do not force separation.
-- Skeleton Topology (graph) vs Skeleton Definition (parameters) must be clearly distinguished.
 - Constraint is a declaration; Solver is an algorithm — separate them.
 - Mixture isn't always bad — one responsibility = one aspect, not one entity = one class.
 
@@ -371,14 +370,13 @@ Representations are the concrete data structures that store domain entities and 
 
 **What it means:** The runtime object that holds the transform data for a single joint in the skeleton hierarchy. A `SkeletonNode` stores `localPosition`, `localRotation`, `worldPosition`, and `worldRotation` for one entry in the joint tree.
 
-**What it represents:** A `SkeletonNode` is a representation that stores runtime state associated with multiple entities. It stores runtime state for:
+**What it represents:** A `SkeletonNode` is an intentional runtime aggregate — it is not an ontological object but a computational container that stores runtime state for multiple domain entities. It holds state for:
 - A **Segment** (via `localPosition` — the bone offset from parent)
 - An **Articulation** (via `localRotation` — the joint angle)
 - A **Coordinate Frame** (via `worldPosition` and `worldRotation` — the computed pose)
 - An **Attachment Point host** (via its children list)
-- **Skeleton Topology** (via parent/child links)
 
-A `SkeletonNode` is not a Segment. A Node is not an Articulation. A Node is not a Coordinate Frame. It stores the runtime state that these entities have at a given moment.
+A `SkeletonNode` is not a Segment. A Node is not an Articulation. A Node is not a Coordinate Frame. It is a runtime container that stores the state these entities have at a given moment. The aggregation is intentional — these entities always share the same lifecycle in the runtime, so combining them in one object is a practical convenience, not an ontological claim.
 
 **Current classes that use this representation:**
 - `SkeletonNode` — the primary runtime joint representation
@@ -404,7 +402,7 @@ A `SkeletonNode` is not a Segment. A Node is not an Articulation. A Node is not 
 
 #### 16. Joint Enum (Semantic Label Representation)
 
-**What it means:** An enum that provides named identifiers for every joint in the skeleton. The `Joint` enum serves as a lookup key for all joint-related data.
+**What it means:** A symbolic identifier namespace that provides named keys for every joint in the skeleton. The `Joint` enum is not an ontological representation — it is a computational label namespace that maps human-readable names to integer indices used throughout the codebase.
 
 **What it represents:** The `Joint` enum is a representation that conflates multiple domain entities into a single namespace. It simultaneously represents:
 - **Articulations** (shoulder, elbow, hip, knee, neck)
@@ -433,12 +431,11 @@ A `SkeletonNode` is not a Segment. A Node is not an Articulation. A Node is not 
 
 #### 18. SkeletonDefinition (Serialization Representation)
 
-**What it means:** The data object that parameterizes a skeleton model — bone lengths, proportions, constraint limits, and topology. It is the serialized form of the domain model's parameters. A SkeletonDefinition is not the skeleton itself; it is the parameterization of a skeleton model. Skeleton != SkeletonDefinition. Definition is parameters.
+**What it means:** The data object that parameterizes the computational skeleton model — bone lengths, proportions, constraint limits, and topology. It is the serialized form of the model's parameters. A SkeletonDefinition is not the skeleton itself; it is the parameterization of a computational skeleton model. Skeleton != SkeletonDefinition. Definition is parameters.
 
 **What it represents:** `SkeletonDefinition` is a representation that parameterizes the skeleton model:
 - **Segment** data (bone lengths like `torsoLength`, `upperArmLength`)
 - **Anatomical Mobility** data (constraint limits like `effectiveExtensionRatio`, `minimumFlexionAngle`)
-- **Skeleton Topology** data (the parent-child relationships)
 - **Proportion** data (ratios between bone lengths)
 
 **Current classes that use this representation:**
@@ -451,10 +448,7 @@ A `SkeletonNode` is not a Segment. A Node is not an Articulation. A Node is not 
 
 **What it means:** A data object that represents a contact relationship — which attachment point is touching which surface, and with what metadata.
 
-**What it represents:** `ContactSpec` is a representation that mixes several concerns:
-- **Contact declaration** (which attachment point is touching which surface)
-- **Solver target** (the end-effector identity and target position)
-- **Solver-specific metadata** (surface normal, friction, and other parameters the solver needs)
+**What it represents:** `ContactSpec` is an intentional aggregation for one contact interaction. It combines the contact declaration (which attachment point is touching which surface), the solver target (the end-effector identity and target position), and solver-specific metadata (surface normal, friction) into a single object because these pieces always travel together through the pipeline. The aggregation is deliberate — it is not a problematic mixture but a practical grouping of concerns that share the same lifecycle for a single contact event.
 
 It does not carry IK chain context, pole vectors, or other implementation details — those belong to the solver's internal logic, not the ontology.
 
@@ -475,7 +469,7 @@ Processes are the ordered stages of the skeleton pipeline. Each stage takes one 
 **Input representations:** SkeletonDefinition (bone lengths, topology), SkeletonPose (local transforms)
 **Output representations:** SkeletonPose (world transforms), Coordinate Frames (computed world positions and orientations)
 
-**Domain entities involved:** Segment, Articulation, Skeleton Topology
+**Domain entities involved:** Segment, Articulation
 **Computational roles involved:** Coordinate Frame
 
 ---
@@ -511,7 +505,7 @@ Processes are the ordered stages of the skeleton pipeline. Each stage takes one 
 **Input representations:** SkeletonPose (constraint-satisfying state), SkeletonDefinition (segment lengths, proportions)
 **Output representations:** SkeletonPose (final state with stamps), Pose State (derived data)
 
-**Domain entities involved:** Segment, Articulation, Attachment Point, Skeleton Topology
+**Domain entities involved:** Segment, Articulation, Attachment Point
 **Computational roles involved:** Pose State
 
 ---
@@ -547,7 +541,6 @@ Processes are the ordered stages of the skeleton pipeline. Each stage takes one 
 | **Segment** | Coordinate Frame (carries segment's transform) | `SkeletonNode` (localPosition), `Bone` (visual), `SkeletonDefinition` (lengths) |
 | **Articulation** | Coordinate Frame (carries joint rotation) | `SkeletonNode` (localRotation), `SkeletonPose.rotations` |
 | **Attachment Point** | IK Effector (solver target), Landmark (observation reference), Contact (body-surface relationship) | `SkeletonNode` (attachment nodes), `ContactSpec` (contact state), `Joint` enum entries |
-| **Skeleton Topology** | — (structural graph, no computational role) | `SkeletonFactory` (builds topology), `SkeletonNode` (parent/child links) |
 | **Anatomical Mobility** | Solver Constraint (computational enforcement of limits) | `IKConstraint`, `SkeletonDefinition` (constraint data), `AngularJointLimits` |
 | **Environment** | Contact (surface context for attachment points) | `EnvironmentDefinition`, `ContactSpec` (surface metadata), `PoseMetadata` |
 | **Coordinate Frame** | — (mathematical construct, not a domain entity) | `SkeletonNode` (worldPosition, worldRotation), `JointRotation` |
@@ -566,12 +559,12 @@ Processes are the ordered stages of the skeleton pipeline. Each stage takes one 
 |---|---|---|---|---|
 | `SkeletonNode` | Segment + Articulation + Attachment Point | Coordinate Frame | `SkeletonNode` | **Mixture** — stores runtime state for multiple entities in one class |
 | `SkeletonPose` | — | Pose State + Pose Intent + Contact State | `SkeletonPose` | **Mixture** — carries state, intent, and transport in one object |
-| `Joint` enum | Semantic Label for all of: Articulation, Segment, Attachment Point, Helper | — | `Joint` enum | **Mixture** — 4 biomechanical categories in one namespace |
+| `Joint` enum | Semantic Label namespace for all of: Articulation, Segment, Attachment Point, Helper | — | `Joint` enum | **Symbolic identifier namespace** — not an ontological representation; maps names to indices |
 | `Bone` | Segment (visual representation) | — | `Bone` | **Mixture** — carries visual and structural concerns |
-| `SkeletonDefinition` | Segment + Articulation + Anatomical Mobility + Topology parameters | — | `SkeletonDefinition` | **Mixture** — parameterizes anatomy, constraints, and proportions |
+| `SkeletonDefinition` | Segment + Articulation + Anatomical Mobility | — | `SkeletonDefinition` | **Mixture** — parameterizes the computational skeleton model, constraints, and proportions |
 | `SkeletonFactory` | Topology Builder | — | `SkeletonFactory` | **Proper entity** — builds the fixed tree structure |
 | `SkeletonNodes` | Topology Convenience Container | — | `SkeletonNodes` | **Technical container** — exposes node references by name for authoring |
-| `ContactSpec` | Attachment Point + Environment (Surface) | Contact + IK Effector Context + Solver Constraint | `ContactSpec` | **Mixture** — carries contact declaration, solver target, and solver metadata |
+| `ContactSpec` | Attachment Point + Environment (Surface) | Contact + IK Effector Context + Solver Constraint | `ContactSpec` | **Intentional aggregation** — contact declaration, solver target, and solver metadata grouped for one contact interaction |
 | `WorldTarget` | Attachment Point + Environment (Surface) | IK Effector + Contact Constraint | `WorldTarget` | **Mixture** — carries the IK target and optionally a contact constraint |
 | `RelativeArticulation` | — | Pose Goal (articulation declaration) | `RelativeArticulation` | **Proper entity** — a single goal declaration |
 | `SpineCurve` | — | Pose Goal (spine declaration) | `SpineCurve` | **Proper entity** — a single goal declaration |
@@ -621,42 +614,39 @@ Processes are the ordered stages of the skeleton pipeline. Each stage takes one 
 
 The system contains three distinct ontological layers:
 
-### Layer 1: Domain Ontology (6 entities — what exists in the human body):
+### Layer 1: Domain Ontology (what exists in the human body):
 1. **Segment** — a rigid body in the biomechanical chain
 2. **Articulation** — a joint with rotational DOF and limits
 3. **Attachment Point** — a fixed point on a segment's surface for external connections
-4. **Skeleton Topology** — the fixed graph structure of the skeleton
-5. **Anatomical Mobility** — a declaration of angular limits on a joint (the body's physical boundaries)
-6. **Environment** — the physical world the body exists in
+4. **Anatomical Mobility** — a declaration of angular limits on a joint (the body's physical boundaries)
+5. **Environment** — the physical world the body exists in
 
-### Layer 2: Computational Roles (7 roles — what domain objects do in algorithms):
-7. **Coordinate Frame** — a mathematical framework for describing position and orientation
-8. **Pose Intent** — a declarative goal declared by the pose author (application-level)
-9. **Pose State** — a computational snapshot of the model's configuration
-10. **IK Effector** — a role that an attachment point plays when targeted by the solver
-11. **Contact** — a relationship state between an attachment point and a surface
-12. **Landmark** — a role that an attachment point plays when used for observation/tracking
-13. **Solver Constraint** — a computational rule that the solver must enforce in its output
+### Layer 2: Computational Roles (what domain objects do in algorithms):
+6. **Coordinate Frame** — a mathematical framework for describing position and orientation
+7. **Pose Intent** — a declarative goal declared by the pose author (application-level)
+8. **Pose State** — a computational snapshot of the model's configuration
+9. **IK Effector** — a role that an attachment point plays when targeted by the solver
+10. **Contact** — a relationship state between an attachment point and a surface
+11. **Landmark** — a role that an attachment point plays when used for observation/tracking
+12. **Solver Constraint** — a computational rule that the solver must enforce in its output
 
-### Layer 3: Representations (6 representations — how data is stored and serialized):
-14. **SkeletonNode** — runtime joint transform container
-15. **SkeletonPose** — top-level pose transport object
-16. **Joint enum** — semantic label namespace for all joints
-17. **Bone** — rendering primitive for segments
-18. **SkeletonDefinition** — serialized skeleton parameters
-19. **ContactSpec** — contact relationship data object
+### Layer 3: Representations (how data is stored and serialized):
+13. **SkeletonNode** — runtime joint transform container
+14. **SkeletonPose** — top-level pose transport object
+15. **Joint enum** — semantic label namespace for all joints
+16. **Bone** — rendering primitive for segments
+17. **SkeletonDefinition** — serialized skeleton parameters
+18. **ContactSpec** — contact relationship data object
 
-### Processes (6 pipeline stages):
-20. **FK Pipeline** — propagates local transforms to world-space coordinate frames
-21. **IK Solver** — computes joint angles to reach targets
-22. **Constraint Solver** — enforces solver constraints (contacts, root position)
-23. **Finalizer** — applies post-solve corrections and derives stamps
-24. **Validator** — checks the final pose against biomechanical rules
-25. **Renderer** — projects to screen space and draws
+### Processes (pipeline stages):
+19. **FK Pipeline** — propagates local transforms to world-space coordinate frames
+20. **IK Solver** — computes joint angles to reach targets
+21. **Constraint Solver** — enforces solver constraints (contacts, root position)
+22. **Finalizer** — applies post-solve corrections and derives stamps
+23. **Validator** — checks the final pose against biomechanical rules
+24. **Renderer** — projects to screen space and draws
 
-Of the 35 current runtime objects, 19 are proper entities (each maps cleanly to one entity), 10 are mixtures (each merges two or more entities), and 6 are technical containers (purely computational, no semantic meaning).
-
-The highest-compression objects are `SkeletonNode` (4 entities merged) and the `Joint` enum (4 categories merged). The lowest-compression objects are the dedicated data classes (`ContactSpec`, `WorldTarget`, `IKConstraint`, etc.) and the intent/state split of `SkeletonPose`.
+The highest-compression objects are `SkeletonNode` and the `Joint` enum. The lowest-compression objects are the dedicated data classes (`ContactSpec`, `WorldTarget`, `IKConstraint`, etc.) and the intent/state split of `SkeletonPose`.
 
 The key insight is that computational entities (IK Effector, Landmark, Contact, Solver Constraint) are not independent domain objects — they are roles that domain objects (Attachment Points) play within the computational system. A single attachment point can simultaneously be an IK effector, a landmark, and a contact point. This reduces the number of true domain entities and makes the model cleaner.
 
@@ -673,7 +663,6 @@ A lifecycle map traces how each domain entity is created, used, and consumed acr
 | **Segment** | Domain (L1) | `SkeletonDefinition` / `SkeletonFactory` | FK pipeline, constraint solver, finalizer | Renderer (via `Bone`) |
 | **Articulation** | Domain (L1) | `SkeletonDefinition` / `SkeletonFactory` | FK pipeline, IK solver, constraint solver | Finalizer (rotation application) |
 | **Attachment Point** | Domain (L1) | `SkeletonDefinition` / `SkeletonFactory` | Contact system, IK effector resolution, landmark tracking | Validator, renderer |
-| **Skeleton Topology** | Domain (L1) | `SkeletonFactory` / `SkeletonDefinition` | FK pipeline, IK solver, constraint solver | All pipeline stages |
 | **Anatomical Mobility** | Domain (L1) | `SkeletonDefinition` | Constraint solver, IK solver | Solver (enforced during solve) |
 | **Environment** | Domain (L1) | Pose author (exercise definition) | Contact system, constraint solver | Contact resolution |
 | **Coordinate Frame** | Computational (L2) | FK pipeline (from parent frame + local transform) | Renderer, validator, projector | Screen-space output |
