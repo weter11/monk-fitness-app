@@ -562,8 +562,8 @@ Processes are the ordered stages of the skeleton pipeline. Each stage takes one 
 | `Joint` enum | Semantic Label namespace for all of: Articulation, Segment, Attachment Point, Helper | — | `Joint` enum | **Symbolic identifier namespace** — not an ontological representation; maps names to indices |
 | `Bone` | Segment (visual representation) | — | `Bone` | **Mixture** — carries visual and structural concerns |
 | `SkeletonDefinition` | Segment + Articulation + Anatomical Mobility | — | `SkeletonDefinition` | **Mixture** — parameterizes the computational skeleton model, constraints, and proportions |
-| `SkeletonFactory` | Topology Builder | — | `SkeletonFactory` | **Proper entity** — builds the fixed tree structure |
-| `SkeletonNodes` | Topology Convenience Container | — | `SkeletonNodes` | **Technical container** — exposes node references by name for authoring |
+| `SkeletonFactory` | — | Topology Builder | `SkeletonFactory` | **Proper entity** — builds the fixed tree structure |
+| `SkeletonNodes` | — | Topology Convenience Container | `SkeletonNodes` | **Technical container** — exposes node references by name for authoring |
 | `ContactSpec` | Attachment Point + Environment (Surface) | Contact + IK Effector Context + Solver Constraint | `ContactSpec` | **Intentional aggregation** — contact declaration, solver target, and solver metadata grouped for one contact interaction |
 | `WorldTarget` | Attachment Point + Environment (Surface) | IK Effector + Contact Constraint | `WorldTarget` | **Mixture** — carries the IK target and optionally a contact constraint |
 | `RelativeArticulation` | — | Pose Goal (articulation declaration) | `RelativeArticulation` | **Proper entity** — a single goal declaration |
@@ -605,7 +605,7 @@ Processes are the ordered stages of the skeleton pipeline. Each stage takes one 
 | `PipelineResult` / `ValidatedFrame` | — | Transport Object | `PipelineResult` / `ValidatedFrame` | **Technical container** — pipeline result wrapper |
 | `HipRomStamp` | — | Derived Data | `HipRomStamp` | **Proper entity** — computed ROM decomposition |
 | `SkeletonMath.IKResult` | — | Solver Output | `SkeletonMath.IKResult` | **Technical container** — IK solve result |
-| `ContactChain` | Topology (IK chain definition) | — | `ContactChain` | **Proper entity** — defines the proximal chain for a contact |
+| `ContactChain` | — | Topology (IK chain definition) | `ContactChain` | **Proper entity** — defines the proximal chain for a contact |
 | `LocalMatrixScratch` | — | Computation Scratch | `LocalMatrixScratch` | **Technical container** — matrix computation buffers |
 
 ---
@@ -645,6 +645,15 @@ The system contains three distinct ontological layers:
 22. **Finalizer** — applies post-solve corrections and derives stamps
 23. **Validator** — checks the final pose against biomechanical rules
 24. **Renderer** — projects to screen space and draws
+
+### Lifetime Table
+
+| Category | Entities |
+|---|---|
+| **Persistent domain** (exist for the skeleton's lifetime, independent of any frame) | Segment, Articulation, Attachment Point, Anatomical Mobility, Environment |
+| **Persistent configuration** (loaded once, referenced throughout the pipeline) | SkeletonDefinition, Joint enum |
+| **Transient computational** (created per pose/frame, consumed during solve) | Coordinate Frame, Pose Intent, Pose State, IK Effector, Contact, Landmark, Solver Constraint |
+| **Runtime representation** (per-frame data structures) | SkeletonNode, SkeletonPose, Bone, ContactSpec |
 
 The highest-compression objects are `SkeletonNode` and the `Joint` enum. The lowest-compression objects are the dedicated data classes (`ContactSpec`, `WorldTarget`, `IKConstraint`, etc.) and the intent/state split of `SkeletonPose`.
 
