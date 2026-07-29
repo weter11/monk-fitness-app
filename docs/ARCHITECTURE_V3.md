@@ -79,9 +79,9 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** World-space limb solving.
 
-**Inputs:** Root world position, target world position, bone lengths, world-space pole vector, mobility limits, contact constraints.
+**Inputs:** Root world position, target world position, bone lengths, mobility limits, contact constraints.
 
-**Outputs:** Solved local rotations for the limb chain; clamp amount stamps; bone-length verification; straight-intent-dropped flag.
+**Outputs:** Solved local rotations for the limb chain; straight-intent-dropped flag.
 
 **Lifetime:** Transient. Computed each frame for each limb target.
 
@@ -91,13 +91,13 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 ### 2.5 Constraint Solver
 
-**Purpose:** Enforces postural constraints after IK solving — root positioning from contacts, posture resolution, contact conflict resolution, and inter-frame smoothing.
+**Purpose:** Enforces postural constraints — root positioning from contacts, posture resolution, and contact conflict resolution.
 
 **Owned responsibility:** Root transform authority and posture resolution. The solver is the sole mover of the root/pelvis transform.
 
 **Inputs:** Intent State (contacts, posture intent, contact precedence), IK results, skeleton model (mobility limits).
 
-**Outputs:** Final root transform; adjusted joint angles for posture; contact conflict resolution; temporal smoothing deltas; stamp data (root translation/rotation delta).
+**Outputs:** Final root transform; adjusted joint angles for posture; contact conflict resolution; stamp data (root translation/rotation delta).
 
 **Lifetime:** Transient. Computed each frame after IK solving.
 
@@ -107,7 +107,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 ### 2.6 Finalizer
 
-**Purpose:** Applies post-solve geometric corrections — world-to-local conversion, extremity derivation, relative rotation resolution, chest-frame reconstruction, and flattening to the final local-transform store.
+**Purpose:** Applies geometric corrections — world-to-local conversion, extremity derivation, relative rotation resolution, chest-frame reconstruction, and flattening to the final local-transform store.
 
 **Owned responsibility:** Exclusive world-to-local frame conversion. The Finalizer is the only subsystem that writes local transforms after the solver has settled.
 
@@ -203,11 +203,11 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 ### 2.12 Animation
 
-**Purpose:** Drives temporal changes in pose parameters — motion curves, drivers, and interpolation between keyframes.
+**Purpose:** Drives temporal changes in pose parameters over time.
 
-**Owned responsibility:** Time-based parameter interpolation. Animation knows about timing, curves, and progress. It does not know about IK, constraints, or geometry.
+**Owned responsibility:** Time-based parameter interpolation. Animation knows about timing and progress. It does not know about IK, constraints, or geometry.
 
-**Inputs:** Motion driver definitions (curves, keyframes, timing); frame progress.
+**Inputs:** Motion driver definitions; frame progress.
 
 **Outputs:** Interpolated parameter values consumed by Pose Authoring.
 
@@ -272,7 +272,7 @@ Author
 Pose Authoring
   ↓ (produces intent package)
 IK Solver
-  ↓ (solves limb transforms in world space)
+  ↓ (produces limb solve results)
 Constraint Solver
   ↓ (resolves root position, posture, contact conflicts)
 Finalizer
@@ -316,13 +316,13 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 - **Must never modify:** The Skeleton Model or any runtime state.
 
 ### IK Solver
-- **Owns:** Limb solve results, bone-length verification, clamp stamps, default pole vectors.
+- **Owns:** Limb solve results.
 - **Reads:** Skeleton Model (bone lengths, mobility limits), Intent State (targets).
 - **Produces:** Solved local rotations for limb chains; stamps.
 - **Must never modify:** Root transform, contact state, or any non-limb joint.
 
 ### Constraint Solver
-- **Owns:** Root transform, posture resolution, contact conflict resolution, inter-frame smoothing.
+- **Owns:** Root transform, posture resolution, contact conflict resolution.
 - **Reads:** Skeleton Model (mobility limits), IK results, Intent State (contacts, posture intent).
 - **Produces:** Final root transform, adjusted joint angles, temporal deltas, stamps.
 - **Must never modify:** Limb IK results (only reads them), intent declarations.
@@ -402,13 +402,13 @@ The runtime state of the system is organized into architectural state categories
 
 ### IK Result State
 - **Writer:** IK Solver
-- **Contents:** Solved limb transforms, clamp stamps, bone-length verification, straight-intent-dropped flag
+- **Contents:** Solved limb transforms, straight-intent-dropped flag
 - **Consumers:** Constraint Solver, Finalizer
 - **Mutability:** Mutable (produced by IK Solver)
 
 ### Constraint Result State
 - **Writer:** Constraint Solver
-- **Contents:** Root transform, posture adjustments, contact conflict resolution, temporal smoothing deltas, stamps
+- **Contents:** Root transform, posture adjustments, contact conflict resolution, stamps
 - **Consumers:** Finalizer
 - **Mutability:** Mutable (produced by Constraint Solver)
 
@@ -449,7 +449,6 @@ The runtime state of the system is organized into architectural state categories
 An architectural contract is a formal agreement between subsystems about what each subsystem guarantees to provide and what it guarantees not to do. Contracts define the responsibilities of subsystems to each other.
 
 ### General provider obligations
-- Every subsystem must produce output for every frame.
 - Every subsystem must produce bounded output. No subsystem may produce undefined values.
 - Every subsystem must produce output that is consistent with its declared inputs.
 
@@ -459,7 +458,6 @@ An architectural contract is a formal agreement between subsystems about what ea
 - Every subsystem must not modify upstream output that it does not own.
 
 ### General assumptions
-- The architecture assumes that every subsystem will produce output for every frame.
 - The architecture assumes that subsystems will not introduce circular dependencies.
 - The architecture assumes that ownership and dependency rules will be preserved.
 
@@ -495,7 +493,7 @@ An architectural contract is a formal agreement between subsystems about what ea
 - **Consumer obligations:** Rendering must consume screen-space positions and produce visual output.
 
 #### Contract: Validator → Application Layer
-- **Provider guarantees:** Validator produces a validation report for every frame. The report contains all detected issues with severities.
+- **Provider guarantees:** Validator produces a validation report for every frame. The report contains all identified issues with severities.
 - **Consumer obligations:** The application layer must consume the validation report.
 
 ---
@@ -536,10 +534,10 @@ The Skeleton Model, Environment, and Animation driver definitions are immutable 
 ## 9. Architectural Boundaries
 
 ### Rendering must not know IK
-Rendering receives only screen-space positions. It has no concept of joint angles, pole vectors, or solver targets.
+Rendering receives only screen-space positions. It has no concept of joint angles.
 
 ### IK must not know rendering
-IK operates in world space with world-space targets. It has no concept of screen coordinates, viewport, or visual styling.
+IK operates in world space. It has no concept of rendering.
 
 ### Validator must not mutate poses
 Validation reads the finalized pose state and produces a report. It never writes to any pose state or influences geometry.
@@ -554,7 +552,7 @@ The Environment defines surfaces (ground plane, prop positions, sizes). It does 
 Pose Authoring declares what the body should do (contacts, targets, posture). It does not solve for positions, compute transforms, or apply constraints.
 
 ### Constraint Solver must not know about rendering
-The solver operates on world-space transforms and produces adjusted joint angles. It has no concept of screen space, viewport, or visual output.
+The solver operates on world-space transforms. It has no concept of rendering.
 
 ### Finalizer must not move solver-settled contact end-effectors
 The Finalizer respects the solver's contact settlements. If the solver has positioned a contact point, the Finalizer must not displace it.
@@ -602,7 +600,7 @@ The following invariants must hold at all times during execution. Any violation 
 The architecture defines the following principles for handling errors at subsystem boundaries.
 
 ### Fail-fast philosophy
-When a subsystem detects an invalid input or an internal inconsistency, it must signal the error immediately rather than attempting to continue with potentially corrupted state. The architecture favors early detection over silent continuation.
+When a subsystem encounters invalid input or an internal inconsistency, it must signal the error immediately rather than attempting to continue with potentially corrupted state. The architecture favors early detection over silent continuation.
 
 ### Boundary-level isolation
 Errors are contained at subsystem boundaries. A subsystem that encounters an error must not propagate the error to other subsystems except through its output. The error must be visible to the consumer of the subsystem's output.
@@ -652,17 +650,17 @@ The architecture defines how the system's internal state is made visible to oper
 ### Observability concerns
 - **State visibility** — the ability to observe the current state of each subsystem.
 - **Contract compliance** — the ability to verify that subsystems are honoring their architectural contracts.
-- **Boundary integrity** — the ability to detect when subsystems are violating architectural boundaries.
+- **Boundary integrity** — the ability to identify when subsystems are violating architectural boundaries.
 - **Data flow integrity** — the ability to verify that data is flowing correctly between subsystems.
 
 ### Observability principles
-- Every subsystem must produce diagnostic information that allows its state to be observed.
-- Diagnostic information must be produced at subsystem boundaries — where data enters and leaves each subsystem.
-- Diagnostic information must not affect the correctness of subsystem outputs. Observability must not compromise the architecture's guarantees.
-- The architecture does not define diagnostic logging formats, transport mechanisms, or storage strategies. These are implementation concerns.
+- Every subsystem must produce observability data that allows its state to be observed.
+- Observability data must be produced at subsystem boundaries — where data enters and leaves each subsystem.
+- Observability data must not affect the correctness of subsystem outputs. Observability must not compromise the architecture's guarantees.
+- The architecture does not define observability data formats, transport mechanisms, or storage strategies. These are implementation concerns.
 
 ### Observability and contracts
-Architectural contracts (§7) define what each subsystem must provide. Observability is the mechanism by which contract compliance can be verified. The architecture defines the contracts; observability is the means of checking them.
+Architectural contracts (§7) define what each subsystem must provide. Observability is the means by which contract compliance can be verified. The architecture defines the contracts; observability is the means of checking them.
 
 ---
 
@@ -672,7 +670,7 @@ The architecture defines the performance characteristics it is designed to achie
 
 ### Performance goals
 - **Deterministic execution** — the architecture guarantees that the same inputs produce the same outputs. Performance must not vary based on hidden state or external factors.
-- **Bounded resource consumption** — the architecture guarantees that each subsystem consumes a bounded amount of memory and computation per frame. The architecture does not define specific targets; these are implementation concerns.
+- **Bounded resource consumption** — the architecture guarantees that each subsystem consumes bounded resources. The architecture does not define specific targets; these are implementation concerns.
 - **Scalability** — the architecture must support additional subsystems and state categories without requiring changes to existing subsystems.
 - **Predictable behavior** — the architecture guarantees that subsystems will behave predictably within their declared boundaries. Performance must not be affected by factors outside the subsystem's declared scope.
 
@@ -694,7 +692,7 @@ The architecture requires deterministic behavior. Given the same inputs, the sam
 Ownership and dependency rules must be preserved regardless of threading model. No mutable state category is shared between threads without explicit ownership transfer. Immutable objects (Skeleton Model, Environment, Animation drivers) may be read concurrently by multiple threads.
 
 ### Parallel execution
-Parallel execution is permitted when architectural contracts are maintained. Phases that have no data dependency on each other may execute concurrently. The architecture does not define synchronization primitives, lock-free data structures, or message queues. These are implementation concerns.
+Parallel execution is permitted when architectural contracts are maintained. Subsystems with no data dependency on each other may execute concurrently. The architecture does not define synchronization primitives, lock-free data structures, or message queues. These are implementation concerns.
 
 ---
 
@@ -734,7 +732,7 @@ Animation feeds interpolated parameter values into Pose Authoring. The interface
 The architecture defines the following extension points where new subsystems or capabilities may be added without modifying existing subsystems.
 
 ### Between Constraint Solver and Finalizer
-A new subsystem may be inserted here to apply post-solve adjustments before the Finalizer converts world transforms to local transforms. The new subsystem must consume Constraint Result State and produce output that the Finalizer can consume. The Finalizer must not be modified to accommodate the new subsystem.
+A new subsystem may be inserted here to adjust world transforms before the Finalizer converts them to local transforms. The new subsystem must consume Constraint Result State and produce output that the Finalizer can consume. The Finalizer must not be modified to accommodate the new subsystem.
 
 ### Between Finalizer and FK
 A new subsystem may be inserted here to apply additional local-transform adjustments before FK propagates them to world space. The new subsystem must consume Local Transform State and produce output that FK can consume. FK must not be modified to accommodate the new subsystem.
