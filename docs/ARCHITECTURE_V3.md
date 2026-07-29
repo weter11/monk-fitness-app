@@ -57,7 +57,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 ---
 
-### 2.3 Forward Kinematics (FK)
+### 2.3 Transform Propagation (TP)
 
 **Purpose:** Propagates local transforms up the skeleton hierarchy to compute world-space positions and orientations for every joint.
 
@@ -69,7 +69,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Lifetime:** Transient. Computed each frame as part of the pipeline.
 
-**Dependencies:** Reads the Skeleton Model (hierarchy). Reads local transforms from the Local Transform State. Produces world transforms consumed by the World Transform State and Validation.
+**Dependencies:** Reads the Skeleton Model (hierarchy). Reads local transforms from the Local Transform State. Produces world transforms consumed by the World Transform State and Validation. Does not know about rendering or presentation.
 
 ---
 
@@ -89,7 +89,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 ---
 
-### 2.5 Constraint Solver
+### 2.5 Pose Solver
 
 **Purpose:** Enforces postural constraints — root positioning from contacts, posture resolution, and contact conflict resolution.
 
@@ -115,7 +115,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Outputs:** Final local transforms (localPosition, localRotation) for every joint; derived extremity orientations; chest-frame reconstruction.
 
-**Lifetime:** Transient. Computed each frame after the Constraint Solver.
+**Lifetime:** Transient. Computed each frame after the Pose Solver.
 
 **Dependencies:** Reads the Skeleton Model. Reads IK results. Does not move solver-settled contact end-effectors. Does not know about rendering or presentation.
 
@@ -123,7 +123,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 ### 2.7 Validator
 
-**Purpose:** Checks the final pose against biomechanical rules — bone lengths preserved, joints within mobility limits, landmarks in valid regions, bilateral symmetry holds.
+**Purpose:** Observes the final pose and checks it against biomechanical rules — bone lengths preserved, joints within mobility limits, landmarks in valid regions, bilateral symmetry holds.
 
 **Owned responsibility:** Read-only correctness verification. The validator never mutates the pose.
 
@@ -131,9 +131,9 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Outputs:** Validation report (issues, severities, results).
 
-**Lifetime:** Transient. Runs once per frame after the Finalizer.
+**Lifetime:** Transient. Runs once per frame after all computation subsystems have published their results.
 
-**Dependencies:** Reads the Skeleton Model. Reads the Finalized Local Transform State and World Transform State. Reads Intent State (environment). Does not write to any pose state.
+**Dependencies:** Reads the Skeleton Model. Reads the Finalized Local Transform State and World Transform State. Reads Intent State (environment). Does not write to any pose state. Is independent of the main computation flow.
 
 ---
 
@@ -143,13 +143,13 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** 3D-to-2D transformation.
 
-**Inputs:** World Transform State; camera parameters (view position, projection settings).
+**Inputs:** World Transform State; Camera State.
 
 **Outputs:** Screen-space skeleton positions; exercise snapshot.
 
-**Lifetime:** Transient. Computed each frame after FK.
+**Lifetime:** Transient. Computed each frame after TP.
 
-**Dependencies:** Reads FK output (world transforms). Reads camera parameters from Intent State. Does not know about IK, constraints, or the solver.
+**Dependencies:** Reads TP output (world transforms). Reads Camera State. Does not know about IK, constraints, or the solver.
 
 ---
 
@@ -177,7 +177,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Inputs:** Author-provided environment definition (ground level, prop positions, sizes, types).
 
-**Outputs:** Surface definitions (ground plane, prop geometries, normals) consumed by the Constraint Solver and Validator.
+**Outputs:** Surface definitions (ground plane, prop geometries, normals) consumed by the Pose Solver and Validator.
 
 **Lifetime:** Persistent per exercise definition. May change between poses but is fixed during a single pose evaluation.
 
@@ -213,7 +213,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Lifetime:** Transient per frame. Driven by the exercise timeline.
 
-**Dependencies:** Reads motion driver definitions. Feeds interpolated values into Pose Authoring. Does not know about the solver, FK, or rendering.
+**Dependencies:** Reads motion driver definitions. Feeds interpolated values into Pose Authoring. Does not know about the solver, TP, or rendering.
 
 ---
 
@@ -238,17 +238,18 @@ Pose Authoring ← Animation
     ↓
 IK Solver ← Skeleton Model
     ↓
-Constraint Solver ← IK Solver, Pose Authoring, Skeleton Model
+Pose Solver ← IK Solver, Pose Authoring, Skeleton Model
     ↓
-Finalizer ← Constraint Solver, Skeleton Model
+Finalizer ← Pose Solver, Skeleton Model
     ↓
-FK ← Finalizer, Skeleton Model
+TP ← Finalizer, Skeleton Model
     ↓
-Projection ← FK, Pose Authoring (camera)
+Projection ← TP, Camera State
     ↓
 Rendering ← Projection, Skeleton Model (bone visuals)
-    ↓
-Validator ← Finalizer, Skeleton Model, Pose Authoring (environment)
+
+Validator (independent observer, reads all published states)
+    ↑ reads Local Transform State, World Transform State, Intent State, Environment
 ```
 
 ### Forbidden directions
@@ -259,7 +260,7 @@ Validator ← Finalizer, Skeleton Model, Pose Authoring (environment)
 - **Definitions must remain immutable.** The Skeleton Model is never modified at runtime.
 - **Environment must not contain pose state.** The environment defines surfaces; it does not track where the body is.
 - **Pose Authoring must not compute geometry.** Pose Authoring declares intent; it does not solve for positions.
-- **Constraint Solver must not know about rendering.** The solver operates on world-space transforms; it has no concept of screen space.
+- **Pose Solver must not know about rendering.** The solver operates on world-space transforms; it has no concept of screen space.
 - **Finalizer must not move solver-settled contact end-effectors.** The Finalizer respects the solver's contact settlements.
 
 ---
@@ -273,11 +274,11 @@ Pose Authoring
   ↓ (produces intent package)
 IK Solver
   ↓ (produces limb solve results)
-Constraint Solver
+Pose Solver
   ↓ (resolves root position, posture, contact conflicts)
 Finalizer
   ↓ (converts world→local, derives extremities, reconstructs chest)
-FK
+TP
   ↓ (propagates local transforms to world space)
 Projection
   ↓ (converts world→screen space)
@@ -290,9 +291,9 @@ Validator (parallel, reads all stages)
 ### Major transformations
 
 1. **Intent → World limb transforms** (IK Solver)
-2. **World limb transforms → Root + posture settlement** (Constraint Solver)
+2. **World limb transforms → Root + posture settlement** (Pose Solver)
 3. **World transforms → Local transforms** (Finalizer)
-4. **Local transforms → World transforms** (FK)
+4. **Local transforms → World transforms** (TP)
 5. **World transforms → Screen-space positions** (Projection)
 6. **Screen-space positions → Visual output** (Rendering)
 7. **Pose state → Validation report** (Validator)
@@ -310,9 +311,9 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 - **Must never modify:** Its own data is immutable at runtime.
 
 ### Pose Authoring
-- **Owns:** Intent declarations (contacts, limb targets, posture, spine curve, extremity overrides, gaze, environment, camera).
+- **Owns:** Intent declarations (contacts, limb targets, posture, spine curve, extremity overrides, gaze target, environment).
 - **Reads:** The Skeleton Model (to know what joints and segments exist).
-- **Produces:** The intent package consumed by IK, Constraint Solver, Validator, and Projection.
+- **Produces:** The intent package consumed by IK, Pose Solver, Validator, and Projection.
 - **Must never modify:** The Skeleton Model or any runtime state.
 
 ### IK Solver
@@ -321,10 +322,10 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 - **Produces:** Solved local rotations for limb chains; stamps.
 - **Must never modify:** Root transform, contact state, or any non-limb joint.
 
-### Constraint Solver
+### Pose Solver
 - **Owns:** Root transform, posture resolution, contact conflict resolution.
 - **Reads:** Skeleton Model (mobility limits), IK results, Intent State (contacts, posture intent).
-- **Produces:** Final root transform, adjusted joint angles, temporal deltas, stamps.
+- **Produces:** Final root transform, adjusted joint angles, stamps.
 - **Must never modify:** Limb IK results (only reads them), intent declarations.
 
 ### Finalizer
@@ -333,7 +334,7 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 - **Produces:** Final local transforms, derived extremity orientations.
 - **Must never modify:** Solver-settled contact end-effectors, root transform, or intent declarations.
 
-### FK
+### TP
 - **Owns:** Stateless transform propagation.
 - **Reads:** Skeleton Model (hierarchy), Finalizer output (local transforms).
 - **Produces:** World-space transforms.
@@ -347,7 +348,7 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 
 ### Projection
 - **Owns:** 3D-to-2D transformation.
-- **Reads:** FK output (world transforms), Intent State (camera).
+- **Reads:** TP output (world transforms), Intent State (camera).
 - **Produces:** Screen-space positions.
 - **Must never modify:** Any pose state or skeleton data.
 
@@ -360,7 +361,7 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 ### Environment
 - **Owns:** Ground plane, prop definitions, surface normals.
 - **Reads:** Nothing from runtime subsystems.
-- **Produces:** Environmental surface data consumed by Constraint Solver and Validator.
+- **Produces:** Environmental surface data consumed by Pose Solver and Validator.
 - **Must never contain:** Pose state, joint transforms, or solver output.
 
 ### Animation
@@ -380,6 +381,7 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 - Ownership includes the right to create, mutate, and destroy the object.
 - No subsystem may create, mutate, or destroy a runtime object owned by another subsystem.
 - Immutable objects (Skeleton Model, Environment, Animation drivers) are owned by the architecture and may be read by any subsystem.
+- Ownership implies authority: only the owner of an object defines its invariants. Other subsystems can only read the object.
 
 ### Mutability rules
 - Immutable objects must never be modified after creation.
@@ -396,33 +398,39 @@ The runtime state of the system is organized into architectural state categories
 
 ### Intent State
 - **Writer:** Pose Authoring
-- **Contents:** Contact declarations, limb targets, posture intent, spine curve, extremity overrides, gaze target, environment context, camera parameters
-- **Consumers:** IK Solver, Constraint Solver, Validator, Projection
+- **Contents:** Contact declarations, limb targets, posture intent, spine curve, extremity overrides, gaze target, environment context
+- **Consumers:** IK Solver, Pose Solver, Validator, TP
+- **Mutability:** Mutable (recreated each frame by Pose Authoring)
+
+### Camera State
+- **Writer:** Pose Authoring
+- **Contents:** View position, projection settings
+- **Consumers:** TP
 - **Mutability:** Mutable (recreated each frame by Pose Authoring)
 
 ### IK Result State
 - **Writer:** IK Solver
 - **Contents:** Solved limb transforms, straight-intent-dropped flag
-- **Consumers:** Constraint Solver, Finalizer
+- **Consumers:** Pose Solver, Finalizer
 - **Mutability:** Mutable (produced by IK Solver)
 
-### Constraint Result State
-- **Writer:** Constraint Solver
+### Pose Result State
+- **Writer:** Pose Solver
 - **Contents:** Root transform, posture adjustments, contact conflict resolution, stamps
 - **Consumers:** Finalizer
-- **Mutability:** Mutable (produced by Constraint Solver)
+- **Mutability:** Mutable (produced by Pose Solver)
 
 ### Local Transform State
 - **Writer:** Finalizer
 - **Contents:** Local transforms (localPosition, localRotation) for every joint; derived extremity orientations
-- **Consumers:** FK, Validator
+- **Consumers:** TP, Validator
 - **Mutability:** Mutable (produced by Finalizer)
 
 ### World Transform State
-- **Writer:** FK
+- **Writer:** TP
 - **Contents:** World-space transforms (worldPosition, worldRotation) for every joint
 - **Consumers:** Projection, Validator
-- **Mutability:** Mutable (produced by FK)
+- **Mutability:** Mutable (produced by TP)
 
 ### Screen Transform State
 - **Writer:** Projection
@@ -440,7 +448,8 @@ The runtime state of the system is organized into architectural state categories
 - Each state category is written by exactly one subsystem.
 - Each state category is read by zero or more downstream subsystems.
 - No state category may be read while it is being written.
-- State categories flow in dependency order: Intent State → IK Result State → Constraint Result State → Local Transform State → World Transform State → Screen Transform State → Validation State.
+- After a state category is published, it becomes read-only. All consumers have read-only access.
+- State categories flow in dependency order: Intent State → Camera State → IK Result State → Pose Result State → Local Transform State → World Transform State → Screen Transform State → Validation State.
 
 ---
 
@@ -472,20 +481,20 @@ An architectural contract is a formal agreement between subsystems about what ea
 - **Provider guarantees:** Pose Authoring produces a complete intent package each frame. The intent package contains all contact declarations, limb targets, posture intent, spine curve, extremity overrides, gaze target, and environment context.
 - **Consumer obligations:** Downstream subsystems must consume the intent package and must not modify it.
 
-#### Contract: IK Solver → Constraint Solver
+#### Contract: IK Solver → Pose Solver
 - **Provider guarantees:** IK Solver produces limb solve results for every limb target. Results are bounded.
-- **Consumer obligations:** Constraint Solver must consume IK results and must not modify them.
+- **Consumer obligations:** Pose Solver must consume IK results and must not modify them.
 
-#### Contract: Constraint Solver → Finalizer
-- **Provider guarantees:** Constraint Solver produces a final root transform and posture-resolved joint angles. Contact settlements are final.
-- **Consumer obligations:** Finalizer must consume Constraint Solver results and must not move solver-settled contact end-effectors.
+#### Contract: Pose Solver → Finalizer
+- **Provider guarantees:** Pose Solver produces a final root transform and posture-resolved joint angles. Contact settlements are final.
+- **Consumer obligations:** Finalizer must consume Pose Solver results and must not move solver-settled contact end-effectors.
 
-#### Contract: Finalizer → FK
+#### Contract: Finalizer → TP
 - **Provider guarantees:** Finalizer produces final local transforms for every joint. World-to-local conversion is complete. Extremities are derived.
-- **Consumer obligations:** FK must consume local transforms and propagate them. FK must not modify local transforms.
+- **Consumer obligations:** TP must consume local transforms and propagate them. TP must not modify local transforms.
 
-#### Contract: FK → Projection
-- **Provider guarantees:** FK produces world-space transforms for every joint. Transforms are consistent with the skeleton hierarchy.
+#### Contract: TP → Projection
+- **Provider guarantees:** TP produces world-space transforms for every joint. Transforms are consistent with the skeleton hierarchy.
 - **Consumer obligations:** Projection must consume world transforms and produce screen-space positions.
 
 #### Contract: Projection → Rendering
@@ -551,7 +560,7 @@ The Environment defines surfaces (ground plane, prop positions, sizes). It does 
 ### Pose Authoring must not compute geometry
 Pose Authoring declares what the body should do (contacts, targets, posture). It does not solve for positions, compute transforms, or apply constraints.
 
-### Constraint Solver must not know about rendering
+### Pose Solver must not know about rendering
 The solver operates on world-space transforms. It has no concept of rendering.
 
 ### Finalizer must not move solver-settled contact end-effectors
@@ -570,9 +579,9 @@ The following invariants must hold at all times during execution. Any violation 
 2. The Environment is immutable during a single pose evaluation.
 3. Pose Authoring is the sole writer of Intent State.
 4. IK Solver is the sole writer of IK Result State.
-5. Constraint Solver is the sole writer of Constraint Result State.
+5. Pose Solver is the sole writer of Pose Result State.
 6. Finalizer is the sole writer of Local Transform State.
-7. FK is the sole writer of World Transform State.
+7. TP is the sole writer of World Transform State.
 8. Projection is the sole writer of Screen Transform State.
 9. Validator is the sole writer of Validation State.
 10. Animation is the sole writer of interpolated parameters in Intent State.
@@ -597,24 +606,22 @@ The following invariants must hold at all times during execution. Any violation 
 
 ## 10. Error Handling Strategy
 
-The architecture defines the following principles for handling errors at subsystem boundaries.
+The architecture defines the following principles for error handling at subsystem boundaries.
 
 ### Fail-fast philosophy
-When a subsystem encounters invalid input or an internal inconsistency, it must signal the error immediately rather than attempting to continue with potentially corrupted state. The architecture favors early detection over silent continuation.
+When a subsystem encounters invalid input or an internal inconsistency, it must signal the error immediately rather than attempting to continue with potentially corrupted state.
 
 ### Boundary-level isolation
-Errors are contained at subsystem boundaries. A subsystem that encounters an error must not propagate the error to other subsystems except through its output. The error must be visible to the consumer of the subsystem's output.
+Errors are contained at subsystem boundaries. A subsystem that encounters an error must not propagate the error to other subsystems except through its output.
 
 ### Graceful degradation
-When a subsystem cannot produce its normal output, it must produce the best available alternative. The architecture prefers degraded but valid output over no output. The specific degradation strategy is an implementation concern of Pipeline Specification and subsystem specifications.
+When a subsystem cannot produce its normal output, it must produce the best available alternative. The architecture prefers degraded but valid output over no output.
 
 ### Error propagation
-Errors propagate only through subsystem outputs. A downstream subsystem that receives invalid input from an upstream subsystem must handle it according to the fail-fast philosophy. The architecture does not define error recovery strategies — these are implementation concerns.
+Errors propagate only through subsystem outputs. A downstream subsystem that receives invalid input from an upstream subsystem must handle it according to the fail-fast philosophy.
 
 ### Architectural consequences
 - Violation of an architectural contract is an architectural defect.
-- The architecture does not define retry logic, circuit breakers, or fallback mechanisms. These are implementation concerns of Pipeline Specification and subsystem specifications.
-- The architecture does not define error logging or diagnostic strategies. These are implementation concerns.
 
 ---
 
@@ -645,39 +652,17 @@ The architecture is configured through architectural-level parameters that gover
 
 ## 12. Observability
 
-The architecture defines how the system's internal state is made visible to operators and developers.
-
-### Observability concerns
-- **State visibility** — the ability to observe the current state of each subsystem.
-- **Contract compliance** — the ability to verify that subsystems are honoring their architectural contracts.
-- **Boundary integrity** — the ability to identify when subsystems are violating architectural boundaries.
-- **Data flow integrity** — the ability to verify that data is flowing correctly between subsystems.
-
-### Observability principles
-- Every subsystem must produce observability data that allows its state to be observed.
-- Observability data must be produced at subsystem boundaries — where data enters and leaves each subsystem.
-- Observability data must not affect the correctness of subsystem outputs. Observability must not compromise the architecture's guarantees.
-- The architecture does not define observability data formats, transport mechanisms, or storage strategies. These are implementation concerns.
-
-### Observability and contracts
-Architectural contracts (§7) define what each subsystem must provide. Observability is the means by which contract compliance can be verified. The architecture defines the contracts; observability is the means of checking them.
+Each subsystem must publish observable state at its boundary. Format, logging, and storage are not part of the architecture.
 
 ---
 
 ## 13. Performance Model
 
-The architecture defines the performance characteristics it is designed to achieve.
+The architecture is designed for the following performance properties.
 
-### Performance goals
-- **Deterministic execution** — the architecture guarantees that the same inputs produce the same outputs. Performance must not vary based on hidden state or external factors.
-- **Bounded resource consumption** — the architecture guarantees that each subsystem consumes bounded resources. The architecture does not define specific targets; these are implementation concerns.
-- **Scalability** — the architecture must support additional subsystems and state categories without requiring changes to existing subsystems.
-- **Predictable behavior** — the architecture guarantees that subsystems will behave predictably within their declared boundaries. Performance must not be affected by factors outside the subsystem's declared scope.
-
-### Performance constraints
-- The architecture does not define frame budgets, latency targets, or throughput requirements. These are implementation concerns of Pipeline Specification.
-- The architecture does not define optimization strategies, caching mechanisms, or parallelization approaches. These are implementation concerns.
-- The architecture defines what performance characteristics the system must have, not how they are achieved.
+- **Deterministic** — the same inputs produce the same outputs.
+- **Bounded resource usage** — each subsystem consumes bounded resources.
+- **Scalable** — the architecture supports additional subsystems and state categories without requiring changes to existing subsystems.
 
 ---
 
@@ -694,12 +679,15 @@ Ownership and dependency rules must be preserved regardless of threading model. 
 ### Parallel execution
 Parallel execution is permitted when architectural contracts are maintained. Subsystems with no data dependency on each other may execute concurrently. The architecture does not define synchronization primitives, lock-free data structures, or message queues. These are implementation concerns.
 
+### Synchronization ownership
+Synchronization is owned by the execution model, not by subsystems. Subsystems should not own synchronization mechanisms.
+
 ---
 
 ## 15. Stable Interfaces
 
 ### Intent → Pipeline
-Pose Authoring produces an intent package. The pipeline (IK, Constraint Solver, Finalizer) consumes it. The interface is the intent package itself — a self-contained declaration of contacts, targets, posture, spine curve, extremity overrides, gaze, and environment.
+Pose Authoring produces an intent package. The pipeline (IK, Pose Solver, Finalizer) consumes it. The interface is the intent package itself — a self-contained declaration of contacts, targets, posture, spine curve, extremity overrides, gaze, and environment.
 
 ### Pipeline → State Categories
 Each pipeline stage produces its output in the corresponding state category. The interface is the state category — a carrier of data in a specific form.
@@ -708,19 +696,19 @@ Each pipeline stage produces its output in the corresponding state category. The
 The Validator reads the finalized Local Transform State and World Transform State and the Skeleton Model. The interface is read-only access to transform state and skeleton parameters.
 
 ### Pipeline → Screen Transform State
-Projection reads world-space transforms from FK and camera parameters from Intent State. The interface is world-space transform data and camera configuration.
+Projection reads world-space transforms from TP and camera parameters from Intent State. The interface is world-space transform data and camera configuration.
 
 ### Screen Transform State → Rendering
 Projection produces screen-space positions. Rendering consumes them. The interface is 2D screen coordinates and bone connectivity.
 
-### Skeleton Model → FK
-FK reads the Skeleton Model (hierarchy) and local transforms from the Finalizer. The interface is the skeleton hierarchy and local transform data.
+### Skeleton Model → TP
+TP reads the Skeleton Model (hierarchy) and local transforms from the Finalizer. The interface is the skeleton hierarchy and local transform data.
 
 ### Skeleton Model → Solver
-The Constraint Solver and IK Solver read the Skeleton Model (bone lengths, mobility limits). The interface is skeleton parameters.
+The Pose Solver and IK Solver read the Skeleton Model (bone lengths, mobility limits). The interface is skeleton parameters.
 
 ### Environment → Solver and Validator
-The Constraint Solver and Validator read environmental surface data. The interface is ground plane and prop definitions.
+The Pose Solver and Validator read environmental surface data. The interface is ground plane and prop definitions.
 
 ### Animation → Pose Authoring
 Animation feeds interpolated parameter values into Pose Authoring. The interface is a set of time-varying parameter values.
@@ -729,25 +717,7 @@ Animation feeds interpolated parameter values into Pose Authoring. The interface
 
 ## 16. Extension Points
 
-The architecture defines the following extension points where new subsystems or capabilities may be added without modifying existing subsystems.
-
-### Between Constraint Solver and Finalizer
-A new subsystem may be inserted here to adjust world transforms before the Finalizer converts them to local transforms. The new subsystem must consume Constraint Result State and produce output that the Finalizer can consume. The Finalizer must not be modified to accommodate the new subsystem.
-
-### Between Finalizer and FK
-A new subsystem may be inserted here to apply additional local-transform adjustments before FK propagates them to world space. The new subsystem must consume Local Transform State and produce output that FK can consume. FK must not be modified to accommodate the new subsystem.
-
-### Alongside Pose Authoring
-A new subsystem may be added to produce intent data (e.g., motion capture targets, exercise library presets) that is consumed by Pose Authoring. The new subsystem must not modify Pose Authoring's existing behavior. Pose Authoring must not be modified to accommodate the new subsystem.
-
-### Alongside Animation
-A new subsystem may be added to produce interpolated parameter values (e.g., animation blending, procedural animation) that are consumed by Pose Authoring. The new subsystem must not modify Animation's existing behavior. Animation must not be modified to accommodate the new subsystem.
-
-### Alongside Serialization
-A new subsystem may be added to provide alternative data transport (e.g., networking, streaming) that produces or consumes serialized data. The new subsystem must not modify Serialization's existing behavior. Serialization must not be modified to accommodate the new subsystem.
-
-### Alongside Validator
-A new subsystem may be added to perform additional validation checks (e.g., biomechanical plausibility, style compliance) that consume the same inputs as Validator. The new subsystem must not modify Validator's existing behavior. Validator must not be modified to accommodate the new subsystem.
+New subsystems can only be inserted between published state categories. Each insertion point requires the new subsystem to consume the upstream state category and produce output for the downstream state category, without modifying existing subsystems.
 
 ### Extension rules
 - New subsystems must not introduce new dependencies on existing subsystems that are not already in the allowed dependency graph.
