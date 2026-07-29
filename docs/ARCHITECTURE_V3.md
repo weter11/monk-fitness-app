@@ -77,7 +77,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Purpose:** Solves for joint angles that place an end-effector (attachment point in IK effector role) at a target world-space position, respecting anatomical mobility limits.
 
-**Owned responsibility:** World-space limb solving. Two-bone analytical IK, straight-limb bend fallback, bone-length preservation, default pole vector generation.
+**Owned responsibility:** World-space limb solving.
 
 **Inputs:** Root world position, target world position, bone lengths, world-space pole vector, mobility limits, contact constraints.
 
@@ -91,7 +91,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 ### 2.5 Constraint Solver
 
-**Purpose:** Enforces postural constraints after IK solving — root positioning from contacts, posture CCD, contact conflict resolution, inter-frame smoothing.
+**Purpose:** Enforces postural constraints after IK solving — root positioning from contacts, posture resolution, contact conflict resolution, and inter-frame smoothing.
 
 **Owned responsibility:** Root transform authority and posture resolution. The solver is the sole mover of the root/pelvis transform.
 
@@ -141,7 +141,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Purpose:** Transforms world-space skeleton transforms into screen-space coordinates for display.
 
-**Owned responsibility:** 3D-to-2D transformation. Perspective projection, viewport mapping, screen-space compensation.
+**Owned responsibility:** 3D-to-2D transformation.
 
 **Inputs:** World Transform State; camera parameters (view position, projection settings).
 
@@ -448,46 +448,55 @@ The runtime state of the system is organized into architectural state categories
 
 An architectural contract is a formal agreement between subsystems about what each subsystem guarantees to provide and what it guarantees not to do. Contracts define the responsibilities of subsystems to each other.
 
-### Contract: Pose Authoring → Pipeline
+### General provider obligations
+- Every subsystem must produce output for every frame.
+- Every subsystem must produce bounded output. No subsystem may produce undefined values.
+- Every subsystem must produce output that is consistent with its declared inputs.
+
+### General consumer obligations
+- Every subsystem must validate the structural integrity of upstream output before consuming it.
+- Every subsystem must handle invalid upstream output gracefully.
+- Every subsystem must not modify upstream output that it does not own.
+
+### General assumptions
+- The architecture assumes that every subsystem will produce output for every frame.
+- The architecture assumes that subsystems will not introduce circular dependencies.
+- The architecture assumes that ownership and dependency rules will be preserved.
+
+### General consequences of contract violation
+- When a subsystem violates its contract, the architecture does not define recovery behavior. Recovery is an implementation concern of Pipeline Specification and subsystem specifications.
+- The architecture defines only that violations are architectural defects.
+- The architecture does not specify which subsystem should detect or handle a violation. Detection and handling are implementation concerns.
+
+### Specific contracts
+
+#### Contract: Pose Authoring → Pipeline
 - **Provider guarantees:** Pose Authoring produces a complete intent package each frame. The intent package contains all contact declarations, limb targets, posture intent, spine curve, extremity overrides, gaze target, and environment context.
 - **Consumer obligations:** Downstream subsystems must consume the intent package and must not modify it.
-- **Violation:** If Pose Authoring fails to produce an intent package, the pipeline cannot proceed. The architecture requires that Pose Authoring always produce output, even if degraded.
 
-### Contract: IK Solver → Constraint Solver
-- **Provider guarantees:** IK Solver produces limb solve results for every limb target. Results are bounded (clamped to reachable workspace when targets are unreachable).
+#### Contract: IK Solver → Constraint Solver
+- **Provider guarantees:** IK Solver produces limb solve results for every limb target. Results are bounded.
 - **Consumer obligations:** Constraint Solver must consume IK results and must not modify them.
-- **Violation:** If IK Solver cannot solve a limb, it must produce a clamped result and record the clamp amount. It must not skip the limb or produce undefined values.
 
-### Contract: Constraint Solver → Finalizer
+#### Contract: Constraint Solver → Finalizer
 - **Provider guarantees:** Constraint Solver produces a final root transform and posture-resolved joint angles. Contact settlements are final.
 - **Consumer obligations:** Finalizer must consume Constraint Solver results and must not move solver-settled contact end-effectors.
-- **Violation:** If Constraint Solver cannot converge, it must produce the best available result and record the residual. It must not leave the root in an undefined state.
 
-### Contract: Finalizer → FK
+#### Contract: Finalizer → FK
 - **Provider guarantees:** Finalizer produces final local transforms for every joint. World-to-local conversion is complete. Extremities are derived.
 - **Consumer obligations:** FK must consume local transforms and propagate them. FK must not modify local transforms.
-- **Violation:** If Finalizer encounters invalid input, it must produce the best available local transforms and record the issue.
 
-### Contract: FK → Projection
+#### Contract: FK → Projection
 - **Provider guarantees:** FK produces world-space transforms for every joint. Transforms are consistent with the skeleton hierarchy.
 - **Consumer obligations:** Projection must consume world transforms and produce screen-space positions.
-- **Violation:** If FK encounters invalid local transforms, it must propagate them and record the issue.
 
-### Contract: Projection → Rendering
+#### Contract: Projection → Rendering
 - **Provider guarantees:** Projection produces screen-space positions for every joint. Positions are within the viewport or flagged as out-of-viewport.
 - **Consumer obligations:** Rendering must consume screen-space positions and produce visual output.
-- **Violation:** If Projection encounters invalid world transforms, it must produce the best available screen positions and record the issue.
 
-### Contract: Validator → Application Layer
+#### Contract: Validator → Application Layer
 - **Provider guarantees:** Validator produces a validation report for every frame. The report contains all detected issues with severities.
 - **Consumer obligations:** The application layer must consume the validation report.
-- **Violation:** If Validator encounters invalid input, it must produce a report indicating the failure. It must not crash.
-
-### General contract principles
-- Every subsystem must produce output for every frame. A missing output is a more severe failure than a degraded output.
-- Failures are isolated. A failure in one subsystem must not propagate to other subsystems unless the failure produces invalid output that is consumed by a downstream subsystem.
-- Failures propagate only through subsystem outputs. A downstream subsystem that receives invalid input must handle it gracefully and produce its own output (degraded if necessary).
-- No subsystem may crash the system. If a subsystem encounters an invalid input, it must produce a degraded result and record the issue.
 
 ---
 
@@ -507,49 +516,24 @@ Each subsystem can be tested in isolation. The architectural contracts define th
 ### Extensible
 New subsystems can be added without modifying existing subsystems. Extension points are defined at architectural boundaries (see §13). New subsystems must follow the same ownership, mutability, and failure isolation rules as existing subsystems.
 
-### Bounded latency
-Each subsystem must produce output for every frame. No subsystem may defer its work to a future frame. The architecture does not define latency targets; these are implementation concerns.
+### Predictable
+The architecture guarantees that subsystems will behave predictably within their declared boundaries. A subsystem's behavior is determined by its inputs and its contract — not by hidden state or external factors.
+
+### Isolated
+Failures in one subsystem are contained within that subsystem. Failures propagate only through subsystem outputs. A subsystem that receives invalid input from an upstream subsystem must handle it gracefully and produce its own output.
+
+### Reproducible
+The architecture guarantees that the same pose authoring input, environment, and animation parameters will produce the same skeleton configuration on every execution. This is a consequence of determinism and isolated state.
+
+### Maintainable
+The architecture is organized by responsibility, not by domain entities. Each subsystem has a single, well-defined purpose. This makes it possible to modify one subsystem without affecting others.
 
 ### Immutable definitions
 The Skeleton Model, Environment, and Animation driver definitions are immutable at runtime. No subsystem may modify them. This ensures that the structural foundation of the system is stable and predictable.
 
 ---
 
-## 9. State Category Contract
-
-The state category model defines the valid categories of runtime state and the contracts governing them. This section resolves the structural consistency of the state model.
-
-### Single-writer rule
-Each state category has exactly one writer. No state category may be written by more than one subsystem. This ensures that ownership is unambiguous and that no two subsystems can produce conflicting writes to the same state.
-
-### State category definitions
-
-| State Category | Writer | Consumers |
-|---|---|---|
-| Intent State | Pose Authoring | IK Solver, Constraint Solver, Validator, Projection |
-| IK Result State | IK Solver | Constraint Solver, Finalizer |
-| Constraint Result State | Constraint Solver | Finalizer |
-| Local Transform State | Finalizer | FK, Validator |
-| World Transform State | FK | Projection, Validator |
-| Screen Transform State | Projection | Rendering |
-| Validation State | Validator | Application layer |
-
-### Consumer obligations
-- A consumer may read a state category only after the writer has completed writing it.
-- A consumer must not modify a state category it reads.
-- A consumer must not transfer ownership of a state category to a third party without explicit architectural authorization.
-
-### Producer obligations
-- A producer must write to its state category completely before signaling that it is available.
-- A producer must not write to a state category after transferring ownership to a consumer.
-- A producer must produce output for every frame, even if the output is a degraded or clamped result.
-
-### Consistency with Ownership
-The state category writers correspond to the ownership defined in §5. Each subsystem owns the state category it writes. The ownership rules (immutable objects, mutable objects, read-only access, ownership transfer) apply to state categories as well.
-
----
-
-## 10. Architectural Boundaries
+## 9. Architectural Boundaries
 
 ### Rendering must not know IK
 Rendering receives only screen-space positions. It has no concept of joint angles, pole vectors, or solver targets.
@@ -601,9 +585,8 @@ The following invariants must hold at all times during execution. Any violation 
 
 ### Failure isolation
 - Failures are isolated. A failure in one subsystem must not propagate to other subsystems unless the failure produces invalid output that is consumed by a downstream subsystem.
-- If a subsystem produces invalid output (NaN, infinite values), downstream subsystems must detect and handle the invalid values gracefully.
-- Degraded output is preferred over missing output. Each subsystem must produce output for every frame, even if the output is a degraded or clamped result.
-- Failures propagate only through subsystem outputs. A downstream subsystem that receives invalid input must handle it gracefully and produce its own output (degraded if necessary).
+- Failures propagate only through subsystem outputs. A downstream subsystem that receives invalid input must handle it gracefully and produce its own output.
+- Degraded output is preferred over missing output.
 
 ### Stability guarantees
 - Immutable definitions: The Skeleton Model, Environment, and Animation driver definitions are immutable at runtime.
@@ -614,7 +597,93 @@ The following invariants must hold at all times during execution. Any violation 
 
 ---
 
-## 11. Threading Assumptions
+## 10. Error Handling Strategy
+
+The architecture defines the following principles for handling errors at subsystem boundaries.
+
+### Fail-fast philosophy
+When a subsystem detects an invalid input or an internal inconsistency, it must signal the error immediately rather than attempting to continue with potentially corrupted state. The architecture favors early detection over silent continuation.
+
+### Boundary-level isolation
+Errors are contained at subsystem boundaries. A subsystem that encounters an error must not propagate the error to other subsystems except through its output. The error must be visible to the consumer of the subsystem's output.
+
+### Graceful degradation
+When a subsystem cannot produce its normal output, it must produce the best available alternative. The architecture prefers degraded but valid output over no output. The specific degradation strategy is an implementation concern of Pipeline Specification and subsystem specifications.
+
+### Error propagation
+Errors propagate only through subsystem outputs. A downstream subsystem that receives invalid input from an upstream subsystem must handle it according to the fail-fast philosophy. The architecture does not define error recovery strategies — these are implementation concerns.
+
+### Architectural consequences
+- Violation of an architectural contract is an architectural defect.
+- The architecture does not define retry logic, circuit breakers, or fallback mechanisms. These are implementation concerns of Pipeline Specification and subsystem specifications.
+- The architecture does not define error logging or diagnostic strategies. These are implementation concerns.
+
+---
+
+## 11. Configuration
+
+The architecture is configured through architectural-level parameters that govern subsystem behavior.
+
+### Configuration concerns
+- **Skeleton topology** — which joints exist and how they are connected.
+- **Bone lengths and proportions** — the physical dimensions of the skeleton.
+- **Mobility limits** — the angular ranges of each joint.
+- **Contact definitions** — which body points can be in contact with which surfaces.
+- **Environment geometry** — the ground plane, props, and their properties.
+- **Animation drivers** — the motion curves and timing parameters.
+
+### Configuration principles
+- Configuration is declared by the author and consumed by the architecture.
+- Configuration is immutable at runtime. No subsystem may modify configuration parameters during execution.
+- Configuration is separate from runtime state. Configuration defines the skeleton; runtime state defines the pose.
+- Configuration is versioned. Changes to configuration must be tracked and must not break existing poses.
+
+### Configuration boundaries
+- Configuration belongs to the authoring layer, not to the computation layer.
+- The architecture does not define configuration file formats or serialization protocols. These are implementation concerns.
+- The architecture defines what configuration parameters exist and how they relate to subsystems, not how they are stored or loaded.
+
+---
+
+## 12. Observability
+
+The architecture defines how the system's internal state is made visible to operators and developers.
+
+### Observability concerns
+- **State visibility** — the ability to observe the current state of each subsystem.
+- **Contract compliance** — the ability to verify that subsystems are honoring their architectural contracts.
+- **Boundary integrity** — the ability to detect when subsystems are violating architectural boundaries.
+- **Data flow integrity** — the ability to verify that data is flowing correctly between subsystems.
+
+### Observability principles
+- Every subsystem must produce diagnostic information that allows its state to be observed.
+- Diagnostic information must be produced at subsystem boundaries — where data enters and leaves each subsystem.
+- Diagnostic information must not affect the correctness of subsystem outputs. Observability must not compromise the architecture's guarantees.
+- The architecture does not define diagnostic logging formats, transport mechanisms, or storage strategies. These are implementation concerns.
+
+### Observability and contracts
+Architectural contracts (§7) define what each subsystem must provide. Observability is the mechanism by which contract compliance can be verified. The architecture defines the contracts; observability is the means of checking them.
+
+---
+
+## 13. Performance Model
+
+The architecture defines the performance characteristics it is designed to achieve.
+
+### Performance goals
+- **Deterministic execution** — the architecture guarantees that the same inputs produce the same outputs. Performance must not vary based on hidden state or external factors.
+- **Bounded resource consumption** — the architecture guarantees that each subsystem consumes a bounded amount of memory and computation per frame. The architecture does not define specific targets; these are implementation concerns.
+- **Scalability** — the architecture must support additional subsystems and state categories without requiring changes to existing subsystems.
+- **Predictable behavior** — the architecture guarantees that subsystems will behave predictably within their declared boundaries. Performance must not be affected by factors outside the subsystem's declared scope.
+
+### Performance constraints
+- The architecture does not define frame budgets, latency targets, or throughput requirements. These are implementation concerns of Pipeline Specification.
+- The architecture does not define optimization strategies, caching mechanisms, or parallelization approaches. These are implementation concerns.
+- The architecture defines what performance characteristics the system must have, not how they are achieved.
+
+---
+
+## 14. Threading Assumptions
 
 The architecture makes the following assumptions about threading and concurrency.
 
@@ -629,7 +698,7 @@ Parallel execution is permitted when architectural contracts are maintained. Pha
 
 ---
 
-## 12. Stable Interfaces
+## 15. Stable Interfaces
 
 ### Intent → Pipeline
 Pose Authoring produces an intent package. The pipeline (IK, Constraint Solver, Finalizer) consumes it. The interface is the intent package itself — a self-contained declaration of contacts, targets, posture, spine curve, extremity overrides, gaze, and environment.
@@ -660,15 +729,15 @@ Animation feeds interpolated parameter values into Pose Authoring. The interface
 
 ---
 
-## 13. Extension Points
+## 16. Extension Points
 
 The architecture defines the following extension points where new subsystems or capabilities may be added without modifying existing subsystems.
 
 ### Between Constraint Solver and Finalizer
-A new subsystem may be inserted here to apply post-solve adjustments (e.g., physics, muscle simulation) before the Finalizer converts world transforms to local transforms. The new subsystem must consume Constraint Result State and produce output that the Finalizer can consume. The Finalizer must not be modified to accommodate the new subsystem.
+A new subsystem may be inserted here to apply post-solve adjustments before the Finalizer converts world transforms to local transforms. The new subsystem must consume Constraint Result State and produce output that the Finalizer can consume. The Finalizer must not be modified to accommodate the new subsystem.
 
 ### Between Finalizer and FK
-A new subsystem may be inserted here to apply additional local-transform adjustments (e.g., animation blending, procedural offsets) before FK propagates them to world space. The new subsystem must consume Local Transform State and produce output that FK can consume. FK must not be modified to accommodate the new subsystem.
+A new subsystem may be inserted here to apply additional local-transform adjustments before FK propagates them to world space. The new subsystem must consume Local Transform State and produce output that FK can consume. FK must not be modified to accommodate the new subsystem.
 
 ### Alongside Pose Authoring
 A new subsystem may be added to produce intent data (e.g., motion capture targets, exercise library presets) that is consumed by Pose Authoring. The new subsystem must not modify Pose Authoring's existing behavior. Pose Authoring must not be modified to accommodate the new subsystem.
