@@ -327,7 +327,7 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 
 ### Pose Result State
 - **Writer:** Pose Solver
-- **Contents:** Root transform, posture adjustments, contact conflict resolution, root transform delta
+- **Contents:** Root transform, posture adjustments, contact conflict resolution
 - **Consumers:** Finalizer
 - **Mutability:** Mutable (produced by Pose Solver)
 
