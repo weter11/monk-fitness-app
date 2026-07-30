@@ -19,7 +19,7 @@ The skeleton engine is composed of several cooperating subsystems. Each subsyste
 
 The system transforms a pose author's intent into a validated, rendered skeleton every frame. The pipeline flows from authoring through computation to display, with each subsystem performing exactly one transformation.
 
-The architecture follows the Domain Analysis: domain entities (Segment, Articulation, Attachment Point, Anatomical Mobility, Environment) are not architecture. They are the subject matter that subsystems operate on. Subsystems are defined by responsibility, not by the domain entities they touch.
+The architecture follows the Domain Analysis: domain entities (Segment, Articulation, Attachment Point, Anatomical Mobility) are not architecture. They are the subject matter that subsystems operate on. Subsystems are defined by responsibility, not by the domain entities they touch.
 
 ---
 
@@ -47,7 +47,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** All declarative input. The author says what they want; the engine figures out how to achieve it.
 
-**Inputs:** Exercise definition, frame progress, environment definition.
+**Inputs:** Exercise definition, frame progress.
 
 **Outputs:** A complete intent package — contact declarations, limb targets, posture intent, spine curve, extremity overrides, gaze target.
 
@@ -127,13 +127,13 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** Read-only correctness verification. The validator never mutates the pose.
 
-**Inputs:** Local Transform State; World Transform State; Skeleton Model (mobility limits, bone lengths); Intent State (ROM declarations); Environment (ground plane, props).
+**Inputs:** Local Transform State; World Transform State; Skeleton Model (mobility limits, bone lengths); Intent State (ROM declarations).
 
 **Outputs:** Validation report (issues, severities, results).
 
 **Lifetime:** Transient. Runs once per frame after all computation subsystems have published their results.
 
-**Dependencies:** Reads the Skeleton Model. Reads Local Transform State, World Transform State, Intent State, and Environment. Does not write to any pose state. Is independent of the main computation flow.
+**Dependencies:** Reads the Skeleton Model. Reads Local Transform State, World Transform State, Intent State. Does not write to any pose state. Is independent of the main computation flow.
 
 ---
 
@@ -169,23 +169,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 ---
 
-### 2.10 Environment
-
-**Purpose:** Defines the physical world the body exists in — ground plane, props (boxes, steps, benches, walls), and their geometric properties.
-
-**Owned responsibility:** Environmental context. The environment defines what surfaces are available for contact. It does not contain pose state.
-
-**Inputs:** Author-provided environment definition (ground level, prop positions, sizes, types).
-
-**Outputs:** Surface definitions (ground plane, prop geometries, normals) consumed by the Pose Solver and Validator.
-
-**Lifetime:** Persistent per exercise definition. May change between poses but is fixed during a single pose evaluation.
-
-**Dependencies:** None. The Environment is declared by the author and consumed by the solver and validator.
-
----
-
-### 2.11 Serialization / Asset Definitions
+### 2.10 Serialization / Asset Definitions
 
 **Purpose:** Loads, stores, and transmits skeleton definitions, pose configurations, and validation profiles.
 
@@ -201,7 +185,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 ---
 
-### 2.12 Animation
+### 2.11 Animation
 
 **Purpose:** Drives temporal changes in pose parameters over time.
 
@@ -248,8 +232,8 @@ Projection ← TP, Camera State
     ↓
 Rendering ← Projection, Skeleton Model (connectivity), Rendering Definition
 
-Validator (independent observer, reads Local Transform State, World Transform State, Intent State, Environment)
-    ↑ reads Local Transform State, World Transform State, Intent State, Environment
+Validator (independent observer, reads Local Transform State, World Transform State, Intent State)
+    ↑ reads Local Transform State, World Transform State, Intent State
 ```
 
 ### Forbidden directions
@@ -258,7 +242,6 @@ Validator (independent observer, reads Local Transform State, World Transform St
 - **IK must not know about rendering.** IK operates in world space; it has no concept of screen coordinates.
 - **Validator must not mutate poses.** Validation is read-only. It produces reports, not corrections.
 - **Definitions must remain immutable.** The Skeleton Model is never modified at runtime.
-- **Environment must not contain pose state.** The environment defines surfaces; it does not track where the body is.
 - **Pose Authoring must not compute geometry.** Pose Authoring declares intent; it does not solve for positions.
 - **Pose Solver must not know about rendering.** The solver operates on world-space transforms; it has no concept of screen space.
 - **Finalizer must not move solver-settled contact end-effectors.** The Finalizer respects the solver's contact settlements.
@@ -286,11 +269,11 @@ Rendering
   ↓ (draws skeleton to framebuffer)
 ```
 
-Validator reads the explicitly published states it depends on: Local Transform State, World Transform State, Intent State, and Environment. It is not part of the main computation flow.
+Validator reads the explicitly published states it depends on: Local Transform State, World Transform State, and Intent State. It is not part of the main computation flow.
 
 ```
 Validator (parallel observer)
-  ↑ reads Local Transform State, World Transform State, Intent State, Environment
+  ↑ reads Local Transform State, World Transform State, Intent State
   ↓ (produces validation report)
 ```
 
@@ -317,7 +300,7 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 - **Must never modify:** Its own data is immutable at runtime.
 
 ### Rendering Definition
-- **Owns:** Bone visual definitions (lengths, thickness, color, display connectivity).
+- **Owns:** Bone visual definitions (thickness, color, display connectivity).
 - **Reads:** Nothing from runtime subsystems.
 - **Produces:** Visual definitions consumed by Rendering.
 - **Must never modify:** Its own data is immutable at runtime.
@@ -325,7 +308,7 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 ### Pose Authoring
 - **Writer:** Pose Authoring
 - **Contents:** Contact declarations, limb targets, posture intent, spine curve, extremity overrides, gaze target
-- **Consumers:** IK Solver, Pose Solver, Validator, TP
+- **Consumers:** IK Solver, Pose Solver, Validator
 - **Mutability:** Mutable (recreated each frame by Pose Authoring)
 
 ### Animation Parameter State
@@ -376,12 +359,16 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 - **Consumers:** Application layer
 - **Mutability:** Mutable (produced by Validator)
 
+---
+
+## 6. State Categories
+
 ### State category rules
 - Each state category is written by exactly one subsystem.
 - Each state category is read by zero or more downstream subsystems.
 - No state category may be read while it is being written.
 - After a state category is published, it becomes read-only. There is exactly one Writer; after writing completes, state is published. Once published, all consumers have read-only access. No published state category can be modified again.
-- State categories form a DAG: Animation Parameter State → Intent State → IK Result State → Pose Result State → Local Transform State → World Transform State → Screen Transform State → Validation State. Camera State → Screen Transform. World Transform State, Local Transform State, Intent State, and Environment → Validation State.
+- State categories form a DAG: Animation Parameter State → Intent State → IK Result State → Pose Result State → Local Transform State → World Transform State → Screen Transform State → Validation State. Camera State → Screen Transform. World Transform State, Local Transform State, and Intent State → Validation State.
 - A state category may be published only after it satisfies its structural validity contract.
 - Consumers never read partially written or unpublished state.
 
@@ -445,7 +432,7 @@ An architectural contract is a formal agreement between subsystems about what ea
 The architecture is designed to achieve the following quality attributes.
 
 ### Deterministic
-Given the same inputs (Skeleton Model, intent, environment, animation parameters), the architecture guarantees the same outputs (world-space transforms, screen-space positions, validation report) on every execution. This guarantee holds on a single thread. Parallel execution may introduce non-determinism if architectural contracts are not maintained.
+Given the same inputs (Skeleton Model, intent, animation parameters), the architecture guarantees the same outputs (world-space transforms, screen-space positions, validation report) on every execution. This guarantee holds on a single thread. Parallel execution may introduce non-determinism if architectural contracts are not maintained.
 
 ### Modular
 Each subsystem has a narrow, well-defined scope. No subsystem may assume responsibilities outside its declared boundary. Subsystems are defined by responsibility, not by the domain entities they touch.
@@ -454,22 +441,22 @@ Each subsystem has a narrow, well-defined scope. No subsystem may assume respons
 Each subsystem can be tested in isolation. The architectural contracts define the inputs and outputs of each subsystem, enabling unit testing of individual subsystems without requiring the full pipeline.
 
 ### Extensible
-New subsystems can be added without modifying existing subsystems. Extension points are defined at architectural boundaries (see §13). New subsystems must follow the same ownership, mutability, and failure isolation rules as existing subsystems.
+New subsystems can be added without modifying existing subsystems. Extension points are defined at architectural boundaries (see §16). New subsystems must follow the same ownership, mutability, and failure isolation rules as existing subsystems.
 
 ### Predictable
 The architecture guarantees that subsystems will behave predictably within their declared boundaries. A subsystem's behavior is determined by its inputs and its contract — not by hidden state or external factors.
 
 ### Isolated
-Failures in one subsystem are contained within that subsystem. Failures propagate only through subsystem outputs. A subsystem that receives invalid input from an upstream subsystem must handle it gracefully and produce its own output.
+Failures in one subsystem are contained within that subsystem. Failures propagate only through subsystem outputs. A downstream subsystem that receives invalid input must handle it according to the fail-fast philosophy.
 
 ### Reproducible
-The architecture guarantees that the same pose authoring input, environment, and animation parameters will produce the same skeleton configuration on every execution. This is a consequence of determinism and isolated state.
+The architecture guarantees that the same pose authoring input and animation parameters will produce the same skeleton configuration on every execution. This is a consequence of determinism and isolated state.
 
 ### Maintainable
 The architecture is organized by responsibility, not by domain entities. Each subsystem has a single, well-defined purpose. This makes it possible to modify one subsystem without affecting others.
 
 ### Immutable definitions
-The Skeleton Model, Environment, and Animation driver definitions are immutable at runtime. No subsystem may modify them. This ensures that the structural foundation of the system is stable and predictable.
+The Skeleton Model and Animation driver definitions are immutable at runtime. No subsystem may modify them. This ensures that the structural foundation of the system is stable and predictable.
 
 ---
 
@@ -487,18 +474,6 @@ Validation reads the finalized pose state and produces a report. It never writes
 ### Definitions must remain immutable
 The Skeleton Model (bone lengths, proportions, connectivity, mobility limits) is never modified at runtime. All runtime mutations happen in transient state objects.
 
-### Environment must not contain pose state
-The Environment defines surfaces (ground plane, prop positions, sizes). It does not track where the body is, what joints are touching, or what the solver computed.
-
-### Pose Authoring must not compute geometry
-Pose Authoring declares what the body should do (contacts, targets, posture). It does not solve for positions, compute transforms, or apply constraints.
-
-### Pose Solver must not know about rendering
-The solver operates on world-space transforms. It has no concept of rendering.
-
-### Finalizer must not move solver-settled contact end-effectors
-The Finalizer respects the solver's contact settlements. If the solver has positioned a contact point, the Finalizer must not displace it.
-
 ### Animation must not know about IK or constraints
 Animation drives time-based parameter interpolation. It does not solve for joint angles or enforce postural constraints.
 
@@ -509,27 +484,26 @@ Serialization moves data between storage and runtime. It does not transform, val
 The following invariants must hold at all times during execution. Any violation is an architectural defect.
 
 1. The Skeleton Model is immutable at runtime.
-2. The Environment is immutable during a single pose evaluation.
-3. Pose Authoring is the sole writer of Intent State.
-4. Animation is the sole writer of Animation Parameter State.
-5. IK Solver is the sole writer of IK Result State.
-6. Pose Solver is the sole writer of Pose Result State.
-7. Finalizer is the sole writer of Local Transform State.
-8. TP is the sole writer of World Transform State.
-9. Projection is the sole writer of Screen Transform State.
-10. Validator is the sole writer of Validation State.
-11. Camera State is written by the Execution Model.
-12. No state category may be read while it is being written.
-13. No state category may be written by more than one subsystem.
-14. No subsystem may read a state category that it also writes.
-15. Dependencies are acyclic.
+2. Pose Authoring is the sole writer of Intent State.
+3. Animation is the sole writer of Animation Parameter State.
+4. IK Solver is the sole writer of IK Result State.
+5. Pose Solver is the sole writer of Pose Result State.
+6. Finalizer is the sole writer of Local Transform State.
+7. TP is the sole writer of World Transform State.
+8. Projection is the sole writer of Screen Transform State.
+9. Validator is the sole writer of Validation State.
+10. Camera State is written by the Execution Model.
+11. No state category may be read while it is being written.
+12. No state category may be written by more than one subsystem.
+13. No subsystem may read a state category that it also writes.
+14. Dependencies are acyclic.
 
 ### Failure isolation
 - Failures are isolated. A failure in one subsystem must not propagate to other subsystems unless the failure produces invalid output that is consumed by a downstream subsystem.
 - Failures propagate only through subsystem outputs. A downstream subsystem that receives invalid input must handle it according to the fail-fast philosophy.
 
 ### Stability guarantees
-- Immutable definitions: The Skeleton Model, Environment, and Animation driver definitions are immutable at runtime.
+- Immutable definitions: The Skeleton Model and Animation driver definitions are immutable at runtime.
 - Deterministic ownership: Every runtime object has exactly one owner. Ownership is declared at the architectural level and must not be violated.
 - Isolated mutation: Each subsystem may mutate only the state categories it owns. Mutation of another subsystem's state category is an architectural violation.
 - Bounded subsystem responsibilities: Each subsystem has a narrow, well-defined scope. No subsystem may assume responsibilities outside its declared boundary.
@@ -561,7 +535,6 @@ The architecture is configured through architectural-level parameters that gover
 - **Bone lengths and proportions** — the physical dimensions of the skeleton.
 - **Mobility limits** — the angular ranges of each joint.
 - **Contact definitions** — which body points can be in contact with which surfaces.
-- **Environment geometry** — the ground plane, props, and their properties.
 - **Animation drivers** — the motion curves and timing parameters.
 
 ### Configuration principles
@@ -601,7 +574,7 @@ The architecture makes the following assumptions about threading and concurrency
 The architecture requires deterministic behavior. Given the same inputs, the same outputs must be produced. This guarantee holds on a single thread. Parallel execution may introduce non-determinism if architectural contracts are not maintained.
 
 ### Ownership preservation
-Ownership and dependency rules must be preserved regardless of threading model. No mutable state category is shared between threads without explicit ownership transfer. Immutable objects (Skeleton Model, Environment, Animation drivers) may be read concurrently by multiple threads.
+Ownership and dependency rules must be preserved regardless of threading model. No mutable state category is shared between threads without explicit ownership transfer. Immutable objects (Skeleton Model, Animation drivers) may be read concurrently by multiple threads.
 
 ### Parallel execution
 Parallel execution is permitted when architectural contracts are maintained. Subsystems with no data dependency on each other may execute concurrently. The architecture does not define synchronization primitives, lock-free data structures, or message queues. These are implementation concerns.
@@ -620,7 +593,7 @@ Pose Authoring produces an intent package. The pipeline (IK, Pose Solver, Finali
 Each pipeline stage produces its output in the corresponding state category. The interface is the state category — a carrier of data in a specific form.
 
 ### Pipeline → Validation State
-The Validator reads the finalized Local Transform State, World Transform State, Intent State, Environment, and the Skeleton Model. The interface is read-only access to transform state, skeleton parameters, and environmental data.
+The Validator reads the finalized Local Transform State, World Transform State, Intent State, and the Skeleton Model. The interface is read-only access to transform state and skeleton parameters.
 
 ### Pipeline → Screen Transform State
 Projection reads world-space transforms from TP and camera parameters from Camera State. The interface is world-space transform data and camera configuration.
@@ -633,9 +606,6 @@ TP reads the Skeleton Model (hierarchy) and local transforms from the Finalizer.
 
 ### Skeleton Model → Solver
 The Pose Solver and IK Solver read the Skeleton Model (bone lengths, mobility limits). The interface is skeleton parameters.
-
-### Environment → Solver and Validator
-The Pose Solver and Validator read environmental surface data. The interface is ground plane and prop definitions.
 
 ### Animation → Animation Parameter State
 Animation produces interpolated parameter values in Animation Parameter State. The interface is a set of time-varying parameter values.
