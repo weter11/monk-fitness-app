@@ -81,7 +81,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Inputs:** Target root-relative position (from Intent State), bone lengths, mobility limits, contact declarations (from Intent State and Skeleton Model).
 
-**Outputs:** Solved local rotations for the limb chain; straight-intent-dropped flag.
+**Outputs:** Root-relative limb transforms; straight-intent-dropped flag.
 
 **Lifetime:** Transient. Computed each frame for each limb target.
 
