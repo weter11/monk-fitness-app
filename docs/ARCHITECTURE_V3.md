@@ -97,7 +97,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Inputs:** Intent State (contacts, posture intent, contact precedence), IK Result State, skeleton model (bone lengths, mobility limits).
 
-**Outputs:** Final root transform; adjusted joint angles for posture; contact conflict resolution; root transform delta (root translation/rotation delta).
+**Outputs:** Final root transform; adjusted joint angles for posture; contact conflict resolution.
 
 **Lifetime:** Transient. Computed each frame after IK solving.
 
