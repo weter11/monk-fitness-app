@@ -582,7 +582,7 @@ Synchronization is owned by the Frame Clock / host execution environment, not by
 ## 15. Stable Interfaces
 
 ### Intent → Pipeline
-Pose Authoring produces an intent package. The pipeline (IK, Pose Solver, Finalizer) consumes it. The interface is the intent package itself — a self-contained declaration of contacts, targets, posture, spine curve, extremity overrides, and gaze.
+Pose Authoring produces an intent package. The pipeline (IK, Pose Solver, Finalizer) consumes it. The interface is the intent package itself — a self-contained declaration of contacts, targets, posture, spine curve, extremity overrides, gaze, and contact precedence.
 
 ### Pipeline → State Categories
 Each pipeline stage produces its output in the corresponding state category. The interface is the state category — a carrier of data in a specific form.
