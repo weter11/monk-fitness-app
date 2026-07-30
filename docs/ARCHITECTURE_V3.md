@@ -75,11 +75,11 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 ### 2.4 Inverse Kinematics (IK)
 
-**Purpose:** Solves for joint angles that place an end-effector (attachment point in IK effector role) at a target world-space position, respecting anatomical mobility limits.
+**Purpose:** Solves for joint angles that place an end-effector (attachment point in IK effector role) at a target position relative to the root, respecting anatomical mobility limits. The root is assumed at origin for IK solving; the Pose Solver subsequently positions the root in world space.
 
-**Owned responsibility:** World-space limb solving.
+**Owned responsibility:** Root-relative limb solving.
 
-**Inputs:** Target world position (from Intent State), bone lengths, mobility limits, contact constraints (from Intent State and Skeleton Model).
+**Inputs:** Target root-relative position (from Intent State), bone lengths, mobility limits, contact constraints (from Intent State and Skeleton Model).
 
 **Outputs:** Solved local rotations for the limb chain; straight-intent-dropped flag.
 
@@ -143,13 +143,13 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** 3D-to-2D transformation and viewport classification.
 
-**Inputs:** World Transform State; Camera State.
+**Inputs:** World Transform State; Camera State (view position, projection settings) provided by the host execution environment.
 
 **Outputs:** Screen-space skeleton positions; exercise snapshot.
 
 **Lifetime:** Transient. Computed each frame after TP.
 
-**Dependencies:** Reads TP output (world transforms). Reads Camera State. Does not know about IK, constraints, or the solver.
+**Dependencies:** Reads TP output (world transforms). Reads Camera State from the host execution environment. Does not know about IK, constraints, or the solver.
 
 ---
 
@@ -281,8 +281,8 @@ Validator (parallel observer)
 
 ### Major transformations
 
-1. **Intent → World limb transforms** (IK Solver)
-2. **World limb transforms → Root + posture settlement** (Pose Solver)
+1. **Intent → Root-relative limb transforms** (IK Solver)
+2. **Root-relative limb transforms + Root → World limb transforms + posture settlement** (Pose Solver)
 3. **Pose Result → Local transforms** (Finalizer)
 4. **Local transforms → World transforms** (TP)
 5. **World transforms → Screen-space positions** (Projection)
@@ -296,7 +296,7 @@ Validator (parallel observer)
 Every runtime object has exactly one subsystem that owns its creation, its mutation, and its destruction. No subsystem may create, mutate, or destroy a runtime object owned by another subsystem.
 
 ### Skeleton Model
-- **Owns:** Bone lengths, proportions, joint connectivity, mobility limits.
+- **Owns:** Bone lengths, proportions, joint connectivity, mobility limits, contact definitions.
 - **Reads:** Nothing from other subsystems.
 - **Produces:** The skeleton structure that all other subsystems reference.
 - **Must never modify:** Its own data is immutable at runtime.
@@ -318,12 +318,6 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 - **Contents:** Interpolated time-based parameter values
 - **Consumers:** Pose Authoring
 - **Mutability:** Mutable (produced by Animation)
-
-### Camera State
-- **Writer:** Host execution environment (Frame Clock)
-- **Contents:** View position, projection settings
-- **Consumers:** Projection
-- **Mutability:** Mutable (recreated each frame by the host execution environment)
 
 ### IK Result State
 - **Writer:** IK Solver
@@ -370,7 +364,7 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 - Each state category is read by zero or more downstream subsystems.
 - No state category may be read while it is being written.
 - After a state category is published, it becomes read-only. There is exactly one Writer; after writing completes, state is published. Once published, all consumers have read-only access. No published state category can be modified again.
-- State categories form a DAG: Animation Parameter State → Intent State → IK Result State → Pose Result State → Local Transform State → World Transform State → Screen Transform State. Camera State → Screen Transform State. World Transform State, Local Transform State, Intent State, and Skeleton Model → Validation State.
+- State categories form a DAG: Animation Parameter State → Intent State → IK Result State → Pose Result State → Local Transform State → World Transform State → Screen Transform State. World Transform State, Local Transform State, Intent State, and Skeleton Model → Validation State.
 - A state category may be published only after it satisfies its structural validity contract.
 - Consumers never read partially written or unpublished state.
 
@@ -400,11 +394,11 @@ An architectural contract is a formal agreement between subsystems about what ea
 ### Specific contracts
 
 #### Contract: Pose Authoring → Pipeline
-- **Provider guarantees:** Pose Authoring produces a complete intent package each frame. The intent package contains all contact declarations, limb targets, posture intent, spine curve, extremity overrides, and gaze target.
+- **Provider guarantees:** Pose Authoring produces a complete intent package each frame. The intent package contains all contact declarations, limb targets, posture intent, spine curve, extremity overrides, gaze target, and contact precedence.
 - **Consumer obligations:** Downstream subsystems must consume the intent package and must not modify it.
 
 #### Contract: IK Solver → Pose Solver
-- **Provider guarantees:** IK Solver produces limb solve results for every limb target. Results are bounded.
+- **Provider guarantees:** IK Solver produces root-relative limb solve results for every limb target. Results are bounded.
 - **Consumer obligations:** Pose Solver must consume IK results and must not modify them.
 
 #### Contract: Pose Solver → Finalizer
@@ -494,11 +488,10 @@ The following invariants must hold at all times during execution. Any violation 
 7. TP is the sole writer of World Transform State.
 8. Projection is the sole writer of Screen Transform State.
 9. Validator is the sole writer of Validation State.
-10. Camera State is written by the host execution environment (Frame Clock).
-11. No state category may be read while it is being written.
-12. No state category may be written by more than one subsystem.
-13. No subsystem may read a mutable state category that it also writes.
-14. Dependencies are acyclic.
+10. No state category may be read while it is being written.
+11. No state category may be written by more than one subsystem.
+12. No subsystem may read a mutable state category that it also writes.
+13. Dependencies are acyclic.
 
 ### Failure isolation
 - Failures are isolated. A failure in one subsystem must not propagate to other subsystems unless the failure produces invalid output that is consumed by a downstream subsystem.
@@ -582,7 +575,7 @@ Ownership and dependency rules must be preserved regardless of threading model. 
 Parallel execution is permitted when architectural contracts are maintained. Subsystems with no data dependency on each other may execute concurrently. The architecture does not define synchronization primitives, lock-free data structures, or message queues. These are implementation concerns.
 
 ### Synchronization ownership
-Synchronization is owned by the execution model, not by subsystems. Subsystems should not own synchronization mechanisms.
+Synchronization is owned by the Frame Clock / host execution environment, not by subsystems. Subsystems should not own synchronization mechanisms.
 
 ---
 
@@ -601,7 +594,7 @@ The Validator reads the finalized Local Transform State, World Transform State, 
 Projection reads world-space transforms from TP and camera parameters from Camera State. The interface is world-space transform data and camera configuration.
 
 ### Screen Transform State → Rendering
-Projection produces screen-space positions. Rendering consumes them. The interface is 2D screen coordinates and bone connectivity.
+Projection produces screen-space positions. Rendering consumes them. The interface is 2D screen coordinates. Display connectivity is provided by Rendering Definition.
 
 ### Skeleton Model → TP
 TP reads the Skeleton Model (hierarchy) and local transforms from the Finalizer. The interface is the skeleton hierarchy and local transform data.
