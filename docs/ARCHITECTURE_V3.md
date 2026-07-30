@@ -43,13 +43,13 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 ### 2.2 Pose Authoring
 
-**Purpose:** Declares what the body should do — the intent behind a pose. This includes contact declarations, limb targets (expressed in root space), posture intent, spine curve, extremity overrides, and gaze target.
+**Purpose:** Declares what the body should do — the intent behind a pose.
 
 **Owned responsibility:** All declarative input. The author says what they want; the engine figures out how to achieve it.
 
 **Inputs:** Exercise definition, frame progress.
 
-**Outputs:** A complete intent package — contact declarations, limb targets (expressed in root space), posture intent, spine curve, extremity overrides, gaze target, contact precedence.
+**Outputs:** Intent State — contact declarations (architectural object: owner=Pose Authoring, consumer=IK Solver, Pose Solver, Validator, Finalizer); limb targets expressed in root space (architectural object: owner=Pose Authoring, consumer=IK Solver, Pose Solver); posture intent (architectural object: owner=Pose Authoring, consumer=Pose Solver); spine curve (architectural object: owner=Pose Authoring, consumer=Finalizer); extremity overrides (architectural object: owner=Pose Authoring, consumer=Finalizer); gaze target (architectural object: owner=Pose Authoring, consumer=Application layer); contact precedence (architectural object: owner=Pose Authoring, consumer=Pose Solver).
 
 **Lifetime:** Per-frame. Recomputed each frame as the exercise progresses.
 
@@ -79,9 +79,9 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** Root-relative limb solving.
 
-**Inputs:** Target root-relative position (from Intent State), bone lengths, mobility limits, contact declarations (from Intent State and Skeleton Model).
+**Inputs:** Limb targets expressed in root space (from Intent State); bone lengths; mobility limits; contact declarations (from Intent State and Skeleton Model).
 
-**Outputs:** Root-relative limb transforms; straight-intent-dropped flag.
+**Outputs:** IK Result State — root-relative limb transforms (architectural object: owner=IK Solver, consumer=Pose Solver); straight-intent-dropped flag (architectural object: owner=IK Solver, consumer=Pose Solver).
 
 **Lifetime:** Transient. Computed each frame for each limb target.
 
@@ -95,9 +95,9 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** Root transform authority and posture adjustment. The solver is the sole authority for the root transform in world space and for posture adjustments.
 
-**Inputs:** Intent State (contact declarations, posture intent, contact precedence), IK Result State, skeleton model (bone lengths, mobility limits).
+**Inputs:** Intent State (contact declarations, posture intent, contact precedence); IK Result State; skeleton model (bone lengths, mobility limits).
 
-**Outputs:** Root transform (world space); posture adjustments; contact conflict resolution.
+**Outputs:** Pose Result State — root transform (world space) (architectural object: owner=Pose Solver, consumer=Finalizer); posture adjustments (architectural object: owner=Pose Solver, consumer=Finalizer); contact conflict resolution (architectural object: owner=Pose Solver, consumer=Finalizer).
 
 **Lifetime:** Transient. Computed each frame after IK solving.
 
@@ -113,7 +113,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Inputs:** Pose Result State (root transform (world space), posture adjustments, contact conflict resolution); skeleton model (bone lengths, proportions); Intent State (authored chest rotation, extremity overrides).
 
-**Outputs:** Final local transforms (localPosition, localRotation) for every joint; derived extremity orientations; chest-frame reconstruction.
+**Outputs:** Local Transform State — final local transforms (localPosition, localRotation) for every joint (architectural object: owner=Finalizer, consumer=TP, Validator); derived extremity orientations (architectural object: owner=Finalizer, consumer=Local Transform State → TP, Validator); chest-frame reconstruction (architectural object: owner=Finalizer, consumer=Local Transform State).
 
 **Lifetime:** Transient. Computed each frame after the Pose Solver.
 
@@ -143,9 +143,9 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** 3D-to-2D transformation and viewport classification.
 
-**Inputs:** World Transform State; camera parameters (view position, projection settings) provided by the host execution environment.
+**Inputs:** World Transform State; camera parameters (architectural object: owner=host execution environment, consumer=Projection).
 
-**Outputs:** Screen-space skeleton positions.
+**Outputs:** Screen Transform State — screen-space positions (architectural object: owner=Projection, consumer=Rendering).
 
 **Lifetime:** Transient. Computed each frame after TP.
 
@@ -159,7 +159,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** Visual representation only. Rendering knows about bones, colors, thickness, and screen positions. It knows nothing about IK, constraints, or pose intent.
 
-**Inputs:** Screen Transform State; Rendering Definition (Bone visual definitions, colors, thickness, display connectivity).
+**Inputs:** Screen Transform State; Rendering Definition (bone visual definitions, colors, thickness, display connectivity).
 
 **Outputs:** Framebuffer output (drawn skeleton).
 
@@ -309,49 +309,49 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 
 ### Pose Authoring
 - **Writer:** Pose Authoring
-- **Contents:** Contact declarations, limb targets (expressed in root space), posture intent, spine curve, extremity overrides, gaze target, contact precedence
+- **Contents:** Contact declarations (architectural object: owner=Pose Authoring, consumers=IK Solver, Pose Solver, Validator, Finalizer); limb targets (expressed in root space) (architectural object: owner=Pose Authoring, consumers=IK Solver, Pose Solver); posture intent (architectural object: owner=Pose Authoring, consumers=Pose Solver, Validator, Finalizer); spine curve (architectural object: owner=Pose Authoring, consumer=Finalizer); extremity overrides (architectural object: owner=Pose Authoring, consumer=Finalizer); gaze target (architectural object: owner=Pose Authoring, consumer=Validator); contact precedence (architectural object: owner=Pose Authoring, consumer=Pose Solver)
 - **Consumers:** IK Solver, Pose Solver, Validator, Finalizer
 - **Mutability:** Mutable (recreated each frame by Pose Authoring)
 
 ### Animation Parameter State
 - **Writer:** Animation
-- **Contents:** Interpolated time-based parameter values
+- **Contents:** Interpolated time-based parameter values (architectural object: owner=Animation, consumer=Pose Authoring)
 - **Consumers:** Pose Authoring
 - **Mutability:** Mutable (produced by Animation)
 
 ### IK Result State
 - **Writer:** IK Solver
-- **Contents:** Root-relative limb transforms; straight-intent-dropped flag (consumed by Pose Solver)
+- **Contents:** Root-relative limb transforms (architectural object: owner=IK Solver, consumer=Pose Solver); straight-intent-dropped flag (architectural object: owner=IK Solver, consumer=Pose Solver)
 - **Consumers:** Pose Solver
 - **Mutability:** Mutable (produced by IK Solver)
 
 ### Pose Result State
 - **Writer:** Pose Solver
-- **Contents:** Root transform (world space), posture adjustments, contact conflict resolution
+- **Contents:** Root transform (world space) (architectural object: owner=Pose Solver, consumer=Finalizer); posture adjustments (architectural object: owner=Pose Solver, consumer=Finalizer); contact conflict resolution (architectural object: owner=Pose Solver, consumer=Finalizer)
 - **Consumers:** Finalizer
 - **Mutability:** Mutable (produced by Pose Solver)
 
 ### Local Transform State
 - **Writer:** Finalizer
-- **Contents:** Local transforms (localPosition, localRotation) for every joint; derived extremity orientations
+- **Contents:** Local transforms (localPosition, localRotation) for every joint (architectural object: owner=Finalizer, consumers=TP, Validator); derived extremity orientations (architectural object: owner=Finalizer, consumers=TP, Validator); chest-frame reconstruction (architectural object: owner=Finalizer, consumers=TP, Validator)
 - **Consumers:** TP, Validator
 - **Mutability:** Mutable (produced by Finalizer)
 
 ### World Transform State
 - **Writer:** TP
-- **Contents:** World-space transforms (worldPosition, worldRotation) for every joint
+- **Contents:** World-space transforms (worldPosition, worldRotation) for every joint (architectural object: owner=TP, consumers=Projection, Validator)
 - **Consumers:** Projection, Validator
 - **Mutability:** Mutable (produced by TP)
 
 ### Screen Transform State
 - **Writer:** Projection
-- **Contents:** Screen-space positions
+- **Contents:** Screen-space positions (architectural object: owner=Projection, consumer=Rendering)
 - **Consumers:** Rendering
 - **Mutability:** Mutable (produced by Projection)
 
 ### Validation State
 - **Writer:** Validator
-- **Contents:** Validation report (issues, severities, results)
+- **Contents:** Validation report (architectural object: owner=Validator, consumer=Application layer)
 - **Consumers:** Application layer
 - **Mutability:** Mutable (produced by Validator)
 
@@ -394,19 +394,19 @@ An architectural contract is a formal agreement between subsystems about what ea
 ### Specific contracts
 
 #### Contract: Pose Authoring → Pipeline
-- **Provider guarantees:** Pose Authoring produces a complete intent package each frame. The intent package contains all contact declarations, limb targets, posture intent, spine curve, extremity overrides, gaze target, and contact precedence.
+- **Provider guarantees:** Pose Authoring produces a complete intent package each frame containing: contact declarations, limb targets (expressed in root space), posture intent, spine curve, extremity overrides, gaze target, contact precedence.
 - **Consumer obligations:** Downstream subsystems must consume the intent package and must not modify it.
 
 #### Contract: IK Solver → Pose Solver
-- **Provider guarantees:** IK Solver produces root-relative limb transforms for every limb target. Results are bounded.
+- **Provider guarantees:** IK Solver produces root-relative limb transforms for every limb target and a straight-intent-dropped flag. Results are bounded.
 - **Consumer obligations:** Pose Solver must consume IK Result State and must not modify it.
 
 #### Contract: Pose Solver → Finalizer
-- **Provider guarantees:** Pose Solver produces a root transform (world space) and posture adjustments. Contact conflict resolution is final.
+- **Provider guarantees:** Pose Solver produces a root transform (world space), posture adjustments, and contact conflict resolution. Contact conflict resolution is final.
 - **Consumer obligations:** Finalizer must consume Pose Solver results and must not move solver-settled contact end-effectors.
 
 #### Contract: Finalizer → TP
-- **Provider guarantees:** Finalizer produces final local transforms for every joint. World-to-local conversion is complete. Extremities are derived.
+- **Provider guarantees:** Finalizer produces final local transforms for every joint, world-to-local conversion is complete. Extremities are derived (derived extremity orientations, chest-frame reconstruction). Local transforms are complete.
 - **Consumer obligations:** TP must consume local transforms and propagate them. TP must not modify local transforms.
 
 #### Contract: TP → Projection
@@ -418,7 +418,7 @@ An architectural contract is a formal agreement between subsystems about what ea
 - **Consumer obligations:** Rendering must consume screen-space positions and produce visual output.
 
 #### Contract: Validator → Application Layer
-- **Provider guarantees:** Validator produces a validation report for every frame. The report contains all identified issues with severities.
+- **Provider guarantees:** Validator produces a validation report for every frame containing issues, severities, and results.
 - **Consumer obligations:** The application layer must consume the validation report.
 
 ---
