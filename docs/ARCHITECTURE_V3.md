@@ -95,7 +95,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** Root transform authority and posture resolution. The solver is the sole authority for the root transform in world space.
 
-**Inputs:** Intent State (contacts, posture intent, contact precedence), IK results, skeleton model (mobility limits).
+**Inputs:** Intent State (contacts, posture intent, contact precedence), IK results, skeleton model (bone lengths, mobility limits).
 
 **Outputs:** Final root transform; adjusted joint angles for posture; contact conflict resolution; stamp data (root translation/rotation delta).
 
@@ -111,7 +111,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** Exclusive world-to-local frame conversion. The Finalizer is the only subsystem that writes local transforms after the solver has settled. It does not move the root; it converts the solver-produced world root transform into Local Transform State.
 
-**Inputs:** Pose Result State (root transform, posture adjustments, contact settlements); skeleton model (segment lengths, proportions); Intent State (authored chest rotation, extremity overrides).
+**Inputs:** Pose Result State (root transform, posture adjustments, contact settlements); skeleton model (bone lengths, proportions); Intent State (authored chest rotation, extremity overrides).
 
 **Outputs:** Final local transforms (localPosition, localRotation) for every joint; derived extremity orientations; chest-frame reconstruction.
 
@@ -497,7 +497,7 @@ The following invariants must hold at all times during execution. Any violation 
 10. Camera State is written by the host execution environment (Frame Clock).
 11. No state category may be read while it is being written.
 12. No state category may be written by more than one subsystem.
-13. No subsystem may read a state category that it also writes.
+13. No subsystem may read a mutable state category that it also writes.
 14. Dependencies are acyclic.
 
 ### Failure isolation
