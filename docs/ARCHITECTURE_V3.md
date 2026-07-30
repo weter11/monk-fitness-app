@@ -117,7 +117,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Lifetime:** Transient. Computed each frame after the Pose Solver.
 
-**Dependencies:** Reads the Skeleton Model. Reads Pose Result State. Does not move solver-settled contact end-effectors. Does not know about rendering or presentation.
+**Dependencies:** Reads the Skeleton Model. Reads Pose Result State. Reads Intent State. Does not move solver-settled contact end-effectors. Does not know about rendering or presentation.
 
 ---
 
@@ -159,7 +159,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** Visual representation only. Rendering knows about bones, colors, thickness, and screen positions. It knows nothing about IK, constraints, or pose intent.
 
-**Inputs:** Screen Transform State; Rendering Definition (bone visuals, colors, thickness, display connectivity); camera parameters.
+**Inputs:** Screen Transform State; Rendering Definition (Bone visual definitions, colors, thickness, display connectivity).
 
 **Outputs:** Framebuffer output (drawn skeleton).
 
@@ -224,16 +224,16 @@ IK Solver ← Skeleton Model
     ↓
 Pose Solver ← IK Solver, Pose Authoring, Skeleton Model
     ↓
-Finalizer ← Pose Solver, Skeleton Model
+Finalizer ← Pose Solver, Skeleton Model, Pose Authoring
     ↓
 TP ← Finalizer, Skeleton Model
     ↓
 Projection ← TP, Camera State
     ↓
-Rendering ← Projection, Skeleton Model (connectivity), Rendering Definition
+Rendering ← Projection, Rendering Definition
 
-Validator (independent observer, reads Local Transform State, World Transform State, Intent State)
-    ↑ reads Local Transform State, World Transform State, Intent State
+Validator (independent observer, reads Skeleton Model, Local Transform State, World Transform State, Intent State)
+    ↑ reads Skeleton Model, Local Transform State, World Transform State, Intent State
 ```
 
 ### Forbidden directions
@@ -269,11 +269,13 @@ Rendering
   ↓ (draws skeleton to framebuffer)
 ```
 
-Validator reads the explicitly published states it depends on: Local Transform State, World Transform State, and Intent State. It is not part of the main computation flow.
+Intent State flows to IK Solver, Pose Solver, Finalizer, and Validator.
+
+Validator reads the explicitly published states it depends on: Local Transform State, World Transform State, Intent State, and the Skeleton Model. It is not part of the main computation flow.
 
 ```
 Validator (parallel observer)
-  ↑ reads Local Transform State, World Transform State, Intent State
+  ↑ reads Local Transform State, World Transform State, Intent State, Skeleton Model
   ↓ (produces validation report)
 ```
 
@@ -308,7 +310,7 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 ### Pose Authoring
 - **Writer:** Pose Authoring
 - **Contents:** Contact declarations, limb targets, posture intent, spine curve, extremity overrides, gaze target
-- **Consumers:** IK Solver, Pose Solver, Validator
+- **Consumers:** IK Solver, Pose Solver, Validator, Finalizer
 - **Mutability:** Mutable (recreated each frame by Pose Authoring)
 
 ### Animation Parameter State
@@ -318,10 +320,10 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 - **Mutability:** Mutable (produced by Animation)
 
 ### Camera State
-- **Writer:** Execution Model
+- **Writer:** Host execution environment (Frame Clock)
 - **Contents:** View position, projection settings
 - **Consumers:** Projection
-- **Mutability:** Mutable (recreated each frame by the Execution Model)
+- **Mutability:** Mutable (recreated each frame by the host execution environment)
 
 ### IK Result State
 - **Writer:** IK Solver
@@ -368,7 +370,7 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 - Each state category is read by zero or more downstream subsystems.
 - No state category may be read while it is being written.
 - After a state category is published, it becomes read-only. There is exactly one Writer; after writing completes, state is published. Once published, all consumers have read-only access. No published state category can be modified again.
-- State categories form a DAG: Animation Parameter State → Intent State → IK Result State → Pose Result State → Local Transform State → World Transform State → Screen Transform State → Validation State. Camera State → Screen Transform. World Transform State, Local Transform State, and Intent State → Validation State.
+- State categories form a DAG: Animation Parameter State → Intent State → IK Result State → Pose Result State → Local Transform State → World Transform State → Screen Transform State. Camera State → Screen Transform State. World Transform State, Local Transform State, Intent State, and Skeleton Model → Validation State.
 - A state category may be published only after it satisfies its structural validity contract.
 - Consumers never read partially written or unpublished state.
 
@@ -492,7 +494,7 @@ The following invariants must hold at all times during execution. Any violation 
 7. TP is the sole writer of World Transform State.
 8. Projection is the sole writer of Screen Transform State.
 9. Validator is the sole writer of Validation State.
-10. Camera State is written by the Execution Model.
+10. Camera State is written by the host execution environment (Frame Clock).
 11. No state category may be read while it is being written.
 12. No state category may be written by more than one subsystem.
 13. No subsystem may read a state category that it also writes.
