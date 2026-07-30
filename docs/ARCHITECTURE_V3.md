@@ -69,7 +69,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Lifetime:** Transient. Computed each frame as part of the pipeline.
 
-**Dependencies:** Reads the Skeleton Model (hierarchy). Reads local transforms from the Local Transform State. Produces world transforms consumed by the World Transform State and Validation. Does not know about rendering or presentation.
+**Dependencies:** Reads the Skeleton Model (hierarchy). Reads local transforms from the Local Transform State. Produces World Transform State.
 
 ---
 
@@ -79,7 +79,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** World-space limb solving.
 
-**Inputs:** Root world position, target world position, bone lengths, mobility limits, contact constraints.
+**Inputs:** Target world position (from Intent State), bone lengths, mobility limits, contact constraints (from Intent State and Skeleton Model).
 
 **Outputs:** Solved local rotations for the limb chain; straight-intent-dropped flag.
 
@@ -93,7 +93,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Purpose:** Enforces postural constraints — root positioning from contacts, posture resolution, and contact conflict resolution.
 
-**Owned responsibility:** Root transform authority and posture resolution. The solver is the sole mover of the root/pelvis transform.
+**Owned responsibility:** Root transform authority and posture resolution. The solver is the sole authority for the root transform in world space.
 
 **Inputs:** Intent State (contacts, posture intent, contact precedence), IK results, skeleton model (mobility limits).
 
