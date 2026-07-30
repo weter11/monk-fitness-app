@@ -49,7 +49,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Inputs:** Exercise definition, frame progress.
 
-**Outputs:** Intent State — contact declarations (architectural object: owner=Pose Authoring, consumer=IK Solver, Pose Solver, Validator, Finalizer); limb targets expressed in root space (architectural object: owner=Pose Authoring, consumer=IK Solver, Pose Solver); posture intent (architectural object: owner=Pose Authoring, consumer=Pose Solver); spine curve (architectural object: owner=Pose Authoring, consumer=Finalizer); extremity overrides (architectural object: owner=Pose Authoring, consumer=Finalizer); gaze target (architectural object: owner=Pose Authoring, consumer=Application layer); contact precedence (architectural object: owner=Pose Authoring, consumer=Pose Solver).
+**Outputs:** Intent State — contact declarations (architectural object: owner=Pose Authoring, consumer=IK Solver, Pose Solver, Validator, Finalizer); limb targets expressed in root space (architectural object: owner=Pose Authoring, consumer=IK Solver, Pose Solver); posture intent (architectural object: owner=Pose Authoring, consumer=Pose Solver); spine curve (architectural object: owner=Pose Authoring, consumer=Finalizer); extremity overrides (architectural object: owner=Pose Authoring, consumer=Finalizer); gaze target (architectural object: owner=Pose Authoring, consumer=Application layer); contact precedence (architectural object: owner=Pose Authoring, consumer=Pose Solver); ROM declarations (architectural object: owner=Pose Authoring, consumer=Validator).
 
 **Lifetime:** Per-frame. Recomputed each frame as the exercise progresses.
 
@@ -307,9 +307,9 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 - **Produces:** Visual definitions consumed by Rendering.
 - **Must never modify:** Its own data is immutable at runtime.
 
-### Pose Authoring
+### Intent State
 - **Writer:** Pose Authoring
-- **Contents:** Contact declarations (architectural object: owner=Pose Authoring, consumers=IK Solver, Pose Solver, Validator, Finalizer); limb targets (expressed in root space) (architectural object: owner=Pose Authoring, consumers=IK Solver, Pose Solver); posture intent (architectural object: owner=Pose Authoring, consumers=Pose Solver, Validator, Finalizer); spine curve (architectural object: owner=Pose Authoring, consumer=Finalizer); extremity overrides (architectural object: owner=Pose Authoring, consumer=Finalizer); gaze target (architectural object: owner=Pose Authoring, consumer=Validator); contact precedence (architectural object: owner=Pose Authoring, consumer=Pose Solver)
+- **Contents:** Contact declarations (architectural object: owner=Pose Authoring, consumer=IK Solver, Pose Solver, Validator, Finalizer); limb targets expressed in root space (architectural object: owner=Pose Authoring, consumer=IK Solver, Pose Solver); posture intent (architectural object: owner=Pose Authoring, consumer=Pose Solver); spine curve (architectural object: owner=Pose Authoring, consumer=Finalizer); extremity overrides (architectural object: owner=Pose Authoring, consumer=Finalizer); gaze target (architectural object: owner=Pose Authoring, consumer=Application layer); contact precedence (architectural object: owner=Pose Authoring, consumer=Pose Solver)
 - **Consumers:** IK Solver, Pose Solver, Validator, Finalizer
 - **Mutability:** Mutable (recreated each frame by Pose Authoring)
 
