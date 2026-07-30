@@ -43,13 +43,13 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 ### 2.2 Pose Authoring
 
-**Purpose:** Declares what the body should do — the intent behind a pose. This includes contact declarations, limb targets (expressed in root space), posture type, spine configuration, extremity overrides, and gaze targets.
+**Purpose:** Declares what the body should do — the intent behind a pose. This includes contact declarations, limb targets (expressed in root space), posture intent, spine curve, extremity overrides, and gaze target.
 
 **Owned responsibility:** All declarative input. The author says what they want; the engine figures out how to achieve it.
 
 **Inputs:** Exercise definition, frame progress.
 
-**Outputs:** A complete intent package — contact declarations, limb targets (expressed in root space), posture intent, spine curve, extremity overrides, gaze target.
+**Outputs:** A complete intent package — contact declarations, limb targets (expressed in root space), posture intent, spine curve, extremity overrides, gaze target, contact precedence.
 
 **Lifetime:** Per-frame. Recomputed each frame as the exercise progresses.
 
@@ -91,17 +91,17 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 ### 2.5 Pose Solver
 
-**Purpose:** Enforces postural constraints — root positioning from contacts, posture resolution, and contact conflict resolution.
+**Purpose:** Enforces postural constraints — root positioning from contacts, posture adjustment, and contact conflict resolution.
 
-**Owned responsibility:** Root transform authority and posture resolution. The solver is the sole authority for the root transform in world space.
+**Owned responsibility:** Root transform authority and posture adjustment. The solver is the sole authority for the root transform in world space and for posture adjustments.
 
-**Inputs:** Intent State (contacts, posture intent, contact precedence), IK Result State, skeleton model (bone lengths, mobility limits).
+**Inputs:** Intent State (contact declarations, posture intent, contact precedence), IK Result State, skeleton model (bone lengths, mobility limits).
 
-**Outputs:** Final root transform; adjusted joint angles for posture; contact conflict resolution.
+**Outputs:** Root transform (world space); posture adjustments; contact conflict resolution.
 
 **Lifetime:** Transient. Computed each frame after IK solving.
 
-**Dependencies:** Reads the Skeleton Model (bone lengths, mobility limits). Reads IK Result State. Reads Intent State (contacts, posture intent). Does not know about rendering or presentation.
+**Dependencies:** Reads the Skeleton Model (bone lengths, mobility limits). Reads IK Result State. Reads Intent State (contact declarations, posture intent). Does not know about rendering or presentation.
 
 ---
 
@@ -111,7 +111,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** Exclusive world-to-local frame conversion. The Finalizer is the only subsystem that writes local transforms after the solver has settled. It does not move the root; it converts the solver-produced world root transform into Local Transform State.
 
-**Inputs:** Pose Result State (root transform, posture adjustments, contact settlements); skeleton model (bone lengths, proportions); Intent State (authored chest rotation, extremity overrides).
+**Inputs:** Pose Result State (root transform (world space), posture adjustments, contact conflict resolution); skeleton model (bone lengths, proportions); Intent State (authored chest rotation, extremity overrides).
 
 **Outputs:** Final local transforms (localPosition, localRotation) for every joint; derived extremity orientations; chest-frame reconstruction.
 
@@ -145,7 +145,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Inputs:** World Transform State; camera parameters (view position, projection settings) provided by the host execution environment.
 
-**Outputs:** Screen-space skeleton positions; exercise snapshot.
+**Outputs:** Screen-space skeleton positions.
 
 **Lifetime:** Transient. Computed each frame after TP.
 
@@ -244,7 +244,7 @@ Validator (independent observer, reads Skeleton Model, Local Transform State, Wo
 - **Definitions must remain immutable.** The Skeleton Model is never modified at runtime.
 - **Pose Authoring must not compute geometry.** Pose Authoring declares intent; it does not solve for positions.
 - **Pose Solver must not know about rendering.** The solver operates on world-space transforms; it has no concept of screen space.
-- **Finalizer must not move solver-settled contact end-effectors.** The Finalizer respects the solver's contact settlements.
+- **Finalizer must not move solver-settled contact end-effectors.** The Finalizer respects the solver's contact conflict resolution.
 
 ---
 
@@ -252,13 +252,13 @@ Validator (independent observer, reads Skeleton Model, Local Transform State, Wo
 
 ```
 Author
-  ↓ (declares intent: contacts, targets, posture)
+  ↓ (declares intent: contact declarations, targets, posture)
 Pose Authoring
   ↓ (produces intent package)
 IK Solver
-  ↓ (produces limb solve results)
+  ↓ (produces root-relative limb transforms)
 Pose Solver
-  ↓ (resolves root position, posture, contact conflicts)
+  ↓ (resolves root position, posture adjustment, contact conflicts)
 Finalizer
   ↓ (converts world→local, derives extremities, reconstructs chest)
 TP
@@ -282,7 +282,7 @@ Validator (parallel observer)
 ### Major transformations
 
 1. **Intent → Root-relative limb transforms** (IK Solver)
-2. **Root-relative limb transforms + Root → World limb transforms + posture settlement** (Pose Solver)
+2. **Root-relative limb transforms + Root → World-space joint transforms + posture adjustments** (Pose Solver)
 3. **Pose Result → Local transforms** (Finalizer)
 4. **Local transforms → World transforms** (TP)
 5. **World transforms → Screen-space positions** (Projection)
@@ -321,13 +321,13 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 
 ### IK Result State
 - **Writer:** IK Solver
-- **Contents:** Solved limb transforms, straight-intent-dropped flag
+- **Contents:** Root-relative limb transforms; straight-intent-dropped flag (consumed by Pose Solver)
 - **Consumers:** Pose Solver
 - **Mutability:** Mutable (produced by IK Solver)
 
 ### Pose Result State
 - **Writer:** Pose Solver
-- **Contents:** Root transform, posture adjustments, contact conflict resolution
+- **Contents:** Root transform (world space), posture adjustments, contact conflict resolution
 - **Consumers:** Finalizer
 - **Mutability:** Mutable (produced by Pose Solver)
 
@@ -345,7 +345,7 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 
 ### Screen Transform State
 - **Writer:** Projection
-- **Contents:** Screen-space positions, exercise snapshot
+- **Contents:** Screen-space positions
 - **Consumers:** Rendering
 - **Mutability:** Mutable (produced by Projection)
 
@@ -398,11 +398,11 @@ An architectural contract is a formal agreement between subsystems about what ea
 - **Consumer obligations:** Downstream subsystems must consume the intent package and must not modify it.
 
 #### Contract: IK Solver → Pose Solver
-- **Provider guarantees:** IK Solver produces root-relative limb solve results for every limb target. Results are bounded.
+- **Provider guarantees:** IK Solver produces root-relative limb transforms for every limb target. Results are bounded.
 - **Consumer obligations:** Pose Solver must consume IK Result State and must not modify it.
 
 #### Contract: Pose Solver → Finalizer
-- **Provider guarantees:** Pose Solver produces a final root transform and posture-resolved joint angles. Contact settlements are final.
+- **Provider guarantees:** Pose Solver produces a root transform (world space) and posture adjustments. Contact conflict resolution is final.
 - **Consumer obligations:** Finalizer must consume Pose Solver results and must not move solver-settled contact end-effectors.
 
 #### Contract: Finalizer → TP
@@ -582,7 +582,7 @@ Synchronization is owned by the Frame Clock / host execution environment, not by
 ## 15. Stable Interfaces
 
 ### Intent → Pipeline
-Pose Authoring produces an intent package. The pipeline (IK, Pose Solver, Finalizer) consumes it. The interface is the intent package itself — a self-contained declaration of contacts, targets, posture, spine curve, extremity overrides, gaze, and contact precedence.
+Pose Authoring produces an intent package. The pipeline (IK, Pose Solver, Finalizer) consumes it. The interface is the intent package itself — a self-contained declaration of contact declarations, targets, posture, spine curve, extremity overrides, gaze, and contact precedence.
 
 ### Pipeline → State Categories
 Each pipeline stage produces its output in the corresponding state category. The interface is the state category — a carrier of data in a specific form.
@@ -591,7 +591,7 @@ Each pipeline stage produces its output in the corresponding state category. The
 The Validator reads the finalized Local Transform State, World Transform State, Intent State, and the Skeleton Model. The interface is read-only access to transform state and skeleton parameters.
 
 ### Pipeline → Screen Transform State
-Projection reads world-space transforms from TP and camera parameters directly from the host execution environment. The interface is world-space transform data and camera configuration.
+Projection reads world-space transforms from TP and camera parameters directly from the host execution environment. The interface is world-space transform data and camera parameters.
 
 ### Screen Transform State → Rendering
 Projection produces screen-space positions. Rendering consumes them. The interface is 2D screen coordinates. Display connectivity is provided by Rendering Definition.
