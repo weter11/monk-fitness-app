@@ -101,7 +101,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Lifetime:** Transient. Computed each frame after IK solving.
 
-**Dependencies:** Reads the Skeleton Model (mobility limits). Reads IK results. Reads Intent State (contacts, posture intent). Does not know about rendering or presentation.
+**Dependencies:** Reads the Skeleton Model (bone lengths, mobility limits). Reads IK results. Reads Intent State (contacts, posture intent). Does not know about rendering or presentation.
 
 ---
 
@@ -109,7 +109,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Purpose:** Applies geometric corrections — world-to-local conversion, extremity derivation, relative rotation resolution, chest-frame reconstruction, and flattening to the final local-transform store.
 
-**Owned responsibility:** Exclusive world-to-local frame conversion. The Finalizer is the only subsystem that writes local transforms after the solver has settled.
+**Owned responsibility:** Exclusive world-to-local frame conversion. The Finalizer is the only subsystem that writes local transforms after the solver has settled. It does not move the root; it converts the solver-produced world root transform into Local Transform State.
 
 **Inputs:** Pose Result State (root transform, posture adjustments, contact settlements); skeleton model (segment lengths, proportions); Intent State (authored chest rotation, extremity overrides).
 
@@ -309,7 +309,7 @@ Every runtime object has exactly one subsystem that owns its creation, its mutat
 
 ### Pose Authoring
 - **Writer:** Pose Authoring
-- **Contents:** Contact declarations, limb targets, posture intent, spine curve, extremity overrides, gaze target
+- **Contents:** Contact declarations, limb targets, posture intent, spine curve, extremity overrides, gaze target, contact precedence
 - **Consumers:** IK Solver, Pose Solver, Validator, Finalizer
 - **Mutability:** Mutable (recreated each frame by Pose Authoring)
 
