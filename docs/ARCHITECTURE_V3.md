@@ -79,7 +79,7 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** Root-relative limb solving.
 
-**Inputs:** Target root-relative position (from Intent State), bone lengths, mobility limits, contact constraints (from Intent State and Skeleton Model).
+**Inputs:** Target root-relative position (from Intent State), bone lengths, mobility limits, contact declarations (from Intent State and Skeleton Model).
 
 **Outputs:** Solved local rotations for the limb chain; straight-intent-dropped flag.
 
@@ -143,13 +143,13 @@ The architecture follows the Domain Analysis: domain entities (Segment, Articula
 
 **Owned responsibility:** 3D-to-2D transformation and viewport classification.
 
-**Inputs:** World Transform State; Camera Parameters (view position, projection settings) provided by the host execution environment.
+**Inputs:** World Transform State; camera parameters (view position, projection settings) provided by the host execution environment.
 
 **Outputs:** Screen-space skeleton positions; exercise snapshot.
 
 **Lifetime:** Transient. Computed each frame after TP.
 
-**Dependencies:** Reads TP output (world transforms). Reads Camera Parameters from the host execution environment. Does not know about IK, constraints, or the solver.
+**Dependencies:** Reads TP output (world transforms). Reads camera parameters from the host execution environment. Does not know about IK, constraints, or the solver.
 
 ---
 
@@ -228,7 +228,7 @@ Finalizer ← Pose Solver, Skeleton Model, Pose Authoring
     ↓
 TP ← Finalizer, Skeleton Model
     ↓
-Projection ← TP, Camera Parameters
+Projection ← TP, (camera parameters from host)
     ↓
 Rendering ← Projection, Rendering Definition
 
@@ -591,7 +591,7 @@ Each pipeline stage produces its output in the corresponding state category. The
 The Validator reads the finalized Local Transform State, World Transform State, Intent State, and the Skeleton Model. The interface is read-only access to transform state and skeleton parameters.
 
 ### Pipeline → Screen Transform State
-Projection reads world-space transforms from TP and camera parameters from Camera Parameters. The interface is world-space transform data and camera configuration.
+Projection reads world-space transforms from TP and camera parameters directly from the host execution environment. The interface is world-space transform data and camera configuration.
 
 ### Screen Transform State → Rendering
 Projection produces screen-space positions. Rendering consumes them. The interface is 2D screen coordinates. Display connectivity is provided by Rendering Definition.
