@@ -1,607 +1,379 @@
-# RFC: Runtime Skeleton Architecture
+# Runtime Skeleton Architecture
 
-> **No code changes.** This is a design proposal only.
-> Produced as a follow-up to the architectural audit (`ARCHITECTURAL_AUDIT_SKELETON_MODEL.md`).
+**Status:** READY FOR ARCHITECTURE FREEZE — pre-freeze architecture audit resolved (see §9 Findings Resolution Index).
+**Scope:** Architecture only. This document defines ownership, responsibility, dependency, canonical source, lifetime, and subsystem boundaries. It deliberately does not define structures, field layouts, algorithms, execution detail beyond phase ordering, or validation algorithms.
+**Provenance:** Produced from the audit cycle (`ARCHITECTURAL_AUDIT_SKELETON_MODEL.md`, `AUDIT_RUNTIME_SKELETON_MODEL.md`), design review (`DESIGN_REVIEW_RUNTIME_SKELETON.md`), dependency graph (`DEPENDENCY_GRAPH_RUNTIME_SKELETON.md`), semantic analysis (`SEMANTIC_ANALYSIS_RUNTIME_SKELETON.md`), and domain analysis (`DOMAIN_ANALYSIS_SKELETON.md`). Facts contradicted by source code were corrected against the code before freezing.
+
+**Freeze rule:** Two independent architects reading this document must arrive at the same architecture. Every architectural object below has exactly one canonical name, one owner, one producer, defined consumers, and a defined lifetime. No object has two meanings; no information has two canonical sources.
 
 ---
 
-## 1. Joint Enum Inventory
+## 1. Canonical Vocabulary
 
-Every value in the `Joint` enum classified into exactly one category.
+Each concept has exactly one canonical name. The synonyms in the right column are deleted from architectural usage; they must not appear in contracts, reviews, or new documents.
 
-| Current enum | Index | Category | Why |
+| Canonical name | Deleted synonyms |
+|---|---|
+| Pose Intent | pose intent declarations; intent carriers (as a concept name); §1.1 (as a concept name) |
+| Pose State | IK Result State; result state; output state; §1.2 (as a concept name) |
+| Settled Geometry | solved limb transforms; limb solve results; intermediate geometry; posture settlement; posture adjustments; posture resolution; local transform state; world transform state |
+| Contact Declaration | contact; contacts (as a concept name); contact spec |
+| Contact Precedence | precedence list; priority order |
+| Contact Conflict Resolution | conflict resolution; precedence resolution |
+| Contact Re-Solve | re-bake; re-baking; contact limb re-bake |
+| Limb Target | limb endpoint target; world target (as a concept name); endpoint declaration |
+| Relative Articulation | joint intent; jointIntents (as a concept name); per-joint rotation intent |
+| Spine Intent | spine curve (as a concept name); spineIntent (as a concept name); single spine declaration |
+| Posture Intent | coarse posture; posture kind; posture family |
+| Head Target | gaze target; gaze; headTarget (as a concept name); head target intent |
+| Extremity Override | manual override; extremity opt-out; orientation mode (as a concept name) |
+| Extremity Articulation | wrist articulation; ankle articulation (as concept names); extremity rotation intent |
+| Heading | extremity heading; facing direction |
+| Support Declaration | supported points; support contacts; support configuration (as a concept name) |
+| Support Point | support body point; body contact point |
+| Environment | environment definition (as a concept name); world context |
+| Camera Definition | camera parameters; camera configuration; camera input |
+| Motion Driver | motion drivers; choreography driver |
+| Production Metadata | pose metadata; exercise metadata |
+| Two-Bone IK Solve | 2-bone analytical solve; IK 2-bone solve; analytic solve |
+| Straight-Limb Fallback | straight fallback; straight-limb bend fallback; straight-intent fallback |
+| Bone-Length Invariant | bone-length-exact invariant; exact-length rule |
+| Default Pole | pole default; fallback pole |
+| Pole | bend-direction vector; pole vector |
+| Limb Solve Result | IK result; ikResult (as a concept name); solve outcome |
+| Root Placement | root exact transform; pelvis seeding; posture seeding |
+| Contact Honor | contact translate/tilt; honoring contacts |
+| Posture CCD | true posture CCD; posture pass; residual pass |
+| Inter-Frame Smoothing | inter-frame temporal relaxation; temporal smoothing; frame relaxation |
+| Frame Conversion | world↔local conversion; world↔local frame conversion; frame conversion step |
+| Tilt Cancel | relative tilt cancel; relative-rotation resolution; tilt cancellation |
+| Chest-Frame Reconstruction | chest reconstruction; thorax frame rebuild |
+| Head-Target Resolution | head-target resolution; resolveHeadTarget (as a concept name); gaze resolution |
+| Extremity Derivation | extremity derivation; derived extremity orientations; extremity orientation derivation; foot/hand derivation |
+| Flatten | flatten to nodes; flattening; publish step |
+| FK Propagation | forward kinematics traversal; FK chain walk |
+| Rule Checks | validation rules; biomechanical checks |
+| Validation Stamp | stamp; state stamp; validation stamp production |
+| Clamp Stamp | maxIkClampAmount (as a concept name); clamp amount state |
+| Straight-Intent-Dropped Flag | dropped-straight flag; straight loss marker |
+| Bone-Lengths-Verified Flag | verified-bone-lengths state |
+| Root Translation Delta / Root Rotation Delta | solver displacement stamps; root deltas |
+| Hip ROM Stamp | hipRomStamps (as a concept name); ROM decomposition stamp |
+| Bilateral Symmetry Delta | symmetry deviation stamp |
+| Bilateral Opposite Bend | opposite-bend stamp |
+| Finalized Pose | outputPose buffer; finalized skeleton; produced frame |
+| Frame History | previous/prePrevious copies; pose history; dynamics history |
+| Runtime Context Injection | environment stamping; context mutation; pipeline side effect |
+| Intent Builder | authoring mutator; sole-mutator surface; heading builder (folded into Intent Builder) |
+
+Naming rules:
+
+1. A carrier and its value share one concept name. "Contact Declaration" names the concept; `ContactSpec`, `contacts`, `limbTargets`, etc. are existing runtime identifiers, not competing concept names.
+2. A verb form of a concept (e.g., "Head-Target Resolution") refers to the same object as the noun form; both are listed in the register with one identity.
+3. No contract may use a term that is absent from this vocabulary or from the object register (§4).
+
+---
+
+## 2. Identifier Namespace
+
+There is exactly **one identifier namespace for body structure**: the `Joint` enumeration (33 identifiers, indices 0–32). It is a semantic label namespace, not a type system. Exactly one structural category applies to each identifier. The `Extremity` enumeration (four values) identifies extremities for intent and derivation purposes; it is a second, separate namespace and never indexes body structure.
+
+### 2.1 Structural categories
+
+| Category | Definition (architectural) |
+|---|---|
+| ROOT | The single world-anchored body node whose placement positions the entire skeleton. Sole member: PELVIS. |
+| SEGMENT | A rigid-body link without independent rotational freedom; carries its parent-relative orientation only as authored segment orientation. Members: LUMBAR, CHEST. |
+| ARTICULATION | Anatomical joint with declared rotational freedom. Members: NECK_END, CLAVICLE_A, SCAPULA_A, SHOULDER_A, ELBOW_A, CLAVICLE_P, SCAPULA_P, SHOULDER_P, ELBOW_P, HIP_F, KNEE_F, ANKLE_F, HIP_B, KNEE_B, ANKLE_B. |
+| ATTACHMENT | A derived point on a body chain with no rotational freedom; its position is always computed by the engine, never authored. Members: HEAD_POS, PALM_A, KNUCKLES_A, PALM_P, KNUCKLES_P, HEEL_F, HEEL_B. |
+| END EFFECTOR | The terminal attachment of a solved or derived chain: an attachment that additionally plays the solver/derivation terminal role. Structural subset of ATTACHMENT (every End Effector is an Attachment; the categories are not disjoint). Members: HAND_A, FINGERTIPS_A, HAND_P, FINGERTIPS_P, TOE_F, TOE_B. |
+| ALIAS | An identifier that denotes the same body point as another identifier, retained for authoring compatibility; it has no tree node and never carries independent state. Members: WRIST_A (alias of HAND_A), WRIST_P (alias of HAND_P). |
+
+Category counts: ROOT 1, SEGMENT 2, ARTICULATION 15, ATTACHMENT 7, END EFFECTOR 6, ALIAS 2 — total 33 identifiers.
+
+### 2.2 Namespace facts (verified against source)
+
+1. The transform hierarchy contains exactly **31 nodes**: every identifier above except the two ALIAS entries has exactly one node.
+2. The arm chain is SHOULDER → ELBOW → HAND → PALM directly. There is no wrist node; WRIST identifiers alias HAND.
+3. ANKLE_F/ANKLE_B are ARTICULATION nodes (declared dorsiflexion/plantar-flexion + inversion/eversion intent) whose children are the heel/toe attachments. They are not a separate category.
+4. HEAD_POS is an ATTACHMENT (position derived from neck direction + definition length) that additionally plays the Landmark role for observation (§4). It is not an articulation and not procedural-category.
+5. Segments and articulations intentionally share this single namespace; each identifier's category is fixed by the table above. Proposals to split the namespace are out of scope for this freeze (roadmap concern).
+
+---
+
+## 3. State Categories
+
+The architecture has exactly three state categories. Each category defines only what information it owns — never storage or format.
+
+### 3.1 Intent State
+
+- **Owns:** everything the pose declares: Contact Declarations, Contact Precedence, Limb Targets, Relative Articulations, Spine Intent, Posture Intent, Head Target, Extremity Overrides, Extremity Articulations, Headings, Support Declaration, Environment, Camera Definition, Motion Driver.
+- **Canonical source:** pose authoring. Nothing else may create or alter Intent State content, with exactly one exception: Runtime Context Injection (§5 R8).
+- **Lifetime:** created during authoring; frozen at end of build; consumed read-only by all engine subsystems; discarded with the frame.
+- **Does not own:** any computed geometry or any Validation Stamp.
+
+### 3.2 Settled Geometry
+
+- **Owns:** the hierarchy's local and world transforms while stages run — the single working representation of body geometry between phases.
+- **Canonical source:** exactly one writer at any point in the execution order (§6): Authoring before build returns; Solver during settlement; Finalizer during finalization. Writer authority transfers only at phase boundaries.
+- **Lifetime:** per frame; begins at authoring, ends when Flatten publishes Pose State.
+- **Does not own:** Intent State, Validation Stamps, published outputs.
+
+### 3.3 Published Pose State
+
+- **Owns:** the final world transforms of all 31 nodes after Flatten, plus all Validation Stamps.
+- **Canonical source:** Finalizer publishes transforms (Flatten); each stamp's canonical producer is listed in §4. Stamps written by more than one producer follow the Stamp Merge Rule (§5 R6); the merged value in Published Pose State is the only canonical value.
+- **Lifetime:** per frame; immutable after publish; consumed by Validation and Rendering.
+- **Does not own:** Intent State, Settled Geometry.
+
+Rotation-space rule: declared rotations in Intent State and Extremity Articulations are parent-relative; rotations in Settled Geometry are local to the hierarchy; rotations in Published Pose State are world-space. Conversion between these spaces is owned exclusively by Frame Conversion (Finalizer). No consumer may compare rotations across categories without going through Frame Conversion output.
+
+Scratch-isolation rule: computation scratch belongs privately to the subsystem that creates it. Scratch never carries information across a subsystem boundary and never survives as canonical state. Cross-frame memory exists only as Pipeline-owned Frame History (§5 R10).
+
+---
+
+## 4. Architectural Object Register
+
+Every named object: owner (accountable subsystem), producer (creates/populates), consumers, lifetime. Structure is intentionally not described.
+
+### 4.1 Intent objects
+
+| Object | Owner | Producer | Consumers | Lifetime |
+|---|---|---|---|---|
+| Contact Declaration | Pose Intent | Authoring bake | ConstraintSolver (Contact Honor, Re-Solve), Finalizer (Settled-Contact Guarantee scope), Validator (contact-preservation checks) | Per build; frozen post-build |
+| Contact Precedence | Pose Intent | Authoring via Intent Builder | ConstraintSolver (Contact Conflict Resolution) | Per build |
+| Limb Target | Pose Intent | Authoring bake | Active limb solver only (§5 R5) | Per build |
+| Relative Articulation | Pose Intent | Authoring via Intent Builder | Finalizer (intent application to non-settled chains) | Per build |
+| Spine Intent | Pose Intent | Authoring via Intent Builder | Finalizer (spine derivation on non-settled chains) | Per build |
+| Posture Intent | Pose Intent | Authoring via Intent Builder | ConstraintSolver (Root Placement) | Per build |
+| Head Target | Pose Intent | Authoring via Intent Builder | Finalizer (Head-Target Resolution) | Per build |
+| Extremity Override | Pose Intent | Authoring via Intent Builder | Finalizer (Extremity Derivation opt-out) | Per build |
+| Extremity Articulation | Pose Intent | Authoring via Intent Builder | Finalizer (Extremity Derivation) | Per build |
+| Heading | Pose Intent | Authoring via Intent Builder | Finalizer (extremity facing application) | Per build |
+| Support Declaration | Pose Intent | Caller + Runtime Context Injection | ConstraintSolver (support checks), Validator (support-polygon checks) | Per frame; injected at frame start |
+| Environment | Pose Intent (context) | Caller + Runtime Context Injection | ConstraintSolver, Validator, Renderer | Per frame; injected at frame start |
+| Camera Definition | Render input | Caller | Projector, Renderers | Per render call |
+| Motion Driver | Pose Intent | Authoring | Pipeline (frame interpolation at Phase 0) | Per build |
+
+### 4.2 Engine operations
+
+| Object | Owner | Producer (= performer) | Consumers | Lifetime |
+|---|---|---|---|---|
+| Two-Bone IK Solve | IK responsibility | Active limb solver | Settled Geometry (chain transforms) | Performed within its phase |
+| Straight-Limb Fallback | IK responsibility | Active limb solver | Settled Geometry; surfaces via Straight-Intent-Dropped Flag | Within limb solving |
+| Bone-Length Invariant | IK responsibility | Active limb solver (verification) | Bone-Lengths-Verified Flag | Within limb solving |
+| Default Pole | IK responsibility | Active limb solver, when Pose omits a Pole | That solver's limb operation | Per limb solve |
+| Pole | Pose Intent (when declared) | Authoring | Limb solver | Per build |
+| Root Placement | Solver responsibility | ConstraintSolver | Settled Geometry (root transform) | Settlement phase |
+| Contact Honor | Solver responsibility | ConstraintSolver | Settled Geometry | Settlement phase |
+| Contact Conflict Resolution | Solver responsibility | ConstraintSolver, driven by Contact Precedence | Settled Geometry | Settlement phase |
+| Contact Re-Solve | Solver responsibility | ConstraintSolver | Settled Geometry (settled contact chains) | Settlement phase |
+| Posture CCD | Solver responsibility | ConstraintSolver, regularized toward declared intent | Settled Geometry (free-joint transforms) | Settlement phase, bounded |
+| Inter-Frame Smoothing | Solver responsibility | ConstraintSolver, consuming Frame History | Settled Geometry (root motion continuity) | Settlement phase |
+| Frame Conversion | Finalizer responsibility | SkeletonPoseFinalizer | All later readers of local/world transforms | Finalization phase |
+| Tilt Cancel | Finalizer responsibility | SkeletonPoseFinalizer | Settled Geometry (inherited-tilt removal) | Finalization phase |
+| Chest-Frame Reconstruction | Finalizer responsibility | SkeletonPoseFinalizer | Settled Geometry (chest chain), bounded by Settled-Contact Guarantee | Finalization phase |
+| Head-Target Resolution | Finalizer responsibility | SkeletonPoseFinalizer | Neck/head chain transforms | Finalization phase |
+| Extremity Derivation | Finalizer responsibility | SkeletonPoseFinalizer | Terminal-chain attachment/end-effector transforms | Finalization phase |
+| Flatten | Finalizer responsibility | SkeletonPoseFinalizer | Published Pose State | Publish, once per frame |
+| FK Propagation | Shared primitive | Any authorized stage | Calling stage | Stateless utility; no lifetime |
+| Rule Checks | Validator responsibility | ExerciseValidator | Validation Report | After publish |
+
+### 4.3 Stamps (all live in Published Pose State)
+
+| Object | Producer(s) | Merge rule | Consumer |
 |---|---|---|---|
-| `PELVIS` | 0 | `ROOT` | Body segment root; the world-space origin of the entire skeleton. Carries the pelvis position and orientation that the solver repositions. |
-| `LUMBAR` | 32 | `BODY_SEGMENT` | Lower spine segment between PELVIS and CHEST. Pass-through by default (identity rotation, coincident with pelvis). Carries independent lumbar DOF when authored. |
-| `CHEST` | 11 | `BODY_SEGMENT` | Thorax segment. Root of the upper body. Carries thoracic twist/side-bend/flex rotation. |
-| `NECK_END` | 26 | `ARTICULATION` | Ball-and-socket joint between CHEST and HEAD. Rotation = neck flexion/extension/lateral bend/rotation. |
-| `HEAD_POS` | 27 | `ATTACHMENT` | Head position marker. No independent rotation — position is derived from neck direction + fixed head length (18f). Used for viewport validation and gaze resolution. |
-| `CLAVICLE_A` | 28 | `ARTICULATION` | Left shoulder girdle (clavicle). Rotation = elevation/depression + protraction/retraction. |
-| `SCAPULA_A` | 29 | `ARTICULATION` | Left scapula. Rotation = scapular upward/downward rotation + protraction/retraction. |
-| `SHOULDER_A` | 12 | `ARTICULATION` | Left glenohumeral joint (shoulder). IK root for the left arm. 3-DOF ball-and-socket. |
-| `ELBOW_A` | 14 | `ARTICULATION` | Left elbow. Hinge articulation with flexion/extension only. |
-| `HAND_A` | 15 | `END_EFFECTOR` | Left hand terminal joint. Position derived from IK solve. No authored rotation. |
-| `WRIST_A` | 16 | `ARTICULATION` | Left wrist. Carries authored wrist articulation (grip, pronation/supination). Also serves as attachment host for palm/fingertips. |
-| `PALM_A` | 17 | `ATTACHMENT` | Left palm marker. Position derived from wrist + hand definition. Contact point for support detection. |
-| `KNUCKLES_A` | 18 | `ATTACHMENT` | Left knuckles marker. Position derived from palm + finger definition. |
-| `FINGERTIPS_A` | 19 | `END_EFFECTOR` | Left fingertips terminal marker. Contact point for support detection. |
-| `CLAVICLE_P` | 30 | `ARTICULATION` | Right shoulder girdle (clavicle). Mirror of CLAVICLE_A. |
-| `SCAPULA_P` | 31 | `ARTICULATION` | Right scapula. Mirror of SCAPULA_A. |
-| `SHOULDER_P` | 13 | `ARTICULATION` | Right glenohumeral joint. Mirror of SHOULDER_A. |
-| `ELBOW_P` | 20 | `ARTICULATION` | Right elbow. Mirror of ELBOW_A. |
-| `HAND_P` | 21 | `END_EFFECTOR` | Right hand terminal joint. Mirror of HAND_A. |
-| `WRIST_P` | 22 | `ARTICULATION` | Right wrist. Mirror of WRIST_A. |
-| `PALM_P` | 23 | `ATTACHMENT` | Right palm marker. Mirror of PALM_A. |
-| `KNUCKLES_P` | 24 | `ATTACHMENT` | Right knuckles marker. Mirror of KNUCKLES_A. |
-| `FINGERTIPS_P` | 25 | `END_EFFECTOR` | Right fingertips terminal marker. Mirror of FINGERTIPS_A. |
-| `HIP_F` | 1 | `ARTICULATION` | Left hip ball-and-socket joint. 3-DOF (flexion/extension, abduction/adduction, internal/external rotation). |
-| `KNEE_F` | 3 | `ARTICULATION` | Left knee. Hinge articulation with flexion/extension. |
-| `ANKLE_F` | 4 | `ARTICULATION` | Left ankle. 2-DOF (dorsiflexion/plantar-flexion + inversion/eversion). |
-| `HEEL_F` | 5 | `ATTACHMENT` | Left heel marker. Position derived from ankle + foot definition. Contact point for support detection. |
-| `TOE_F` | 6 | `END_EFFECTOR` | Left toe terminal marker. Contact point for support detection. |
-| `KNEE_B` | 7 | `ARTICULATION` | Right knee. Mirror of KNEE_F. |
-| `ANKLE_B` | 8 | `ARTICULATION` | Right ankle. Mirror of ANKLE_F. |
-| `HEEL_B` | 9 | `ATTACHMENT` | Right heel marker. Mirror of HEEL_F. |
-| `TOE_B` | 10 | `END_EFFECTOR` | Right toe terminal marker. Mirror of TOE_B. |
+| Clamp Stamp | Active limb solver (first write), ConstraintSolver (strengthen-only) | max | ExerciseValidator |
+| Straight-Intent-Dropped Flag | Active limb solver (first write), ConstraintSolver (strengthen-only) | OR | ExerciseValidator |
+| Bone-Lengths-Verified Flag | Active limb solver (first write), ConstraintSolver (strengthen-only) | AND | ExerciseValidator |
+| Root Translation Delta / Root Rotation Delta | ConstraintSolver (sole producer) | overwrite (single writer) | ExerciseValidator |
+| Hip ROM Stamp | SkeletonPoseFinalizer (sole producer) | overwrite | ExerciseValidator |
+| Bilateral Symmetry Delta | SkeletonPoseFinalizer (sole producer) | overwrite | ExerciseValidator |
+| Bilateral Opposite Bend | SkeletonPoseFinalizer (sole producer) | overwrite | ExerciseValidator |
 
-### Category Summary
+Limb Solve Result is the transient outcome of one limb solve (chain placement plus clamp/straight/bone-length readings). Its durable surfacing is exclusively the three solver-produced stamps above; the result itself is private scratch of its producer and never crosses a subsystem boundary.
 
-| Category | Count | Entries |
-|---|---|---|
-| `ROOT` | 1 | PELVIS |
-| `BODY_SEGMENT` | 2 | LUMBAR, CHEST |
-| `ARTICULATION` | 14 | NECK_END, CLAVICLE_A, SCAPULA_A, SHOULDER_A, ELBOW_A, WRIST_A, CLAVICLE_P, SCAPULA_P, SHOULDER_P, ELBOW_P, WRIST_P, HIP_F, KNEE_F, ANKLE_F, KNEE_B, ANKLE_B |
-| `ATTACHMENT` | 6 | HEAD_POS, PALM_A, KNUCKLES_A, PALM_P, KNUCKLES_P, HEEL_F, HEEL_B |
-| `END_EFFECTOR` | 4 | HAND_A, FINGERTIPS_A, HAND_P, FINGERTIPS_P, TOE_F, TOE_B |
-| `RIG_HELPER` | 0 | (none currently — but wrist/ankle nodes serve this role accidentally) |
-| `PROCEDURAL` | 0 | (none currently — but HEAD_POS is procedural in origin) |
-| `UNKNOWN` | 0 | — |
+### 4.4 Subsystems and infrastructure
 
-### Classification Notes
+| Object | Owner | Producer | Consumers | Lifetime |
+|---|---|---|---|---|
+| SkeletonPose (carrier) | Pipeline during execution; caller before/after | PoseBuilder.build() | All stages; Renderer; Validator | Per frame |
+| Finalized Pose | Pipeline (returned to caller) | SkeletonPoseFinalizer via Flatten | Renderer, Validator | Per frame |
+| Frame History | Pipeline | Pipeline (retained Finalized Poses) | ConstraintSolver (Inter-Frame Smoothing), Validator (dynamics checks) | Rolling two frames |
+| SkeletonNode (hierarchy node) | Pose carrier (tree) | SkeletonFactory | Authoring, active limb solver, ConstraintSolver, Finalizer, Flatten | Per frame tree; node buffers reused |
+| SkeletonDefinition | Engine instance | Caller (per definition) | Factory, all stages, Validator | Permanent per engine |
+| SkeletonFactory | Definition layer | Caller | Pipeline setup | Permanent per engine |
+| SkeletonNodes container | Authoring convenience | SkeletonFactory | Pose authoring | Build-time only |
+| ContactChain mapping | Solver responsibility | ConstraintSolver (fixed per contact joint) | Contact Re-Solve | Static knowledge |
+| ExerciseValidator | Caller (composition root); referenced by Pipeline | Caller | Pipeline drives; report returned to caller | Long-lived |
+| Validator Profile | Validator configuration | Caller | ExerciseValidator | Long-lived |
+| Validation Report | Caller | ExerciseValidator | Application diagnostics | Per validate call |
+| SkeletonPipeline | Creator (renderer/snapshot renderer) | Creator | Callers producing frames | Long-lived per creator instance |
+| SkeletonProjector | Rendering layer | Renderer instances | Renderers | Long-lived per renderer |
+| Projected Output | Renderer | SkeletonProjector | Screen composition | Per frame |
+| Bone | Rendering definition | Rendering definition holder | Projector, Renderers | Permanent per definition |
+| Rendering Style | Rendering definition | Caller | Renderers | Permanent per renderer |
+| Exercise Snapshot | Snapshot Renderer | SkeletonSnapshotRenderer | Export/application | Per capture |
+| Production Metadata | Pose builder API | Caller | Pipeline reads Environment/Support context for injection; playback timing is an application concern outside this architecture | Per build |
+| Intent Builder | Authoring surface | SkeletonPose | Pose authoring code | During authoring |
 
-- `WRIST_A` / `WRIST_P` are classified as `ARTICULATION` because they carry authored rotation (grip, pronation/supination), but they also serve as `ATTACHMENT` hosts (palm/fingertips derive from them). This dual role is an inconsistency that the RFC in Section 6 addresses.
-- `HEAD_POS` is classified as `ATTACHMENT` because it has no independent DOF — its position is procedurally derived from the neck direction + a fixed head length. It is a tracking marker, not a joint.
-- `HEEL_F` / `HEEL_B` are classified as `ATTACHMENT` because they are contact markers whose positions are derived by the Finalizer's extremity orientation logic. They carry no authored rotation.
-- `TOE_F` / `TOE_B` are classified as `END_EFFECTOR` because they are terminal contact points used by the solver and validator.
-- `HAND_A` / `HAND_P` are classified as `END_EFFECTOR` because they are the IK solve targets for the arm chains. Their positions are set by the solver, not authored.
-- `FINGERTIPS_A` / `FINGERTIPS_P` are classified as `END_EFFECTOR` because they are terminal markers used for support detection and rendering.
+Landmark is a **role**, not a stored object: any attachment may serve as an observation reference for Rule Checks (viewport, sliding, symmetry). The role confers no state and no ownership beyond the attachments already registered.
 
 ---
 
-## 2. Runtime Object Inventory
+## 5. Canonical Ownership Rules
 
-### 2.1 SkeletonNode
+These rules are constitutional. Any design or code that violates them is a defect regardless of intent.
 
-| Aspect | Detail |
-|---|---|
-| **Type** | Mutable class |
-| **Ownership** | Created by `SkeletonFactory`; owned by `SkeletonPose.roots` (transient, per-frame) |
-| **Lifetime** | Created once by factory, then mutated in-place across frames. The tree topology is fixed; only `localPosition`, `localRotation`, `worldPosition`, `worldRotation` change. |
-| **Responsibility** | Hierarchical transform node: carries `localPosition` (segment offset), `localRotation` (articulation angle), `worldPosition`/`worldRotation` (FK-computed), parent/children tree links. Also serves as the substrate for IK solves (solver writes `localPosition` into middle/end nodes), chest-frame reconstruction (Finalizer reads/writes `chest.localRotation`), head-target resolution (Finalizer writes `neck.localPosition`/`head.localPosition`), and extremity orientation derivation (Finalizer reads wrist/ankle `localRotation`). |
-| **Problems** | Violates SRP: simultaneously a hierarchy node, articulation, segment, attachment host, IK substrate, and validation data source. |
-
-### 2.2 SkeletonPose
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Mutable class |
-| **Ownership** | Created by `PoseBuilder.build()` or `SkeletonPose()` + `copyFrom`. Owned by the pipeline during `runStages()`, then passed to renderer/validator. |
-| **Lifetime** | Per-frame. The pipeline creates it via `build()`, mutates it through stages, and returns it to the caller. The pipeline keeps `previous` and `prePrevious` copies for dynamics validation (2-frame history). |
-| **Responsibility** | Flat joint map (`joints: Array<Vector3>`, `rotations: Array<JointRotation>`) + intent carriers (`contacts`, `limbTargets`, `jointIntents`, `spineIntent`, `postureIntent`, `extremityOverrides`, `extremityArticulations`, `headTarget`, `headings`, `environment`, `supportedPoints`) + state stamps (`boneLengthsVerified`, `rootTranslationDelta`, `rootRotationDelta`, `hipRomStamps`, `bilateralSymmetryDelta`, `bilateralOppositeBend`, `straightIntentDropped`, `maxIkClampAmount`). |
-| **Problems** | Mixes intent (§1.1) and state (§1.2) in one object. The flat array indexed by `Joint.ordinal` conflates articulations, segments, and attachments. |
-
-### 2.3 Bone
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Immutable data class |
-| **Ownership** | Defined in `SkeletonEngine.bones` (static, per-definition). |
-| **Lifetime** | Permanent. Created once with the engine, never mutated. |
-| **Responsibility** | Rendering primitive: defines a parentJoint → childJoint pair with thickness and color multiplier. Used by `SkeletonProjector` and `SkeletonRenderer` to draw bones in screen space. |
-| **Problems** | Exists only for rendering. Duplicates the hierarchy topology that already exists in the `SkeletonNode` tree. Hardcoded in `SkeletonEngine` rather than derived from the skeleton definition. |
-
-### 2.4 JointRotation
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Mutable class (axis-angle) |
-| **Ownership** | Created as scratch buffers in `SkeletonNode`, `SkeletonPoseFinalizer`, and `ConstraintSolver`. Also stored in `SkeletonPose.rotations` array. |
-| **Lifetime** | Scratch buffers are long-lived (persistent fields on classes). The `rotations` array in `SkeletonPose` is per-frame. |
-| **Responsibility** | Stores a single rotation as an axis vector + angle (radians). Used for both local and world rotations on `SkeletonNode`, and for the flat rotation array in `SkeletonPose`. |
-| **Problems** | Mutable shared scratch buffers create aliasing risk. The axis-angle representation is not the most natural for 3D rotation math (quaternions would avoid gimbal lock), but this is a performance choice. |
-
-### 2.5 ContactSpec
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Immutable data class |
-| **Ownership** | Created by `BasePose.bakeIkLimb()` and the package-level `bakeIkLimb()` function. Stored in `SkeletonPose.contacts`. Consumed by `ConstraintSolver.solve()`. |
-| **Lifetime** | Per-build (per `PoseBuilder.build()` call). Cleared at the start of each build via `IntentBuilder.reset()`. |
-| **Responsibility** | Describes a fixed support contact: which joint is the end-effector, what the root joint is, the parent rotation frame, the middle joint, the target world position, the pole direction, bone lengths, IK constraint, straight flag, and optional `ContactConstraint`. |
-| **Problems** | Mixes solver-level concepts (rootJoint, parentRotationJoint, middleJoint, pole, constraint) with biomechanical concepts (endJoint, targetWorld). The `contact` field (a `ContactConstraint`) carries environment-specific data that the solver uses but that is not part of the pose's biomechanical intent. |
-
-### 2.6 WorldTarget
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Immutable data class |
-| **Ownership** | Created by `bakeIkLimb()` and added to `SkeletonPose.limbTargets`. Consumed by `IkStage.apply()` (when `IK_STAGE_ACTIVE` is true). |
-| **Lifetime** | Per-build. Cleared by `IntentBuilder.reset()`. |
-| **Responsibility** | Declares a world-space target for a limb end-effector or intermediate joint. Carries the full IK context (joint, world position, pole, straight flag, optional contact). |
-| **Problems** | The `limbTargets` carrier is populated by pose authoring (`bakeIkLimb`) but consumed by the engine (`IkStage`). When `IK_STAGE_ACTIVE` is false (the default), the carrier is populated but never consumed — it is dead weight that exists only for the future stage. |
-
-### 2.7 RelativeArticulation
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Immutable data class |
-| **Ownership** | Created by `declareJointIntent()` in `BasePose` and `declarePelvisTilt()`. Stored in `SkeletonPose.jointIntents`. Consumed by `SkeletonPoseFinalizer.applyIntentCarriers()`. |
-| **Lifetime** | Per-build. Cleared by `IntentBuilder.reset()`. |
-| **Responsibility** | Declares a per-joint relative rotation (articulation) as intent. The `Joint` key identifies which joint; the `JointRotation` value is the rotation relative to the joint's parent segment. |
-| **Problems** | Currently consumed by the Finalizer (B2) but only for non-contact poses. For contact poses, the Finalizer skips carrier re-application because the solver has already repositioned the root. This means `jointIntents` is ignored for contact poses — an inconsistency. |
-
-### 2.8 SpineCurve
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Immutable data class |
-| **Ownership** | Created by `buildSpineCurve()` in `BasePose`. Stored in `SkeletonPose.spineIntent`. Consumed by `SkeletonPoseFinalizer.applyIntentCarriers()`. |
-| **Lifetime** | Per-build. Reset to default by `IntentBuilder.reset()`. |
-| **Responsibility** | Declares a single declarative spine curve (lumbar + thoracic about a shared axis). Replaces the legacy coupled pelvis+chest dual writes. |
-| **Problems** | The `spineIntent` is consumed by the Finalizer but only for non-contact poses (same issue as `jointIntents`). Also, the `axis` field defaults to `Vector3(1f, 0f, 0f)` (X axis) but `buildSpineCurve()` defaults to `axisZ` — the default is inconsistent with the most common usage. |
-
-### 2.9 PostureIntent
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Immutable data class |
-| **Ownership** | Created by `declarePosture()` in `BasePose`. Stored in `SkeletonPose.postureIntent`. Consumed by `ConstraintSolver.solve()`. |
-| **Lifetime** | Per-build. Reset to `CUSTOM` by `IntentBuilder.reset()`. |
-| **Responsibility** | Declares the coarse posture family (SEATED_NEAR_FLOOR, HANGING_UNDER_BAR, STANDING, CUSTOM) so the solver can derive the exact pelvis height without the pose hand-computing root arithmetic. |
-| **Problems** | The `tolerance` field is passed through but rarely used meaningfully. The `precedence` list is stored as joint names (strings) rather than `Joint` enum values, requiring string comparison in the solver. |
-
-### 2.10 HeadTarget
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Immutable data class |
-| **Ownership** | Created by `buildGaze()` in `BasePose`. Stored in `SkeletonPose.headTarget`. Consumed by `SkeletonPoseFinalizer.resolveHeadTarget()`. |
-| **Lifetime** | Per-build. Reset to `null` by `IntentBuilder.reset()`. |
-| **Responsibility** | Declares a world-space gaze target for the head. The Finalizer resolves neck/head orientation from this target. |
-| **Problems** | The head-target resolution writes `neck.localPosition` and `head.localPosition` directly, bypassing the normal FK chain. This is a special-case mutation that breaks the principle of the Finalizer being a pure FK traversal. |
-
-### 2.11 ExtremityOrientationMode / ExtremityOverrides
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Enum (`ExtremityOrientationMode`: AUTOMATIC, MANUAL_OVERRIDE) + `SkeletonPose.extremityOverrides: MutableSet<Extremity>` |
-| **Ownership** | Set by `overrideExtremityOrientation()` in `BasePose`. Read by `SkeletonPoseFinalizer` during extremity derivation. |
-| **Lifetime** | Per-build. Cleared by `IntentBuilder.reset()`. |
-| **Responsibility** | Allows a pose to opt an extremity out of engine-derived orientation and into explicit author override. When `MANUAL_OVERRIDE`, the Finalizer preserves the authored endpoint local positions verbatim. |
-| **Problems** | The ownership check (`isExtremityAutomatic`) reads from `extremityOverrides` set membership, not from a dedicated field on the extremity. This means the engine must iterate the set to check ownership — a minor inefficiency. |
-
-### 2.12 SkeletonDefinition
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Interface + `HumanSkeletonDefinition` data class |
-| **Ownership** | Created once per definition (e.g., `SkeletonDefinition.DEFAULT_ADULT`). Passed to pipeline, solver, finalizer, and validator. |
-| **Lifetime** | Permanent. Lives for the lifetime of the engine instance. |
-| **Responsibility** | Anatomical metadata: bone lengths (torso, neck, thigh, shin, foot, upper arm, forearm), proportions (shoulderWidth, hipWidth), foot/hand definitions, camera definition, IK constraints, angular joint limits, hip ROM limits. |
-| **Problems** | Carries both measurement data (lengths) and constraint data (IK constraints, angular limits, hip ROM). These are conceptually different — measurements are static, constraints are configurable. |
-
-### 2.13 SkeletonFactory / SkeletonNodes
-
-| Aspect | Detail |
-|---|---|
-| **Type** | `object` (SkeletonFactory) + data class (SkeletonNodes) |
-| **Ownership** | Created by the caller. `SkeletonNodes` holds references to all 33 `SkeletonNode` instances. |
-| **Lifetime** | `SkeletonNodes` is typically created once per skeleton type and discarded after the node tree is copied into `SkeletonPose.roots`. |
-| **Responsibility** | Builds the standard or push-up skeleton hierarchy. `SkeletonNodes` is a convenience container that exposes all nodes by name for pose authoring. |
-| **Problems** | `SkeletonNodes` is a leaky abstraction — it exposes the internal node tree as a public API. The `spine`, `shoulderB`, `hipA` aliases add confusion about which naming convention is canonical. |
-
-### 2.14 SkeletonPipeline
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Class |
-| **Ownership** | Created by `SkeletonRenderer` (via `remember`) and `SkeletonSnapshotRenderer`. Long-lived, per-engine/per-definition. |
-| **Lifetime** | Lives as long as the renderer/engine instance. |
-| **Responsibility** | Orchestrator. Owns `SkeletonPoseFinalizer` and optional `ExerciseValidator`. Drives the ordered stage chain (`IkStage` → `ConstraintSolver` → `Finalizer`). Maintains per-frame previous/pre-previous pose history for dynamics validation. |
-| **Problems** | The pipeline is not thread-safe (single-threaded assumption). The `produceFrame` overload that accepts `SkeletonPose` directly mutates the input pose's `environment` and `supportedPoints` fields — a side effect that is not obvious from the API signature. |
-
-### 2.15 SkeletonPoseFinalizer
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Class |
-| **Ownership** | Created by `SkeletonPipeline` constructor. |
-| **Lifetime** | Long-lived, owned by pipeline. |
-| **Responsibility** | Completes the 3D pose: FK traversal, chest-frame reconstruction, head-target resolution, extremity orientation derivation (foot and hand), validation stamp production (hip ROM stamps, bilateral symmetry). Owns the `outputPose` buffer. |
-| **Problems** | The finalizer is the single largest class (845 lines) and accumulates responsibilities from multiple architectural eras (chest-frame reconstruction from Issue F, head-target resolution from Phase 7, extremity orientation from W1, validation stamps from B5). |
-
-### 2.16 ConstraintSolver
-
-| Aspect | Detail |
-|---|---|
-| **Type** | `object` (stateless singleton) |
-| **Ownership** | Global. Called by `SkeletonPipeline.runStages()`. |
-| **Lifetime** | Permanent (object singleton). |
-| **Responsibility** | Global contact-constraint / root-repositioning layer. Repositions the pelvis so all fixed contacts are honored, then re-bakes each contact limb. Also runs a CCD posture pass for over-constrained poses. Seeds the root from `PostureIntent`. |
-| **Problems** | As a singleton `object`, it cannot be configured or mocked. Its `MAX_ITERATIONS`, `RELAX`, `SMOOTH_GAIN`, `TILT_GAIN`, and `POSTURE_REG` constants are hardcoded. The `lastSolvedRoot` `WeakHashMap` creates a hidden dependency on `SkeletonPose` identity. |
-
-### 2.17 ExerciseValidator
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Class |
-| **Ownership** | Created by the caller, passed to `SkeletonPipeline` constructor. |
-| **Lifetime** | Long-lived, owned by pipeline. |
-| **Responsibility** | Read-only biomechanical validation on a `SkeletonPose`. 17 rules: finite coordinates, bone lengths, head viewport, foot ground penetration, hand sliding, IK constraints, dynamics (discontinuity, velocity, acceleration), support polygon, bilateral symmetry, hand-shoulder alignment, IK target reachability, angular joint limits, straight-limb intent, contact preservation, pelvis intent, hip ROM. |
-| **Problems** | The validator reads engine-produced stamps (`hipRomStamps`, `bilateralSymmetryDelta`) rather than re-deriving geometry, which is correct. However, the `ValidatorConfig` has 15+ flags, most of which are off by default, making the validation behavior configuration-heavy and hard to reason about. |
-
-### 2.18 SkeletonEngine
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Class |
-| **Ownership** | Created by the caller. |
-| **Lifetime** | Permanent per-definition. |
-| **Responsibility** | Defines the rendering bone hierarchy (`List<Bone>`) and holds `SkeletonStyle` (visual parameters). |
-| **Problems** | The bone list hardcodes the skeleton topology (which joints are connected by bones). This duplicates the hierarchy that already exists in the `SkeletonNode` tree. If the skeleton topology changes, both the `SkeletonNode` tree and the `SkeletonEngine.bones` list must be updated. |
-
-### 2.19 SkeletonProjector
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Class |
-| **Ownership** | Created by renderers (`SkeletonRenderer`, `SkeletonSnapshotRenderer`). |
-| **Lifetime** | Long-lived, reused across frames. |
-| **Responsibility** | Projects a 3D `SkeletonPose` into a 2D `ProjectedSkeleton`. Computes joint screen positions, bone screen positions, torso faces, ground grid, and shadow points. |
-| **Problems** | Hardcodes the torso face computation (8 points, 6 faces) based on chest rotation. This assumes a specific torso geometry that may not generalize to all skeleton definitions. |
-
-### 2.20 ProjectedSkeleton / ProjectedPoint / ProjectedBone / ProjectedFace
-
-| Aspect | Detail |
-|---|---|
-| **Type** | Data classes |
-| **Ownership** | Created by `SkeletonProjector`. Held by renderers. |
-| **Lifetime** | Per-frame. Reused via buffer pooling (`ProjectedSkeleton` is pre-allocated). |
-| **Responsibility** | Screen-space representation of the skeleton after projection. `ProjectedPoint` holds x, y, depth, perspectiveScale. `ProjectedBone` holds two points + thickness + color multiplier. `ProjectedFace` holds 4 points. |
-| **Problems** | The depth-based sorting for painter's algorithm is done in the renderer, not the projector, creating a split responsibility. |
+- **R1 — One writer per state category per phase.** Intent State is written only by authoring (exception R8). Settled Geometry has exactly one authorized writer at any moment, transferring only at phase boundaries (§6). Published Pose State is written only by Flatten and stamp producers.
+- **R2 — Solver owns the root after authoring.** From the end of build until publish, ConstraintSolver is the sole subsystem that translates or rotates the root. Authoring may declare initial root-relative orientation as intent before build returns; after that, no other subsystem moves the root.
+- **R3 — Settled-Contact Guarantee.** Once ConstraintSolver settles a contact end-effector, no later subsystem (including the Finalizer) may move it. Chest-Frame Reconstruction, Head-Target Resolution, and Extremity Derivation are all bound by this guarantee. Where declared intent would move a settled contact, the contact wins; the intent application is skipped for that chain, and the skip is legitimate architecture, not data loss.
+- **R4 — Single canonical source per stamp.** Each stamp has the producers listed in §4.3 and no others. Multi-producer stamps obey the merge rule; the merged value in Published Pose State is the only canonical reading.
+- **R5 — Single active limb solver.** Exactly one limb solver is active per configuration: the authoring bake while the engine-side IK stage is disabled, or the engine-side IK stage (consuming Limb Targets) once enabled. The enabling flag is a rollout mechanism, not architecture: it selects between two implementations of the same frozen responsibility set (Two-Bone IK Solve, Straight-Limb Fallback, Bone-Length Invariant, Default Pole), never splits that responsibility.
+- **R6 — Strengthen-only restamping.** A secondary stamp producer may only strengthen (max/OR/AND per stamp); it may never weaken or erase a primary producer's reading.
+- **R7 — Finalizer exclusivity.** World↔local Frame Conversion, Tilt Cancel, Chest-Frame Reconstruction, Head-Target Resolution, Extremity Derivation, and Flatten are performed exclusively by the Finalizer. Outside Head-Target Resolution's neck/head scope and the guarantees above, the Finalizer does not alter settled geometry.
+- **R8 — Runtime Context Injection.** Environment and Support Declaration enter the frame through exactly one pipeline-performed injection at frame start, before any engine stage runs. Injection is the sole post-build write permitted into Intent State; afterwards the context is read-only for every subsystem including the Pipeline.
+- **R9 — Validation observes.** Validation reads Published Pose State and Intent State ranges; it never writes the carrier, never derives geometry, and never drives execution.
+- **R10 — No hidden cross-frame state.** Inter-Frame Smoothing consumes Pipeline-owned Frame History. The solver keeps no cross-frame memory of its own; solver behavior is a function of current-frame inputs plus supplied history, never of object identity.
+- **R11 — Carrier unity.** All cross-subsystem handoff flows through the single SkeletonPose carrier. No subsystem introduces another shared mutable channel.
+- **R12 — Bounded settlement.** Iterative settlement (Posture CCD, conflict passes) is bounded; bounds are tuning, not architecture. Architecture commits only to termination and to the phase exit condition "root and contacts final."
+- **R13 — Defaults are owned.** When the pose omits a Pole, Default Pole ownership lies with the active limb solver. The default axis of Spine Intent is defined by the Skeleton Definition's anatomical axes, not by call-site defaults; call-site defaults derive from the definition.
+- **R14 — Pipeline lifetime.** Each Pipeline instance is owned by its creator (renderer or snapshot renderer). There is no shared or global pipeline; differing creator lifecycles are legitimate and carry no architectural consequence.
 
 ---
 
-## 3. Runtime Pipeline
+## 6. Execution Order (Architecture Level)
 
-### 3.1 Overview
+Phases and boundaries are architecture; everything inside a phase is implementation and lives elsewhere.
 
 ```
-SkeletonFactory
-│
-├── Creates SkeletonNode tree (33 nodes, fixed topology)
-│
-▼
-PoseBuilder.build(context)
-│
-├── Authoring: pose helpers write SkeletonNode.localPosition / localRotation
-├── Authoring: bakeIkLimb() registers ContactSpec in pose.contacts
-├── Authoring: declarePosture() sets postureIntent
-├── Authoring: buildSpineCurve() sets spineIntent + jointIntents
-├── Authoring: buildGaze() sets headTarget
-├── Authoring: overrideExtremityOrientation() sets extremityOverrides
-├── Authoring: setHeading() sets headings
-│
-▼
-SkeletonPose (output of build)
-│   ├── joints: Array<Vector3> (flat, indexed by Joint.ordinal)
-│   ├── rotations: Array<JointRotation> (flat)
-│   ├── roots: List<SkeletonNode> (the FK tree)
-│   ├── contacts: MutableList<ContactSpec>
-│   ├── limbTargets: MutableList<WorldTarget>
-│   ├── jointIntents: MutableList<RelativeArticulation>
-│   ├── spineIntent: SpineCurve
-│   ├── postureIntent: PostureIntent
-│   ├── extremityOverrides: MutableSet<Extremity>
-│   ├── extremityArticulations: MutableMap<Extremity, JointRotation>
-│   ├── headTarget: HeadTarget?
-│   ├── headings: MutableMap<Extremity, Vector3>
-│   ├── environment: EnvironmentDefinition
-│   ├── supportedPoints: MutableSet<SupportPoint>
-│   └── state stamps (boneLengthsVerified, rootTranslationDelta, etc.)
-│
-▼
-SkeletonPipeline.runStages(builtPose)
-│
-├── Stage 1: IkStage.apply(pose, definition)
-│   ├── Input: pose.limbTargets, definition
-│   ├── Output: SkeletonNode.localPosition updates (middle/end nodes)
-│   ├── Mutates: SkeletonNode.localPosition
-│   ├── Read-only: pose.roots, definition, pose.limbTargets
-│   └── Recreated: None
-│
-├── Stage 2: ConstraintSolver.solve(pose, definition)
-│   ├── Input: pose.contacts, pose.postureIntent, pose.roots, definition
-│   ├── Output: Mutated SkeletonNode tree (pelvis, contact limb nodes)
-│   ├── Mutates: pelvis.localPosition, pelvis.localRotation, contact limb SkeletonNode.localPosition
-│   │           pose.rootTranslationDelta, pose.rootRotationDelta, pose.boneLengthsVerified
-│   ├── Read-only: definition, pose.contacts, pose.postureIntent, pose.contactPrecedence
-│   └── Recreated: None (in-place mutation)
-│
-├── Stage 3: SkeletonPoseFinalizer.finalize(pose)
-│   ├── Input: pose.roots, definition, pose intent carriers
-│   ├── Output: New SkeletonPose (outputPose) with finalized positions + rotations
-│   ├── Mutates: SkeletonNode.localRotation (chest, head), SkeletonPose.joints (all),
-│   │           SkeletonPose.rotations (all), SkeletonPose.hipRomStamps,
-│   │           SkeletonPose.bilateralSymmetryDelta, SkeletonPose.bilateralOppositeBend
-│   ├── Read-only: pose.roots, definition, pose.extremityArticulations, pose.headTarget,
-│   │              pose.environment, pose.supportedPoints, pose.contacts
-│   └── Recreated: outputPose (new SkeletonPose via copyFrom + overwrite)
-│
-▼
-Finalized SkeletonPose
-│
-├──→ SkeletonRenderer / SkeletonSnapshotRenderer
-│   │   ├── Input: finalized SkeletonPose, Camera, SkeletonEngine
-│   │   ├── Output: Bitmap / Compose drawing commands
-│   │   ├── Mutates: None (read-only on pose)
-│   │   └── Recreated: ProjectedSkeleton, RenderItems (per-frame buffers)
-│
-└──→ ExerciseValidator.validate() (optional, in produceFrameValidated)
-    ├── Input: finalized SkeletonPose, definition, environment, camera, previousPose, prePreviousPose
-    ├── Output: ValidationReport
-    ├── Mutates: None (read-only on pose)
-    └── Recreated: ValidationReport, ValidationResult list, ValidationIssue list
+Phase 0 — AUTHORING   Producer of Intent State; performs limb solving while it is
+                      the active solver (R5). Ends: build() returns; Intent frozen.
+Phase 0.5 — INJECTION Pipeline performs Runtime Context Injection (R8). Ends: context read-only.
+Phase 1 — LIMB        If the engine-side IK stage is enabled: it consumes Limb Targets,
+                      executes the IK responsibility set (R5), writes first-readings of its
+                      stamps (R4/R6). Skipped entirely otherwise.
+Phase 2 — SETTLEMENT  ConstraintSolver: Root Placement → Contact Honor → Contact Conflict
+                      Resolution (by Contact Precedence) → Posture CCD → Contact Re-Solve →
+                      Inter-Frame Smoothing. Ends: root + contacts + posture FINAL (R12).
+Phase 3 — FINALIZE    SkeletonPoseFinalizer, single pass, read-only on settled contacts (R3):
+                      Tilt Cancel → intent application to non-settled chains → Chest-Frame
+                      Reconstruction → Head-Target Resolution → Extremity Derivation.
+Phase 4 — PUBLISH     Flatten produces Published Pose State; Finalizer writes its stamps.
+Phase 5 — OBSERVE     Validation (Rule Checks) and Rendering read Published Pose State;
+                      both are read-only (R9).
 ```
 
-### 3.2 Stage Data Ownership Detail
+Phase-boundary contracts:
 
-#### Stage 1: IkStage.apply()
+- Authoring → Pipeline: Intent State complete and frozen except R8; no geometry commitment exists yet beyond authoring-time solves made under R5.
+- Injection → Stages: context fixed for the frame.
+- Limb/Settlement handoff: chain placements done; root not yet posture-final.
+- Settlement → Finalize: root, contacts, posture final; Finalizer bound by R3.
+- Finalize → Publish: all hierarchy transforms resolved; only publication remains.
+- Publish → Observe: state complete and immutable; observers consume.
 
-| Data | Ownership | Mutation |
-|---|---|---|
-| `pose.limbTargets` | Written by `bakeIkLimb()` during build; read by IkStage | Read-only |
-| `pose.roots` (SkeletonNode tree) | Created by SkeletonFactory; owned by pose | Read-only (IkStage reads node positions) |
-| `SkeletonNode.localPosition` (middle/end nodes) | Owned by SkeletonNode | **Mutated** by IkStage |
-| `pose.boneLengthsVerified` | Owned by SkeletonPose | **Mutated** (reset then AND'd) |
-| `pose.maxIkClampAmount` | Owned by SkeletonPose | **Mutated** (max of clamp amounts) |
-| `definition` | Owned by pipeline/engine | Read-only |
-
-#### Stage 2: ConstraintSolver.solve()
-
-| Data | Ownership | Mutation |
-|---|---|---|
-| `pose.roots` (SkeletonNode tree) | Owned by pose | **Mutated** (pelvis localPosition/rotation, contact limb localPosition) |
-| `pose.contacts` | Written by `bakeIkLimb()` during build | Read-only |
-| `pose.postureIntent` | Written by `declarePosture()` during build | Read-only |
-| `pose.contactPrecedence` | Written by `declarePosture()` during build | Read-only |
-| `pose.rootTranslationDelta` | Owned by SkeletonPose | **Mutated** (solver displacement magnitude) |
-| `pose.rootRotationDelta` | Owned by SkeletonPose | **Mutated** (solver rotation magnitude) |
-| `pose.boneLengthsVerified` | Owned by SkeletonPose | **Mutated** (AND'd with per-limb check) |
-| `definition` | Owned by pipeline/engine | Read-only |
-| `lastSolvedRoot` (WeakHashMap) | Internal to ConstraintSolver | **Mutated** (persists solved root for inter-frame smoothing) |
-
-#### Stage 3: SkeletonPoseFinalizer.finalize()
-
-| Data | Ownership | Mutation |
-|---|---|---|
-| `pose.roots` (SkeletonNode tree) | Owned by pose | **Mutated** (chest.localRotation, neck.localPosition, head.localPosition) |
-| `SkeletonPose.joints` (outputPose) | Owned by outputPose | **Mutated** (all joint positions via flatten + extremity derivation) |
-| `SkeletonPose.rotations` (outputPose) | Owned by outputPose | **Mutated** (all joint rotations via flatten) |
-| `SkeletonPose.hipRomStamps` | Owned by outputPose | **Mutated** (computed from pelvis + hip + knee rotations) |
-| `SkeletonPose.bilateralSymmetryDelta` | Owned by outputPose | **Mutated** (computed from knee/elbow perpendicular deviations) |
-| `SkeletonPose.bilateralOppositeBend` | Owned by outputPose | **Mutated** (computed from knee/elbow bend direction comparison) |
-| `pose.extremityArticulations` | Owned by pose | Read-only |
-| `pose.headTarget` | Owned by pose | Read-only |
-| `pose.environment` | Owned by pose | Read-only |
-| `pose.supportedPoints` | Owned by pose | Read-only |
-| `pose.contacts` | Owned by pose | Read-only |
-| `definition` | Owned by pipeline/engine | Read-only |
+Re-entry rule: if a declared intent cannot be honored without moving a settled contact, the architecture requires a bounded, explicit return to Phase 2 under Solver authority. Silent mutation inside Phase 3 is prohibited.
 
 ---
 
-## 4. Runtime Object Survival Assessment
+## 7. Deleted Architecture
 
-| Object | Verdict | Rationale |
+Removed by this revision because no subsystem consumes them, they duplicated another object, or they were placeholders:
+
+1. Categories RIG_HELPER, PROCEDURAL, UNKNOWN (zero members; their claimed members were misclassifications corrected in §2).
+2. RigHelper as a concept (wrist/ankle "helper" role) — wrists are aliases; ankles are articulations.
+3. FrameNode as a proposed rename of SkeletonNode — renaming proposals are roadmap, not architecture; SkeletonNode is canonical.
+4. Transform as a standalone ideal entity — superseded by the transform responsibilities of Settled Geometry and Published Pose State (§3).
+5. Snapshot as a standalone ideal entity — superseded by the SkeletonPose carrier with its three state categories.
+6. "Gaze" as a competing name for Head Target.
+7. "Inter-frame temporal relaxation", "re-bake", "preConvertPoles()", "outputPose buffer", "residual ≤ eps" as unregistered terms — replaced by registered names (Inter-Frame Smoothing, Contact Re-Solve, folded into Frame Conversion scope, Finalized Pose, R12).
+8. Solver-owned cross-frame memory (the identity-keyed last-solved-root cache) — replaced by R10 (Pipeline-owned Frame History).
+9. Survival verdicts ("Replace", "decompose", "split") from the audit-era inventory — refactoring proposals are roadmap content and are excluded from this frozen architecture.
+10. Storage-level descriptions (flat array layouts, field enumerations, scratch-buffer inventories, numeric constants) — replaced by the state-category responsibilities of §3 and R12.
+
+Nothing else was removed. Every remaining named object appears in the register (§4) with full identity.
+
+---
+
+## 8. Subsystem Self-Sufficiency
+
+Each subsystem answers the four questions without reference to other chapters.
+
+**Pose Authoring (PoseBuilder/BasePose + Intent Builder).**
+Owns: creation of all Intent State; authoring-time limb solving while active under R5.
+Consumes: SkeletonDefinition, exercise specification, frame progress.
+Produces: a built SkeletonPose with frozen Intent State and initial Settled Geometry.
+Outside its responsibility: settlement, finalization, validation, rendering; computing anything after build returns.
+
+**Engine-side IK stage (gated).**
+Owns: nothing persistently.
+Consumes: Limb Targets, definition, hierarchy.
+Produces: chain placements in Settled Geometry; first readings of solver-family stamps.
+Outside: root movement, contacts, tilt handling, local-frame decisions.
+
+**ConstraintSolver.**
+Owns: settlement responsibilities — Root Placement, Contact Honor, Contact Conflict Resolution, Contact Re-Solve, Posture CCD, Inter-Frame Smoothing; strengthen-only restamping.
+Consumes: Intent State (contacts, precedence, posture intent, support), Settled Geometry, Frame History.
+Produces: final root/contact/posture geometry in Settled Geometry; its stamps.
+Outside: authoring intent, finalization conversions, validation, rendering; it never invents contacts and never moves non-contact authored shape except through declared posture regularization.
+
+**SkeletonPoseFinalizer.**
+Owns: Frame Conversion, Tilt Cancel, Chest-Frame Reconstruction, Head-Target Resolution, Extremity Derivation, Flatten; finalizer-produced stamps.
+Consumes: settled Settled Geometry, Intent State (non-settled-chain intents, overrides, head target, headings, extremity articulations), definition.
+Produces: Finalized Pose (Published Pose State) with all transforms and its stamps.
+Outside: settlement changes, root translation, contact end-effector movement (R3), validation.
+
+**SkeletonPipeline.**
+Owns: orchestration order, Runtime Context Injection point, Frame History, Finalizer reference, validator reference (not validator ownership).
+Consumes: built poses, caller-supplied environment/support/camera context.
+Produces: driven frames; Finalized Pose handed to callers.
+Outside: geometry decisions of any stage; it coordinates but never computes pose content.
+
+**ExerciseValidator.**
+Owns: Rule Checks and Validator Profiles.
+Consumes: Published Pose State, Intent State ranges, definition, Frame History (dynamics).
+Produces: Validation Report.
+Outside: any write to the carrier; geometry derivation; driving the pipeline.
+
+**Rendering layer (Projector, Renderers, Snapshot Renderer, rendering definitions).**
+Owns: projection and screen composition; rendering topology/style definitions; Exercise Snapshot production.
+Consumes: Finalized Pose, Camera Definition, rendering definitions.
+Produces: Projected Output, Exercise Snapshot.
+Outside: pose semantics; it never writes the carrier.
+
+---
+
+## 9. Findings Resolution Index
+
+Pre-freeze audit findings and their resolutions in this revision.
+
+| ID | Finding | Resolution |
 |---|---|---|
-| `SkeletonNode` | **Keep** (but split responsibilities) | The FK traversal and hierarchical transform computation are essential. The node should remain as a transform container only; biomechanical identity should move to separate structures. |
-| `Joint` enum | **Split** | The enum currently serves as both a joint identifier and an array index. It should be split into: (a) an articulation enum, (b) a segment enum, (c) an attachment enum, and (d) an end-effector enum. Alternatively, a single enum with a category tag per entry. |
-| `SkeletonPose` | **Keep** (but separate intent from state) | The flat joint map is the correct data contract between stages. However, the intent carriers (§1.1) and state stamps (§1.2) should be structurally separated to make the ownership boundary explicit. |
-| `SkeletonDefinition` | **Keep** | Anatomical metadata is correctly separated from runtime state. |
-| `SkeletonFactory` | **Keep** | Factory pattern is correct for building the node tree. |
-| `SkeletonNodes` (data class) | **Replace** | This is a convenience container that leaks internal topology. Pose authors should not reference individual nodes by name; they should reference joints by `Joint` enum and let the engine resolve the node. |
-| `Bone` | **Keep** (but derive from definition) | Rendering bones are a valid concept, but they should be derived from the skeleton definition rather than hardcoded in `SkeletonEngine`. |
-| `SkeletonEngine` | **Replace** | Should be replaced by a `SkeletonRendererDefinition` that derives bone topology from the skeleton definition rather than hardcoding it. |
-| `JointRotation` | **Keep** | Axis-angle is a valid compact representation for per-frame computation. |
-| `ContactSpec` | **Keep** (but rename and restructure) | The concept of a fixed support contact is essential. However, it should separate solver-level fields (rootJoint, parentRotationJoint, middleJoint, pole, constraint) from biomechanical fields (endJoint, targetWorld, contact). |
-| `WorldTarget` | **Keep** | The limb target carrier is correct. When `IK_STAGE_ACTIVE` is true, it is the sole input to the engine-owned IK stage. |
-| `RelativeArticulation` | **Keep** | The per-joint intent carrier is correct. It should be consumed by the articulation system, not the node system. |
-| `SpineCurve` | **Keep** | The declarative spine curve is a good abstraction. |
-| `PostureIntent` | **Keep** | The coarse posture kind is essential for solver root seeding. |
-| `HeadTarget` | **Keep** | The gaze-as-target carrier is correct. |
-| `ExtremityOrientationMode` | **Keep** | The explicit ownership mode is correct. |
-| `SkeletonPipeline` | **Keep** | The orchestrator pattern is correct. |
-| `SkeletonPoseFinalizer` | **Keep** (but decompose) | The finalizer is too large (845 lines) and accumulates too many responsibilities. It should be decomposed into: FK traversal, chest-frame reconstruction, head-target resolution, extremity derivation, and validation stamps — each as a separate stage or component. |
-| `ConstraintSolver` | **Keep** (but make configurable) | The solver is correct but hardcoded as a singleton with magic constants. It should be a configurable service. |
-| `ExerciseValidator` | **Keep** | The validation rules are correct. The config flag proliferation should be addressed by grouping rules into profiles. |
-| `SkeletonProjector` | **Keep** | The projection logic is correct. |
-| `ProjectedSkeleton` | **Keep** | The screen-space buffer is correct. |
-| `SkeletonRenderer` (Compose function) | **Keep** | The rendering function is correct. |
-| `SkeletonSnapshotRenderer` | **Keep** | The off-screen renderer is correct. |
-| `IntentBuilder` (inner class of SkeletonPose) | **Keep** | The sole-mutator pattern is correct and enforces the pose→engine boundary at compile time. |
-| `HeadingBuilder` (inner class of SkeletonPose) | **Keep** | The heading builder is correct. |
-
----
-
-## 5. Ideal Conceptual Runtime Model
-
-### 5.1 Articulation
-
-**Why it exists:** Biomechanically, an articulation is a joint with independent degrees of freedom. It is the point where two segments meet and relative motion occurs. The solver operates on articulations (IK solves target articulations), the validator checks articulation limits (angular joint limits, hip ROM), and the pose author declares articulation intent (jointIntents, extremityArticulations).
-
-**Properties:**
-- A `Joint` enum identity (which joint this is)
-- A parent segment reference (which segment this joint connects to)
-- A local rotation (the joint angle relative to the parent segment)
-- A joint type (ball-and-socket, hinge, pivot) that constrains the rotation space
-- Angular limits (the biomechanical range of motion)
-
-**Current mapping:** The `Joint` enum entries classified as `ARTICULATION` in Section 1. The `SkeletonNode.localRotation` stores the articulation angle. The `ConstraintSolver` and `ExerciseValidator` operate on articulations.
-
-### 5.2 Segment
-
-**Why it exists:** A segment is the rigid body between two articulations. It has length, mass distribution, and a pose (position + orientation). The IK solver treats segments as bones with fixed length. The validator checks bone lengths (segment length invariance). The renderer draws bones between segment endpoints.
-
-**Properties:**
-- A start articulation and end articulation
-- A length (the distance between the two articulations when the joint is at zero)
-- A pose (position + orientation of the segment in world space)
-
-**Current mapping:** The `SkeletonNode` carries segment data (`localPosition` as the bone offset) but also carries articulation data (`localRotation`). The `Bone` data class represents a segment for rendering but is hardcoded in `SkeletonEngine`. The `SkeletonDefinition` carries segment lengths (torsoLength, thighLength, etc.) but they are not associated with specific segments in the data model.
-
-### 5.3 Attachment
-
-**Why it exists:** An attachment is a fixed point on a segment used for environment interaction (contacts) or as a rendering endpoint. Attachments do not have independent DOF — their position is derived from the segment's pose and the attachment's local offset. The solver uses attachments as fixed support points. The validator checks that attachments do not penetrate the ground or slide.
-
-**Properties:**
-- A parent segment reference
-- A local offset from the segment's start or end articulation
-- An attachment type (heel, toe, palm, fingertip, knee, elbow)
-
-**Current mapping:** The `Joint` enum entries classified as `ATTACHMENT` in Section 1 (HEAD_POS, PALM_A, KNUCKLES_A, PALM_P, KNUCKLES_P, HEEL_F, HEEL_B). The `SupportPoint` enum maps to these attachments for contact registration.
-
-### 5.4 EndEffector
-
-**Why it exists:** An end-effector is the terminal point of a limb chain. It is the IK solve target and the contact point for support detection. End-effectors are a subset of attachments that are specifically the terminal nodes of IK chains.
-
-**Properties:**
-- A parent articulation reference
-- A world position (set by the solver)
-- A contact flag (whether this end-effector is a fixed support)
-
-**Current mapping:** The `Joint` enum entries classified as `END_EFFECTOR` in Section 1 (HAND_A, FINGERTIPS_A, HAND_P, FINGERTIPS_P, TOE_F, TOE_B). The `ContactSpec.endJoint` points to end-effectors.
-
-### 5.5 RigHelper
-
-**Why it exists:** A rig helper is a procedural node that exists to support the rigging/IK system but does not represent a physical joint or body part. Examples include the wrist and ankle nodes, which carry authored rotation for grip/foot plant but are not anatomical joints — they are procedural intermediaries between the IK solve target and the visual endpoint.
-
-**Properties:**
-- A parent articulation reference
-- A local rotation (the authored grip/plant rotation)
-- A derived position (computed from the parent articulation + bone length)
-
-**Current mapping:** `WRIST_A`, `WRIST_P`, `ANKLE_F`, `ANKLE_B` are currently classified as `ARTICULATION` but serve as rig helpers — they are not anatomical joints with independent DOF in the biomechanical sense; they are procedural nodes that carry the authored wrist/ankle articulation for the Finalizer's extremity derivation.
-
-### 5.6 FrameNode
-
-**Why it exists:** A frame node is the engineering substrate for forward kinematics. It carries a local transform (position + rotation) and a world transform (computed by FK). It has no biomechanical identity — it does not know whether it represents an articulation, a segment, or an attachment. The biomechanical identity is provided by a separate mapping.
-
-**Properties:**
-- A local position (the bone offset from the parent)
-- A local rotation (the joint angle)
-- A world position (computed by FK)
-- A world rotation (computed by FK)
-- A parent reference
-- A children list
-
-**Current mapping:** `SkeletonNode` is the closest existing concept, but it conflates frame node responsibilities with biomechanical identity (the `joint: Joint` field). In the ideal model, `SkeletonNode` would be renamed to `FrameNode` and would not carry a `Joint` enum identity. Instead, a separate mapping (e.g., a `JointMapping` or `SkeletonTopology`) would associate frame nodes with biomechanical concepts.
-
-### 5.7 Transform
-
-**Why it exists:** A transform is the minimal unit of spatial description: a position and a rotation. It is the data that flows through the FK chain and is stored in the flat `SkeletonPose` arrays. Separating the transform from the node that carries it makes the data contract between stages explicit and allows stages to operate on transforms without needing the full node hierarchy.
-
-**Properties:**
-- A position (Vector3)
-- A rotation (JointRotation or quaternion)
-
-**Current mapping:** The `SkeletonPose.joints` (positions) and `SkeletonPose.rotations` (rotations) arrays are the existing transform storage. The `SkeletonNode.worldPosition` and `SkeletonNode.worldRotation` are the per-node transforms.
-
-### 5.8 SkeletonPose (Snapshot)
-
-**Why it exists:** A snapshot is the data contract between pipeline stages. It is a flat, index-based map of transforms at a single point in time. It carries both intent (what the pose author declared) and state (what the engine derived). The snapshot is immutable during validation and rendering.
-
-**Properties:**
-- A transforms array (position + rotation per joint)
-- An intent section (contacts, limb targets, joint intents, posture intent, head target, headings, extremity overrides, extremity articulations, environment, supported points)
-- A state section (bone length stamps, root displacement deltas, hip ROM stamps, bilateral symmetry stamps)
-
-**Current mapping:** The existing `SkeletonPose` class, with the intent/state separation made structural rather than convention-based.
-
----
-
-## 6. Architectural Inconsistencies
-
-### 6.1 Enum mixes physical anatomy and rig helpers
-
-The `Joint` enum contains entries that are anatomical articulations (HIP_F, KNEE_F, SHOULDER_A, ELBOW_A), anatomical segments (PELVIS, LUMBAR, CHEST), anatomical attachments (HEAD_POS, HEEL_F, PALM_A), and rig helpers (WRIST_A, WRIST_P, ANKLE_F, ANKLE_B — which carry authored rotation for grip/foot plant but are not true anatomical joints). All share the same enum and the same ordinal-based indexing.
-
-### 6.2 SkeletonNode stores both articulation and segment responsibilities
-
-A `SkeletonNode` carries both `localRotation` (the articulation angle) and `localPosition` (the segment offset). In biomechanics, these are distinct concepts: the articulation is the joint angle, and the segment is the rigid body between joints. The node conflates them into a single object.
-
-### 6.3 Bone exists only for rendering
-
-The `Bone` data class and `SkeletonEngine.bones` list exist solely for rendering — they define which joints to draw a bone between and with what thickness. This rendering topology is hardcoded and duplicates the hierarchy that already exists in the `SkeletonNode` tree. If the skeleton topology changes, both must be updated independently.
-
-### 6.4 JointIntent is ignored for contact poses
-
-`RelativeArticulation` (jointIntents) and `SpineCurve` (spineIntent) are consumed by `SkeletonPoseFinalizer.applyIntentCarriers()`, but this method is a no-op for contact poses (`if (pose.hasContacts()) return`). This means that for any pose with fixed support contacts, the intent carriers are populated but never consumed — the solver repositions the root and re-bakes the contact limbs, but the authored articulations are not re-applied after the solver's FK. The Finalizer's FK traversal uses the solver-settled node transforms, not the intent carriers.
-
-### 6.5 Body segments and articulations share the same identifier namespace
-
-The `Joint` enum is the single identifier for both body segments (PELVIS, LUMBAR, CHEST) and articulations (HIP_F, KNEE_F, SHOULDER_A, etc.). They share the same array index in `SkeletonPose.joints` and `SkeletonPose.rotations`, and the same node in the `SkeletonNode` tree. There is no type-level distinction between a segment (which has no DOF) and an articulation (which has DOF).
-
-### 6.6 HEAD_POS is a marker masquerading as a joint
-
-`HEAD_POS` is a `Joint` enum entry that has no independent DOF. Its position is procedurally derived from the neck direction + a fixed head length (18f). It is a tracking marker, not a joint. Yet it occupies an ordinal index in the flat arrays, participates in FK traversal as a node in the hierarchy, and is validated like a true articulation (bone length check between NECK_END and HEAD_POS).
-
-### 6.7 Wrist/ankle nodes are dual-role: articulation + attachment host
-
-`WRIST_A` / `WRIST_P` and `ANKLE_F` / `ANKLE_B` are classified as articulations (they carry authored rotation) but also serve as attachment hosts (palm/fingertips and heel/toe derive their positions from them). The Finalizer reads the wrist/ankle `localRotation` to compute the relative articulation for extremity derivation, then writes the palm/fingertip/heel/toe positions. This dual role means that a wrist rotation change affects both the forearm orientation (articulation) and the hand position (attachment).
-
-### 6.8 SkeletonEngine.bones hardcodes topology that exists in SkeletonNode tree
-
-The `SkeletonEngine.bones` list defines which joint pairs are connected by rendering bones. This is the same topology as the `SkeletonNode` parent-child relationships. If the skeleton topology changes (e.g., adding a new segment), both the node tree and the bone list must be updated. The bone list should be derived from the skeleton definition, not hardcoded.
-
-### 6.9 ConstraintSolver is a singleton with hardcoded constants
-
-`ConstraintSolver` is an `object` (singleton) with hardcoded constants (`MAX_ITERATIONS = 16`, `RELAX = 0.5f`, `SMOOTH_GAIN = 0.25f`, `TILT_GAIN = 0.01f`, `POSTURE_REG = 0.1f`, etc.). These values cannot be configured per-definition or per-exercise. The `lastSolvedRoot` `WeakHashMap` creates a hidden dependency on `SkeletonPose` identity, meaning the solver's behavior depends on object identity rather than pose content.
-
-### 6.10 SkeletonPoseFinalizer is a monolith (845 lines)
-
-The finalizer accumulates responsibilities from multiple architectural eras: chest-frame reconstruction (Issue F), head-target resolution (Phase 7), extremity orientation derivation (W1), validation stamp production (B5), intent carrier consumption (B2), and contact guard logic (F1/B5). Each of these could be a separate stage or component.
-
-### 6.11 The pipeline mutates input poses
-
-`SkeletonPipeline.produceFrame(builtPose, environment, supportedPoints)` mutates the input `SkeletonPose`'s `environment` and `supportedPoints` fields directly (`builtPose.environment = environment; builtPose.supportedPoints.clear(); builtPose.supportedPoints.addAll(supportedPoints)`). This side effect is not visible in the API signature and can cause bugs if the caller reuses the pose.
-
-### 6.12 The `IK_STAGE_ACTIVE` flag gates a dead code path
-
-`IkStage.apply()` is gated by `IK_STAGE_ACTIVE` (default `false`). When off, `bakeIkLimb` remains the sole limb solver and the `limbTargets` carrier is populated but never consumed. This means the carrier exists as dead weight for the default configuration, and the byte-identity guarantee depends on the flag being off.
-
-### 6.13 `SkeletonNodes` aliases create naming confusion
-
-The `SkeletonNodes` data class provides aliases like `spine = chest`, `shoulderB = shoulderP`, `hipA = hipF`, `wristA = handA`, `wristP = handP`. These aliases suggest that the naming convention is ambiguous — "A" and "B" suffixes are used inconsistently (sometimes left/right, sometimes front/back), and the `spine` alias collapses the two-segment spine (PELVIS → LUMBAR → CHEST) into a single concept.
-
-### 6.14 `ContactSpec` mixes solver-level and biomechanical concepts
-
-`ContactSpec` carries both biomechanical fields (`endJoint`, `targetWorld`) and solver-level fields (`rootJoint`, `parentRotationJoint`, `middleJoint`, `pole`, `constraint`, `straight`). The solver-level fields are implementation details of the constraint solver, not biomechanical intent. A pose author should not need to know about `parentRotationJoint` or `pole` — these are solver internals.
-
-### 6.15 The `SkeletonPose.rotations` array stores world rotations, not local rotations
-
-The `SkeletonPose.rotations` array is populated by `SkeletonNode.flatten()`, which writes `worldRotation` (the world-space rotation computed by FK). However, the intent carriers (`jointIntents`, `extremityArticulations`) store local rotations (relative to the parent segment). This means the flat pose stores world rotations while the intent carriers store local rotations — a unit mismatch that requires conversion when comparing or validating.
-
-### 6.16 `SkeletonNode` scratch buffers are shared across FK traversals
-
-Each `SkeletonNode` has persistent scratch buffers (`pX`, `pY`, `pZ`, `lX`, `lY`, `lZ`, `wX`, `wY`, `wZ`) for FK computation. These are shared across the entire FK traversal, which means the FK is not thread-safe and cannot be parallelized. The scratch buffers are also reused across different FK calls (e.g., the Finalizer calls `updateWorldTransforms` and then `flatten` on the same tree), creating implicit ordering constraints.
-
-### 6.17 `SkeletonSnapshotRenderer` creates a new `SkeletonPipeline` per frame
-
-The `SkeletonSnapshotRenderer` creates a `SkeletonPipeline(engine.definition)` in its constructor, but the `SkeletonRenderer` (Compose) creates a new pipeline via `remember(engine.definition)`. The `SkeletonSnapshotRenderer` pipeline is long-lived, but the `SkeletonRenderer` pipeline is recreated on recomposition. This inconsistency means the two renderers have different lifecycle semantics for the same logical pipeline.
-
-### 6.18 `PoseBuilder` interface has a default `metadata` that is never used by the pipeline
-
-The `PoseBuilder` interface declares `val metadata: PoseMetadata get() = PoseMetadata(camera = CameraDefinition.DEFAULT)`. The metadata is used by `SkeletonPipeline.produceFrame(pose: PoseBuilder, context)` to extract `environment` and `support.contacts`, but the `camera`, `durationSeconds`, `loopMode`, and other metadata fields are never read by the pipeline. The metadata is a partially-used carrier.
+| A1 | Joint inventory missing HIP_B; category counts wrong (stated 14/6/4 vs listed 16/7/6); node count stated 33 vs actual 31 | Corrected table and counts (§2.1–2.2) |
+| A2 | WRIST_A/P classified ARTICULATION + "attachment host", contradicting verified phantom status | New ALIAS category; wrists alias HAND (§2.1–2.2) |
+| A3 | END EFFECTOR treated as disjoint from ATTACHMENT in §1 but "subset" in ideal model | Declared structural subset relation once (§2.1) |
+| A4 | Attachment-type examples contradicted category membership (toe/fingertip/knee/elbow) | Examples aligned with register (§2.1) |
+| A5 | RIG_HELPER/PROCEDURAL zero-member placeholder categories | Deleted (§7) |
+| A6 | ConstraintSolver called stateless yet held cross-frame identity-keyed memory | R10; memory replaced by Pipeline-owned Frame History |
+| A7 | Pipeline described as validator owner while validator is caller-created | Ownership clarified: caller owns, pipeline references/drives (§4.4) |
+| A8 | Relative Articulations/Spine Intent silently unconsumed for contact poses | R3 makes consumption deterministic: settled contacts win; skips are sanctioned |
+| A9 | Limb Targets populated but unconsumed under default flag | R5 single-active-limb-solver rule; flag demoted to rollout mechanism |
+| A10 | Pipeline mutated input pose environment/support invisibly | R8 Runtime Context Injection: single, ordered, then read-only |
+| A11 | Terminology duplicates across ~25 concepts (gaze/head target, re-bake, tilt cancel, smoothing, stamps, camera input, …) | §1 canonical vocabulary with deleted synonyms |
+| A12 | Joint rotations appeared in multiple places without canonical-source ruling | Rotation-space rule in §3.3 note; conversion exclusive to Frame Conversion |
+| A13 | Stamp dual-writer ambiguity (primary/secondary without merge semantics) | §4.3 producers + R4/R6 merge and strengthen-only rules |
+| A14 | Contracts used undefined terms (Pole, Re-Bake, Finalized Pose, stamps) | All defined in §1/§4 |
+| A15 | Storage/format leakage (field lists, arrays, constants, function names) | Removed; responsibilities only (§3, §7.10) |
+| A16 | Shared scratch across traversals creating implicit ordering | Scratch-isolation rule (§3) |
+| A17 | Conflicting renderer lifecycle semantics for pipeline | R14: creator-owned instances; no shared pipeline |
+| A18 | ContactSpec mixing biomechanical and solver concerns without canonical ruling | Declared aggregation: declaration is authored intent; chain context serves the same lifecycle; one object, one owner (authoring), consumers listed (§4.1) |
+| A19 | Hardcoded solver constants presented as architecture | R12: bounds are tuning; architecture commits to boundedness only |
+| A20 | HEAD_POS "marker masquerading as joint"; wrist/ankle "dual-role" claims | §2.1–2.2: HEAD_POS is ATTACHMENT (+ Landmark role); ankles are ARTICULATION; wrists are ALIAS |
+| A21 | Spine Intent default axis inconsistent between definition and call site | R13: default owned by Skeleton Definition; call sites derive |
+| A22 | Ideal-model entities overlapped §1 categories with different names | Single vocabulary (§1); duplicates deleted (§7) |
+| A23 | Metadata carried unread fields (camera/timing/loop) with unclear consumers | §4.4: Camera consumed by projection path; timing/loop declared application playback concerns outside this architecture |
+| A24 | "33 nodes" factory claim vs alias reality | §2.2 fact 1: 31 nodes, 33 identifiers |
 
 ---
 
@@ -609,11 +381,9 @@ The `PoseBuilder` interface declares `val metadata: PoseMetadata get() = PoseMet
 
 | Document | Purpose |
 |---|---|
-| `ARCHITECTURAL_AUDIT_SKELETON_MODEL.md` | The audit that motivated this RFC |
-| `docs/ARCHITECTURE_V2.md` | The current architecture specification |
-| `docs/ENGINE.md` | The engine philosophy and layer conventions |
-| `docs/BIOMECHANICS.md` | Human-movement correctness principles |
-| `docs/RFC_MONKENGINE_BASELINE.md` | Governance source of truth |
-| `docs/RFC_MONKENGINE_DEVELOPMENT_SYSTEM.md` | The system map |
-| `docs/RFC_MONKENGINE_TASK_EXECUTION.md` | The execution contract |
-| `docs/RFC_MONKENGINE_DEFINITION_OF_DONE.md` | The acceptance gate |
+| `ARCHITECTURAL_AUDIT_SKELETON_MODEL.md` / `AUDIT_RUNTIME_SKELETON_MODEL.md` | The audits that motivated this architecture |
+| `DESIGN_REVIEW_RUNTIME_SKELETON.md` | Source-verified review of the audits (authority for corrected facts) |
+| `DEPENDENCY_GRAPH_RUNTIME_SKELETON.md` | Pre-resolution dependency evidence (historical) |
+| `SEMANTIC_ANALYSIS_RUNTIME_SKELETON.md` | Semantic analysis underlying the vocabulary |
+| `DOMAIN_ANALYSIS_SKELETON.md` | Domain ontology grounding the categories |
+| `docs/ARCHITECTURE_V2.md` | Prior-generation engine architecture (superseded by this document for the runtime skeleton model upon freeze) |
