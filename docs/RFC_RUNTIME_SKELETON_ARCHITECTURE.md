@@ -93,7 +93,7 @@ There is exactly **one identifier namespace for body structure**: the `Joint` en
 | SEGMENT | A rigid-body link without independent rotational freedom; carries its parent-relative orientation only as authored segment orientation. Members: LUMBAR, CHEST. |
 | ARTICULATION | Anatomical joint with declared rotational freedom. Members: NECK_END, CLAVICLE_A, SCAPULA_A, SHOULDER_A, ELBOW_A, CLAVICLE_P, SCAPULA_P, SHOULDER_P, ELBOW_P, HIP_F, KNEE_F, ANKLE_F, HIP_B, KNEE_B, ANKLE_B. |
 | ATTACHMENT | A derived point on a body chain with no rotational freedom; its position is always computed by the engine, never authored. Members: HEAD_POS, PALM_A, KNUCKLES_A, PALM_P, KNUCKLES_P, HEEL_F, HEEL_B. |
-| END EFFECTOR | The terminal attachment of a solved or derived chain: an attachment that additionally plays the solver/derivation terminal role. Structural subset of ATTACHMENT (every End Effector is an Attachment; the categories are not disjoint). Members: HAND_A, FINGERTIPS_A, HAND_P, FINGERTIPS_P, TOE_F, TOE_B. |
+| END EFFECTOR | The terminal point of a solved or derived chain. Shares the attachment mechanical nature (no rotational freedom; position always computed by the engine) but is a distinct classification, not an additional one: each identifier holds exactly one category, and the categories are mutually exclusive. What End Effectors share with Attachments is their mechanical nature, not their classification. Members: HAND_A, FINGERTIPS_A, HAND_P, FINGERTIPS_P, TOE_F, TOE_B. |
 | ALIAS | An identifier that denotes the same body point as another identifier, retained for authoring compatibility; it has no tree node and never carries independent state. Members: WRIST_A (alias of HAND_A), WRIST_P (alias of HAND_P). |
 
 Category counts: ROOT 1, SEGMENT 2, ARTICULATION 15, ATTACHMENT 7, END EFFECTOR 6, ALIAS 2 — total 33 identifiers.
@@ -110,7 +110,7 @@ Category counts: ROOT 1, SEGMENT 2, ARTICULATION 15, ATTACHMENT 7, END EFFECTOR 
 
 ## 3. State Categories
 
-The architecture has exactly three state categories. Each category defines only what information it owns — never storage or format.
+The architecture has exactly three state categories, hosted by the single SkeletonPose carrier (§5 R11). The carrier hosts them; it owns none of them. Each category defines only what information it owns — never storage or format.
 
 ### 3.1 Intent State
 
@@ -144,7 +144,7 @@ Camera Definition and Motion Driver are **not** part of Intent State: Camera Def
 - **Lifetime:** per frame; immutable after publish; consumed by ExerciseValidator and the Rendering layer.
 - **Does not own:** Intent State, Settled Geometry.
 
-Rotation-space rule (authoritative representation per phase): declared rotations in Author Intent and Extremity Articulations are parent-relative input only — they are never an alternative canonical source of final rotations. From Phase 0 until Phase 3 completes, the working local transforms in Settled Geometry are the sole authoritative representation of body geometry; their world transforms are derived views produced by FK Propagation. After Phase 4, the published world transforms in Published Pose State are the sole authoritative representation of the final pose and are immutable. Conversion between spaces is owned exclusively by Frame Conversion (SkeletonPoseFinalizer). No consumer may compare rotations across categories without going through Frame Conversion output.
+Rotation-space rule (authoritative representation per phase): declared rotations in Author Intent and Extremity Articulations are parent-relative input only — they are never an alternative canonical source of final rotations. From Phase 0 until Phase 3 completes, the working local transforms in Settled Geometry are the sole authoritative representation of body geometry; their world transforms are derived views produced by FK Propagation. After Phase 4, the published world transforms in Published Pose State are the sole authoritative representation of the final pose and are immutable. Conversion between spaces is owned exclusively by Frame Conversion (SkeletonPoseFinalizer). No consumer may compare rotations across categories without going through Frame Conversion output. The root transform follows the same authority chain: declared/authored by Pose Authoring before build returns; settled by ConstraintSolver as the sole mover during settlement (R2); converted only within Finalization; ultimately canonical only as the published root transform in Published Pose State. No two subsystems own any representation of the root simultaneously.
 
 Scratch-isolation rule: computation scratch belongs privately to the subsystem that creates it. Scratch never carries information across a subsystem boundary and never survives as canonical state. Cross-frame memory exists only as SkeletonPipeline-owned Frame History (§5 R10).
 
@@ -169,7 +169,7 @@ Producers are subsystems, stages, the Active Limb Solver role, or External provi
 
 | Object | Owner | Producer | Consumers | Lifetime |
 |---|---|---|---|---|
-| Contact Declaration | Intent State | Pose Authoring (authoring bake) | ConstraintSolver (Contact Honor, Contact Re-Solve), SkeletonPoseFinalizer (Settled-Contact Guarantee scope), ExerciseValidator (contact-preservation checks) | Per build |
+| Contact Declaration | Intent State | Pose Authoring (authoring bake) | ConstraintSolver (Contact Honor, Contact Re-Solve), ExerciseValidator (contact-preservation checks). The SkeletonPoseFinalizer receives settled-contact information via the Settlement Result, not from raw declarations | Per build |
 | Contact Precedence | Intent State | Pose Authoring (via Intent Builder) | ConstraintSolver (Contact Conflict Resolution) | Per build |
 | Limb Target | Intent State | Pose Authoring (authoring bake) | Active Limb Solver only (§5 R5) | Per build |
 | Relative Articulation | Intent State | Pose Authoring (via Intent Builder) | SkeletonPoseFinalizer (intent application to non-settled chains) | Per build |
@@ -185,7 +185,7 @@ Producers are subsystems, stages, the Active Limb Solver role, or External provi
 
 | Object | Owner | Producer | Consumers | Lifetime |
 |---|---|---|---|---|
-| Environment context | Intent State (Frame Context) | SkeletonPipeline (Runtime Context Injection), resolving the External Environment Definition | ConstraintSolver, ExerciseValidator, Rendering layer | Per frame; frozen at injection |
+| Environment context | Intent State (Frame Context) | SkeletonPipeline (Runtime Context Injection), resolving the External Environment Definition | ConstraintSolver, SkeletonPoseFinalizer (Environment-context ground checks in Extremity Derivation), ExerciseValidator, Rendering layer | Per frame; frozen at injection |
 | Support Declaration | Intent State (Frame Context) | SkeletonPipeline (Runtime Context Injection), resolving the Production Metadata support context and Contact Declarations | ConstraintSolver (support checks), ExerciseValidator (support-polygon checks) | Per frame; frozen at injection |
 
 **Group C — External inputs and persistent definitions** (owner External; immutable to the engine):
@@ -237,7 +237,9 @@ Operations are performed by their owner and produce effects only inside state ca
 
 Settlement Result carries only the solver-level settlement outcome: the settled root transform in world space, the settled-contact information, and the Contact Conflict Resolution outcome. It contains no copy of final joint rotations — published world transforms and working local transforms remain canonically owned by their categories (§3). The Finalized Pose adds no state beyond the Published Pose State it carries.
 
-Limb Solve Result is the transient outcome of one limb solve (chain placement plus clamp/straight/bone-length readings). Its durable surfacing is exclusively the three solver-produced Validation Stamps in §4.4; the result itself is private scratch of its producer under the scratch-isolation rule (§3) and never crosses a subsystem boundary.
+Frame Progress is a transient pipeline-produced input, deliberately **outside** the three state categories: it never enters the carrier, exists only during Phase 0, and implies no additional state category and no animation-parameter state.
+
+Limb Solve Result is **not an architectural object**: it is the private scratch outcome of one limb solve (clamp/straight/bone-length readings plus the placement decisions). Its durable effects are exactly the chain placements its producer writes into Settled Geometry while authorized (R1/R5) and the three solver-produced Validation Stamps in §4.4. Under the scratch-isolation rule (§3) it never crosses a subsystem boundary and is never an inter-subsystem state.
 
 ### 4.4 Validation Stamps (all owned by Published Pose State)
 
@@ -255,7 +257,7 @@ Limb Solve Result is the transient outcome of one limb solve (chain placement pl
 
 | Object | Owner | Producer | Consumers | Lifetime |
 |---|---|---|---|---|
-| SkeletonPose (carrier) | SkeletonPipeline (execution window); External before build and after return | Pose Authoring (build) | All stages; Rendering layer; ExerciseValidator | Per frame |
+| SkeletonPose (carrier) | Transfer chain, exactly one owner at any moment (R11): Pose Authoring (created at build) → SkeletonPipeline (execution window) → External caller (after return) | Pose Authoring (build); the returned Finalized Pose instance is produced by SkeletonPoseFinalizer (Flatten) | All stages; Rendering layer; ExerciseValidator | Per frame |
 | Frame History | SkeletonPipeline | SkeletonPipeline (retained Finalized Poses) | ConstraintSolver (Inter-Frame Smoothing), ExerciseValidator (dynamics checks) | Rolling two frames |
 | SkeletonNode (hierarchy node) | Settled Geometry (its transforms are the category's content) | SkeletonFactory | Pose Authoring, Active Limb Solver, ConstraintSolver, SkeletonPoseFinalizer, Flatten | Per-frame tree; node buffers reused |
 | SkeletonFactory | External | Caller provisioning | SkeletonPipeline setup, Pose Authoring | Permanent per engine |
@@ -273,7 +275,7 @@ Limb Solve Result is the transient outcome of one limb solve (chain placement pl
 | Exercise Snapshot | External (exported artifact) | Snapshot Renderer | Caller/export | Per capture |
 | Intent Builder | Pose Authoring (authoring surface) | Carrier construction | Pose authoring code | During authoring |
 
-Landmark is a **role**, not a stored object: any attachment may serve as an observation reference for Rule Checks (viewport, sliding, symmetry). The role confers no state and no ownership beyond the attachments already registered.
+Landmark is a **role**, not a stored object: any attachment-family identifier (an Attachment or End Effector) may serve as an observation reference for Rule Checks (viewport, sliding, symmetry). The role confers no state and no ownership beyond the identifiers already registered.
 
 ---
 
@@ -284,17 +286,18 @@ These rules are constitutional. Any design or code that violates them is a defec
 - **R1 — One writer per state region, one freeze boundary.** Author Intent is written only by Pose Authoring and frozen at build return. Frame Context is written only by the SkeletonPipeline's single Runtime Context Injection and frozen at injection (R8). Settled Geometry has exactly one authorized writer at any moment, transferring only at phase boundaries (§6). Published Pose State is written only by Flatten and Validation Stamp producers.
 - **R2 — ConstraintSolver owns the root after authoring.** From the end of build until publish, ConstraintSolver is the sole subsystem that translates or rotates the root. Pose Authoring may declare initial root-relative orientation as intent before build returns; after that, no other subsystem moves the root.
 - **R3 — Settled-Contact Guarantee.** Once ConstraintSolver settles a contact end-effector, no later subsystem (including the SkeletonPoseFinalizer) may move it, and none may alter the Settlement Result. Chest-Frame Reconstruction, Head-Target Resolution, and Extremity Derivation are all bound by this guarantee. Where declared intent would move a settled contact, the contact wins; the intent application is skipped for that chain, and the skip is legitimate architecture, not data loss.
-- **R4 — Single canonical source per Validation Stamp.** Each Validation Stamp has the producers listed in §4.4 and no others. Multi-producer stamps obey the merge rule; the merged value in Published Pose State is the only canonical reading.
+- **R4 — Single canonical source per Validation Stamp.** Each Validation Stamp has the producers listed in §4.4 and no others. Multi-producer Validation Stamps obey the merge rule; the merged value in Published Pose State is the only canonical reading.
 - **R5 — Single active limb solver.** Exactly one limb solver is active per configuration: the authoring bake while the engine-side IK stage is disabled, or the engine-side IK stage (consuming Limb Targets) once enabled. The enabling flag is a rollout mechanism, not architecture: it selects between two implementations of the same frozen responsibility set (Two-Bone IK Solve, Straight-Limb Fallback, Bone-Length Invariant, Default Pole), never splits that responsibility. The Active Limb Solver is a single architectural owner regardless of which implementation is instantiated.
 - **R6 — Strengthen-only restamping.** A secondary Validation Stamp producer may only strengthen (max/OR/AND per Validation Stamp); it may never weaken or erase a primary producer's reading.
-- **R7 — Finalizer exclusivity.** World↔local Frame Conversion, Tilt Cancel, Chest-Frame Reconstruction, Head-Target Resolution, Extremity Derivation, and Flatten are performed exclusively by the SkeletonPoseFinalizer. Outside Head-Target Resolution's neck/head scope and the guarantees above, the SkeletonPoseFinalizer does not alter settled geometry or the Settlement Result.
+- **R7 — SkeletonPoseFinalizer exclusivity.** World↔local Frame Conversion, Tilt Cancel, Chest-Frame Reconstruction, Head-Target Resolution, Extremity Derivation, and Flatten are performed exclusively by the SkeletonPoseFinalizer. Outside Head-Target Resolution's neck/head scope and the guarantees above, the SkeletonPoseFinalizer does not alter settled geometry or the Settlement Result.
 - **R8 — Runtime Context Injection.** The Frame Context (resolved Environment context and Support Declaration) enters the carrier through exactly one SkeletonPipeline-performed injection at frame start, before any engine stage runs. Its sources are External definitions (Environment Definition, the Production Metadata support context) plus Contact Declarations; the persistent definitions themselves never enter the carrier. Injection is the sole post-build write into Intent State; afterwards the Frame Context is immutable for every subsystem including the SkeletonPipeline. Camera Definition and Motion Driver are never injected: Camera Definition is consumed directly by the SkeletonProjector from the host render context; Motion Driver is consumed by the SkeletonPipeline at Phase 0.
 - **R9 — Validation observes.** ExerciseValidator reads Published Pose State, Author Intent ranges, and the Frame Context; it never writes the carrier, never derives geometry, and never drives execution.
 - **R10 — No hidden cross-frame state.** Inter-Frame Smoothing consumes SkeletonPipeline-owned Frame History. ConstraintSolver keeps no cross-frame memory of its own; its behavior is a function of current-frame inputs plus supplied history, never of object identity.
-- **R11 — Carrier unity.** All cross-subsystem handoff flows through the single SkeletonPose carrier. No subsystem introduces another shared mutable channel.
+- **R11 — Carrier unity and single-owner transfer.** All cross-subsystem handoff flows through the single SkeletonPose carrier; no subsystem introduces another shared mutable channel. Carrier ownership is a strict transfer chain — Pose Authoring → SkeletonPipeline → External caller — with exactly one owner at any moment; during execution the current owner delegates write authority phase-by-phase per R1/R5 but never shares it.
 - **R12 — Bounded settlement.** Iterative settlement (Posture CCD, conflict passes) is bounded; bounds are tuning, not architecture. Architecture commits only to termination and to the phase exit condition "the Settlement Result is final."
 - **R13 — Defaults are owned.** When the pose omits a Pole, Default Pole ownership lies with the active limb solver. The default axis of Spine Intent is defined by the Skeleton Definition's anatomical axes, not by call-site defaults; call-site defaults derive from the definition.
 - **R14 — Pipeline lifetime.** Each SkeletonPipeline instance is owned by its creator (a renderer or Snapshot Renderer instance). There is no shared or global pipeline; differing creator lifecycles are legitimate and carry no architectural consequence.
+- **R15 — Extension points.** Exactly two extension forms are architectural. (i) **Stage insertion:** a new stage may be inserted between existing phases only if it takes a single-writer window over one state region under R1, respects the phase-boundary contracts of §6, and introduces no second canonical source. (ii) **Observer addition:** additional read-only observers may consume Published Pose State (via the Finalized Pose) at any time without producing state and without new state categories. Both forms are legitimate architecture; neither requires nor permits redesigning existing writer authority or stamp ownership.
 
 ---
 
@@ -335,7 +338,7 @@ Phase-boundary contracts:
 - Pose Authoring → SkeletonPipeline: Author Intent complete and frozen; geometry limited to authoring-time solves made under R5.
 - Injection → Stages: Frame Context fixed for the frame.
 - Limb/Settlement handoff: chain placements done; root not yet posture-final; Settlement Result not yet fixed.
-- Settlement → Finalize: Settlement Result final (settled root, contacts, posture); SkeletonPoseFinalizer bound by R3/R7.
+- Settlement → Finalize: Settlement Result final — its contents are exactly the settled root transform (world space), the settled-contact information, and the Contact Conflict Resolution outcome (§4.3); it contains no joint rotations and no separate "posture" member — free-joint posture finality is Settled Geometry content. SkeletonPoseFinalizer bound by R3/R7.
 - Finalize → Publish: all hierarchy transforms resolved; only publication remains.
 - Publish → Observe: Published Pose State complete and immutable; observers consume.
 
@@ -389,7 +392,7 @@ Outside: authoring intent, Frame Context writes, finalization conversions, valid
 
 **SkeletonPoseFinalizer.**
 Owns: Frame Conversion, Tilt Cancel, Chest-Frame Reconstruction, Head-Target Resolution, Extremity Derivation, Flatten; finalizer-produced Validation Stamps.
-Consumes: Settled Geometry including the Settlement Result, Author Intent (non-settled-chain intents, Extremity Overrides, Head Target, Headings, Extremity Articulations), Frame Context (ground-aware derivation checks), SkeletonDefinition.
+Consumes: Settled Geometry including the Settlement Result, Author Intent (non-settled-chain intents, Extremity Overrides, Head Target, Headings, Extremity Articulations), Frame Context (Environment context for ground-aware Extremity Derivation checks), SkeletonDefinition.
 Produces: the Finalized Pose carrying Published Pose State with all transforms and its Validation Stamps.
 Outside: altering the Settlement Result or settled contact end-effectors (R3/R7), root translation, validation.
 
@@ -401,13 +404,13 @@ Outside: geometry decisions of any stage; Camera Definition handling (it bypasse
 
 **ExerciseValidator.**
 Owns: Rule Checks and Validator Profiles.
-Consumes: Finalized Pose (Published Pose State), Author Intent ranges, Frame Context, SkeletonDefinition, Frame History (dynamics).
+Consumes: Finalized Pose (Published Pose State), Author Intent ranges, Frame Context, Contact Definition, SkeletonDefinition, Frame History (dynamics).
 Produces: Validation Report.
 Outside: any write to the carrier; geometry derivation; driving the pipeline.
 
 **Rendering layer (SkeletonProjector, renderer components, Snapshot Renderer, Bone topology, Rendering Style).**
 Owns: projection and screen composition; Bone topology and Rendering Style definitions; Exercise Snapshot production.
-Consumes: Finalized Pose, Camera Definition (directly from the host render context, never via the carrier), rendering definitions.
+Consumes: Finalized Pose, Camera Definition (directly from the host render context, never via the carrier), Frame Context (Environment context for surface and support depiction), rendering definitions.
 Produces: Projected Output, Exercise Snapshot.
 Outside: pose semantics; it never writes the carrier.
 
@@ -421,7 +424,7 @@ Pre-freeze audit findings and their resolutions in this revision.
 |---|---|---|
 | A1 | Joint inventory missing HIP_B; category counts wrong (stated 14/6/4 vs listed 16/7/6); node count stated 33 vs actual 31 | Corrected table and counts (§2.1–2.2) |
 | A2 | WRIST_A/P classified ARTICULATION + "attachment host", contradicting verified phantom status | New ALIAS category; wrists alias HAND (§2.1–2.2) |
-| A3 | END EFFECTOR treated as disjoint from ATTACHMENT in §1 but "subset" in ideal model | Declared structural subset relation once (§2.1) |
+| A3 | END EFFECTOR treated as disjoint from ATTACHMENT in §1 but "subset" in ideal model | Resolved as mutually exclusive classifications sharing one mechanical nature: each identifier holds exactly one category (§2.1) |
 | A4 | Attachment-type examples contradicted category membership (toe/fingertip/knee/elbow) | Examples aligned with register (§2.1) |
 | A5 | RIG_HELPER/PROCEDURAL zero-member placeholder categories | Deleted (§7) |
 | A6 | ConstraintSolver called stateless yet held cross-frame identity-keyed memory | R10; memory replaced by Pipeline-owned Frame History |
@@ -444,7 +447,7 @@ Pre-freeze audit findings and their resolutions in this revision.
 | A23 | Metadata carried unread fields (camera/timing/loop) with unclear consumers | §4.1 Group C: Camera Definition consumed by the projection path; timing/loop declared application playback concerns outside this architecture |
 | A24 | "33 nodes" factory claim vs alias reality | §2.2 fact 1: 31 nodes, 33 identifiers |
 | A25 | Camera Definition triple-classified (Intent State member, render input, projection parameter) | Resolved: External render input owned by the host render context; removed from Intent State; never enters the carrier; consumed directly by the SkeletonProjector and renderer components (§3.1, §4.1 Group C, R8, §6 Phase 5) |
-| A26 | Motion Driver classified as per-frame Intent State | Resolved: External persistent animation configuration owned by exercise/configuration authoring; SkeletonPipeline consumes it at Phase 0 to derive frame progress (§3.1, §4.1 Group C, §6 Phase 0) |
+| A26 | Motion Driver classified as per-frame Intent State | Resolved: External persistent animation configuration owned by exercise/configuration authoring; SkeletonPipeline consumes it at Phase 0 to derive Frame Progress (§3.1, §4.1 Group C, §4.3, §6 Phase 0) |
 | A27 | Posture-adjustment term family ("posture adjustments", "adjusted joint angles", "posture-resolved joint angles", "contact settlements") competing as solver-result representations | Resolved: canonical Settlement Result defined — world-space settled root transform, settled-contact information, conflict outcome; no copy of final rotations; synonyms deleted (§1, §3.2, §4.2, §4.3, §7 item 13) |
 | A28 | Joint-rotation ownership ambiguous across states | Resolved: authority-per-phase rule — Author Intent declared rotations are input only; Settled Geometry working locals authoritative during Phases 0–3 (world views derived via FK Propagation); Published Pose State authoritative and immutable after Phase 4; space-qualifier naming rule 4 (§3 rotation-space rule) |
 | A29 | Environment conflated definition, intent, and injection mechanism | Resolved: Environment Definition (External, persistent, never in carrier) vs Frame Context (per-frame region of Intent State, written once by Runtime Context Injection, immutable after) vs Runtime Context Injection (the sole write mechanism) (§3.1, §4.1 Groups B/C, R8) |
