@@ -717,4 +717,19 @@
     <string name="validation_dead_hang_p3">Пропорції рук та орієнтація зап\'ясть</string>
 
     <string name="ok">ОК</string>
+
+    <!-- C3 Manual Controls -->
+    <string name="program_controls_title">Керування програмою</string>
+    <string name="restart_current_cycle">Перезапустити поточний цикл</string>
+    <string name="restart_current_cycle_desc">Очищає прогрес лише поточного циклу. Дата старту, налаштування та історія минулих циклів зберігаються.</string>
+    <string name="restart_current_cycle_confirm">Перезапустити поточний цикл?</string>
+    <string name="restart_current_cycle_confirm_text">Усі позначки виконання поточного циклу буде видалено. Історія минулих циклів збережеться. Скасувати це неможливо.</string>
+    <string name="start_revised_program">Почати переглянуту програму</string>
+    <string name="start_revised_program_desc">Запускає програму знову з 1-го дня починаючи з сьогоднішнього. Минула історія програми залишиться в архіві.</string>
+    <string name="start_revised_program_confirm">Почати переглянуту програму?</string>
+    <string name="start_revised_program_confirm_text">Календар програми почнеться заново з сьогоднішнього дня, з 1-го дня. Минула історія програми залишиться в архіві. Скасувати це неможливо.</string>
+    <string name="full_reset">Повне скидання</string>
+    <string name="full_reset_desc">Видаляє всі дані: тренування, заняття поставою, статистику, налаштування та стан онбордингу. Застосунок повернеться до першого запуску.</string>
+    <string name="full_reset_confirm">Виконати повне скидання?</string>
+    <string name="full_reset_confirm_text">Буде видалено все: історію тренувань, записи ваги, дані харчування та всі налаштування. Застосунок повернеться до онбордингу першого запуску. Скасувати це неможливо.</string>
 </resources>

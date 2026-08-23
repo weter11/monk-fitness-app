@@ -146,6 +146,28 @@ class WorkoutRepository(private val progressDao: ProgressDao) {
         null
     }
 
+    // --- C3 Manual Controls (Settings): destructive maintenance actions ---
+
+    suspend fun deleteProgressForCycle(cycleNumber: Int) {
+        try {
+            progressDao.deleteUserProgressForCycle(cycleNumber)
+            progressDao.deletePostureProgressForCycle(cycleNumber)
+            progressDao.deleteProgramDayStatesForCycle(cycleNumber)
+        } catch (_: Exception) {
+        }
+    }
+
+    suspend fun clearAllProgressData() {
+        try {
+            progressDao.clearUserProgress()
+            progressDao.clearPostureProgress()
+            progressDao.clearProgramDayStates()
+            progressDao.clearSetLogs()
+            progressDao.clearBodyWeightEntries()
+        } catch (_: Exception) {
+        }
+    }
+
     suspend fun getMealCyclesSnapshot(): List<MealCycle> = try {
         progressDao.getMealCyclesSnapshot()
     } catch (_: Exception) {
