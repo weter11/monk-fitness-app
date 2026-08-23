@@ -14,13 +14,19 @@ import com.monkfitness.app.data.model.VolumeHistoryPoint
 import com.monkfitness.app.data.model.WorkoutFrequencyPoint
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flatMapLatest
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class WorkoutRepository(private val progressDao: ProgressDao) {
 
-    fun getAllProgress(): Flow<List<UserProgress>> = progressDao.getAllProgress()
+    fun getAllProgress(cycleNumber: Flow<Int>): Flow<List<UserProgress>> = cycleNumber.flatMapLatest { progressDao.getAllProgress(it) }
         .catch { emit(emptyList()) }
 
-    fun getCompletedDaysCount(): Flow<Int> = progressDao.getCompletedDaysCount()
+    fun getCompletedDaysCount(cycleNumber: Flow<Int>): Flow<Int> = cycleNumber.flatMapLatest { progressDao.getCompletedDaysCount(it) }
         .catch { emit(0) }
 
     fun getDailyVolumeHistory(): Flow<List<VolumeHistoryPoint>> = progressDao.getDailyVolumeHistory()
@@ -35,16 +41,16 @@ class WorkoutRepository(private val progressDao: ProgressDao) {
     fun getBodyWeightEntriesSince(cutoff: String): Flow<List<BodyWeightEntry>> = progressDao.getEntriesSince(cutoff)
         .catch { emit(emptyList()) }
 
-    fun getAllPostureProgress(): Flow<List<PostureSessionProgress>> = progressDao.getAllPostureProgress()
+    fun getAllPostureProgress(cycleNumber: Flow<Int>): Flow<List<PostureSessionProgress>> = cycleNumber.flatMapLatest { progressDao.getAllPostureProgress(it) }
         .catch { emit(emptyList()) }
 
-    fun getCompletedPostureDaysCount(): Flow<Int> = progressDao.getCompletedPostureDaysCount()
+    fun getCompletedPostureDaysCount(cycleNumber: Flow<Int>): Flow<Int> = cycleNumber.flatMapLatest { progressDao.getCompletedPostureDaysCount(it) }
         .catch { emit(0) }
 
-    fun getProgramDayStates(): Flow<List<ProgramDayState>> = progressDao.getProgramDayStates()
+    fun getProgramDayStates(cycleNumber: Flow<Int>): Flow<List<ProgramDayState>> = cycleNumber.flatMapLatest { progressDao.getProgramDayStates(it) }
         .catch { emit(emptyList()) }
 
-    fun getProgramStatistics(): Flow<ProgramStatisticsSnapshot> = progressDao.getProgramStatistics()
+    fun getProgramStatistics(cycleNumber: Flow<Int>): Flow<ProgramStatisticsSnapshot> = cycleNumber.flatMapLatest { progressDao.getProgramStatistics(it) }
         .catch {
             emit(
                 ProgramStatisticsSnapshot(
@@ -68,8 +74,8 @@ class WorkoutRepository(private val progressDao: ProgressDao) {
     fun getShoppingItemsForCycle(cycleId: Long): Flow<List<ShoppingItemEntity>> = progressDao.getShoppingItemsForCycle(cycleId)
         .catch { emit(emptyList()) }
 
-    suspend fun getProgressByDay(day: Int): UserProgress? = try {
-        progressDao.getProgressByDay(day)
+    suspend fun getProgressByDay(cycleNumber: Int, day: Int): UserProgress? = try {
+        progressDao.getProgressByDay(cycleNumber, day)
     } catch (e: Exception) {
         null
     }
@@ -94,8 +100,8 @@ class WorkoutRepository(private val progressDao: ProgressDao) {
     } catch (_: Exception) {
     }
 
-    suspend fun getPostureProgressByDay(day: Int): PostureSessionProgress? = try {
-        progressDao.getPostureProgressByDay(day)
+    suspend fun getPostureProgressByDay(cycleNumber: Int, day: Int): PostureSessionProgress? = try {
+        progressDao.getPostureProgressByDay(cycleNumber, day)
     } catch (e: Exception) {
         null
     }
@@ -111,14 +117,14 @@ class WorkoutRepository(private val progressDao: ProgressDao) {
     } catch (_: Exception) {
     }
 
-    suspend fun getProgramDayStatesSnapshot(): List<ProgramDayState> = try {
-        progressDao.getProgramDayStatesSnapshot()
+    suspend fun getProgramDayStatesSnapshot(cycleNumber: Int): List<ProgramDayState> = try {
+        progressDao.getProgramDayStatesSnapshot(cycleNumber)
     } catch (_: Exception) {
         emptyList()
     }
 
-    suspend fun getProgramDayState(day: Int): ProgramDayState? = try {
-        progressDao.getProgramDayState(day)
+    suspend fun getProgramDayState(cycleNumber: Int, day: Int): ProgramDayState? = try {
+        progressDao.getProgramDayState(cycleNumber, day)
     } catch (_: Exception) {
         null
     }
@@ -131,6 +137,13 @@ class WorkoutRepository(private val progressDao: ProgressDao) {
     suspend fun upsertProgramDayState(state: ProgramDayState) = try {
         progressDao.upsertProgramDayState(state)
     } catch (_: Exception) {
+    }
+
+    /** Highest cycle number present in program_day_state (migration backfill marker). */
+    suspend fun getMaxProgramDayStateCycle(): Int? = try {
+        progressDao.getMaxProgramDayStateCycle()
+    } catch (_: Exception) {
+        null
     }
 
     suspend fun getMealCyclesSnapshot(): List<MealCycle> = try {
@@ -173,23 +186,29 @@ class WorkoutRepository(private val progressDao: ProgressDao) {
     } catch (_: Exception) {
     }
 
+    /**
+     * Streak is calculated against absolute calendar dates (per C2 decision), not program
+     * day numbers: completing Day 56 and next-cycle Day 1 on consecutive calendar days keeps
+     * the streak unbroken. Today counts; if nothing is logged today, the streak may continue
+     * from yesterday so it doesn't vanish mid-day.
+     */
     suspend fun calculateStreak(): Int = try {
-        val completedDays = progressDao.getCompletedDays()
-        if (completedDays.isEmpty()) 0
-        else {
-            val dayNumbers = completedDays.map { it.day }.distinct().sortedDescending()
-            if (dayNumbers.isEmpty()) 0
-            else {
-                var streak = 1
-                for (i in 0 until dayNumbers.size - 1) {
-                    if (dayNumbers[i] - 1 == dayNumbers[i + 1]) {
-                        streak++
-                    } else {
-                        break
-                    }
-                }
-                streak
+        val zone = ZoneId.systemDefault()
+        val completedDates = progressDao.getCompletedDays()
+            .mapTo(mutableSetOf()) { Instant.ofEpochMilli(it.completionDate).atZone(zone).toLocalDate() }
+        if (completedDates.isEmpty()) {
+            0
+        } else {
+            var streak = 0
+            var cursor = LocalDate.now(zone)
+            if (cursor !in completedDates) {
+                cursor = cursor.minusDays(1)
             }
+            while (cursor in completedDates) {
+                streak++
+                cursor = cursor.minusDays(1)
+            }
+            streak
         }
     } catch (_: Exception) {
         0

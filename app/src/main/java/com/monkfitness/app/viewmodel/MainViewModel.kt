@@ -52,6 +52,7 @@ import com.monkfitness.app.validation.ValidationSettings
 import com.monkfitness.app.validation.ValidationPoseRegistry
 import com.monkfitness.app.util.normalize
 import com.monkfitness.app.domain.usecase.calculateProgramDay
+import com.monkfitness.app.domain.usecase.resolveCycleAndDay
 import com.monkfitness.app.domain.usecase.synchronizeProgramStates
 import com.monkfitness.app.ui.screens.WorkoutStep
 import com.monkfitness.app.util.NotificationScheduler
@@ -168,27 +169,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _nutritionMessageEvents = MutableSharedFlow<Int>(extraBufferCapacity = 1)
     val nutritionMessageEvents = _nutritionMessageEvents.asSharedFlow()
 
-    val allProgress = repository.getAllProgress().stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
-    )
-
     val programStartDate = settingsManager.programStartDateFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), LocalDate.now().toString()
-    )
-
-    val programSummaryDismissed = settingsManager.programSummaryDismissedFlow.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), false
     )
 
     val nutritionWarningDismissedFor = settingsManager.nutritionWarningDismissedForFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), null
     )
 
-    val currentProgramDay = combine(programStartDate, currentDate) { startDate, today ->
-        calculateProgramDay(parseDate(startDate, today), today)
+    // Cycle-aware "today": past the first cycle this resolves to the day WITHIN the active
+    // cycle. Before the C2 rollover runs (stored cycle still 1), days 57+ stay clamped at
+    // 56 so the completion dialog remains visible until it fires.
+    val currentProgramDay = combine(
+        settingsManager.programCycleNumberFlow,
+        programStartDate,
+        currentDate
+    ) { storedCycle, startDate, today ->
+        val (resolvedCycle, resolvedDay) = resolveCycleAndDay(parseDate(startDate, today), today)
+        if (resolvedCycle >= storedCycle) resolvedDay else TOTAL_PROGRAM_DAYS
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
 
-    val programDayStates = repository.getProgramDayStates().stateIn(
+    val programCycleNumber = combine(
+        settingsManager.programCycleNumberFlow,
+        programStartDate,
+        currentDate
+    ) { storedCycle, startDate, today ->
+        val (resolvedCycle, _) = resolveCycleAndDay(parseDate(startDate, today), today)
+        maxOf(storedCycle, resolvedCycle)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
+
+    val allProgress = repository.getAllProgress(programCycleNumber).stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+
+    val programDayStates = repository.getProgramDayStates(programCycleNumber).stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
@@ -196,9 +210,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .map { states -> states.count { it.isCompleted } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    val todayProgramDayState = combine(programDayStates, currentProgramDay) { states, day ->
+    val todayProgramDayState = combine(programDayStates, currentProgramDay, programCycleNumber) { states, day, cycle ->
         states.firstOrNull { it.programDay == day }
             ?: ProgramDayState(
+                cycleNumber = cycle,
                 programDay = day,
                 isWorkoutDay = getWorkoutTypeForDay(day) != com.monkfitness.app.data.model.WorkoutType.REST,
                 isCompleted = false,
@@ -209,6 +224,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
         ProgramDayState(
+            cycleNumber = 1,
             programDay = 1,
             isWorkoutDay = true,
             isCompleted = false,
@@ -251,12 +267,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _postureSelectedSubCategory = MutableStateFlow<ExerciseSubCategory?>(null)
     private val _expandedFamilyIds = MutableStateFlow<Set<String>>(emptySet())
 
-    val completedDaysCount = repository.getCompletedDaysCount().stateIn(
+    val completedDaysCount = repository.getCompletedDaysCount(programCycleNumber).stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 0
     )
 
     val programStatistics = combine(
-        repository.getProgramStatistics(),
+        repository.getProgramStatistics(programCycleNumber),
         exercisePersonalRecords
     ) { snapshot, personalRecords ->
         val denominator = (snapshot.totalWorkoutsCompleted + snapshot.totalMissed).coerceAtLeast(1)
@@ -294,11 +310,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .map { history -> history.lastOrNull() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val postureProgress = repository.getAllPostureProgress().stateIn(
+    val postureProgress = repository.getAllPostureProgress(programCycleNumber).stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
-    val completedPostureDaysCount = repository.getCompletedPostureDaysCount().stateIn(
+    val completedPostureDaysCount = repository.getCompletedPostureDaysCount(programCycleNumber).stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 0
     )
 
@@ -406,7 +422,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             additionalPostureTrainingEnabled = false,
             flexibilityTrainingType = FlexibilityTrainingType.BOTH,
             flexibilityFocusAreas = setOf(ExerciseSubCategory.FULL_BODY),
-            todayProgramDayState = ProgramDayState(1, true, false, false, null)
+            todayProgramDayState = ProgramDayState(
+                cycleNumber = 1,
+                programDay = 1,
+                isWorkoutDay = true,
+                isCompleted = false,
+                isMissed = false,
+                completedAt = null
+            )
         )
     )
 
@@ -973,13 +996,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun completeWorkout(day: Int) {
         viewModelScope.launch {
-            val rewardKey = "workout_$day"
+            val cycle = programCycleNumber.value
+            val rewardKey = "workout_${cycle}_$day"
             if (rewardsGrantedDays.value.contains(rewardKey)) {
                 // Suppress rewards/completion updates for repeated workouts
                 return@launch
             }
             val completedAt = System.currentTimeMillis()
             val progress = UserProgress(
+                cycleNumber = cycle,
                 day = day,
                 isCompleted = true,
                 completionDate = completedAt,
@@ -988,6 +1013,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repository.updateProgress(progress)
             repository.upsertProgramDayState(
                 ProgramDayState(
+                    cycleNumber = cycle,
                     programDay = day,
                     isWorkoutDay = true,
                     isCompleted = true,
@@ -1001,12 +1027,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun completeRecoveryDay(day: Int) {
         viewModelScope.launch {
-            val rewardKey = "recovery_$day"
+            val cycle = programCycleNumber.value
+            val rewardKey = "recovery_${cycle}_$day"
             if (rewardsGrantedDays.value.contains(rewardKey)) {
                 return@launch
             }
             repository.upsertProgramDayState(
                 ProgramDayState(
+                    cycleNumber = cycle,
                     programDay = day,
                     isWorkoutDay = false,
                     isCompleted = true,
@@ -1020,11 +1048,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun completePostureWorkout(day: Int) {
         viewModelScope.launch {
-            val rewardKey = "posture_$day"
+            val cycle = programCycleNumber.value
+            val rewardKey = "posture_${cycle}_$day"
             if (rewardsGrantedDays.value.contains(rewardKey)) {
                 return@launch
             }
             val progress = PostureSessionProgress(
+                cycleNumber = cycle,
                 day = day,
                 isCompleted = true,
                 completionDate = System.currentTimeMillis(),
@@ -1282,9 +1312,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val showProgramSummary = combine(
         currentProgramDay,
         todayProgramDayState,
-        programSummaryDismissed
-    ) { day, state, dismissed ->
-        day == TOTAL_PROGRAM_DAYS && state.isCompleted && !dismissed
+        programCycleNumber
+    ) { day, state, cycle ->
+        // C2: the "program completed" dialog is the automatic-rollover gate —
+        // it appears on the last day of a finished cycle and stays visible until
+        // the rollover below runs (or the user dismisses it manually). Fires at
+        // the end of EVERY cycle, not just the first.
+        day == TOTAL_PROGRAM_DAYS && state.isCompleted
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     fun setNutritionCycleLength(days: Int) {
@@ -1311,6 +1345,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissProgramSummary() {
         viewModelScope.launch {
+            // C2: dismissing the completion dialog IS the automatic rollover. The dialog
+            // reappears on every relaunch until it runs, so the rollover is effectively
+            // guaranteed even if this call is interrupted. Works for ANY cycle N -> N+1.
+            val finishedCycle = programCycleNumber.value
+            if (currentProgramDay.value == TOTAL_PROGRAM_DAYS && todayProgramDayState.value.isCompleted) {
+                val nextCycle = finishedCycle + 1
+                // 1) Seed the next cycle's grid as a fresh copy of the template (nothing
+                //    completed). The finished cycle's rows — completions AND missed days —
+                //    stay untouched as history.
+                val freshGrid = synchronizeProgramStates(
+                    existing = emptyList(),
+                    currentProgramDay = TOTAL_PROGRAM_DAYS,
+                    workoutTypeForDay = ::getWorkoutTypeForDay
+                )
+                repository.upsertProgramDayStates(freshGrid.map { it.copy(cycleNumber = nextCycle) })
+
+                // 2) Stamp the stored cycle number; programCycleNumber flips to nextCycle
+                //    and every cycle-scoped flow re-resolves against it automatically.
+                settingsManager.setProgramCycleNumber(nextCycle)
+            }
             settingsManager.setProgramSummaryDismissed(true)
         }
     }
@@ -1438,9 +1492,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun syncProgramDayStates() {
-        val legacyProgress = allProgress.value.associateBy { it.day }
+        val cycle = programCycleNumber.value
+        // Legacy backfill: rows migrated from before the rollover existed carry no
+        // template grid for future cycles. If the active cycle has no grid yet, seed it
+        // fresh (nothing completed) without touching earlier cycles' history.
+        if (cycle > 1 && repository.getProgramDayStatesSnapshot(cycle).isEmpty()) {
+            val freshGrid = synchronizeProgramStates(
+                existing = emptyList(),
+                currentProgramDay = TOTAL_PROGRAM_DAYS,
+                workoutTypeForDay = ::getWorkoutTypeForDay
+            )
+            repository.upsertProgramDayStates(freshGrid.map { it.copy(cycleNumber = cycle) })
+        }
+        val legacyProgress = allProgress.value.filter { it.cycleNumber == cycle }.associateBy { it.day }
         val synchronizedStates = synchronizeProgramStates(
-            existing = repository.getProgramDayStatesSnapshot(),
+            existing = repository.getProgramDayStatesSnapshot(cycle),
             currentProgramDay = currentProgramDay.value,
             workoutTypeForDay = ::getWorkoutTypeForDay
         ).map { state ->

@@ -26,7 +26,7 @@ import com.monkfitness.app.data.model.UserProgress
         MealEntity::class,
         ShoppingItemEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -158,6 +158,86 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Cycle-aware foundation (C1/C2): progress tables gain a cycleNumber column and a
+         * composite (cycleNumber, day) primary key so each 56-day program cycle has its own
+         * history. Non-destructive: legacy rows are preserved verbatim as cycle 1.
+         */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // user_progress → cycle 1
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `user_progress_new` (
+                        `cycleNumber` INTEGER NOT NULL,
+                        `day` INTEGER NOT NULL,
+                        `isCompleted` INTEGER NOT NULL,
+                        `completionDate` INTEGER NOT NULL,
+                        `workoutType` TEXT NOT NULL,
+                        PRIMARY KEY(`cycleNumber`, `day`)
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    INSERT INTO `user_progress_new` (`cycleNumber`, `day`, `isCompleted`, `completionDate`, `workoutType`)
+                    SELECT 1, `day`, `isCompleted`, `completionDate`, `workoutType` FROM `user_progress`
+                    """.trimIndent()
+                )
+                database.execSQL("DROP TABLE `user_progress`")
+                database.execSQL("ALTER TABLE `user_progress_new` RENAME TO `user_progress`")
+
+                // posture_session_progress → cycle 1
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `posture_session_progress_new` (
+                        `cycleNumber` INTEGER NOT NULL,
+                        `day` INTEGER NOT NULL,
+                        `isCompleted` INTEGER NOT NULL,
+                        `completionDate` INTEGER NOT NULL,
+                        `focusArea` TEXT NOT NULL,
+                        PRIMARY KEY(`cycleNumber`, `day`)
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    INSERT INTO `posture_session_progress_new` (`cycleNumber`, `day`, `isCompleted`, `completionDate`, `focusArea`)
+                    SELECT 1, `day`, `isCompleted`, `completionDate`, `focusArea` FROM `posture_session_progress`
+                    """.trimIndent()
+                )
+                database.execSQL("DROP TABLE `posture_session_progress`")
+                database.execSQL("ALTER TABLE `posture_session_progress_new` RENAME TO `posture_session_progress`")
+
+                // program_day_state → cycle 1 (backfilled from the live snapshot)
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `program_day_state_new` (
+                        `cycleNumber` INTEGER NOT NULL,
+                        `programDay` INTEGER NOT NULL,
+                        `isWorkoutDay` INTEGER NOT NULL,
+                        `isCompleted` INTEGER NOT NULL,
+                        `isMissed` INTEGER NOT NULL,
+                        `completedAt` INTEGER,
+                        PRIMARY KEY(`cycleNumber`, `programDay`)
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    INSERT INTO `program_day_state_new` (`cycleNumber`, `programDay`, `isWorkoutDay`, `isCompleted`, `isMissed`, `completedAt`)
+                    SELECT 1, `programDay`, `isWorkoutDay`, `isCompleted`, `isMissed`, `completedAt` FROM `program_day_state`
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    "INSERT INTO `program_day_state_new` (`cycleNumber`, `programDay`, `isWorkoutDay`, `isCompleted`, `isMissed`, `completedAt`) " +
+                        "SELECT MAX(`cycleNumber`) + 1, `programDay`, `isWorkoutDay`, 0, 0, NULL FROM `program_day_state_new` GROUP BY `programDay`"
+                )
+                database.execSQL("DROP TABLE `program_day_state`")
+                database.execSQL("ALTER TABLE `program_day_state_new` RENAME TO `program_day_state`")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -165,7 +245,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "monk_fitness_db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                 INSTANCE = instance
                 instance
