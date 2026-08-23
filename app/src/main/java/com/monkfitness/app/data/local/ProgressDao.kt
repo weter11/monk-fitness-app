@@ -20,17 +20,23 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ProgressDao {
-    @Query("SELECT * FROM user_progress ORDER BY day ASC")
-    fun getAllProgress(): Flow<List<UserProgress>>
+    @Query("SELECT * FROM user_progress WHERE cycleNumber = :cycleNumber ORDER BY day ASC")
+    fun getAllProgress(cycleNumber: Int): Flow<List<UserProgress>>
 
-    @Query("SELECT COUNT(*) FROM user_progress WHERE isCompleted = 1")
-    fun getCompletedDaysCount(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM user_progress WHERE cycleNumber = :cycleNumber AND isCompleted = 1")
+    fun getCompletedDaysCount(cycleNumber: Int): Flow<Int>
 
-    @Query("SELECT * FROM user_progress WHERE isCompleted = 1")
+    /**
+     * All completed workout days across all cycles, newest first.
+     * Streaks are calendar-date based, so this deliberately spans cycles.
+     */
+    @Query("SELECT * FROM user_progress WHERE isCompleted = 1 ORDER BY completionDate DESC")
     suspend fun getCompletedDays(): List<UserProgress>
 
-    @Query("SELECT * FROM user_progress WHERE day = :day LIMIT 1")
-    suspend fun getProgressByDay(day: Int): UserProgress?
+    @Query(
+        "SELECT * FROM user_progress WHERE cycleNumber = :cycleNumber AND day = :day LIMIT 1"
+    )
+    suspend fun getProgressByDay(cycleNumber: Int, day: Int): UserProgress?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun updateProgress(progress: UserProgress)
@@ -104,26 +110,32 @@ interface ProgressDao {
     )
     fun getWorkoutFrequencyByWeek(): Flow<List<WorkoutFrequencyPoint>>
 
-    @Query("SELECT * FROM posture_session_progress ORDER BY day ASC")
-    fun getAllPostureProgress(): Flow<List<PostureSessionProgress>>
+    @Query("SELECT * FROM posture_session_progress WHERE cycleNumber = :cycleNumber ORDER BY day ASC")
+    fun getAllPostureProgress(cycleNumber: Int): Flow<List<PostureSessionProgress>>
 
-    @Query("SELECT COUNT(*) FROM posture_session_progress WHERE isCompleted = 1")
-    fun getCompletedPostureDaysCount(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM posture_session_progress WHERE cycleNumber = :cycleNumber AND isCompleted = 1")
+    fun getCompletedPostureDaysCount(cycleNumber: Int): Flow<Int>
 
-    @Query("SELECT * FROM posture_session_progress WHERE day = :day LIMIT 1")
-    suspend fun getPostureProgressByDay(day: Int): PostureSessionProgress?
+    @Query(
+        "SELECT * FROM posture_session_progress WHERE cycleNumber = :cycleNumber AND day = :day LIMIT 1"
+    )
+    suspend fun getPostureProgressByDay(cycleNumber: Int, day: Int): PostureSessionProgress?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun updatePostureProgress(progress: PostureSessionProgress)
 
-    @Query("SELECT * FROM program_day_state ORDER BY programDay ASC")
-    fun getProgramDayStates(): Flow<List<ProgramDayState>>
+    @Query("SELECT * FROM program_day_state WHERE cycleNumber = :cycleNumber ORDER BY programDay ASC")
+    fun getProgramDayStates(cycleNumber: Int): Flow<List<ProgramDayState>>
 
-    @Query("SELECT * FROM program_day_state ORDER BY programDay ASC")
-    suspend fun getProgramDayStatesSnapshot(): List<ProgramDayState>
+    @Query("SELECT * FROM program_day_state WHERE cycleNumber = :cycleNumber ORDER BY programDay ASC")
+    suspend fun getProgramDayStatesSnapshot(cycleNumber: Int): List<ProgramDayState>
 
-    @Query("SELECT * FROM program_day_state WHERE programDay = :day LIMIT 1")
-    suspend fun getProgramDayState(day: Int): ProgramDayState?
+    @Query("SELECT * FROM program_day_state WHERE cycleNumber = :cycleNumber AND programDay = :day LIMIT 1")
+    suspend fun getProgramDayState(cycleNumber: Int, day: Int): ProgramDayState?
+
+    /** Highest cycle number that has any program_day_state row (used by migration backfill). */
+    @Query("SELECT MAX(cycleNumber) FROM program_day_state")
+    suspend fun getMaxProgramDayStateCycle(): Int?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertProgramDayStates(states: List<ProgramDayState>)
@@ -134,16 +146,16 @@ interface ProgressDao {
     @Query(
         """
         SELECT
-            (SELECT COUNT(*) FROM program_day_state WHERE isWorkoutDay = 1 AND isCompleted = 1) AS totalWorkoutsCompleted,
-            (SELECT COUNT(*) FROM program_day_state WHERE isWorkoutDay = 1 AND isMissed = 1) AS totalMissed,
+            (SELECT COUNT(*) FROM program_day_state WHERE cycleNumber = :cycleNumber AND isWorkoutDay = 1 AND isCompleted = 1) AS totalWorkoutsCompleted,
+            (SELECT COUNT(*) FROM program_day_state WHERE cycleNumber = :cycleNumber AND isWorkoutDay = 1 AND isMissed = 1) AS totalMissed,
             (SELECT COUNT(*) FROM set_log) AS totalSets,
             (SELECT COALESCE(SUM(repsCompleted), 0) FROM set_log) AS totalReps,
             (SELECT COALESCE(SUM(durationSeconds), 0) FROM set_log) AS totalTimerSeconds,
             (SELECT COUNT(DISTINCT sessionDate || ':' || exerciseId) FROM set_log) AS totalExercisesCompleted,
-            (SELECT COUNT(*) FROM program_day_state WHERE isWorkoutDay = 1) AS totalWorkoutDays
+            (SELECT COUNT(*) FROM program_day_state WHERE cycleNumber = :cycleNumber AND isWorkoutDay = 1) AS totalWorkoutDays
         """
     )
-    fun getProgramStatistics(): Flow<ProgramStatisticsSnapshot>
+    fun getProgramStatistics(cycleNumber: Int): Flow<ProgramStatisticsSnapshot>
 
     @Query("SELECT * FROM meal_cycles ORDER BY startDate ASC, id ASC")
     fun getMealCycles(): Flow<List<MealCycle>>

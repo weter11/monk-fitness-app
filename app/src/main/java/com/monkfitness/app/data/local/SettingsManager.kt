@@ -45,6 +45,7 @@ class SettingsManager(private val context: Context) {
         val NUTRITION_AVAILABLE_PRODUCTS = stringSetPreferencesKey("nutrition_available_products")
         val PROGRAM_START_DATE = stringPreferencesKey("program_start_date")
         val PROGRAM_SUMMARY_DISMISSED = booleanPreferencesKey("program_summary_dismissed")
+        val PROGRAM_CYCLE_NUMBER = intPreferencesKey("program_cycle_number")
         val NUTRITION_WARNING_DISMISSED_FOR = stringPreferencesKey("nutrition_warning_dismissed_for")
         val SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION = booleanPreferencesKey("show_excluded_products_in_nutrition")
         val DISABLED_EXERCISE_FAMILIES = stringSetPreferencesKey("disabled_exercise_families")
@@ -288,6 +289,16 @@ class SettingsManager(private val context: Context) {
     suspend fun setProgramSummaryDismissed(dismissed: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PROGRAM_SUMMARY_DISMISSED] = dismissed
+        }
+    }
+
+    val programCycleNumberFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+        preferences[PROGRAM_CYCLE_NUMBER] ?: 1
+    }
+
+    suspend fun setProgramCycleNumber(cycle: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PROGRAM_CYCLE_NUMBER] = cycle
         }
     }
 

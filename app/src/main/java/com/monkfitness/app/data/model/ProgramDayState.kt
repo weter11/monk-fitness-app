@@ -1,14 +1,17 @@
 package com.monkfitness.app.data.model
 
 import androidx.room.Entity
-import androidx.room.PrimaryKey
 
-@Entity(tableName = "program_day_state")
-data class ProgramDayState(
-    @PrimaryKey
-    val programDay: Int,
-    val isWorkoutDay: Boolean,
-    val isCompleted: Boolean,
-    val isMissed: Boolean,
-    val completedAt: Long?
+@Entity(
+    tableName = "program_day_state",
+    primaryKeys = ["cycleNumber", "programDay"],
 )
+data class ProgramDayState(
+    val cycleNumber: Int = 1,
+    val programDay: Int,
+    val isWorkoutDay: Boolean = false,
+    val isCompleted: Boolean = false,
+    val isMissed: Boolean = false,
+    val completedAt: Long? = null
+)
+
