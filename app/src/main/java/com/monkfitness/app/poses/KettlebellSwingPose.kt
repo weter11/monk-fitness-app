@@ -44,6 +44,8 @@ class KettlebellSwingPose : PoseBuilder {
     }
 
     override fun build(context: PoseContext): SkeletonPose {
+        // Per-frame hygiene: clear last build's §1.1 carriers from this reused singleton buffer.
+        SkeletonPose.IntentBuilder(jointsBuffer).reset()
         val def = context.definition
         ensureHierarchy(def)
         // B3 — every production pose declares its posture intent. This pose authors a

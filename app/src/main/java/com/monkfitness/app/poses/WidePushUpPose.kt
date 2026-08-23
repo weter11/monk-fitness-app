@@ -8,15 +8,13 @@ class WidePushUpPose : BasePushUpPose() {
     override val poleA = Vector3(0.2f, 0.8f, -2.0f)
     override val poleP = Vector3(0.2f, 0.8f, 2.0f)
 
-    override fun build(context: PoseContext): SkeletonPose {
-        val pose = super.build(context)
+    override fun onPoseBuilt(pose: SkeletonPose) {
         // Wide push-up: hands splayed outward (laterally), not forward.
         // Override the BODY_FORWARD heading inherited from BasePushUpPose.
         // LEFT_HAND (HAND_A) points left (+Z in pelvis frame).
         // RIGHT_HAND (HAND_P) points right (-Z in pelvis frame).
         pose.headings[Extremity.HAND_A] = Vector3(0f, 0f, 1f)
         pose.headings[Extremity.HAND_P] = Vector3(0f, 0f, -1f)
-        return pose
     }
 
     override val metadata = PoseMetadata(

@@ -65,7 +65,7 @@ class ProneCobraStretchPose : BasePose() {
         toeB = nodes.toeB
     }
 
-    override fun build(context: PoseContext): SkeletonPose {
+    override fun onBuild(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
         // B3 — every production pose declares its posture intent. This pose authors a

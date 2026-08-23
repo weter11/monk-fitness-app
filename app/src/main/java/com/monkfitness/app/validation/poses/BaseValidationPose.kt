@@ -363,10 +363,13 @@ abstract class BaseValidationPose : PoseBuilder {
     protected abstract fun buildStatic(definition: SkeletonDefinition): SkeletonPose
 
     final override fun build(context: PoseContext): SkeletonPose {
-        // PR-04: a reused pose instance may be built more than once; clear any fixed-contact
-        // specs from a previous build before re-authoring, so the global solver never replays
-        // stale contacts.
-        jointsBuffer.contacts.clear()
+        // PR-04 grew into full carrier hygiene: a reused pose instance is built more than
+        // once, so reset ALL §1.1 intent carriers before re-authoring — neither the global
+        // solver (stale fixed contacts) nor the Finalizer (stale joint/extremity intents)
+        // may replay state from a previous build. [IntentBuilder.reset] covers contacts,
+        // jointIntents, limbTargets, extremity carriers and posture in O(carriers), keeping
+        // per-frame intent complexity constant.
+        SkeletonPose.IntentBuilder(jointsBuffer).reset()
         // Validation poses are frozen: animation progress / side / mirroring are ignored.
         return buildStatic(context.definition)
     }

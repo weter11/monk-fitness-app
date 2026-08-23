@@ -30,12 +30,15 @@ class SquatFamilyConsistencyTest {
 
     @Test
     fun allVariantsShareBaseBuildPipeline() {
-        val baseBuild: Method = BaseSquatPose::class.java.getDeclaredMethod("build", PoseContext::class.java)
+        val baseBuild: Method = BaseSquatPose::class.java.getDeclaredMethod("onBuild", PoseContext::class.java)
         val failures = mutableListOf<String>()
         for (name in baselineTravel.keys) {
             val cls = Class.forName("com.monkfitness.app.poses.$name")
-            val own = cls.declaredMethods.any { it.name == "build" && it.returnType == SkeletonPose::class.java }
-            if (own) failures.add("$name re-implements build() instead of using BaseSquatPose.build()")
+            // Carrier hygiene (2026-08-23): BasePose.build() is now a final template method
+            // (reset + onBuild), so a variant physically cannot override build(); the drift
+            // guard therefore checks onBuild(), the pipeline realization subclasses author.
+            val own = cls.declaredMethods.any { it.name == "onBuild" && it.returnType == SkeletonPose::class.java }
+            if (own) failures.add("$name re-implements onBuild() instead of using BaseSquatPose.onBuild()")
             // sanity: it really is a BaseSquatPose and the inherited method resolves
             assertTrue("$name must extend BaseSquatPose", BaseSquatPose::class.java.isAssignableFrom(cls))
         }
