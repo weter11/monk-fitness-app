@@ -29,6 +29,53 @@ import org.junit.Test
  *                   (solver entered via `postureDriven`, no contacts)
  *  - ARMCIRCLES:    ArmCirclesPose              — contact-less CUSTOM (solver skipped;
  *                   residual stamps come from the Finalizer's enforceContactNoMove path)
+ *
+ * ## Intent-timing note (characterization caveat, NOT an architectural invariant)
+ *
+ * SQUAT_POSTURE writes its posture intent AFTER [SquatPose.build] returns (via
+ * [SkeletonPose.IntentBuilder.posture], the sole mutation surface outside the animation
+ * package), because the current production squat path declares CUSTOM in-build
+ * ([BaseSquatPose] `declarePosture(CUSTOM)`) and never enters the postureDriven branch on
+ * its own. This is a test-side workaround, disclosed here per the Phase-0 audit.
+ *
+ * Why post-build writes are behaviorally equivalent to in-build authoring under the
+ * CURRENT consumer set (verified by repo-wide search at commit 181c4f0): `postureIntent`
+ * has exactly three production read sites, all evaluated at or after pipeline injection —
+ * SkeletonPipeline.produceFrame (~line 125, solver-entry gate) and
+ * ConstraintSolver (~lines 217, 449, solve-time gate and posture regularization).
+ * No `build()` implementation reads `postureIntent`; authoring writes it, the pipeline
+ * consumes it. Because every consumer observes the field only after the pose reaches
+ * produceFrame, a write anywhere in the pre-injection window — inside build() or
+ * immediately after its return — is indistinguishable downstream.
+ *
+ * Scope of this claim: it holds for the consumers listed above as of Phase 0. If a future
+ * phase introduces a build-time or pre-injection reader of `postureIntent`, this fixture's
+ * equivalence argument must be re-validated and the workaround re-examined. This note is
+ * documentation of a characterization limitation, not proof of an architectural rule.
+ *
+ * ## Golden-update policy for known-compromised stamp families
+ *
+ * Transform goldens (7 joints per fixture) are the PRIMARY Phase-0 regression baseline.
+ * The following Validation Stamp families are characterization data, NOT frozen semantic
+ * truth; they encode current behavior including known defects, and legitimate corrections
+ * in later phases are EXPECTED to change them (update the golden in the same change, and
+ * name the responsible phase here or in the change description):
+ *
+ *  - `straightIntentDropped` (all fixtures, currently `false`): VACUOUS — no production
+ *    writer of the straight intent exists (V1), so the assertion cannot fail today and
+ *    pins nothing about engine behavior.
+ *  - `boneLengthsVerified` (all fixtures, currently `true`): the read sits downstream of
+ *    the solver's erase-and-re-AND of the stamp (V2, ConstraintSolver ~line 236), so the
+ *    value coincides with correct behavior only because all fixture bakes pass; the
+ *    field's semantics are defective until the V2-owning phase corrects it.
+ *  - `rootTranslationDelta` on ARMCIRCLES (currently `235.0`): produced by the Finalizer's
+ *    `enforceContactNoMove` strengthen (`max()` merge, SkeletonPoseFinalizer ~line 303),
+ *    a second producer that contradicts the RFC §4.4 sole-producer rule (V12). The value
+ *    is an accounting artifact of that merge, not an intended semantic.
+ *
+ * Transform goldens are unaffected by the above and must only change when the pipeline's
+ * numeric output intentionally changes. Any golden change caused by an intentional
+ * architecture correction must be explicitly documented with the responsible phase.
  */
 class RuntimeArchitectureBaselineTest {
 
