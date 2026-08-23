@@ -88,6 +88,33 @@ abstract class BasePose : PoseBuilder {
     }
 
     /**
+     * Carrier hygiene (per-frame O(1) intent complexity): every build starts from a clean
+     * §1.1 intent-carrier slate. Pose instances are long-lived singletons reused across
+     * animation frames, so any carrier left uncleared would accumulate one entry per frame,
+     * growing the Finalizer/Solver consume cost linearly forever (the leak fixed here:
+     * jointsBuffer.jointIntents grew +1–2 entries/frame on non-contact poses).
+     * [IntentBuilder.reset] clears exactly the per-build carriers; structural node trees
+     * ([ensureHierarchy]) are untouched. Subclasses author into the freshly-reset
+     * [jointsBuffer] via [onBuild]; they cannot forget the reset because [build] is final.
+     */
+    final override fun build(context: PoseContext): SkeletonPose {
+        SkeletonPose.IntentBuilder(jointsBuffer).reset()
+        val pose = onBuild(context)
+        onPoseBuilt(pose)
+        return pose
+    }
+
+    /**
+     * Post-finalize extension point for subclasses that need to adjust the built pose
+     * (e.g. override an inherited heading). Runs after [onBuild] has finalized the pose,
+     * still inside the final [build] template — so per-build carrier hygiene is preserved.
+     */
+    protected open fun onPoseBuilt(pose: SkeletonPose) {}
+
+    /** Author this pose's geometry + intent carriers into the freshly-reset [jointsBuffer]. */
+    protected abstract fun onBuild(context: PoseContext): SkeletonPose
+
+    /**
      * Branch C (RFC_BRANCH_C_EXTREMITY_ARTICULATION) — authors a **wrist articulation** (grip) as
      * the §1.3 [Extremity] intent. Composes the 2-DOF local rotation from [flexion] (flexion/
      * extension about the mediolateral Z axis) and [deviation] (radial/ulnar deviation about the

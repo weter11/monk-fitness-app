@@ -43,7 +43,7 @@ class TrunkFrameTest {
             SkeletonMath.composeRotations(node.localRotation, x, node.localRotation)
             declareJointIntent(Joint.CHEST, JointRotation(node.localRotation.axis, node.localRotation.angle))
         }
-        override fun build(context: PoseContext): SkeletonPose = SkeletonPose()
+        override fun onBuild(context: PoseContext): SkeletonPose = SkeletonPose()
     }
 
     @Test
