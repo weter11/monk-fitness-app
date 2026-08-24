@@ -27,8 +27,10 @@ import org.junit.Test
  *  - PUSHUP:        StandardPushUpPose          — contact pose (hands/toes support)
  *  - SQUAT_POSTURE: SquatPose + IntentBuilder.posture(STANDING) — posture-driven
  *                   (solver entered via `postureDriven`, no contacts)
- *  - ARMCIRCLES:    ArmCirclesPose              — contact-less CUSTOM (solver skipped;
- *                   residual stamps come from the Finalizer's enforceContactNoMove path)
+ *  - ARMCIRCLES:    ArmCirclesPose              — posture-driven: declares STANDING
+ *                   in-build (ArmCirclesPose ~:73), so the solver RUNS via the postureDriven
+ *                   branch despite zero Contact Declarations (contact-guard stays empty)
+ *                   [fixture description corrected in Phase 1 — see stamp note below]
  *
  * ## Intent-timing note (characterization caveat, NOT an architectural invariant)
  *
@@ -61,17 +63,26 @@ import org.junit.Test
  * in later phases are EXPECTED to change them (update the golden in the same change, and
  * name the responsible phase here or in the change description):
  *
- *  - `straightIntentDropped` (all fixtures, currently `false`): VACUOUS — no production
- *    writer of the straight intent exists (V1), so the assertion cannot fail today and
- *    pins nothing about engine behavior.
+ *  - `straightIntentDropped` (all fixtures, currently `false`): Architecture-declared,
+ *    currently vacuous in production — no production writer of the straight intent exists
+ *    (V1), so the assertion cannot fail today and pins nothing about engine behavior;
+ *    carried forward to the phase that owns stamp semantics.
  *  - `boneLengthsVerified` (all fixtures, currently `true`): the read sits downstream of
  *    the solver's erase-and-re-AND of the stamp (V2, ConstraintSolver ~line 236), so the
  *    value coincides with correct behavior only because all fixture bakes pass; the
  *    field's semantics are defective until the V2-owning phase corrects it.
- *  - `rootTranslationDelta` on ARMCIRCLES (currently `235.0`): produced by the Finalizer's
- *    `enforceContactNoMove` strengthen (`max()` merge, SkeletonPoseFinalizer ~line 303),
- *    a second producer that contradicts the RFC §4.4 sole-producer rule (V12). The value
- *    is an accounting artifact of that merge, not an intended semantic.
+ *  - `rootTranslationDelta` on ARMCIRCLES (currently `235.0`): produced by the
+ *    ConstraintSolver's UNI-6 root-displacement computation (reset ~:231, compute ~:403),
+ *    reached because this fixture enters the solver via its in-build STANDING posture.
+ *    CORRECTED in Phase 1: an earlier revision of this note attributed the value to the
+ *    Finalizer's `enforceContactNoMove` strengthen (`max()` merge, ~:303); that attribution
+ *    was FALSE — with zero Contact Declarations the contact guard snapshot is empty, the
+ *    strengthen loop runs zero iterations, and the site early-returns, so it cannot have
+ *    produced this fixture's value (verified against source during the Phase-1 self-audit).
+ *    Whether that strengthen write site conflicts with the RFC §4.4 sole-producer rule
+ *    (V12) remains OPEN clarification debt; this note assigns no provenance to it. The
+ *    235.0 value characterizes current solver displacement behavior — its existence and
+ *    stability are recorded; it is NOT certified as intended semantics.
  *
  * Transform goldens are unaffected by the above and must only change when the pipeline's
  * numeric output intentionally changes. Any golden change caused by an intentional

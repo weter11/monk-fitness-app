@@ -58,6 +58,9 @@ android {
     }
     buildFeatures {
         compose = true
+        // Required for the R8 debug-gated context-freeze check (BuildConfig.DEBUG) in
+        // SkeletonPipeline.runStages — AGP 8 disables BuildConfig generation by default.
+        buildConfig = true
     }
     packaging {
         resources {

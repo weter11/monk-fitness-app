@@ -1,5 +1,7 @@
 package com.monkfitness.app.animation
 
+import com.monkfitness.app.BuildConfig
+
 /**
  * Result of a single pipeline frame. [report] is non-null only when the frame was produced
  * through a validating entry point ([SkeletonPipeline.produceFrameValidated]).
@@ -75,9 +77,7 @@ class SkeletonPipeline(
         environment: EnvironmentDefinition = EnvironmentDefinition(),
         supportedPoints: Set<SupportPoint> = emptySet()
     ): PipelineResult {
-        builtPose.environment = environment
-        builtPose.supportedPoints.clear()
-        builtPose.supportedPoints.addAll(supportedPoints)
+        injectRuntimeContext(builtPose, environment, supportedPoints)
         val finalized = runStages(builtPose)
         return PipelineResult(finalized, null)
     }
@@ -94,14 +94,40 @@ class SkeletonPipeline(
         // W1b — stamp the engine-owned support model onto the pose so the Finalizer can derive
         // support planes for EVERY pose from the environment (ground + props) and the declared
         // support contacts, instead of any per-pose hardcoded plane. Declarative: the pose only
-        // says WHICH points rest on WHAT; the engine decides the geometry. No-op for a pose with no
-        // environment/support declared (byte-identical geometry elsewhere).
-        built.environment = pose.metadata.environment
-        built.supportedPoints.clear()
+        // says WHICH points rest on WHAT; the engine decides the geometry. No-op for a pose with
+        // no environment/support declared (byte-identical geometry elsewhere).
+        // R8: deriving the support-point set from Contact Declarations counts as injection-time
+        // derivation (§4.1 Group B producer text), so it feeds the single injection call below.
+        val derivedSupportedPoints = HashSet<SupportPoint>()
         for (contact in pose.metadata.support.contacts) {
-            built.supportedPoints.add(contact.point)
+            derivedSupportedPoints.add(contact.point)
         }
+        injectRuntimeContext(built, pose.metadata.environment, derivedSupportedPoints)
         return PipelineResult(runStages(built), null)
+    }
+
+    /**
+     * R8 — Runtime Context Injection single-point (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md,
+     * Phase 1; RFC_RUNTIME_SKELETON_ARCHITECTURE §5 R8 / §3.1 Frame Context constituency).
+     *
+     * The ONLY place the pipeline stamps [SkeletonPose.environment] and
+     * [SkeletonPose.supportedPoints]. Both [produceFrame] overloads call this exactly once,
+     * immediately before [runStages]; no other pipeline method writes these carriers. The
+     * renderer overload forwards its caller-supplied support model verbatim; the builder
+     * overload derives it from `pose.metadata` at the call site (Contact Declaration
+     * derivation is injection-time derivation, kept inside this boundary).
+     *
+     * Behavior-preserving extraction: each overload previously performed exactly these writes
+     * inline, at the same position in the frame sequence.
+     */
+    private fun injectRuntimeContext(
+        pose: SkeletonPose,
+        environment: EnvironmentDefinition,
+        supportedPoints: Set<SupportPoint>
+    ) {
+        pose.environment = environment
+        pose.supportedPoints.clear()
+        pose.supportedPoints.addAll(supportedPoints)
     }
 
     /**
@@ -110,6 +136,13 @@ class SkeletonPipeline(
      * (RFC_ENGINE_PIPELINE §8.1 — the pipeline is the sole caller of both, preventing re-entrancy).
      */
     private fun runStages(pose: SkeletonPose): SkeletonPose {
+        // R8 enforcement (debug builds only) — snapshot the freshly injected context, then
+        // re-compare after every stage. Carrier-level post-injection writes by a stage fail
+        // fast with IllegalStateException("R8 violation: …"). This is characterization/
+        // enforcement of carrier-level mutation, not complete mechanical R8 enforcement:
+        // deep payload mutation and content-identical rewrites are outside its reach, and
+        // release builds compile the mechanism out entirely (no snapshot, no compare).
+        val r8 = if (BuildConfig.DEBUG) RuntimeContextSnapshot.of(pose) else null
         // B1 (IkStage extraction) — the pipeline-owned limb stage consumes the §1.1 `limbTargets`
         // carrier and re-derives each limb's local positions on the engine-owned node tree.
         // (IK_STAGE_ACTIVE was excluded from Phase B — its flag is a future additive
@@ -117,6 +150,7 @@ class SkeletonPipeline(
         // before the ConstraintSolver so contact limbs are re-baked from their targets ahead of the
         // root-repositioning pass, and before the Finalizer's FK.
         IkStage.apply(pose, definition)
+        r8?.assertUnchanged(pose, "after IkStage")
         // Stage 3 (ConstraintSolver) — posture/contact settling. Runs for contact poses (M3) and
         // for any pose that names a non-CUSTOM posture intent so the engine owns the coarse root
         // height. A CUSTOM, contact-less production pose is still a pure no-op. (Phase B collapsed
@@ -126,9 +160,15 @@ class SkeletonPipeline(
         if (pose.roots.isNotEmpty() && (pose.hasContacts() || postureDriven)) {
             ConstraintSolver.solve(pose, definition)
         }
+        r8?.assertUnchanged(pose, "after ConstraintSolver")
         // Stage 4+ (Finalizer) — world↔local conversion, extremity derivation, chest-frame
         // reconstruction, FK flatten. The Finalizer no longer calls the Solver itself (M2).
-        return finalizer.finalize(pose)
+        val finalized = finalizer.finalize(pose)
+        // Checked on the INPUT pose: [finalize] copies into its own output buffer, so the R8
+        // question here is whether any stage wrote the injected context on the pose that
+        // entered the chain — not what the output copy carries.
+        r8?.assertUnchanged(pose, "after Finalizer")
+        return finalized
     }
 
     /**
