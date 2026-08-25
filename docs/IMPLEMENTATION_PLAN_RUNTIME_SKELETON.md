@@ -1,8 +1,31 @@
 # IMPLEMENTATION PLAN — Runtime Skeleton Architecture
 
 **Implements:** `docs/RFC_RUNTIME_SKELETON_ARCHITECTURE.md` (frozen; READY FOR ARCHITECTURE FREEZE, audits A1–A33 resolved).
-**Status:** Approved plan. No implementation code written yet. Each phase will be audited against this plan before it starts.
+**Status:** In execution. Phases 0–1 complete and merged (PRs #207, #211); each subsequent phase is audited against this plan before it starts. See Execution log below.
 **Ground rules honored:** every phase cites exact RFC §/R-rules; all current-code claims were source-verified (file:line cited); phases ordered by dependency; each phase is a single-reviewable diff; every non-RFC-dictated choice is flagged as an IMPLEMENTATION DECISION.
+
+---
+
+## Execution log
+
+| Phase | Result | Record |
+|---|---|---|
+| P0 Baseline & characterization harness | ✅ Complete | PR #207 (merged as `17e6455`): harness `RuntimeArchitectureBaselineTest` (`181c4f0`) + audit-blocker closure commit `36bc149` (KDoc-only: intent-timing caveat; golden-update policy for compromised stamp families) |
+| P1 R8: Runtime Context Injection single-point | ✅ Complete | PR #211 (merged as `d5de6d9`): `1eacb68` extraction + debug-gated enforcement (`RuntimeContextSnapshot`, `BuildConfig.DEBUG` enablement, `RuntimeContextInjectionTest`); `90075c0` snapshot negative-path unit tests |
+
+**Binding decisions from the #211 implementation review (apply to all later phases):**
+
+- The frozen RFC (`docs/RFC_RUNTIME_SKELETON_ARCHITECTURE.md`) must remain byte-identical during implementation phases. Two clarification sentences drafted during P1 were **reverted** (`90075c0`) and remain **unratified proposals**, recorded here only:
+  1. Frame Context may reference the externally owned Environment Definition by reference (ownership stays external; no subsystem may mutate the referenced instance).
+  2. Debug-build invariant-enforcement snapshots inside the pipeline are observability instrumentation, not Frame Context consumption (R8(b) scoping).
+
+**Architecture-owner debt ledger (carried forward; none blocks P2 start):**
+
+- **V12** — second producer of Root Translation Delta (Finalizer strengthen site vs §4.4 sole-producer rule): adjudicate in **Phase 2** (owns stamp semantics). No provenance assigned yet.
+- **Straight-intent-dropped flag**: architecture-declared (§4.4), currently vacuous in production (no writer/reader). Producers arrive in Phase 4 per plan Risk 2.
+- **RFC internal inconsistency**: `Pose Result State` appears under both the Settlement Result row and the Pose State row of the terminology table — fix at amendment time.
+- **Frame Progress / Motion Driver**: RFC §4.3 states the pipeline derives progress; production callers construct `PoseContext(progress = …)` directly. Reconcile before any phase depends on pipeline-derived progress.
+- Baseline KDoc corrections (in `RuntimeArchitectureBaselineTest`, P0 closure): ArmCircles fixture is posture-driven (STANDING declared in-build; solver executes); golden-value existence ≠ proven semantic producer.
 
 ---
 
