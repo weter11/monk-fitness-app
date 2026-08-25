@@ -1,7 +1,7 @@
 # IMPLEMENTATION PLAN — Runtime Skeleton Architecture
 
 **Implements:** `docs/RFC_RUNTIME_SKELETON_ARCHITECTURE.md` (frozen; READY FOR ARCHITECTURE FREEZE, audits A1–A33 resolved).
-**Status:** Approved plan. No implementation code written yet. Each phase will be audited against this plan before it starts.
+**Status:** Approved plan. Phase 1 (R8) implemented — PR #211 (RFC restored byte-identical during review; negative-path snapshot coverage added). Phases 2+ not started; each phase will be audited against this plan before it starts.
 **Ground rules honored:** every phase cites exact RFC §/R-rules; all current-code claims were source-verified (file:line cited); phases ordered by dependency; each phase is a single-reviewable diff; every non-RFC-dictated choice is flagged as an IMPLEMENTATION DECISION.
 
 ---
