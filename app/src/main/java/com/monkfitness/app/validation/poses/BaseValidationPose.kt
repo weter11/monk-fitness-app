@@ -24,6 +24,7 @@ import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.SkeletonPose.IntentBuilder
 import com.monkfitness.app.animation.SupportContact
 import com.monkfitness.app.animation.SupportDefinition
+import com.monkfitness.app.animation.ValidationStampMerge
 import com.monkfitness.app.animation.Vector3
 import com.monkfitness.app.animation.WorldTarget
 
@@ -271,7 +272,8 @@ abstract class BaseValidationPose : PoseBuilder {
         )
 
         val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
-        // Phase 1 (F5): reset the bone-length stamp once per build (mirrors BasePose.bakeIkLimb).
+        // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge;
+        // mirrors BasePose.bakeIkLimb).
         if (jointsBuffer.isTransformsUpdated) {
             jointsBuffer.boneLengthsVerified = true
             jointsBuffer.isTransformsUpdated = false
@@ -290,13 +292,13 @@ abstract class BaseValidationPose : PoseBuilder {
         }
         // Single source of truth: automatically propagate the solver's clamp amount into the
         // pose so reachability is detected without per-pose manual bookkeeping.
-        if (ikResult.clampAmount > jointsBuffer.maxIkClampAmount) {
-            jointsBuffer.maxIkClampAmount = ikResult.clampAmount
-        }
+        jointsBuffer.maxIkClampAmount =
+            ValidationStampMerge.clamp(jointsBuffer.maxIkClampAmount, ikResult.clampAmount)
         // Phase 1 (F5): assert the solved chain preserved both bone lengths exactly and fold the
         // result into the pose's single `boneLengthsVerified` stamp (AND across all limbs).
         val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)
-        jointsBuffer.boneLengthsVerified = jointsBuffer.boneLengthsVerified && bonesOk
+        jointsBuffer.boneLengthsVerified =
+            ValidationStampMerge.verified(jointsBuffer.boneLengthsVerified, bonesOk)
         // Store the limb offsets in the parent's true local frame (no hand-fed inverse-Z scalar).
         tempV1.set(ikResult.joint).subtract(rootWorldPos)
         SkeletonMath.toLocalDirection(tempV1, parentRot, middleNode.localPosition)

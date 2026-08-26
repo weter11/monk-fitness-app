@@ -72,7 +72,8 @@ object IkStage {
             val length2 = if (isArm) definition.forearmLength else definition.shinLength
             val constraint = if (isArm) definition.armIKConstraint else definition.legIKConstraint
 
-            // Phase 1 (F5): reset the bone-length stamp once per build, mirroring bakeIkLimb.
+            // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge),
+            // mirroring bakeIkLimb: the first limb re-baked this build re-arms the optimistic `true`.
             if (pose.isTransformsUpdated) {
                 pose.boneLengthsVerified = true
                 pose.isTransformsUpdated = false
@@ -96,11 +97,11 @@ object IkStage {
                 SkeletonMath.solveIK(rootWorld, target.world, length1, length2, worldPole, constraint, ikResult, target.contact)
             }
 
-            if (result.clampAmount > pose.maxIkClampAmount) {
-                pose.maxIkClampAmount = result.clampAmount
-            }
+            pose.maxIkClampAmount =
+                ValidationStampMerge.clamp(pose.maxIkClampAmount, result.clampAmount)
             val bonesOk = SkeletonMath.bonesExact(rootWorld, result.joint, result.end, length1, length2)
-            pose.boneLengthsVerified = pose.boneLengthsVerified && bonesOk
+            pose.boneLengthsVerified =
+                ValidationStampMerge.verified(pose.boneLengthsVerified, bonesOk)
 
             tempV1.set(result.joint).subtract(rootWorld)
             SkeletonMath.toLocalDirection(tempV1, parentRot, middle.localPosition)
