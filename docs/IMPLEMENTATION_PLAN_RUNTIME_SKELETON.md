@@ -1,7 +1,7 @@
 # IMPLEMENTATION PLAN — Runtime Skeleton Architecture
 
 **Implements:** `docs/RFC_RUNTIME_SKELETON_ARCHITECTURE.md` (frozen; READY FOR ARCHITECTURE FREEZE, audits A1–A33 resolved).
-**Status:** In execution. Phases 0–1 complete and merged (PRs #207, #211); each subsequent phase is audited against this plan before it starts. See Execution log below.
+**Status:** In execution. Phases 0–2 complete and merged (PRs #207, #211, #214); each subsequent phase is audited against this plan before it starts. See Execution log below.
 **Ground rules honored:** every phase cites exact RFC §/R-rules; all current-code claims were source-verified (file:line cited); phases ordered by dependency; each phase is a single-reviewable diff; every non-RFC-dictated choice is flagged as an IMPLEMENTATION DECISION.
 
 ---
@@ -12,6 +12,7 @@
 |---|---|---|
 | P0 Baseline & characterization harness | ✅ Complete | PR #207 (merged as `17e6455`): harness `RuntimeArchitectureBaselineTest` (`181c4f0`) + audit-blocker closure commit `36bc149` (KDoc-only: intent-timing caveat; golden-update policy for compromised stamp families) |
 | P1 R8: Runtime Context Injection single-point | ✅ Complete | PR #211 (merged as `d5de6d9`): `1eacb68` extraction + debug-gated enforcement (`RuntimeContextSnapshot`, `BuildConfig.DEBUG` enablement, `RuntimeContextInjectionTest`); `90075c0` snapshot negative-path unit tests |
+| P2 R4/R6 stamp-merge centralization + V2 fix | ✅ Complete | PR #214 (merged as `cfe4266`): `9c2a802` introduces `object ValidationStampMerge` (RFC §4.4 single merge surface for clamp/verified/dropped) and rewrites `ConstraintSolver.solve` merge-once — captures `primaryVerified` at entry, ANDs contact-limb findings locally, publishes once at end, eliminating the V2 unconditional-erase defect. Five raw-assignment sites routed through merge helpers (`BasePose.bakeIkLimb`, `IkStage.apply`, `BaseValidationPose`, `BasePose` package-level `bakeIkLimb`, `ConstraintSolver`); R6 debug-only `check()` carried by each helper. New tests: `ValidationStampMergeTest` (truth tables + non-vacuous V2 regression oracle — `SquatPose + STANDING` with seeded `false`; anti-vacuity guard asserts `rootTranslationDelta > 0` proving solver body executed) and `ValidationStampWriteSiteAuditTest` (whitelist of stamp write sites enforces single-merge-surface rule). Golden-fixture verification: P0 fixtures do not exercise V2 in their natural execution — PUSHUP solver-skips (CUSTOM + no contacts), SQUAT_POSTURE and ARMCIRCLES enter posture-driven path with no Contact Declarations, so the defect never manifests in P0 output; the dedicated `SquatPose + STANDING` regression fixture correctly isolates V2. **V2 CLOSED.** RFC unchanged. Goldens unchanged. V1/V12 untouched per scope boundaries. |
 
 **Binding decisions from the #211 implementation review (apply to all later phases):**
 
@@ -19,9 +20,10 @@
   1. Frame Context may reference the externally owned Environment Definition by reference (ownership stays external; no subsystem may mutate the referenced instance).
   2. Debug-build invariant-enforcement snapshots inside the pipeline are observability instrumentation, not Frame Context consumption (R8(b) scoping).
 
-**Architecture-owner debt ledger (carried forward; none blocks P2 start):**
+**Architecture-owner debt ledger (carried forward; none blocks P3 start):**
 
-- **V12** — second producer of Root Translation Delta (Finalizer strengthen site vs §4.4 sole-producer rule): adjudicate in **Phase 2** (owns stamp semantics). No provenance assigned yet.
+- **V2** — ~~Solver restamp erased primary `false`~~ **CLOSED in Phase 2 (PR #214, `9c2a802`).** Solver now captures `primaryVerified` at entry, ANDs contact-limb findings locally, publishes the merged result exactly once via `ValidationStampMerge.verified`. Dedicated regression oracle at `ValidationStampMergeTest.successfulSettlementKeepsFailedPrimaryVerificationFalseEndState`.
+- **V12** — second producer of Root Translation Delta (Finalizer strengthen site vs §4.4 sole-producer rule): adjudicate in **Phase 3** (owns stamp semantics — same lane as P2). No provenance assigned yet.
 - **Straight-intent-dropped flag**: architecture-declared (§4.4), currently vacuous in production (no writer/reader). Producers arrive in Phase 4 per plan Risk 2.
 - **RFC internal inconsistency**: `Pose Result State` appears under both the Settlement Result row and the Pose State row of the terminology table — fix at amendment time.
 - **Frame Progress / Motion Driver**: RFC §4.3 states the pipeline derives progress; production callers construct `PoseContext(progress = …)` directly. Reconcile before any phase depends on pipeline-derived progress.
@@ -74,7 +76,7 @@ Every "Current state" below was grep/read-verified against `app/src/main/java/co
 
 ## Risk list
 
-1. **V2 is a live R6 defect** (solver resetting `boneLengthsVerified=true`). The merge-once rewrite changes observable stamp outcomes when a non-contact limb failed bake verification — P0 goldens may need a deliberate, documented update at P2. Bug-fix surfacing, not drift; auditors should expect that fixture diff.
+1. **V2 (CLOSED in Phase 2).** ~~Solver resets `boneLengthsVerified=true` — defect V2.~~ Resolved in PR #214: solver now merge-once via `ValidationStampMerge.verified`. P0 goldens verified non-affected (PUSHUP solver-skips, SQUAT_POSTURE/ARMCIRCLES have no Contact Declarations so V2 never manifested in golden output).
 2. **V1 means P4 adds behavior** (flag starts being written). Tests asserting `straightIntentDropped == false` unconditionally were passing vacuously; expect P0 fixture updates here too.
 3. **P5 semantic shift:** identity-keyed smoothing (per-pose-instance memory) becomes frame-chain history. Sequential same-pose playback preserved; interleaved multi-instance replay is not, and cannot be under R10. Any test relying on interleaved smoothing encodes the violated architecture and must be consciously rewritten — flagged for audit, not routed around.
 4. **P10 depends on SkeletonDefinition exposing anatomical forward.** If no such property exists, the phase adds one (definition-level configuration — the R13-designated owner). If judged a definition-format change, stop-and-flag rather than proceed silently.
@@ -115,11 +117,19 @@ Every "Current state" below was grep/read-verified against `app/src/main/java/co
 
 - **RFC citations:** §5 R4, R6; §4.4 table (merge rules max/OR/AND).
 - **Dependency:** P0. Must precede P4 and P8.
-- **Current state:** Merge logic hand-rolled and duplicated: `BasePose.kt:288–289` & `:435–436` (clamp, max), `:295` & `:439` (verified, AND); `ConstraintSolver.kt:231–232` (deltas reset), `:236` **defect V2**: unconditional `boneLengthsVerified = true` can erase a primary `false` for non-contact limbs; `:370` ANDs only contact-limb re-bakes.
+- **Current state (pre-P2):** Merge logic hand-rolled and duplicated: `BasePose.kt:288–289` & `:435–436` (clamp, max), `:295` & `:439` (verified, AND); `ConstraintSolver.kt:231–232` (deltas reset), `:236` **defect V2**: unconditional `boneLengthsVerified = true` can erase a primary `false` for non-contact limbs; `:370` ANDs only contact-limb re-bakes.
 - **Target state:** Add `object ValidationStampMerge { clamp(old, reading)=max; verified(old, reading)=old && reading; dropped(old, dropped)=old || dropped }` (new file `animation/ValidationStampMerge.kt` — decision below). Replace raw assignments at the five sites. Rewrite solver logic merge-once: capture primary value before settlement into a local, AND contact-limb findings locally, assign merged result once at settlement end — eliminating the `= true` reset.
 - **Enforcement mechanism:** Helpers carry debug-only `check(new strengthens old per rule)`; whitelist test asserts stamp fields are written only via merge sites.
 - **Test plan:** New `ValidationStampMergeTest`: (a) primary `verified=false` + successful solver pass ⇒ stays `false` (**fails on current code** — defect test); (b) clamp monotonicity; (c) dropped OR monotonicity; (d) sole-producer overwrite unchanged for deltas.
 - **Open questions / implementation decisions:** Helper location (new file vs `SkeletonMath`) — propose new file, keeping `SkeletonMath` algorithm-only. "Strengthen" for the AND flag (further-restricting) is fixed by §4.4; the merge-once local pattern is an implementation choice.
+
+### Phase 2 — Post-merge audit notes (2026-08-29, PR #214 → `cfe4266`)
+
+- **Landed as:** `9c2a802` (commit) → `cfe4266` (merge commit, PR #214). `Android CI` run `32995924826` green for `9c2a802`.
+- **Changed files (7, +465 / −26):** `animation/BasePose.kt`, `animation/ConstraintSolver.kt`, `animation/IkStage.kt`, `animation/ValidationStampMerge.kt` (new), `validation/poses/BaseValidationPose.kt`, `test/animation/ValidationStampMergeTest.kt` (new), `test/arch/ValidationStampWriteSiteAuditTest.kt` (new).
+- **Independent V2 golden-impact audit (closed 2026-08-29):** confirmed that none of the three P0 fixtures exercise V2 in their natural golden-captured execution — PUSHUP solver-skips (`CUSTOM` posture + zero `ContactSpec` → early return at `ConstraintSolver.kt:218`); SQUAT_POSTURE and ARMCIRCLES enter posture-driven path but declare no `ContactSpec`, so the V2-erase site runs only over a vacuous `contactFindings` accumulator; the P0 goldens carry `primaryVerified=true` and would be identical under both old and new code. The dedicated regression fixture `SquatPose + STANDING` (with `pose.boneLengthsVerified = false` seeded) correctly isolates V2 as a non-vacuous oracle.
+- **Scope boundaries honored:** RFC unchanged; goldens unchanged; V1 (Straight-Intent-Dropped producer) untouched; V12 (Root-Translation-Delta second-producer provenance) untouched — V12 deferred to Phase 3 (same stamp-semantics lane).
+- **V2 status:** CLOSED. See architecture-owner debt ledger.
 
 ## Phase 3 — §3.2/§4.3: Settlement Result surfaced on Settled Geometry
 
