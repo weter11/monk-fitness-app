@@ -272,9 +272,10 @@ abstract class BasePose : PoseBuilder {
         contact: ContactConstraint? = null
     ): SkeletonMath.IKResult {
         val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
-        // Phase 1 (F5): reset the bone-length stamp once per build. `isTransformsUpdated` is set
-        // true by the previous frame's finalize; the first limb baked this build clears it and
-        // re-arms the optimistic `true` so the AND across limbs starts fresh.
+        // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge):
+        // `isTransformsUpdated` was set by the previous frame's finalize; the first limb baked
+        // this build re-arms the optimistic `true` so the fresh write window's AND across limbs
+        // starts from the §4.4 default.
         if (jointsBuffer.isTransformsUpdated) {
             jointsBuffer.boneLengthsVerified = true
             jointsBuffer.isTransformsUpdated = false
@@ -312,14 +313,14 @@ abstract class BasePose : PoseBuilder {
 
         // Single source of truth: automatically propagate the solver's clamp amount into the
         // pose so reachability is detected without per-pose manual bookkeeping.
-        if (ikResult.clampAmount > jointsBuffer.maxIkClampAmount) {
-            jointsBuffer.maxIkClampAmount = ikResult.clampAmount
-        }
+        jointsBuffer.maxIkClampAmount =
+            ValidationStampMerge.clamp(jointsBuffer.maxIkClampAmount, ikResult.clampAmount)
 
         // Phase 1 (F5): assert the solved chain preserved both bone lengths exactly and fold the
         // result into the pose's single `boneLengthsVerified` stamp (AND across all limbs).
         val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)
-        jointsBuffer.boneLengthsVerified = jointsBuffer.boneLengthsVerified && bonesOk
+        jointsBuffer.boneLengthsVerified =
+            ValidationStampMerge.verified(jointsBuffer.boneLengthsVerified, bonesOk)
 
         // Store the limb offsets in the parent's true local frame so they survive the parent's
         // full 3D world rotation exactly — no hand-fed inverse-Z scalar.
@@ -436,6 +437,8 @@ fun bakeIkLimb(
     contact: ContactConstraint? = null
 ): SkeletonMath.IKResult {
     val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
+    // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge); mirrors
+    // [BasePose.bakeIkLimb]: the first limb baked this build re-arms the optimistic `true`.
     if (buffer.isTransformsUpdated) {
         buffer.boneLengthsVerified = true
         buffer.isTransformsUpdated = false
@@ -459,11 +462,11 @@ fun bakeIkLimb(
     } else {
         SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, ikBuffer, contact)
     }
-    if (ikResult.clampAmount > buffer.maxIkClampAmount) {
-        buffer.maxIkClampAmount = ikResult.clampAmount
-    }
+    buffer.maxIkClampAmount =
+        ValidationStampMerge.clamp(buffer.maxIkClampAmount, ikResult.clampAmount)
     val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)
-    buffer.boneLengthsVerified = buffer.boneLengthsVerified && bonesOk
+    buffer.boneLengthsVerified =
+        ValidationStampMerge.verified(buffer.boneLengthsVerified, bonesOk)
 
     bakeIkScratch1.set(ikResult.joint).subtract(rootWorldPos)
     SkeletonMath.toLocalDirection(bakeIkScratch1, parentRot, middleNode.localPosition)

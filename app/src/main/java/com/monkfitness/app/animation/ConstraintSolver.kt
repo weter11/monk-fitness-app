@@ -230,10 +230,11 @@ object ConstraintSolver {
         // UNI-6 — reset the recorded root-displacement deltas; they are recomputed below.
         pose.rootTranslationDelta = 0f
         pose.rootRotationDelta = 0f
-        // Phase 1 (F5): the solver is a secondary writer of the bone-length stamp; re-arm it
-        // optimistically and AND each contact limb's re-bake below (the primary write happens in
-        // bakeIkLimb at authoring time; this keeps the stamp coherent after the solver moves the root).
-        pose.boneLengthsVerified = true
+        // Phase 2 (R4/R6, registered defect V2): the solver is a secondary producer of the
+        // Bone-Lengths-Verified Flag and may only strengthen it (RFC §4.4 rule AND / §5 R6).
+        // Capture the primary authoring-time reading before settlement writes anything; the
+        // merged value is assigned exactly once at the end of solve() (merge-once).
+        val primaryVerified = pose.boneLengthsVerified
 
         // UNI-1: snapshot the authored joint configuration (the "goal shape") before any solver
         // mutation, so the posture pass can regularize its CCD solution back toward the authored
@@ -263,6 +264,10 @@ object ConstraintSolver {
         // root produced for this same pose on the previous frame, so marginally inconsistent
         // contacts don't jitter frame-to-frame. Disabled (gain 0) leaves the per-frame solve exact.
         // (Phase B collapsed SOLVER_OWNS_POSTURE to its true branch.)
+        // Phase 2 (R4/R6): local accumulation of this settlement's contact-limb findings. The
+        // carrier flag is written back exactly once after the loop, so a mid-settle assignment
+        // can never erase the primary reading captured above.
+        var contactFindings = true
         if (SMOOTH_GAIN > 0f) {
             val prev = lastSolvedRoot[pose]
             if (prev != null) {
@@ -367,7 +372,7 @@ object ConstraintSolver {
 
                 // Phase 1 (F5): the re-baked contact limb must preserve both bone lengths too.
                 if (!SkeletonMath.bonesExact(rootWorld, ikResult.joint, ikResult.end, spec.length1, spec.length2)) {
-                    pose.boneLengthsVerified = false
+                    contactFindings = false
                 }
 
                 dir.set(ikResult.joint).subtract(rootWorld)
@@ -384,6 +389,13 @@ object ConstraintSolver {
 
             if (!moved) break
         }
+
+        // Phase 2 (R4/R6, merge-once): publish the strengthened stamp exactly once — the primary
+        // authoring-time reading ANDed with every contact limb's settlement finding. This replaces
+        // the former unconditional `pose.boneLengthsVerified = true`, which erased a primary
+        // `false` originating from a non-contact limb (registered defect V2) and thereby violated
+        // RFC §5 R6 (strengthen-only restamping).
+        pose.boneLengthsVerified = ValidationStampMerge.verified(primaryVerified, contactFindings)
 
         // UNI-1 — true posture pass. The loop above is a root-reposition relaxation (translate +
         // tilt the pelvis, then re-bake each contact limb toward its target). When contacts are
