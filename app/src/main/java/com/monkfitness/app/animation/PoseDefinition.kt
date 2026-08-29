@@ -152,7 +152,20 @@ class SkeletonPose(
     var rootRotationDelta: Float = 0f,
     // Fixed support contacts registered by contact-bearing `bakeIkLimb` calls (PR-04). The
     // global constraint solver consumes these to reposition the root so every contact holds.
-    val contacts: MutableList<ContactSpec> = mutableListOf()
+    val contacts: MutableList<ContactSpec> = mutableListOf(),
+
+    // Phase 3 (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md, §3.2/§4.3) — Settlement Result surfaced
+    // on the carrier as an internal, unpublished section. Populated exactly once by
+    // [ConstraintSolver.solve] at Phase 2 exit. The Finalizer does NOT read or write this
+    // field in Phase 3 (RFC R3: "none may alter the Settlement Result"; R7: "the
+    // SkeletonPoseFinalizer does not alter settled geometry or the Settlement Result").
+    // Clear-at-publish is a property of the `copyFrom` boundary, not a Finalizer write: the
+    // published pose's `copyFrom(pose)` does not copy this field (verified at
+    // PoseDefinition.kt:320-356), so the Finalized Pose carries exactly Published Pose State
+    // contents. `null` means the solver was not entered (contact-less CUSTOM early-return or
+    // pipeline path that bypassed the solver). Actual consumption (if any) belongs to the
+    // later phase assigned to the Settled-Contact Guarantee; it is not part of Phase 3.
+    internal var settlementResult: SettlementInfo? = null
 ) {
 
     /**
@@ -596,3 +609,54 @@ class SkeletonPose(
     fun isSupported(point: SupportPoint): Boolean = supportedPoints.contains(point)
 
 }
+
+/**
+ * Phase 3 (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md, §3.2/§4.3) — the Settlement Result surfaced
+ * on [SkeletonPose] as an internal, unpublished section.
+ *
+ * Membership (RFC §4.3 / §3.2): the world-space settled root transform, the settled-contact
+ * information, and the Contact Conflict Resolution outcome. Per the RFC the Settlement Result
+ * contains no copy of final joint rotations and never competes with Published Pose State as a
+ * source of final transforms; it is superseded at publication (R3). The shape below is an
+ * implementation decision (IMPLEMENTATION_PLAN line 139): the RFC defines membership, not layout.
+ *
+ * Producers / consumers (Phase 3 contract only):
+ *  - Sole production producer: [ConstraintSolver.solve], exactly once at Phase 2 exit.
+ *    No other subsystem may write to this object (RFC R3: "none may alter the Settlement
+ *    Result"; R7: "the SkeletonPoseFinalizer does not alter settled geometry or the
+ *    Settlement Result").
+ *  - The Finalizer does not read or write the Settlement Result in Phase 3. The Finalizer is
+ *    not a Phase-3 consumer; consumption (if any) belongs to the later phase assigned to
+ *    the Settled-Contact Guarantee, and is not part of this data class's contract.
+ *  - Cleared at publish by construction: the published pose's `copyFrom(pose)` does not copy
+ *    this field (see [SkeletonPose.copyFrom] — verified absence at PoseDefinition.kt:320-356),
+ *    so the Finalized Pose carries exactly Published Pose State contents and the Settlement
+ *    Result never leaks. The clear is a property of the copy boundary, not a write by the
+ *    Finalizer.
+ *
+ * Scope discipline on [declaredContactJoints]: the field is named `declaredContactJoints`
+ * rather than `settledContactJoints` because the pre-existing solver (V10) does not track
+ * per-contact settlement outcomes — it just re-bakes each declared contact's limb toward its
+ * target under a bounded iteration. Renaming to `declared` precisely states what the value is
+ * (the list of end-joints from the Contact Declarations the Solver iterates) without
+ * overclaiming settlement. Actual per-contact settlement tracking and the Settled-Contact
+ * Guarantee are deferred to the later phase assigned to that responsibility. This data
+ * class records only the current Phase-3 contract and the explicit deferral; it makes no
+ * commitment about how that later phase will implement the guarantee.
+ *
+ * @param settledRootWorld the pelvis world-space position at Phase 2 exit (R2 settled root).
+ * @param declaredContactJoints the end-joints of the Contact Declarations the Solver
+ *   iterates during Contact Honor / Contact Re-Solve. Pre-P3 documented as the "honored
+ *   contact joints" (plan line 139); the precise name is `declaredContactJoints` per this
+ *   scope correction. Per-contact settlement tracking is deferred to the later phase that
+ *   owns the Settled-Contact Guarantee.
+ * @param conflictOutcomeJoint the precedence winner (earliest non-empty entry in the pose's
+ *   `contactPrecedence` list) when Contact Conflict Resolution produced a winner; `null` when
+ *   the precedence list is empty (uniform-mean path — every contact is equal) or no contacts
+ *   were declared.
+ */
+data class SettlementInfo(
+    val settledRootWorld: Vector3,
+    val declaredContactJoints: List<Joint>,
+    val conflictOutcomeJoint: Joint?
+)

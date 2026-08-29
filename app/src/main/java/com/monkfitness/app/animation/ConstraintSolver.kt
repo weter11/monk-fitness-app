@@ -432,6 +432,43 @@ object ConstraintSolver {
 
         // Final FK + flatten so the finalized pose reflects the solved root placement.
         SkeletonPose.fromHierarchy(roots, pose)
+
+        // Phase 3 (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md, §3.2/§4.3) — populate the Settlement
+        // Result exactly once at Phase 2 exit. The world position is read AFTER `fromHierarchy`
+        // so it reflects the post-FK settled root (R2's settled-pelvis reading). Membership
+        // is fixed by RFC §4.3: settled root transform (world), settled-contact information,
+        // and Contact Conflict Resolution outcome — no copy of final joint rotations
+        // (RFC §3.2). The conflict-outcome payload is the precedence winner (earliest
+        // non-empty entry in `pose.contactPrecedence`); null when the list is empty
+        // (uniform-mean path) or no contacts were declared.
+        //
+        // Scope discipline (audit B2): the field is named `declaredContactJoints` (not
+        // `settledContactJoints`) because the pre-existing solver does not track per-contact
+        // settlement outcomes; it re-bakes each declared contact's limb toward its target
+        // under a bounded iteration. Renaming the field explicitly avoids the
+        // documented-vs-data divergence. Actual per-contact settlement tracking and the
+        // Settled-Contact Guarantee are deferred to the later phase assigned to that
+        // responsibility; this call site records only the current Phase-3 contract.
+        val settledRootWorld = Vector3(pelvis.worldPosition.x, pelvis.worldPosition.y, pelvis.worldPosition.z)
+        val declaredContactJoints: List<Joint> = contacts.map { it.endJoint }
+        val conflictWinner: Joint? = pickPrecedenceWinner(pose.contactPrecedence, contacts)
+        pose.settlementResult = SettlementInfo(settledRootWorld, declaredContactJoints, conflictWinner)
+    }
+
+    /**
+     * Returns the precedence winner — the first end-joint whose name appears in [precedence]
+     * (i.e. the highest-priority contact). Returns `null` when [precedence] is empty
+     * (uniform-mean path — every contact is equal) or when no contact name matches any
+     * declared contact end-joint. Allocated per-call only on the populated branch; trivial cost
+     * given the call site is once per solve.
+     */
+    private fun pickPrecedenceWinner(precedence: List<String>, contacts: List<ContactSpec>): Joint? {
+        if (precedence.isEmpty() || contacts.isEmpty()) return null
+        for (name in precedence) {
+            val match = contacts.firstOrNull { it.endJoint.name == name }
+            if (match != null) return match.endJoint
+        }
+        return null
     }
 
     /**
