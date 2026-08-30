@@ -19,6 +19,7 @@ import com.monkfitness.app.animation.SkeletonPipeline
 import com.monkfitness.app.poses.StandardPushUpPose
 import java.lang.reflect.InvocationTargetException
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -141,6 +142,6 @@ class StraightIntentFallbackTest {
 
         published.copyFrom(source)
 
-        assertTrue(published.limbSolverOwners == 0)
+        assertEquals(0, published.limbSolverOwners)
     }
 }
