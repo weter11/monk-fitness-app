@@ -132,4 +132,15 @@ class StraightIntentFallbackTest {
             IK_STAGE_ACTIVE = original
         }
     }
+
+    @Test
+    fun solverOwnershipInstrumentationDoesNotCrossCopyBoundary() {
+        val source = SkeletonPose()
+        val published = SkeletonPose()
+        source.limbSolverOwners = 3
+
+        published.copyFrom(source)
+
+        assertTrue(published.limbSolverOwners == 0)
+    }
 }
