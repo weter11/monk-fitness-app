@@ -46,6 +46,20 @@ class StraightIntentFallbackTest {
     }
 
     @Test
+    fun contactRebakeBoundaryMatchesCanonicalStraightOutcome() {
+        val insideEpsilon = 1.9995f
+        val canonical = SkeletonMath.straightFallbackRequired(insideEpsilon, 2f, 1f, constraint)
+        val result = SkeletonMath.solveStraightLimb(
+            Vector3(), Vector3(insideEpsilon, 0f, 0f), 2f, 1f, constraint
+        )
+
+        assertTrue("contact re-bake must take its bent branch at this boundary", insideEpsilon < 2f - 1e-3f)
+        assertTrue(canonical)
+        assertTrue(result.straightIntentDropped)
+        assertTrue(canonical == result.straightIntentDropped)
+    }
+
+    @Test
     fun ordinaryBentRequestDoesNotReportDrop() {
         val result = SkeletonMath.solveIK(
             Vector3(), Vector3(1.5f, 0.5f, 0f), 2f, 1f, Vector3(0f, 0f, 1f), constraint

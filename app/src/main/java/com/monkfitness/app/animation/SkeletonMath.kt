@@ -367,6 +367,20 @@ data class ContactConstraint(
         (L1 + L2) * constraint.effectiveExtensionRatio
 
     /**
+     * Canonical semantic test for a straight request that must use the bent fallback.
+     * Callers use this only to report the outcome; solving remains in the existing paths.
+     */
+    fun straightFallbackRequired(
+        requestedDistance: Float,
+        L1: Float,
+        L2: Float,
+        constraint: IKConstraint
+    ): Boolean = requestedDistance.coerceIn(
+        minReach(L1, L2, constraint),
+        maxReach(L1, L2, constraint)
+    ) < L1
+
+    /**
      * R2 (reach target authoring): project an authored IK [target] onto the *reachable annulus*
      * `[minReach, maxReach]` centred on [root], along the root→target direction, writing the
      * result into [out]. A target inside the band is copied unchanged. A tiny [margin] keeps the
@@ -687,6 +701,7 @@ data class ContactConstraint(
         val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
 
         val dist = dMag.coerceIn(minDist, maxDist)
+        val straightFallback = straightFallbackRequired(dMag, L1, L2, constraint)
 
         val dirX: Float; val dirY: Float; val dirZ: Float
         if (dMag > 1e-6f) {
@@ -729,7 +744,7 @@ data class ContactConstraint(
         // (the same triangle solve the ConstraintSolver would apply) so both bone lengths are
         // preserved at bake time, removing the hidden dependency on the solver. A zero pole selects
         // the solver's stable world-down bend plane.
-        if (dist < L1) {
+        if (straightFallback) {
             result.straightIntentDropped = true
             result.end.set(
                 root.x + dirX * dist,
