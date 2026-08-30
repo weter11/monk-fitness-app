@@ -93,18 +93,23 @@ class StraightIntentFallbackTest {
 
     @Test
     fun pipelineDetectsIllegalDualSolverOwnership() {
-        IK_STAGE_ACTIVE = false
-        val pose = StandardPushUpPose().build(PoseContext(0.5f, Side.RIGHT, SkeletonDefinition.DEFAULT_ADULT))
-        val owners = SkeletonPose::class.java.getDeclaredField("limbSolverOwners")
-        owners.isAccessible = true
-        owners.setInt(pose, 3)
-        val runStages = SkeletonPipeline::class.java.getDeclaredMethod("runStages", SkeletonPose::class.java)
-        runStages.isAccessible = true
+        val original = IK_STAGE_ACTIVE
         try {
-            runStages.invoke(SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT), pose)
-            throw AssertionError("R5 dual-solver invariant did not throw")
-        } catch (e: InvocationTargetException) {
-            assertTrue(e.cause is IllegalStateException)
+            IK_STAGE_ACTIVE = false
+            val pose = StandardPushUpPose().build(PoseContext(0.5f, Side.RIGHT, SkeletonDefinition.DEFAULT_ADULT))
+            val owners = SkeletonPose::class.java.getDeclaredField("limbSolverOwners")
+            owners.isAccessible = true
+            owners.setInt(pose, 3)
+            val runStages = SkeletonPipeline::class.java.getDeclaredMethod("runStages", SkeletonPose::class.java)
+            runStages.isAccessible = true
+            try {
+                runStages.invoke(SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT), pose)
+                throw AssertionError("R5 dual-solver invariant did not throw")
+            } catch (e: InvocationTargetException) {
+                assertTrue(e.cause is IllegalStateException)
+            }
+        } finally {
+            IK_STAGE_ACTIVE = original
         }
     }
 }
