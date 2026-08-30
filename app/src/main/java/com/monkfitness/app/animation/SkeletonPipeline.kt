@@ -176,8 +176,8 @@ class SkeletonPipeline(
                     "R5 violation: invalid limb-solver owner state ${pose.limbSolverOwners}"
                 }
             }
-            pose.limbSolverOwners = 0
         }
+        pose.limbSolverOwners = 0
         return finalized
     }
 
