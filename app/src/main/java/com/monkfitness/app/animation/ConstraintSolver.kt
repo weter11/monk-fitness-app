@@ -355,6 +355,10 @@ object ConstraintSolver {
                 away.set(rootWorld).subtract(spec.targetWorld)
                 val reachMag = away.mag()
                 val canBeStraight = spec.straight && reachMag >= spec.length1 - 1e-3f
+                val straightDistance = reachMag.coerceIn(
+                    SkeletonMath.minReach(spec.length1, spec.length2, spec.constraint),
+                    (spec.length1 + spec.length2) * spec.constraint.effectiveExtensionRatio
+                )
 
                 if (canBeStraight) {
                     SkeletonMath.solveStraightLimb(
@@ -362,7 +366,7 @@ object ConstraintSolver {
                         spec.constraint, ikResult, spec.contact
                     )
                 } else {
-                    if (spec.straight) {
+                    if (spec.straight && straightDistance < spec.length1) {
                         pose.straightIntentDropped =
                             ValidationStampMerge.dropped(pose.straightIntentDropped, true)
                     }
