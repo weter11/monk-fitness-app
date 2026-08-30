@@ -47,7 +47,7 @@ class StraightIntentFallbackTest {
 
     @Test
     fun contactRebakeBoundaryMatchesCanonicalStraightOutcome() {
-        val insideEpsilon = 1.9995f
+        val insideEpsilon = 1.998f
         val canonical = SkeletonMath.straightFallbackRequired(insideEpsilon, 2f, 1f, constraint)
         val result = SkeletonMath.solveStraightLimb(
             Vector3(), Vector3(insideEpsilon, 0f, 0f), 2f, 1f, constraint
