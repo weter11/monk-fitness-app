@@ -375,10 +375,18 @@ data class ContactConstraint(
         L1: Float,
         L2: Float,
         constraint: IKConstraint
-    ): Boolean = requestedDistance.coerceIn(
-        minReach(L1, L2, constraint),
-        maxReach(L1, L2, constraint)
-    ) < L1
+    ): Boolean = straightClampedDistance(requestedDistance, L1, L2, constraint) < L1
+
+    private fun straightClampedDistance(
+        requestedDistance: Float,
+        L1: Float,
+        L2: Float,
+        constraint: IKConstraint
+    ): Float {
+        val minCos = cos(constraint.minimumFlexionAngle * DEG2RAD)
+        val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
+        return requestedDistance.coerceIn(minDist, maxReach(L1, L2, constraint))
+    }
 
     /**
      * R2 (reach target authoring): project an authored IK [target] onto the *reachable annulus*
