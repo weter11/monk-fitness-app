@@ -5,6 +5,13 @@ import com.monkfitness.app.animation.IKConstraint
 import com.monkfitness.app.animation.SkeletonMath
 import com.monkfitness.app.animation.ValidationStampMerge
 import com.monkfitness.app.animation.Vector3
+import com.monkfitness.app.animation.IK_STAGE_ACTIVE
+import com.monkfitness.app.animation.JointRotation
+import com.monkfitness.app.animation.SkeletonFactory
+import com.monkfitness.app.animation.SkeletonPose
+import com.monkfitness.app.animation.IkStage
+import com.monkfitness.app.poses.StandardPushUpPose
+import java.lang.reflect.InvocationTargetException
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,5 +54,57 @@ class StraightIntentFallbackTest {
         dropped = ValidationStampMerge.dropped(dropped, false)
 
         assertTrue(dropped)
+    }
+
+    @Test
+    fun contactStraightFallbackReportsDrop() {
+        val result = SkeletonMath.solveStraightLimb(
+            Vector3(0f, 1f, 0f), Vector3(0f, 0.5f, 0f), 2f, 1f, constraint,
+            contact = com.monkfitness.app.animation.ContactConstraint.ground(0f)
+        )
+
+        assertTrue(result.straightIntentDropped)
+    }
+
+    @Test
+    fun activeIkStageReportsStraightFallbackAndValidStraightRemainsClear() {
+        val original = IK_STAGE_ACTIVE
+        try {
+            IK_STAGE_ACTIVE = true
+            fun solve(target: Vector3): SkeletonPose {
+                val nodes = SkeletonFactory.createStandardSkeleton()
+                nodes.shoulderA.localPosition.set(0f, 0f, 0f)
+                nodes.elbowA.localPosition.set(1f, 0f, 0f)
+                nodes.handA.localPosition.set(1f, 0f, 0f)
+                nodes.roots.forEach { it.updateWorldTransforms(Vector3(), JointRotation()) }
+                val pose = SkeletonPose()
+                pose.roots = nodes.roots
+                pose.limbTargets.add(WorldTarget(Joint.HAND_A, target, straight = true))
+                IkStage.apply(pose, SkeletonDefinition.DEFAULT_ADULT)
+                return pose
+            }
+
+            assertTrue(solve(Vector3(0.5f, 0f, 0f)).straightIntentDropped)
+            assertFalse(solve(Vector3(2.5f, 0f, 0f)).straightIntentDropped)
+        } finally {
+            IK_STAGE_ACTIVE = original
+        }
+    }
+
+    @Test
+    fun pipelineDetectsIllegalDualSolverOwnership() {
+        IK_STAGE_ACTIVE = false
+        val pose = StandardPushUpPose().build(PoseContext(0.5f, Side.RIGHT, SkeletonDefinition.DEFAULT_ADULT))
+        val owners = SkeletonPose::class.java.getDeclaredField("limbSolverOwners")
+        owners.isAccessible = true
+        owners.setInt(pose, 3)
+        val runStages = SkeletonPipeline::class.java.getDeclaredMethod("runStages", SkeletonPose::class.java)
+        runStages.isAccessible = true
+        try {
+            runStages.invoke(SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT), pose)
+            throw AssertionError("R5 dual-solver invariant did not throw")
+        } catch (e: InvocationTargetException) {
+            assertTrue(e.cause is IllegalStateException)
+        }
     }
 }

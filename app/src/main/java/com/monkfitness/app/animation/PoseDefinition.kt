@@ -344,7 +344,6 @@ class SkeletonPose(
         this.rootTranslationDelta = other.rootTranslationDelta
         this.rootRotationDelta = other.rootRotationDelta
         this.straightIntentDropped = other.straightIntentDropped
-        this.limbSolverOwners = other.limbSolverOwners
         this.boneLengthsVerified = other.boneLengthsVerified
         this.spineIntent = other.spineIntent
         this.postureIntent = other.postureIntent

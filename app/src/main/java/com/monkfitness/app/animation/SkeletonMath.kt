@@ -640,7 +640,10 @@ data class ContactConstraint(
         }
 
         result.end.set(rpx + hx, rpy + hy, rpz + hz)
-        if (straight) {
+        if (straight && dist < L1) {
+            result.straightIntentDropped = true
+            solveTriangleJoint(root, result.end, straightDegeneratePole, L1, L2, result.joint)
+        } else if (straight) {
             solveStraightMiddle(root, result.end, L1, result.joint)
         } else {
             solveTriangleJoint(root, result.end, pole, L1, L2, result.joint)
