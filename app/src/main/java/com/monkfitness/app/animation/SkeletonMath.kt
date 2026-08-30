@@ -349,7 +349,8 @@ data class ContactConstraint(
         var requestedDistance: Float = 0f,
         var clampedDistance: Float = 0f,
         var clampAmount: Float = 0f,
-        var angularClampAmount: Float = 0f
+        var angularClampAmount: Float = 0f,
+        var straightIntentDropped: Boolean = false
     )
 
     /**
@@ -412,6 +413,7 @@ data class ContactConstraint(
         result: IKResult = IKResult(),
         contact: ContactConstraint? = null
     ): IKResult {
+        result.straightIntentDropped = false
         val dx = target.x - root.x
         val dy = target.y - root.y
         val dz = target.z - root.z
@@ -670,6 +672,7 @@ data class ContactConstraint(
         result: IKResult = IKResult(),
         contact: ContactConstraint? = null
     ): IKResult {
+        result.straightIntentDropped = false
         val dx = target.x - root.x
         val dy = target.y - root.y
         val dz = target.z - root.z
@@ -724,6 +727,7 @@ data class ContactConstraint(
         // preserved at bake time, removing the hidden dependency on the solver. A zero pole selects
         // the solver's stable world-down bend plane.
         if (dist < L1) {
+            result.straightIntentDropped = true
             result.end.set(
                 root.x + dirX * dist,
                 root.y + dirY * dist,

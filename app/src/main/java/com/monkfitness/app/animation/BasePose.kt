@@ -271,6 +271,7 @@ abstract class BasePose : PoseBuilder {
         straight: Boolean = false,
         contact: ContactConstraint? = null
     ): SkeletonMath.IKResult {
+        jointsBuffer.limbSolverOwners = jointsBuffer.limbSolverOwners or 1
         val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
         // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge):
         // `isTransformsUpdated` was set by the previous frame's finalize; the first limb baked
@@ -315,6 +316,8 @@ abstract class BasePose : PoseBuilder {
         // pose so reachability is detected without per-pose manual bookkeeping.
         jointsBuffer.maxIkClampAmount =
             ValidationStampMerge.clamp(jointsBuffer.maxIkClampAmount, ikResult.clampAmount)
+        jointsBuffer.straightIntentDropped =
+            ValidationStampMerge.dropped(jointsBuffer.straightIntentDropped, ikResult.straightIntentDropped)
 
         // Phase 1 (F5): assert the solved chain preserved both bone lengths exactly and fold the
         // result into the pose's single `boneLengthsVerified` stamp (AND across all limbs).
@@ -436,6 +439,7 @@ fun bakeIkLimb(
     straight: Boolean = false,
     contact: ContactConstraint? = null
 ): SkeletonMath.IKResult {
+    buffer.limbSolverOwners = buffer.limbSolverOwners or 1
     val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
     // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge); mirrors
     // [BasePose.bakeIkLimb]: the first limb baked this build re-arms the optimistic `true`.
@@ -464,6 +468,8 @@ fun bakeIkLimb(
     }
     buffer.maxIkClampAmount =
         ValidationStampMerge.clamp(buffer.maxIkClampAmount, ikResult.clampAmount)
+    buffer.straightIntentDropped =
+        ValidationStampMerge.dropped(buffer.straightIntentDropped, ikResult.straightIntentDropped)
     val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)
     buffer.boneLengthsVerified =
         ValidationStampMerge.verified(buffer.boneLengthsVerified, bonesOk)

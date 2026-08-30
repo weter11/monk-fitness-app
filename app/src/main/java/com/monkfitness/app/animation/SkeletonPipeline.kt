@@ -168,6 +168,15 @@ class SkeletonPipeline(
         // question here is whether any stage wrote the injected context on the pose that
         // entered the chain — not what the output copy carries.
         r8?.assertUnchanged(pose, "after Finalizer")
+        if (BuildConfig.DEBUG) {
+            check(pose.limbSolverOwners != 3) {
+                "R5 violation: bakeIkLimb and IkStage both executed for one frame"
+            }
+            check(pose.limbSolverOwners == 0 || pose.limbSolverOwners == 1 || pose.limbSolverOwners == 2) {
+                "R5 violation: invalid limb-solver owner state ${pose.limbSolverOwners}"
+            }
+            pose.limbSolverOwners = 0
+        }
         return finalized
     }
 

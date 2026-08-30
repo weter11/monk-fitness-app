@@ -261,6 +261,9 @@ class SkeletonPose(
     /** IK/Solver stamp: a straight-limb intent could not be honoured (the limb was re-baked bent). */
     var straightIntentDropped: Boolean = false
 
+    /** Debug-only ownership bits: bakeIkLimb = 1, IkStage = 2. */
+    internal var limbSolverOwners: Int = 0
+
     /**
      * IK stamp: every solved limb exactly preserved its bone lengths (invariant F5). Optimistic
      * default `true`; each `bakeIkLimb` ANDs its per-limb check in, so a single violated limb
@@ -341,6 +344,7 @@ class SkeletonPose(
         this.rootTranslationDelta = other.rootTranslationDelta
         this.rootRotationDelta = other.rootRotationDelta
         this.straightIntentDropped = other.straightIntentDropped
+        this.limbSolverOwners = other.limbSolverOwners
         this.boneLengthsVerified = other.boneLengthsVerified
         this.spineIntent = other.spineIntent
         this.postureIntent = other.postureIntent
@@ -464,6 +468,7 @@ class SkeletonPose(
             pose.contactPrecedence.clear()
             pose.contacts.clear()
             pose.headTarget = null
+            pose.limbSolverOwners = 0
         }
     }
 

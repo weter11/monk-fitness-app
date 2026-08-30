@@ -362,6 +362,10 @@ object ConstraintSolver {
                         spec.constraint, ikResult, spec.contact
                     )
                 } else {
+                    if (spec.straight) {
+                        pose.straightIntentDropped =
+                            ValidationStampMerge.dropped(pose.straightIntentDropped, true)
+                    }
                     // The parent frame rotation is set by the solver (translation and/or tilt), so
                     // the contact's world-space pole is recomputed each pass and reused directly.
                     SkeletonMath.solveIK(
