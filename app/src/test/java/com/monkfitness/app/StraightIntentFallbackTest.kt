@@ -10,6 +10,12 @@ import com.monkfitness.app.animation.JointRotation
 import com.monkfitness.app.animation.SkeletonFactory
 import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.IkStage
+import com.monkfitness.app.animation.WorldTarget
+import com.monkfitness.app.animation.Joint
+import com.monkfitness.app.animation.SkeletonDefinition
+import com.monkfitness.app.animation.PoseContext
+import com.monkfitness.app.animation.Side
+import com.monkfitness.app.animation.SkeletonPipeline
 import com.monkfitness.app.poses.StandardPushUpPose
 import java.lang.reflect.InvocationTargetException
 import org.junit.Assert.assertFalse
