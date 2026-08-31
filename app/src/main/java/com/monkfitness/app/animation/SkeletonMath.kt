@@ -662,10 +662,7 @@ data class ContactConstraint(
         }
 
         result.end.set(rpx + hx, rpy + hy, rpz + hz)
-        if (straight && dist < L1) {
-            result.straightIntentDropped = true
-            solveTriangleJoint(root, result.end, straightDegeneratePole, L1, L2, result.joint)
-        } else if (straight) {
+        if (straight) {
             solveStraightMiddle(root, result.end, L1, result.joint)
         } else {
             solveTriangleJoint(root, result.end, pole, L1, L2, result.joint)
@@ -735,6 +732,7 @@ data class ContactConstraint(
                 (root.y + dirY * dist - contact.point.y) * contact.normal.y +
                 (root.z + dirZ * dist - contact.point.z) * contact.normal.z
             if (signed < 0f) {
+                if (straightFallback) result.straightIntentDropped = true
                 resolveContactPlane(root, target, dist, Vector3(0f, 0f, 0f), L1, L2, constraint, contact, result, straight = true)
                 return result
             }
