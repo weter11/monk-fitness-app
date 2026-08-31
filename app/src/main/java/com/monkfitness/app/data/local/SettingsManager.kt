@@ -46,6 +46,7 @@ class SettingsManager(private val context: Context) {
         val PROGRAM_START_DATE = stringPreferencesKey("program_start_date")
         val PROGRAM_SUMMARY_DISMISSED = booleanPreferencesKey("program_summary_dismissed")
         val PROGRAM_CYCLE_NUMBER = intPreferencesKey("program_cycle_number")
+        val PROGRAM_REVISION = intPreferencesKey("program_revision")
         val NUTRITION_WARNING_DISMISSED_FOR = stringPreferencesKey("nutrition_warning_dismissed_for")
         val SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION = booleanPreferencesKey("show_excluded_products_in_nutrition")
         val DISABLED_EXERCISE_FAMILIES = stringSetPreferencesKey("disabled_exercise_families")
@@ -300,6 +301,25 @@ class SettingsManager(private val context: Context) {
         context.dataStore.edit { preferences ->
             preferences[PROGRAM_CYCLE_NUMBER] = cycle
         }
+    }
+
+    val programRevisionFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+        preferences[PROGRAM_REVISION] ?: 0
+    }
+
+    suspend fun setProgramRevision(revision: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PROGRAM_REVISION] = revision
+        }
+    }
+
+    /**
+     * C3 Full Reset: atomically clears every preference this app owns, returning DataStore
+     * to first-launch state. The next [ensureProgramStartDate] call stamps a fresh start
+     * date and onboarding restarts because IS_ONBOARDING_COMPLETED is gone.
+     */
+    suspend fun clearAll() {
+        context.dataStore.edit { it.clear() }
     }
 
     val nutritionWarningDismissedForFlow: Flow<String?> = context.dataStore.data.map { preferences ->

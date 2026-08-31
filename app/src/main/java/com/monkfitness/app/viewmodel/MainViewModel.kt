@@ -72,6 +72,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flowOf
@@ -197,6 +198,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val (resolvedCycle, _) = resolveCycleAndDay(parseDate(startDate, today), today)
         maxOf(storedCycle, resolvedCycle)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
+
+    // C3 "Start Revised Program" marker: bumped on each revised start; currently informational.
+    val programRevision = settingsManager.programRevisionFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), 0
+    )
 
     val allProgress = repository.getAllProgress(programCycleNumber).stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
@@ -579,6 +585,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             settingsManager.ensureProgramStartDate()
+            // C3 crash-recovery: if Full Reset cleared preferences while a stale ViewModel
+            // instance still held cycle N, persisting N again would resurrect a phantom
+            // cycle against the fresh day-1 calendar. Clamp the stored number whenever it
+            // runs ahead of what the calendar itself resolves.
+            val startDate = parseDate(settingsManager.programStartDateFlow.first(), LocalDate.now())
+            val (resolvedCycle, _) = resolveCycleAndDay(startDate)
+            val storedCycle = settingsManager.programCycleNumberFlow.first()
+            if (storedCycle > resolvedCycle) {
+                settingsManager.setProgramCycleNumber(resolvedCycle)
+            }
             refreshCalendarState()
         }
         viewModelScope.launch {
@@ -1372,6 +1388,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun dismissNutritionExpirationWarning() {
         viewModelScope.launch {
             settingsManager.dismissNutritionWarningFor(activeMealCycle.value?.startDate)
+        }
+    }
+
+    // --- C3 Manual Controls (Settings): confirmation-guarded maintenance actions ---
+
+    /**
+     * C3 "Restart Current Cycle": wipes ONLY the active cycle's progress rows. Start date,
+     * stored cycle number, settings, and prior cycles' history are untouched; the template
+     * grid is re-seeded fresh (nothing completed) by the next [syncProgramDayStates] tick.
+     */
+    fun restartCurrentCycle() {
+        viewModelScope.launch {
+            repository.deleteProgressForCycle(programCycleNumber.value)
+            refreshCalendarState()
+        }
+    }
+
+    /**
+     * C3 "Start Revised Program": bumps the program revision marker and restarts the
+     * calendar from today at cycle 1, day 1. Prior program history stays in the database
+     * for the archive view.
+     */
+    fun startRevisedProgram() {
+        viewModelScope.launch {
+            val currentRevision = settingsManager.programRevisionFlow.first()
+            settingsManager.setProgramRevision(currentRevision + 1)
+            settingsManager.resetProgramStartDate()
+            settingsManager.setProgramCycleNumber(1)
+            refreshCalendarState()
+        }
+    }
+
+    /**
+     * C3 "Full Reset": complete wipe back to first-launch state — Room tables cleared,
+     * every preference cleared so onboarding restarts on next navigation.
+     */
+    fun fullReset() {
+        viewModelScope.launch {
+            repository.clearAllProgressData()
+            settingsManager.clearAll()
         }
     }
 

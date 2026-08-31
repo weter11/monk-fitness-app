@@ -724,4 +724,19 @@
     <string name="validation_dead_hang_p3">Arm proportions and wrist orientation</string>
 
     <string name="ok">OK</string>
+
+    <!-- C3 Manual Controls -->
+    <string name="program_controls_title">Program controls</string>
+    <string name="restart_current_cycle">Restart current cycle</string>
+    <string name="restart_current_cycle_desc">Clears progress for the current cycle only. Start date, settings and previous cycle history are kept.</string>
+    <string name="restart_current_cycle_confirm">Restart current cycle?</string>
+    <string name="restart_current_cycle_confirm_text">All completions of the current cycle will be cleared. Previous cycle history is kept. This cannot be undone.</string>
+    <string name="start_revised_program">Start revised program</string>
+    <string name="start_revised_program_desc">Restarts the program from day 1 today. Previous program history stays available in the archive.</string>
+    <string name="start_revised_program_confirm">Start revised program?</string>
+    <string name="start_revised_program_confirm_text">The program calendar restarts from today at day 1. Your previous program history remains in the archive. This cannot be undone.</string>
+    <string name="full_reset">Full reset</string>
+    <string name="full_reset_desc">Erases all data: workouts, posture sessions, statistics, settings and onboarding state. The app returns to first launch.</string>
+    <string name="full_reset_confirm">Perform full reset?</string>
+    <string name="full_reset_confirm_text">Everything will be erased: workout history, body weight log, nutrition data and all settings. The app returns to first-launch onboarding. This cannot be undone.</string>
 </resources>

@@ -29,6 +29,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -241,6 +244,14 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            ProgramControlsSection(
+                onRestartCycle = viewModel::restartCurrentCycle,
+                onStartRevisedProgram = viewModel::startRevisedProgram,
+                onFullReset = viewModel::fullReset
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             LibraryStatisticsSection(stats = libraryStats)
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -353,6 +364,127 @@ private fun ExerciseFamiliesSelector(
             }
         }
     }
+}
+
+@Composable
+private fun ProgramControlsSection(
+    onRestartCycle: () -> Unit,
+    onStartRevisedProgram: () -> Unit,
+    onFullReset: () -> Unit
+) {
+    var showRestartCycleDialog by remember { mutableStateOf(false) }
+    var showRevisedProgramDialog by remember { mutableStateOf(false) }
+    var showFullResetDialog by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(text = stringResource(R.string.program_controls_title), style = MaterialTheme.typography.titleLarge)
+
+        Text(
+            text = stringResource(R.string.restart_current_cycle_desc),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary
+        )
+        androidx.compose.material3.Button(
+            onClick = { showRestartCycleDialog = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = stringResource(R.string.restart_current_cycle))
+        }
+
+        Text(
+            text = stringResource(R.string.start_revised_program_desc),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary
+        )
+        androidx.compose.material3.Button(
+            onClick = { showRevisedProgramDialog = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = stringResource(R.string.start_revised_program))
+        }
+
+        Text(
+            text = stringResource(R.string.full_reset_desc),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary
+        )
+        androidx.compose.material3.Button(
+            onClick = { showFullResetDialog = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = stringResource(R.string.full_reset),
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+
+    if (showRestartCycleDialog) {
+        ConfirmationDialog(
+            title = stringResource(R.string.restart_current_cycle_confirm),
+            text = stringResource(R.string.restart_current_cycle_confirm_text),
+            confirmLabel = stringResource(R.string.restart_current_cycle),
+            onConfirm = {
+                showRestartCycleDialog = false
+                onRestartCycle()
+            },
+            onDismiss = { showRestartCycleDialog = false }
+        )
+    }
+    if (showRevisedProgramDialog) {
+        ConfirmationDialog(
+            title = stringResource(R.string.start_revised_program_confirm),
+            text = stringResource(R.string.start_revised_program_confirm_text),
+            confirmLabel = stringResource(R.string.start_revised_program),
+            onConfirm = {
+                showRevisedProgramDialog = false
+                onStartRevisedProgram()
+            },
+            onDismiss = { showRevisedProgramDialog = false }
+        )
+    }
+    if (showFullResetDialog) {
+        ConfirmationDialog(
+            title = stringResource(R.string.full_reset_confirm),
+            text = stringResource(R.string.full_reset_confirm_text),
+            confirmLabel = stringResource(R.string.full_reset),
+            isError = true,
+            onConfirm = {
+                showFullResetDialog = false
+                onFullReset()
+            },
+            onDismiss = { showFullResetDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun ConfirmationDialog(
+    title: String,
+    text: String,
+    confirmLabel: String,
+    isError: Boolean = false,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(text) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(
+                    text = confirmLabel,
+                    color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable

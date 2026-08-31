@@ -717,4 +717,19 @@
     <string name="validation_dead_hang_p3">Пропорции рук и ориентация запястий</string>
 
     <string name="ok">ОК</string>
+
+    <!-- C3 Manual Controls -->
+    <string name="program_controls_title">Управление программой</string>
+    <string name="restart_current_cycle">Перезапустить текущий цикл</string>
+    <string name="restart_current_cycle_desc">Очищает прогресс только текущего цикла. Дата старта, настройки и история прошлых циклов сохраняются.</string>
+    <string name="restart_current_cycle_confirm">Перезапустить текущий цикл?</string>
+    <string name="restart_current_cycle_confirm_text">Все отметки выполнения текущего цикла будут удалены. История прошлых циклов сохранится. Отменить это нельзя.</string>
+    <string name="start_revised_program">Начать пересмотренную программу</string>
+    <string name="start_revised_program_desc">Запускает программу заново с 1-го дня начиная с сегодняшнего. Прошлая история программы останется в архиве.</string>
+    <string name="start_revised_program_confirm">Начать пересмотренную программу?</string>
+    <string name="start_revised_program_confirm_text">Календарь программы начнётся заново с сегодняшнего дня, с 1-го дня. Прошлая история программы останется в архиве. Отменить это нельзя.</string>
+    <string name="full_reset">Полный сброс</string>
+    <string name="full_reset_desc">Удаляет все данные: тренировки, занятия осанкой, статистику, настройки и состояние онбординга. Приложение вернётся к первому запуску.</string>
+    <string name="full_reset_confirm">Выполнить полный сброс?</string>
+    <string name="full_reset_confirm_text">Будет удалено всё: история тренировок, записи веса, данные питания и все настройки. Приложение вернётся к онбордингу первого запуска. Отменить это нельзя.</string>
 </resources>
