@@ -170,11 +170,8 @@ class SkeletonPipeline(
         r8?.assertUnchanged(pose, "after Finalizer")
         if (BuildConfig.DEBUG) {
             check(pose.limbSolverExecutions in 0..1) {
-                if (pose.limbSolverExecutions > 1) {
-                    "R5 violation: multiple runtime limb solvers executed for one frame"
-                } else {
-                    "R5 violation: invalid Phase-1 solver execution count ${pose.limbSolverExecutions}"
-                }
+                "R5 violation: multiple runtime limb solvers executed for one frame " +
+                    "(count=${pose.limbSolverExecutions})"
             }
         }
         pose.limbSolverExecutions = 0
