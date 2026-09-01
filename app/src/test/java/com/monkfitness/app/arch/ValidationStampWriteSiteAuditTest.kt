@@ -131,6 +131,11 @@ class ValidationStampWriteSiteAuditTest {
                 "boneLengthsVerified", "this.boneLengthsVerified = other.boneLengthsVerified",
                 "copyFrom: carrier-internal duplication (the Finalizer's outputPose handoff); " +
                     "not a producer."
+            ),
+            Triple(
+                "straightIntentDropped", "this.straightIntentDropped = other.straightIntentDropped",
+                "copyFrom: carrier-internal duplication (the Finalizer's outputPose handoff); " +
+                    "not a producer."
             )
         )
     )

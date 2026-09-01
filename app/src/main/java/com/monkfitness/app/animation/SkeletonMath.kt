@@ -706,7 +706,8 @@ data class ContactConstraint(
         val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
 
         val dist = dMag.coerceIn(minDist, maxDist)
-        val straightFallback = straightFallbackRequired(dMag, L1, L2, constraint)
+        // Keep the semantic outcome tied to the exact distance used by this solver.
+        val straightFallback = dist < L1
 
         val dirX: Float; val dirY: Float; val dirZ: Float
         if (dMag > 1e-6f) {

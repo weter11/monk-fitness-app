@@ -171,7 +171,7 @@ class SkeletonPipeline(
         if (BuildConfig.DEBUG) {
             check(pose.limbSolverOwners in 0..2) {
                 if (pose.limbSolverOwners == 3) {
-                    "R5 violation: bakeIkLimb and IkStage both executed for one frame"
+                    "R5 violation: multiple runtime limb solvers executed for one frame"
                 } else {
                     "R5 violation: invalid limb-solver owner state ${pose.limbSolverOwners}"
                 }

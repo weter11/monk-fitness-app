@@ -271,7 +271,6 @@ abstract class BasePose : PoseBuilder {
         straight: Boolean = false,
         contact: ContactConstraint? = null
     ): SkeletonMath.IKResult {
-        jointsBuffer.limbSolverOwners = jointsBuffer.limbSolverOwners or 1
         val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
         // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge):
         // `isTransformsUpdated` was set by the previous frame's finalize; the first limb baked
@@ -439,7 +438,6 @@ fun bakeIkLimb(
     straight: Boolean = false,
     contact: ContactConstraint? = null
 ): SkeletonMath.IKResult {
-    buffer.limbSolverOwners = buffer.limbSolverOwners or 1
     val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
     // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge); mirrors
     // [BasePose.bakeIkLimb]: the first limb baked this build re-arms the optimistic `true`.
