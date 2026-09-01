@@ -105,7 +105,11 @@ class StraightIntentFallbackTest {
                 return pose
             }
 
-            assertTrue(solve(Vector3(0.5f, 0f, 0f)).straightIntentDropped)
+            val activePose = solve(Vector3(0.5f, 0f, 0f))
+            assertTrue(activePose.straightIntentDropped)
+            val executions = SkeletonPose::class.java.getDeclaredField("limbSolverExecutions")
+            executions.isAccessible = true
+            assertEquals(1, executions.getInt(activePose))
             assertFalse(solve(Vector3(2.5f, 0f, 0f)).straightIntentDropped)
         } finally {
             IK_STAGE_ACTIVE = original
@@ -113,19 +117,37 @@ class StraightIntentFallbackTest {
     }
 
     @Test
-    fun pipelineDetectsIllegalDualSolverOwnership() {
+    fun inactiveIkStageSkipsPhase1Execution() {
+        val original = IK_STAGE_ACTIVE
+        try {
+            IK_STAGE_ACTIVE = false
+            val pose = SkeletonPose()
+            pose.roots = SkeletonFactory.createStandardSkeleton().roots
+            val executions = SkeletonPose::class.java.getDeclaredField("limbSolverExecutions")
+            executions.isAccessible = true
+
+            IkStage.apply(pose, SkeletonDefinition.DEFAULT_ADULT)
+
+            assertEquals(0, executions.getInt(pose))
+        } finally {
+            IK_STAGE_ACTIVE = original
+        }
+    }
+
+    @Test
+    fun pipelineRejectsMultiplePhase1SolverExecutions() {
         val original = IK_STAGE_ACTIVE
         try {
             IK_STAGE_ACTIVE = false
             val pose = StandardPushUpPose().build(PoseContext(0.5f, Side.RIGHT, SkeletonDefinition.DEFAULT_ADULT))
-            val owners = SkeletonPose::class.java.getDeclaredField("limbSolverOwners")
-            owners.isAccessible = true
-            owners.setInt(pose, 3)
+            val executions = SkeletonPose::class.java.getDeclaredField("limbSolverExecutions")
+            executions.isAccessible = true
+            executions.setInt(pose, 2)
             val runStages = SkeletonPipeline::class.java.getDeclaredMethod("runStages", SkeletonPose::class.java)
             runStages.isAccessible = true
             try {
                 runStages.invoke(SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT), pose)
-                throw AssertionError("R5 dual-solver invariant did not throw")
+                throw AssertionError("R5 multiple-solver invariant did not throw")
             } catch (e: InvocationTargetException) {
                 assertTrue(e.cause is IllegalStateException)
             }
@@ -135,13 +157,15 @@ class StraightIntentFallbackTest {
     }
 
     @Test
-    fun solverOwnershipInstrumentationDoesNotCrossCopyBoundary() {
+    fun phase1ExecutionInstrumentationDoesNotCrossCopyBoundary() {
         val source = SkeletonPose()
         val published = SkeletonPose()
-        source.limbSolverOwners = 3
+        val executions = SkeletonPose::class.java.getDeclaredField("limbSolverExecutions")
+        executions.isAccessible = true
+        executions.setInt(source, 1)
 
         published.copyFrom(source)
 
-        assertEquals(0, published.limbSolverOwners)
+        assertEquals(0, executions.getInt(published))
     }
 }

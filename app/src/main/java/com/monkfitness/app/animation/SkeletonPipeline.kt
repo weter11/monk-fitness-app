@@ -169,15 +169,15 @@ class SkeletonPipeline(
         // entered the chain — not what the output copy carries.
         r8?.assertUnchanged(pose, "after Finalizer")
         if (BuildConfig.DEBUG) {
-            check(pose.limbSolverOwners in 0..2) {
-                if (pose.limbSolverOwners == 3) {
+            check(pose.limbSolverExecutions in 0..1) {
+                if (pose.limbSolverExecutions > 1) {
                     "R5 violation: multiple runtime limb solvers executed for one frame"
                 } else {
-                    "R5 violation: invalid limb-solver owner state ${pose.limbSolverOwners}"
+                    "R5 violation: invalid Phase-1 solver execution count ${pose.limbSolverExecutions}"
                 }
             }
         }
-        pose.limbSolverOwners = 0
+        pose.limbSolverExecutions = 0
         return finalized
     }
 

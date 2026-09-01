@@ -56,7 +56,7 @@ object IkStage {
         if (targets.isEmpty()) return
         val roots = pose.roots
         if (roots.isEmpty()) return
-        pose.limbSolverOwners = pose.limbSolverOwners or 2
+        pose.limbSolverExecutions++
 
         val nodeMap = Array<SkeletonNode?>(Joint.entries.size) { null }
         for (root in roots) collect(root, nodeMap)
