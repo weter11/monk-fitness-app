@@ -261,7 +261,7 @@ class SkeletonPose(
     /** IK/Solver stamp: a straight-limb intent could not be honoured (the limb was re-baked bent). */
     var straightIntentDropped: Boolean = false
 
-    /** Per-frame ownership instrumentation; bakeIkLimb = 1, IkStage = 2; never published. */
+    /** Per-frame runtime ownership instrumentation; IkStage = 2; never published. */
     internal var limbSolverOwners: Int = 0
 
     /**
