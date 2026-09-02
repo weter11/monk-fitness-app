@@ -150,6 +150,8 @@ class ValidationStampWriteSiteAuditTest {
                 val line = stripComment(lines[i])
                 val m = assignmentRegex.find(line) ?: continue
                 if (m.groupValues[1] !in stampFields) continue
+                // IKResult is a solver outcome carrier, not published SkeletonPose state.
+                if (line.substringBefore('=').contains("result.${m.groupValues[1]}")) continue
                 val throughHelper = line.contains("ValidationStampMerge.") ||
                     lines.getOrNull(i + 1)?.contains("ValidationStampMerge.") == true
                 if (!throughHelper) {

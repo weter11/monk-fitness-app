@@ -13,6 +13,7 @@ import com.monkfitness.app.animation.IkStage
 import com.monkfitness.app.animation.WorldTarget
 import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.SkeletonDefinition
+import com.monkfitness.app.animation.HumanSkeletonDefinition
 import com.monkfitness.app.animation.PoseContext
 import com.monkfitness.app.animation.Side
 import com.monkfitness.app.animation.SkeletonPipeline
@@ -43,7 +44,7 @@ class StraightIntentFallbackTest {
         )
 
         assertFalse(result.straightIntentDropped)
-        assertTrue(SkeletonMath.bonesExact(Vector3(), result.joint, result.end, 2f, 1f))
+        assertEquals(2.5f, result.clampedDistance, 1e-6f)
     }
 
     @Test
@@ -101,7 +102,14 @@ class StraightIntentFallbackTest {
                 val pose = SkeletonPose()
                 pose.roots = nodes.roots
                 pose.limbTargets.add(WorldTarget(Joint.HAND_A, target, straight = true))
-                IkStage.apply(pose, SkeletonDefinition.DEFAULT_ADULT)
+                IkStage.apply(
+                    pose,
+                    HumanSkeletonDefinition(
+                        upperArmLength = 2f,
+                        forearmLength = 1f,
+                        armIKConstraint = constraint
+                    )
+                )
                 return pose
             }
 
