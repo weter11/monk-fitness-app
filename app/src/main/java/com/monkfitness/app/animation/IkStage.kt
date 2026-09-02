@@ -56,6 +56,7 @@ object IkStage {
         if (targets.isEmpty()) return
         val roots = pose.roots
         if (roots.isEmpty()) return
+        pose.limbSolverExecutions++
 
         val nodeMap = Array<SkeletonNode?>(Joint.entries.size) { null }
         for (root in roots) collect(root, nodeMap)
@@ -99,6 +100,8 @@ object IkStage {
 
             pose.maxIkClampAmount =
                 ValidationStampMerge.clamp(pose.maxIkClampAmount, result.clampAmount)
+            pose.straightIntentDropped =
+                ValidationStampMerge.dropped(pose.straightIntentDropped, result.straightIntentDropped)
             val bonesOk = SkeletonMath.bonesExact(rootWorld, result.joint, result.end, length1, length2)
             pose.boneLengthsVerified =
                 ValidationStampMerge.verified(pose.boneLengthsVerified, bonesOk)

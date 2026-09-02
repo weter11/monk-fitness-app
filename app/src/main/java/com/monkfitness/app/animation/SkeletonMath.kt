@@ -349,7 +349,8 @@ data class ContactConstraint(
         var requestedDistance: Float = 0f,
         var clampedDistance: Float = 0f,
         var clampAmount: Float = 0f,
-        var angularClampAmount: Float = 0f
+        var angularClampAmount: Float = 0f,
+        var straightIntentDropped: Boolean = false
     )
 
     /**
@@ -364,6 +365,28 @@ data class ContactConstraint(
     /** Maximum reachable end-effector distance for a 2-bone chain (honours the extension cap). */
     fun maxReach(L1: Float, L2: Float, constraint: IKConstraint): Float =
         (L1 + L2) * constraint.effectiveExtensionRatio
+
+    /**
+     * Canonical semantic test for a straight request that must use the bent fallback.
+     * Callers use this only to report the outcome; solving remains in the existing paths.
+     */
+    fun straightFallbackRequired(
+        requestedDistance: Float,
+        L1: Float,
+        L2: Float,
+        constraint: IKConstraint
+    ): Boolean = straightClampedDistance(requestedDistance, L1, L2, constraint) < L1
+
+    private fun straightClampedDistance(
+        requestedDistance: Float,
+        L1: Float,
+        L2: Float,
+        constraint: IKConstraint
+    ): Float {
+        val minCos = cos(constraint.minimumFlexionAngle * DEG2RAD)
+        val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
+        return requestedDistance.coerceIn(minDist, maxReach(L1, L2, constraint))
+    }
 
     /**
      * R2 (reach target authoring): project an authored IK [target] onto the *reachable annulus*
@@ -412,6 +435,7 @@ data class ContactConstraint(
         result: IKResult = IKResult(),
         contact: ContactConstraint? = null
     ): IKResult {
+        result.straightIntentDropped = false
         val dx = target.x - root.x
         val dy = target.y - root.y
         val dz = target.z - root.z
@@ -670,6 +694,7 @@ data class ContactConstraint(
         result: IKResult = IKResult(),
         contact: ContactConstraint? = null
     ): IKResult {
+        result.straightIntentDropped = false
         val dx = target.x - root.x
         val dy = target.y - root.y
         val dz = target.z - root.z
@@ -681,6 +706,8 @@ data class ContactConstraint(
         val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
 
         val dist = dMag.coerceIn(minDist, maxDist)
+        // Keep the semantic outcome tied to the exact distance used by this solver.
+        val straightFallback = dist < L1
 
         val dirX: Float; val dirY: Float; val dirZ: Float
         if (dMag > 1e-6f) {
@@ -706,6 +733,7 @@ data class ContactConstraint(
                 (root.y + dirY * dist - contact.point.y) * contact.normal.y +
                 (root.z + dirZ * dist - contact.point.z) * contact.normal.z
             if (signed < 0f) {
+                if (straightFallback) result.straightIntentDropped = true
                 resolveContactPlane(root, target, dist, Vector3(0f, 0f, 0f), L1, L2, constraint, contact, result, straight = true)
                 return result
             }
@@ -723,7 +751,8 @@ data class ContactConstraint(
         // (the same triangle solve the ConstraintSolver would apply) so both bone lengths are
         // preserved at bake time, removing the hidden dependency on the solver. A zero pole selects
         // the solver's stable world-down bend plane.
-        if (dist < L1) {
+        if (straightFallback) {
+            result.straightIntentDropped = true
             result.end.set(
                 root.x + dirX * dist,
                 root.y + dirY * dist,

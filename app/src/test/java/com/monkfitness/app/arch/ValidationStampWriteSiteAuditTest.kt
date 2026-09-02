@@ -128,11 +128,12 @@ class ValidationStampWriteSiteAuditTest {
                 "copyFrom: carrier-internal duplication; not a producer."
             ),
             Triple(
-                "straightIntentDropped", "this.straightIntentDropped = other.straightIntentDropped",
-                "copyFrom: carrier-internal duplication; not a producer."
+                "boneLengthsVerified", "this.boneLengthsVerified = other.boneLengthsVerified",
+                "copyFrom: carrier-internal duplication (the Finalizer's outputPose handoff); " +
+                    "not a producer."
             ),
             Triple(
-                "boneLengthsVerified", "this.boneLengthsVerified = other.boneLengthsVerified",
+                "straightIntentDropped", "this.straightIntentDropped = other.straightIntentDropped",
                 "copyFrom: carrier-internal duplication (the Finalizer's outputPose handoff); " +
                     "not a producer."
             )
@@ -149,6 +150,8 @@ class ValidationStampWriteSiteAuditTest {
                 val line = stripComment(lines[i])
                 val m = assignmentRegex.find(line) ?: continue
                 if (m.groupValues[1] !in stampFields) continue
+                // IKResult is a solver outcome carrier, not published SkeletonPose state.
+                if (line.substringBefore('=').contains("result.${m.groupValues[1]}")) continue
                 val throughHelper = line.contains("ValidationStampMerge.") ||
                     lines.getOrNull(i + 1)?.contains("ValidationStampMerge.") == true
                 if (!throughHelper) {

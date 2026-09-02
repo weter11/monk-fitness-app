@@ -168,6 +168,13 @@ class SkeletonPipeline(
         // question here is whether any stage wrote the injected context on the pose that
         // entered the chain — not what the output copy carries.
         r8?.assertUnchanged(pose, "after Finalizer")
+        if (BuildConfig.DEBUG) {
+            check(pose.limbSolverExecutions in 0..1) {
+                "R5 violation: multiple runtime limb solvers executed for one frame " +
+                    "(count=${pose.limbSolverExecutions})"
+            }
+        }
+        pose.limbSolverExecutions = 0
         return finalized
     }
 

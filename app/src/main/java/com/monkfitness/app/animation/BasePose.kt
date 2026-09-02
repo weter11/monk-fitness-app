@@ -315,6 +315,8 @@ abstract class BasePose : PoseBuilder {
         // pose so reachability is detected without per-pose manual bookkeeping.
         jointsBuffer.maxIkClampAmount =
             ValidationStampMerge.clamp(jointsBuffer.maxIkClampAmount, ikResult.clampAmount)
+        jointsBuffer.straightIntentDropped =
+            ValidationStampMerge.dropped(jointsBuffer.straightIntentDropped, ikResult.straightIntentDropped)
 
         // Phase 1 (F5): assert the solved chain preserved both bone lengths exactly and fold the
         // result into the pose's single `boneLengthsVerified` stamp (AND across all limbs).
@@ -464,6 +466,8 @@ fun bakeIkLimb(
     }
     buffer.maxIkClampAmount =
         ValidationStampMerge.clamp(buffer.maxIkClampAmount, ikResult.clampAmount)
+    buffer.straightIntentDropped =
+        ValidationStampMerge.dropped(buffer.straightIntentDropped, ikResult.straightIntentDropped)
     val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)
     buffer.boneLengthsVerified =
         ValidationStampMerge.verified(buffer.boneLengthsVerified, bonesOk)
