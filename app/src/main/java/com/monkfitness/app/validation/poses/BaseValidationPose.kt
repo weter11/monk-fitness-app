@@ -276,6 +276,8 @@ abstract class BaseValidationPose : PoseBuilder {
         // mirrors BasePose.bakeIkLimb).
         if (jointsBuffer.isTransformsUpdated) {
             jointsBuffer.boneLengthsVerified = true
+            // Phase 4 (R5): dropped-flag re-arm mirrors BasePose.bakeIkLimb (fresh-window, F2).
+            jointsBuffer.straightIntentDropped = false
             jointsBuffer.isTransformsUpdated = false
         }
         // Phase 1 (F6): a zero-length pole means the pose omitted one — derive the default world
@@ -294,6 +296,13 @@ abstract class BaseValidationPose : PoseBuilder {
         // pose so reachability is detected without per-pose manual bookkeeping.
         jointsBuffer.maxIkClampAmount =
             ValidationStampMerge.clamp(jointsBuffer.maxIkClampAmount, ikResult.clampAmount)
+        // Phase 4 (R5): diagnostic-instrument bake fold — mirrors BasePose.bakeIkLimb; this is
+        // the producer for the only production authors of `straight = true` (validation poses).
+        jointsBuffer.straightIntentDropped =
+            ValidationStampMerge.dropped(
+                jointsBuffer.straightIntentDropped,
+                if (straight) ikResult.straightIntentDropped else false
+            )
         // Phase 1 (F5): assert the solved chain preserved both bone lengths exactly and fold the
         // result into the pose's single `boneLengthsVerified` stamp (AND across all limbs).
         val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)

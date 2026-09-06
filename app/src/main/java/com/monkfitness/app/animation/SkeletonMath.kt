@@ -349,7 +349,12 @@ data class ContactConstraint(
         var requestedDistance: Float = 0f,
         var clampedDistance: Float = 0f,
         var clampAmount: Float = 0f,
-        var angularClampAmount: Float = 0f
+        var angularClampAmount: Float = 0f,
+        // Phase 4 (R5) — the Straight-Limb Fallback outcome of THIS solve, recorded at the
+        // branch that actually took it (RFC §4.3: the Limb Solve Result scratch carries the
+        // clamp/straight/bone-length readings). Private scratch; never crosses a subsystem
+        // boundary. Producers fold it into the carrier stamp via ValidationStampMerge.dropped.
+        var straightIntentDropped: Boolean = false
     )
 
     /**
@@ -412,6 +417,9 @@ data class ContactConstraint(
         result: IKResult = IKResult(),
         contact: ContactConstraint? = null
     ): IKResult {
+        // Phase 4 (R5): per-solve reset — a reused scratch buffer must not leak a previous
+        // straight limb's outcome into this solve (bake sites reuse one IKResult per limb).
+        result.straightIntentDropped = false
         val dx = target.x - root.x
         val dy = target.y - root.y
         val dz = target.z - root.z
@@ -670,6 +678,9 @@ data class ContactConstraint(
         result: IKResult = IKResult(),
         contact: ContactConstraint? = null
     ): IKResult {
+        // Phase 4 (R5): per-solve reset (see solveIK) — the scratch reading always describes
+        // THIS solve.
+        result.straightIntentDropped = false
         val dx = target.x - root.x
         val dy = target.y - root.y
         val dz = target.z - root.z
@@ -706,6 +717,13 @@ data class ContactConstraint(
                 (root.y + dirY * dist - contact.point.y) * contact.normal.y +
                 (root.z + dirZ * dist - contact.point.z) * contact.normal.z
             if (signed < 0f) {
+                // Phase 4 (R5): the limb is slid onto the surface and its middle joint placed
+                // by the straight-collinear helper — the rigid-straight solve could not be
+                // delivered at the requested placement, so the fallback outcome is honest iff
+                // the collinear middle had to be pulled inside the end (middleDist = dMag < L1)
+                // OR the requested distance was unreachable (clamped) below full straight reach.
+                // Geometry-observing flag only — no placement changes.
+                if (dist < L1) result.straightIntentDropped = true
                 resolveContactPlane(root, target, dist, Vector3(0f, 0f, 0f), L1, L2, constraint, contact, result, straight = true)
                 return result
             }
@@ -724,6 +742,10 @@ data class ContactConstraint(
         // preserved at bake time, removing the hidden dependency on the solver. A zero pole selects
         // the solver's stable world-down bend plane.
         if (dist < L1) {
+            // Phase 4 (R5): the straight request degenerates below the proximal bone and this
+            // branch executes the bent fallback — record the semantic outcome at the branch
+            // that took it (geometry untouched).
+            result.straightIntentDropped = true
             result.end.set(
                 root.x + dirX * dist,
                 root.y + dirY * dist,
