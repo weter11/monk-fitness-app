@@ -13,7 +13,10 @@ import org.junit.Test
  * engine-owned posture behaviour directly.
  *  - the solver seeds the root pelvis height from the pose's declared [PostureIntent];
  *  - contact conflicts are resolved by `contactPrecedence` (weighted root step);
- *  - the solved root is persisted for inter-frame temporal smoothing.
+ *  - the solved root is carried into the next frame's Inter-Frame Smoothing — as of Phase 5
+ *    (R10) this temporal state is owned by the SkeletonPipeline's Frame History and supplied
+ *    to each solve explicitly; the solver itself persists nothing (see
+ *    [com.monkfitness.app.arch.InterFrameSmoothingTest] for the smoothing contract).
  */
 class ConstraintSolverPhase2Test {
 
