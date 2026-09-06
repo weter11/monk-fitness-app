@@ -96,12 +96,39 @@ abstract class BasePose : PoseBuilder {
      * [IntentBuilder.reset] clears exactly the per-build carriers; structural node trees
      * ([ensureHierarchy]) are untouched. Subclasses author into the freshly-reset
      * [jointsBuffer] via [onBuild]; they cannot forget the reset because [build] is final.
+     *
+     * Phase 10 (R13): the final template also captures the build's [PoseContext.definition]
+     * so authoring helpers whose defaults are definition-owned (see [buildSpineCurve]) can
+     * resolve them without a signature migration at every call site. The reference is
+     * authoring/build-lifetime only — it never enters [SkeletonPose] state.
      */
     final override fun build(context: PoseContext): SkeletonPose {
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
+        buildDefinition = context.definition
         val pose = onBuild(context)
         onPoseBuilt(pose)
         return pose
+    }
+
+    /**
+     * Phase 10 (R13) — the definition of the [build] currently in progress (or the most recent
+     * one; single-threaded animation authoring, same contract as [jointsBuffer]). Written only
+     * by the final [build] template; read by definition-owned helper defaults.
+     */
+    private var buildDefinition: SkeletonDefinition? = null
+
+    /**
+     * Resolve the current build's definition-owned anatomical forward (RFC §5 R13). Fails fast
+     * when no build has run: an axis-less spine default outside the authoring lifecycle has no
+     * definition to derive from and must not silently pick a constant.
+     */
+    private fun anatomicalForward(): Vector3 {
+        val definition = buildDefinition
+        check(definition != null) {
+            "R13 defaults: axis-less spine authoring requires the final build(context) " +
+                "template to have supplied the current SkeletonDefinition"
+        }
+        return definition.anatomicalForward
     }
 
     /**
@@ -193,13 +220,18 @@ abstract class BasePose : PoseBuilder {
      * Phase 5 (W13/G4, W14/G5): this is the SINGLE authorized way to express a trunk lean.
      * A pose must never hand-write both `pelvis.localRotation` and `chest.localRotation` as
      * independent angles (migration rule B7 / frozen A2) — call this once instead.
+     *
+     * Phase 10 (R13): the axis-less default is the current build definition's anatomical
+     * forward, not a call-site constant (RFC §5 R13 / §1 Spine Intent row); an explicit
+     * [axis] remains the author's override. [axisZ] stays untouched for the (non-R13) helpers
+     * that still use it as a plain axis literal.
      */
     protected fun buildSpineCurve(
         lower: SkeletonNode,
         chest: SkeletonNode,
         lowerRad: Float,
         thoracicRad: Float,
-        axis: Vector3 = axisZ
+        axis: Vector3 = anatomicalForward()
     ) {
         lower.localRotation.set(axis, lowerRad)
         chest.localRotation.set(axis, thoracicRad)

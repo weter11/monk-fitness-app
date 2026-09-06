@@ -33,6 +33,14 @@ interface SkeletonDefinition {
     val hipRomLimits: HipRomLimits
         get() = HipRomLimits.DEFAULT
 
+    // Phase 10 (R13) — the definition's anatomical forward axis. RFC §5 R13: the default axis
+    // of Spine Intent is defined by the Skeleton Definition's anatomical axes, not by call-site
+    // defaults; call-site defaults derive from this property (the authoring base resolves its
+    // axis-less spine default through it). Deliberately abstract: every definition must state
+    // its own anatomical forward — there is no inherited fallback that would let the owner
+    // silently revert to a call-site constant.
+    val anatomicalForward: Vector3
+
     companion object {
         val DEFAULT_ADULT: SkeletonDefinition = HumanSkeletonDefinition()
     }
@@ -58,4 +66,10 @@ data class HumanSkeletonDefinition(
     override val armIKConstraint: IKConstraint = IKConstraint.ArmConstraint,
     override val legIKConstraint: IKConstraint = IKConstraint.LegConstraint,
     override val hipRomLimits: HipRomLimits = HipRomLimits.DEFAULT
-) : SkeletonDefinition
+) : SkeletonDefinition {
+    // Phase 10 (R13): the human model's anatomical forward is the historical +Z call-site
+    // default (bit-exact), so standard-definition axis-less spine authoring stays unchanged.
+    // A class-body property (not a data-class constructor parameter): adding one to the
+    // primary constructor would silently widen equals/hashCode/copy — out of P10's scope.
+    override val anatomicalForward: Vector3 = Vector3(0f, 0f, 1f)
+}
