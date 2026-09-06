@@ -64,11 +64,12 @@ Every "Current state" below was grep/read-verified against `app/src/main/java/co
 | P8 §6 Phase 4 publish ordering | P2, P3, P4 | Centralized stamp writes (P2); supersede point defined (P3); upstream limb-phase stamps exist (P4). **Explicitly NOT P7** — see below |
 | P9 R9 observer lock-in | P8 | Observes the completed published-state condition |
 | P10 R13 defaults ownership | P0 | Independent lane |
-| P11 R11/R14 compliance | P1–P10 | Verifies the assembled whole |
+| P11 R11/R14 compliance | P1–P10, P12 | Verifies the assembled whole (the whole includes the activated configuration) |
+| **P12 R5 Activation / Limb-Solver Ownership Transition** | P4, P5, P6, P7, P8 | Sole owner of the move from the runtime-validation state to the activated state in which `IK_STAGE_ACTIVE=true` is a valid production configuration (see Phase 12) |
 
 **P7→P8 resolution: P8 does NOT require P7.** They guard disjoint windows with disjoint mechanisms: P7 asserts Settled Geometry invariants between Phase 2 exit and Phase 3 completion (contacts don't move during finalization); P8 structures Phase 4's internal write order and immutability onset. Neither consumes the other's outputs, and P8's tests are expressible without P7's assertions being live. Practical note (scheduling, not dependency): landing P7 before P8 avoids potential diff churn if a guarantee violation ever forces a Finalizer change.
 
-**Parallel lanes after P0:** {P1, P2, P3, P5, P10} concurrent; then P4 (needs P2), P6 (needs P1+P5), P7 (needs P3+P6); P8 once P2+P3+P4 complete, independent of P6/P7 progress; P9 after P8; P11 closes.
+**Parallel lanes after P0:** {P1, P2, P3, P5, P10} concurrent; then P4 (needs P2), P6 (needs P1+P5), P7 (needs P3+P6); P8 once P2+P3+P4 complete, independent of P6/P7 progress; P9 after P8; P12 after P4+P5+P6+P7+P8, parallel with P9/P10; P11 closes (after P12).
 
 ---
 
@@ -215,6 +216,78 @@ Every "Current state" below was grep/read-verified against `app/src/main/java/co
 - **Enforcement mechanism:** The compliance tests; optional CI grep gate for forbidden patterns (`WeakHashMap<SkeletonPose`, global singletons) — decision below.
 - **Test plan:** As stated.
 - **Open questions / implementation decisions:** CI grep gate — propose yes; RFC silent on tooling.
+
+## Phase 12 — R5 Activation / Limb-Solver Ownership Transition
+
+**Status:** Ratified by the architecture owner 2026-09-06 (P12 adjudication). **NOT STARTED.** This phase is the sole owner of the work required to make `IK_STAGE_ACTIVE=true` a valid production configuration. Until it lands, flag-ON is a test/diagnostic configuration only, and P4's instruments honestly decline to certify authoring-vs-stage exclusivity. The frozen RFC is NOT amended by this phase and is NOT wrong: §5 R5 and §6 Phase 0/1 already define the activation end-state; the execution plan previously contained no phase owning the journey to it. P12 closes that plan gap.
+
+### 12.0 Normative vocabulary — the three states this phase exists to separate
+
+1. **CURRENT PRODUCTION STATE** — `IK_STAGE_ACTIVE=false` (`IkStage.kt:38`; zero production writes to the flag — sweep-verified; sole production read `:54`). The authoring bake is the active production limb solver; `IkStage` is a dead no-op. R5's per-configuration letter holds *only* because this configuration is the deployed one.
+2. **P4 RUNTIME VALIDATION STATE** — after P4 lands: the runtime-window counter + `check(count == 1 || (count == 0 && stage skipped))` proves no *second Phase-1 runtime solver* can enter `runStages`; the config/static audit proves the flag remains test-only. **Neither instrument proves authoring-vs-stage exclusivity** — flag-ON still double-solves (the authoring bake is ungated: `BasePose.kt:308`, `BaseValidationPose.kt:288`).
+3. **FUTURE R5 ACTIVATION STATE** — `IK_STAGE_ACTIVE=true` is a *valid production configuration*: authoring no longer performs limb realization for any migrated path, all `limbTargets` are realized by `IkStage`, exactly one implementation owns limb realization, and the invariant is enforced in the strengthened mode (§12.7). **Only P12 may move the codebase from state 2 to state 3.**
+
+### 12.1 RFC citations and contract position
+
+§5 R5 (full activation of the frozen responsibility set), §4.2 rows (Two-Bone IK Solve / Straight-Limb Fallback / Bone-Length Invariant / Default Pole — all "Active Limb Solver"), §6 Phase 0 ("while it is the Active Limb Solver") and Phase 1 ("If the engine-side IK stage is enabled"), §4.1 owner-kind sentence ("exactly one of its two implementations is instantiated per configuration"), A9 (flag demoted to rollout mechanism).
+
+### 12.2 Dependencies (mirrors the dependency table)
+
+Hard-deps **P4, P5, P6, P7, P8**. Parallel with **P9/P10**. Prerequisite of **P11**.
+- P4: producers, `IKResult` scratch, runtime-window counter and config audit are the substrate P12 strengthens (§12.7).
+- P5: the solver signature must be final (`solve(pose, definition, previousRootWorld?)`) before the re-bake path is re-owned — avoids rebase collision on the contact re-bake loop.
+- P6: the flag-ON pelvis window (Check 1; plan §P6 test (c), which already runs `IK_STAGE_ACTIVE=true` through the pipeline) must be green pre-flip and is a P12 acceptance gate.
+- P7: the Settled-Contact Guarantee harness must certify contacts pre-flip so §12.9's equivalence proof can detect guarantee-breaking.
+- P8: publication order fixed before the realization path swaps.
+
+### 12.3 Exact current blockers (source-verified at `d1d8962`; all must clear before any flip)
+
+- **B-1 Authoring-time consumers of solved results.** `BaseHipFlexorPose.solveFrontLeg` (`:105–110`) returns the bake `IKResult`; `CouchStretchPose:58–61` and `HalfKneelingStretchPose:52–55` derive arm targets from `legFIK.joint` **inside build**. Under activation these break (the solved knee does not exist yet at Phase 0).
+- **B-2 Direct-`solveIK` bypass family** (10 files: `LatStretchPose:94–113`, `DeadBugPose:73–92`, `MountainClimberPose:91–125`, `LegRaisePose:59–69`, `ReverseSnowAngelPose:81–114`, `GluteBridgePose:111–139`, `PelvicTiltPose:109+`, `SupermanPose`, `CatCowPose:61–84`, `BaseThoracicPose:139`): limb solving outside every registered implementation, with no `limbTargets`/stamp/contact registration; some consume `result.joint/end` directly (`CatCowPose:81–84` `setJoint` writes).
+- **B-3 Constraint/length recovery gap in `IkStage`.** `WorldTarget` (`PoseDefinition.kt:103–109`) carries no L1/L2/constraint; `IkStage.kt:69–73` recovers via an arm/leg heuristic reading `definition.armIKConstraint`/`legIKConstraint`. Authoring call sites pass **per-bake constraints** — the validation family uses opted-in full-extension variants (`BaseValidationPose.kt:239–243` `armStraightConstraint`/`legStraightConstraint`, e.g. `MiddleSplitPose:77–78`). Today contact limbs are masked by the `ConstraintSolver` re-bake (`ContactSpec` carries the authored constraint); non-contact straight limbs are masked only because targets happen to sit inside both bands. Parity that depends on coincidence is not an activation criterion.
+- **B-4 Third bake implementation.** `BaseValidationPose.kt:~250–330` duplicates authoring solving; validation poses are the *only* production `straight = true` authors and their KDoc semantics (e.g. `MiddleSplitPose:23–31`: the probe expects the *authoring* fallback to produce the bent limb) are written against the current state. VALIDATION.md's probe contract (the pose says "I want a straight limb here, show me what the runtime does") must survive activation with the *activated runtime* as the observed solver.
+- **B-5 `IkStage.kt:33` flip criterion** ("Flip it on after the `IkStageTest` byte-identity check is green") is under-conditioned (§12.10).
+
+### 12.4 Intent/carrier changes required (design decisions P12 must resolve)
+
+- **Extend the Limb Target** so `IkStage` can realize every limb losslessly: add `length1`, `length2`, and the per-limb `IKConstraint` reference (or a constraint-selector token) to `WorldTarget`; the stage then uses recovered values instead of the `isArm` heuristic (clears B-3). This is an Intent State format extension inside a carrier R5 already names — RFC §4.1 fixes the row's ownership/consumers, not its field list — but per this plan's amendment discipline (§Execution log binding decisions) it is raised as a **separate clarification proposal to weter11**, never bundled into an implementation PR.
+- **Declare-order solve inputs:** for B-1/B-2, the intent model needs either (a) pose-authored targets expressed against *declared* joints (root-relative/heading primitives that already exist: `setHeading`, `jointIntents`) so no Phase-1 output is needed at authoring time, or (b) a sanctioned in-build "planning solve" that is **not** limb realization (no node writes; results consumed only to compose targets). Option (b) touches R5's semantics and requires the same clarification proposal. P12 picks the recipe per family and documents it.
+- No new state categories; carrier fields stay outside `copyFrom` per the P3/P4 suppression pattern.
+
+### 12.5 Migration of authoring-dependent poses (B-1 + capture list)
+
+Per-family work items: the hip-flexor chain (`CouchStretchPose`, `HalfKneelingStretchPose` via `BaseHipFlexorPose`) — rewrite `solveArmsOnKnee`'s dependency to declared-intent terms (§12.4a) or the sanctioned planning solve (§12.4b); then the capture-only families: `BasePushUpPose:241–242` (documented bookkeeping-only — verify zero effect, then drop the capture) and the `reset()`-family poses that capture without downstream use (`ArmCirclesPose:100–118`, `WallSlidesPose:109–126`, `HipCarsPose:95–115`, `FacePullPose:96–123`, `KettlebellSwingPose:81–93`, `ScapularRetractionPose:96–113`, `BurpeePose:193–200`). Acceptance per family: while flag-OFF, node-write suppression is added **only when flag-ON** (the bake keeps running its registration/stamp effects — `limbTargets.add`, `contacts.add`, stamp merges — so contacts and stamp producers behave identically), proven by §12.9's harness.
+
+### 12.6 Migration of the direct-`solveIK` bypass family
+
+Route each of the 10 B-2 files through the package-level `bakeIkLimb` (exactly the gap `BasePose.kt:410–419` KDoc claims closed; the P4 ruling "no H2 migration in P4" deferred it — it is in-scope here because activation cannot proceed while these limbs exist in neither implementation). Sequence per file: migrate to bake (expected byte-identical for identity-parent cases; the helpers' clamp/verified stamps newly *populate* where they were silent — validator-visible diagnostics must be diffed, not assumed), add `limbTargets` coverage, then fold into §12.9's equivalence proof. `BaseThoracicPose:139` and CatCow-style `setJoint` consumers need the §12.4 planning-solve decision first.
+
+### 12.7 Transition of `IK_STAGE_ACTIVE`; post-activation enforcement of the single-active-solver invariant
+
+- **Flag lifecycle:** the declaration moves from "test-only rollout" to an engine-supplied configuration input (constructor/definition-level knob supplied by the creator per R14; still zero *silent* production writes). The P4 config audit is **retargeted, not deleted**: from "no production write exists" to "writes occur only through the declared configuration surface."
+- **Strengthened mode (replaces P4's runtime-window claim):** (a) the bake performs its limb realization **only when the stage is disabled** (`IK_STAGE_ACTIVE` gates the node-realization effect at the bake, not the registration effects); (b) the P4 carrier counter increments at *both* Phase-1-realization sites (bake realization branch + stage), so the plan formula becomes exactly `check(count == 1)` in both configurations — the `0 && skipped` disjunct retires; (c) `runStages` keeps the post-chain check (stage window); (d) the static audit extends: no `middleNode`/`endNode` `localPosition` writes outside the two registered implementations. Enforcement honesty note for the record: this makes the invariant mechanically true in **both** configurations — precisely what §12.0 state 3 requires.
+
+### 12.8 Tests that become INVALID at activation (declared up front, not discovered late)
+
+1. `IkStageTest.productionPosesByteIdenticalStageOnVsOff` / `contactPosesByteIdenticalStageOnVsOff` (`:88–125`): post-flip, flag-OFF *is* the legacy config and flag-ON *is* the realized config — the two runs differ only by authoring realization. Byte-equality there is tautological for migrated families and **vacuously green while B-2 limbs solve in neither config**. Retire/replace with §12.9's proof.
+2. `IkStageTest.flagDefaultsFalse` (`:69–72`): a state-2 guarantee; replaced by the §12.7 configuration-surface test.
+3. `RuntimeArchitectureBaselineTest` goldens: **must stay byte-identical across the flip** for the three fixtures (all in the migrated or bypass-migrated set; any diff = a realization change → stop-and-adjudicate with P12 named as the responsible phase per the golden-update policy — never a silent update).
+4. P4's config audit (retargeted per §12.7) and P4's runtime-window KDoc (updated from "one runtime solver" to full R5 mode).
+5. P6 `RootAuthorityTest` (c): remains **valid** and becomes a production-path test; P6 (b)/(d) unchanged.
+
+### 12.9 True-equivalence proof (or recorded deliberate deltas)
+
+- **Cross-configuration golden harness (the heart):** freeze a corpus = {3 baseline fixtures × reps} ∪ {all migrated B-1 families} ∪ {all 10 B-2 files} ∪ {5 validation poses incl. all `straight = true` probes} × progress sweep. Capture every joint world transform + all 8 stamps in **state-2 flag-ON** (= today's double-solve net output) and **state-3 post-flip** (= single-solve). Assert exact equality per the characterization policy. A mismatch is *either* a defect *or* an adjudicated behavior change: adjudicated changes are listed per-case with RFC-rule citation (e.g. a straight probe whose bent-fallback should now surface via `straightIntentDropped=true` instead of being silently re-solved by the stage — the flag P4 wires is the diagnostic that makes this visible, closing the loop on why P4 precedes P12).
+- **Counterfactual red-gates** (P2 discipline): every new enforcement test must be proven red on the pre-P12 tree (double-realization injectable → `count == 1` throws) before green means anything; anti-vacuity guards inside every stage-dependent test.
+- **Full forced suite** at both configuration gates; CI run on the exact head SHA; no golden touched without a §12.9-adjudicated entry naming P12.
+
+### 12.10 Disposition of `IkStage.kt`'s current flip criterion
+
+`IkStage.kt:28–37` ("Flip it on after the `IkStageTest` byte-identity check is green") is **replaced** — it is a comment, not RFC text, so P12 edits it directly. New criterion, in the KDoc: activation requires ALL of — (i) B-1 consumers eliminated or planning-solve-sanctioned, (ii) B-2 family migrated to registered implementations, (iii) `WorldTarget` carries constraint/lengths (B-3 lossless recovery, no coincidence dependence), (iv) §12.7 strengthened-mode enforcement live, (v) §12.9 equivalence harness green-or-adjudicated, (vi) validation-probe semantics re-certified against the realized path (B-4). Each item names its P12 work-package so the criterion is checkable, not aspirational.
+
+### 12.11 Explicit non-goals of P12
+
+No RFC edits (the activation state is what the frozen R5/§6 already describe; the only carrier/clarification proposals are §12.4's, raised separately). No IK math changes. No validator rule semantics beyond what §12.9's stamp-surfacing exposes. No deletion of either implementation (adjudication B). No merge of anything into `main`.
 
 ---
 
