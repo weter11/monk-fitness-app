@@ -183,6 +183,15 @@ class SkeletonPipeline(
         // deep payload mutation and content-identical rewrites are outside its reach, and
         // release builds compile the mechanism out entirely (no snapshot, no compare).
         val r8 = if (BuildConfig.DEBUG) RuntimeContextSnapshot.of(pose) else null
+        // Phase 6 (R2) — root-authority boundary instrumentation (debug builds only; RFC §5 R2,
+        // plan §P6). Capture point A: this is the window-entry state — build has returned and
+        // Runtime Context Injection is done, so the pelvis transform holds the last lawful
+        // authoring write. `r2ProtectedRoot` is the snapshot later checks compare against; it
+        // switches ONLY at the explicit solve site below (capture B) — never inferred from the
+        // retained Frame History (P5 pitfall 1): a frame that legitimately skips the solve has
+        // no authorized root mover, so A must survive to publish untouched.
+        var r2ProtectedRoot =
+            if (BuildConfig.DEBUG) PhaseBoundaryAsserts.captureRoot(pose, "capture A (post-build)") else null
         // B1 (IkStage extraction) — the pipeline-owned limb stage consumes the §1.1 `limbTargets`
         // carrier and re-derives each limb's local positions on the engine-owned node tree.
         // (IK_STAGE_ACTIVE was excluded from Phase B — its flag is a future additive
@@ -191,6 +200,12 @@ class SkeletonPipeline(
         // root-repositioning pass, and before the Finalizer's FK.
         IkStage.apply(pose, definition)
         r8?.assertUnchanged(pose, "after IkStage")
+        // Phase 6 Check 1 — Phase 1 is not a root mover: the pelvis must be bit-identical to A
+        // (covers the engine-side-limb-stage-active configuration; the limb stage writes only
+        // middle/end joint locals, so a pelvis change here means a regression).
+        if (BuildConfig.DEBUG) {
+            r2ProtectedRoot?.assertUnchanged(pose, "Phase 1 (IkStage limb solve window)")
+        }
         // Stage 3 (ConstraintSolver) — posture/contact settling. Runs for contact poses (M3) and
         // for any pose that names a non-CUSTOM posture intent so the engine owns the coarse root
         // height. A CUSTOM, contact-less production pose is still a pure no-op. (Phase B collapsed
@@ -232,9 +247,19 @@ class SkeletonPipeline(
             }
             if (BuildConfig.DEBUG) {
                 lastFrameArmedSmoothingCapture = settledRoot != null
+                // Phase 6 capture point B — the solve ran (the authorized root mover). The
+                // protected reference for the remaining windows switches to the settled root
+                // NOW, at the explicit branch site (the P5 armed-state pattern: the decision
+                // is made by instrumentation at the execution site, never inferred from
+                // retained history). A pelvis-less solved tree keeps A: no settled root was
+                // written, so the authored root remains the state that must survive.
+                r2ProtectedRoot = PhaseBoundaryAsserts.captureRoot(pose, "capture B (post-settlement)")
             }
         } else if (BuildConfig.DEBUG) {
             lastFrameArmedSmoothingCapture = false
+            // Phase 6 branch handling — the solve was legitimately skipped (contact-less
+            // CUSTOM), so no authorized mover exists after build: Checks 1/2 compare against
+            // A directly (plan §P6). `r2ProtectedRoot` intentionally still holds A here.
         }
         r8?.assertUnchanged(pose, "after ConstraintSolver")
         // Stage 4+ (Finalizer) — world↔local conversion, extremity derivation, chest-frame
@@ -244,6 +269,19 @@ class SkeletonPipeline(
         // question here is whether any stage wrote the injected context on the pose that
         // entered the chain — not what the output copy carries.
         r8?.assertUnchanged(pose, "after Finalizer")
+        // Phase 6 Check 2 — Phases 3/4 (Finalize + publish) are not root movers: the published
+        // frame's pelvis must be bit-identical to the protected reference (B on solved frames,
+        // A on legitimately skipped frames). Checked on the FINALIZED pose — its `roots` are the
+        // same node tree the Finalizer published from, so this asserts on the state consumers
+        // actually receive (RFC §6 Phase 4: publication completes with these transforms).
+        if (BuildConfig.DEBUG) {
+            r2ProtectedRoot?.assertUnchanged(
+                finalized,
+                "Phase 3/4 (Finalizer + publish window; solver " +
+                    (if (pose.hasContacts() || postureDriven) "ran" else "was skipped") +
+                    " this frame)"
+            )
+        }
         // Phase 4 (R5) — runtime-window enforcement (plan §P4: check(count == 1 ||
         // (count == 0 && stage skipped))). Counts Phase-1 limb-solver windows executed inside
         // this pipeline frame (today: IkStage only). Proves no second Phase-1 runtime solver can
