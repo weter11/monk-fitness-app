@@ -277,12 +277,12 @@ class LimbSolverOwnershipActivationContractTest {
 
     @Test
     fun hipFlexorFamilyDoesNotConsumeSolveResultsForAuthoring() {
-        // B-1 blocker: `BaseHipFlexorPose.solveFrontLeg` hands the bake's IKResult to the
-        // variants, which derive the arm targets from the SOLVED KNEE world position inside
+        // B-1 blocker: `BaseHipFlexorPose.solveFrontLeg` handed the bake's IKResult to the
+        // variants, which derived the arm targets from the SOLVED KNEE world position inside
         // build. Under activation the stage realizes the leg later, so the solved knee is not
-        // an authoring input at that point — the dependency must be re-expressed (declared
-        // intent §12.4a or the sanctioned planning solve §12.4b). The source audit pins the
-        // shape: no hip-flexor file may read a solve result's `joint`/`end` to compose intent.
+        // an authoring input at that point. The sanctioned shape (§12.4b): intent may be
+        // composed from a `planLimbPlacement` result (planning solve: no registration, no node
+        // writes, no stamps) — NEVER from the return value of a `bakeIkLimb` call.
         val files = listOf(
             "poses/BaseHipFlexorPose.kt",
             "poses/CouchStretchPose.kt",
@@ -295,16 +295,14 @@ class LimbSolverOwnershipActivationContractTest {
                 val line = raw.trim()
                 if (line.startsWith("//") || line.startsWith("*") || line.startsWith("/*")) return@forEachIndexed
                 val code = line.substringBefore("//")
-                if (Regex("""legFIK\s*\.\s*(joint|end)\b""").containsMatchIn(code) ||
-                    Regex("""solveFrontLeg[^=]*\.\s*(joint|end)\b""").containsMatchIn(code)
-                ) {
+                if (Regex("""=\s*bakeIkLimb\s*\(""").containsMatchIn(code)) {
                     offenders.add("$rel:${i + 1}: $line")
                 }
             }
         }
         assertEquals(
-            "authoring must not compose intent from the Active Limb Solver's runtime result " +
-                "(B-1; §12.4a declared-intent or §12.4b sanctioned planning solve):\n" +
+            "authoring must not consume a registered bake's realization result; the only " +
+                "allowed composition source in this family is planLimbPlacement (§12.4b):\n" +
                 offenders.joinToString("\n"),
             emptyList<String>(), offenders
         )
@@ -315,11 +313,12 @@ class LimbSolverOwnershipActivationContractTest {
     @Test
     fun noUnauthorizedDirectSolveInProductionPoses() {
         // Registered Phase-1 limb-solver implementations + the solver math itself + the
-        // sanctioned Phase-2 Contact Re-Solve are the ONLY production files allowed to invoke
-        // `solveIK(`. Production pose files calling it directly are the B-2 bypass family.
+        // sanctioned Phase-2 Contact Re-Solve + the §12.4b planning-solve primitive are the ONLY
+        // production files allowed to invoke `solveIK(`. Production POSE files calling it
+        // directly are the B-2 bypass family.
         val allowed = setOf(
             "SkeletonMath.kt",        // the math itself
-            "BasePose.kt",            // authoring bake (registered implementation, both paths)
+            "BasePose.kt",            // authoring bake (registered implementations) + planLimbPlacement (§12.4b)
             "IkStage.kt",             // engine stage (registered implementation)
             "BaseValidationPose.kt",  // validation-family authoring bake (registered authoring implementation)
             "ConstraintSolver.kt"     // Phase-2 Contact Re-Solve (settlement, not a limb solver)

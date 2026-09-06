@@ -409,6 +409,44 @@ abstract class BasePose : PoseBuilder {
     protected fun parabolicFootLift(t: Float): Float = MotionDrivers.ParabolicLift(t)
 
     /**
+     * P12 (§12.4b) — the ONE sanctioned authoring-time **planning solve**. Computes a limb's
+     * intermediate placement (e.g. the bent-knee apex) so a pose can COMPOSE later Limb Targets
+     * from it inside `build()`, when the Active Limb Solver's result is not authoring input under
+     * activation (R5: the realization happens in the engine stage, after build returns).
+     *
+     * It is NOT limb realization and NOT a second Active Limb Solver, mechanically:
+     *  - writes NO nodes and NO carrier state (registration effects do not run);
+     *  - does NOT count into the R5 solver-window counter (no Phase-1 realization happened);
+     *  - its result may be consumed ONLY to compose intent values (target coordinates) that the
+     *    pose then declares through `bakeIkLimb`/the Intent Builder — never as geometry;
+     *  - produces no Validation Stamp readings — the stamped solve for that limb is the
+     *    registered implementation's job under R5.
+     *
+     * P12 admits exactly one family to this route (plan §12.5): the hip-flexor chain, whose arm
+     * targets are choreographed against the front knee's bent position. Adding any other caller
+     * requires a plan amendment; `PlanningSolveInventoryTest` pins the call sites.
+     */
+    protected fun planLimbPlacement(
+        rootWorldPos: Vector3,
+        targetWorldPos: Vector3,
+        length1: Float,
+        length2: Float,
+        pole: Vector3,
+        constraint: IKConstraint,
+        out: SkeletonMath.IKResult
+    ): SkeletonMath.IKResult {
+        val worldPole = if (pole.mag() < 1e-4f) {
+            SkeletonMath.deriveDefaultPole(rootWorldPos, targetWorldPos, tempPoleWorld)
+        } else {
+            pole
+        }
+        return SkeletonMath.solveIK(
+            rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, out
+        )
+    }
+
+
+    /**
      * Phase 2 (F2/F7) — declares the coarse posture intent the [ConstraintSolver] should honour
      * (seeding the root/pelvis height) and the contact-conflict precedence order. This is the
      * pose-side half of moving root ownership into the engine: instead of hand-computing `pelvisY`/

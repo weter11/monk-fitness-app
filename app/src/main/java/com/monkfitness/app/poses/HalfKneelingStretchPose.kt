@@ -47,12 +47,13 @@ class HalfKneelingStretchPose : BaseHipFlexorPose() {
         kneeB!!.localPosition.set(thighVecB)
         ankleB!!.localPosition.set(shinVecB)
 
-        // 3. Inverse Kinematics for Front Leg
+        // 3. Front leg intent (declared through the registered bake; the returned knee apex is
+        // the §12.4b planning-solve value used ONLY to compose the arm targets below).
         targetAnkleF.set(65f, 25f, -def.hipWidth)
-        val legFIK = solveFrontLeg(def)
+        val legFPlan = planFrontLegKnee(def)
 
         // 4. Arms Rest on Front Knee
-        solveArmsOnKnee(legFIK.joint, def)
+        solveArmsOnKnee(legFPlan.joint, def)
 
         // 5. Extremity / Foot Orientation
         applyFrontFoot(def)
