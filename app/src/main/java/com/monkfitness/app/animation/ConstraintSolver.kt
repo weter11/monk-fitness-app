@@ -268,6 +268,13 @@ object ConstraintSolver {
         // carrier flag is written back exactly once after the loop, so a mid-settle assignment
         // can never erase the primary reading captured above.
         var contactFindings = true
+        // Phase 4 (R5): local accumulation of Straight-Limb Fallback outcomes observed by the
+        // contact re-bake — from the solver's own branch decision (a straight spec re-baked bent
+        // because the moved root left it inside L1) and from the scratch reading of the straight
+        // solve it ran instead. Merged into the carrier exactly once after the loop (R6: the
+        // ConstraintSolver is a strengthen-only, OR producer per §4.4 — the merge can never
+        // erase an authoring-time `true`).
+        var straightFindings = false
         if (SMOOTH_GAIN > 0f) {
             val prev = lastSolvedRoot[pose]
             if (prev != null) {
@@ -369,6 +376,12 @@ object ConstraintSolver {
                         spec.pole, spec.constraint, ikResult, spec.contact
                     )
                 }
+                // Phase 4 (R5): record this re-bake's fallback outcome from branch evidence +
+                // scratch only — no independently reconstructed predicate. `!canBeStraight` on a
+                // straight spec means the solver itself executed the bent fallback for it.
+                if (spec.straight && (!canBeStraight || ikResult.straightIntentDropped)) {
+                    straightFindings = true
+                }
 
                 // Phase 1 (F5): the re-baked contact limb must preserve both bone lengths too.
                 if (!SkeletonMath.bonesExact(rootWorld, ikResult.joint, ikResult.end, spec.length1, spec.length2)) {
@@ -396,6 +409,11 @@ object ConstraintSolver {
         // `false` originating from a non-contact limb (registered defect V2) and thereby violated
         // RFC §5 R6 (strengthen-only restamping).
         pose.boneLengthsVerified = ValidationStampMerge.verified(primaryVerified, contactFindings)
+
+        // Phase 4 (R5, merge-once): the Straight-Intent-Dropped Flag strengthened exactly once
+        // with this settlement's fallback findings (RFC §4.4 rule OR; §5 R6 strengthen-only).
+        pose.straightIntentDropped =
+            ValidationStampMerge.dropped(pose.straightIntentDropped, straightFindings)
 
         // UNI-1 — true posture pass. The loop above is a root-reposition relaxation (translate +
         // tilt the pelvis, then re-bake each contact limb toward its target). When contacts are

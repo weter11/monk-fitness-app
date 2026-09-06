@@ -262,6 +262,21 @@ class SkeletonPose(
     var straightIntentDropped: Boolean = false
 
     /**
+     * Phase 4 (R5) — runtime-window limb-solver execution count. Incremented ONLY by engine
+     * Phase-1 limb-solver windows inside `runStages` (today: `IkStage.apply`, past its gate),
+     * checked (`in 0..1`) and reset by `SkeletonPipeline.runStages` at the end of each frame.
+     *
+     * Scope (honesty KDoc): this proves NO SECOND Phase-1 runtime solver can execute for one
+     * frame. It does NOT certify authoring-vs-stage exclusivity — authoring solves run inside
+     * `build()`, outside the pipeline window, and the config audit pins `IK_STAGE_ACTIVE=false`
+     * as the deployed state. Full R5 activation is owned by plan Phase 12.
+     *
+     * Internal instrumentation: never added to `copyFrom`, so Published Pose State cannot inherit
+     * it (P3 suppression pattern).
+     */
+    internal var limbSolverExecutions: Int = 0
+
+    /**
      * IK stamp: every solved limb exactly preserved its bone lengths (invariant F5). Optimistic
      * default `true`; each `bakeIkLimb` ANDs its per-limb check in, so a single violated limb
      * flips the whole pose to `false`. The IK path resets it at the start of each build.

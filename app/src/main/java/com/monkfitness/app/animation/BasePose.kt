@@ -278,6 +278,11 @@ abstract class BasePose : PoseBuilder {
         // starts from the §4.4 default.
         if (jointsBuffer.isTransformsUpdated) {
             jointsBuffer.boneLengthsVerified = true
+            // Phase 4 (R5): the Straight-Intent-Dropped Flag (OR identity = false) re-arms in
+            // the SAME sanctioned fresh-window block, so each build's write window opens with
+            // neither stamp carrying a previous build's reading. Not a strengthening merge
+            // (F2 pattern).
+            jointsBuffer.straightIntentDropped = false
             jointsBuffer.isTransformsUpdated = false
         }
         // B1 (IkStage extraction) — forward the end joint + world target into the §1.1
@@ -315,6 +320,15 @@ abstract class BasePose : PoseBuilder {
         // pose so reachability is detected without per-pose manual bookkeeping.
         jointsBuffer.maxIkClampAmount =
             ValidationStampMerge.clamp(jointsBuffer.maxIkClampAmount, ikResult.clampAmount)
+
+        // Phase 4 (R5): fold this solve's Straight-Limb Fallback outcome into the carrier
+        // stamp (RFC §4.4 producer "Active Limb Solver (first write)", merge rule OR). The
+        // reading is the scratch's — it describes the branch THIS solve actually took.
+        jointsBuffer.straightIntentDropped =
+            ValidationStampMerge.dropped(
+                jointsBuffer.straightIntentDropped,
+                if (straight) ikResult.straightIntentDropped else false
+            )
 
         // Phase 1 (F5): assert the solved chain preserved both bone lengths exactly and fold the
         // result into the pose's single `boneLengthsVerified` stamp (AND across all limbs).
@@ -441,6 +455,8 @@ fun bakeIkLimb(
     // [BasePose.bakeIkLimb]: the first limb baked this build re-arms the optimistic `true`.
     if (buffer.isTransformsUpdated) {
         buffer.boneLengthsVerified = true
+        // Phase 4 (R5): dropped-flag re-arm mirrors the member path (fresh-window, F2 pattern).
+        buffer.straightIntentDropped = false
         buffer.isTransformsUpdated = false
     }
     buffer.limbTargets.add(
@@ -464,6 +480,12 @@ fun bakeIkLimb(
     }
     buffer.maxIkClampAmount =
         ValidationStampMerge.clamp(buffer.maxIkClampAmount, ikResult.clampAmount)
+    // Phase 4 (R5): package-level bake fold — mirrors the member path exactly (see above).
+    buffer.straightIntentDropped =
+        ValidationStampMerge.dropped(
+            buffer.straightIntentDropped,
+            if (straight) ikResult.straightIntentDropped else false
+        )
     val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)
     buffer.boneLengthsVerified =
         ValidationStampMerge.verified(buffer.boneLengthsVerified, bonesOk)

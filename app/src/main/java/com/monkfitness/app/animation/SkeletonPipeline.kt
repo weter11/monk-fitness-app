@@ -168,6 +168,24 @@ class SkeletonPipeline(
         // question here is whether any stage wrote the injected context on the pose that
         // entered the chain — not what the output copy carries.
         r8?.assertUnchanged(pose, "after Finalizer")
+        // Phase 4 (R5) — runtime-window enforcement (plan §P4: check(count == 1 ||
+        // (count == 0 && stage skipped))). Counts Phase-1 limb-solver windows executed inside
+        // this pipeline frame (today: IkStage only). Proves no second Phase-1 runtime solver can
+        // run for one frame; deliberately does NOT claim authoring-vs-stage exclusivity —
+        // authoring solving happens in build(), outside this window (P12 owns that transition;
+        // see IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md §12.0 state 2 vs state 3).
+        if (BuildConfig.DEBUG) {
+            val stageSkipped = !IK_STAGE_ACTIVE
+            check(
+                pose.limbSolverExecutions == 1 ||
+                    (pose.limbSolverExecutions == 0 && stageSkipped)
+            ) {
+                "R5 violation: runtime limb-solver windows executed this frame = " +
+                    "${pose.limbSolverExecutions} (expected 1, or 0 while the engine-side " +
+                    "IK stage is skipped)"
+            }
+        }
+        pose.limbSolverExecutions = 0
         return finalized
     }
 

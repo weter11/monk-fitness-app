@@ -52,6 +52,16 @@ class ValidationStampWriteSiteAuditTest {
                 "boneLengthsVerified", "buffer.boneLengthsVerified = true",
                 "Sanctioned build-scoped re-arm (F2) in package-level bakeIkLimb; mirrors the " +
                     "member path."
+            ),
+            Triple(
+                "straightIntentDropped", "jointsBuffer.straightIntentDropped = false",
+                "Phase 4 (R5): dropped-flag re-arm in the same sanctioned fresh-window block " +
+                    "(F2 pattern); OR identity is false."
+            ),
+            Triple(
+                "straightIntentDropped", "buffer.straightIntentDropped = false",
+                "Phase 4 (R5): dropped-flag re-arm in package-level bakeIkLimb; mirrors the " +
+                    "member path."
             )
         ),
         "IkStage.kt" to listOf(
@@ -65,6 +75,11 @@ class ValidationStampWriteSiteAuditTest {
             Triple(
                 "boneLengthsVerified", "jointsBuffer.boneLengthsVerified = true",
                 "Sanctioned re-arm (F2) in the diagnostic-instrument bake; mirrors the member path."
+            ),
+            Triple(
+                "straightIntentDropped", "jointsBuffer.straightIntentDropped = false",
+                "Phase 4 (R5): dropped-flag re-arm in the same sanctioned fresh-window block " +
+                    "(F2 pattern); mirrors the member path."
             )
         ),
 
@@ -149,6 +164,14 @@ class ValidationStampWriteSiteAuditTest {
                 val line = stripComment(lines[i])
                 val m = assignmentRegex.find(line) ?: continue
                 if (m.groupValues[1] !in stampFields) continue
+                // Phase 4 (R5): the IKResult scratch buffer is a solve-local outcome carrier
+                // (RFC §4.3 — Limb Solve Result, never an inter-subsystem state), not the
+                // pose's Validation Stamp. Its field writes are out of this audit's scope;
+                // the carrier stamp itself is only writable through ValidationStampMerge or
+                // the whitelisted sites below. Receiver-based: every carrier write in the
+                // codebase sits on `pose.`/`jointsBuffer.`/`buffer.`/`this.` — never `result.`.
+                val lhs = line.substringBefore('=')
+                if (Regex("""(?<![A-Za-z0-9_])result\.${m.groupValues[1]}\s*$""").containsMatchIn(lhs)) continue
                 val throughHelper = line.contains("ValidationStampMerge.") ||
                     lines.getOrNull(i + 1)?.contains("ValidationStampMerge.") == true
                 if (!throughHelper) {

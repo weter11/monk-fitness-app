@@ -52,6 +52,13 @@ object IkStage {
      */
     fun apply(pose: SkeletonPose, definition: SkeletonDefinition) {
         if (!IK_STAGE_ACTIVE) return
+        // Phase 4 (R5): the engine-side limb-solver window IS executing for this frame — count
+        // it for the pipeline's runtime-window enforcement. Incremented past the rollout gate
+        // but before the no-work early-returns so "window instantiated" is counted uniformly
+        // (count==0 in the check means the stage was skipped by config, not merely idle).
+        // Sole production increment site; authoring solves are NOT counted here — they run in
+        // build(), outside the pipeline window (P12 owns the activation transition).
+        pose.limbSolverExecutions++
         val targets = pose.limbTargets
         if (targets.isEmpty()) return
         val roots = pose.roots
@@ -99,6 +106,12 @@ object IkStage {
 
             pose.maxIkClampAmount =
                 ValidationStampMerge.clamp(pose.maxIkClampAmount, result.clampAmount)
+            // Phase 4 (R5): fold the executed solve's fallback outcome (see BasePose.bakeIkLimb).
+            pose.straightIntentDropped =
+                ValidationStampMerge.dropped(
+                    pose.straightIntentDropped,
+                    if (target.straight) result.straightIntentDropped else false
+                )
             val bonesOk = SkeletonMath.bonesExact(rootWorld, result.joint, result.end, length1, length2)
             pose.boneLengthsVerified =
                 ValidationStampMerge.verified(pose.boneLengthsVerified, bonesOk)
