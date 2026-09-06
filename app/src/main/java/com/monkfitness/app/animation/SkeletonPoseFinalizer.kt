@@ -1,5 +1,6 @@
 package com.monkfitness.app.animation
 
+import com.monkfitness.app.BuildConfig
 import kotlin.math.*
 
 /**
@@ -17,6 +18,18 @@ class SkeletonPoseFinalizer(
 ) {
     private val outputPose = SkeletonPose()
     private val tempDir = Vector3()
+
+    // P8 (§6 Phase 4 / §3.3) — publication marker (DEBUG-only enforcement state for §3.3's
+    // immutability onset; the single-shot semantics are a plan §P8 IMPLEMENTATION DECISION, not
+    // new RFC rules, and the marker is runtime state on THIS finalizer instance — it never
+    // enters the published carrier contents, which must carry exactly Published Pose State per
+    // §3.3/§4.3). Set at the tail of [publish]; cleared only by the documented re-arm evidences
+    // (new pipeline window / new authoring cycle / different carrier). Release builds never
+    // read or write these fields' enforcement role ([published] stays false — no runtime
+    // verification path is added to release; the marker assignment itself is compiled out).
+    private var published = false
+    private var publishingPose: SkeletonPose? = null
+    private var publishingBuildToken = 0L
     private val tempForwardHint = Vector3()
     private val tempFootDir = Vector3()
     private val tempFootNormal = Vector3()
@@ -346,6 +359,32 @@ class SkeletonPoseFinalizer(
         // supported legacy path. Fail fast instead of silently taking the deleted bridge.
         check(pose.roots.isNotEmpty()) { "SkeletonPoseFinalizer.finalize requires a populated pose.roots (legacy bridge removed in Phase E)" }
 
+        // P8 (§6 Phase 4 / §3.3) — publish-order re-entry guard (DEBUG-only). The single-shot
+        // semantics are an IMPLEMENTATION DECISION of plan §P8, NOT §6 Phase 4's literal text:
+        // §6 fixes the internal write order and §3.3 the immutability onset; this guard is the
+        // enforcement mechanism FOR §3.3 — a second publication of the same carrier through this
+        // finalizer would silently republish the reused private `outputPose` buffer. Two
+        // legitimate boundary events re-arm the marker (neither is a violation):
+        //  (a) SkeletonPipeline opening a new execution window for this carrier
+        //      ([beginPublishWindow]) — RFC §6 Phase 0.5 / §4.5 R11 ownership transfer;
+        //  (b) a fresh authoring pass over the carrier — the per-build intent-carrier reset
+        //      bumps [SkeletonPose.buildCycleToken]; the jointsBuffer instance is reused across
+        //      builds (BasePose §build-template), so a new build cycle is a new publish cycle;
+        //  and a different carrier object always belongs to a different frame's publish unit.
+        if (BuildConfig.DEBUG) {
+            val reArmed = published &&
+                (publishingPose !== pose || publishingBuildToken != pose.buildCycleToken)
+            if (reArmed) published = false
+            check(!published) {
+                "$PUBLISH_ORDER_VIOLATION this SkeletonPoseFinalizer already published the " +
+                    "carrier at hand and no re-arm evidence exists (same carrier, same authoring " +
+                    "cycle, no new pipeline window) — re-finalizing would republish the reused " +
+                    "outputPose buffer after RFC §3.3 immutability onset"
+            }
+            publishingPose = pose
+            publishingBuildToken = pose.buildCycleToken
+        }
+
         outputPose.copyFrom(pose)
 
         // Modern rotation-driven path: Execute Forward Kinematics traversal directly using direct local joint rotations/offsets
@@ -416,12 +455,106 @@ class SkeletonPoseFinalizer(
             )
         }
 
+        // P8 — explicit publish tail: final flatten-completion check → Validation Stamp
+        // writes → publication marker (RFC §6 Phase 4 fixed internal order). The tail is the
+        // ONLY return path of this function; no caller reaches the published buffer without it.
+        return publish(outputPose)
+    }
+
+    /**
+     * P8 (§6 Phase 4 / §3.3) — the single explicit publish tail of [finalize].
+     *
+     * Fixed internal order (RFC §6 Phase 4: publication completes ONLY after BOTH write sets —
+     * every published transform and every attributable Validation Stamp write — are finished):
+     *
+     * ```
+     * final flatten-completion check → applyValidationStamps → published = true → return
+     * ```
+     *
+     * The marker is set ONLY after the final validation-stamp writes complete; nothing after it
+     * performs a Published Pose State write (enforced debug-side at [applyValidationStamps] and
+     * at the [finalize] entry). The marker is DEBUG-only enforcement state on this instance (a
+     * plan §P8 IMPLEMENTATION DECISION for §3.3 enforcement — not a new RFC rule, not a state
+     * category, and never carrier content).
+     */
+    private fun publish(outputPose: SkeletonPose): SkeletonPose {
+        // §6 Phase 4 write set 1 completion: every published transform is in the carrier
+        // before the stamp phase begins (debug-only verification).
+        if (BuildConfig.DEBUG) assertFinalFlattenComplete(outputPose)
+
         // B5 — populate the §1.2 STATE stamps the validator consumes (no geometry inference
         // left in the validator). Computed from the final solved `outputPose`, so the stamps
         // reflect exactly the geometry the validator previously re-derived.
         applyValidationStamps(outputPose)
 
+        // §3.3 immutability onset: the publication marker, set ONLY after the last
+        // attributable stamp write above (§6 Phase 4 order). Debug-only.
+        if (BuildConfig.DEBUG) {
+            published = true
+        }
         return outputPose
+    }
+
+    /**
+     * P8 — re-arm evidence (a) for the [finalize] publish-order guard: SkeletonPipeline opens a
+     * NEW execution window over the carrier it is about to run (RFC §6 Phase 0.5 → stages;
+     * §4.5 R11 ownership transfer). The frame is a new publish unit, so the publication marker
+     * THIS finalizer instance holds from the previous frame is cleared. Called ONLY under
+     * `BuildConfig.DEBUG` (see [SkeletonPipeline.runStages]) — release builds never reach it,
+     * so no runtime verification path is added there.
+     */
+    internal fun beginPublishWindow() {
+        published = false
+    }
+
+    /**
+     * P8 — final flatten-completion check (debug-only, called from [publish] before the
+     * stamp phase): every published transform must already bit-match the flattened hierarchy.
+     *
+     * The extremity-derivation endpoints ([EXTREMITY_DERIVED_JOINTS]) are the sole authorized
+     * carrier-only writes at publish time: `adjustFootOrientation` / `adjustHandOrientation`
+     * compute them into the carrier (no upstream node carries the derived positions), so the
+     * node-vs-carrier comparison excludes exactly those joints — the set was probe-verified
+     * bit-exact on every other joint across all production pose families and progress sweeps.
+     */
+    private fun assertFinalFlattenComplete(pose: SkeletonPose) {
+        for (root in pose.roots) checkFlattened(root, pose)
+    }
+
+    private fun checkFlattened(node: SkeletonNode, pose: SkeletonPose) {
+        if (!EXTREMITY_DERIVED_JOINTS.contains(node.joint)) {
+            val w = node.worldPosition
+            val j = pose.getJoint(node.joint)
+            check(w.x == j.x && w.y == j.y && w.z == j.z) {
+                "$PUBLISH_ORDER_VIOLATION transform ${node.joint} was not flattened into the " +
+                    "published carrier before the stamp phase (RFC §6 Phase 4: Flatten completes " +
+                    "every published transform FIRST)"
+            }
+        }
+        for (child in node.children) checkFlattened(child, pose)
+    }
+
+    companion object {
+        /**
+         * P8 — centralized prefix of every publish-order enforcement failure (entry re-entry,
+         * post-marker stamp write, pre-stamp flatten gap). Follows the same centralization
+         * idiom as the R2/R3/R5/R8 enforcement texts of this track; P8's guard is a plan §P8
+         * IMPLEMENTATION DECISION enforcing §3.3, so the message names the ORDER violation
+         * rather than an RFC rule number.
+         */
+        internal const val PUBLISH_ORDER_VIOLATION = "Publish-order violation:"
+
+        /**
+         * Joints whose published value is derived directly into the carrier by the Finalizer's
+         * W1 extremity derivation (no node-side world position corresponds to the derived
+         * value). Excluded from the final flatten-completion check — probe-verified as the
+         * EXACT mismatch set on every production pose family.
+         */
+        private val EXTREMITY_DERIVED_JOINTS = setOf(
+            Joint.HEEL_F, Joint.TOE_F, Joint.HEEL_B, Joint.TOE_B,
+            Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A,
+            Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P
+        )
     }
 
     // B5 — §1.2 stamp production (engine-owned). Reuses the identical femur-direction math
@@ -429,6 +562,17 @@ class SkeletonPoseFinalizer(
     private val hipRomStampScratch = HipRomStamp(0f, 0f, 0f, 0f)
 
     private fun applyValidationStamps(pose: SkeletonPose) {
+        // P8 (§3.3) — the stamp phase is part of the publish tail: it may run ONLY before the
+        // publication marker. A write reaching here after `published=true` (a late re-entry on
+        // an already-published finalizer instance) mutates Published Pose State past immutability
+        // onset and throws in DEBUG. (During the normal single pass the marker is still unset.)
+        if (BuildConfig.DEBUG) {
+            check(!published) {
+                "$PUBLISH_ORDER_VIOLATION Validation Stamp write attempted after the §3.3 " +
+                    "immutability onset (published=true) — stamp writes belong to the publish " +
+                    "tail and may never follow publication"
+            }
+        }
         pose.hipRomStamps.clear()
         for (i in 0 until 2) {
             val hip = if (i == 0) Joint.HIP_F else Joint.HIP_B

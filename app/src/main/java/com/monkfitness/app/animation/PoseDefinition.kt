@@ -168,6 +168,17 @@ class SkeletonPose(
     internal var settlementResult: SettlementInfo? = null
 ) {
 
+    // P8 (§6 Phase 4 / §3.3) — authoring-cycle token (DEBUG-only enforcement support for the
+    // SkeletonPoseFinalizer publish-order guard): bumped by [IntentBuilder.reset], the per-build
+    // carrier hygiene reset both build templates perform first. The Finalizer's reused-carrier
+    // re-arm evidence (b) compares this token: a changed token means a FRESH authoring pass
+    // opened over the carrier, so publishing again is a new legitimate publish unit rather
+    // than a silent §3.3 re-entry. This is implementation-decision bookkeeping, NOT Published
+    // Pose State content: like settlementResult it is deliberately absent from [copyFrom], so
+    // the Finalized Pose keeps exactly transforms+stamps contents (§3.3/§4.3). Release builds
+    // never read or write it (the bump is BuildConfig.DEBUG-gated).
+    internal var buildCycleToken: Long = 0L
+
     /**
      * The environment the pose rests in, derived from `metadata.environment` once by the pipeline.
      * The [SkeletonPoseFinalizer] reads this — NOT a per-pose hardcoded plane — to derive the
@@ -467,6 +478,10 @@ class SkeletonPose(
          * consuming stages in B1/B2; until then the carrier-backed surface above is the substrate.)
          */
         fun reset() {
+            // P8 — bump the authoring-cycle token: this reset is the canonical "fresh build
+            // pass" boundary the finalizer's publish-order guard recognizes as re-arm evidence
+            // (b) (debug-gated: release never reads the token — no runtime path added).
+            if (com.monkfitness.app.BuildConfig.DEBUG) pose.buildCycleToken++
             pose.spineIntent = SpineCurve()
             pose.jointIntents.clear()
             pose.limbTargets.clear()
