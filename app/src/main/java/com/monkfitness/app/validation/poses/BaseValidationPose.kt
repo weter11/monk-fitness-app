@@ -159,13 +159,17 @@ abstract class BaseValidationPose : PoseBuilder {
      * B2 — the single declarative spine curve (lower + thoracic about a shared axis), mirroring
      * [com.monkfitness.app.animation.BasePose.buildSpineCurve]. Writes both nodes and records the
      * `spineIntent` plus per-joint `jointIntents` entries for the Finalizer to consume.
+     *
+     * Phase 10 (R13): like the production base, the axis-less default resolves from the current
+     * build definition's anatomical forward — the validation authoring path gets no separate
+     * hardcoded anatomical default; an explicit [axis] remains the author's override.
      */
     protected fun buildSpineCurve(
         lower: SkeletonNode,
         chest: SkeletonNode,
         lowerRad: Float,
         thoracicRad: Float,
-        axis: Vector3 = axisZ
+        axis: Vector3 = anatomicalForward()
     ) {
         lower.localRotation.set(axis, lowerRad)
         chest.localRotation.set(axis, thoracicRad)
@@ -381,8 +385,33 @@ abstract class BaseValidationPose : PoseBuilder {
         // jointIntents, limbTargets, extremity carriers and posture in O(carriers), keeping
         // per-frame intent complexity constant.
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
+        // Phase 10 (R13): capture the build's definition so the axis-less spine default in
+        // buildSpineCurve resolves definition-owned (mirrors BasePose.build). Authoring-
+        // lifetime only; the reference never enters SkeletonPose state.
+        buildDefinition = context.definition
         // Validation poses are frozen: animation progress / side / mirroring are ignored.
         return buildStatic(context.definition)
+    }
+
+    /**
+     * Phase 10 (R13) — the definition of the [build] currently in progress (or the most recent
+     * one; same single-threaded authoring contract as [jointsBuffer]). Written only by the final
+     * [build] template; read by the definition-owned spine default.
+     */
+    private var buildDefinition: SkeletonDefinition? = null
+
+    /**
+     * Resolve the current build's definition-owned anatomical forward (RFC §5 R13). Fails fast
+     * when no build has run: an axis-less spine default outside the authoring lifecycle has no
+     * definition to derive from and must not silently pick a constant.
+     */
+    private fun anatomicalForward(): Vector3 {
+        val definition = buildDefinition
+        check(definition != null) {
+            "R13 defaults: axis-less spine authoring requires the final build(context) " +
+                "template to have supplied the current SkeletonDefinition"
+        }
+        return definition.anatomicalForward
     }
 
     protected fun staticMetadata(
