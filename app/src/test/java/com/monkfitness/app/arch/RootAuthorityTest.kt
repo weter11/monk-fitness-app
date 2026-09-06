@@ -103,6 +103,59 @@ class RootAuthorityTest {
     }
 
     @Test
+    fun armedStateSwitchIsConfinedToTheSolverWindowAndUtilityUseIsCentralized() {
+        // Supplementary audits (defense-in-depth; the behavioral tests above are the primary
+        // regression). Three static contracts of the armed-state pattern:
+        //  (1) the protected-root reference switches at EXACTLY ONE production site, and it
+        //      sits inside the solve-branch window (the P5 pattern: instrumentation at the
+        //      execution site, not a second mechanism elsewhere);
+        //  (2) the instrumentation never reads retained Frame History (`previous`/
+        //      `prePrevious`) to arm or suppress protection — the behavioral trap for that
+        //      error class is [solverSkippedFrameAfterSolvedFrameProtectsOwnAuthoredRoot];
+        //  (3) PhaseBoundaryAsserts is driven only by SkeletonPipeline — no ad-hoc
+        //      root-authority check has appeared in an unrelated production class.
+        val sources = productionAnimationSources()
+        val pipeline = sources["SkeletonPipeline.kt"] ?: error("SkeletonPipeline.kt not found")
+        val isSwitchSite = Regex("""^r2ProtectedRoot\s*=(?!=)""")
+        val switchLines = pipeline.withIndex()
+            .filter { (_, line) -> isSwitchSite.containsMatchIn(line.trim()) }
+            .map { it.index }
+        assertEquals(
+            "the R2 protected-root reference may switch at exactly one site (capture B at " +
+                "the explicit solve branch; the capture-A `var` declaration is not a switch)",
+            1, switchLines.size
+        )
+        val solveAt = pipeline.indexOfFirst { it.contains("ConstraintSolver.solve(") }
+        val postSolveAssertAt = pipeline.indexOfFirst { it.contains("\"after ConstraintSolver\"") }
+        assertTrue(
+            "the switch site must lie between the ConstraintSolver.solve call and the " +
+                "post-solve stage assert (solveAt=$solveAt, switch=${switchLines[0]}, " +
+                "assert=$postSolveAssertAt)",
+            solveAt >= 0 && postSolveAssertAt >= 0 &&
+                switchLines[0] > solveAt && switchLines[0] < postSolveAssertAt
+        )
+        val historyInference = pipeline.filter { line ->
+            line.contains("r2ProtectedRoot") &&
+                (line.contains("previous") || line.contains("prePrevious"))
+        }
+        assertTrue(
+            "R2 protection must never be armed/suppressed from retained Frame History: $historyInference",
+            historyInference.isEmpty()
+        )
+        val extraUsers = sources
+            .filter { (name, lines) ->
+                name != "SkeletonPipeline.kt" && lines.any { it.contains("PhaseBoundaryAsserts.") }
+            }
+            .keys
+        assertEquals(
+            "PhaseBoundaryAsserts must be driven only by SkeletonPipeline (boundary checks " +
+                "centralized — no ad-hoc root-authority mechanism elsewhere); found $extraUsers",
+            emptySet<String>(),
+            extraUsers
+        )
+    }
+
+    @Test
     fun forbiddenRootRotationInFinalizerWindowThrowsAtCheck2() {
         // THE primary behavioral regression (plan test (a)/(d) shape): a real root mutation
         // executed INSIDE the protected window by production code — the Finalizer's intent
