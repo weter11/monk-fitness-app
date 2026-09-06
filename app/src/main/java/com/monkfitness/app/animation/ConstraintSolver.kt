@@ -89,10 +89,14 @@ object ConstraintSolver {
     // jitter when contacts are marginally inconsistent. Zero = no smoothing (strict per-frame solve).
     private const val SMOOTH_GAIN = 0.25f
 
-    // Phase 2 (F9) — per-pose inter-frame relaxation cache. Keyed by the [SkeletonPose] identity,
-    // which production poses reuse across frames, so the last solved root is carried forward and
-    // the current solve eases toward it. `WeakHashMap` keeps it free of leaks when poses are GC'd.
-    private val lastSolvedRoot = java.util.WeakHashMap<SkeletonPose, Vector3>()
+    // Phase 5 (R10) — the solver keeps NO cross-frame memory of its own. The inter-frame
+    // relaxation state that Phase 2 carried in an identity-keyed `WeakHashMap<SkeletonPose,
+    // Vector3>` is now owned by SkeletonPipeline's Frame History (§4.5) and supplied to each
+    // solve explicitly via [solve]'s `previousSolvedRoot` parameter (RFC §5 R10: the solver's
+    // behavior is a function of current-frame inputs plus supplied history, never of object
+    // identity). Reintroducing any persistent pose-keyed / static previous-root cache here
+    // re-creates the V3 violation; the `arch/FrameHistoryOwnershipAuditTest` source audit and
+    // the `InterFrameSmoothingTest` behavioral suite pin the boundary.
 
     // Persistent scratch — no hot-path allocation.
     private val zero = Vector3()
@@ -205,13 +209,26 @@ object ConstraintSolver {
      * transforms and, at the end, runs a fresh FK + flatten).
      *
      * Branch B3 — posture universality: when the solver owns posture and the pose
-     * declares a non-[PostureIntent.Kind.CUSTOM] intent, the solver runs even with **no** contacts,
-     * so it can seed/pin the coarse pelvis height from the intent (the relaxation loop below is a
-     * strict no-op for contact-less poses, so production standing shapes are untouched apart from
-     * the engine-owned root height). A pose that neither registers contacts nor names a posture is
-     * still a pure no-op.
+     * declares a non-[PostureIntent.Kind.CUSTOM] intent, the solver runs even with **no**
+     * contacts, so it can seed/pin the coarse pelvis height from the intent (the relaxation
+     * loop below is a strict no-op for contact-less poses, so production standing shapes are
+     * untouched apart from the engine-owned root height). A pose that neither registers
+     * contacts nor names a posture is still a pure no-op.
+     *
+     * Phase 5 (R10) — [previousRootWorld] is the Frame History input for Inter-Frame
+     * Smoothing: the settled root the previous frame produced, held and supplied by
+     * [SkeletonPipeline] (the RFC §4.5 owner of Frame History), or `null` on the first frame
+     * of the history window. The solver never derives it from its own memory — this method is
+     * a pure function of the current-frame inputs plus the supplied history, never of object
+     * identity (§5 R10). The value is in the solver's own root space (the pelvis node's local
+     * position — the root's world position for a body-root hierarchy), the exact
+     * representation the pre-P5 solver cache persisted, so easing numerics are unchanged.
      */
-    fun solve(pose: SkeletonPose, definition: SkeletonDefinition) {
+    fun solve(
+        pose: SkeletonPose,
+        definition: SkeletonDefinition,
+        previousRootWorld: Vector3? = null
+    ) {
         val contacts = pose.contacts
         // Phase B collapsed SOLVER_OWNS_POSTURE to its true branch (always on).
         val postureDriven = pose.postureIntent.kind != PostureIntent.Kind.CUSTOM
@@ -260,10 +277,13 @@ object ConstraintSolver {
         // unchanged. (Phase B collapsed SOLVER_OWNS_POSTURE to its true branch.)
         seedRootFromPostureIntent(pose, definition, pelvis)
 
-        // Phase 2 (F9) — inter-frame temporal smoothing. Ease the seeded/solved root toward the
-        // root produced for this same pose on the previous frame, so marginally inconsistent
-        // contacts don't jitter frame-to-frame. Disabled (gain 0) leaves the per-frame solve exact.
-        // (Phase B collapsed SOLVER_OWNS_POSTURE to its true branch.)
+        // Phase 2 (F9) / Phase 5 (R10) — inter-frame temporal smoothing. Ease the seeded/solved
+        // root toward the root produced by the previous frame, so marginally inconsistent contacts
+        // don't jitter frame-to-frame. Disabled (gain 0) leaves the per-frame solve exact. The
+        // previous root arrives as a current-frame input ([previousRootWorld], supplied from the
+        // SkeletonPipeline's Frame History; the pipeline's runStages debug check owns the
+        // "first frame vs forgot to wire" trip-wire) — the solver holds no cross-frame memory
+        // of its own (RFC §5 R10).
         // Phase 2 (R4/R6): local accumulation of this settlement's contact-limb findings. The
         // carrier flag is written back exactly once after the loop, so a mid-settle assignment
         // can never erase the primary reading captured above.
@@ -276,7 +296,7 @@ object ConstraintSolver {
         // erase an authoring-time `true`).
         var straightFindings = false
         if (SMOOTH_GAIN > 0f) {
-            val prev = lastSolvedRoot[pose]
+            val prev = previousRootWorld
             if (prev != null) {
                 pelvis.localPosition.x = SkeletonMath.lerp(prev.x, pelvis.localPosition.x, 1f - SMOOTH_GAIN)
                 pelvis.localPosition.y = SkeletonMath.lerp(prev.y, pelvis.localPosition.y, 1f - SMOOTH_GAIN)
@@ -438,15 +458,12 @@ object ConstraintSolver {
         SkeletonMath.getRotationFromMatrix(outMatX, outMatY, outMatZ, rootDeltaRot)
         pose.rootRotationDelta = kotlin.math.abs(rootDeltaRot.angle)
 
-        // Phase 2 (F9) — persist the solved root for inter-frame temporal smoothing on the next
-        // build of this same pose instance (see [lastSolvedRoot]). (Phase B collapsed
-        // SOLVER_OWNS_POSTURE to its true branch.)
-        val cached = lastSolvedRoot[pose]
-        if (cached != null) {
-            cached.set(pelvis.localPosition)
-        } else {
-            lastSolvedRoot[pose] = pelvis.localPosition.copy()
-        }
+        // Phase 5 (R10) — the solved root is NOT persisted here. The former F9 cache write
+        // (`lastSolvedRoot[pose] = …`) was the V3 violation: cross-frame memory owned by the
+        // solver and keyed by SkeletonPose object identity. The pipeline commits its Frame
+        // History after finalization (`commitFrameHistory`) and supplies the previous root to
+        // the next solve as an explicit input, so this method ends its temporal work with the
+        // current frame.
 
         // Final FK + flatten so the finalized pose reflects the solved root placement.
         SkeletonPose.fromHierarchy(roots, pose)

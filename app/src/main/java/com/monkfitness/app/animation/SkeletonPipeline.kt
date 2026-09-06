@@ -35,9 +35,14 @@ data class ValidatedFrame(val pose: SkeletonPose, val report: ValidationReport)
  *
  * **Ownership & lifetime (RFC_ENGINE_PIPELINE §Issue 5):** a `SkeletonPipeline` owns its stage
  * *instances* (currently the [SkeletonPoseFinalizer] and an optional [ExerciseValidator]) and the
- * per-frame previous/pre-previous pose history used by the dynamics validator rules. It is a
- * long-lived, per-engine/per-definition object — **not** created per frame or per pose. It is not
- * thread-safe (one instance per render loop), matching the existing single-threaded finalizer.
+ * Frame History (RFC_RUNTIME_SKELETON_ARCHITECTURE §4.5) — the previous/pre-previous pose chain
+ * consumed by the dynamics validator rules and (Phase 5 / §5 R10) the settled-root smoothing
+ * input supplied to the solver's Inter-Frame Smoothing (§4.2). The Frame History is now the
+ * engine's ONLY cross-frame temporal state: the ConstraintSolver previously kept a hidden
+ * identity-keyed cache of its own (plan violation V3) and was made stateless with respect to
+ * previous frames. The pipeline is a long-lived, per-engine/per-definition object — **not**
+ * created per frame or per pose. It is not thread-safe (one instance per render loop), matching
+ * the existing single-threaded finalizer.
  */
 class SkeletonPipeline(
     private val definition: SkeletonDefinition,
@@ -54,8 +59,30 @@ class SkeletonPipeline(
     // Per-frame history for the dynamics validator rules (velocity/acceleration/discontinuity).
     // Snapshots so a later frame's finalize (which reuses the finalizer's output buffer) cannot
     // alias the previous frame's data.
+    // Phase 5 (R10) — this is the RFC §4.5 Frame History and the pipeline is its SOLE owner.
+    // It now advances on EVERY production path via [commitFrameHistory] (both [produceFrame]
+    // overloads and [produceFrameValidated]); before P5 it advanced only on the validating path
+    // while inter-frame smoothing secretly lived in the solver's identity-keyed WeakHashMap
+    // (the V3 violation R10 removes).
     private var previous: SkeletonPose? = null
     private var prePrevious: SkeletonPose? = null
+
+    // Phase 5 (R10) — the Frame History input for the solver's Inter-Frame Smoothing (§4.2):
+    // the settled root of the most recent frame that RAN THE SOLVER, captured BY VALUE right
+    // after that solve (node buffers are reused across builds, so a reference must never be
+    // retained). Same value space the deleted solver cache persisted (the pelvis node's local
+    // position — the root space the solver seeds and eases in), so sequential-playback
+    // smoothing numerics are unchanged; what changed is WHO holds it and how the next solve
+    // receives it: the pipeline owns it and passes it as an explicit current-frame input, and
+    // it is never keyed by SkeletonPose identity — every consumer of this pipeline shares the
+    // single rolling history (RFC §5 R10; plan Risk 3). `null` until this pipeline has solved
+    // its first frame — the legitimate "first frame" case.
+    private var previousSmoothingRoot: Vector3? = null
+    // Debug trip-wire bookkeeping (see [runStages]): whether the most recent frame RAN the
+    // solver over a hierarchy with a settled pelvis node — i.e. whether it captured (or should
+    // have captured) a smoothing root for the next frame. Distinguishes a legitimate
+    // "first frame / solve skipped" state from "forgot to wire". Never read in release builds.
+    private var lastFrameArmedSmoothingCapture = false
 
     /**
      * Single entry point for an already-built pose (renderer path). Runs the ordered stage chain
@@ -79,6 +106,8 @@ class SkeletonPipeline(
     ): PipelineResult {
         injectRuntimeContext(builtPose, environment, supportedPoints)
         val finalized = runStages(builtPose)
+        // Phase 5 (R10) — Frame History is committed on this path too (see [commitFrameHistory]).
+        commitFrameHistory(finalized)
         return PipelineResult(finalized, null)
     }
 
@@ -90,6 +119,17 @@ class SkeletonPipeline(
      * report (use [produceFrameValidated] for validation).
      */
     fun produceFrame(pose: PoseBuilder, context: PoseContext): PipelineResult {
+        val finalized = runStages(buildAndInject(pose, context))
+        commitFrameHistory(finalized)
+        return PipelineResult(finalized, null)
+    }
+
+    /**
+     * Builder-path front half: `build()` + the single [injectRuntimeContext] call. Shared by
+     * [produceFrame] and [produceFrameValidated] (the validating entry must run the stages
+     * *before* committing history so it can validate against the PREVIOUS frame's chain).
+     */
+    private fun buildAndInject(pose: PoseBuilder, context: PoseContext): SkeletonPose {
         val built = pose.build(context)
         // W1b — stamp the engine-owned support model onto the pose so the Finalizer can derive
         // support planes for EVERY pose from the environment (ground + props) and the declared
@@ -103,7 +143,7 @@ class SkeletonPipeline(
             derivedSupportedPoints.add(contact.point)
         }
         injectRuntimeContext(built, pose.metadata.environment, derivedSupportedPoints)
-        return PipelineResult(runStages(built), null)
+        return built
     }
 
     /**
@@ -147,7 +187,7 @@ class SkeletonPipeline(
         // carrier and re-derives each limb's local positions on the engine-owned node tree.
         // (IK_STAGE_ACTIVE was excluded from Phase B — its flag is a future additive
         // decision, not legacy removal — so the IkStage no-op gate is preserved as-is.) It runs
-        // before the ConstraintSolver so contact limbs are re-baked from their targets ahead of the
+        // before the ConstraintSolver so contact limbs are re-baked from its targets ahead of the
         // root-repositioning pass, and before the Finalizer's FK.
         IkStage.apply(pose, definition)
         r8?.assertUnchanged(pose, "after IkStage")
@@ -157,8 +197,44 @@ class SkeletonPipeline(
         // PIPELINE_ACTIVE and SOLVER_OWNS_POSTURE to their true branch: the pipeline is always live
         // and posture ownership is always on.)
         val postureDriven = pose.postureIntent.kind != PostureIntent.Kind.CUSTOM
+        // Phase 5 (R10) — the Frame History smoothing input is supplied to the solve as an
+        // explicit current-frame argument; the solver derives it from no other source (RFC
+        // §5 R10: behavior is a function of current-frame inputs plus supplied history, never
+        // of object identity). Debug `check` distinguishes the legitimate "first frame of the
+        // history window" from "forgot to wire": the trip-wire is armed only when the frame
+        // about to become `previous` actually RAN the solver over a hierarchy with a pelvis
+        // node (a frame that skipped the solve — contact-less CUSTOM — legitimately has no
+        // smoothing root to capture, exactly like the deleted cache which was written only
+        // by solving frames). If a future refactor drops the capture below, the next frame's
+        // solve throws here instead of silently losing smoothing.
+        if (BuildConfig.DEBUG) {
+            check(
+                previous == null || !lastFrameArmedSmoothingCapture || previousSmoothingRoot != null
+            ) {
+                "R10 violation: the committed Frame History carries a solved root eligible " +
+                    "for smoothing but no smoothing root was captured — the commit-time " +
+                    "capture in runStages was forgotten"
+            }
+        }
         if (pose.roots.isNotEmpty() && (pose.hasContacts() || postureDriven)) {
-            ConstraintSolver.solve(pose, definition)
+            ConstraintSolver.solve(pose, definition, previousSmoothingRoot)
+            // Phase 5 (R10) — capture THIS frame's settled root BY VALUE as the next frame's
+            // smoothing history, immediately after the solve (the sole root mover, R2). Read
+            // from the pelvis node's local position — the exact value space the deleted solver
+            // cache persisted (the root space the solver seeds/eases in), so sequential-
+            // playback smoothing numerics are unchanged. Node buffers are reused across
+            // builds, so the reference must never be retained. A pelvis-less solved tree
+            // captures nothing (the old cache could not have been written either — `solve`
+            // early-returns before settling without a pelvis).
+            val settledRoot = findPelvisNode(pose.roots)?.localPosition
+            if (settledRoot != null) {
+                previousSmoothingRoot = Vector3(settledRoot.x, settledRoot.y, settledRoot.z)
+            }
+            if (BuildConfig.DEBUG) {
+                lastFrameArmedSmoothingCapture = settledRoot != null
+            }
+        } else if (BuildConfig.DEBUG) {
+            lastFrameArmedSmoothingCapture = false
         }
         r8?.assertUnchanged(pose, "after ConstraintSolver")
         // Stage 4+ (Finalizer) — world↔local conversion, extremity derivation, chest-frame
@@ -190,9 +266,44 @@ class SkeletonPipeline(
     }
 
     /**
+     * Phase 5 (R10) — the SOLE rotation site of the Frame History pose chain, called by every
+     * production entry point after the frame is produced (the validating path commits only
+     * after validation consumed the PREVIOUS chain, preserving dynamics-rule ordering).
+     * [previous]/[prePrevious] hold snapshots of the finalized frame per the §4.5 rolling
+     * two-frame lifetime. Behavior change vs pre-P5: the chain now also advances on the two
+     * non-validating [produceFrame] overloads (previously it advanced only on the validating
+     * path, while smoothing secretly lived in the solver's identity cache). The smoothing root
+     * capture lives in [runStages] (next to the solve it follows); both are pipeline-owned
+     * Frame History state.
+     */
+    private fun commitFrameHistory(finalized: SkeletonPose) {
+        prePrevious = previous
+        previous = SkeletonPose().apply { copyFrom(finalized) }
+    }
+
+    /** Depth-first search of a solved hierarchy for the pelvis (root-authority) node. */
+    private fun findPelvisNode(roots: List<SkeletonNode>): SkeletonNode? {
+        for (root in roots) {
+            val found = findPelvisNode(root)
+            if (found != null) return found
+        }
+        return null
+    }
+
+    private fun findPelvisNode(node: SkeletonNode): SkeletonNode? {
+        if (node.joint == Joint.PELVIS) return node
+        for (child in node.children) {
+            val found = findPelvisNode(child)
+            if (found != null) return found
+        }
+        return null
+    }
+
+    /**
      * [produceFrame] plus the mandatory validation stage. Requires a validator to have been
-     * supplied at construction. Maintains the previous/pre-previous history so the dynamics rules
-     * see a coherent frame sequence; call [resetHistory] when the animation restarts/seeks.
+     * supplied at construction. The dynamics rules read the previous/pre-previous Frame History
+     * before this frame is committed to it; call [resetHistory] when the animation
+     * restarts/seeks.
      */
     fun produceFrameValidated(
         pose: PoseBuilder,
@@ -205,7 +316,7 @@ class SkeletonPipeline(
     ): ValidatedFrame {
         val v = validator
             ?: error("produceFrameValidated requires a validator supplied to the SkeletonPipeline constructor.")
-        val finalized = produceFrame(pose, context).pose
+        val finalized = runStages(buildAndInject(pose, context))
         val report = v.validate(
             pose = finalized,
             definition = definition,
@@ -217,8 +328,9 @@ class SkeletonPipeline(
             prePreviousPose = prePrevious,
             deltaTime = deltaTime
         )
-        prePrevious = previous
-        previous = SkeletonPose().apply { copyFrom(finalized) }
+        // Phase 5 (R10) — history rotation folded into the shared [commitFrameHistory]; the
+        // validate call above still reads the PREVIOUS chain before this frame commits.
+        commitFrameHistory(finalized)
         return ValidatedFrame(finalized, report)
     }
 
