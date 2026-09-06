@@ -192,6 +192,15 @@ class SkeletonPipeline(
         // no authorized root mover, so A must survive to publish untouched.
         var r2ProtectedRoot =
             if (BuildConfig.DEBUG) PhaseBoundaryAsserts.captureRoot(pose, "capture A (post-build)") else null
+        // Phase 7 (R3) — settled-contact boundary instrumentation (debug builds only; RFC §5
+        // R3/R7, §3.2, plan §P7). `r3SettledContacts` holds the post-solve WORLD-position
+        // snapshot of the frame's settled-contact end-effectors; it arms ONLY at the explicit
+        // solve site below, and only when this solve actually PRODUCED the Settlement Result
+        // it references (identity-vs-prior evidence — never inferred from retained history or
+        // root state, per the P5/P6 armed-state pattern). A frame that skips the solve, or
+        // whose solve early-returned above the populate point, arms nothing: no settle means
+        // no settled geometry to protect.
+        var r3SettledContacts: PhaseBoundaryAsserts.SettledContactSnapshot? = null
         // B1 (IkStage extraction) — the pipeline-owned limb stage consumes the §1.1 `limbTargets`
         // carrier and re-derives each limb's local positions on the engine-owned node tree.
         // (IK_STAGE_ACTIVE was excluded from Phase B — its flag is a future additive
@@ -232,6 +241,13 @@ class SkeletonPipeline(
             }
         }
         if (pose.roots.isNotEmpty() && (pose.hasContacts() || postureDriven)) {
+            // Phase 7 (R3) — arming evidence read BEFORE the solve: the ConstraintSolver fixes
+            // a NEW Settlement Result instance on every complete settle, so `!== prior` after
+            // the call is per-frame production evidence at the execution site (P6 armed-state
+            // pattern). A solve that early-returns above the populate point leaves a stale
+            // carrier slot — identity is then equal and nothing arms; the reference is never
+            // inferred from retained history or root state.
+            val priorSettlement = if (BuildConfig.DEBUG) pose.settlementResult else null
             ConstraintSolver.solve(pose, definition, previousSmoothingRoot)
             // Phase 5 (R10) — capture THIS frame's settled root BY VALUE as the next frame's
             // smoothing history, immediately after the solve (the sole root mover, R2). Read
@@ -254,6 +270,15 @@ class SkeletonPipeline(
                 // retained history). A pelvis-less solved tree keeps A: no settled root was
                 // written, so the authored root remains the state that must survive.
                 r2ProtectedRoot = PhaseBoundaryAsserts.captureRoot(pose, "capture B (post-settlement)")
+                // Phase 7 capture — arm the settled-contact reference ONLY when THIS solve
+                // produced the Settlement Result it lists (new instance vs the pre-call slot).
+                // The snapshot reads the reference set from the Settlement Result (the sole
+                // canonical producer output) and the world positions the solver's final FK +
+                // flatten just wrote into the carrier.
+                if (pose.settlementResult !== priorSettlement) {
+                    r3SettledContacts =
+                        PhaseBoundaryAsserts.captureSettledContacts(pose, "post-settlement (Phase 2 exit)")
+                }
             }
         } else if (BuildConfig.DEBUG) {
             lastFrameArmedSmoothingCapture = false
@@ -280,6 +305,17 @@ class SkeletonPipeline(
                 "Phase 3/4 (Finalizer + publish window; solver " +
                     (if (pose.hasContacts() || postureDriven) "ran" else "was skipped") +
                     " this frame)"
+            )
+            // Phase 7 Check — R3 Settled-Contact Guarantee (RFC §5 R3/R7, plan §P7): every
+            // settled contact end-effector must still sit at its post-solve world position
+            // once Phase 3 finalization has completed. Checked on the FINALIZED pose — the
+            // tree consumers receive, so this detects a settled contact displaced by ANY
+            // finalization operation (frame-wide walk over the Settlement Result's list; per
+            // plan, whole-phase checking first — finer instrumentation only on triage).
+            r3SettledContacts?.assertUnchanged(
+                finalized,
+                "Phase 3 finalization (post-settlement → completion of " +
+                    "SkeletonPoseFinalizer.finalize)"
             )
         }
         // Phase 4 (R5) — runtime-window enforcement (plan §P4: check(count == 1 ||
