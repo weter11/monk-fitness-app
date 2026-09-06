@@ -29,8 +29,14 @@ package com.monkfitness.app.animation
  * float values): legitimate movers are known, transforms are otherwise only ever assigned by
  * value, and P0-class characterization guarantees mean no drift tolerance exists to grant.
  *
- * The scope is deliberately the ROOT ONLY (pelvis node local position + local rotation):
- * child joints legitimately move via limb re-bakes and FK propagation and are not part of R2.
+ * The scope of the ROOT guard is deliberately the ROOT ONLY (pelvis node local position +
+ * local rotation): child joints legitimately move via limb re-bakes and FK propagation and
+ * are not part of R2.
+ *
+ * Phase 7 (R3) reuses this utility for the Settled-Contact Guarantee ([SettledContactSnapshot]
+ * / [captureSettledContacts]) with the same debug gating and exact-compare semantics, but a
+ * DISJOINT reference set: the world positions of the settled-contact end-effectors named by
+ * the frame's Settlement Result (RFC §3.2/§4.3) — never the root, never the declaration list.
  */
 internal object PhaseBoundaryAsserts {
 
@@ -83,6 +89,70 @@ internal object PhaseBoundaryAsserts {
             rot.axis.x, rot.axis.y, rot.axis.z, rot.angle,
             capturedAt
         )
+    }
+
+    /**
+     * Phase 7 (R3) — immutable by-value snapshot of the WORLD positions of a frame's settled
+     * contact end-effectors (plan §P7; reuses this utility's P6 exact-compare idiom for a
+     * multi-joint reference set). Produced from the [SettlementInfo] the ConstraintSolver
+     * fixed at Phase 2 exit — the Settlement Result is the SOLE reference source: the joint
+     * set comes from its `declaredContactJoints` member, never reconstructed from the pose's
+     * Contact Declarations, retained chains, solver heuristics, or Frame History.
+     */
+    class SettledContactSnapshot internal constructor(
+        private val joints: Array<Joint>,
+        private val x: FloatArray,
+        private val y: FloatArray,
+        private val z: FloatArray,
+        /** Boundary label this snapshot was taken at (names the protected window on failure). */
+        internal val capturedAt: String
+    ) {
+        /**
+         * Throws [IllegalStateException] ("R3 violation: …") if any settled contact
+         * end-effector's world position in [pose] no longer bit-matches its post-solve
+         * snapshot. R3: once the ConstraintSolver settles a contact end-effector, no later
+         * subsystem — including the SkeletonPoseFinalizer — may move it until the frame is
+         * published. Comparison walks the WHOLE reference set (every joint the Settlement
+         * Result lists) with exact float equality, unlike the root snapshot there is no
+         * structural early-out: the carrier arrays always hold the flattened world value.
+         */
+        fun assertUnchanged(pose: SkeletonPose, windowDescription: String) {
+            for (i in joints.indices) {
+                val current = pose.getJoint(joints[i])
+                check(current.x == x[i] && current.y == y[i] && current.z == z[i]) {
+                    "R3 violation: settled contact ${joints[i]} was moved during " +
+                        "$windowDescription, but R3's Settled-Contact Guarantee freezes every " +
+                        "end-effector settled by the ConstraintSolver (captured at $capturedAt) " +
+                        "between the solve and completion of finalization — settled=" +
+                        "Vector3(${x[i]}, ${y[i]}, ${z[i]}) " +
+                        "current=Vector3(${current.x}, ${current.y}, ${current.z}). Where " +
+                        "declared intent would move a settled contact the contact wins: the " +
+                        "intent application is skipped for that chain (§5 R3)."
+                }
+            }
+        }
+    }
+
+    /**
+     * Phase 7 (R3) — snapshots the world positions of the settled-contact end-effectors
+     * listed by the pose's [SettlementInfo] (the canonical Settlement Result: populated by
+     * the ConstraintSolver at Phase 2 exit from its final FK + flatten). Returns `null` when
+     * the frame has no Settlement Result — the legitimate "no settle ran" case (contact-less
+     * CUSTOM frames skip the solve; the early-return path never fixes a Result).
+     */
+    fun captureSettledContacts(pose: SkeletonPose, capturedAt: String): SettledContactSnapshot? {
+        val result = pose.settlementResult ?: return null
+        val joints = result.declaredContactJoints.toTypedArray()
+        val xs = FloatArray(joints.size)
+        val ys = FloatArray(joints.size)
+        val zs = FloatArray(joints.size)
+        for (i in joints.indices) {
+            val world = pose.getJoint(joints[i])
+            xs[i] = world.x
+            ys[i] = world.y
+            zs[i] = world.z
+        }
+        return SettledContactSnapshot(joints, xs, ys, zs, capturedAt)
     }
 
     private fun findPelvis(pose: SkeletonPose): SkeletonNode? {
