@@ -176,6 +176,13 @@ class SkeletonPipeline(
      * (RFC_ENGINE_PIPELINE §8.1 — the pipeline is the sole caller of both, preventing re-entrancy).
      */
     private fun runStages(pose: SkeletonPose): SkeletonPose {
+        // P8 (§6 Phase 4 / §3.3) — window-start evidence: the pipeline is opening a NEW
+        // execution window over this carrier (R11 transfer), so any publication marker the
+        // finalizer holds from a previous frame of the SAME carrier (the reused jointsBuffer
+        // path — sequential playback produces one carrier per builder) is a legitimate
+        // re-arm, not a re-entry violation. Debug-only, same placement as every other
+        // boundary instrument in this function.
+        if (BuildConfig.DEBUG) finalizer.beginPublishWindow()
         // R8 enforcement (debug builds only) — snapshot the freshly injected context, then
         // re-compare after every stage. Carrier-level post-injection writes by a stage fail
         // fast with IllegalStateException("R8 violation: …"). This is characterization/
