@@ -133,11 +133,26 @@ class StraightIntentFallbackTest {
         // at hip→foot ≈ 57 units vs thighLength 112 — the engine's only honest outcome is the
         // bent fallback, which P4 now surfaces on the carrier. This is the first real producer
         // coverage for the ONLY production authors of straight intent.
-        val pose = MiddleSplitPose().build(PoseContext(0.5f, Side.LEFT, SkeletonDefinition.DEFAULT_ADULT))
-        assertTrue(
-            "P4 V1 regression: the probe's executed bent fallback must report straightIntentDropped",
-            pose.straightIntentDropped
-        )
+        //
+        // P12 (WP-F / §12.8 retarget): the reading asserted HERE is the AUTHORING-CONFIGURATION
+        // producer — the bake folding its executed fallback — so it pins flag-OFF explicitly
+        // (R5 keeps both configurations supported; this test's claim is about the bake). Under
+        // the activated configuration the drop is produced by the engine stage window and is
+        // observed on the PUBLISHED state: that path is covered by
+        // [middleSplitPublishedStateCarriesTheDropThroughThePipeline] plus
+        // ValidationOwnershipReCertificationTest.straightProbeReadingComesFromActiveImplementation
+        // (which pins build-window-empty / stage-window-produces exactly).
+        val original = IK_STAGE_ACTIVE
+        try {
+            IK_STAGE_ACTIVE = false
+            val pose = MiddleSplitPose().build(PoseContext(0.5f, Side.LEFT, SkeletonDefinition.DEFAULT_ADULT))
+            assertTrue(
+                "P4 V1 regression: the probe's executed bent fallback must report straightIntentDropped",
+                pose.straightIntentDropped
+            )
+        } finally {
+            IK_STAGE_ACTIVE = original
+        }
     }
 
     @Test

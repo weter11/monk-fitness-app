@@ -262,10 +262,23 @@ abstract class BaseValidationPose : PoseBuilder {
         straight: Boolean = false,
         contact: ContactConstraint? = null
     ) {
+        // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge;
+        // mirrors BasePose.bakeIkLimb). P12 (WP-F / §12.5 acceptance): the fresh-window block is
+        // build-window bookkeeping, NOT realization, so it runs in BOTH configurations — a
+        // reused instrument carrier may never open a new authoring cycle carrying the previous
+        // frame's solver readings (a stale straight-dropped `true` would let a probe report a
+        // drop no implementation executed this cycle). Only the solve + folds + node writes
+        // below the realization gate belong to the Active Limb Solver.
+        val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
+        if (jointsBuffer.isTransformsUpdated) {
+            jointsBuffer.boneLengthsVerified = true
+            // Phase 4 (R5): dropped-flag re-arm mirrors BasePose.bakeIkLimb (fresh-window, F2).
+            jointsBuffer.straightIntentDropped = false
+            jointsBuffer.isTransformsUpdated = false
+        }
         // B1 (IkStage extraction) — forward the end joint + full IK context into the §1.1
         // `limbTargets` carrier so the engine-owned IkStage can reproduce this solve byte-for-byte
-        // (dead→live flip). `bakeIkLimb` remains the sole solver while IK_STAGE_ACTIVE is
-        // false.
+        // (dead→live flip).
         jointsBuffer.limbTargets.add(
             WorldTarget(
                 endNode.joint,
@@ -301,8 +314,9 @@ abstract class BaseValidationPose : PoseBuilder {
                 )
             }
         }
-        // P12 (§12.7a): realization runs only while the engine stage is off; registration above is
-        // unconditional. Counter evidence per authoring cycle mirrors BasePose.bakeIkLimb.
+        // P12 (§12.7a): realization runs only while the engine stage is off; registration and
+        // the fresh-window block above are unconditional. Counter evidence per authoring cycle
+        // mirrors BasePose.bakeIkLimb.
         if (IK_STAGE_ACTIVE) return
         if (com.monkfitness.app.BuildConfig.DEBUG &&
             jointsBuffer.limbSolverRealizationToken != jointsBuffer.buildCycleToken
@@ -311,15 +325,6 @@ abstract class BaseValidationPose : PoseBuilder {
             jointsBuffer.limbSolverExecutions++
         }
 
-        val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
-        // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge;
-        // mirrors BasePose.bakeIkLimb).
-        if (jointsBuffer.isTransformsUpdated) {
-            jointsBuffer.boneLengthsVerified = true
-            // Phase 4 (R5): dropped-flag re-arm mirrors BasePose.bakeIkLimb (fresh-window, F2).
-            jointsBuffer.straightIntentDropped = false
-            jointsBuffer.isTransformsUpdated = false
-        }
         // Phase 1 (F6): a zero-length pole means the pose omitted one — derive the default world
         // pole so the bend plane is always well-defined.
         val worldPole = if (pole.mag() < 1e-4f) {
