@@ -29,7 +29,7 @@ class PlanningSolveInventoryTest {
                 val line = raw.trim()
                 if (line.startsWith("//") || line.startsWith("*") || line.startsWith("/*")) return@forEachIndexed
                 val code = line.substringBefore("//")
-                if (code.contains("planLimbPlacement(") && !code.contains("protected fun")) {
+                if (code.contains("planLimbPlacement(") && !code.contains("fun planLimbPlacement")) {
                     sites.add("${f.relativeTo(File(root)).path}:${i + 1}")
                 }
             }

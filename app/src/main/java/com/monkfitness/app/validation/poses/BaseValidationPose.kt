@@ -7,6 +7,7 @@ import com.monkfitness.app.animation.ContactConstraint
 import com.monkfitness.app.animation.ConstraintSolver
 import com.monkfitness.app.animation.ContactSpec
 import com.monkfitness.app.animation.IKConstraint
+import com.monkfitness.app.animation.IK_STAGE_ACTIVE
 import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.JointRotation
 import com.monkfitness.app.animation.LoopMode
@@ -271,9 +272,44 @@ abstract class BaseValidationPose : PoseBuilder {
                 Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
                 Vector3(pole.x, pole.y, pole.z),
                 straight,
-                contact
+                contact,
+                length1,
+                length2,
+                constraint
             )
         )
+        // PR-04: register the fixed support contact so the global constraint solver can
+        // reposition the root and re-bake the limb to honor it. P12 (§12.5 acceptance):
+        // registration runs in BOTH configurations; only realization below is gated.
+        if (contact != null) {
+            val chain = ConstraintSolver.chainForEnd(endNode.joint)
+            if (chain != null) {
+                jointsBuffer.contacts.add(
+                    ContactSpec(
+                        endJoint = endNode.joint,
+                        rootJoint = chain.rootJoint,
+                        parentRotationJoint = chain.parentRotationJoint,
+                        middleJoint = chain.middleJoint,
+                        targetWorld = Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
+                        pole = Vector3(pole.x, pole.y, pole.z),
+                        length1 = length1,
+                        length2 = length2,
+                        constraint = constraint,
+                        straight = straight,
+                        contact = contact
+                    )
+                )
+            }
+        }
+        // P12 (§12.7a): realization runs only while the engine stage is off; registration above is
+        // unconditional. Counter evidence per authoring cycle mirrors BasePose.bakeIkLimb.
+        if (IK_STAGE_ACTIVE) return
+        if (com.monkfitness.app.BuildConfig.DEBUG &&
+            jointsBuffer.limbSolverRealizationToken != jointsBuffer.buildCycleToken
+        ) {
+            jointsBuffer.limbSolverRealizationToken = jointsBuffer.buildCycleToken
+            jointsBuffer.limbSolverExecutions++
+        }
 
         val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
         // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge;
@@ -318,28 +354,6 @@ abstract class BaseValidationPose : PoseBuilder {
         tempV1.set(ikResult.end).subtract(ikResult.joint)
         SkeletonMath.toLocalDirection(tempV1, parentRot, endNode.localPosition)
 
-        // PR-04: register the fixed support contact so the global constraint solver can
-        // reposition the root and re-bake the limb to honor it.
-        if (contact != null) {
-            val chain = ConstraintSolver.chainForEnd(endNode.joint)
-            if (chain != null) {
-                jointsBuffer.contacts.add(
-                    ContactSpec(
-                        endJoint = endNode.joint,
-                        rootJoint = chain.rootJoint,
-                        parentRotationJoint = chain.parentRotationJoint,
-                        middleJoint = chain.middleJoint,
-                        targetWorld = Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
-                        pole = Vector3(pole.x, pole.y, pole.z),
-                        length1 = length1,
-                        length2 = length2,
-                        constraint = constraint,
-                        straight = straight,
-                        contact = contact
-                    )
-                )
-            }
-        }
     }
 
     /**

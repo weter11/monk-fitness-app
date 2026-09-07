@@ -1,39 +1,71 @@
 package com.monkfitness.app.animation
 
 /**
- * Branch B — B1 (IkStage extraction, RFC_BRANCH_B_IMPLEMENTATION §2 B1).
+ * Branch B — B1 (IkStage extraction, RFC_BRANCH_B_IMPLEMENTATION §2 B1), activated by P12.
  *
  * `IkStage` is the pipeline-owned stage that **consumes** the §1.1 `limbTargets` carrier and
- * performs the limb inverse-kinematics that `bakeIkLimb` used to do inline. It re-derives each
- * limb's `middle`/`end` local positions on the engine-owned node tree (`pose.roots`) from the end
- * joint's declared [WorldTarget], completing the move of limb solving out of the pose authoring
- * path and into the engine.
+ * performs the limb inverse-kinematics realization. It derives each limb's `middle`/`end` local
+ * positions on the engine-owned node tree (`pose.roots`) from the declared [WorldTarget].
  *
- * **Reversibility / byte-identity (B1 exit criteria):** the stage is gated by
- * [IK_STAGE_ACTIVE] (default **false**). When off, `bakeIkLimb` remains the sole limb
- * solver and every pose renders byte-identical to the pre-B1 baseline. When on, the stage re-solves
- * each limb with the *exact* same `SkeletonMath` calls `bakeIkLimb` uses (it reads the full IK
- * context — pole, straight flag and contact — straight off the [WorldTarget] that `bakeIkLimb`
- * recorded), so the rendered frame is unchanged — `IkStageTest` asserts this across the limb and
- * contact-instrument poses.
+ * **P12 (R5 activation).** With [IK_STAGE_ACTIVE] the engine-supplied production default
+ * (**true**), `IkStage` is the sole Active Limb Solver per §12.0 state 3: the authoring bakes
+ * keep their registration effects but their node-realization branch is gated off (§12.7a), the
+ * solver-window counter increments at each realization site so the pipeline proves exactly one
+ * solver per frame in both configurations (§12.7b), and every Limb Target carries its declared
+ * solve inputs — bone lengths + constraint ([WorldTarget.length1]/[WorldTarget.length2]/
+ * [WorldTarget.constraint]) — so realization is lossless (B-3): the former `isArm` joint-name
+ * heuristic that recovered `definition.armIKConstraint`/`legIKConstraint` and the definition
+ * lengths is GONE. A target without declared realization context (only reachable via the
+ * shorthand `IntentBuilder.limbTarget`, never written by a registered bake) fails fast under the
+ * active stage — no silent definition recovery, no coincidence-dependent parity.
  *
- * **Parameter recovery.** A [WorldTarget] carries the end `joint`, its `world` target, the authored
- * `pole`, the `straight` flag and the optional `contact` — everything `bakeIkLimb` used. The stage
- * recovers the proximal chain from [ConstraintSolver.chainForEnd] (root / parent-rotation / middle
- * joints) and the bone lengths + per-limb IK constraint from the [SkeletonDefinition]; contacts are
- * already registered in `pose.contacts` by `bakeIkLimb`, so the stage only re-solves (it never
+ * Re-solve parity with the authoring bake is preserved by construction: the stage executes the
+ * same `SkeletonMath` calls with the same declared arguments, and contacts are already
+ * registered in `pose.contacts` by the bake, so the stage only re-solves (it never
  * double-registers). For a zero-length `pole` it derives the default world pole, exactly as
  * `bakeIkLimb` does.
+ *
+ * **Activation criterion (§12.10) — this flag became production-valid at `IK_STAGE_ACTIVE=true`
+ * as the P12 deployed default. Each item below names its work package and its concrete evidence
+ * (test/audit), not an aspiration:**
+ *  (i)  B-1 authoring consumers eliminated or planning-solve-sanctioned — WP-B:
+ *       `LimbSolverOwnershipActivationContractTest.hipFlexorFamilyDoesNotConsumeSolveResultsForAuthoring`
+ *       + `PlanningSolveInventoryTest` (planning solve confined to one sanctioned site);
+ *  (ii) B-2 direct-`solveIK` bypass family migrated to registered implementations — WP-D:
+ *       `LimbSolverOwnershipActivationContractTest.noUnauthorizedDirectSolveInProductionPoses`
+ *       (static sweep) + `bypassFamilyLimbsAreRegisteredAsIntent` (behavioral);
+ *  (iii) B-3 lossless authored limb-data recovery — WP-E:
+ *       `losslessStraightConstraintDecode` / `losslessBoneLengthDecode` (declared-context parity,
+ *       fail-fast on undeclared context) — no heuristic remains in this file;
+ *  (iv) §12.7 strengthened single-active-solver enforcement live — WP-G:
+ *       `SingleActiveSolverEnforcementTest` (double-realization counterfactual red-gates:
+ *       bake+stage co-execution detected even on identical outputs);
+ *  (v)  §12.9 equivalence harness green-or-adjudicated — WP-H:
+ *       `ActivationEquivalenceTest` (pre-P12 state-2 corpus vs post-flip state-3, per-joint
+ *       raw-bit transforms + all 8 Validation Stamps; deltas adjudicated per case);
+ *  (vi) validation-probe semantics re-certified against the realized path — WP-F/H:
+ *       `ValidationProbeRecertificationTest` + `StraightIntentFallbackTest` (probe drop reading
+ *       now produced by the activated runtime solver).
+ * Flag-ON is exercised through the pipeline by `RootAuthorityTest` (plan §P6 test (c), now a
+ * production-path test) and every `ActivationEquivalenceTest` case.
  */
 /**
- * Additive migration flag for the pipeline-owned limb stage ([IkStage]), default **false**.
+ * Engine-supplied configuration of the pipeline-owned limb stage ([IkStage]).
  *
- * When **false** (the default) `bakeIkLimb` remains the sole limb solver, so every pose renders
- * byte-identical to the pre-B1 baseline - the stage is a no-op. Flip it on (after the
- * `IkStageTest` byte-identity check is green) to make [IkStage] the real solver. This is the one
- * remaining engine flag: it is a *future additive* decision (the dead->live flip of B1), not a
- * legacy rollback branch, so Phase B/F left it in place after deleting the collapsed flags.
- * It lives beside its sole reader ([IkStage.apply]) rather than in a global flag object.
+ * **P12 (§12.0 state 3): production default `true`** — `IkStage` is the sole Active Limb Solver
+ * and the configuration above is valid by the criterion in [IkStage]'s KDoc. The flag remains
+ * selectable per R5 ("the enabling flag is a rollout mechanism, not architecture: it selects
+ * between two implementations of the same frozen responsibility set"): `false` keeps the
+ * authoring bake as the Active Limb Solver for differential/regression work, and the §12.7
+ * strengthened enforcement proves the single-solver invariant in BOTH configurations. Writes
+ * occur only through the declared configuration surface (tests flip it under flag-scoped
+ * restore; `SingleActiveSolverEnforcementTest` audits this — P4's "zero production writes"
+ * audit retargeted per §12.7). It lives beside its sole reader ([IkStage.apply]) rather than
+ * in a global flag object.
+ *
+ * WORK-PACKAGE NOTE (WP-I final gate): the *declaration default below is flipped to `true`*
+ * only when every (i)–(vi) criterion above has landed with its evidence; until then the
+ * machinery is live but the deployed state stays flag-OFF (safe prior state).
  */
 var IK_STAGE_ACTIVE: Boolean = false
 
@@ -52,12 +84,13 @@ object IkStage {
      */
     fun apply(pose: SkeletonPose, definition: SkeletonDefinition) {
         if (!IK_STAGE_ACTIVE) return
-        // Phase 4 (R5): the engine-side limb-solver window IS executing for this frame — count
-        // it for the pipeline's runtime-window enforcement. Incremented past the rollout gate
-        // but before the no-work early-returns so "window instantiated" is counted uniformly
-        // (count==0 in the check means the stage was skipped by config, not merely idle).
-        // Sole production increment site; authoring solves are NOT counted here — they run in
-        // build(), outside the pipeline window (P12 owns the activation transition).
+        // Phase 4 (R5) / P12 §12.7b: the engine-side limb-solver window IS executing for this
+        // frame — count it for the pipeline's single-active-solver enforcement. Incremented past
+        // the rollout gate but before the no-work early-returns so "window instantiated" is
+        // counted uniformly (count==0 in the strengthened check means a frame reached the
+        // pipeline with NO registered realization — a violation). The bake realization branch
+        // increments the SAME counter while the stage is disabled, so a bake+stage double solve
+        // is observable even when the two implementations produce identical output.
         pose.limbSolverExecutions++
         val targets = pose.limbTargets
         if (targets.isEmpty()) return
@@ -73,11 +106,21 @@ object IkStage {
             val middle = nodeMap[chain.middleJoint.index] ?: continue
             val end = nodeMap[target.joint.index] ?: continue
 
-            val isArm = target.joint == Joint.HAND_A || target.joint == Joint.HAND_P ||
-                target.joint == Joint.ELBOW_A || target.joint == Joint.ELBOW_P
-            val length1 = if (isArm) definition.upperArmLength else definition.thighLength
-            val length2 = if (isArm) definition.forearmLength else definition.shinLength
-            val constraint = if (isArm) definition.armIKConstraint else definition.legIKConstraint
+            // P12 (§12.4/§12.10-iii, B-3): lossless decode. The realization inputs are the
+            // DECLARED values on the Limb Target — the same ones the authoring bake solved with.
+            // No arm/leg joint-name heuristic, no definition recovery, no length guessing: an
+            // undeclared context means the target did not come through a registered implementation.
+            val length1 = target.length1
+            val length2 = target.length2
+            val constraint = target.constraint
+            if (length1.isNaN() || length2.isNaN() || constraint == null) {
+                throw IllegalStateException(
+                    "R5 violation: Limb Target ${target.joint} carries no declared realization " +
+                        "context (length1=$length1 length2=$length2 constraint=$constraint) — " +
+                        "every realized limb must be declared through a registered authoring " +
+                        "bake (§12.4 lossless intent); silent definition recovery is forbidden"
+                )
+            }
 
             // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge),
             // mirroring bakeIkLimb: the first limb re-baked this build re-arms the optimistic `true`.

@@ -269,12 +269,24 @@ class RootAuthorityTest {
         // [PhaseBoundaryAssertsTest] plus the source audit of the Check-1 call site.
         val reference = SkeletonPipeline(definition)
         val refFixture = FrameFixture()
-        refFixture.pose.limbTargets.add(WorldTarget(Joint.ANKLE_F, Vector3(30f, -60f, 0f)))
+        refFixture.pose.limbTargets.add(
+            WorldTarget(
+                Joint.ANKLE_F, Vector3(30f, -60f, 0f),
+                length1 = definition.thighLength, length2 = definition.shinLength,
+                constraint = definition.legIKConstraint
+            )
+        )
         val refPublished = reference.produceFrame(refFixture.authorRoot(40f)).pose
 
         val pipeline = SkeletonPipeline(definition)
         val fixture = FrameFixture()
-        fixture.pose.limbTargets.add(WorldTarget(Joint.ANKLE_F, Vector3(30f, -60f, 0f)))
+        fixture.pose.limbTargets.add(
+            WorldTarget(
+                Joint.ANKLE_F, Vector3(30f, -60f, 0f),
+                length1 = definition.thighLength, length2 = definition.shinLength,
+                constraint = definition.legIKConstraint
+            )
+        )
         fixture.authorRoot(40f)
         try {
             IK_STAGE_ACTIVE = true

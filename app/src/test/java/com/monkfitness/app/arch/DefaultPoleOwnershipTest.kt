@@ -235,7 +235,11 @@ class DefaultPoleOwnershipTest {
         assertOmittedPoleDeclared(authored)
         val authoredKnee = Vector3().set(authored.getJoint(Joint.KNEE_F))
         val authoredAnkle = Vector3().set(authored.getJoint(Joint.ANKLE_F))
-        assertEquals("stage window must be skipped while gated off", 0, authored.limbSolverExecutions)
+        // P12 §12.7b retarget (was: "stage window must be skipped while gated off == 0"): the
+        // strengthened counter covers BOTH realization sites, so a flag-OFF build now carries
+        // exactly ONE authoring-window increment. What remains pinned: the stage itself has
+        // not run yet — the delta assertions below observe its window directly.
+        assertEquals("the authoring bake window must be counted exactly once", 1, authored.limbSolverExecutions)
 
         // Now run the engine-side stage on the SAME declaration with the pole still omitted —
         // the other implementation of the identical frozen responsibility set.
@@ -249,9 +253,10 @@ class DefaultPoleOwnershipTest {
         IK_STAGE_ACTIVE = originalFlag
         SkeletonPose.fromHierarchy(authored.roots, authored)
 
-        assertTrue(
-            "IkStage window must have executed (anti-vacuity)",
-            authored.limbSolverExecutions > 0
+        assertEquals(
+            "IkStage window must have executed exactly once on top of the authoring count " +
+                "(anti-vacuity; §12.7b per-window evidence)",
+            2, authored.limbSolverExecutions
         )
         // The stage re-solved (its toLocalDirection write is the same offset — bit-stable) ...
         assertEquals(

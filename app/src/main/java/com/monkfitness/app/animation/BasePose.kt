@@ -317,23 +317,63 @@ abstract class BasePose : PoseBuilder {
             jointsBuffer.straightIntentDropped = false
             jointsBuffer.isTransformsUpdated = false
         }
-        // B1 (IkStage extraction) — forward the end joint + world target into the §1.1
-        // `limbTargets` carrier so the engine-owned IkStage can consume it (dead→live flip).
-        // `bakeIkLimb` remains the sole solver while IK_STAGE_ACTIVE is false, so
-        // this record is additive and byte-identical on its own.
         // B1 (IkStage extraction) — forward the end joint + full IK context into the §1.1
         // `limbTargets` carrier so the engine-owned IkStage can reproduce this solve byte-for-byte
-        // (dead→live flip). `bakeIkLimb` remains the sole solver while IK_STAGE_ACTIVE is
-        // false, so this record is additive and byte-identical on its own.
+        // (dead→live flip).
+        // P12 (§12.7a state 3) — the registration effects above always run; the limb REALIZATION
+        // (solve + stamp folds + node writes) is performed by the bake ONLY while the engine stage
+        // is disabled (R5: the bake is the Active Limb Solver while the stage is off). With
+        // IK_STAGE_ACTIVE=true the stage owns realization and this bake contributes zero
+        // geometry — exactly one implementation realizes per configuration, counted on the
+        // solver-window counter at each realization site (§12.7b).
         jointsBuffer.limbTargets.add(
             WorldTarget(
                 endNode.joint,
                 Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
                 Vector3(pole.x, pole.y, pole.z),
                 straight,
-                contact
+                contact,
+                length1,
+                length2,
+                constraint
             )
         )
+        // PR-04: if this limb carries a fixed support contact, register it so the global
+        // constraint solver can reposition the root and re-bake the limb to honor the contact.
+        // P12 (§12.5 acceptance): REGISTRATION runs in BOTH configurations — the ContactSpec is
+        // intent, not realization — so contact/stamp producers behave identically across the
+        // flag; only the limb solve + folds + node writes below are gated.
+        if (contact != null) {
+            val chain = ConstraintSolver.chainForEnd(endNode.joint)
+            if (chain != null) {
+                jointsBuffer.contacts.add(
+                    ContactSpec(
+                        endJoint = endNode.joint,
+                        rootJoint = chain.rootJoint,
+                        parentRotationJoint = chain.parentRotationJoint,
+                        middleJoint = chain.middleJoint,
+                        targetWorld = Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
+                        pole = Vector3(pole.x, pole.y, pole.z),
+                        length1 = length1,
+                        length2 = length2,
+                        constraint = constraint,
+                        straight = straight,
+                        contact = contact
+                    )
+                )
+            }
+        }
+        if (IK_STAGE_ACTIVE) return ikBuffer
+        // §12.7b realization-site evidence: one increment per authoring cycle (edge-triggered on
+        // the P8 build token), so the frame counts ONE Active Limb Solver window however many
+        // limbs the winning implementation realizes. Debug-gated: the counter is enforcement
+        // instrumentation, never production state (P3 suppression pattern; absent from copyFrom).
+        if (com.monkfitness.app.BuildConfig.DEBUG &&
+            jointsBuffer.limbSolverRealizationToken != jointsBuffer.buildCycleToken
+        ) {
+            jointsBuffer.limbSolverRealizationToken = jointsBuffer.buildCycleToken
+            jointsBuffer.limbSolverExecutions++
+        }
 
         // Phase 1 (F6): a zero-length pole means the pose omitted one — derive the default world
         // pole so the bend plane is always well-defined (the engine owns this, not the pose).
@@ -376,29 +416,6 @@ abstract class BasePose : PoseBuilder {
         tempV1.set(ikResult.end).subtract(ikResult.joint)
         SkeletonMath.toLocalDirection(tempV1, parentRot, endNode.localPosition)
 
-        // PR-04: if this limb carries a fixed support contact, register it so the global
-        // constraint solver can reposition the root and re-bake the limb to honor the contact.
-        if (contact != null) {
-            val chain = ConstraintSolver.chainForEnd(endNode.joint)
-            if (chain != null) {
-                jointsBuffer.contacts.add(
-                    ContactSpec(
-                        endJoint = endNode.joint,
-                        rootJoint = chain.rootJoint,
-                        parentRotationJoint = chain.parentRotationJoint,
-                        middleJoint = chain.middleJoint,
-                        targetWorld = Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
-                        pole = Vector3(pole.x, pole.y, pole.z),
-                        length1 = length1,
-                        length2 = length2,
-                        constraint = constraint,
-                        straight = straight,
-                        contact = contact
-                    )
-                )
-            }
-        }
-
         return ikResult
     }
 
@@ -435,13 +452,19 @@ abstract class BasePose : PoseBuilder {
         constraint: IKConstraint,
         out: SkeletonMath.IKResult
     ): SkeletonMath.IKResult {
-        val worldPole = if (pole.mag() < 1e-4f) {
-            SkeletonMath.deriveDefaultPole(rootWorldPos, targetWorldPos, tempPoleWorld)
-        } else {
-            pole
+        // A planning solve composes choreography intent, never realization: the authored
+        // pole must be explicit (a zero pole is rejected — default-pole DERIVATION is
+        // Default-Pole ownership, R13, and stays inside the registered limb-solver
+        // implementations only). The non-zero path forwards the authored pole verbatim.
+        if (pole.mag() < 1e-4f) {
+            throw IllegalArgumentException(
+                "planLimbPlacement requires an explicit non-zero pole (composition intent " +
+                    "belongs to the pose; deriving a default here would mimic solver " +
+                    "ownership — R13/§12.4b)"
+            )
         }
         return SkeletonMath.solveIK(
-            rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, out
+            rootWorldPos, targetWorldPos, length1, length2, pole, constraint, out
         )
     }
 
@@ -505,6 +528,36 @@ fun declarePelvisTilt(pelvis: SkeletonNode, buffer: SkeletonPose, axis: Vector3,
 private val bakeIkScratch1 = Vector3()
 private val bakeIkScratchPole = Vector3()
 
+/**
+ * P12 (§12.4b) — package-level form of [BasePose.planLimbPlacement] for poses implementing
+ * [PoseBuilder] directly. Same contract: composition ONLY — no registration, no node writes,
+ * no stamps, no realization count. Callers may use the result solely to compose declared
+ * intent values; consuming it as final geometry is a second Active Limb Solver and is audited
+ * (LimbSolverOwnershipActivationContractTest / PlanningSolveInventoryTest).
+ */
+fun planLimbPlacement(
+    rootWorldPos: Vector3,
+    targetWorldPos: Vector3,
+    length1: Float,
+    length2: Float,
+    pole: Vector3,
+    constraint: IKConstraint,
+    out: SkeletonMath.IKResult
+): SkeletonMath.IKResult {
+    // See [BasePose.planLimbPlacement]: composition-only; the authored pole must be explicit
+    // (zero rejected); default-pole derivation stays in the registered implementations.
+    if (pole.mag() < 1e-4f) {
+        throw IllegalArgumentException(
+            "planLimbPlacement requires an explicit non-zero pole (composition intent " +
+                "belongs to the pose; deriving a default here would mimic solver " +
+                "ownership — R13/§12.4b)"
+        )
+    }
+    return SkeletonMath.solveIK(
+        rootWorldPos, targetWorldPos, length1, length2, pole, constraint, out
+    )
+}
+
 fun bakeIkLimb(
     rootWorldPos: Vector3,
     targetWorldPos: Vector3,
@@ -535,9 +588,42 @@ fun bakeIkLimb(
             Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
             Vector3(pole.x, pole.y, pole.z),
             straight,
-            contact
+            contact,
+            length1,
+            length2,
+            constraint
         )
     )
+    if (contact != null) {
+        val chain = ConstraintSolver.chainForEnd(endNode.joint)
+        if (chain != null) {
+            buffer.contacts.add(
+                ContactSpec(
+                    endJoint = endNode.joint,
+                    rootJoint = chain.rootJoint,
+                    parentRotationJoint = chain.parentRotationJoint,
+                    middleJoint = chain.middleJoint,
+                    targetWorld = Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
+                    pole = Vector3(pole.x, pole.y, pole.z),
+                    length1 = length1,
+                    length2 = length2,
+                    constraint = constraint,
+                    straight = straight,
+                    contact = contact
+                )
+            )
+        }
+    }
+    // P12 (§12.7a): realization runs only while the engine stage is off; registration above is
+    // unconditional (§12.5 acceptance — limbTargets AND contacts register in both configs).
+    // Counter evidence per authoring cycle mirrors the member path.
+    if (IK_STAGE_ACTIVE) return ikBuffer
+    if (com.monkfitness.app.BuildConfig.DEBUG &&
+        buffer.limbSolverRealizationToken != buffer.buildCycleToken
+    ) {
+        buffer.limbSolverRealizationToken = buffer.buildCycleToken
+        buffer.limbSolverExecutions++
+    }
     val worldPole = if (pole.mag() < 1e-4f) {
         SkeletonMath.deriveDefaultPole(rootWorldPos, targetWorldPos, bakeIkScratchPole)
     } else {
@@ -565,25 +651,5 @@ fun bakeIkLimb(
     bakeIkScratch1.set(ikResult.end).subtract(ikResult.joint)
     SkeletonMath.toLocalDirection(bakeIkScratch1, parentRot, endNode.localPosition)
 
-    if (contact != null) {
-        val chain = ConstraintSolver.chainForEnd(endNode.joint)
-        if (chain != null) {
-            buffer.contacts.add(
-                ContactSpec(
-                    endJoint = endNode.joint,
-                    rootJoint = chain.rootJoint,
-                    parentRotationJoint = chain.parentRotationJoint,
-                    middleJoint = chain.middleJoint,
-                    targetWorld = Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
-                    pole = Vector3(pole.x, pole.y, pole.z),
-                    length1 = length1,
-                    length2 = length2,
-                    constraint = constraint,
-                    straight = straight,
-                    contact = contact
-                )
-            )
-        }
-    }
     return ikResult
 }

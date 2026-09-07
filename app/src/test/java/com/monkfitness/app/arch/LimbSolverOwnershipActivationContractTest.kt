@@ -16,10 +16,14 @@ import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.Vector3
 import com.monkfitness.app.animation.WorldTarget
 import com.monkfitness.app.animation.bakeIkLimb
+import com.monkfitness.app.poses.CatCowPose
 import com.monkfitness.app.poses.DeadBugPose
 import com.monkfitness.app.poses.LatStretchPose
+import com.monkfitness.app.poses.LegRaisePose
+import com.monkfitness.app.poses.SupermanPose
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -179,11 +183,29 @@ class LimbSolverOwnershipActivationContractTest {
         val actual = SkeletonPose()
         val aNodes = hipTree(root)
         actual.limbTargets.add(
-            WorldTarget(Joint.ANKLE_F, fullTarget, Vector3(1f, 0f, 0f), straight = true)
+            WorldTarget(
+                Joint.ANKLE_F, fullTarget, Vector3(1f, 0f, 0f), straight = true,
+                length1 = def.thighLength, length2 = def.shinLength, constraint = authored
+            )
         )
         actual.roots = aNodes.roots
         runStage(actual, def)
         snapshot(aNodes, actual)
+
+        // The decode is lossless only because the declared constraint is honored: an
+        // undeclared Limb Target must fail fast under the active stage, NEVER silently
+        // recover definition defaults (that recovery was the B-3 heuristic).
+        val undeclared = SkeletonPose()
+        val uNodes = hipTree(root)
+        undeclared.limbTargets.add(
+            WorldTarget(Joint.ANKLE_F, fullTarget, Vector3(1f, 0f, 0f), straight = true)
+        )
+        undeclared.roots = uNodes.roots
+        val thrown = runCatching { runStage(undeclared, def) }.exceptionOrNull()
+        assertTrue(
+            "undeclared realization context must fail fast (no silent definition recovery)",
+            thrown is IllegalStateException && thrown.message!!.contains("R5 violation")
+        )
 
         val dev = maxOf(
             abs(actual.getJoint(Joint.KNEE_F).x - expected.getJoint(Joint.KNEE_F).x),
@@ -228,7 +250,12 @@ class LimbSolverOwnershipActivationContractTest {
         snapshot(nodes, expected)
 
         val actual = SkeletonPose()
-        actual.limbTargets.add(WorldTarget(Joint.ANKLE_F, target, Vector3(1f, 0f, 0f)))
+        actual.limbTargets.add(
+            WorldTarget(
+                Joint.ANKLE_F, target, Vector3(1f, 0f, 0f),
+                length1 = 2f, length2 = 1f, constraint = IKConstraint.LegConstraint
+            )
+        )
         actual.roots = nodes.roots
         runStage(actual, def)
         snapshot(nodes, actual)
@@ -271,6 +298,69 @@ class LimbSolverOwnershipActivationContractTest {
                 pose.limbTargets.size >= 4
             )
         }
+    }
+
+    @Test
+    fun worldBuiltPosesUseAuthoredHierarchyNotPositionReconstruction() {
+        // §12.6 hierarchy audit (WP-D): the four world-position-built bypass poses must reach
+        // the pipeline through the authored-hierarchy idiom — a built pose carries the
+        // SkeletonFactory tree (knee/ankle authored as node LOCALS), and NO production pose
+        // file may call the legacy `fromJointPositions` reconstruction (solve-result world
+        // positions embedded into initial Settled Geometry — the B-1-shaped breakage).
+        val files = listOf(
+            "poses/DeadBugPose.kt",
+            "poses/LegRaisePose.kt",
+            "poses/SupermanPose.kt",
+            "poses/CatCowPose.kt"
+        )
+        val root = productionJavaRoot()
+        val offenders = mutableListOf<String>()
+        for (rel in files) {
+            File(root, rel).readLines().forEachIndexed { i, raw ->
+                val line = raw.trim()
+                if (line.startsWith("//") || line.startsWith("*") || line.startsWith("/*")) return@forEachIndexed
+                if (line.substringBefore("//").contains("fromJointPositions")) {
+                    offenders.add("$rel:${i + 1}")
+                }
+            }
+        }
+        assertEquals(
+            "no migrated pose may use fromJointPositions (the world-position reconstruction " +
+                "the bypass family depended on):\n" + offenders.joinToString("\n"),
+            emptyList<String>(), offenders
+        )
+        // Behavioral half: each converted pose's built carrier must have a node hierarchy whose
+        // knee nodes carry the SOLVED local offsets (hierarchy exists before the bake; the bake
+        // wrote authored nodes), and all four limbs registered as Limb Targets.
+        for ((name, builder) in listOf<Pair<String, PoseBuilder>>(
+            "DeadBug" to DeadBugPose(),
+            "LegRaise" to LegRaisePose(),
+            "Superman" to SupermanPose(),
+            "CatCow" to CatCowPose()
+        )) {
+            val pose = builder.build(PoseContext(0.5f, Side.LEFT, def))
+            assertTrue("$name: authored hierarchy required", pose.roots.isNotEmpty())
+            val kneeF = findNode(pose.roots[0], Joint.KNEE_F)
+            assertTrue("$name: KNEE_F node must exist on the authored tree", kneeF != null)
+            assertTrue(
+                "$name: bake must have written the knee's LOCAL offset (thigh, ~L1 long)",
+                abs(kneeF!!.localPosition.mag() - def.thighLength) < 1f
+            )
+            assertEquals("$name: four limbs declared", 4, pose.limbTargets.size)
+            for (t in pose.limbTargets) {
+                assertFalse("$name:${t.joint}: declared realization context required", t.length1.isNaN())
+                assertTrue("$name:${t.joint}: constraint declared", t.constraint != null)
+            }
+        }
+    }
+
+    private fun findNode(node: com.monkfitness.app.animation.SkeletonNode, joint: Joint): com.monkfitness.app.animation.SkeletonNode? {
+        if (node.joint == joint) return node
+        for (c in node.children) {
+            val f = findNode(c, joint)
+            if (f != null) return f
+        }
+        return null
     }
 
     // --------------------------------------------- E — hip-flexor authoring consumers (B-1)

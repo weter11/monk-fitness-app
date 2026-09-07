@@ -1,7 +1,6 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.animation.SkeletonMath.solveIK
 import com.monkfitness.app.animation.SkeletonMath.lerp
 import kotlin.math.*
 
@@ -87,16 +86,10 @@ class MountainClimberPose : PoseBuilder {
         val targetHandA = Vector3(chest!!.worldPosition.x, 15f, -def.shoulderWidth * 1.2f)
         val targetHandP = Vector3(chest!!.worldPosition.x, 15f, def.shoulderWidth * 1.2f)
 
-        // Solve Arm IK (straightened vertical support arms)
-        val armA = solveIK(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(-1f, -1f, -1f), def.armIKConstraint, armABuffer)
-        val armP = solveIK(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(-1f, -1f, 1f), def.armIKConstraint, armPBuffer)
-
-        // Set Arm joint local coordinates (Phase 4: lean-cancel removed; engine keeps the
-        // planted arm flat automatically, so the IK offset is written directly)
-        elbowA!!.localPosition.set(armA.joint.x - shoulderA!!.worldPosition.x, armA.joint.y - shoulderA!!.worldPosition.y, armA.joint.z - shoulderA!!.worldPosition.z)
-        handA!!.localPosition.set(armA.end.x - armA.joint.x, armA.end.y - armA.joint.y, armA.end.z - armA.joint.z)
-        elbowP!!.localPosition.set(armP.joint.x - shoulderP!!.worldPosition.x, armP.joint.y - shoulderP!!.worldPosition.y, armP.joint.z - shoulderP!!.worldPosition.z)
-        handP!!.localPosition.set(armP.end.x - armP.joint.x, armP.end.y - armP.joint.y, armP.end.z - armP.joint.z)
+        // P12 (§12.6): arms declared through the registered authoring bake (was direct
+        // solveIK + raw-offset writes — the bypass family).
+        bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(-1f, -1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, jointsBuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(-1f, -1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
@@ -120,15 +113,9 @@ class MountainClimberPose : PoseBuilder {
             def.hipWidth * 1.2f
         )
 
-        // Solve Leg IK (knees bend up under torso)
-        val legF = solveIK(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, legFBuffer)
-        val legB = solveIK(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, legBBuffer)
-
-        // Set Leg joint local coordinates (Phase 4: lean-cancel removed; the IK offset is written directly)
-        kneeF!!.localPosition.set(legF.joint.x - hipF!!.worldPosition.x, legF.joint.y - hipF!!.worldPosition.y, legF.joint.z - hipF!!.worldPosition.z)
-        ankleF!!.localPosition.set(legF.end.x - legF.joint.x, legF.end.y - legF.joint.y, legF.end.z - legF.joint.z)
-        kneeB!!.localPosition.set(legB.joint.x - hipB!!.worldPosition.x, legB.joint.y - hipB!!.worldPosition.y, legB.joint.z - hipB!!.worldPosition.z)
-        ankleB!!.localPosition.set(legB.end.x - legB.joint.x, legB.end.y - legB.joint.y, legB.end.z - legB.joint.z)
+        // P12 (§12.6): legs declared through the registered authoring bake.
+        bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
+        bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 
         // The engine derives heel/toe from the shank + the neutral ankle articulation. The flat
         // foot on the forward-leaning shank is intentionally NOT hand-authored here; if the engine

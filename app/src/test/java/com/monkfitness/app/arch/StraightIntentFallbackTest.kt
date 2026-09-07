@@ -214,7 +214,12 @@ class StraightIntentFallbackTest {
                 nodes.roots.forEach { it.updateWorldTransforms(Vector3(), JointRotation()) }
                 val pose = SkeletonPose()
                 pose.roots = nodes.roots
-                pose.limbTargets.add(WorldTarget(Joint.HAND_A, target, straight = true))
+                pose.limbTargets.add(
+                    WorldTarget(
+                        Joint.HAND_A, target, straight = true,
+                        length1 = 2f, length2 = 1f, constraint = constraint
+                    )
+                )
                 IkStage.apply(
                     pose,
                     HumanSkeletonDefinition(upperArmLength = 2f, forearmLength = 1f, armIKConstraint = constraint)

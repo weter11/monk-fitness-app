@@ -6,33 +6,38 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Phase 4 (R5) — configuration / ownership static audit
- * (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md §P4 enforcement + §12.0 states 1–2).
+ * Phase 4 (R5) configuration / ownership static audit — P12 §12.7 RETARGETED FORM.
+ * (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md §P4 enforcement, §12.0 state 3, §12.7, §12.8 item 4.)
  *
- * Complements [com.monkfitness.app.IkStageTest] (behavioral) and
- * [ValidationStampWriteSiteAuditTest] (stamp-write) with the source-level contract that the
- * P4 runtime-window counter structurally CANNOT see: authoring-vs-stage exclusivity is today a
- * CONFIGURATION property, and the configuration is pinned by three facts:
+ * The P4 shape pinned "flag-ON is unreachable" (zero production writes + a stage-only
+ * counter). P12 activates the stage, so the contract this audit now enforces is the
+ * strengthened ownership contract:
  *
- *  1. `IK_STAGE_ACTIVE` has ZERO production writes — it is a rollout flag whose only production
- *     assignment is its `false` declaration; flipping it ON in production is a P12 transition,
- *     not a runtime possibility (RFC R5: "rollout mechanism, not architecture").
- *  2. Its sole production read is the `IkStage.apply` gate — no other subsystem branches on it.
- *  3. `limbSolverExecutions` is incremented at exactly one production site (`IkStage`, the one
- *     engine Phase-1 window), checked/reset only by `SkeletonPipeline.runStages`, and absent
- *     from `copyFrom` (Published Pose State can never inherit it — P3 suppression pattern).
+ *  1. `IK_STAGE_ACTIVE` remains a CONFIGURATION SURFACE: its only production write is the
+ *     declaration itself, whose default WP-I flips once (production-valid). No runtime code
+ *     path may WRITE the flag — flips belong to the declared configuration surface (and to
+ *     tests under flag-scoped restore), never to execution logic.
+ *  2. Reads are confined to the realization-decision sites: the engine stage gate, the three
+ *     registered authoring bakes' realization gates (§12.7a), and the pipeline's window check.
+ *     No other subsystem may branch on it.
+ *  3. `limbSolverExecutions` is incremented at BOTH registered realization sites — the bake
+ *     realization branch (member/package/validation paths, `BasePose.kt` + `BaseValidationPose.kt`)
+ *     and the engine stage window (`IkStage.kt`) — so the counter can OBSERVE the historical
+ *     violation mode (authoring solver blind to the instrument). P4's "exactly one increment
+ *     site" was the vacuity this phase closes (§12.7b). Checked/reset only by
+ *     `SkeletonPipeline.runStages`; absent from `copyFrom` (P3 suppression pattern).
  *
- * If P12 activates the stage, THIS audit is the one the plan retargets (§12.7/§12.8) — failing
- * it outside P12 means someone made flag-ON reachable without the activation contract.
+ * Pre-P12 this audit was RED against P12's machinery BY DESIGN (that was the WP-A contract's
+ * B-property); this file records the post-transition contract.
  */
 class RuntimeSolverOwnershipAuditTest {
 
     private val sources: Map<String, List<String>> by lazy { productionSources() }
 
     @Test
-    fun ikStageFlagHasNoProductionWriteAndConfigReadsOnlyAtGateAndCheck() {
+    fun ikStageFlagIsDeclarationOnlyAndReadOnlyAtRealizationDecisionSites() {
         val assignment = Regex("""^\s*IK_STAGE_ACTIVE\s*=(?!=)""")
-        val declaration = Regex("""^\s*var IK_STAGE_ACTIVE\s*:\s*Boolean\s*=\s*false""")
+        val declaration = Regex("""^\s*var IK_STAGE_ACTIVE\s*:\s*Boolean\s*= """)
         var writes = 0
         var declarations = 0
         val readSites = mutableListOf<String>()
@@ -50,45 +55,59 @@ class RuntimeSolverOwnershipAuditTest {
             }
         }
         assertEquals(
-            "IK_STAGE_ACTIVE must have no production writes before P12 (rollout flag; flips " +
-                "belong to tests only)",
+            "no execution path may WRITE the flag — the only production write is the " +
+                "declaration's default (config surface; §12.7 flag lifecycle)",
             0, writes
         )
-        assertEquals("the flag must be declared exactly once, default false", 1, declarations)
-        // Two reads are legitimate: the IkStage gate (the decision) and the pipeline's
-        // runtime-window check, which reads the SAME config only to express the plan's
-        // `count == 0 && stage skipped` disjunct — no new branching logic.
+        assertEquals("the flag must be declared exactly once", 1, declarations)
+        // Reads are legal only at the realization-decision sites: the stage gate, the three
+        // registered bake realization gates, and the pipeline's R5 window check.
         assertEquals(
-            "flag reads must stay at the gate + the R5 window check",
-            setOf("IkStage.kt", "SkeletonPipeline.kt"),
+            "flag reads must stay at the realization gates + the R5 window check " +
+                "(IkStage, the bake paths, SkeletonPipeline)",
+            setOf("IkStage.kt", "BasePose.kt", "BaseValidationPose.kt", "SkeletonPipeline.kt"),
             readSites.map { it.substringBefore(':') }.toSet()
         )
         assertTrue("the gate must remain the stage's entry check", readSites.any { it.startsWith("IkStage.kt:") })
     }
 
     @Test
-    fun runtimeWindowCounterHasExactlyOneIncrementSiteCheckedByThePipeline() {
-        val increment = Regex("""\bpose\.limbSolverExecutions\+\+""")
-        val checkSite = Regex("""limbSolverExecutions""")
-        val increments = mutableListOf<String>()
+    fun solverWindowCounterIsIncrementedAtEveryRegisteredRealizationSite() {
+        val increment = Regex("""\blimbSolverExecutions\+\+""")
         val perFile = mutableMapOf<String, Int>()
+        val sites = mutableListOf<String>()
         for ((path, lines) in sources) {
             for ((i, raw) in lines.withIndex()) {
                 val line = stripComment(raw)
                 if (increment.containsMatchIn(line)) {
-                    increments.add("${path.substringAfterLast('/')}:${i + 1}")
+                    sites.add("${path.substringAfterLast('/')}:${i + 1}")
                 }
-                if (checkSite.containsMatchIn(line)) {
+                if (line.contains("limbSolverExecutions")) {
                     perFile[path.substringAfterLast('/')] = (perFile[path.substringAfterLast('/')] ?: 0) + 1
                 }
             }
         }
-        assertEquals("exactly one production increment site (IkStage)", listOf("IkStage.kt:61"), increments)
-        // Declared+documented in PoseDefinition, incremented in IkStage, checked+reset in the
-        // pipeline. No other production file may touch the counter.
+        // Both registered realization windows count: the engine stage (1) + the three bake
+        // realization branches (member / package-level / validation). A bake site that
+        // realized WITHOUT incrementing would re-open the P4 blindness — the count above
+        // pins every realization branch to an increment.
         assertEquals(
-            "unexpected files reference the runtime-window counter",
-            setOf("PoseDefinition.kt", "IkStage.kt", "SkeletonPipeline.kt"),
+            "increment sites must be exactly the stage window + the 3 bake realization " +
+                "branches (§12.7b)",
+            4, sites.size
+        )
+        assertEquals(
+            setOf("IkStage.kt", "BasePose.kt", "BaseValidationPose.kt"),
+            sites.map { it.substringBefore(':') }.toSet()
+        )
+        assertEquals("the stage window increments exactly once", 1, sites.count { it.startsWith("IkStage.kt") })
+        assertEquals("the member bake + the package-level bake increment once each",
+            2, sites.count { it.startsWith("BasePose.kt") })
+        // Declared+documented in PoseDefinition, incremented at the realization sites above,
+        // checked+reset in the pipeline. No other production file may touch the counter.
+        assertEquals(
+            "unexpected files reference the solver-window counter",
+            setOf("PoseDefinition.kt", "IkStage.kt", "BasePose.kt", "BaseValidationPose.kt", "SkeletonPipeline.kt"),
             perFile.keys
         )
     }

@@ -325,21 +325,25 @@ class SkeletonPipeline(
                     "SkeletonPoseFinalizer.finalize)"
             )
         }
-        // Phase 4 (R5) — runtime-window enforcement (plan §P4: check(count == 1 ||
-        // (count == 0 && stage skipped))). Counts Phase-1 limb-solver windows executed inside
-        // this pipeline frame (today: IkStage only). Proves no second Phase-1 runtime solver can
-        // run for one frame; deliberately does NOT claim authoring-vs-stage exclusivity —
-        // authoring solving happens in build(), outside this window (P12 owns that transition;
-        // see IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md §12.0 state 2 vs state 3).
+        // Phase 4 (R5) / P12 §12.7b — strengthened runtime-window enforcement. The counter now
+        // covers BOTH registered realization sites (authoring bake branch + engine stage), so:
+        //  - flag-ON (stage config): the stage window must have executed exactly once (it counts
+        //    at entry); any leaked second solver (a bake that realized while the stage was on, a
+        //    duplicated stage call, or a hidden third path) raises the count and the check fires
+        //    even when the two implementations produce byte-identical output;
+        //  - flag-OFF (authoring config): the bake's per-build realization counts once; the
+        //    `count == 0` case survives ONLY for the legacy skipped-window reading (no registered
+        //    realization this frame — the config audit pins which configuration deploys; P4's
+        //    formula `count == 1 || (count == 0 && stage skipped)` is retargeted, and the
+        //    bake-blindness that made it vacuous against double-solve is closed).
         if (BuildConfig.DEBUG) {
-            val stageSkipped = !IK_STAGE_ACTIVE
             check(
                 pose.limbSolverExecutions == 1 ||
-                    (pose.limbSolverExecutions == 0 && stageSkipped)
+                    (pose.limbSolverExecutions == 0 && !IK_STAGE_ACTIVE)
             ) {
                 "R5 violation: runtime limb-solver windows executed this frame = " +
-                    "${pose.limbSolverExecutions} (expected 1, or 0 while the engine-side " +
-                    "IK stage is skipped)"
+                    "${pose.limbSolverExecutions} (expected exactly 1; 0 only while the " +
+                    "engine-side IK stage is disabled and no registered realization ran)"
             }
         }
         pose.limbSolverExecutions = 0

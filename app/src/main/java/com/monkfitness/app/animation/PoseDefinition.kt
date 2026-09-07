@@ -93,19 +93,36 @@ data class RelativeArticulation(
  * optional `contact` (fixed support). The default values make the builder-facing
  * `IntentBuilder.limbTarget(joint, world)` ergonomic for non-contact, non-straight targets.
  *
+ * **P12 (B-3 / §12.4) — lossless realization fields.** The activated stage must decode a limb
+ * from the DECLARED solve inputs, never by recovering bone lengths or the IK constraint through
+ * an arm/leg joint-name heuristic (parity that depends on the authored context coinciding with
+ * the definition defaults is not an activation criterion — plan §12.3 B-3). Every realized limb
+ * therefore declares `length1`, `length2` and the per-bake `constraint`; the values are the
+ * authoring bake's own inputs (single canonical source: Author Intent, RFC §3.1). The `NaN`
+ * defaults mark the shorthand surface (`IntentBuilder.limbTarget(joint, world)`, used by
+ * hand-built fixtures) as NOT-production-realizable: with the stage active, a target whose
+ * realization context is absent fails fast — no silent definition recovery.
+ *
  * @param joint the joint this target pins.
  * @param world the world-space position the joint should occupy.
  * @param pole the authored IK bend-plane pole (zero vector ⇒ the stage derives the default pole).
  * @param straight true ⇒ solve as a rigid (straight) limb segment.
  * @param contact non-null ⇒ this target is a fixed support contact (the pose also registers a
  *   `ContactSpec`; the stage reuses the exact `contact` so the ConstraintSolver re-bake matches).
+ * @param length1 the declared proximal bone length (NaN ⇒ not declared; never silently recovered).
+ * @param length2 the declared distal bone length (NaN ⇒ not declared; never silently recovered).
+ * @param constraint the per-limb IK constraint the authoring bake solved with (null ⇒ not
+ *   declared; never silently recovered from the definition).
  */
 data class WorldTarget(
     val joint: Joint,
     val world: Vector3,
     val pole: Vector3 = Vector3(),
     val straight: Boolean = false,
-    val contact: ContactConstraint? = null
+    val contact: ContactConstraint? = null,
+    val length1: Float = Float.NaN,
+    val length2: Float = Float.NaN,
+    val constraint: IKConstraint? = null
 )
 
 /**
@@ -273,19 +290,32 @@ class SkeletonPose(
     var straightIntentDropped: Boolean = false
 
     /**
-     * Phase 4 (R5) — runtime-window limb-solver execution count. Incremented ONLY by engine
-     * Phase-1 limb-solver windows inside `runStages` (today: `IkStage.apply`, past its gate),
-     * checked (`in 0..1`) and reset by `SkeletonPipeline.runStages` at the end of each frame.
+     * Phase 4 (R5) — runtime-window limb-solver execution count. Incremented by engine
+     * Phase-1 limb-solver windows: the `SkeletonPipeline.runStages` window count covers the
+     * engine-side `IkStage` (past its gate) and the authoring bake's REALIZATION branch
+     * (P12 §12.7b — edge-triggered per authoring cycle so per-frame playback re-builds count
+     * once), checked and reset by `SkeletonPipeline.runStages` at the end of each frame.
      *
-     * Scope (honesty KDoc): this proves NO SECOND Phase-1 runtime solver can execute for one
-     * frame. It does NOT certify authoring-vs-stage exclusivity — authoring solves run inside
-     * `build()`, outside the pipeline window, and the config audit pins `IK_STAGE_ACTIVE=false`
-     * as the deployed state. Full R5 activation is owned by plan Phase 12.
+     * P12 (strengthened mode): with `IK_STAGE_ACTIVE=true` the bake's realization branch is
+     * gated off (plan §12.7a), so exactly one implementation realizes limb intent per frame in
+     * EITHER configuration and the counter proves it: a second solver entering through any path
+     * — even one producing identical output — raises the count above 1 and the pipeline's
+     * debug `check` fires. This is the full R5 enforcement; P4's narrower runtime-window claim
+     * (stage-only increment, `count == 0 && stage skipped` escape) is retired.
      *
      * Internal instrumentation: never added to `copyFrom`, so Published Pose State cannot inherit
      * it (P3 suppression pattern).
      */
     internal var limbSolverExecutions: Int = 0
+
+    /**
+     * P12 (§12.7b) — authoring-cycle edge trigger for the counter above: the first bake
+     * REALIZATION of a build cycle increments once; further limb bakes in the same cycle add
+     * nothing (the Active Limb Solver for a frame is one window, not one call). Compared
+     * against [buildCycleToken] (bumped by `IntentBuilder.reset`). Debug-gated instrumentation
+     * only; absent from `copyFrom`.
+     */
+    internal var limbSolverRealizationToken: Long = -1L
 
     /**
      * IK stamp: every solved limb exactly preserved its bone lengths (invariant F5). Optimistic
