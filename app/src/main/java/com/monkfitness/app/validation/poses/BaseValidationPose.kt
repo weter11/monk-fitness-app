@@ -316,14 +316,9 @@ abstract class BaseValidationPose : PoseBuilder {
         }
         // P12 (§12.7a): realization runs only while the engine stage is off; registration and
         // the fresh-window block above are unconditional. Counter evidence per authoring cycle
-        // mirrors BasePose.bakeIkLimb.
+        // mirrors BasePose.bakeIkLimb (single registration point).
         if (IK_STAGE_ACTIVE) return
-        if (com.monkfitness.app.BuildConfig.DEBUG &&
-            jointsBuffer.limbSolverRealizationToken != jointsBuffer.buildCycleToken
-        ) {
-            jointsBuffer.limbSolverRealizationToken = jointsBuffer.buildCycleToken
-            jointsBuffer.limbSolverExecutions++
-        }
+        jointsBuffer.registerLimbRealization(endNode.joint, authoringWindow = true)
 
         // Phase 1 (F6): a zero-length pole means the pose omitted one — derive the default world
         // pole so the bend plane is always well-defined.

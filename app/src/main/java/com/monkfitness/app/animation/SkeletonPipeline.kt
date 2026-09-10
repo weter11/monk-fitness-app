@@ -325,17 +325,24 @@ class SkeletonPipeline(
                     "SkeletonPoseFinalizer.finalize)"
             )
         }
-        // Phase 4 (R5) / P12 §12.7b — strengthened runtime-window enforcement. The counter now
-        // covers BOTH registered realization sites (authoring bake branch + engine stage), so:
-        //  - flag-ON (stage config): the stage window must have executed exactly once (it counts
-        //    at entry); any leaked second solver (a bake that realized while the stage was on, a
-        //    duplicated stage call, or a hidden third path) raises the count and the check fires
-        //    even when the two implementations produce byte-identical output;
-        //  - flag-OFF (authoring config): the bake's per-build realization counts once; the
-        //    `count == 0` case survives ONLY for the legacy skipped-window reading (no registered
-        //    realization this frame — the config audit pins which configuration deploys; P4's
-        //    formula `count == 1 || (count == 0 && stage skipped)` is retargeted, and the
-        //    bake-blindness that made it vacuous against double-solve is closed).
+        // Phase 4 (R5) / P12 §12.7b — strengthened runtime enforcement. Two pieces of execution
+        // evidence from the registered realization sites:
+        //  - WINDOW count (the first block below): the counter covers BOTH registered realization
+        //    sites (authoring bake branch + engine stage), so
+        //    · flag-ON (stage config): the stage window must have executed exactly once (it counts
+        //      at entry); any leaked second solver (a bake that realized while the stage was on, a
+        //      duplicated stage call, or a hidden third path) raises the count and the check fires
+        //      even when the two implementations produce byte-identical output;
+        //    · flag-OFF (authoring config): the bake's per-build realization counts once (the
+        //      authoring window is re-armed through the same registration path the sites call); the
+        //      `count == 0` case survives ONLY for the legacy skipped-window reading (no registered
+        //      realization this frame — the config audit pins which configuration deploys).
+        //  - PER-EXECUTION evidence (WP-G): the window count has a resolution limit — two
+        //    realizations of ONE limb inside ONE window (a duplicated Limb Target handed to the
+        //    stage, or a second `bakeIkLimb` call for the same joint in one build) leave the same
+        //    window count and a byte-identical frame. `limbDuplicateRealizations` counts those
+        //    events, and the second check rejects the frame on that number alone: the violation is
+        //    EXECUTION evidence, never a comparison of world positions, floats, stamps or hashes.
         if (BuildConfig.DEBUG) {
             check(
                 pose.limbSolverExecutions == 1 ||
@@ -345,8 +352,19 @@ class SkeletonPipeline(
                     "${pose.limbSolverExecutions} (expected exactly 1; 0 only while the " +
                     "engine-side IK stage is disabled and no registered realization ran)"
             }
+            check(pose.limbDuplicateRealizations == 0) {
+                "R5 violation: the Active Limb Solver realized a limb more than once inside one " +
+                    "build cycle — duplicate realization events = ${pose.limbDuplicateRealizations}, " +
+                    "window executions = ${pose.limbSolverExecutions}, total realization events = " +
+                    "${pose.limbSolverExecutions + pose.limbDuplicateRealizations}. Exactly one " +
+                    "realization per limb per cycle is allowed (§12.7 strengthened single-active-" +
+                    "solver enforcement; realized-limb mask = " +
+                    "${java.lang.Long.toBinaryString(pose.limbRealizedLimbs)} by Joint.index)"
+            }
         }
         pose.limbSolverExecutions = 0
+        pose.limbDuplicateRealizations = 0
+        pose.limbRealizedLimbs = 0L
         return finalized
     }
 

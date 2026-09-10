@@ -290,18 +290,25 @@ class SkeletonPose(
     var straightIntentDropped: Boolean = false
 
     /**
-     * Phase 4 (R5) — runtime-window limb-solver execution count. Incremented by engine
-     * Phase-1 limb-solver windows: the `SkeletonPipeline.runStages` window count covers the
-     * engine-side `IkStage` (past its gate) and the authoring bake's REALIZATION branch
-     * (P12 §12.7b — edge-triggered per authoring cycle so per-frame playback re-builds count
-     * once), checked and reset by `SkeletonPipeline.runStages` at the end of each frame.
+     * Phase 4 (R5) — limb-solver WINDOW execution count. Counted by the pipeline-owned limb
+     * realization sites: the engine-side `IkStage` window (once per `apply` call, past its gate)
+     * and the authoring/validation bake's REALIZATION branch (P12 §12.7b — re-armed per
+     * authoring cycle so a rebuilt carrier starts from a fresh count however many limbs the
+     * implementation realizes). Checked and reset by `SkeletonPipeline.runStages` at the end of
+     * each frame.
      *
      * P12 (strengthened mode): with `IK_STAGE_ACTIVE=true` the bake's realization branch is
      * gated off (plan §12.7a), so exactly one implementation realizes limb intent per frame in
-     * EITHER configuration and the counter proves it: a second solver entering through any path
-     * — even one producing identical output — raises the count above 1 and the pipeline's
-     * debug `check` fires. This is the full R5 enforcement; P4's narrower runtime-window claim
-     * (stage-only increment, `count == 0 && stage skipped` escape) is retired.
+     * EITHER configuration and the counter proves it: a second solver window entering through
+     * any path — even one producing identical output — raises the count above 1 and the
+     * pipeline's debug `check` fires.
+     *
+     * WP-G: the window count alone has a RESOLUTION limit — two realizations of ONE limb inside
+     * ONE window (a duplicated Limb Target, a second `bakeIkLimb` call for the same joint) are
+     * indistinguishable from one realization by this number, because the frame they produce is
+     * byte-identical. The per-execution half of the invariant is [limbRealizedLimbs] +
+     * [limbDuplicateRealizations], registered through [registerLimbRealization] and checked by
+     * the same pipeline block.
      *
      * Internal instrumentation: never added to `copyFrom`, so Published Pose State cannot inherit
      * it (P3 suppression pattern).
@@ -309,13 +316,34 @@ class SkeletonPose(
     internal var limbSolverExecutions: Int = 0
 
     /**
-     * P12 (§12.7b) — authoring-cycle edge trigger for the counter above: the first bake
-     * REALIZATION of a build cycle increments once; further limb bakes in the same cycle add
-     * nothing (the Active Limb Solver for a frame is one window, not one call). Compared
-     * against [buildCycleToken] (bumped by `IntentBuilder.reset`). Debug-gated instrumentation
-     * only; absent from `copyFrom`.
+     * P12 (§12.7b) — the build-cycle key of the current realization evidence. Set by
+     * [registerLimbRealization] when a realization event opens a new build cycle (the first
+     * realization after `IntentBuilder.reset` bumped [buildCycleToken]); a differing value is
+     * the deterministic re-arm evidence for the counter above and for the realized-limb mask.
+     * Debug-gated instrumentation only; absent from `copyFrom`.
      */
     internal var limbSolverRealizationToken: Long = -1L
+
+    /**
+     * P12 WP-G (§12.7b/c) — **per-execution evidence**: a bitmask of the limb end joints the
+     * Active Limb Solver realized in the current cycle, keyed by [Joint.index] (the joint
+     * enumeration is 33 members with indices 0..32, i.e. it fits one `Long`; the bound is pinned
+     * by `SingleActiveSolverEnforcementTest`). Cleared by the cycle re-arm in
+     * [registerLimbRealization] and by the pipeline's per-frame reset, so no frame can inherit a
+     * previous frame's realization set.
+     */
+    internal var limbRealizedLimbs: Long = 0L
+
+    /**
+     * P12 WP-G (§12.7b/c) — number of realization events in the current cycle that re-realized a
+     * limb [limbRealizedLimbs] already holds (0 means the single-active-solver invariant holds).
+     * This is the evidence the window count cannot express: two realizations of one limb inside
+     * one window leave the same window count AND a byte-identical frame, but they are two
+     * execution events, and `SkeletonPipeline.runStages` rejects the frame on this number alone
+     * (execution evidence, never output comparison). Reset with the cycle key and by the
+     * pipeline's per-frame reset — no cross-frame solver memory.
+     */
+    internal var limbDuplicateRealizations: Int = 0
 
     /**
      * IK stamp: every solved limb exactly preserved its bone lengths (invariant F5). Optimistic
@@ -384,6 +412,45 @@ class SkeletonPose(
 
     fun setJointRotation(id: Joint, r: JointRotation) {
         rotations[id.index].copyFrom(r)
+    }
+
+    /**
+     * P12 WP-G (§12.7b/c) — the **single authoritative registration point** for Active Limb
+     * Solver realization evidence. Every registered realization site calls it exactly once per
+     * limb it is about to realize, immediately before the limb's solve executes:
+     * `BasePose.bakeIkLimb` (member), the package-level `bakeIkLimb`, `BaseValidationPose.bakeIkLimb`,
+     * and `IkStage.apply` (per target). Keeping the registration in one function — rather than a
+     * counter write per site — is what makes "one authoritative execution-evidence path" checkable
+     * (`RuntimeSolverOwnershipAuditTest` pins the call-site set).
+     *
+     * Cycle-local and deterministic:
+     *  - a realization event whose cycle key differs from [buildCycleToken] opens a fresh cycle:
+     *    the realized-limb mask and the duplicate count are cleared and, for an authoring site,
+     *    the window count is RE-ARMED to 1 (not accumulated) — a rebuilt carrier starts from a
+     *    fresh count, so two consecutive builds can never sum into one ownership failure;
+     *  - the limb is recorded in [limbRealizedLimbs]; realizing a limb this cycle already holds
+     *    increments [limbDuplicateRealizations] — the execution evidence a window count cannot
+     *    express (two realizations of one limb inside one window produce an identical frame).
+     *
+     * Debug-gated instrumentation, like every other enforcement instrument: release builds carry
+     * no evidence and no counter writes.
+     *
+     * @param authoringWindow true for the authoring/validation bake sites, whose realization runs
+     *   inside `build()` — one window per build cycle however many limbs it realizes. The engine
+     *   stage instantiates its window once per `apply` call (above its no-work early returns) and
+     *   passes `false` here.
+     */
+    internal fun registerLimbRealization(joint: Joint, authoringWindow: Boolean) {
+        if (!com.monkfitness.app.BuildConfig.DEBUG) return
+        if (limbSolverRealizationToken != buildCycleToken) {
+            limbSolverRealizationToken = buildCycleToken
+            limbRealizedLimbs = 0L
+            limbDuplicateRealizations = 0
+            if (authoringWindow) limbSolverExecutions = 1
+        }
+        val bit = 1L shl joint.index
+        if (limbRealizedLimbs and bit != 0L) limbDuplicateRealizations++
+        limbRealizedLimbs = limbRealizedLimbs or bit
     }
 
     fun copyFrom(other: SkeletonPose) {

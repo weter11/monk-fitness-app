@@ -84,13 +84,16 @@ object IkStage {
      */
     fun apply(pose: SkeletonPose, definition: SkeletonDefinition) {
         if (!IK_STAGE_ACTIVE) return
-        // Phase 4 (R5) / P12 §12.7b: the engine-side limb-solver window IS executing for this
+        // Phase 4 (R5) / P12 §12.7b: the engine-side limb-solver WINDOW is instantiated for this
         // frame — count it for the pipeline's single-active-solver enforcement. Incremented past
         // the rollout gate but before the no-work early-returns so "window instantiated" is
         // counted uniformly (count==0 in the strengthened check means a frame reached the
         // pipeline with NO registered realization — a violation). The bake realization branch
-        // increments the SAME counter while the stage is disabled, so a bake+stage double solve
-        // is observable even when the two implementations produce identical output.
+        // counts the SAME counter while the stage is disabled, so a bake+stage double solve is
+        // observable even when the two implementations produce identical output.
+        // WP-G: the per-execution half (which limbs this window realized, and whether any limb was
+        // realized twice inside it) is registered per target below through the single evidence
+        // path `SkeletonPose.registerLimbRealization`.
         pose.limbSolverExecutions++
         val targets = pose.limbTargets
         if (targets.isEmpty()) return
@@ -140,6 +143,12 @@ object IkStage {
             } else {
                 pole
             }
+
+            // WP-G (§12.7b/c) — per-EXECUTION evidence for this limb, registered at the single
+            // authoritative evidence path immediately before the solve executes. A duplicated
+            // Limb Target for one joint runs this solve twice inside ONE stage window, which the
+            // window count cannot see (identical output); this records it as a second realization.
+            pose.registerLimbRealization(target.joint, authoringWindow = false)
 
             val result = if (target.straight) {
                 SkeletonMath.solveStraightLimb(rootWorld, target.world, length1, length2, constraint, ikResult, target.contact)

@@ -364,16 +364,12 @@ abstract class BasePose : PoseBuilder {
             }
         }
         if (IK_STAGE_ACTIVE) return ikBuffer
-        // §12.7b realization-site evidence: one increment per authoring cycle (edge-triggered on
-        // the P8 build token), so the frame counts ONE Active Limb Solver window however many
-        // limbs the winning implementation realizes. Debug-gated: the counter is enforcement
-        // instrumentation, never production state (P3 suppression pattern; absent from copyFrom).
-        if (com.monkfitness.app.BuildConfig.DEBUG &&
-            jointsBuffer.limbSolverRealizationToken != jointsBuffer.buildCycleToken
-        ) {
-            jointsBuffer.limbSolverRealizationToken = jointsBuffer.buildCycleToken
-            jointsBuffer.limbSolverExecutions++
-        }
+        // §12.7b/WP-G realization-site evidence — ONE registration path for every realization
+        // site (see `SkeletonPose.registerLimbRealization`): the first realization of a build
+        // cycle re-arms the cycle's window count to 1 (however many limbs this implementation
+        // realizes), and each realized limb is recorded so a SECOND realization of the same limb
+        // inside this window is per-execution evidence instead of an invisible no-op.
+        jointsBuffer.registerLimbRealization(endNode.joint, authoringWindow = true)
 
         // Phase 1 (F6): a zero-length pole means the pose omitted one — derive the default world
         // pole so the bend plane is always well-defined (the engine owns this, not the pose).
@@ -616,14 +612,9 @@ fun bakeIkLimb(
     }
     // P12 (§12.7a): realization runs only while the engine stage is off; registration above is
     // unconditional (§12.5 acceptance — limbTargets AND contacts register in both configs).
-    // Counter evidence per authoring cycle mirrors the member path.
+    // Counter evidence per authoring cycle mirrors the member path (single registration point).
     if (IK_STAGE_ACTIVE) return ikBuffer
-    if (com.monkfitness.app.BuildConfig.DEBUG &&
-        buffer.limbSolverRealizationToken != buffer.buildCycleToken
-    ) {
-        buffer.limbSolverRealizationToken = buffer.buildCycleToken
-        buffer.limbSolverExecutions++
-    }
+    buffer.registerLimbRealization(endNode.joint, authoringWindow = true)
     val worldPole = if (pole.mag() < 1e-4f) {
         SkeletonMath.deriveDefaultPole(rootWorldPos, targetWorldPos, bakeIkScratchPole)
     } else {
