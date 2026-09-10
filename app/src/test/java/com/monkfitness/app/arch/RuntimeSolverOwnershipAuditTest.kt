@@ -10,6 +10,7 @@ import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPipeline
 import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.poses.CouchStretchPose
+import com.monkfitness.app.poses.HalfKneelingStretchPose
 import com.monkfitness.app.poses.PelvicTiltPose
 import com.monkfitness.app.poses.SquatPose
 import com.monkfitness.app.validation.poses.MiddleSplitPose
@@ -441,8 +442,183 @@ class RuntimeSolverOwnershipAuditTest {
         }
     }
 
-    // ====================================================== B. execution-ownership checks
+    /**
+     * WP-H §8 — the sanctioned §12.4b **planning solve** is composition intent, never realization:
+     * it writes no nodes, registers no evidence, produces no stamp readings and counts into no
+     * solver window, so it cannot become a second Active Limb Solver by accident. Verified
+     * structurally (both helper bodies) and behaviourally (the one admitted family), with the
+     * cross-configuration equivalence of those families owned by `ActivationEquivalenceTest`.
+     */
+    @Test
+    fun planningSolveComposesIntentOnlyAndIsNeverRealizationEvidence() {
+        // (a) structural: both planning-solve bodies are composition-only.
+        for (signature in listOf("protected fun planLimbPlacement(", "fun planLimbPlacement(")) {
+            val body = bodyOf("BasePose.kt") { it.trim().startsWith(signature) }
+            val code = body.map { stripComment(it) }
+            assertEquals(
+                "$signature: the planning solve must call the solver exactly once", 1,
+                code.count { it.contains("SkeletonMath.solveIK(") }
+            )
+            for (forbidden in listOf(
+                "registerLimbRealization", "limbTargets", "toLocalDirection", "localPosition",
+                "ValidationStampMerge", "limbSolverExecutions", "setJoint"
+            )) {
+                assertTrue(
+                    "$signature: the planning solve must not contain `$forbidden` — composition " +
+                        "intent only, no realization and no carrier write (§12.4b)",
+                    code.none { it.contains(forbidden) }
+                )
+            }
+        }
 
+        // (b) behavioural: the one admitted family (hip-flexor chain) — the planning solve adds no
+        // window, no duplicate and no stamp, and the composed targets reach the canonical solver
+        // identically in both configurations.
+        val hipFlexor = listOf<Pair<String, () -> PoseBuilder>>(
+            "CouchStretch" to { CouchStretchPose() },
+            "HalfKneelingStretch" to { HalfKneelingStretchPose() }
+        )
+        for ((name, factory) in hipFlexor) {
+            IK_STAGE_ACTIVE = false
+            val deployed = factory().build(PoseContext(0.5f, Side.LEFT, def))
+            assertTrue("$name: limbs must be declared (anti-vacuity)", deployed.limbTargets.isNotEmpty())
+            assertEquals(
+                "$name (flag-OFF): exactly ONE realization window — the registered bake's. The " +
+                    "planning solve must not count as Phase-1 realization",
+                1, deployed.limbSolverExecutions
+            )
+            assertEquals("$name (flag-OFF): no duplicate realization", 0, deployed.limbDuplicateRealizations)
+
+            IK_STAGE_ACTIVE = true
+            val activated = factory().build(PoseContext(0.5f, Side.LEFT, def))
+            assertEquals(
+                "$name (flag-ON): the build window registers no realization at all — the planning " +
+                    "solve is not evidence",
+                0, activated.limbSolverExecutions
+            )
+            assertEquals(0, activated.limbDuplicateRealizations)
+            assertEquals(
+                "$name: the same declared intent (composed from the planning solve) must reach the " +
+                    "canonical active solver in both configurations",
+                deployed.limbTargets.map { it.joint to it.world.x.toRawBits() },
+                activated.limbTargets.map { it.joint to it.world.x.toRawBits() }
+            )
+        }
+    }
+
+    // ------------------------------------------------- WP-H §15 audit extension
+    @Test
+    fun equivalenceHarnessIntroducesNoSolverPathNoEvidenceWriterAndNoLegacyReconstruction() {
+        // WP-H §15 — additive audit extension (the WP-G checks above are unchanged and unweakened).
+        // Four WP-H-specific structural claims:
+        //  (1) the §12.9 equivalence harness observes ONLY through the public pipeline boundary —
+        //      no direct solver call, no direct stage call, no evidence registration, and no
+        //      geometry reconstruction; the two allow-listed authoring-side fixtures are counted;
+        //  (2) no `setJoint(solvedResult…) -> fromJointPositions` path has returned: the legacy
+        //      reconstruction has zero production consumers outside its declaration file;
+        //  (3) the ConstraintSolver settlement boundary is intact: the Phase-2 contact re-solve
+        //      neither registers R5 evidence nor reads the Limb Targets nor references the stage;
+        //  (4) no additional evidence mutation path exists: the four evidence fields stay confined
+        //      to the files the WP-G audit pins, including in the new test sources.
+        val harnessFile = "ActivationEquivalenceTest.kt"
+        val harness = testSources().entries.firstOrNull { it.key.endsWith("/$harnessFile") }
+            ?: error("the WP-H equivalence harness must exist in the arch test package")
+        val forbidden = listOf(
+            "SkeletonMath.solveIK(", "SkeletonMath.solveStraightLimb(", "IkStage.apply",
+            "registerLimbRealization(", "fromJointPositions(", "setJoint(", "limbTargets.add"
+        )
+        val offenders = mutableListOf<String>()
+        var bakeCalls = 0
+        var settlementCalls = 0
+        for ((i, raw) in harness.value.withIndex()) {
+            val line = stripComment(raw)
+            if (line.isEmpty()) continue
+            for (pattern in forbidden) if (line.contains(pattern)) offenders += "$harnessFile:${i + 1} $pattern"
+            if (line.contains("bakeIkLimb(")) bakeCalls++
+            if (line.contains("ConstraintSolver.solve(")) settlementCalls++
+        }
+        assertEquals(
+            "the equivalence harness must observe through the pipeline boundary only:\n" +
+                offenders.joinToString("\n"),
+            emptyList<String>(), offenders
+        )
+        // The two allow-listed authoring-side calls, pinned with their reasons:
+        //  - `bakeIkLimb(` ×2: the REGRESSION-A probe is an authoring fixture (it declares limbs
+        //    through the registered member bake exactly like any pose; the flag gates realization),
+        //    and no corpus case calls a solver directly;
+        //  - `ConstraintSolver.solve(` ×1: the §9 settlement-boundary adjudication invokes the
+        //    Phase-2 settlement pass to prove it is NOT an R5 realization path.
+        assertEquals("only the test-only authoring probe may call the registered bake", 2, bakeCalls)
+        assertEquals("only the §9 boundary test may invoke the settlement pass", 1, settlementCalls)
+
+        // (2) no legacy reconstruction consumer has returned.
+        val legacyConsumers = sources.filterValues { lines ->
+            lines.any { stripComment(it).contains("fromJointPositions(") }
+        }.keys.filterNot { it.endsWith("/PoseDefinition.kt") }
+        assertEquals(
+            "`fromJointPositions` must keep zero production consumers (WP-D eliminated the " +
+                "position-reconstruction family): $legacyConsumers",
+            emptyList<String>(), legacyConsumers
+        )
+        assertTrue(
+            "anti-vacuity: the legacy helper must still be declared where it is audited",
+            sources.entries.first { it.key.endsWith("/PoseDefinition.kt") }.value
+                .any { stripComment(it).contains("fun fromJointPositions(") }
+        )
+
+        // (3) the ConstraintSolver settlement boundary (static half of the §9 adjudication).
+        val solver = sources.entries.first { it.key.endsWith("/ConstraintSolver.kt") }.value
+            .map { stripComment(it) }
+        assertTrue(
+            "the Phase-2 contact re-solve must not register R5 realization evidence — it is R3 " +
+                "settlement ownership, not an Active Limb Solver implementation",
+            solver.none { it.contains("registerLimbRealization") }
+        )
+        assertTrue(
+            "the Phase-2 contact re-solve must not consume the Limb Targets as a hidden second " +
+                "limb realization path",
+            solver.none { it.contains("limbTargets") }
+        )
+        assertTrue(
+            "the Phase-2 contact re-solve must not reference the engine limb stage",
+            solver.none { it.contains("IkStage") }
+        )
+        assertTrue(
+            "anti-vacuity: the settlement re-solve surface must still exist in this file",
+            solver.any { it.contains("for (spec in contacts)") }
+        )
+
+        // (4) the evidence fields stay confined to the WP-G-pinned files, test sources included.
+        val evidenceFields = Regex(
+            """\blimbSolverExecutions\b|\blimbSolverRealizationToken\b|\blimbRealizedLimbs\b|\blimbDuplicateRealizations\b"""
+        )
+        val testWriters = testSources().filterValues { lines ->
+            lines.any { evidenceFields.containsMatchIn(stripComment(it)) }
+        }.keys.map { it.substringAfterLast('/') }.toSet()
+        assertEquals(
+            "realization evidence may only be READ in tests (never written) — a test that writes " +
+                "the evidence fields directly would fabricate enforcement proof: $testWriters",
+            setOf("ActivationEquivalenceTest.kt", "RuntimeSolverOwnershipAuditTest.kt",
+                "SingleActiveSolverEnforcementTest.kt", "DefaultPoleOwnershipTest.kt",
+                "StraightIntentFallbackTest.kt", "ValidationOwnershipReCertificationTest.kt",
+                "LimbSolverOwnershipActivationContractTest.kt"),
+            testWriters
+        )
+        val testWrites = testSources().values.sumOf { lines ->
+            lines.count { line ->
+                val l = stripComment(line)
+                Regex("""\b(limbSolverExecutions|limbSolverRealizationToken|limbRealizedLimbs|limbDuplicateRealizations)\s*=(?!=)""")
+                    .containsMatchIn(l)
+            }
+        }
+        assertEquals(
+            "no test may WRITE the realization evidence fields (the WP-G rule: never fabricate the " +
+                "evidence value — inject through the registered production path instead)",
+            0, testWrites
+        )
+    }
+
+    // ====================================================== B. execution-ownership checks
     /** The four registered realization paths, built under the current configuration. */
     private fun registeredPathMatrix(): List<Pair<String, SkeletonPose>> {
         val ctx = PoseContext(0f, Side.LEFT, def)
@@ -586,7 +762,16 @@ class RuntimeSolverOwnershipAuditTest {
         return line.substringBefore("//")
     }
 
-    private fun productionSources(): Map<String, List<String>> {
+    private fun productionSources(): Map<String, List<String>> = sourcesUnder("src/main/java")
+
+    /**
+     * WP-H §15 — the test sources, scanned by the same rules as the production sources so the
+     * equivalence harness itself is auditable (it must observe only through the pipeline boundary
+     * and must never write realization evidence).
+     */
+    private fun testSources(): Map<String, List<String>> = sourcesUnder("src/test/java")
+
+    private fun sourcesUnder(relative: String): Map<String, List<String>> {
         var dir = File(System.getProperty("user.dir"))
         var moduleRoot: File? = null
         for (attempt in 0 until 8) {
@@ -599,7 +784,7 @@ class RuntimeSolverOwnershipAuditTest {
         val root = moduleRoot ?: error(
             "Could not locate app module root from ${System.getProperty("user.dir")}"
         )
-        val srcDir = File(root, "src/main/java")
+        val srcDir = File(root, relative)
         return srcDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .associate {

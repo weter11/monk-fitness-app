@@ -272,20 +272,33 @@ class StraightIntentFallbackTest {
         // Fault injection: a second Phase-1 runtime solver window on one frame must make the
         // pipeline throw. PR #216's counter shape could not catch this design; this pins the
         // ENFORCEMENT, not just the counter's existence.
+        //
+        // P12 WP-H (finding F-2) — the injection goes through the REGISTERED realization path. The
+        // previous shape wrote the counter directly (`built.limbSolverExecutions = 2`), which tests
+        // the `check` expression rather than the mechanism: a fabricated evidence value can never
+        // be produced by production code, so the assertion proved nothing about enforcement. A
+        // genuine second window is produced by the two registered engines co-executing on one
+        // frame — the test-only direct stage window plus the pipeline's own stage window — the
+        // exact co-execution shape `SingleActiveSolverEnforcementTest` anchors.
         val original = IK_STAGE_ACTIVE
         try {
-            IK_STAGE_ACTIVE = false
-            val built = MiddleSplitPose().build(PoseContext(0.5f, Side.LEFT, SkeletonDefinition.DEFAULT_ADULT))
-            built.limbSolverExecutions = 2
-            val pipeline = SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT)
-            var thrown: IllegalStateException? = null
-            try {
-                pipeline.produceFrame(built)
-            } catch (e: IllegalStateException) {
-                thrown = e
-            }
-            assertTrue("R5 runtime-window check must fire on a double execution", thrown != null)
-            assertTrue(thrown!!.message!!.contains("R5 violation"))
+            IK_STAGE_ACTIVE = true
+            val definition = SkeletonDefinition.DEFAULT_ADULT
+            val violation = runCatching {
+                val built = MiddleSplitPose().build(PoseContext(0.5f, Side.LEFT, definition))
+                IkStage.apply(built, definition) // window #1 (legitimate test-only co-execution)
+                SkeletonPipeline(definition).produceFrame(built) // window #2 → must throw
+            }.exceptionOrNull()
+            assertTrue(
+                "R5 runtime-window check must fire on a second registered solver window. Observed: " +
+                    (violation?.let { "${it::class.simpleName}: ${it.message}" } ?: "no violation raised"),
+                violation is IllegalStateException && violation.message.orEmpty().contains("R5 violation")
+            )
+            assertTrue(
+                "the rejection must report the observed window count (2), i.e. the EVIDENCE failed " +
+                    "the frame and not a fabricated value: ${violation?.message}",
+                violation?.message.orEmpty().contains("windows executed this frame = 2")
+            )
         } finally {
             IK_STAGE_ACTIVE = original
         }
