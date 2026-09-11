@@ -25,49 +25,68 @@ package com.monkfitness.app.animation
  * double-registers). For a zero-length `pole` it derives the default world pole, exactly as
  * `bakeIkLimb` does.
  *
- * **Activation criterion (§12.10) — this flag became production-valid at `IK_STAGE_ACTIVE=true`
- * as the P12 deployed default. Each item below names its work package and its concrete evidence
- * (test/audit), not an aspiration:**
+ * **Activation criterion (§12.10) — SATISFIED and enforced by `ActivationGateTest`, which is the
+ * authoritative check for every item below (the gate composes the owning suite rather than
+ * duplicating it, and fails the moment any criterion becomes false):**
  *  (i)  B-1 authoring consumers eliminated or planning-solve-sanctioned — WP-B:
+ *       `ActivationGateTest.criterionOne_b1AuthoringConsumersAreResolved` composes
  *       `LimbSolverOwnershipActivationContractTest.hipFlexorFamilyDoesNotConsumeSolveResultsForAuthoring`
- *       + `PlanningSolveInventoryTest` (planning solve confined to one sanctioned site);
+ *       + `PlanningSolveInventoryTest` (one sanctioned planning-solve call site) + the WP-H
+ *       composition-only behaviour audit;
  *  (ii) B-2 direct-`solveIK` bypass family migrated to registered implementations — WP-D:
- *       `LimbSolverOwnershipActivationContractTest.noUnauthorizedDirectSolveInProductionPoses`
- *       (static sweep) + `bypassFamilyLimbsAreRegisteredAsIntent` (behavioral);
- *  (iii) B-3 lossless authored limb-data recovery — WP-E:
- *       `losslessStraightConstraintDecode` / `losslessBoneLengthDecode` (declared-context parity,
- *       fail-fast on undeclared context) — no heuristic remains in this file;
+ *       `criterionTwo_directBypassFamilyIsResolved` composes the static sweep
+ *       (`noUnauthorizedDirectSolveInProductionPoses`), the per-file-pinned solve inventory
+ *       (`noJointNameHeuristicOrUnregisteredLimbSolvePathRemains`) and the zero-consumer
+ *       legacy-reconstruction audit;
+ *  (iii) B-3 lossless authored limb-data recovery — WP-D:
+ *       `criterionThree_declaredLimbContextReachesTheEngineSolver` composes the declared
+ *       constraint + bone-length decode tests, the realized-set == declared-set audit over all four
+ *       registered paths, and a source check that this file recovers NOTHING from `definition`
+ *       (no length/constraint coincidence, no joint-name heuristic);
  *  (iv) §12.7 strengthened single-active-solver enforcement live — WP-G:
- *       `SingleActiveSolverEnforcementTest` (double-realization counterfactual red-gates:
- *       bake+stage co-execution detected even on identical outputs);
- *  (v)  §12.9 equivalence harness green-or-adjudicated — WP-H:
- *       `ActivationEquivalenceTest` (pre-P12 state-2 corpus vs post-flip state-3, per-joint
- *       raw-bit transforms + all 8 Validation Stamps; deltas adjudicated per case);
+ *       `criterionFour_strengthenedEnforcementRejectsASecondRealization` composes
+ *       `SingleActiveSolverEnforcementTest` (a second realization of one limb is rejected even when
+ *       both executions produce a byte-identical frame) + the counterfactual audit, and pins the
+ *       enforcement block as a `check(...)` contract on the registered execution counters;
+ *  (v)  §12.9 equivalence harness green — WP-H:
+ *       `criterionFive_section129EquivalenceCorpusIsGreen` RUNS the corpus
+ *       (`ActivationEquivalenceTest`: 39 representative entries × progress sweep, raw-bit exact over
+ *       all 33 joint transforms + the complete §4.4 stamp set + settlement state + publish markers +
+ *       kinematic state) and requires zero deltas, zero ownership-premise failures and zero
+ *       relaxations — never a smaller activation smoke test;
  *  (vi) validation-probe semantics re-certified against the realized path — WP-F/H:
- *       `ValidationProbeRecertificationTest` + `StraightIntentFallbackTest` (probe drop reading
- *       now produced by the activated runtime solver).
- * Flag-ON is exercised through the pipeline by `RootAuthorityTest` (plan §P6 test (c), now a
- * production-path test) and every `ActivationEquivalenceTest` case.
+ *       `criterionSix_validationProbesAreReCertified` composes
+ *       `ValidationOwnershipReCertificationTest` (probe reading produced by the ACTIVE
+ *       implementation, fresh build window re-armed, R9 write-freeness of the validator) and the
+ *       cross-configuration probe matrix.
+ * The deployed configuration itself is asserted twice over — statically on the declaration
+ * (`RuntimeSolverOwnershipAuditTest`, the §12.7 configuration surface) and at runtime plus for the
+ * absence of any environment/system-property channel
+ * (`ActivationGateTest.productionConfigurationIsStateThree`) — and the §14 post-activation behaviour
+ * is proved on the production path by `ActivationGateTest`
+ * (`activatedProductionRejectsASecondRealizationOfTheSameLimb`,
+ * `activatedProductionAcceptsAnOrdinaryActiveFrame`,
+ * `f1SnapshotFamilyCannotHideASecondRealization`). Flag-ON runs through the pipeline in
+ * `RootAuthorityTest` (plan §P6 test (c), a production-path test) and in every
+ * `ActivationEquivalenceTest` case.
  */
 /**
  * Engine-supplied configuration of the pipeline-owned limb stage ([IkStage]).
  *
- * **P12 (§12.0 state 3): production default `true`** — `IkStage` is the sole Active Limb Solver
- * and the configuration above is valid by the criterion in [IkStage]'s KDoc. The flag remains
- * selectable per R5 ("the enabling flag is a rollout mechanism, not architecture: it selects
- * between two implementations of the same frozen responsibility set"): `false` keeps the
- * authoring bake as the Active Limb Solver for differential/regression work, and the §12.7
- * strengthened enforcement proves the single-solver invariant in BOTH configurations. Writes
- * occur only through the declared configuration surface (tests flip it under flag-scoped
- * restore; `SingleActiveSolverEnforcementTest` audits this — P4's "zero production writes"
- * audit retargeted per §12.7). It lives beside its sole reader ([IkStage.apply]) rather than
- * in a global flag object.
- *
- * WORK-PACKAGE NOTE (WP-I final gate): the *declaration default below is flipped to `true`*
- * only when every (i)–(vi) criterion above has landed with its evidence; until then the
- * machinery is live but the deployed state stays flag-OFF (safe prior state).
+ * **P12 (§12.0 state 3): production default `true`** — `IkStage` is the sole Active Limb Solver and
+ * the configuration above is valid by the criterion in [IkStage]'s KDoc. The flag remains selectable
+ * per R5 ("the enabling flag is a rollout mechanism, not architecture: it selects between two
+ * implementations of the same frozen responsibility set"): `false` keeps the authoring bake as the
+ * Active Limb Solver for differential/regression work, and the §12.7 strengthened enforcement proves
+ * the single-solver invariant in BOTH configurations. Writes occur only through this declared
+ * configuration surface — one declaration, zero production writes, reads confined to the four
+ * realization-decision files (`RuntimeSolverOwnershipAuditTest`), the runtime value and the absence
+ * of any environment/system-property selector pinned by
+ * `ActivationGateTest.productionConfigurationIsStateThree`; tests flip the flag in memory only, under
+ * flag-scoped restore. It lives beside its sole reader ([IkStage.apply]) rather than in a global flag
+ * object.
  */
-var IK_STAGE_ACTIVE: Boolean = false
+var IK_STAGE_ACTIVE: Boolean = true
 
 object IkStage {
 
