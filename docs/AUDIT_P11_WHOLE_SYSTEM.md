@@ -8,6 +8,14 @@
 audit's only production-visible additions was 104 classes / 454 tests — i.e. the delta is exactly
 +1 class / +8 tests and zero collateral.
 
+**B-1 status (recorded after this audit was written).** B-1 is fixed and proposed in its own change,
+**PR #227** / branch `fix/b1-knee-pushup-plank-geometry` @ `5c49aef`, on top of `origin/main` @ `914a6f6`.
+That branch is 2 files (1 production KNEES branch + 1 new 7-test class) and carries **no** other P11 work:
+B-2…B-7 stay open here. Fresh numbers on it: focused class 7/7 RED on the pre-fix source → 7/7 GREEN on the
+fix; full suite 103 classes / 450 tests (`origin/main` source) → **104 / 457**, 0F/0E/0S, both runs forced
+fresh on this host; the six FEET-pivot push-ups are byte-identical (996-line joint dump, sha256
+`78a9ed40…7e7d8b` both sides).
+
 **Method.** Every claim below is a measurement of a produced frame or a source-site census, never a
 reading of prose. The corpus probe drove all 49 registered production animations (plus the 4
 validation poses) through `SkeletonPipeline` and dumped 33 joints × 5 progress values, the derived
@@ -78,7 +86,18 @@ confirmed defects the green suite does not see.
   production readers** (census: only `PushUpPlankTest` reads them). `PushUpPlankTest`
   `assertEquals(15f, resultTop.kneeHeight, 0.2f)` therefore certifies "the knee is on the floor"
   about a value that never reaches the skeleton.
-* **Class:** CONFIRMED BUG (A pose authoring + dead engine output). *Not fixed in this audit* — see §8.
+* **Class:** CONFIRMED BUG (A pose authoring + dead engine output).
+* **Status: FIXED — PR #227** (`fix/b1-knee-pushup-plank-geometry` @ `5c49aef`, not merged). The KNEES
+  branch now consumes the solver: `kneeF.localPosition = (kneeX − ankleX, kneeHeight − ankleHeight, 0)`,
+  `kneeF.localRotation = −theta`, depth authored as hip flexion via `buildHipFlexion` (0.42 rad amplitude
+  unchanged, pelvis left neutral per BPS §5), the mirror leg laid out from the solver's own bone-exact
+  knee→hip / ankle→knee deltas, and the knee pivot feeds the solver the rep's depth phase (raised cosine)
+  instead of the linear animation phase so the LOOP seam closes. Post-fix produced frame: `KNEE_F.y` = 15.00,
+  `PELVIS.y` = the solver's `pelvisHeight` (exact to 4 decimals at the top of the rep), both shins at the
+  declared 45°, hands on the floor inside the reach band, elbow interior angle travelling ≥ 15°, p=0 and p=1
+  within 1u on 7 joints. Regression gate: `app/src/test/java/com/monkfitness/app/KneePushUpPlankGeometryTest.kt`
+  (7 tests, published-frame assertions only; RED 7/7 on the pre-fix source). This audit's original
+  measurements above are retained unedited as the pre-fix record.
 * **What test would have caught it yesterday:** an assertion on the **produced frame**, e.g.
   `every declared SupportContact joint lies within tolerance of its support surface`
   (see §4, T-1). `EnvironmentPenetrationTest` *does* cover `KneePushUpPose` (its `support.contacts`
@@ -214,6 +233,41 @@ confirmed defects the green suite does not see.
   (α) clear the smoothing history too and retarget the pinning test with the plan rationale recorded;
   (β) keep it and narrow the KDoc so it no longer promises a "restart/seek" reset it does not perform.
 
+### B-7 — Cold-pipeline first frames publish a misplaced head (one-build-stale `neck.worldPosition` read)
+
+* **File / symbol:** `animation/BasePose.kt` `buildGaze` (`:44–60`, the read is `val nw = neck.worldPosition`),
+  called from every gaze pose — for this measurement `poses/BasePushUpPose.kt:219`
+  (`buildGaze(neck!!, head!!, def.neckLength, pushUpHeadDirection)`), which runs **before** the pose's own
+  authoring-FK pass (`BasePushUpPose.kt:226–228`).
+* **Symptom (measured, `pushup_knee` and `pushup_standard`, cold `SkeletonPipeline`, real frame cadence
+  `dt = 0.0166 s`, 150 frames over `cycleDuration = 2500 ms`):** the first published frame is not continuous
+  with the rest of the animation. `HEAD_POS` frame 1 vs frame 0 = 42.73 units (knee) / 42.17 (standard);
+  `NECK_END` = 21.37 / 21.09. `ExerciseValidator` reports `POSITION_DISCONTINUITY` on frame 1
+  (`HEAD_POS 42.728924 > 15`, plus 14 joints at 84.8–180.2 in the same frame) and `VELOCITY_DISCONTINUITY`
+  on frame 2 (`HEAD_POS 2571.874 > 150`), then nothing for the remaining 148 frames.
+* **Root cause, first incorrect state transition:** on the **first build of a pose instance** `buildGaze`
+  reads `neck.worldPosition` before any FK has been propagated for that build, so the neck's world position is
+  still the node's initial (zero) state: the authored synthetic target becomes `(0,0,0) + gazeDir·100` —
+  measured **exactly `(−98.058, 19.612, 0.000)` for both `KneePushUp` and `StandardPushUp`, at both p=0 and
+  p=0.5** (identical target ⇒ a shared-helper read, not pose math). The Finalizer resolves the head direction
+  as `normalize(target − neck.worldPosition)`, so the frame-0 head points 51.5° off its settled direction while
+  the bone lengths are preserved (neck 18.0): published frame 0 `dir = (0.6126, −0.7904)` vs the converged
+  `dir = (−0.5736, −0.8191)`; by frame 2 the resolver sees `target − neck = (−98.025, 19.701) ≈ gazeDir·100`.
+  The same stale read is what makes a residual `HEAD_POS` discontinuity survive a warm-up: warming the pipeline
+  at p=0.3 and then producing p=0 leaves the first two frames with a 16.79-unit `HEAD_POS` step. The artifact is
+  therefore a *one-build-behind* read whose magnitude equals the trunk's progress-to-progress displacement — not
+  a warm-up requirement (error counts: 3 for every warm-up count 2…20, 32 for a true cold start).
+* **Not a warm-up bug, not a reused-buffer alias:** the first frame is **published** wrong and the pipeline state
+  is what lets the next frame correct it. `KneePushUp` and `StandardPushUp` share the artifact to within 0.6
+  units even though one is the KNEES pivot and the other the FEET pivot, and it reproduces identically on the
+  **pre-fix** `origin/main` source (frame-0 target `(−98.058, 19.612, 0.000)` there too) — so it predates P12
+  activation and B-1 alike. It is **not** introduced by B-1 and is **not** fixed by it.
+* **Class:** CONFIRMED PRODUCTION BUG (first-frame transient; visual severity one frame, validator severity
+  ERROR). Deliberately **not** fixed here: the repair is an ordering/ownership change in a shared authoring
+  helper (`buildGaze` must read the neck's post-FK world position, or the resolver must stop re-deriving the
+  direction from a pre-FK target), it touches every gaze pose family, and it needs its own bounded change plus
+  a regression test. Recorded here so the next independent change starts from the measured mechanism.
+
 ---
 
 ## 3. Biomechanical pose-defect inventory (measured)
@@ -283,6 +337,25 @@ Corpus: 49 registered animations + 4 validation poses, 5 progress samples each.
   passes them while being a floating plank (B-1).
 * **T-6 — `EnvironmentPenetrationTest.supportJoints` is a fourth private copy of the side mapping**
   (`:80+`), and it agrees with `contactJointsFor` (A = left). Any future fix to B-4 must find all four.
+* **T-7 — `KneePushUpPoseTest.testKneePushUpPoseBiomechanicalCompliance` aliases the reused frame buffer,
+  so its 100-frame temporal sweep validates one frame 100 times.** The test stores
+  `poses.add(pipeline.produceFrame(rawPose).pose)` (`KneePushUpPoseTest.kt:46`) and then feeds
+  `previousPose`/`prePreviousPose` from that list. `SkeletonPipeline.produceFrame` returns the Finalizer's
+  **reused** output buffer (`SkeletonPoseFinalizer.outputPose`), so all 100 entries are the same object:
+  measured `System.identityHashCode(...pose)` identical across 5 successive frames (1 distinct identity),
+  stored-ref `CHEST.y` spread = 0.0 with 1 distinct value while value-snapshots of the same frames give 10
+  distinct values, and `previousPose === currentPose` for **every** step. Consequences: (i) the pose is
+  effectively validated once, at the last produced progress — never as a moving sequence; (ii) every
+  temporal rule the config enables is structurally inert (`HAND_SLIDING` computes a zero displacement,
+  `POSITION_DISCONTINUITY`/`VELOCITY_DISCONTINUITY` compare a frame against itself), so this class cannot
+  see a hand slide, a pop or any inter-frame defect, and it stays green while B-1 and B-7 both ship; and
+  (iii) the `expectedSupportJoints`/symmetry assertions silently lose their sweep dimension.
+  `MotionProbe` documents the same trap in its own KDoc ("never store `.pose` references") — the pose test
+  simply does not follow it. Class: **TEST / INVARIANT GAP (test adequacy defect), not a production bug.**
+  Deliberately **not** rewritten as part of B-1: fixing it changes what an existing green test can observe
+  and would immediately surface the B-7 first-frame errors, so it needs its own change with its own
+  before/after evidence. The new B-1 gate (`KneePushUpPlankGeometryTest`) snapshots every frame via
+  `copyFrom` for exactly this reason.
 
 ---
 
@@ -364,12 +437,17 @@ currently-shipped behaviour in a way that is worse than the pre-P12 baseline (th
 inherited is fixed on this branch).
 
 **Recommended next, in this order** (each needs its own bounded change + regression test):
-1. **B-1 knee push-up** (highest severity; fix recipe derived and constant-exact in §B-1).
-2. **T-1 support-contact-on-surface invariant** — write it *with* the B-3 fix so it can be green;
+1. ~~**B-1 knee push-up**~~ — **DONE, PR #227** (`fix/b1-knee-pushup-plank-geometry` @ `5c49aef`, not merged).
+   7-test produced-frame gate; RED 7/7 pre-fix → GREEN post-fix; full suite 104 classes / 457 tests.
+2. **B-7 cold-start head placement** — new, recorded in §2. One-frame transient, shared `buildGaze` path,
+   affects every gaze pose family; fix belongs with T-7, because a correct temporal sweep is what proves it.
+3. **T-1 support-contact-on-surface invariant** — write it *with* the B-3 fix so it can be green;
    it is the invariant that would have caught §2 in one run.
-3. **B-3 / B-2 plank + push-up foot planting** — one change, because fixing either alone leaves the
+4. **T-7 aliased-buffer test repair** — turn `KneePushUpPoseTest` (and any sibling that stores
+   `produceFrame(...).pose`) into a real frame-snapshot sweep before touching B-7.
+5. **B-3 / B-2 plank + push-up foot planting** — one change, because fixing either alone leaves the
    corpus inconsistent; must be landed with golden review (it moves ~8 published poses).
-4. **B-5 renderer context** — make omission a compile error or carry the declaration on the carrier.
+6. **B-5 renderer context** — make omission a compile error or carry the declaration on the carrier.
 
 **Requires architectural decision (recorded, deliberately not resolved):**
 * **B-4** the `A/P/F/B ↔ left/right` convention and its three (four) contradictory maps — needs an
@@ -378,8 +456,9 @@ inherited is fixed on this branch).
 * **B-6** `resetHistory()` scope vs the plan §P5 "unchanged" pin.
 * **§12.7 flag lifecycle** — creator-owned configuration input vs the landed global.
 
-**Can be deferred:** documentation drift (§7); `PushUpPlankResult` dead outputs (delete together
-with B-1); `IK_STAGE_ACTIVE` global (no live risk while zero production writers).
+**Can be deferred:** documentation drift (§7); `IK_STAGE_ACTIVE` global (no live risk while zero production
+writers). The `PushUpPlankResult` dead-output item is **closed**: all three previously unread fields
+(`kneeX`, `kneeHeight`, `pelvisHeight`) plus `theta` are now consumed by the KNEES branch in PR #227.
 
 **False positives checked and rejected:**
 * `IK_STAGE_ACTIVE` read sites — `BasePose.kt:366/616`, `BaseValidationPose.kt:320`,
@@ -410,6 +489,26 @@ with B-1); `IK_STAGE_ACTIVE` global (no live risk while zero production writers)
 All three probe classes were deleted before the final suite run, so the reported 462-test figure
 contains no audit scaffolding.
 
+**B-1 / B-7 / T-7 follow-up measurements (2026-09-11, after this audit was written; probes deleted before
+the reported suite runs — `git status` clean, `git log --all -- app/src/test/java/.../Zz*` empty).**
+
+| check | command | result |
+| --- | --- | --- |
+| B-1 focused gate, pre-fix source | `git checkout origin/main -- BasePushUpPose.kt` then `--tests "…KneePushUpPlankGeometryTest" --rerun-tasks` | **7 tests / 7 FAILED** (assertion text quoted in PR #227) |
+| B-1 focused gate, post-fix | same command on `fix/b1-knee-pushup-plank-geometry` | **7 tests / 0 FAILED**, XML ts `2026-09-11T19:12:26Z` |
+| baseline full suite, pristine `origin/main` source (B-1 class withheld) | `:app:cleanTest :app:testDebugUnitTest --rerun-tasks` | **103 classes / 450 tests** / 0F / 0E / 0S, XML ts `19:14:00Z…19:14:04Z` |
+| B-1 branch full suite | same, branch tree, no probes | **104 classes / 457 tests** / 0F / 0E / 0S, XML ts `19:12:38Z…19:12:43Z`; structural counts agree (`104` files with `@Test`, `457` annotations) |
+| six FEET-pivot variants, pre-fix vs post-fix | throwaway `ZzDumpProbeTest` (`Joint.values()` × 5 progress × 6 variants) | 996 lines each side, `diff` = 0, sha256 `78a9ed407afc2ea290af4f9153ab82bbbd4442036cae8b96aaf401afa72e7d8b` both |
+| B-7 cold-start sweep | throwaway probes (cold + warm-up 0/1/2/3/5/10/20, 150 frames @ `dt=0.0166`, 2× loop) | 32 ERRORs (frames 1–2) on a cold pipeline, 3 on every warm-up ≥ 2, **0 in the second loop**; `HEAD_POS` step 42.73 (knee) / 42.17 (standard) |
+| B-7 mechanism | authored `headTarget` per frame (`buildHead`/`buildGaze` output) | frame 0 target `(−98.058, 19.612, 0.000)` for **both** poses at p=0 **and** p=0.5; by frame 2 `target − neck = (−98.025, 19.701)` |
+| B-7 reproduction on pre-fix source | same probe with `origin/main`'s `BasePushUpPose.kt` | identical frame-0 target → predates B-1/P12 |
+| T-7 aliasing | throwaway probe over the `KneePushUpPoseTest` storage pattern | `identityHashCode` identical across 5 frames (1 distinct); stored-ref `CHEST.y` spread 0.0 (1 distinct) vs 10 distinct for value snapshots; `previousPose === currentPose` = true |
+| release gate | `./gradlew :app:assembleRelease` | FAILS at `:app:lintVitalRelease` with the same 2 pre-existing errors (`themes.xml:2` ResourceCycle, `build.gradle.kts:25` ExpiredTargetSdkVersion); APK still produced (7.8 MB); `compileReleaseKotlin` + `assembleDebug` green |
+
+**B-1 CI (authoritative for the proposed fix).** PR #227 Android CI run `34637839631` → **success**
+(1m52s) on head SHA `5c49aef8598e75d672ba586a6a3d311856a3f65e` = the branch tip = the PR head = local
+`HEAD`. The PR is **not merged**; no merge decision is implied.
+
 **Execution environment disclosure.** The suite runs above were **ad-hoc local Gradle** on the audit
 host. GitHub CI was additionally executed on the exact committed bytes: Android CI run
 `34629937098` → **success** (1m46s) on head SHA
@@ -426,10 +525,14 @@ grep gate). The three properties the plan asked for are thereby converted from "
 construction" into executed evidence.
 
 **P11 is nonetheless NOT complete, and must not be closed on the strength of a green suite.** The
-assembled and activated production system contains at least four confirmed correctness defects
+assembled and activated production system contains at least five confirmed correctness defects
 (B-1 knee push-up geometry + dead solver outputs; B-2 the write-only support channel that leaves two
 production planks without any support model; B-3 toes/forearm contacts never consumed by extremity
-derivation; B-4 three contradictory side mappings), one R14-ownership gap in the P12 flag lifecycle,
-and a missing invariant (T-1) that is the common reason all of them stayed invisible. Four further
-items are recorded as needing an architectural decision and were deliberately **not** resolved here.
-The methodological precedent holds: the suite is green, and the system is not correct.
+derivation; B-4 three contradictory side mappings; **B-7** cold-pipeline first frames publishing a
+misplaced head from a one-build-stale `neck.worldPosition` read), one R14-ownership gap in the P12 flag
+lifecycle, and two missing invariants that are the common reason all of them stayed invisible: **T-1**
+(no declared support contact is ever asserted to land on its support surface) and **T-7** (the knee
+push-up's 100-frame temporal sweep validates one reused buffer 100 times, so no inter-frame defect could
+ever be seen). Four further items are recorded as needing an architectural decision and were deliberately
+**not** resolved here. **B-1 is now fixed** and proposed separately in PR #227; every other finding above
+remains open. The methodological precedent holds: the suite is green, and the system is not correct.
