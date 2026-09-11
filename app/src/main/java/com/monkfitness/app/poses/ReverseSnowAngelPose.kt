@@ -1,7 +1,6 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.animation.SkeletonMath.solveIK
 import com.monkfitness.app.animation.SkeletonMath.lerp
 import kotlin.math.*
 
@@ -77,15 +76,10 @@ class ReverseSnowAngelPose : PoseBuilder {
         val targetAnkleF = Vector3(pelvis!!.worldPosition.x - totalLegLen * 0.94f, 10f, -def.hipWidth)
         val targetAnkleB = Vector3(pelvis!!.worldPosition.x - totalLegLen * 0.94f, 10f, def.hipWidth)
 
-        // Solve Leg IK (straightened vertical support legs)
-        val legFIK = solveIK(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, legFBuffer)
-        val legBIK = solveIK(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, legBBuffer)
-
-        // Set Leg joint local coordinates (Phase 4: lean-cancel removed; the IK offset is written directly)
-        kneeF!!.localPosition.set(legFIK.joint.x - hipF!!.worldPosition.x, legFIK.joint.y - hipF!!.worldPosition.y, legFIK.joint.z - hipF!!.worldPosition.z)
-        ankleF!!.localPosition.set(legFIK.end.x - legFIK.joint.x, legFIK.end.y - legFIK.joint.y, legFIK.end.z - legFIK.joint.z)
-        kneeB!!.localPosition.set(legBIK.joint.x - hipB!!.worldPosition.x, legBIK.joint.y - hipB!!.worldPosition.y, legBIK.joint.z - hipB!!.worldPosition.z)
-        ankleB!!.localPosition.set(legBIK.end.x - legBIK.joint.x, legBIK.end.y - legBIK.joint.y, legBIK.end.z - legBIK.joint.z)
+        // P12 (§12.6): legs declared through the registered authoring bake (was direct
+        // solveIK + raw-offset writes — the bypass family).
+        bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
+        bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 
         // The engine derives heel/toe from the shank + the neutral ankle articulation. The flat
         // foot on the forward-leaning shank is intentionally NOT hand-authored here; if the engine
@@ -109,15 +103,9 @@ class ReverseSnowAngelPose : PoseBuilder {
             shoulderP!!.worldPosition.z + totalArmLen * sin(alpha)
         )
 
-        // Solve Arm IK (fully extended sweeping arms)
-        val armA = solveIK(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, -1f), def.armIKConstraint, armABuffer)
-        val armP = solveIK(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, 1f), def.armIKConstraint, armPBuffer)
-
-        // Set Arm joint local coordinates (Phase 4: lean-cancel removed; the IK offset is written directly)
-        elbowA!!.localPosition.set(armA.joint.x - shoulderA!!.worldPosition.x, armA.joint.y - shoulderA!!.worldPosition.y, armA.joint.z - shoulderA!!.worldPosition.z)
-        handA!!.localPosition.set(armA.end.x - armA.joint.x, armA.end.y - armA.joint.y, armA.end.z - armA.joint.z)
-        elbowP!!.localPosition.set(armP.joint.x - shoulderP!!.worldPosition.x, armP.joint.y - shoulderP!!.worldPosition.y, armP.joint.z - shoulderP!!.worldPosition.z)
-        handP!!.localPosition.set(armP.end.x - armP.joint.x, armP.end.y - armP.joint.y, armP.end.z - armP.joint.z)
+        // P12 (§12.6): arms declared through the registered authoring bake.
+        bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, jointsBuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 

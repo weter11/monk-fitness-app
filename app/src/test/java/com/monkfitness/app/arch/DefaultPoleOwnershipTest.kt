@@ -18,7 +18,6 @@ import com.monkfitness.app.validation.poses.BaseValidationPose
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 import java.io.File
 
@@ -44,18 +43,19 @@ import java.io.File
  *  3. Anti-vacuity: the declaration genuinely carries the zero-length pole, the solver window
  *     genuinely executes, and the limb genuinely bends with exact bone lengths.
  *
- * Fixture geometry: the limb's bone lengths are the standard definition's own (the engine
- * stage recovers them from the definition — a fixture that authored different lengths would
- * misrepresent production poses), with the target inside the reach band so the limb is
- * genuinely bent. The solver default pole for this aim is a unit vector in the XY plane;
+ * Fixture geometry: the limb's bone lengths are the declared realization context of a production
+ * pose (every real pose passes `def.thighLength`/`def.shinLength` to the bake, and since WP-D the
+ * engine stage realizes from the DECLARED lengths/constraint on the Limb Target — §12.4 lossless
+ * intent — not by re-deriving them from the definition), with the target inside the reach band so
+ * the limb is genuinely bent. The solver default pole for this aim is a unit vector in the XY plane;
  * the decoy pole (0,0,1) bends the same chain out of plane, so the parity vs "unrelated
  * fallback" distinction is sharp.
  */
 // Fixture limb constants (file-level: the authoring probes are nested classes resolve
-// through the file scope, not an outer instance). Bone lengths come from the standard
-// definition itself — the engine-side stage recovers lengths from the definition, so a
-// fixture whose authored lengths differ from it would misrepresent production poses (every
-// real pose passes def.thighLength/def.shinLength to the bake).
+// through the file scope, not an outer instance). Bone lengths are the lengths a production pose
+// declares — every real pose passes `def.thighLength`/`def.shinLength` to the bake, so a fixture
+// that authored different lengths would not represent production (and since WP-D the engine stage
+// realizes from the declared context on the Limb Target, §12.4).
 private val POLE_FIXTURE_ROOT = Vector3(0f, 220f, 0f)
 private val POLE_FIXTURE_TARGET = Vector3(80f, 120f, 0f)
 private val POLE_FIXTURE_L1 = HumanSkeletonDefinition().thighLength
@@ -81,15 +81,25 @@ class DefaultPoleOwnershipTest {
             d > 60f && d < 0.9 * (l1 + l2))
     }
 
-    @Before fun requireCurrentProductionState() {
-        // The lock-in's premise: while the rollout flag is off, the authoring bake is the
-        // Active Limb Solver. (P12 owns the activation transition; flag use here is
-        // test-scoped and restored in @After.)
-        assertTrue("IK_STAGE_ACTIVE must default to false", !originalFlag)
-    }
-
     @After fun restoreFlag() {
         IK_STAGE_ACTIVE = originalFlag
+    }
+
+    /**
+     * Runs [block] in the **authoring configuration** (`IK_STAGE_ACTIVE = false`) and restores the
+     * previous configuration. P12 WP-I: the deployed default is now the activated configuration, so
+     * an assertion about what the AUTHORING BAKE does (it is the Active Limb Solver only while the
+     * engine stage is disabled, §12.7a) has to name its configuration explicitly. The claim is
+     * unchanged; only the configuration it holds in is now stated instead of assumed.
+     */
+    private fun <T> inAuthoringConfiguration(block: () -> T): T {
+        val original = IK_STAGE_ACTIVE
+        return try {
+            IK_STAGE_ACTIVE = false
+            block()
+        } finally {
+            IK_STAGE_ACTIVE = original
+        }
     }
 
     // --- Fixture limb (pelvis -> hip -> knee -> ankle, zero hip offset so hip world == root) --
@@ -194,7 +204,9 @@ class DefaultPoleOwnershipTest {
 
     @Test
     fun exerciseBakeResolvesOmittedPoleThroughSolverDefault() {
-        val pose = MemberBakeProbe().build(PoseContext(0f, Side.LEFT, def))
+        // WP-I: this asserts what the AUTHORING BAKE realizes, so it runs in the authoring
+        // configuration (the deployed default is now the activated engine stage, §12.7a).
+        val pose = inAuthoringConfiguration { MemberBakeProbe().build(PoseContext(0f, Side.LEFT, def)) }
         assertOmittedPoleDeclared(pose)
         assertSolvedFromSolverDefault(pose.getJoint(Joint.KNEE_F), pose.getJoint(Joint.ANKLE_F), "member bake")
     }
@@ -202,10 +214,12 @@ class DefaultPoleOwnershipTest {
     @Test
     fun packageLevelBakeResolvesOmittedPoleThroughSolverDefault() {
         // The package-level bakeIkLimb (BasePose.kt) is the third mirror of the same
-        // responsibility for poses implementing PoseBuilder directly.
+        // responsibility for poses implementing PoseBuilder directly. WP-I: an authoring-bake
+        // realization, so the authoring configuration is named explicitly.
         val f = LegFixture(l1, l2, root)
         val buffer = SkeletonPose()
-        com.monkfitness.app.animation.bakeIkLimb(
+        inAuthoringConfiguration {
+            com.monkfitness.app.animation.bakeIkLimb(
             f.hip.worldPosition, target, l1, l2,
             Vector3(), // omitted pole
             IKConstraint.LegConstraint,
@@ -213,6 +227,7 @@ class DefaultPoleOwnershipTest {
             SkeletonMath.IKResult(),
             buffer
         )
+        }
         val pose = SkeletonPose.fromHierarchy(listOf(f.pelvis), buffer)
         assertOmittedPoleDeclared(pose)
         assertSolvedFromSolverDefault(pose.getJoint(Joint.KNEE_F), pose.getJoint(Joint.ANKLE_F), "package bake")
@@ -220,7 +235,8 @@ class DefaultPoleOwnershipTest {
 
     @Test
     fun validationBakeResolvesOmittedPoleThroughSolverDefault() {
-        val pose = ValidationBakeProbe().build(PoseContext(0f, Side.LEFT, def))
+        // WP-I: the validation bake realizes only in the authoring configuration (§12.7a).
+        val pose = inAuthoringConfiguration { ValidationBakeProbe().build(PoseContext(0f, Side.LEFT, def)) }
         assertOmittedPoleDeclared(pose)
         assertSolvedFromSolverDefault(pose.getJoint(Joint.KNEE_F), pose.getJoint(Joint.ANKLE_F), "validation bake")
     }
@@ -235,7 +251,11 @@ class DefaultPoleOwnershipTest {
         assertOmittedPoleDeclared(authored)
         val authoredKnee = Vector3().set(authored.getJoint(Joint.KNEE_F))
         val authoredAnkle = Vector3().set(authored.getJoint(Joint.ANKLE_F))
-        assertEquals("stage window must be skipped while gated off", 0, authored.limbSolverExecutions)
+        // P12 §12.7b retarget (was: "stage window must be skipped while gated off == 0"): the
+        // strengthened counter covers BOTH realization sites, so a flag-OFF build now carries
+        // exactly ONE authoring-window increment. What remains pinned: the stage itself has
+        // not run yet — the delta assertions below observe its window directly.
+        assertEquals("the authoring bake window must be counted exactly once", 1, authored.limbSolverExecutions)
 
         // Now run the engine-side stage on the SAME declaration with the pole still omitted —
         // the other implementation of the identical frozen responsibility set.
@@ -249,9 +269,10 @@ class DefaultPoleOwnershipTest {
         IK_STAGE_ACTIVE = originalFlag
         SkeletonPose.fromHierarchy(authored.roots, authored)
 
-        assertTrue(
-            "IkStage window must have executed (anti-vacuity)",
-            authored.limbSolverExecutions > 0
+        assertEquals(
+            "IkStage window must have executed exactly once on top of the authoring count " +
+                "(anti-vacuity; §12.7b per-window evidence)",
+            2, authored.limbSolverExecutions
         )
         // The stage re-solved (its toLocalDirection write is the same offset — bit-stable) ...
         assertEquals(

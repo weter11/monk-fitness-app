@@ -55,12 +55,16 @@ class DynamicStretchPosesTest {
         val pose = QuadrupedThoracicRotationsPose()
         assertNotNull(pose.metadata)
 
-        val result0 = pose.build(context0)
+        // P12 WP-I: read the choreography off the PUBLISHED frame of the production pipeline — the
+        // thoracic arm is realized by the engine-owned stage (the authoring bake registers intent
+        // only, §12.7a), and this template returns an independent snapshot carrier, so the flat
+        // joint array of a half-built carrier is not the frame the engine produces.
+        val result0 = SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT).produceFrame(pose, context0).pose
         assertNotNull(result0)
         val elbowAX0 = result0.getJoint(Joint.ELBOW_A).x
         val elbowAY0 = result0.getJoint(Joint.ELBOW_A).y
 
-        val result1 = pose.build(context1)
+        val result1 = SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT).produceFrame(pose, context1).pose
         assertNotNull(result1)
         val elbowAX1 = result1.getJoint(Joint.ELBOW_A).x
         val elbowAY1 = result1.getJoint(Joint.ELBOW_A).y

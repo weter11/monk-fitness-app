@@ -1,10 +1,11 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.animation.SkeletonMath.solveIK
 import com.monkfitness.app.animation.SkeletonMath.lerp
 import kotlin.math.*
 
+// P12 (§12.6): the direct solveIK import was removed with the bypass family migration;
+// limbs are declared through the package-level bakeIkLimb (registered authoring bake).
 class LatStretchPose : PoseBuilder {
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
@@ -90,15 +91,11 @@ class LatStretchPose : PoseBuilder {
         val targetAnkleF = Vector3(-60f, 10f, -def.hipWidth * 1.5f)
         val targetAnkleB = Vector3(-60f, 10f, def.hipWidth * 1.5f)
 
-        // Solve Leg IK
-        val legFIK = solveIK(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, legFBuffer)
-        val legBIK = solveIK(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, legBBuffer)
-
-        // Set Leg joint local coordinates (Phase 4: lean-cancel removed; the IK offset is written directly)
-        kneeF!!.localPosition.set(legFIK.joint.x - hipF!!.worldPosition.x, legFIK.joint.y - hipF!!.worldPosition.y, legFIK.joint.z - hipF!!.worldPosition.z)
-        ankleF!!.localPosition.set(legFIK.end.x - legFIK.joint.x, legFIK.end.y - legFIK.joint.y, legFIK.end.z - legFIK.joint.z)
-        kneeB!!.localPosition.set(legBIK.joint.x - hipB!!.worldPosition.x, legBIK.joint.y - hipB!!.worldPosition.y, legBIK.joint.z - hipB!!.worldPosition.z)
-        ankleB!!.localPosition.set(legBIK.end.x - legBIK.joint.x, legBIK.end.y - legBIK.joint.y, legBIK.end.z - legBIK.joint.z)
+        // P12 (§12.6): limbs are declared through the registered authoring bake — registration
+        // (Limb Target + stamps) always; node realization only while the engine stage is off.
+        // (Was: direct solveIK + raw-offset node writes — the bypass family.)
+        bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
+        bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 
         // The engine derives heel/toe from the shank + the neutral ankle articulation. The flat
         // foot on the forward-leaning shank is intentionally NOT hand-authored here; if the engine
@@ -108,15 +105,9 @@ class LatStretchPose : PoseBuilder {
         val targetHandA = Vector3(45f, 120f, -def.shoulderWidth * 0.8f)
         val targetHandP = Vector3(45f, 120f, def.shoulderWidth * 0.8f)
 
-        // Solve Arm IK
-        val armA = solveIK(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, armABuffer)
-        val armP = solveIK(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, armPBuffer)
-
-        // Set Arm joint local coordinates (Phase 4: lean-cancel removed; the IK offset is written directly)
-        elbowA!!.localPosition.set(armA.joint.x - shoulderA!!.worldPosition.x, armA.joint.y - shoulderA!!.worldPosition.y, armA.joint.z - shoulderA!!.worldPosition.z)
-        handA!!.localPosition.set(armA.end.x - armA.joint.x, armA.end.y - armA.joint.y, armA.end.z - armA.joint.z)
-        elbowP!!.localPosition.set(armP.joint.x - shoulderP!!.worldPosition.x, armP.joint.y - shoulderP!!.worldPosition.y, armP.joint.z - shoulderP!!.worldPosition.z)
-        handP!!.localPosition.set(armP.end.x - armP.joint.x, armP.end.y - armP.joint.y, armP.end.z - armP.joint.z)
+        // P12 (§12.6): arms likewise declared through the registered bake (was direct solveIK).
+        bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, jointsBuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 

@@ -7,6 +7,7 @@ import com.monkfitness.app.animation.ContactConstraint
 import com.monkfitness.app.animation.ConstraintSolver
 import com.monkfitness.app.animation.ContactSpec
 import com.monkfitness.app.animation.IKConstraint
+import com.monkfitness.app.animation.IK_STAGE_ACTIVE
 import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.JointRotation
 import com.monkfitness.app.animation.LoopMode
@@ -261,29 +262,64 @@ abstract class BaseValidationPose : PoseBuilder {
         straight: Boolean = false,
         contact: ContactConstraint? = null
     ) {
-        // B1 (IkStage extraction) — forward the end joint + full IK context into the §1.1
-        // `limbTargets` carrier so the engine-owned IkStage can reproduce this solve byte-for-byte
-        // (dead→live flip). `bakeIkLimb` remains the sole solver while IK_STAGE_ACTIVE is
-        // false.
-        jointsBuffer.limbTargets.add(
-            WorldTarget(
-                endNode.joint,
-                Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
-                Vector3(pole.x, pole.y, pole.z),
-                straight,
-                contact
-            )
-        )
-
-        val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
         // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge;
-        // mirrors BasePose.bakeIkLimb).
+        // mirrors BasePose.bakeIkLimb). P12 (WP-F / §12.5 acceptance): the fresh-window block is
+        // build-window bookkeeping, NOT realization, so it runs in BOTH configurations — a
+        // reused instrument carrier may never open a new authoring cycle carrying the previous
+        // frame's solver readings (a stale straight-dropped `true` would let a probe report a
+        // drop no implementation executed this cycle). Only the solve + folds + node writes
+        // below the realization gate belong to the Active Limb Solver.
+        val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
         if (jointsBuffer.isTransformsUpdated) {
             jointsBuffer.boneLengthsVerified = true
             // Phase 4 (R5): dropped-flag re-arm mirrors BasePose.bakeIkLimb (fresh-window, F2).
             jointsBuffer.straightIntentDropped = false
             jointsBuffer.isTransformsUpdated = false
         }
+        // B1 (IkStage extraction) — forward the end joint + full IK context into the §1.1
+        // `limbTargets` carrier so the engine-owned IkStage can reproduce this solve byte-for-byte
+        // (dead→live flip).
+        jointsBuffer.limbTargets.add(
+            WorldTarget(
+                endNode.joint,
+                Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
+                Vector3(pole.x, pole.y, pole.z),
+                straight,
+                contact,
+                length1,
+                length2,
+                constraint
+            )
+        )
+        // PR-04: register the fixed support contact so the global constraint solver can
+        // reposition the root and re-bake the limb to honor it. P12 (§12.5 acceptance):
+        // registration runs in BOTH configurations; only realization below is gated.
+        if (contact != null) {
+            val chain = ConstraintSolver.chainForEnd(endNode.joint)
+            if (chain != null) {
+                jointsBuffer.contacts.add(
+                    ContactSpec(
+                        endJoint = endNode.joint,
+                        rootJoint = chain.rootJoint,
+                        parentRotationJoint = chain.parentRotationJoint,
+                        middleJoint = chain.middleJoint,
+                        targetWorld = Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
+                        pole = Vector3(pole.x, pole.y, pole.z),
+                        length1 = length1,
+                        length2 = length2,
+                        constraint = constraint,
+                        straight = straight,
+                        contact = contact
+                    )
+                )
+            }
+        }
+        // P12 (§12.7a): realization runs only while the engine stage is off; registration and
+        // the fresh-window block above are unconditional. Counter evidence per authoring cycle
+        // mirrors BasePose.bakeIkLimb (single registration point).
+        if (IK_STAGE_ACTIVE) return
+        jointsBuffer.registerLimbRealization(endNode.joint, authoringWindow = true)
+
         // Phase 1 (F6): a zero-length pole means the pose omitted one — derive the default world
         // pole so the bend plane is always well-defined.
         val worldPole = if (pole.mag() < 1e-4f) {
@@ -318,28 +354,6 @@ abstract class BaseValidationPose : PoseBuilder {
         tempV1.set(ikResult.end).subtract(ikResult.joint)
         SkeletonMath.toLocalDirection(tempV1, parentRot, endNode.localPosition)
 
-        // PR-04: register the fixed support contact so the global constraint solver can
-        // reposition the root and re-bake the limb to honor it.
-        if (contact != null) {
-            val chain = ConstraintSolver.chainForEnd(endNode.joint)
-            if (chain != null) {
-                jointsBuffer.contacts.add(
-                    ContactSpec(
-                        endJoint = endNode.joint,
-                        rootJoint = chain.rootJoint,
-                        parentRotationJoint = chain.parentRotationJoint,
-                        middleJoint = chain.middleJoint,
-                        targetWorld = Vector3(targetWorldPos.x, targetWorldPos.y, targetWorldPos.z),
-                        pole = Vector3(pole.x, pole.y, pole.z),
-                        length1 = length1,
-                        length2 = length2,
-                        constraint = constraint,
-                        straight = straight,
-                        contact = contact
-                    )
-                )
-            }
-        }
     }
 
     /**

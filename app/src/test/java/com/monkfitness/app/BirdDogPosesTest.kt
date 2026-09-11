@@ -36,12 +36,16 @@ class BirdDogPosesTest {
         val pose = StaticBirdDogHoldPose()
         assertNotNull(pose.metadata)
 
-        val result0 = pose.build(context0)
+        // P12 WP-I: production limb realization runs in the engine-owned stage, so a choreography
+        // assertion observes the PUBLISHED frame of the production pipeline. `build()` alone
+        // registers the declared intent — it no longer realizes limbs (§12.7a), which is why these
+        // readings were taken from the pipeline entry point instead of the half-built carrier.
+        val result0 = SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT).produceFrame(pose, context0).pose
         assertNotNull(result0)
         val pelvis0 = result0.getJoint(Joint.PELVIS)
         val handP0 = result0.getJoint(Joint.HAND_P).x
 
-        val result1 = pose.build(context1)
+        val result1 = SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT).produceFrame(pose, context1).pose
         assertNotNull(result1)
         val pelvis1 = result1.getJoint(Joint.PELVIS)
         val handP1 = result1.getJoint(Joint.HAND_P).x
@@ -70,7 +74,7 @@ class BirdDogPosesTest {
             phase = 0f,
             loopIndex = 0
         )
-        val resultRight = pose.build(contextRightExt)
+        val resultRight = SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT).produceFrame(pose, contextRightExt).pose
         val rightHandX = resultRight.getJoint(Joint.HAND_P).x
         val leftHandX = resultRight.getJoint(Joint.HAND_A).x
 
@@ -88,7 +92,7 @@ class BirdDogPosesTest {
             phase = 0f,
             loopIndex = 0
         )
-        val resultLeft = pose.build(contextLeftExt)
+        val resultLeft = SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT).produceFrame(pose, contextLeftExt).pose
         val rightHandXAfter = resultLeft.getJoint(Joint.HAND_P).x
         val leftHandXAfter = resultLeft.getJoint(Joint.HAND_A).x
 

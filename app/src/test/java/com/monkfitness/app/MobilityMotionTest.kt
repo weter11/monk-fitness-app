@@ -29,7 +29,10 @@ class MobilityMotionTest {
         )
         val failures = mutableListOf<String>()
         for ((name, floor) in cases) {
-            val travel = MotionProbe.maxVerticalTravel(MotionProbe.build(name))
+            // P12 (§12.6): 3D axis span, not a Y-only assumption — see MotionProbe.maxTravel3D
+            // for why the mobility family's authored choreography (prone sagittal sweeps,
+            // quadruped arching) requires the non-vertical axis after the bypass migration.
+            val travel = MotionProbe.maxTravel3D(MotionProbe.build(name))
             if (travel < floor) failures.add("$name travel=%.1f (need >= %.1f)".format(travel, floor))
         }
         assertTrue("Mobility motion contract violated:\n" + failures.joinToString("\n"), failures.isEmpty())

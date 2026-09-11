@@ -78,8 +78,8 @@ class KettlebellSwingPose : PoseBuilder {
         val targetAnkleB = Vector3(0f, 10f, def.hipWidth * 1.5f)
 
         // Solve Leg IK (knees bend slightly during hinge)
-        val legFIK = bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
-        val legBIK = bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
+        bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
+        bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 
         // The engine derives heel/toe from the shank + the neutral ankle articulation. The flat
         // foot on the forward-leaning shank is intentionally NOT hand-authored here; if the engine
@@ -89,8 +89,8 @@ class KettlebellSwingPose : PoseBuilder {
         val targetHandX = lerp(-35f, 40f, u)
         val targetHandY = lerp(130f, pelvisY + def.torsoLength, u)
 
-        val armAIK = bakeIkLimb(shoulderA!!.worldPosition, Vector3(targetHandX, targetHandY, -def.shoulderWidth * 0.8f), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, JointRotation(), elbowA!!, handA!!, armABuffer, jointsBuffer)
-        val armPIK = bakeIkLimb(shoulderP!!.worldPosition, Vector3(targetHandX, targetHandY, def.shoulderWidth * 0.8f), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, JointRotation(), elbowP!!, handP!!, armPBuffer, jointsBuffer)
+        bakeIkLimb(shoulderA!!.worldPosition, Vector3(targetHandX, targetHandY, -def.shoulderWidth * 0.8f), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, JointRotation(), elbowA!!, handA!!, armABuffer, jointsBuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, Vector3(targetHandX, targetHandY, def.shoulderWidth * 0.8f), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, JointRotation(), elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 

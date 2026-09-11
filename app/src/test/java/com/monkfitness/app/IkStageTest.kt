@@ -3,36 +3,42 @@ package com.monkfitness.app
 import com.monkfitness.app.animation.*
 import com.monkfitness.app.poses.*
 import com.monkfitness.app.validation.poses.*
-import org.junit.After
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.math.abs
 
 /**
- * B1 (RFC_BRANCH_B_IMPLEMENTATION §2 B1) — `IkStage` extraction.
+ * B1 (RFC_BRANCH_B_IMPLEMENTATION §2 B1) — the `IkStage` §1.1 carrier, in the ACTIVATED state.
  *
- * B1 introduces the pipeline-owned `IkStage` that consumes the §1.1 `limbTargets` carrier (now
- * populated by every `bakeIkLimb` forward) and re-derives each limb's local positions on the
- * engine-owned node tree. The stage is gated by `IK_STAGE_ACTIVE` (default **false**,
- * so the legacy `bakeIkLimb` remains the sole solver and the baseline is byte-identical).
+ * B1 introduced the pipeline-owned `IkStage` that consumes the `limbTargets` carrier (now populated
+ * by every `bakeIkLimb` forward). P12 activated it: `IK_STAGE_ACTIVE` defaults to **true** and the
+ * stage is the sole Active Limb Solver (§12.0 state 3), while the authoring bakes keep their
+ * registration effects and their node-realization branch is gated off (§12.7a).
  *
- * This suite proves the B1 exit criterion: when the stage is switched on it reproduces the legacy
- * `bakeIkLimb` limb solving exactly — every production pose and every contact-bearing validation
- * instrument renders byte-identically (maxDeviation 0.0) with the flag on vs off. The stage must
- * therefore be safe to flip on as the real solver once this is green.
+ * **§12.8 retirement (WP-I).** Three state-2-only probes that used to live here are retired — they
+ * were guarantees ABOUT state 2, not about the architecture:
+ *  - `productionPosesByteIdenticalStageOnVsOff` / `contactPosesByteIdenticalStageOnVsOff` — a
+ *    flag-OFF-vs-flag-ON byte-identity smoke test over 11 production + 4 contact fixtures, which
+ *    treated the OFF/ON pair itself as the runtime contract (post-activation "flag-OFF" is the
+ *    legacy authoring configuration, so the comparison says nothing about the deployed state).
+ *    §12.9 replaced it with the complete cross-configuration corpus (`ActivationEquivalenceTest`:
+ *    39 entries × progress sweep — all 33 joint transforms + the full §4.4 stamp set + settlement
+ *    state + publish markers + kinematic state, 0 raw-bit deltas) — the same comparison over a
+ *    strictly larger observation, run for the deployed configuration as well.
+ *  - `flagDefaultsFalse` — asserted `IK_STAGE_ACTIVE` defaults to false, i.e. that state 2 is the
+ *    deployed state. Replaced by the §12.7 configuration-surface audit
+ *    (`RuntimeSolverOwnershipAuditTest.ikStageFlagIsDeclarationOnlyAndReadOnlyAtRealizationDecisionSites`)
+ *    and the §12.10 activation gate (`ActivationGateTest.productionConfigurationIsStateThree`),
+ *    which assert the deployed state and the single-writer contract rather than a stale default.
+ * Nothing was hidden: no ignore annotation was applied, no assumption-based skip was introduced, and
+ * no assertion was conditionalized on the flag. The §12.8 disposition is itself pinned by
+ * `ActivationEquivalenceTest.retiredAndStateTwoOnlyProbesAreExplicitlyClassified`.
  *
- * It also asserts the carrier flip: `limbTargets` is empty under B0 and populated after B1.
+ * The carrier coverage below is state-agnostic and survives activation: `limbTargets` is populated in
+ * BOTH configurations (§12.5 — registration is intent; only the realization moved).
  */
 class IkStageTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
-    private val originalStage = IK_STAGE_ACTIVE
-
-    @After
-    fun restore() {
-        IK_STAGE_ACTIVE = originalStage
-    }
 
     private fun poseFactories(): List<Pair<String, () -> PoseBuilder>> = listOf(
         "StandardPullUp" to { StandardPullUpPose() },
@@ -55,22 +61,6 @@ class IkStageTest {
         "PikeSit" to { PikeSitPose() }
     )
 
-    private fun maxDeviation(a: SkeletonPose, b: SkeletonPose): Float {
-        var max = 0f
-        for (j in Joint.entries) {
-            val pa = a.getJoint(j); val pb = b.getJoint(j)
-            val d = maxOf(abs(pa.x - pb.x), abs(pa.y - pb.y), abs(pa.z - pb.z))
-            if (d > max) max = d
-        }
-        return max
-    }
-
-    @Test
-    fun flagDefaultsFalse() {
-        // B1 ships additive + reversible: the stage is OFF by default so the legacy path is preserved.
-        assertTrue("IK_STAGE_ACTIVE must default to false in B1", !originalStage)
-    }
-
     @Test
     fun limbTargetsCarrierIsLiveAfterB1() {
         for ((name, factory) in poseFactories()) {
@@ -81,48 +71,5 @@ class IkStageTest {
             val pose = factory().build(PoseContext(0.5f, Side.LEFT, def))
             assertTrue("$name must populate limbTargets (B1 dead→live) got=${pose.limbTargets.size}", pose.limbTargets.size > 0)
         }
-    }
-
-    @Test
-    fun productionPosesByteIdenticalStageOnVsOff() {
-        var maxDev = 0f
-        var worst = ""
-        for ((name, factory) in poseFactories()) {
-            for (i in 0..20) {
-                val p = i / 20f
-                val ctx = PoseContext(p, Side.LEFT, def)
-
-                IK_STAGE_ACTIVE = false
-                val off = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
-                IK_STAGE_ACTIVE = true
-                val on = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
-
-                val d = maxDeviation(off, on)
-                if (d > maxDev) { maxDev = d; worst = "$name @$p" }
-            }
-        }
-        assertEquals("IkStage must not change production poses at $worst", 0f, maxDev, 1e-4f)
-        println("IkStageTest.productionPosesByteIdenticalStageOnVsOff: OK maxDev=$maxDev")
-    }
-
-    @Test
-    fun contactPosesByteIdenticalStageOnVsOff() {
-        var maxDev = 0f
-        var worst = ""
-        for ((name, factory) in contactPoseFactories()) {
-            for (p in listOf(0f, 0.5f, 1f)) {
-                val ctx = PoseContext(p, Side.LEFT, def)
-
-                IK_STAGE_ACTIVE = false
-                val off = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
-                IK_STAGE_ACTIVE = true
-                val on = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
-
-                val d = maxDeviation(off, on)
-                if (d > maxDev) { maxDev = d; worst = "$name @$p" }
-            }
-        }
-        assertEquals("IkStage must not change contact instruments at $worst", 0f, maxDev, 1e-4f)
-        println("IkStageTest.contactPosesByteIdenticalStageOnVsOff: OK maxDev=$maxDev")
     }
 }

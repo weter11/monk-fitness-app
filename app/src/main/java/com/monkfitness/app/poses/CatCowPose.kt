@@ -1,20 +1,41 @@
 package com.monkfitness.app.poses
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.animation.SkeletonMath.solveIK
 import com.monkfitness.app.animation.SkeletonMath.lerp
+import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.sqrt
 import kotlin.math.sin
 
+/**
+ * P12 (§12.6): converted from the legacy world-position-built representation
+ * (`solveIK -> setJoint(result) -> fromJointPositions`) to the authored-hierarchy idiom
+ * (SkeletonFactory tree + declared pelvis tilt + registered package bake limbs +
+ * `fromHierarchy`). The quadruped base is now declared as a spine TILT toward the same
+ * world direction the legacy chest offset encoded, which additionally restores the exact
+ * `torsoLength` bone (the legacy raw offset (−torsoLength, dy) silently stretched the
+ * trunk by sqrt(L² + dy²) — a representation correction §12.9 quantifies). Knee/ankle
+ * targets, poles, and the alternating cat/cow choreography are unchanged; the solved leg
+ * targets ride the canonical bake, the solved world positions of the legacy path are
+ * reproduced exactly through the same parent-frame inverse (the reconstruction helper's
+ * `rotAround(−parentRot)` == the bake's `toLocalDirection`). Legacy raw toe/head world
+ * writes are superseded by the W1 engine derivation and the declared Head Target
+ * (canonical Phase-7 path).
+ */
 class CatCowPose : PoseBuilder {
+    private var roots: List<SkeletonNode>? = null
+    private var pelvis: SkeletonNode? = null; private var chest: SkeletonNode? = null; private var neck: SkeletonNode? = null; private var head: SkeletonNode? = null
+    private var shoulderA: SkeletonNode? = null; private var elbowA: SkeletonNode? = null; private var handA: SkeletonNode? = null
+    private var shoulderP: SkeletonNode? = null; private var elbowP: SkeletonNode? = null; private var handP: SkeletonNode? = null
+    private var hipF: SkeletonNode? = null; private var kneeF: SkeletonNode? = null; private var ankleF: SkeletonNode? = null
+    private var hipB: SkeletonNode? = null; private var kneeB: SkeletonNode? = null; private var ankleB: SkeletonNode? = null
+
     private val jointsBuffer = SkeletonPose()
     private val legFIK = SkeletonMath.IKResult()
     private val legBIK = SkeletonMath.IKResult()
     private val armAIK = SkeletonMath.IKResult()
     private val armPIK = SkeletonMath.IKResult()
     private val tempV1 = Vector3()
-    private val tempV2 = Vector3()
-    private val tempV3 = Vector3()
 
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f,
@@ -25,6 +46,17 @@ class CatCowPose : PoseBuilder {
         motionCurve = MotionCurve.SINE
     )
 
+    private fun ensureHierarchy(definition: SkeletonDefinition) {
+        if (roots != null) return
+        val nodes = SkeletonFactory.createStandardSkeleton()
+        roots = nodes.roots
+        pelvis = nodes.pelvis; chest = nodes.chest; neck = nodes.neck; head = nodes.head
+        shoulderA = nodes.shoulderA; elbowA = nodes.elbowA; handA = nodes.handA
+        shoulderP = nodes.shoulderP; elbowP = nodes.elbowP; handP = nodes.handP
+        hipF = nodes.hipF; kneeF = nodes.kneeF; ankleF = nodes.ankleF
+        hipB = nodes.hipB; kneeB = nodes.kneeB; ankleB = nodes.ankleB
+    }
+
     override fun build(context: PoseContext): SkeletonPose {
         // Per-frame hygiene: clear last build's §1.1 carriers from this reused singleton buffer.
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
@@ -32,62 +64,55 @@ class CatCowPose : PoseBuilder {
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
         val progress = context.progress
         val definition = context.definition
+        ensureHierarchy(definition)
 
-        // Quadruped base
-        // progress 0 (Cat - rounded) to 1 (Cow - arched)
-
+        // Quadruped base: progress 0 (Cat - rounded) to 1 (Cow - arched)
         val ankleHeight = definition.foot.ankleHeight
         val pelvisPos = lerp(45f, 40f, progress) + ankleHeight
-        val pelvis = tempV1.set(50f, pelvisPos, 0f)
-
         val chestPos = lerp(45f, 35f, progress) + ankleHeight
-        val chest = tempV2.set(-definition.torsoLength, chestPos - pelvisPos, 0f).add(pelvis)
 
-        val hipF = tempV3.set(0f, 0f, -definition.hipWidth).add(pelvis)
-        val hipB = Vector3(0f, 0f, definition.hipWidth).add(pelvis) // tempV3 is occupied
+        // Declared spine: direction legacy encoded as (−torsoLength, chestPos − pelvisPos).
+        val dx = -definition.torsoLength
+        val dy = chestPos - pelvisPos
+        val mag = sqrt(dx * dx + dy * dy)
+        // rotZ(θ)·(+Y) = (−sinθ, cosθ) must equal (dx, dy)/mag → θ = atan2(−dx, dy).
+        val spineTilt = atan2(-dx, dy)
+        pelvis!!.localPosition.set(50f, pelvisPos, 0f)
+        declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), spineTilt)
+        chest!!.localPosition.set(0f, definition.torsoLength, 0f)
+        neck!!.localPosition.set(0f, definition.neckLength, 0f)
+        head!!.localPosition.set(0f, 18f, 0f)
+        hipF!!.localPosition.set(0f, 0f, -definition.hipWidth)
+        hipB!!.localPosition.set(0f, 0f, definition.hipWidth)
+        shoulderA!!.localPosition.set(0f, 0f, -definition.shoulderWidth)
+        shoulderP!!.localPosition.set(0f, 0f, definition.shoulderWidth)
 
-        val kneeBaseR = Vector3(50f, ankleHeight, -definition.hipWidth)
+        roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
+
+        // LEG TARGETS: ankles planted at the knee-base floor points (unchanged targets/poles).
+        val kneeBaseR = tempV1.set(50f, ankleHeight, -definition.hipWidth)
+        bakeIkLimb(hipF!!.worldPosition, kneeBaseR, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f), IKConstraint.LegConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFIK, jointsBuffer)
         val kneeBaseL = Vector3(50f, ankleHeight, definition.hipWidth)
+        bakeIkLimb(hipB!!.worldPosition, kneeBaseL, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f), IKConstraint.LegConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBIK, jointsBuffer)
 
-        val legF = solveIK(hipF, kneeBaseR, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f), IKConstraint.LegConstraint, legFIK)
-        val legB = solveIK(hipB, kneeBaseL, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f), IKConstraint.LegConstraint, legBIK)
+        // ARM TARGETS: hands under the shoulders (same offsets, now read from FK).
+        val handBaseR = Vector3(shoulderA!!.worldPosition.x, shoulderA!!.worldPosition.y - chestPos, shoulderA!!.worldPosition.z)
+        val handBaseL = Vector3(shoulderP!!.worldPosition.x, shoulderP!!.worldPosition.y - chestPos, shoulderP!!.worldPosition.z)
+        bakeIkLimb(shoulderA!!.worldPosition, handBaseR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK, jointsBuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, handBaseL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK, jointsBuffer)
 
-        val shoulderA = Vector3(0f, 0f, -definition.shoulderWidth).add(chest)
-        val shoulderP = Vector3(0f, 0f, definition.shoulderWidth).add(chest)
-
-        val handBaseR = Vector3(0f, -chestPos, 0f).add(shoulderA)
-        val handBaseL = Vector3(0f, -chestPos, 0f).add(shoulderP)
-
-        val armA = solveIK(shoulderA, handBaseR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint, armAIK)
-        val armP = solveIK(shoulderP, handBaseL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint, armPIK)
-
+        // Gaze: the legacy headPitch sweep (−0.5 → +0.5 rad, direction (−cos, sin, 0) from
+        // the chest) becomes the declared Head Target (Finalizer-owned head, Phase 7).
         val headPitch = lerp(-0.5f, 0.5f, progress)
-        val headDir = tempV3.set(-cos(headPitch), sin(headPitch), 0f).normalize()
-        val neckEnd = Vector3(headDir.x, headDir.y, headDir.z).multiply(definition.neckLength).add(chest)
-        val headPos = headDir.multiply(definition.neckLength + 18f).add(chest)
+        val gazeDir = tempV1.set(-cos(headPitch), sin(headPitch), 0f).normalize()
+        val nw = neck!!.worldPosition
+        SkeletonPose.IntentBuilder(jointsBuffer).headTarget(
+            Vector3(nw.x + gazeDir.x * 100f, nw.y + gazeDir.y * 100f, nw.z + gazeDir.z * 100f)
+        )
 
-        jointsBuffer.setJoint(Joint.PELVIS, pelvis)
-        jointsBuffer.setJoint(Joint.HIP_F, hipF)
-        jointsBuffer.setJoint(Joint.HIP_B, hipB)
-        jointsBuffer.setJoint(Joint.KNEE_F, legF.joint)
-        jointsBuffer.setJoint(Joint.ANKLE_F, legF.end)
-        jointsBuffer.setJoint(Joint.TOE_F, tempV3.set(kneeBaseR).add(Vector3(10f, 0f, 0f)))
-        jointsBuffer.setJoint(Joint.KNEE_B, legB.joint)
-        jointsBuffer.setJoint(Joint.ANKLE_B, legB.end)
-        jointsBuffer.setJoint(Joint.TOE_B, tempV1.set(kneeBaseL).add(Vector3(10f, 0f, 0f)))
-        jointsBuffer.setJoint(Joint.CHEST, chest)
-        jointsBuffer.setJoint(Joint.SHOULDER_A, shoulderA)
-        jointsBuffer.setJoint(Joint.SHOULDER_P, shoulderP)
-        jointsBuffer.setJoint(Joint.ELBOW_A, armA.joint)
-        jointsBuffer.setJoint(Joint.HAND_A, armA.end)
-        jointsBuffer.setJoint(Joint.ELBOW_P, armP.joint)
-        jointsBuffer.setJoint(Joint.HAND_P, armP.end)
-        jointsBuffer.setJoint(Joint.NECK_END, neckEnd)
-        jointsBuffer.setJoint(Joint.HEAD_POS, headPos)
-
-        // Phase E (L1 bridge removal): this pose authors joints as world positions; populate the
-        // roots hierarchy from them so finalize no longer takes the deleted legacy bridge.
-        SkeletonPose.fromJointPositions(definition, jointsBuffer, jointsBuffer)
+        SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
+        jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
+        jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer
     }
 }

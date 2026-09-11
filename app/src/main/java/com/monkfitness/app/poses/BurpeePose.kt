@@ -190,14 +190,14 @@ class BurpeePose : PoseBuilder {
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
         // Solve IK for legs
-        val legFIK = bakeIkLimb(hipF!!.worldPosition, info.ankleF, def.thighLength, def.shinLength, Vector3(0.5f, 1f, 0f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
-        val legBIK = bakeIkLimb(hipB!!.worldPosition, info.ankleB, def.thighLength, def.shinLength, Vector3(0.5f, 1f, 0f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
+        bakeIkLimb(hipF!!.worldPosition, info.ankleF, def.thighLength, def.shinLength, Vector3(0.5f, 1f, 0f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
+        bakeIkLimb(hipB!!.worldPosition, info.ankleB, def.thighLength, def.shinLength, Vector3(0.5f, 1f, 0f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         // Solve IK for arms
-        val armAIK = bakeIkLimb(shoulderA!!.worldPosition, info.handA, def.upperArmLength, def.forearmLength, info.armPole, def.armIKConstraint, JointRotation(), elbowA!!, handA!!, armABuffer, jointsBuffer)
-        val armPIK = bakeIkLimb(shoulderP!!.worldPosition, info.handP, def.upperArmLength, def.forearmLength, info.armPole, def.armIKConstraint, JointRotation(), elbowP!!, handP!!, armPBuffer, jointsBuffer)
+        bakeIkLimb(shoulderA!!.worldPosition, info.handA, def.upperArmLength, def.forearmLength, info.armPole, def.armIKConstraint, JointRotation(), elbowA!!, handA!!, armABuffer, jointsBuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, info.handP, def.upperArmLength, def.forearmLength, info.armPole, def.armIKConstraint, JointRotation(), elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 

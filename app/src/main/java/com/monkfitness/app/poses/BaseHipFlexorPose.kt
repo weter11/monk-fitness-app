@@ -43,6 +43,9 @@ abstract class BaseHipFlexorPose : BasePose() {
     protected val legFBuffer = SkeletonMath.IKResult()
     protected val armABuffer = SkeletonMath.IKResult()
     protected val armPBuffer = SkeletonMath.IKResult()
+    // P12 (§12.4b): scratch for the sanctioned planning solve (front-knee apex → arm targets).
+    // Composition-only: never written to the carrier, never a realization result.
+    private val kneePlanBuffer = SkeletonMath.IKResult()
 
     // Reusable scratch to avoid any per-frame allocations.
     protected val thighVecB = Vector3()
@@ -101,12 +104,20 @@ abstract class BaseHipFlexorPose : BasePose() {
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
     }
 
-    /** Front leg IK via engine bakeIkLimb; returns the IK result (knee joint world pos) for the arms. */
-    protected fun solveFrontLeg(def: SkeletonDefinition): SkeletonMath.IKResult {
-        return bakeIkLimb(
+    /** Front-leg intent. P12 (§12.5/B-1): the returned knee apex comes from the sanctioned
+     *  planning solve (§12.4b) — consumed ONLY to compose the arm targets — never from a
+     *  realization result. The front leg itself is declared through the registered bake
+     *  (registration + state-gated realization), exactly like every other limb. */
+    protected fun planFrontLegKnee(def: SkeletonDefinition): SkeletonMath.IKResult {
+        val plan = planLimbPlacement(
+            hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength,
+            frontLegPole, def.legIKConstraint, kneePlanBuffer
+        )
+        bakeIkLimb(
             hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength,
             frontLegPole, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer
         )
+        return plan
     }
 
     /** Both arms rest on the front knee — identical choreography for both variants. */

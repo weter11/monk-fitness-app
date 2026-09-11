@@ -105,12 +105,23 @@ class StraightIntentFallbackTest {
 
         fun bake(straight: Boolean, targetX: Float): SkeletonPose {
             val pose = SkeletonPose()
-            bakeIkLimb(
-                root, targetX.let { Vector3(it, 0f, 0f) }, 2f, 1f,
-                Vector3(0f, 0f, 1f), constraint, JointRotation(),
-                nodes.kneeF, nodes.ankleF, SkeletonMath.IKResult(), pose,
-                straight = straight
-            )
+            // P12 WP-I: the read-fold asserted below is the AUTHORING BAKE's realized-instance
+            // reading, which is produced only while the engine stage is disabled (§12.7a). The
+            // deployed default is now the activated configuration, so this scope is explicit rather
+            // than assumed; the activated producer of the same reading is covered by the
+            // stage-window test in this file (`activeIkStageFoldsFallbackAndCountsOneExecution`).
+            val original = IK_STAGE_ACTIVE
+            try {
+                IK_STAGE_ACTIVE = false
+                bakeIkLimb(
+                    root, targetX.let { Vector3(it, 0f, 0f) }, 2f, 1f,
+                    Vector3(0f, 0f, 1f), constraint, JointRotation(),
+                    nodes.kneeF, nodes.ankleF, SkeletonMath.IKResult(), pose,
+                    straight = straight
+                )
+            } finally {
+                IK_STAGE_ACTIVE = original
+            }
             return pose
         }
 
@@ -133,11 +144,26 @@ class StraightIntentFallbackTest {
         // at hip→foot ≈ 57 units vs thighLength 112 — the engine's only honest outcome is the
         // bent fallback, which P4 now surfaces on the carrier. This is the first real producer
         // coverage for the ONLY production authors of straight intent.
-        val pose = MiddleSplitPose().build(PoseContext(0.5f, Side.LEFT, SkeletonDefinition.DEFAULT_ADULT))
-        assertTrue(
-            "P4 V1 regression: the probe's executed bent fallback must report straightIntentDropped",
-            pose.straightIntentDropped
-        )
+        //
+        // P12 (WP-F / §12.8 retarget): the reading asserted HERE is the AUTHORING-CONFIGURATION
+        // producer — the bake folding its executed fallback — so it pins flag-OFF explicitly
+        // (R5 keeps both configurations supported; this test's claim is about the bake). Under
+        // the activated configuration the drop is produced by the engine stage window and is
+        // observed on the PUBLISHED state: that path is covered by
+        // [middleSplitPublishedStateCarriesTheDropThroughThePipeline] plus
+        // ValidationOwnershipReCertificationTest.straightProbeReadingComesFromActiveImplementation
+        // (which pins build-window-empty / stage-window-produces exactly).
+        val original = IK_STAGE_ACTIVE
+        try {
+            IK_STAGE_ACTIVE = false
+            val pose = MiddleSplitPose().build(PoseContext(0.5f, Side.LEFT, SkeletonDefinition.DEFAULT_ADULT))
+            assertTrue(
+                "P4 V1 regression: the probe's executed bent fallback must report straightIntentDropped",
+                pose.straightIntentDropped
+            )
+        } finally {
+            IK_STAGE_ACTIVE = original
+        }
     }
 
     @Test
@@ -214,7 +240,12 @@ class StraightIntentFallbackTest {
                 nodes.roots.forEach { it.updateWorldTransforms(Vector3(), JointRotation()) }
                 val pose = SkeletonPose()
                 pose.roots = nodes.roots
-                pose.limbTargets.add(WorldTarget(Joint.HAND_A, target, straight = true))
+                pose.limbTargets.add(
+                    WorldTarget(
+                        Joint.HAND_A, target, straight = true,
+                        length1 = 2f, length2 = 1f, constraint = constraint
+                    )
+                )
                 IkStage.apply(
                     pose,
                     HumanSkeletonDefinition(upperArmLength = 2f, forearmLength = 1f, armIKConstraint = constraint)
@@ -252,20 +283,33 @@ class StraightIntentFallbackTest {
         // Fault injection: a second Phase-1 runtime solver window on one frame must make the
         // pipeline throw. PR #216's counter shape could not catch this design; this pins the
         // ENFORCEMENT, not just the counter's existence.
+        //
+        // P12 WP-H (finding F-2) — the injection goes through the REGISTERED realization path. The
+        // previous shape wrote the counter directly (`built.limbSolverExecutions = 2`), which tests
+        // the `check` expression rather than the mechanism: a fabricated evidence value can never
+        // be produced by production code, so the assertion proved nothing about enforcement. A
+        // genuine second window is produced by the two registered engines co-executing on one
+        // frame — the test-only direct stage window plus the pipeline's own stage window — the
+        // exact co-execution shape `SingleActiveSolverEnforcementTest` anchors.
         val original = IK_STAGE_ACTIVE
         try {
-            IK_STAGE_ACTIVE = false
-            val built = MiddleSplitPose().build(PoseContext(0.5f, Side.LEFT, SkeletonDefinition.DEFAULT_ADULT))
-            built.limbSolverExecutions = 2
-            val pipeline = SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT)
-            var thrown: IllegalStateException? = null
-            try {
-                pipeline.produceFrame(built)
-            } catch (e: IllegalStateException) {
-                thrown = e
-            }
-            assertTrue("R5 runtime-window check must fire on a double execution", thrown != null)
-            assertTrue(thrown!!.message!!.contains("R5 violation"))
+            IK_STAGE_ACTIVE = true
+            val definition = SkeletonDefinition.DEFAULT_ADULT
+            val violation = runCatching {
+                val built = MiddleSplitPose().build(PoseContext(0.5f, Side.LEFT, definition))
+                IkStage.apply(built, definition) // window #1 (legitimate test-only co-execution)
+                SkeletonPipeline(definition).produceFrame(built) // window #2 → must throw
+            }.exceptionOrNull()
+            assertTrue(
+                "R5 runtime-window check must fire on a second registered solver window. Observed: " +
+                    (violation?.let { "${it::class.simpleName}: ${it.message}" } ?: "no violation raised"),
+                violation is IllegalStateException && violation.message.orEmpty().contains("R5 violation")
+            )
+            assertTrue(
+                "the rejection must report the observed window count (2), i.e. the EVIDENCE failed " +
+                    "the frame and not a fabricated value: ${violation?.message}",
+                violation?.message.orEmpty().contains("windows executed this frame = 2")
+            )
         } finally {
             IK_STAGE_ACTIVE = original
         }

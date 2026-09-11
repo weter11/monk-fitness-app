@@ -22,7 +22,30 @@ object MotionProbe {
     )
 
     /** Max vertical (Y) travel of any tracked joint across progress 0 -> 1, in skeleton units. */
-    fun maxVerticalTravel(pose: PoseBuilder, def: SkeletonDefinition = SkeletonDefinition.DEFAULT_ADULT): Float {
+    fun maxVerticalTravel(pose: PoseBuilder, def: SkeletonDefinition = SkeletonDefinition.DEFAULT_ADULT): Float =
+        maxAxisTravel(pose, def, axis = 1)
+
+    /**
+     * P12 (§12.6) — max travel of any tracked joint on ANY world axis across the rep.
+     *
+     * Motivation: the Y-only metric is an axis assumption (exercise motion is vertical in
+     * world space). It held while it was tuned, but two mobility poses measured *through*
+     * reconstruction artifacts: the legacy `solveIK -> raw-offset` writes re-rotated the
+     * limb a second time under FK, flinging it vertically even though the authored choreo-
+     * graphy is horizontal (prone Reverse Snow Angel sweeps the hands in the sagittal plane
+     * of a body lying along X; Cat-Cow arches). Post-migration the limbs realize where the
+     * pose actually declared them — so the motion contract must be read as "the joint
+     * travels through its authored range", on the axis the choreography lives on. The 3D
+     * axis span is a strict superset of the Y span (a pose can only measure >= here), so
+     * switching a floor to this metric can never mask motion the Y metric caught.
+     */
+    fun maxTravel3D(pose: PoseBuilder, def: SkeletonDefinition = SkeletonDefinition.DEFAULT_ADULT): Float {
+        var best = 0f
+        for (axis in 0..2) best = maxOf(best, maxAxisTravel(pose, def, axis))
+        return best
+    }
+
+    private fun maxAxisTravel(pose: PoseBuilder, def: SkeletonDefinition, axis: Int): Float {
         val pipeline = SkeletonPipeline(def)
         for (k in 0..10) {
             val c = PoseContext(progress = 0.3f, side = Side.RIGHT, definition = def,
@@ -36,9 +59,9 @@ object MotionProbe {
                 deltaTime = 0.0166f, cycleDuration = 2500f)
             val fr = pipeline.produceFrame(pose.build(ctx)).pose
             for (j in VJ) {
-                val y = fr.getJoint(j).y
-                mn[j] = kotlin.math.min(mn[j]!!, y)
-                mx[j] = kotlin.math.max(mx[j]!!, y)
+                val v = when (axis) { 0 -> fr.getJoint(j).x; 1 -> fr.getJoint(j).y; else -> fr.getJoint(j).z }
+                mn[j] = kotlin.math.min(mn[j]!!, v)
+                mx[j] = kotlin.math.max(mx[j]!!, v)
             }
         }
         return VJ.maxOf { mx[it]!! - mn[it]!! }

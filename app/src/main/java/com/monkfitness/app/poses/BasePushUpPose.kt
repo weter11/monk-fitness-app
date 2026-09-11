@@ -237,9 +237,11 @@ abstract class BasePushUpPose : BasePose() {
 
         // Elbow poles are authored in WORLD space (MIGRATION_RULES A8: the pose never converts
         // frames — `bakeIkLimb` consumes the pole as world, the Finalizer owns any local→world
-        // conversion). `armA`/`armP` carries the IK result for reachability bookkeeping.
-        val armA = bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK)
-        val armP = bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
+        // conversion). P12 §12.5: the former `val armA`/`armP` IK-result captures were
+        // bookkeeping-only (never read) and are dropped — the bake's registration + (gated)
+        // realization effects run identically without them (WP-C differential: byte-identical).
+        bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK)
+        bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
         // The palm/knuckles/fingertips and the wrist are OWNED by the engine:
         // the Finalizer derives heel/toe (foot) and palm/wrist/hand (W1 automatic)

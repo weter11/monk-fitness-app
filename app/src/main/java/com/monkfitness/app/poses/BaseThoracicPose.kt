@@ -115,16 +115,18 @@ abstract class BaseThoracicPose : BasePose() {
 
     /**
      * Bakes an arm whose root (shoulder) is a child of the rotating chest.
-     * IK is solved in world space; the elbow/hand local offsets are then expressed in the
-     * chest's local frame via the exact inverse of the chest world rotation (single
-     * axis-angle, so rotAround by -angle is exact). This keeps the rib cage the driver of
-     * the motion while the arms still reach to world targets.
      *
-     * The pole is authored in the chest's LOCAL frame and transformed into world space using
-     * the chest's current world rotation (see SkeletonMath.toWorldDirection). Because both the
-     * shoulder and the reaching target live in the chest frame, a constant local pole yields a
-     * constant local elbow direction as the thorax twists — eliminating pole-vector flips and
-     * the jerky arm motion those cause.
+     * P12 (§12.6): routed through the registered package-level authoring bake — the former
+     * direct `SkeletonMath.solveIK` + manual `rotAround(-chestAngle)` writes were a bypass
+     * with no `limbTargets`/stamp registration. The conversion is semantics-preserving: the
+     * shoulder's immediate parent (SCAPULA/CLAVICLE) carries identity rotations in this
+     * family, so the bake's `middleNode.parent.worldRotation` frame IS the chest world
+     * rotation the manual path inverted, and `toLocalDirection` == the exact single-axis
+     * `rotAround(-angle)`. The pole stays authored in the chest's LOCAL frame and is
+     * transformed to world with the chest's current rotation before the bake (constant
+     * local pole ⇒ constant local elbow direction under thorax twist — the flip/jerk fix
+     * this helper exists for). The result is consumed ONLY as the reachability diagnostic
+     * the subclasses log; realization/stamps/registration belong to the bake.
      */
     protected fun bakeThoracicArm(
         rootWorld: Vector3,
@@ -136,12 +138,11 @@ abstract class BaseThoracicPose : BasePose() {
         buffer: SkeletonMath.IKResult
     ): SkeletonMath.IKResult {
         val poleWorld = SkeletonMath.toWorldDirection(poleLocal, chest!!.worldRotation, tempPoleWorld)
-        val ik = SkeletonMath.solveIK(rootWorld, targetWorld, def.upperArmLength, def.forearmLength, poleWorld, def.armIKConstraint, buffer)
-        tempV1.set(ik.joint).subtract(rootWorld)
-        SkeletonMath.rotAround(tempV1, chest!!.worldRotation.axis, -chest!!.worldRotation.angle, elbowNode.localPosition)
-        tempV1.set(ik.end).subtract(ik.joint)
-        SkeletonMath.rotAround(tempV1, chest!!.worldRotation.axis, -chest!!.worldRotation.angle, handNode.localPosition)
-        return ik
+        return bakeIkLimb(
+            rootWorld, targetWorld, def.upperArmLength, def.forearmLength,
+            poleWorld, def.armIKConstraint, chest!!.worldRotation,
+            elbowNode, handNode, buffer, jointsBuffer
+        )
     }
 
     /** W1: the engine now derives hand orientation; the open-hand offsets and tilt counter-rotation are removed. */

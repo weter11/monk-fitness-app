@@ -269,13 +269,30 @@ class RootAuthorityTest {
         // [PhaseBoundaryAssertsTest] plus the source audit of the Check-1 call site.
         val reference = SkeletonPipeline(definition)
         val refFixture = FrameFixture()
-        refFixture.pose.limbTargets.add(WorldTarget(Joint.ANKLE_F, Vector3(30f, -60f, 0f)))
-        val refPublished = reference.produceFrame(refFixture.authorRoot(40f)).pose
+        refFixture.pose.limbTargets.add(
+            WorldTarget(
+                Joint.ANKLE_F, Vector3(30f, -60f, 0f),
+                length1 = definition.thighLength, length2 = definition.shinLength,
+                constraint = definition.legIKConstraint
+            )
+        )
+        // The anti-vacuity reference is the AUTHORING configuration — the implementation that
+        // realizes the limb while the engine stage is disabled (§12.7a). WP-I scopes it explicitly:
+        // the deployed default is now the ACTIVATED configuration, so relying on the default would
+        // compare the activated path against itself and the guard below would be vacuous.
+        val refPublished = inAuthoringConfiguration { reference.produceFrame(refFixture.authorRoot(40f)).pose }
 
         val pipeline = SkeletonPipeline(definition)
         val fixture = FrameFixture()
-        fixture.pose.limbTargets.add(WorldTarget(Joint.ANKLE_F, Vector3(30f, -60f, 0f)))
+        fixture.pose.limbTargets.add(
+            WorldTarget(
+                Joint.ANKLE_F, Vector3(30f, -60f, 0f),
+                length1 = definition.thighLength, length2 = definition.shinLength,
+                constraint = definition.legIKConstraint
+            )
+        )
         fixture.authorRoot(40f)
+        val originalStage = IK_STAGE_ACTIVE
         try {
             IK_STAGE_ACTIVE = true
             val out = pipeline.produceFrame(fixture.pose).pose
@@ -286,7 +303,23 @@ class RootAuthorityTest {
                 refPublished.getJoint(Joint.ANKLE_F).x, out.getJoint(Joint.ANKLE_F).x, 1e-3f
             )
         } finally {
+            IK_STAGE_ACTIVE = originalStage
+        }
+    }
+
+    /**
+     * Runs [block] in the **authoring configuration** (`IK_STAGE_ACTIVE = false`) and restores the
+     * previous configuration. P12 WP-I: the deployed default is the activated configuration, so a
+     * reference frame that must be produced by the authoring bake has to name its configuration
+     * explicitly (§12.7a: each implementation realizes only under its own configuration).
+     */
+    private fun <T> inAuthoringConfiguration(block: () -> T): T {
+        val original = IK_STAGE_ACTIVE
+        return try {
             IK_STAGE_ACTIVE = false
+            block()
+        } finally {
+            IK_STAGE_ACTIVE = original
         }
     }
 

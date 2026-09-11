@@ -15,8 +15,8 @@ import kotlin.math.abs
  * true branches and removed, so the pipeline is unconditionally live and there is no legacy
  * bypass or coherence invariant. This suite verifies the production guarantee: both entry points
  * ([produceFrame] with a [PoseBuilder] and with a pre-built [SkeletonPose] for renderers) are
- * byte-identical to a manual Solver+Finalizer run, and the validated path matches the direct
- * validator.
+ * byte-identical to a manual stage-chain run (Phase 1 `IkStage` → Solver → Finalizer), and the
+ * validated path matches the direct validator.
  */
 class SkeletonPipelineM0Test {
 
@@ -51,6 +51,12 @@ class SkeletonPipelineM0Test {
                 val p = i / frames.toFloat()
 
                 val built = refPose.build(PoseContext(p, Side.LEFT, def))
+                // P12 WP-I: the manual replication includes the production limb stage (Phase 1).
+                // With the deployed default activated the limbs are realized by `IkStage` (§12.7a),
+                // so a reference that skipped it would compare the pipeline against a frame whose
+                // limbs were never realized. The call self-gates on the rollout flag, so the
+                // replication stays exact in both configurations.
+                IkStage.apply(built, def)
                 // Stamp the environment-driven support model so the Finalizer derives support
                 // planes identically to the active pipeline path (which stamps these from
                 // metadata.environment / metadata.support.contacts inside produceFrame).
@@ -112,6 +118,9 @@ class SkeletonPipelineM0Test {
 
         // Independent pose instances per path (see byte-identity test rationale).
         val built = StandardPullUpPose().build(PoseContext(0f, Side.LEFT, def))
+        // P12 WP-I: mirror the production stage chain exactly (Phase 1 → Phase 2 → Finalizer), so
+        // the direct-validation frame is the same frame the validated entry point produces.
+        IkStage.apply(built, def)
         if (built.roots.isNotEmpty() && built.hasContacts()) ConstraintSolver.solve(built, def)
         val directPose = SkeletonPoseFinalizer(def).finalize(built)
         val directReport = validator.validate(directPose, def, env, camera, 1000f, 1000f, null, null, 0.033f)
