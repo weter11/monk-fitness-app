@@ -20,11 +20,21 @@ import java.lang.reflect.Method
 class SquatFamilyConsistencyTest {
 
     // Established travel baselines (measured 2026-07-20, before L6 consolidation; byte-stable after).
+    //
+    // 2026-09-11 (B-7, `ColdStartHeadPlacementTest`): SquatPose / AirSquatPose / JumpSquatPose were
+    // re-measured after the gaze-intent origin fix in `BasePose.buildGaze`. MotionProbe warms the
+    // pipeline at progress 0.3 and then samples progress 0..1, so the pre-fix head at the p=0 sample
+    // was authored from the *warm-up* build's neck world position — a downward/backward offset of the
+    // head equal to the trunk's motion between p=0.3 and p=0, which shrank the measured Y travel.
+    // With the origin taken from the current build the head realizes the authored gaze at that sample,
+    // so each of the three upright variants gains the offset it was losing (+1.0 / +1.7 / +2.5 units).
+    // The epsilon is unchanged (0.5) and every variant is still pinned individually; SumoSquat and
+    // DeepSquatHold did not move.
     private val baselineTravel = mapOf(
-        "SquatPose" to 191.3f,
-        "AirSquatPose" to 183.8f,
+        "SquatPose" to 192.3f,
+        "AirSquatPose" to 185.5f,
         "SumoSquatPose" to 191.9f,
-        "JumpSquatPose" to 93.0f,
+        "JumpSquatPose" to 95.5f,
         "DeepSquatHoldPose" to 0.0f
     )
 
