@@ -201,6 +201,25 @@ class ActivationGateTest {
                 )
             }
         }
+        // (e) §10.F — no production path can hand an UNDECLARED Limb Target to the stage: the
+        // shorthand declaration surface (`IntentBuilder.limbTarget`) carries no declared context by
+        // construction and therefore has no production consumer. Only the carrier-substrate
+        // component test uses it, and that test never produces a frame (it asserts carrier
+        // population).
+        val shorthandConsumers = productionSources().filterValues { lines ->
+            lines.any { stripComment(it).contains(".limbTarget(") }
+        }.keys.filterNot { it.endsWith("/PoseDefinition.kt") }
+        assertEquals(
+            "no production code may declare a Limb Target through the undeclared shorthand — " +
+                "every realized limb must come from a registered bake (§12.4 lossless intent): " +
+                "$shorthandConsumers",
+            emptyList<String>(), shorthandConsumers
+        )
+        assertTrue(
+            "anti-vacuity: the shorthand surface must still be declared where it is audited",
+            productionSources().entries.first { it.key.endsWith("/PoseDefinition.kt") }.value
+                .any { stripComment(it).contains("fun limbTarget(") }
+        )
     }
 
     // =============================================================================================
