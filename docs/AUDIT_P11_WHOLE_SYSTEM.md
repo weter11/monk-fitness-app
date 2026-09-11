@@ -408,8 +408,13 @@ with B-1); `IK_STAGE_ACTIVE` global (no live risk while zero production writers)
 | support-channel trace | throwaway `ZzP11SupportTraceTest` (deleted) | `p11-audit/p11-support-trace.txt` |
 
 All three probe classes were deleted before the final suite run, so the reported 462-test figure
-contains no audit scaffolding. The run was **ad-hoc local** (Gradle on this host), not GitHub CI;
-no PR/push was performed as part of this audit.
+contains no audit scaffolding.
+
+**Execution environment disclosure.** The suite runs above were **ad-hoc local Gradle** on the audit
+host. GitHub CI was additionally executed on the exact committed bytes: Android CI run
+`34629937098` → **success** (1m46s) on head SHA
+`5e92f3f356339b008cd4d8b09fb93e7899005e03` (= the branch tip = the PR #226 head = local `HEAD`).
+The PR was opened by this audit and is **not merged**; no merge decision is implied.
 
 ---
 
