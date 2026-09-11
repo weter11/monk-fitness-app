@@ -27,6 +27,41 @@ abstract class BasePushUpPose : BasePose() {
     // authored hand target inside `SkeletonMath`'s reachable annulus.
     private val kneePivotDepthHipFlexion: Float = 0.42f
 
+    /**
+     * B-8 — the flat plank's trunk-frame roll, in radians, about the chest's lateral Z axis.
+     *
+     * `buildTorso` lays the chest one torso length along the pelvis's LOCAL -X while the chest's
+     * local +Y is its anatomical spine (up) axis, so the trunk frame that matches that layout is
+     * the chest's local frame rolled +pi/2: the chest's local +Y then lies on the trunk axis and
+     * its local -Z on the shoulder line. This is exactly the rotation
+     * `SkeletonPoseFinalizer.reconstructChestFrame` derives for this layout (verified bit-equal:
+     * axis (0,0,1), angle 1.5707964 = `PI.toFloat() / 2f`), so declaring it here does not change
+     * the frame the pose publishes — it only makes it authoritative BEFORE the limb realization.
+     */
+    private val trunkFrameRoll: Float = PI.toFloat() / 2f
+
+    /**
+     * B-8 — declares this family's trunk (chest) frame as pose-owned Phase-0 intent: the node write
+     * plus the paired §1.1 chest carrier, the same two-effect form every other authored
+     * articulation in [BasePose] uses.
+     *
+     * Why it is here and not in the engine: the frozen pipeline assigns the chest intent to the
+     * POSE (`ARCHITECTURE_V2` §4.1 "Chest/hip/girdle/ankle/wrist intent | Pose (relative)") and
+     * runs the limb realization in Phase 1, while the Finalizer's chest-frame reconstruction is a
+     * Phase-3, read-only-on-settled *fallback* (§2.4, §3 PHASE 3, INVARIANT 4). A pose that leaves
+     * the frame unauthored therefore realizes its limbs in the pelvis-only frame and is corrected
+     * afterwards — the B-8 defect. Declaring the frame here fixes the order without moving engine
+     * phases, without a second realization path and without touching the fallback.
+     *
+     * A member that authors its own trunk rotation ([declineTrunkPitch]) keeps it: the engine
+     * treats a non-identity chest as authored intent (Issue F) and never reconstructs it.
+     */
+    protected fun declareFlatPlankTrunkFrame() {
+        if (declineTrunkPitch != 0f) return
+        chest!!.localRotation.set(axisZ, trunkFrameRoll)
+        declareJointIntent(Joint.CHEST, JointRotation(axisZ, trunkFrameRoll))
+    }
+
     protected var roots: List<SkeletonNode>? = null
     protected var ankleF: SkeletonNode? = null; protected var kneeF: SkeletonNode? = null; protected var hipF: SkeletonNode? = null; protected var pelvis: SkeletonNode? = null; protected var chest: SkeletonNode? = null; protected var neck: SkeletonNode? = null; protected var head: SkeletonNode? = null
     protected var shoulderA: SkeletonNode? = null; protected var elbowA: SkeletonNode? = null; protected var handA: SkeletonNode? = null; protected var palmA: SkeletonNode? = null; protected var knucklesA: SkeletonNode? = null; protected var fingertipsA: SkeletonNode? = null
@@ -216,6 +251,33 @@ abstract class BasePushUpPose : BasePose() {
             kneeB!!.localPosition.set(uxB * def.thighLength, uyB * def.thighLength, 0f)
             ankleB!!.localPosition.set(uxB * def.shinLength, uyB * def.shinLength, 0f)
         }
+
+        // B-8 — declare the flat plank's trunk frame in Phase 0 (§4.1 "Chest/hip/girdle/ankle/wrist
+        // intent | Pose (relative)"): the chest frame is POSE-owned intent, so the pose is the
+        // subsystem that must make it authoritative before the limb realization runs.
+        //
+        // Both pivot branches above lay the trunk with `buildTorso` — one torso length along the
+        // pelvis's LOCAL -X — while the chest's local +Y is its anatomical spine (up) axis. The
+        // frame that matches that layout is therefore the chest's local frame rolled +pi/2 about
+        // its lateral Z (its local -Z then lies on the shoulder line), and the node write is
+        // paired with the §1.1 chest intent exactly as every other authored articulation in this
+        // file does (B2).
+        //
+        // Left unauthored, the frame was established only by the Finalizer's PHASE-3 fallback
+        // (`SkeletonPoseFinalizer.reconstructChestFrame`, which derives precisely this rotation
+        // for this layout) — i.e. AFTER the Phase-1 limb realization had already baked the arms
+        // in the pelvis-only frame. The fallback then re-FK'd the chest subtree and dragged the
+        // realized arms with it: on a builder's first build the hands landed ~109 units above the
+        // floor instead of on their authored target. Frames >= 1 only looked correct because the
+        // fallback's write survived in the reused node buffer and was read back as authored
+        // intent, so the fallback early-returned — steady-state correctness was a property of
+        // cross-build buffer reuse, not of the frame (B-8).
+        //
+        // A member that authors its own trunk pitch (`declineTrunkPitch`) keeps that authorship:
+        // the engine treats any non-identity chest rotation as authored intent (Issue F) and never
+        // reconstructs it, so those members are left exactly as they were.
+        declareFlatPlankTrunkFrame()
+
         buildGaze(neck!!, head!!, def.neckLength, pushUpHeadDirection)
 
         // Seat the shoulder girdle on the chest (clavicle/scapula are identity, so this places

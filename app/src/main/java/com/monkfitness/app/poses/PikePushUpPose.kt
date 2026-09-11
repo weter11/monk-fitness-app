@@ -89,6 +89,11 @@ class PikePushUpPose : BasePushUpPose() {
         // (STABILIZATION_AUDIT P2: no duplicate joint intent line).
         declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, torsoGlobalPitch - legPitch)
         chest!!.localPosition.set(-def.torsoLength, 0f, 0f)
+        // B-8 — the pike lays its trunk exactly like the flat plank members (one torso length along
+        // the pelvis's local -X), so it declares the same pose-owned trunk frame. Its own authoring
+        // path is separate from `BasePushUpPose.onBuild`, so the family declaration is invoked here
+        // too — one implementation, one statement of the family's trunk frame.
+        declareFlatPlankTrunkFrame()
 
         // 1. Correcting the Right-Side (Side B) Floating Leg Asymmetry
         // By subtracting the torso pitch, we isolate and enforce the exact same global leg pitch on both sides.
