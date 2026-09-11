@@ -81,17 +81,53 @@ class ExtremityArticulationTest {
     @Test
     fun manualOverridePreservesAuthoredEndpoints() {
         // DeadHang authors an overhand grip via the carrier; opting HAND_A into MANUAL_OVERRIDE
-        // must leave the authored palm/fingertips nodes untouched (the derivation is skipped).
-        val overridden = DeadHangPose().build(PoseContext(0.5f, Side.LEFT, def))
-        // Capture the authored endpoint the pose left on the node (factory default — DeadHang does
-        // not hand-author PALM_A), which the opt-out contract must preserve verbatim.
-        val authoredPalm = overridden.getJoint(Joint.PALM_A).copy()
-        overridden.overrideExtremityOrientation(Extremity.HAND_A)
-        // The opted-out extremity's authored endpoint must be preserved verbatim by the Finalizer.
-        val out = SkeletonPipeline(def).produceFrame(overridden).pose
-        assertEquals("opt-out must preserve authored PALM_A.x", authoredPalm.x, out.getJoint(Joint.PALM_A).x, 1e-3f)
-        assertEquals("opt-out must preserve authored PALM_A.y", authoredPalm.y, out.getJoint(Joint.PALM_A).y, 1e-3f)
-        assertEquals("opt-out must preserve authored PALM_A.z", authoredPalm.z, out.getJoint(Joint.PALM_A).z, 1e-3f)
+        // must leave the authored palm/fingertips geometry untouched (the derivation is skipped).
+        //
+        // P12 WP-I: the "authored endpoint" reference is the FK value on the produced frame's node
+        // tree — `PALM_A` is a carrier-only extremity-derived joint, so the derivation writes the
+        // FLAT CARRIER and never the node. Reading it from the half-built carrier instead (as the
+        // pre-activation form did) is no longer the frame: under state 3 `build()` registers limb
+        // intent and the engine-owned stage realizes the limb (§12.7a). The claim — the opt-out
+        // preserves the authored endpoint verbatim — is unchanged and is now asserted on the
+        // published frame of the production path.
+        val ctx = PoseContext(0.5f, Side.LEFT, def)
+        val built = DeadHangPose().build(ctx)
+        built.overrideExtremityOrientation(Extremity.HAND_A)
+        val out = SkeletonPipeline(def).produceFrame(built).pose
+        val authored = palmNodeWorld(out)
+        val published = out.getJoint(Joint.PALM_A)
+        assertEquals("opt-out must preserve authored PALM_A.x", authored.x, published.x, 1e-3f)
+        assertEquals("opt-out must preserve authored PALM_A.y", authored.y, published.y, 1e-3f)
+        assertEquals("opt-out must preserve authored PALM_A.z", authored.z, published.z, 1e-3f)
+
+        // Control (non-vacuity): the SAME frame with the hand auto-owned IS derived — the carrier
+        // value departs from the authored FK value — so the preservation above is a real opt-out
+        // effect and not a derivation that happens to be a no-op.
+        val derivedFrame = SkeletonPipeline(def).produceFrame(DeadHangPose(), ctx).pose
+        val derivedAuthored = palmNodeWorld(derivedFrame)
+        val derivedPublished = derivedFrame.getJoint(Joint.PALM_A)
+        val shift = abs(derivedPublished.x - derivedAuthored.x) +
+            abs(derivedPublished.y - derivedAuthored.y) +
+            abs(derivedPublished.z - derivedAuthored.z)
+        assertTrue(
+            "control: an auto-owned hand must be engine-derived (observed authored->carrier shift=$shift)",
+            shift > 1e-3f
+        )
+    }
+
+    /** World position of the `PALM_A` node on a produced frame's tree (the authored FK value). */
+    private fun palmNodeWorld(pose: SkeletonPose): Vector3 {
+        fun find(node: SkeletonNode): SkeletonNode? {
+            if (node.joint == Joint.PALM_A) return node
+            for (c in node.children) {
+                find(c)?.let { return it }
+            }
+            return null
+        }
+        for (root in pose.roots) {
+            find(root)?.let { return it.worldPosition }
+        }
+        error("the produced frame must carry a PALM_A node")
     }
 
     @Test

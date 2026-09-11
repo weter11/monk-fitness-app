@@ -500,9 +500,12 @@ class SkeletonPose(
      *
      * B0 introduced this builder as the sole mutator; B1 made `limbTargets` live and consumed it:
      * every `bakeIkLimb` forwards its end joint + world target into the carrier, and the pipeline-owned
-     * `IkStage` reads it (gated by `IK_STAGE_ACTIVE`, default false). The remaining dead
+     * `IkStage` reads it (gated by `IK_STAGE_ACTIVE`, **true** since P12 — the engine stage is the
+     * Active Limb Solver in the deployed state 3, §12.0/§12.7a; `false` selects the authoring bake).
+     * The remaining dead
      * subset (`spineIntent`, `jointIntents`) is consumed in B2 (Finalizer) and B3 (posture). The
-     * builder remains additive substrate + a compile guard; no pose behavior changes when flags are off.
+     * builder remains additive substrate + a compile guard; registration effects run in both
+     * configurations.
      */
     class IntentBuilder(private val pose: SkeletonPose) {
 

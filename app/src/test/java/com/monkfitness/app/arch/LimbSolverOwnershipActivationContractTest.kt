@@ -12,6 +12,7 @@ import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonFactory
 import com.monkfitness.app.animation.SkeletonMath
 import com.monkfitness.app.animation.SkeletonNodes
+import com.monkfitness.app.animation.SkeletonPipeline
 import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.Vector3
 import com.monkfitness.app.animation.WorldTarget
@@ -70,6 +71,27 @@ class LimbSolverOwnershipActivationContractTest {
     @After
     fun restoreFlag() {
         IK_STAGE_ACTIVE = originalStage
+    }
+
+    /**
+     * Runs [block] in the **authoring configuration** (`IK_STAGE_ACTIVE = false`), restoring the
+     * previous configuration afterwards.
+     *
+     * P12 WP-I: the deployed default is now the ACTIVATED configuration, so a reference that must be
+     * produced BY the authoring bake has to name its configuration explicitly (§12.7a: the bake
+     * realizes only while the stage is disabled). This is not a weakening — the decode comparisons
+     * below are comparisons against the authoring implementation's realization of the same declared
+     * context, and R5 keeps both configurations supported (the activated side is driven explicitly by
+     * [runStage]). The state-agnostic registration assertions stay unconditional.
+     */
+    private fun <T> inAuthoringConfiguration(block: () -> T): T {
+        val original = IK_STAGE_ACTIVE
+        return try {
+            IK_STAGE_ACTIVE = false
+            block()
+        } finally {
+            IK_STAGE_ACTIVE = original
+        }
     }
 
     // ------------------------------------------------------------- A — realization gate (§12.7a)
@@ -172,12 +194,14 @@ class LimbSolverOwnershipActivationContractTest {
 
         val expected = SkeletonPose()
         val eNodes = hipTree(root)
-        bakeIkLimb(
-            eNodes.hipF.worldPosition, fullTarget, def.thighLength, def.shinLength,
-            Vector3(1f, 0f, 0f), authored, JointRotation(),
-            eNodes.kneeF, eNodes.ankleF, SkeletonMath.IKResult(), expected,
-            straight = true
-        )
+        inAuthoringConfiguration {
+            bakeIkLimb(
+                eNodes.hipF.worldPosition, fullTarget, def.thighLength, def.shinLength,
+                Vector3(1f, 0f, 0f), authored, JointRotation(),
+                eNodes.kneeF, eNodes.ankleF, SkeletonMath.IKResult(), expected,
+                straight = true
+            )
+        }
         snapshot(eNodes, expected)
 
         val actual = SkeletonPose()
@@ -243,10 +267,12 @@ class LimbSolverOwnershipActivationContractTest {
         nodes.roots.forEach { it.updateWorldTransforms(Vector3(), JointRotation()) }
 
         val expected = SkeletonPose()
-        bakeIkLimb(
-            root, target, 2f, 1f, Vector3(1f, 0f, 0f), IKConstraint.LegConstraint,
-            JointRotation(), nodes.kneeF, nodes.ankleF, SkeletonMath.IKResult(), expected
-        )
+        inAuthoringConfiguration {
+            bakeIkLimb(
+                root, target, 2f, 1f, Vector3(1f, 0f, 0f), IKConstraint.LegConstraint,
+                JointRotation(), nodes.kneeF, nodes.ankleF, SkeletonMath.IKResult(), expected
+            )
+        }
         snapshot(nodes, expected)
 
         val actual = SkeletonPose()
@@ -329,9 +355,13 @@ class LimbSolverOwnershipActivationContractTest {
                 "the bypass family depended on):\n" + offenders.joinToString("\n"),
             emptyList<String>(), offenders
         )
-        // Behavioral half: each converted pose's built carrier must have a node hierarchy whose
-        // knee nodes carry the SOLVED local offsets (hierarchy exists before the bake; the bake
-        // wrote authored nodes), and all four limbs registered as Limb Targets.
+        // Behavioral half: each converted pose's built carrier must declare its four limbs with a
+        // complete realization context, and the ACTIVE implementation must place them on the
+        // authored hierarchy. P12 WP-I: with the deployed default activated, the authoring bake
+        // registers without realizing (§12.7a), so the realized knee offset is observed on the
+        // PUBLISHED frame of the production path — the same claim ("the limb is realized on the
+        // authored tree, at the declared bone length, not reconstructed from solved positions"),
+        // measured on the configuration that now owns realization.
         for ((name, builder) in listOf<Pair<String, PoseBuilder>>(
             "DeadBug" to DeadBugPose(),
             "LegRaise" to LegRaisePose(),
@@ -340,17 +370,22 @@ class LimbSolverOwnershipActivationContractTest {
         )) {
             val pose = builder.build(PoseContext(0.5f, Side.LEFT, def))
             assertTrue("$name: authored hierarchy required", pose.roots.isNotEmpty())
-            val kneeF = findNode(pose.roots[0], Joint.KNEE_F)
-            assertTrue("$name: KNEE_F node must exist on the authored tree", kneeF != null)
-            assertTrue(
-                "$name: bake must have written the knee's LOCAL offset (thigh, ~L1 long)",
-                abs(kneeF!!.localPosition.mag() - def.thighLength) < 1f
-            )
+            assertTrue("$name: KNEE_F node must exist on the authored tree", findNode(pose.roots[0], Joint.KNEE_F) != null)
             assertEquals("$name: four limbs declared", 4, pose.limbTargets.size)
             for (t in pose.limbTargets) {
                 assertFalse("$name:${t.joint}: declared realization context required", t.length1.isNaN())
                 assertTrue("$name:${t.joint}: constraint declared", t.constraint != null)
             }
+            val published = SkeletonPipeline(def)
+                .produceFrame(builder, PoseContext(0.5f, Side.LEFT, def)).pose
+            val kneeF = findNode(published.roots[0], Joint.KNEE_F)
+            assertTrue("$name: KNEE_F node must survive publication", kneeF != null)
+            assertTrue(
+                "$name: the active limb-solver implementation must place the knee on the authored " +
+                    "hierarchy at the declared thigh length (L1) — got " +
+                    "${kneeF!!.localPosition.mag()} vs L1=${def.thighLength}",
+                abs(kneeF.localPosition.mag() - def.thighLength) < 1f
+            )
         }
     }
 

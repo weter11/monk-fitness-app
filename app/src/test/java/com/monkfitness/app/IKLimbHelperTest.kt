@@ -225,9 +225,13 @@ class IKLimbHelperTest {
     @Test
     fun testDeadHangHandsStayOnBar() {
         val def = SkeletonDefinition.DEFAULT_ADULT
-        val pose = DeadHangPose()
+        val pipeline = SkeletonPipeline(def)
         val context = PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)
-        val skeleton = pose.build(context)
+        val pose = DeadHangPose()
+        // P12 WP-I: the bar plane is honored by the production path (the declared contacts reach the
+        // engine-owned stage and the Phase-2 settlement pass), so the frame is produced through the
+        // pipeline rather than read off a half-built carrier.
+        val skeleton = pipeline.produceFrame(pose, context).pose
 
         // Hands are fixed contacts on the bar (y = 500): the contact-aware clamp must keep the
         // grip on the bar plane, not let the over-clamp drag it below.

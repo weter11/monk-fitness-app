@@ -20,7 +20,6 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 
 /**
@@ -57,12 +56,6 @@ class SingleActiveSolverEnforcementTest {
     private val def = SkeletonDefinition.DEFAULT_ADULT
     private val originalFlag = IK_STAGE_ACTIVE
     private val ctx = PoseContext(0f, Side.LEFT, def)
-
-    @Before
-    fun requireDeployedConfiguration() {
-        // Premise of the flag-OFF cases: today the authoring bake is the Active Limb Solver.
-        assertTrue("IK_STAGE_ACTIVE must be false in the deployed configuration", !originalFlag)
-    }
 
     @After
     fun restoreFlag() {

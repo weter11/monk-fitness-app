@@ -60,7 +60,6 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 import java.io.File
 
@@ -102,6 +101,7 @@ import java.io.File
  * | 8 | `STAMPS` — the complete §4.4 set: Clamp Stamp, Straight-Intent-Dropped, Bone-Lengths-Verified, Root Translation Delta, Root Rotation Delta, Hip ROM stamp ×2 (4 angles each), Bilateral Symmetry Delta, Bilateral Opposite Bend | **RAW-BIT exact** | §4.4 fixes each stamp's producer and merge rule. The Active Limb Solver is the FIRST writer of the three solver-family stamps in both configurations; the ConstraintSolver (max/OR/AND, merge-once) and the Finalizer (sole producers) are configuration-independent. A stamp that changes only because realization is *recorded* differently is an adjudicated entry, never a tolerance. |
  * | 9 | `SETTLEMENT` — Settlement Result presence, settled root world transform, declared-contact joint list, conflict outcome, and the PUBLISHED world position of every settled contact end-effector | **RAW-BIT exact** | RFC §5 R3 (Settled-Contact Guarantee) + §4.3: the Settlement Result's membership is fixed and the settled contacts must survive Phase 3 finalization. This is the contact/settlement coverage. |
  * | 10 | `PUBLISH` — the published instance is a distinct carrier instance / frame published | **exact** | R11 transfer chain: the returned Finalized Pose is the buffer the Finalizer publishes from, never the input carrier. |
+ * | 11 | `KINEMATIC` — the published kinematic-state marker (`isTransformsUpdated`) | **exact** | Added at WP-I: this was the ONE published field the observation did not compare, and it DID diverge — the engine stage consumes the build-window marker (§12.7a), so the finalizer's FK-refresh branch ran on every activated frame and wrote the truthful marker only onto its INPUT carrier (`copyFrom` had already captured the stale value into the published one). WP-I corrected the finalizer's bookkeeping (one write, no geometry change) and added this dimension so the equivalence claim covers the complete published state; a future divergence of the marker across configurations now fails here instead of hiding. |
  *
  * **Execution evidence is deliberately NOT an equivalence dimension.** The realization counters
  * (`limbSolverExecutions`, `limbRealizedLimbs`, `limbDuplicateRealizations`) are *per-configuration
@@ -145,14 +145,15 @@ class ActivationEquivalenceTest {
     private val def = SkeletonDefinition.DEFAULT_ADULT
     private val originalStage = IK_STAGE_ACTIVE
 
-    @Before
-    fun requireDeployedConfiguration() {
-        assertFalse(
-            "WP-H must not move production to the activated state: IK_STAGE_ACTIVE must be false " +
-                "in the deployed configuration (WP-I owns the flip)",
-            originalStage
-        )
-    }
+    // P12 WP-I (§12.8 disposition): this harness is CONFIGURATION-AGNOSTIC by construction — every
+    // test sets the flag explicitly for each observation and restores it in `finally` / `@After` —
+    // so its former WP-H premise ("the deployed default must still be flag-OFF") is gone. That
+    // state-2 pin now lives in exactly ONE place: the §12.10 activation gate
+    // (`ActivationGateTest.productionConfigurationIsStateThree`), which owns the deployed-state
+    // claim. The corpus remains the §12.9 proof FOR THE ACTIVATED CONFIGURATION as well: with the
+    // production default `true` it still compares flag-OFF (the legacy authoring configuration, a
+    // valid R5-selectable configuration) against flag-ON and requires raw-bit identity of the
+    // complete published observation.
 
     @After
     fun restoreStage() {
@@ -486,6 +487,17 @@ class ActivationEquivalenceTest {
 
         // 8. STAMPS — the complete §4.4 set.
         sections["STAMPS"] = stampLines(f.published)
+
+        // 8b. KINEMATIC — the published carrier's kinematic-state marker. Added at WP-I: this was
+        // the ONE published field the OFF/ON observation did not compare, and it DID diverge —
+        // the engine stage consumes the build-window marker (`isTransformsUpdated`) and the
+        // finalizer's refresh branch wrote the truth only onto its INPUT carrier, so a
+        // flag-ON frame published `false` where a flag-OFF frame published `true`. WP-I corrected
+        // the finalizer (bookkeeping only, no geometry) and extended this observation so the
+        // equivalence claim covers the complete published state instead of the observed subset.
+        sections["KINEMATIC"] = listOf(
+            "published.isTransformsUpdated=${f.published.isTransformsUpdated}"
+        )
 
         // 9. SETTLEMENT — settlement state + settled contacts at the published boundary.
         sections["SETTLEMENT"] = settlementLines(f)
@@ -960,27 +972,46 @@ class ActivationEquivalenceTest {
     }
 
     /**
-     * FINDING F-1 (recorded, not silently fixed) — **authoring realization evidence is
-     * carrier-local, and one build template returns a snapshot instead of its carrier.**
+     * FINDING F-1 (raised at WP-H) — **adjudicated at WP-I: the snapshot boundary is INTENTIONAL
+     * and is now codified.** Authoring realization evidence is carrier-local, and one build template
+     * returns a snapshot instead of its carrier.
      *
-     * `BaseThoracicPose.finalizeThoracicPose` returns `out.copyFrom(jointsBuffer)` (not the
-     * carrier) so that two samples of one builder cannot alias. The realization evidence fields
-     * are deliberately absent from `copyFrom` (P3 suppression: Published Pose State never inherits
-     * instrumentation — pinned by `RuntimeSolverOwnershipAuditTest`), so the returned carrier of
-     * the three `BaseThoracicPose` templates carries ZERO authoring evidence in the flag-OFF
+     * `BaseThoracicPose.finalizeThoracicPose` returns `out.copyFrom(jointsBuffer)` (not the carrier)
+     * so that two samples of one builder cannot alias. The realization evidence fields are
+     * deliberately absent from `copyFrom` (P3 suppression: Published Pose State never inherits
+     * instrumentation — pinned by `RuntimeSolverOwnershipAuditTest`), so the returned carrier of the
+     * three `BaseThoracicPose` templates carries ZERO authoring evidence in the flag-OFF
      * configuration even though the authoring bake did realize their limbs. Consequence: in
      * flag-OFF the pipeline's `count == 0 && !IK_STAGE_ACTIVE` disjunct is what admits those
      * frames, i.e. §12.7b's "exactly one window, proven by the counter" does not *prove* anything
-     * for that family in the diagnosis configuration.
+     * for that family in the legacy diagnostic configuration.
      *
-     * Scope of the finding — it is NOT an equivalence defect and NOT an activation blocker:
-     *  - the activated configuration (state 3) is fully covered: the stage registers its window on
-     *    the very carrier the pipeline inspects, so `count == 1` is real evidence there;
-     *  - the published frame is raw-bit identical across configurations (this corpus);
-     *  - no output, stamp, settlement or root value is affected.
-     * It is recorded here (and in the WP-H report) as an enforcement-coverage limitation of one
-     * build template in one configuration, for weter11 to disposition — WP-H does not add a second
-     * evidence mutation path (§15 forbids it) and does not weaken the check.
+     * **WP-I disposition (option A — codified, not silently fixed).** The boundary is the
+     * architectural consequence of two deliberate decisions, and correcting it would *create* the
+     * thing §15 forbids (a second evidence-mutation path):
+     *  - the instrumentation must NOT cross `copyFrom` (P3 suppression pattern; the published pose
+     *    is produced through `copyFrom`, so propagating the counter would make enforcement state
+     *    Published Pose State);
+     *  - the evidence is by construction carrier-local to the implementation that realized ON that
+     *    carrier: the thoracic bake realizes on `jointsBuffer`, so that is the carrier that must
+     *    carry (and does carry) its evidence — transporting it onto the returned snapshot would be
+     *    evidence transported between carriers, i.e. a second evidence path.
+     *
+     * It cannot invalidate state-3 ownership, and that is proved rather than asserted:
+     *  - with the engine stage ACTIVE the bake is gated (§12.7a), so no authoring realization exists
+     *    to hide — the stage registers its window and its per-limb mask on the very carrier the
+     *    pipeline inspects (`check(count == 1)`, the flag-OFF disjunct being unreachable), which is
+     *    why the acceptance below is evidence-backed;
+     *  - the flag-OFF admission cannot mask a second solver in the deployed state, and the family's
+     *    activated path is additionally subjected to the §14 double-realization rejection
+     *    (`ActivationGateTest.f1SnapshotFamilyCannotHideASecondRealization`);
+     *  - the *semantic* result of the family's realization is preserved across the boundary by
+     *    design — clamp / dropped / verified stamps ride `copyFrom` and the published frame is
+     *    raw-bit identical across configurations (this corpus).
+     *
+     * Corollary for any new family: **evidence is carrier-local** — a build template that returns a
+     * copy hides its own realization evidence, so it must be covered by the activated-configuration
+     * enforcement (engine-side evidence on the inspected carrier), never by the flag-OFF disjunct.
      */
     @Test
     fun snapshotReturningTemplatesCarryNoAuthoringEvidence() {
@@ -1054,13 +1085,16 @@ class ActivationEquivalenceTest {
     }
 
     /**
-     * §14 disposition pin — probes that are NOT valid as activation evidence must be NAMED, never
-     * silently skipped, assumed, or conditionally disabled. WP-I owns their retirement (the flag is
-     * still false), so WP-H pins two facts:
-     *  - the retirement classification exists in the frozen plan (§12.8: the two `IkStageTest`
-     *    byte-identity parity tests and `flagDefaultsFalse` are state-2 guarantees);
-     *  - those tests are still present and executing in the suite (nothing was deleted, `@Ignore`d,
-     *    `assume`d away or made conditional to let WP-H go green).
+     * §12.8 disposition pin — the WP-H form of this test pinned the state-2-only probes as *still
+     * present and unconditional* (nothing deleted, `@Ignore`d, `assume`d or flag-conditionalized
+     * just to make the harness green) while WP-I still owned their retirement. WP-I has now retired
+     * them (same commit as the flip), so the pin asserts the DISPOSITION instead:
+     *  - the frozen plan keeps naming the retirement classification (§12.8) — it is not amended;
+     *  - the three state-2-only probes are GONE from `IkStageTest` (retired, not hidden: no
+     *    `@Ignore`, no `assume`, nothing left asserting that state 2 is the default);
+     *  - each retired probe's coverage has a replacement that describes state 3:
+     *    the byte-identity parity pair → the §12.9 cross-configuration corpus (this class),
+     *    `flagDefaultsFalse` → the §12.7 configuration-surface audit + the §12.10 activation gate.
      */
     @Test
     fun retiredAndStateTwoOnlyProbesAreExplicitlyClassified() {
@@ -1071,11 +1105,12 @@ class ActivationEquivalenceTest {
             "§12.8 must keep naming the tests that become invalid at activation",
             planText.contains("### 12.8 Tests that become INVALID at activation")
         )
-        for (retired in listOf(
+        val retiredProbes = listOf(
             "productionPosesByteIdenticalStageOnVsOff",
             "contactPosesByteIdenticalStageOnVsOff",
             "flagDefaultsFalse"
-        )) {
+        )
+        for (retired in retiredProbes) {
             assertTrue(
                 "§12.8 must explicitly classify `$retired` as a state-2 guarantee replaced at WP-I " +
                     "(a retired probe has to be named, not silently dropped)",
@@ -1084,24 +1119,39 @@ class ActivationEquivalenceTest {
         }
 
         val ikStageTest = File(moduleRoot(), "src/test/java/com/monkfitness/app/IkStageTest.kt")
-        assertTrue("the state-2-only suite must still exist pre-flip", ikStageTest.isFile)
+        assertTrue("the IkStage suite must still exist (its carrier test is state-agnostic)", ikStageTest.isFile)
         val suiteText = ikStageTest.readText()
-        for (stateTwoOnly in listOf(
-            "productionPosesByteIdenticalStageOnVsOff",
-            "contactPosesByteIdenticalStageOnVsOff",
-            "flagDefaultsFalse"
-        )) {
-            assertTrue(
-                "`$stateTwoOnly` must still be present and unconditional until WP-I retires it " +
-                    "in the same commit that flips the flag",
-                suiteText.contains("fun $stateTwoOnly(")
+        for (retired in retiredProbes) {
+            assertFalse(
+                "`$retired` must be RETIRED at activation, not kept as a state-2 guarantee " +
+                    "(the suite now describes state 3)",
+                suiteText.contains("fun $retired(")
             )
         }
         assertFalse(
-            "no probe may be disabled to make the equivalence harness pass (no @Ignore / assume)",
+            "a retired probe may not be hidden instead of removed (no @Ignore / assume)",
             suiteText.contains("@Ignore") || suiteText.contains("assumeTrue") || suiteText.contains("assumeFalse")
         )
-        assertFalse("WP-H must not have moved the deployed default", IK_STAGE_ACTIVE)
+        assertTrue(
+            "the state-agnostic carrier coverage of the retired suite must survive",
+            suiteText.contains("fun limbTargetsCarrierIsLiveAfterB1(")
+        )
+
+        // The replacements must be real and reachable in the current suite, not asserted by name only.
+        val replacements = listOf(
+            "ActivationGateTest.kt" to "criterionFive_section129EquivalenceCorpusIsGreen",
+            "ActivationGateTest.kt" to "productionConfigurationIsStateThree",
+            "ActivationEquivalenceTest.kt" to "corpusIsEquivalentAcrossOwnershipConfigurations",
+            "RuntimeSolverOwnershipAuditTest.kt" to "ikStageFlagIsDeclarationOnlyAndReadOnlyAtRealizationDecisionSites"
+        )
+        for ((file, method) in replacements) {
+            val source = File(moduleRoot(), "src/test/java/com/monkfitness/app/arch/$file")
+            assertTrue("the replacement suite $file must exist", source.isFile)
+            assertTrue(
+                "`$file` must carry the replacement coverage `$method`",
+                source.readText().contains("fun $method(")
+            )
+        }
     }
 
     // =====================================================================================

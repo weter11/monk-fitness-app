@@ -397,6 +397,16 @@ class SkeletonPoseFinalizer(
                 pose.roots[i].flatten(outputPose)
             }
             pose.isTransformsUpdated = true
+            // P12 WP-I — the published carrier must report the SAME kinematic state as the
+            // skip branch does (where `copyFrom` above carries the input's `true`): `outputPose`
+            // was just refreshed from the hierarchy by the flatten above, so its flat joint array
+            // IS current. Without this write the published Pose State said "transforms not
+            // updated" for exactly the frames whose realization ran in the engine stage (the
+            // stage consumes the build-window marker), i.e. the flag-ON configuration published a
+            // different Kinematic State than flag-OFF for the same frame. Bookkeeping only: the
+            // FK/flatten decision above is already made, no geometry is affected, and no
+            // production reader consumes this field after publication.
+            outputPose.isTransformsUpdated = true
         }
         outputPose.roots = pose.roots
 

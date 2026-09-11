@@ -210,8 +210,9 @@ class SkeletonPipeline(
         var r3SettledContacts: PhaseBoundaryAsserts.SettledContactSnapshot? = null
         // B1 (IkStage extraction) — the pipeline-owned limb stage consumes the §1.1 `limbTargets`
         // carrier and re-derives each limb's local positions on the engine-owned node tree.
-        // (IK_STAGE_ACTIVE was excluded from Phase B — its flag is a future additive
-        // decision, not legacy removal — so the IkStage no-op gate is preserved as-is.) It runs
+        // P12 (state 3): this gate is the CONFIGURATION SELECTOR, not a legacy no-op — with the
+        // deployed default `true` the stage is the sole Active Limb Solver and the authoring bakes'
+        // realization branch is gated off (§12.7a). It runs
         // before the ConstraintSolver so contact limbs are re-baked from its targets ahead of the
         // root-repositioning pass, and before the Finalizer's FK.
         IkStage.apply(pose, definition)
@@ -336,7 +337,11 @@ class SkeletonPipeline(
         //    · flag-OFF (authoring config): the bake's per-build realization counts once (the
         //      authoring window is re-armed through the same registration path the sites call); the
         //      `count == 0` case survives ONLY for the legacy skipped-window reading (no registered
-        //      realization this frame — the config audit pins which configuration deploys).
+        //      realization this frame) — in particular a zero-limb/custom pose, which legitimately
+        //      opens no window while the stage is disabled. **In the deployed configuration
+        //      (state 3) the disjunct is unreachable** — `IkStage.apply` counts its window at entry,
+        //      so a frame that reaches the pipeline always reports exactly one window, and the
+        //      enforced formula there is exactly `count == 1` (§12.7b, §12.10 criterion 4).
         //  - PER-EXECUTION evidence (WP-G): the window count has a resolution limit — two
         //    realizations of ONE limb inside ONE window (a duplicated Limb Target handed to the
         //    stage, or a second `bakeIkLimb` call for the same joint in one build) leave the same

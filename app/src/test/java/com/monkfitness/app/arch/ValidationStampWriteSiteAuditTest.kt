@@ -67,8 +67,8 @@ class ValidationStampWriteSiteAuditTest {
         "IkStage.kt" to listOf(
             Triple(
                 "boneLengthsVerified", "pose.boneLengthsVerified = true",
-                "Sanctioned re-arm (F2) in the engine-side limb stage; dormant while " +
-                    "IK_STAGE_ACTIVE=false."
+                "Sanctioned re-arm (F2) in the engine-side limb stage — the ACTIVE realization " +
+                    "path in the deployed configuration (state 3, IK_STAGE_ACTIVE=true)."
             )
         ),
         "BaseValidationPose.kt" to listOf(

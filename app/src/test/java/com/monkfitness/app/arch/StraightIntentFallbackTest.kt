@@ -105,12 +105,23 @@ class StraightIntentFallbackTest {
 
         fun bake(straight: Boolean, targetX: Float): SkeletonPose {
             val pose = SkeletonPose()
-            bakeIkLimb(
-                root, targetX.let { Vector3(it, 0f, 0f) }, 2f, 1f,
-                Vector3(0f, 0f, 1f), constraint, JointRotation(),
-                nodes.kneeF, nodes.ankleF, SkeletonMath.IKResult(), pose,
-                straight = straight
-            )
+            // P12 WP-I: the read-fold asserted below is the AUTHORING BAKE's realized-instance
+            // reading, which is produced only while the engine stage is disabled (§12.7a). The
+            // deployed default is now the activated configuration, so this scope is explicit rather
+            // than assumed; the activated producer of the same reading is covered by the
+            // stage-window test in this file (`activeIkStageFoldsFallbackAndCountsOneExecution`).
+            val original = IK_STAGE_ACTIVE
+            try {
+                IK_STAGE_ACTIVE = false
+                bakeIkLimb(
+                    root, targetX.let { Vector3(it, 0f, 0f) }, 2f, 1f,
+                    Vector3(0f, 0f, 1f), constraint, JointRotation(),
+                    nodes.kneeF, nodes.ankleF, SkeletonMath.IKResult(), pose,
+                    straight = straight
+                )
+            } finally {
+                IK_STAGE_ACTIVE = original
+            }
             return pose
         }
 

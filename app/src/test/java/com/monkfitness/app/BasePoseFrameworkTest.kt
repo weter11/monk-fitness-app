@@ -39,13 +39,16 @@ class BasePoseFrameworkTest {
         val def = SkeletonDefinition.DEFAULT_ADULT
         val context = PoseContext(0.5f, Side.LEFT, def)
 
-        // Evaluate builds at progress 0.5f (bottom of rep)
-        val sPose = standardPose.build(context)
-        val wPose = widePose.build(context)
-        val kPose = kneePose.build(context)
-        val dPose = declinePose.build(context)
-        val dmPose = diamondPose.build(context)
-        val mPose = militaryPose.build(context)
+        // Evaluate the PUBLISHED frames of the production pipeline at progress 0.5f (bottom of rep).
+        // P12 WP-I: `build()` alone registers limb intent (§12.7a) — the hands are realized by the
+        // engine-owned stage, so hand-alignment readings must come from the frame the engine
+        // produces. The claim below (the variants differ in hand placement) is unchanged.
+        val sPose = SkeletonPipeline(def).produceFrame(standardPose, context).pose
+        val wPose = SkeletonPipeline(def).produceFrame(widePose, context).pose
+        val kPose = SkeletonPipeline(def).produceFrame(kneePose, context).pose
+        val dPose = SkeletonPipeline(def).produceFrame(declinePose, context).pose
+        val dmPose = SkeletonPipeline(def).produceFrame(diamondPose, context).pose
+        val mPose = SkeletonPipeline(def).produceFrame(militaryPose, context).pose
 
         assertNotNull(sPose)
         assertNotNull(wPose)

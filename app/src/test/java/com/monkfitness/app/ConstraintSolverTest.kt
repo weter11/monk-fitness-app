@@ -10,8 +10,8 @@ import org.junit.Test
 /**
  * PR-04 — Global contact-constraint / root-repositioning layer.
  *
- * These exercises drive the *render* path (build -> SkeletonPoseFinalizer, which runs the
- * [ConstraintSolver]) so the fixed contacts registered by the validation poses are honored:
+ * These exercises drive the *production* path (build → IkStage → SkeletonPoseFinalizer, which runs
+ * the [ConstraintSolver]) so the fixed contacts registered by the validation poses are honored:
  * the root/pelvis is derived from the contacts rather than a fixed authored value, and every
  * non-contact limb follows rigidly. The four reference poses must hold their contacts without
  * penetration or fold, and the solver must be deterministic (no flicker).
@@ -22,8 +22,13 @@ class ConstraintSolverTest {
     private val context = PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)
 
     private fun finalized(pose: BaseValidationPose): SkeletonPose {
-        val raw = pose.build(context)
-        return SkeletonPoseFinalizer(def).finalize(raw)
+        // P12 WP-I: the production path for a built carrier is the PIPELINE
+        // (build → IkStage → ConstraintSolver → Finalizer). Before activation the authoring bake
+        // realized the limbs inside `build()` and the solver was the only missing stage, so
+        // `build()` + `finalize()` was an equivalent replication; under state 3 the limbs are
+        // realized by the engine-owned stage, which only the pipeline drives (§12.7a) — a direct
+        // finalize would observe a frame whose limbs were never realized.
+        return SkeletonPipeline(def).produceFrame(pose, context).pose
     }
 
     private fun assertFinite(pose: SkeletonPose, label: String) {

@@ -17,7 +17,6 @@ import com.monkfitness.app.validation.poses.MiddleSplitPose
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 import java.io.File
 
@@ -31,7 +30,9 @@ import java.io.File
  *
  * **A. Static (source-structure) checks.**
  *  1. `IK_STAGE_ACTIVE` remains a CONFIGURATION SURFACE: its only production write is the
- *     declaration itself, whose default WP-I flips once. Reads are confined to the
+ *     declaration itself, whose default WP-I flipped once (state 3 — the deployed value is asserted
+ *     statically here and at runtime by `ActivationGateTest.productionConfigurationIsStateThree`).
+ *     Reads are confined to the
  *     realization-decision sites (the engine stage gate, the three registered bake gates, the
  *     pipeline's enforcement block).
  *  2. The realization evidence has exactly ONE registration path —
@@ -64,10 +65,12 @@ class RuntimeSolverOwnershipAuditTest {
     private val def = SkeletonDefinition.DEFAULT_ADULT
     private val originalFlag = IK_STAGE_ACTIVE
 
-    @Before
-    fun requireDeployedConfiguration() {
-        assertTrue("IK_STAGE_ACTIVE must be false in the deployed configuration", !originalFlag)
-    }
+    // P12 WP-I (§12.8 disposition): the former P4 premise ("the deployed configuration is flag-OFF")
+    // is retired together with the state-2 default it pinned. Every behavioural case in this audit
+    // sets the configuration it is about explicitly, and the deployed-state claim now lives in
+    // exactly two authoritative places: the configuration-surface test below (the DECLARATION's
+    // default, statically) and `ActivationGateTest.productionConfigurationIsStateThree` (the loaded
+    // runtime value).
 
     @After
     fun restoreFlag() {
@@ -102,6 +105,19 @@ class RuntimeSolverOwnershipAuditTest {
             0, writes
         )
         assertEquals("the flag must be declared exactly once", 1, declarations)
+        // §12.8 disposition of the retired `IkStageTest.flagDefaultsFalse`: the configuration
+        // SURFACE owns the deployed default now (this static half) together with the runtime gate
+        // (`ActivationGateTest.productionConfigurationIsStateThree`). Asserting the declaration's
+        // default here is what makes the flip reviewable: a state-2 default cannot come back
+        // unnoticed, and it is the same single declaration the write/read audit above counts.
+        val declarationLine = sources.entries.first { it.key.endsWith("/IkStage.kt") }.value
+            .map { stripComment(it).trim() }
+            .single { it.startsWith("var IK_STAGE_ACTIVE") }
+        assertEquals(
+            "the deployed production default must be the state-3 value (§12.0 state 3: the engine " +
+                "stage is the Active Limb Solver): $declarationLine",
+            "true", declarationLine.substringAfter("=").trim()
+        )
         // Reads are legal only at the realization-decision sites: the stage gate, the three
         // registered bake realization gates, and the pipeline's R5 window check.
         assertEquals(
@@ -551,6 +567,34 @@ class RuntimeSolverOwnershipAuditTest {
         assertEquals("only the test-only authoring probe may call the registered bake", 2, bakeCalls)
         assertEquals("only the §9 boundary test may invoke the settlement pass", 1, settlementCalls)
 
+        // WP-I §14 addition — the §12.10 ACTIVATION GATE is audited by the same rules, with exactly
+        // ONE allow-listed intent mutation: the duplicated Limb Target it injects to prove that the
+        // PRODUCTION enforcement path rejects a real second realization of one limb (the injection
+        // must be registered intent, never a fabricated evidence value). Everything else stays
+        // forbidden, so the gate's failure proofs cannot come from a direct solver or stage call.
+        val gateFile = "ActivationGateTest.kt"
+        val gate = testSources().entries.firstOrNull { it.key.endsWith("/$gateFile") }
+            ?: error("the §12.10 activation gate must exist in the arch test package")
+        val gateForbidden = forbidden.filterNot { it == "limbTargets.add" }
+        val gateOffenders = mutableListOf<String>()
+        var gateInjections = 0
+        for ((i, raw) in gate.value.withIndex()) {
+            val line = stripComment(raw)
+            if (line.isEmpty()) continue
+            for (pattern in gateForbidden) if (line.contains(pattern)) gateOffenders += "$gateFile:${i + 1} $pattern"
+            if (line.contains("limbTargets.add(")) gateInjections++
+        }
+        assertEquals(
+            "the activation gate must drive the PRODUCTION path only (no direct solver/stage call, no " +
+                "evidence registration, no geometry reconstruction):\n" + gateOffenders.joinToString("\n"),
+            emptyList<String>(), gateOffenders
+        )
+        assertEquals(
+            "the gate's only intent mutation is the duplicated Limb Target used to prove that the " +
+                "production enforcement rejects a second realization",
+            2, gateInjections
+        )
+
         // (2) no legacy reconstruction consumer has returned.
         val legacyConsumers = sources.filterValues { lines ->
             lines.any { stripComment(it).contains("fromJointPositions(") }
@@ -598,7 +642,8 @@ class RuntimeSolverOwnershipAuditTest {
         assertEquals(
             "realization evidence may only be READ in tests (never written) — a test that writes " +
                 "the evidence fields directly would fabricate enforcement proof: $testWriters",
-            setOf("ActivationEquivalenceTest.kt", "RuntimeSolverOwnershipAuditTest.kt",
+            setOf("ActivationEquivalenceTest.kt", "ActivationGateTest.kt",
+                "RuntimeSolverOwnershipAuditTest.kt",
                 "SingleActiveSolverEnforcementTest.kt", "DefaultPoleOwnershipTest.kt",
                 "StraightIntentFallbackTest.kt", "ValidationOwnershipReCertificationTest.kt",
                 "LimbSolverOwnershipActivationContractTest.kt"),
