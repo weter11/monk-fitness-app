@@ -126,8 +126,17 @@ class RuntimeArchitectureBaselineTest {
 
     private object PushUpGolden {
         val pelvis = floatArrayOf(60.00885f, 53.970253f, 0.0f)
-        val handA = floatArrayOf(-6.0209026f, 55.639805f, -68.99999f)
-        val handP = floatArrayOf(-6.0209026f, 55.639805f, 68.99999f)
+        // B-8 (cold-frame limb realization) — GOLDEN UPDATE, responsible change named per the
+        // fixture's golden-update policy. This fixture publishes the COLD FIRST frame of a fresh
+        // pose on a fresh pipeline (`produceFrame(builder.build(context()))`), which is exactly the
+        // frame B-8 corrected: the arm chain now realizes in the trunk frame the pose itself
+        // declares (and publishes) instead of the pelvis-only frame that the Finalizer's Phase-3
+        // fallback replaced after the realization. handA/handP therefore moved from
+        // (-6.0209026, 55.639805, ±68.99999) — floating 55.6 units above the floor — onto their
+        // authored target (-58.3216, 0, ±69). Pelvis/feet are unchanged, and the SETTLED rep is
+        // unchanged (byte-identical, see ColdFrameLimbRealizationTest).
+        val handA = floatArrayOf(-58.321594f, 7.6293945E-6f, -68.99999f)
+        val handP = floatArrayOf(-58.321594f, 7.6293945E-6f, 68.99999f)
         val ankleF = floatArrayOf(268.00098f, 25.0f, -22.0f)
         val ankleB = floatArrayOf(268.00098f, 25.0f, 22.0f)
         val toeF = floatArrayOf(285.57257f, 42.5716f, -22.0f)

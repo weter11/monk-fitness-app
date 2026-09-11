@@ -92,6 +92,20 @@ class IsometricSidePlankPose : BasePlankPose() {
         SkeletonMath.rotAround(shoulderA!!.localPosition, spineAxis, spineRoll, shoulderA!!.localPosition)
         SkeletonMath.rotAround(shoulderP!!.localPosition, spineAxis, spineRoll, shoulderP!!.localPosition)
 
+        // B-8 — the girdle roll above is a statement about the pose's TRUNK frame as well: rolling
+        // the shoulder offsets 90° about the local spine axis moves the shoulder line onto the
+        // chest's local X, and the chest's local -Z is that shoulder line, so the chest frame must
+        // roll with it. The trunk frame is pose-owned Phase-0 intent (ARCHITECTURE_V2 §4.1), and
+        // declaring it here (node write + the paired §1.1 chest carrier, the form every other
+        // authored articulation uses) makes it authoritative BEFORE the Phase-1 limb realization.
+        // Left unauthored, the frame was established only by the Finalizer's Phase-3 fallback
+        // `reconstructChestFrame` — which derives exactly this roll from this layout — i.e. AFTER
+        // the arms had been realized, and its re-FK then dragged the realized arm chain with the
+        // reconstructed thorax: on a builder's first build the planted forearm landed 28 units off
+        // target (B-8).
+        chest!!.localRotation.set(axisY, spineRoll)
+        declareJointIntent(Joint.CHEST, JointRotation(axisY, spineRoll))
+
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
         // --- 3. Legs: stacked, bottom foot planted -----------------------------
