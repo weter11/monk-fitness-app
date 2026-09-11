@@ -129,6 +129,53 @@ was absent from the sandbox. Geometry-preserving changes (poles, shoulder placem
 removal, metadata) are expected byte-identical; the M14 decline tilt is a deliberate geometry change
 that requires the `:app:testDebugUnitTest` push-up suite to confirm before marking M14 fully resolved.
 
+### DONE — B-8 cold-frame limb realization (PR #229)
+
+Cross-family Solver/Finalizer-interaction finding (§1.4) from the P11 whole-system audit
+(`docs/AUDIT_P11_WHOLE_SYSTEM.md` on the P11 branch), recorded here because it changes production
+geometry on `main`. Pose-side fix only: no engine file, no phase order, no ownership change.
+
+- **Defect.** A pose that leaves its trunk (chest) frame unauthored realized its limbs in the
+  pelvis-only frame on the **cold first frame**. The engine's trunk frame for a non-upright trunk is
+  produced by the Finalizer's `reconstructChestFrame` — a Phase-3 Finalization-phase *fallback*
+  (`ARCHITECTURE_V2` §3 PHASE 3, §2.4, INVARIANT 4) — i.e. **after** the Phase-1 limb realization had
+  baked the arm chain; the fallback then re-FK'd the chest subtree and dragged the realized arms with
+  it. Frames ≥ 1 only looked correct because the fallback's node write survived in the reused builder
+  buffer and was read back as *authored* intent (Issue F), so steady-state correctness was a property
+  of cross-build buffer reuse, not of the frame.
+- **Measured (`origin/main` @ `4cd8d9a`, progress 0, cold first frame vs settled, ELBOW_A/HAND_A).**
+  `pushup_standard` 74.31/160.33, `pushup_wide` 79.50/157.05, `pushup_military` 92.91/155.33,
+  `pushup_diamond` 89.80/157.05, `pushup_knee` 82.01/108.22, `pike_pushup_standard` 92.21/145.00,
+  `side_plank_standard` 62.22/28.00; the standard plank's hands sat **108.84** units above the floor.
+  Control: `pushup_decline` authors its trunk pitch, the guard early-returns, delta 0.00/0.00.
+- **Fix (ordering at the correct boundary).** The trunk frame is pose-owned Phase-0 intent
+  (`ARCHITECTURE_V2` §4.1), so the affected families **declare** it through the single existing path —
+  chest node write + its §1.1 joint carrier: `BasePushUpPose.declareFlatPlankTrunkFrame()` (both pivot
+  branches, plus `PikePushUpPose`, which authors its own `onBuild`) and `IsometricSidePlankPose` (its
+  girdle roll is the layout statement the frame must follow). The Finalizer keeps the fallback and its
+  exclusivity; the fallback's trigger condition (identity chest) is simply no longer met for these
+  poses, and a member that authors its own trunk pitch keeps it.
+- **After.** Cold-vs-settled limb delta **0.000000** for every joint of every fixed family;
+  `ColdFrameLimbRealizationTest` **7/7** (RED 3/7 pre-fix with the numbers above). Full suite
+  `origin/main` 104 classes / 457 tests → **105 / 464 / 0F / 0E / 0S**. Whole-corpus dump (53 poses ×
+  5 progress × cold+settled = 17,490 joint-lines): **200 differ** — the six flat-plank members on the
+  COLD frame only (byte-identical on every later frame), `side_plank_standard` additionally
+  ≤ 4.6e-5 units on settled frames (authored analytic axis vs the derivation's float-rounded axis), and
+  the other **46 poses byte-identical everywhere**. One P0 golden updated
+  (`RuntimeArchitectureBaselineTest.PushUpGolden`, documented in the fixture).
+- **T-7 relation (measured, three trees, same corrected sweep md5 `97144f78…`).** `origin/main` + T-7 →
+  **32 ERRORs (28 arm-chain + 4 head/neck)**; B-8 + T-7 → **4 ERRORs (0 arm-chain)**; B-7 + B-8 + T-7 →
+  **0 ERRORs (green)**. B-8 was the arm-chain blocker; the correction stays its own change.
+- **Recorded, NOT fixed — B-8b.** `thoracic_extension_reps` is **not** a B-8 victim (its trunk frame is
+  already authoritative — identity and frame-invariant). Its residual (ELBOW_A 29.93 / HAND_A 17.91) is
+  a different defect: the pose derives both arm targets from `neck!!.worldPosition` while the neck's
+  local offsets are written by the engine (`resolveHeadTarget`, Phase 7), so the first build realizes
+  against a target it never sees again (declared-target delta 16.67 units). Pinned by attribution in
+  `ColdFrameLimbRealizationTest` so it cannot be masked or mis-attributed.
+- **Still open (P11 backlog, unchanged).** T-7, B-2 (`PoseMetadata.supportContacts` write-only), B-3
+  (`*_TOES`/`*_FOREARM` never consulted), B-4 (three contradictory SupportPoint↔Joint maps), B-5
+  (renderer overload passes ∅), B-6 (`EnvironmentPenetrationTest` vacuity), §12.7 flag lifecycle.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
