@@ -10,7 +10,15 @@ class HipCarsPose : PoseBuilder {
         durationSeconds = 3.0f,
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
+        // M8 — the STANCE foot (B/right: the pose's own comment names F "the active working leg"
+        // and B "the support leg") rests on the declared ground for the whole rep. The circling
+        // foot is deliberately NOT declared: the foot derivation has no "planted" gate, so
+        // declaring a foot the exercise lifts would drive it against a surface it has left.
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(SupportContact.RIGHT_FOOT)
+        )
     )
 
     private var roots: List<SkeletonNode>? = null
@@ -73,7 +81,8 @@ class HipCarsPose : PoseBuilder {
         // B3 — STANDING posture: the solver owns the coarse pelvis height (seed == standH).
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.STANDING)
 
-        val standH = def.shinLength + def.thighLength + 25f
+        // standH is no longer read: every target below is authored in the chain root's own frame
+        // (M8), so the pose does not need to name the solver-owned root height.
         pelvis!!.localPosition = Vector3(0f, 0f, 0f)
         declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), 0f)
 
@@ -89,27 +98,33 @@ class HipCarsPose : PoseBuilder {
         // Compute Spine transforms
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
-        // 1. Leg kinematics
-        // Support leg (Background side P) stays perfectly static and flat on the ground
-        val targetAnkleB = Vector3(0f, def.foot.ankleHeight, def.hipWidth * 1.2f)
-        bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
+        // M8 — the working leg keeps the author's own circle, expressed against the standing foot
+        // line this pose now authors (the chain root's frame), so the lift is realizable as written
+        // instead of being clamped to the chain's minimum reach. The STANCE leg's ankle sits one
+        // reachable leg-span below the hip: the root height is solver-owned (B3: the STANDING intent
+        // pins the pelvis after this build), so a floor-anchored Y would sit a whole standing root
+        // height above the hip and the solver would relocate the effector along that up direction.
+        val legSpan = SkeletonMath.maxReach(def.thighLength, def.shinLength, def.legIKConstraint)
+        val stanceAnkleB = Vector3(0f, hipB!!.worldPosition.y - legSpan, def.hipWidth * 1.2f)
+        bakeIkLimb(hipB!!.worldPosition, stanceAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 
-        // Active working leg (Foreground side F) circles smoothly in 3D space
+        // Active working leg (Foreground side F) circles smoothly in 3D space, lifted 18 ± 12 above
+        // the standing foot line the stance leg just declared.
         val theta = context.progress * 2.0f * kotlin.math.PI.toFloat()
         val circleRadiusX = 15f
         val circleRadiusY = 12f
         val activeAnkleX = circleRadiusX * cos(theta)
-        // Keep active ankle lifted safely above ground to prevent penetration (def.foot.ankleHeight + 18f min height)
-        val activeAnkleY = def.foot.ankleHeight + 18f + circleRadiusY * sin(theta)
+        val activeAnkleY = stanceAnkleB.y + 18f + circleRadiusY * sin(theta)
         val targetAnkleF = Vector3(activeAnkleX, activeAnkleY, -def.hipWidth * 1.4f)
 
         bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
-        // 2. Arms stay static on hips
-        val targetHandA = Vector3(0f, standH - 20f, -def.shoulderWidth - 5f)
-        val targetHandP = Vector3(0f, standH - 20f, def.shoulderWidth + 5f)
+        // 2. Arms stay static on hips (M8 — measured from the shoulder the pose owns at build time;
+        // `standH − 20` was the floor-anchored form of the same point).
+        val targetHandA = Vector3(0f, shoulderA!!.worldPosition.y - def.torsoLength - 20f, -def.shoulderWidth - 5f)
+        val targetHandP = Vector3(0f, shoulderP!!.worldPosition.y - def.torsoLength - 20f, def.shoulderWidth + 5f)
 
         bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, JointRotation(), elbowA!!, handA!!, armABuffer, jointsBuffer)
         bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, JointRotation(), elbowP!!, handP!!, armPBuffer, jointsBuffer)

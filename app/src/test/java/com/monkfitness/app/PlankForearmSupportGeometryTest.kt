@@ -608,7 +608,17 @@ class PlankForearmSupportGeometryTest {
          * × every joint XYZ, `8415` rows, full float bits) differs in exactly `268` rows, all of them
          * `KettlebellSwingPose` + `BurpeePose`; the other 49 classes are byte-identical, which
          * `M6M7SwingBurpeeGeometryTest.UNAFFECTED_CORPUS_DIGEST` (`-2275091341366878044`) gates directly.
+         *
+         * **Re-baselined again by the M8/M9/M10 support-declaration pass**
+         * (`fix/m8-m9-m10-support-declaration`): the 17 classes that pass declares/ re-authors
+         * (7 upper/dynamic + the stretch family + the core/hip poses) all live inside this "every
+         * pose outside the plank family" corpus. Observed RED on the pre-fix value
+         * `3799530965937589305`, and again on the M6/M7 value `-8819852136411858964` after the pass was
+         * rebased onto the M6/M7 merge (this pass originally branched off `fc65695`), before the
+         * re-baseline below. The pass's own blast-radius guard
+         * (`M8M9M10SupportDeclarationTest.UNAFFECTED_CORPUS_DIGEST`) excludes exactly its 17 classes
+         * and is measured equal on the pre-fix and post-fix trees.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -8819852136411858964L
+        const val UNAFFECTED_CORPUS_DIGEST = 2399534090990759846L
     }
 }

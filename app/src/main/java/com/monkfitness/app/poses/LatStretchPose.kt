@@ -22,6 +22,13 @@ class LatStretchPose : PoseBuilder {
                     depth = 40f
                 )
             )
+        ),
+        // M9 — the planted feet on the ONE canonical support channel (`metadata.support`). The WALL
+        // contact (the hand/forearm the stretch hangs off) is not declared: the wall's contact
+        // plane is the M15 finding's territory, not this pass's.
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(SupportContact.LEFT_FOOT, SupportContact.RIGHT_FOOT)
         )
     )
 

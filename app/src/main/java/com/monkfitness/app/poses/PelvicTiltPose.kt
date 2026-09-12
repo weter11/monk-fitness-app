@@ -10,7 +10,13 @@ class PelvicTiltPose : PoseBuilder {
         durationSeconds = 3.0f,
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.EASE_IN_OUT,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
+        // M10 — the planted feet (supine pelvic tilt: the feet are the ground contact through the
+        // whole rep), on the ONE canonical support channel (`metadata.support`).
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(SupportContact.LEFT_FOOT, SupportContact.RIGHT_FOOT)
+        )
     )
 
     private var roots: List<SkeletonNode>? = null

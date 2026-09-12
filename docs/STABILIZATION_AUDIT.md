@@ -1343,20 +1343,182 @@ statement is recorded below.
   `bakeIkLimb` or carrier change), the renderer, the poses' metadata/declarations (`M8`/`M9`/`M10`),
   M11–M15, and the P2 cleanup list.
 
+### DONE — M8 + M9 + M10 the support-model declaration pass (+ M8's authored-frame correction) (branch `fix/m8-m9-m10-support-declaration`; production declarations + production geometry)
+
+Branch created off `fc65695` (the M3/M5 merge, PR #239) and **rebased onto the M6/M7 merge `eea705c` (PR #240)** when that landed — all numbers below re-measured on that merged base (the rebase moved this pass's three corpus digests, its blast-radius row counts, and the burpee's interaction with the re-authored M7 plant; the pose-side correction itself is byte-unchanged, verified by `git diff` on `app/src/main`).
+
+The group's three findings re-measured against the current tree first. **Two of them share ONE root
+cause; M8's second clause is a different one** — recorded here as measured, not as the audit row
+reads.
+
+- **Root cause 1 (M9's 8 stretch poses + M10's 3 core/hip poses + M8's declaration half).** These
+  poses never wrote their support model, so the engine published an EMPTY one for every one of them.
+  **The channel was never broken** — `PoseMetadata.support` (`SupportDefinition.pivot` + `.contacts`)
+  is the ONE declaration channel since B-2; its `supportPoints` accessor is resolved once per frame by
+  `SkeletonPipeline`'s single R8 injection into `SkeletonPose.supportedPoints`, and that carrier is
+  what `SkeletonPoseFinalizer.declaredFootSupportPoint` / `declaredHandSupportPoint` /
+  `supportPlaneNormalFor` (and every validator) consume. Measured pre-fix: `supportedPoints = []` for
+  all 18 at every sampled progress under both frame conditions, and the declaration-driven
+  derivation was therefore inert for all 18. **Authoritative channel: `metadata.support`. Consumed
+  representation: `SkeletonPose.supportedPoints`.** No consumer is defective; the declaration itself
+  was missing. (`exerciseFamily`/`bodyOrientation` remain vocabulary with no production consumer;
+  `support.pivot` is read by the push-up family's `KNEES` branch only; `HIPS`/`PELVIS`/`BACK`,
+  `*_KNEE` and `*_ELBOW` resolve to joints but no derivation consumes them — the pass's vocabulary
+  gap, item (a) below.)
+- **Root cause 2 (M8's second clause — "IK targets never run through `clampTargetToReach` →
+  unreachable authoring silently solver-clamped").** 5 of the 7 upper/dynamic poses
+  (`ArmCirclesPose`, `FacePullPose`, `ScapularRetractionPose`, `WallSlidesPose`, `HipCarsPose`)
+  author their limb IK targets as ABSOLUTE world points in the floor-anchored frame the pose itself
+  used to write (`targetAnkle = (0, def.foot.ankleHeight, ±z)`,
+  `handY = standH + def.torsoLength + …`), while `pelvis.localPosition` is `(0,0,0)` and the coarse
+  root height is written by the ConstraintSolver's STANDING posture pin **after** `build` (B3). At
+  build time the hip is therefore at the origin and the authored ankle target sits ~15 units ABOVE
+  it — below the chain's minimum reach on the wrong side — so the solver relocates the effector
+  outward along that upward direction. Measured published frames: `PELVIS/HIP_F 235.0`, `KNEE_F
+  281.8595`, `ANKLE_F 288.7450` (the legs realized pointing UP, feet `273` units above the declared
+  floor), `maxIkClampAmount` `40.377…220.538`, and the arms frozen at maximum reach — an arm circle
+  that must sweep a `253`-unit diameter measured a `36.51`-unit Y span; the wall slide measured
+  `0.19` (the "latent bug" `StaticHoldStabilityTest`'s own note had already flagged against the
+  BPS's shoulder sliding). No support declaration can be truthful for geometry like that: the
+  declaration pass and this correction are one change.
+- **Fix (pose-side only — no engine file, no solver path, no carrier, no API, no new global state).**
+  1. **17 declarations on the canonical channel:** M8 — `ArmCirclesPose`/`FacePullPose`/
+     `ScapularRetractionPose`/`WallSlidesPose`/`KettlebellSwingPose` = both feet; `HipCarsPose` =
+     the stance foot only (`RIGHT_FOOT`: the foot derivation has no "planted" gate, so declaring the
+     circling foot would drive a limb that has left the mat); `BurpeePose` = both hands (the hand
+     derivation IS self-gating — `planted` = hand below elbow — so the stand/jump phases are
+     untouched). M9 — `CouchStretchPose` = the front foot (the rear contact is the shin/knee, no
+     `*_KNEE` derivation); `HalfKneelingStretchPose`/`LatStretchPose` = both feet;
+     `DynamicWorldsGreatestStretchPose` = both feet + the support hand `RIGHT_HAND` (the reaching A
+     hand is not declared); `ProneCobraStretchPose`/`ReverseSnowAngelPose` = both hands + both feet;
+     `SupermanPose` = both hands (the bow lifts the legs well clear; the foot derivation is
+     ungated). M10 — `GluteBridgePose`/`PelvicTiltPose` = both feet; `MountainClimberPose` = both
+     hands. The wall contacts (`WallSlidesPose`, `LatStretchPose`) are deliberately NOT declared —
+     the wall's contact plane is M15's finding.
+  2. **The 5 standing poses' limb targets re-expressed in the frame the pose actually owns:** each
+     target relative to the chain root (`hip*.worldPosition` / `shoulder*.worldPosition`) with the
+     span taken from the engine's own `SkeletonMath.maxReach(...)`, and the arm targets the chain's
+     `30°` minimum-flexion stop still forbids routed through the engine's own
+     `SkeletonMath.clampTargetToReach` (the R2 reach-target helper the rest of the corpus authors
+     with). Authored intent is preserved: `HipCars` keeps its circle (now lifted above the standing
+     foot line it declares), `FacePull` its `−10 → 0` travel from the shoulder, `WallSlides` its
+     `−10 → +60` slide, `ArmCircles` its circle centred on the shoulder, `HipCars`' hands their
+     hip line.
+- **Measured, published frames, pre-fix → post-fix (`p=0.5`, COLD; the same numbers hold at every
+  sampled progress).**
+
+  | pose | `ANKLE_F` | `TOE_F` | `HAND_A` | `maxIkClampAmount` |
+  |---|---|---|---|---|
+  | `ArmCirclesPose` | `288.745 → 29.247` | `297.801 → 29.247` | `480.455 → 355.0` | `124.935 → 0.047` |
+  | `FacePullPose` | `288.745 → 29.247` | `297.801 → 29.247` | `497.721 → 345.0` | `87.499 → 0.047` |
+  | `ScapularRetractionPose` | `288.745 → 29.247` | `297.801 → 29.247` | `497.494 → 327.3` | `72.805 → 0.047` |
+  | `WallSlidesPose` | `288.745 → 29.247` | `297.801 → 29.247` | `497.659 → 387.0` | `117.688 → 0.047` |
+  | `HipCarsPose` | `284.550 → 47.200` (the circling leg; the stance foot lands on the `29.247` line) | `284.550 → 47.200` | `450.0 → 215.0` (hands on the hip line) | `40.377 → 0.047` |
+
+  The declared hand contacts are now also realized IN the plane their declaration names (the
+  declaration reaching its consumer): `ProneCobraStretchPose` `FINGERTIPS_A` `−6.990 → 14.93`
+  (level with its `HAND_A`), `DynamicWorldsGreatestStretchPose` `FINGERTIPS_P` `−12.900 → 7.45`,
+  `ReverseSnowAngelPose` `8.659 → 15.000`, `SupermanPose` `6.592 → 10.000`.
+- **Regression coverage (fresh runs).** New `M8M9M10SupportDeclarationTest` (**8 tests**): the group's
+  declaration census on the canonical channel; the declared model reaching the published carrier on
+  every sampled progress under both frame conditions; the corrected family's legs realized DOWN to
+  the declared support (and each declared foot in its plane); the corrected family's limb targets
+  realizable as declared (`maxIkClampAmount` inside the engine's own `0.1` reachability flag); the
+  corrected family KEEPING its authored motion (the anti-freeze guard, floors from the measured
+  spans: arm circles `256.96`, wall slide `82.71`, face pull `51.50`, hip-car ankle `24.0`, scapular
+  squeeze `19.45`); the declared hand contacts in their declared plane; the counterfactual twin
+  (declaration removed → empty carrier and the fetched contact back through its surface,
+  `FINGERTIPS_A −6.99`); and the blast-radius digest.
+- **RED → GREEN.** The same class on the untouched base tree (no test-side tolerance) is **7 of 8
+  FAILED** — every behavioural assertion, with the numbers above quoted in the failures. Run TWICE:
+  on `fc65695` (this pass's original base, 7 of 8) and again after the rebase on the merged base
+  `eea705c` (the same 7 of 8 — re-measured, not carried over). `unaffectedPosesPublishByteIdenticalGeometry`
+  is green on every tree by construction (it excludes the corrected classes), which is the point of
+  that guard. On this branch: **8/8**.
+  Full suite `--rerun-tasks` with the results directory purged: merged base **117 classes / 558 tests /
+  0F / 0E / 0S** → this branch **118 / 566 / 0F / 0E / 0S** — exactly `+1` class / `+8` tests (the
+  new gate), no other count moved.
+- **Blast radius, direct and non-inferred (measured on the MERGED base `eea705c`).** Whole-corpus
+  dump (`51` classes × `5` progress × every joint XYZ = `8415` rows, full float bits) measured on the
+  rebased base and on this tree: **exactly `717` rows differ, every one of them inside the pass's own
+  classes** — the 5 standing poses (`100` rows each: legs, feet, arms),
+  `DynamicWorldsGreatestStretchPose` (`35`), `BurpeePose`/`MountainClimberPose`/
+  `ProneCobraStretchPose`/`ReverseSnowAngelPose`/`SupermanPose` (`30` each), `PelvicTiltPose` (`20`),
+  `KettlebellSwingPose` (`8`), `GluteBridgePose` (`4`). **The other 37 production classes are
+  byte-identical**. Cross-check that the rebased base is what it claims to be: the same dump on
+  `fc65695` vs `eea705c` differs in **exactly `268` rows, all `KettlebellSwingPose` (`140`) +
+  `BurpeePose` (`128`)** — the M6/M7 merge's own, documented effect, reproduced independently here.
+  Four declared poses are truthful and inert on this base and therefore invisible in the dump
+  (`CouchStretchPose`, `HalfKneelingStretchPose`, `LatStretchPose` — and `KettlebellSwingPose`,
+  whose declaration now moves `8` rows because the M6/M7 merge re-authored its feet). The new gate's
+  own digest (`M8M9M10SupportDeclarationTest.UNAFFECTED_CORPUS_DIGEST = -9118394861084468944`) covers
+  every class OUTSIDE the group and is measured EQUAL on the pre-fix tree, on the merged base and on
+  this tree. **Five** pre-existing guards whose corpora include the corrected classes went RED on
+  their previous values and are re-baselined with this pass named at each constant
+  (`RuntimeArchitectureBaselineTest.ARMCIRCLES` golden — the fixture's role is unchanged, it is
+  still the posture-driven, zero-Contact-Declaration representative; `M1StepUpGeometryTest`
+  `-8991724156081959456` / `6801737802461053843` → `2391109884830495565`;
+  `M3M5ProneTrunkGeometryTest` `-517042293001259057` / `-5490451701131484798` → `5434130474548470574`;
+  `PlankForearmSupportGeometryTest` `3799530965937589305` / `-8819852136411858964` → `2399534090990759846`;
+  `M6M7SwingBurpeeGeometryTest` `-2275091341366878044` → `-8892365611399986406`).
+  `EnvironmentPenetrationTest`'s pinned declaration census moves from 26 to 9 names (the pass's
+  classes leave it; the census is what makes a silently-dropped declaration fail), and the invariant
+  it owns now evaluates this pass's declarations for real — `BurpeePose`'s declared hands included,
+  which is how the plant's derivative chain was verified clean rather than assumed.
+- **Contracts whose calibration had been read off the frozen chains, re-derived from the authored
+  choreography (not weakened, not retuned).** `MobilityMotionTest`'s `HipCarsPose` floor `35 → 30`
+  (the authored circle: `radiusX = 15`, a `30.0`-unit ankle span; the old floor was passed only by
+  the clamp artifact — measured knee swing `74.73`). `StaticHoldStabilityTest`: `WallSlidesPose`
+  (`0.19 → 82.71`) and `FacePullPose` (`3.92 → 51.50`) REMOVED from the static-hold list — they are
+  rep exercises (`wall_slide_standard`, `face_pull_banded`) and were only ever "static" because the
+  clamp froze them; their authored motion is now pinned by the new gate's anti-freeze guard instead.
+  `ScapularRetractionPose` stays a hold by registration with its ceiling re-pointed `15 → 20` against
+  the authored squeeze (`19.45`).
+- **Deliberately NOT done (recorded, not silently resolved).** (a) **`HamstringStretchPose` (M9) is
+  NOT declared** — its only derivable floor contact is the foot and the pose authors BOTH feet's
+  articulation ("front foot points to sky"), so a `*_FOOT` declaration would drive the authored
+  pointed foot THROUGH the floor (measured `TOE_F 21.55 → −2.57` at `p=0.5`, i.e. the declaration's
+  own derivation creates the penetration). Its real support (pelvis + legs on the mat) has no
+  consumed point: the **vocabulary gap** the pass records rather than invents a point for.
+  (b) **`BurpeePose`'s FEET are not declared** — the remaining one-line follow-up of this finding.
+  (Before the rebase this was *blocked*: on `fc65695` the un-fixed M7 plant drove the declared toe
+  chain `9.73` BELOW the floor, `TOES worst=-9.732243`. On the merged base `eea705c` the foot chain is
+  clean — measured `ANKLE_F` `15.00–19.10`, `HEEL_F` `11.92–15.00`, `TOE_F` `15.00–36.67`, nothing
+  below the surface — so declaring it is unblocked, but it is a further production change and this
+  pass keeps its scope.) The HANDS declaration this pass does ship is *verified* on the merged base,
+  not assumed: pre-declaration the planted hand's fingertips hung `21.010` BELOW the floor
+  (`FINGERTIPS_A/P −21.010` at `p=0.25/0.75`, `KNUCKLES −11.46`, `PALM −5.73`); with it the chain is
+  realized in the declared plane (`3.8e-06`) while the stand/jump phases stay untouched (the
+  derivation's `planted` gate). (c) Seven production classes remain undeclared with no M-number that would own them
+  (`AlternatingBirdDogPose`, `BirdDogPose`, `StaticBirdDogHoldPose`, `QuadrupedThoracicRotationsPose`,
+  `ThoracicExtensionPose`, `DeadBugPose`, `LegRaisePose`) — flagged for assignment, deliberately not
+  expanded into this pass. (d) `GluteBridgePose`/`PelvicTiltPose` publish their elbows
+  `−30.69`/`−33.35` BELOW their own mat (measured, unchanged by this pass: no declared contact, so no
+  invariant covers them) — the supine arm authoring, recorded as open. (e) The M6/M7/M11–M15 items
+  and the P2 cleanup list: untouched.
+- **Determination:** the pass was **not** blocked on an architectural decision; every question it met
+  that is a product/design choice (declaration vocabulary for non-derivable contacts; whether the hip
+  CAR circle should be wider than `radiusX 15`; whether `scapular_retraction_hold` should be authored
+  as a true hold; how much of the `0.98` straight-limb cap is a limb bulge) is recorded above with
+  its measurement and left for the user.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
 2. H2 complement — migrate LatStretchPose (M11) and CatCowPose (M12) onto `bakeIkLimb`/gaze
-   helpers for full carrier coverage; declare the support model (`metadata.support`) for the stretch
-   family (M9) and the core/hip poses (M10) and the upper/dynamic poses (M8).
+   helpers for full carrier coverage. **The declaration half of this item is DONE (M8/M9/M10 — see
+   the record above): the 7 upper/dynamic poses, the stretch family and the core/hip poses now
+   declare on `metadata.support`.** Still open from that pass: `HamstringStretchPose`'s declaration
+   (blocked on the foot-vocabulary gap), `BurpeePose`'s feet (now unblocked — the M7 plant landed
+   as PR #240 / `eea705c` and that foot chain measures clean there), and the 7 undeclared classes with no owning M-number (flagged for assignment).
 3. M2/M6/M7 — pose-specific biomechanical-fidelity bugs (side-plank contact
    side — **the declaration side resolved by B-4 and the pose's own planted-forearm floor debt
    resolved by B-7**). **M1 (the step contact), M3 (cobra) + M4 (superman) + M5
    (snow angel's trunk/legacy path), and M6 (the swing's hinge + its straight-arm pendulum) + M7
    (the burpee's rep geometry) are DONE — see the records above** (M6's audit wording is corrected
    there: the profile's *axis*, not its direction, was the defect, and the pose owns a second
-   authored error the audit sentence does not name). M5's declaration half is
-   split off to item 2 (M8/M9/M10's family-wide channel).
+   authored error the audit sentence does not name). **M8/M9/M10 (the support-model declaration
+   pass) is DONE too — see the record above**, which also covers M5's declaration half.
 4. M13/M14 — tuning items (hamstring reach, decline plank tilt).
 
 ### TODO — P2
@@ -1373,5 +1535,6 @@ A8/A6 leaks — resolved in the Push-Up Family pass above.)
 - Fix the pose, not the engine, when a pose authors motion incorrectly.
 - Keep pose-side migrations on the **existing** carrier surface (the H2 fix is the template).
 - After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
-  current baseline of record (**117 classes / 558 tests** as of the M6/M7 landing; the older "282"
-  figure predates P12) before marking a finding resolved.
+  current baseline of record (**118 classes / 566 tests** as of the M6/M7 landing plus the
+  M8/M9/M10 declaration pass; `--rerun-tasks` with the results directory purged, XML-stamped fresh; the
+  older "282" figure predates P12) before marking a finding resolved.

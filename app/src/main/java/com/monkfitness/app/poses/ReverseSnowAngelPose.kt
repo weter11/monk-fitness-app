@@ -42,7 +42,20 @@ class ReverseSnowAngelPose : PoseBuilder {
         durationSeconds = 3.0f,
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
+        // M9 — the prone body's floor line: the sweeping hands (they stay on the mat through the
+        // whole arc) and the legs. One canonical channel, `metadata.support`. Declaring the hands
+        // is what resolves their contact at all (measured pre-fix the un-declared fingertips sat
+        // 1.3–6.4 units off the plane at the sweep's extremes).
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(
+                SupportContact.LEFT_HAND,
+                SupportContact.RIGHT_HAND,
+                SupportContact.LEFT_FOOT,
+                SupportContact.RIGHT_FOOT
+            )
+        )
     )
 
     private var roots: List<SkeletonNode>? = null

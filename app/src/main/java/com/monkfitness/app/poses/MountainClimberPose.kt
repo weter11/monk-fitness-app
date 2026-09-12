@@ -10,7 +10,14 @@ class MountainClimberPose : PoseBuilder {
         durationSeconds = 2.0f,
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
+        // M10 — the planted HANDS (the plank pillar the knees drive in under), on the ONE canonical
+        // support channel (`metadata.support`). The FEET are not declared: the driving knees lift
+        // them off the surface within the rep, and the foot derivation has no "planted" gate.
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND)
+        )
     )
 
     private var roots: List<SkeletonNode>? = null

@@ -10,7 +10,27 @@ class BurpeePose : PoseBuilder {
         durationSeconds = 2.0f,
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
+        // M8 — the rep's plant, on the ONE canonical support channel (`metadata.support`): the
+        // hands, which plant where the trunk reaches (the plank/push-up plant). The hand derivation
+        // is self-gating — it only orients a hand that is BELOW its elbow
+        // (`SkeletonPoseFinalizer` `planted`) — so the stand/jump phases, where the hands are free,
+        // are untouched by this declaration.
+        //
+        // Measured on the merged base (the M7 plant correction landed as PR #240 / `eea705c`):
+        // this declaration FIXES the plant's derivative chain — pre-declaration the planted hand's
+        // fingertips hung 21.01 units BELOW the floor (`FINGERTIPS_A/P −21.010` at p=0.25/0.75,
+        // `KNUCKLES −11.46`, `PALM −5.73`); with it the whole chain is realized in the declared
+        // plane (~3.8e-06) while the stand/jump phases stay untouched (the self-gating above).
+        //
+        // The FEET are deliberately NOT declared: the foot's plant is the remaining one-line
+        // follow-up of this finding (its chain is clean on the merged base — measured `ANKLE_F`
+        // 15.00–19.10, `HEEL_F` 11.92–15.00, `TOE_F` 15.00–36.67, nothing below the surface — so
+        // declaring it is unblocked, but it is a further production change this pass does not make).
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND)
+        )
     )
 
     private var roots: List<SkeletonNode>? = null

@@ -51,7 +51,17 @@ class SupermanPose : PoseBuilder {
         durationSeconds = 3.0f,
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
+        // M9 — the hands' floor line at the prone seam (the bow lifts the arms off the mat and the
+        // hand derivation is self-gating: it only orients a hand that is BELOW its elbow, so the
+        // lifted phase is untouched). One canonical channel, `metadata.support`. The FEET are
+        // deliberately NOT declared: the bow lifts the legs as one rigid line well clear of the
+        // floor, and the foot derivation has no "planted" gate (measured: declaring them would
+        // re-aim the lifted foot's long axis, a 17.57-unit change on a limb that has left the mat).
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND)
+        )
     )
 
     private var roots: List<SkeletonNode>? = null
