@@ -469,6 +469,16 @@ tolerance.
     6.27 at `HEAD_POS`). B-5 guarantees the Frame Context survives re-entry, not that re-entry
     reproduces the frame. New observation, recorded for its own pass.
   - `*_KNEE` / `*_ELBOW` support kinds still have no consumer (unchanged; B-3/B-4 residual).
+  - **The carrier aliases the authoring node** (new observation, NOT fixed): the authoring helpers
+    record `JointRotation(handNode.localRotation.axis, handNode.localRotation.angle)`
+    (`BasePose.kt:171/193`) and `JointRotation.axis` is a stored reference, so the carrier's axis IS
+    the node's `Vector3` — measured `axisSameObject = true` for every migrated extremity in the whole
+    registry. A later in-place `localRotation.set(...)` on that node silently rewrites the already
+    recorded carrier, and carrier-vs-node equality on the *axis* is guaranteed by aliasing rather than
+    by value. The angle is a `Float` (copied), so the equivalence guard above still compares values
+    where it matters, and no production pose currently rewrites an articulated node after recording
+    it. Out of B-5 scope (Branch-C §11 mixed-mode authoring, §1.1 carrier hygiene); recorded for its
+    own pass.
 
 ### TODO — P1 (next pass, in priority order)
 
