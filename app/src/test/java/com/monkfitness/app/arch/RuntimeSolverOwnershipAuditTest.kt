@@ -47,10 +47,11 @@ import java.io.File
  *     classified implementation files has appeared after WP-D.
  *
  * **B. Execution-ownership checks (the invariant itself, not a flag or a symbol).** For every
- * registered realization path: the deployed configuration executes exactly ONE authoring
- * realization and zero engine-side ones; the activated configuration executes exactly ONE
- * engine-side realization and zero authoring ones; and a counterfactual two-realization cycle is
- * rejected deterministically on the registered evidence.
+ * registered realization path: the AUTHORING configuration (`IK_STAGE_ACTIVE=false`, R5's
+ * non-deployed rollout selection) executes exactly ONE authoring realization and zero engine-side
+ * ones; the DEPLOYED activated configuration (`IK_STAGE_ACTIVE=true`, §12.0 state 3) executes
+ * exactly ONE engine-side realization and zero authoring ones; and a counterfactual
+ * two-realization cycle is rejected deterministically on the registered evidence.
  *
  * LIMITS (stated so the checks are not over-read): these are source-structure and behaviour
  * checks over the current file set, not a proof of the whole codebase. The local-write
@@ -646,7 +647,12 @@ class RuntimeSolverOwnershipAuditTest {
                 "RuntimeSolverOwnershipAuditTest.kt",
                 "SingleActiveSolverEnforcementTest.kt", "DefaultPoleOwnershipTest.kt",
                 "StraightIntentFallbackTest.kt", "ValidationOwnershipReCertificationTest.kt",
-                "LimbSolverOwnershipActivationContractTest.kt"),
+                "LimbSolverOwnershipActivationContractTest.kt",
+                // P12 §12.7 — the lifecycle suite reads the same execution evidence to state the
+                // "one realization per declared limb" invariant and the double-realization trap.
+                // It is a READER only: the write-count assertion below covers it like every other
+                // test source, so extending this set cannot legalise a fabricated evidence value.
+                "SingleActiveSolverLifecycleTest.kt"),
             testWriters
         )
         val testWrites = testSources().values.sumOf { lines ->

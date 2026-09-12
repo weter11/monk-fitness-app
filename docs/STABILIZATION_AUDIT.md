@@ -196,7 +196,11 @@ geometry on `main`. Pose-side fix only: no engine file, no phase order, no owner
   `ColdFrameLimbRealizationTest` so it could not be masked or mis-attributed while open; that pin is
   **removed** by the B-8b fix (the pose now projects the head base from its own authored gaze, chest
   frame and `def.neckLength`), and the frame-consistency assertion it was excluded from now covers it.
-- **Still open (P11 backlog).** §12.7 flag lifecycle; and — recorded so the label is unambiguous — the
+- **Still open (P11 backlog).** §12.7 flag lifecycle — **its verification half is now CLOSED** (see the
+  `DONE — §12.7 flag lifecycle …` block below: the lifecycle/ownership behaviour is proven on the
+  production path with counterfactual RED evidence); the remaining *configuration-ownership* question
+  (R14 creator-owned knob vs the landed single declared surface) is recorded OPEN with options in plan
+  §12.7; and — recorded so the label is unambiguous — the
   **P11 branch's own B-6** (`docs/AUDIT_P11_WHOLE_SYSTEM.md` §2: `SkeletonPipeline.resetHistory()`
   clears the dynamics chain but not the smoothing history; class NEEDS ARCHITECTURAL DECISION + DEAD
   API — zero production callers — and deliberately pinned by
@@ -705,7 +709,9 @@ explicitly left open ("the poses' own §7 debt", P11 §M2).
   all green; `:app:lintVitalRelease` fails **identically on both trees** (pre-existing `themes.xml`
   `ResourceCycle` + `ExpiredTargetSdkVersion`).
 - **Deliberately NOT touched (the mission's out-of-scope residuals, still open).** B-5's residual, the
-  P11-branch `SkeletonPipeline.resetHistory()` B-6 decision, the §12.7 flag lifecycle, the
+  P11-branch `SkeletonPipeline.resetHistory()` B-6 decision, the §12.7 flag lifecycle
+  (**verification closed 2026-09-12 — see the block below; its configuration-ownership half is still
+  open**), the
   `*_KNEE` / `*_ELBOW` support-consumer architecture, M9/M10 (missing
   declarations), the renderer, and every validator threshold (the 2-unit band included). (**B-8b /
   `ThoracicExtensionPose` was in this list when B-7 landed; it is now fixed — see the `DONE — B-8b`
@@ -798,6 +804,74 @@ offsets.
 - **Not touched.** B-8 (its cold-frame limb-realization contract is verified unchanged and stays
   green), the Finalizer, phase ordering, head/neck semantics, and every other pose.
 
+### DONE — §12.7 flag lifecycle / single-active-solver ownership verification (P12; the last P11-backlog item naming P12, 2026-09-12)
+
+Split by what was actually missing, because on `main` @ `3f6733d` the enforcement half is already live
+and green: this change is verification + record, not a new mechanism.
+
+- **Diagnosis (measured).** §12.7's gating contract holds as written: the three registered authoring
+  bakes run their registration effects (Limb Target + Contact Declaration) and the F2 build-window
+  bookkeeping in BOTH configurations while their realization block (solve + stamp folds + limb node
+  writes) sits behind the configuration gate; `IkStage.apply` is the sole realization site under the
+  deployed state 3; and `SkeletonPipeline.runStages` rejects a frame on per-implementation EXECUTION
+  evidence (window count + per-limb duplicate mask), never on output comparison. What was missing:
+  (i) no test induced the §12.7a violation mode itself — an authoring realization co-executing with
+  the engine stage inside ONE build cycle. The existing counterfactuals only doubled ONE
+  implementation (two `bakeIkLimb` calls, a duplicated Limb Target, or a second stage window), and
+  the two increment sites are flag-mutually-exclusive, so nothing in the suite exercised the shape
+  the gate exists to prevent; (ii) the straight-intent flag's current-build truthfulness across
+  consecutive builds of a REUSED carrier was asserted nowhere; (iii) three records still described
+  state 2 as the deployed state, one of them a test comment contradicting the shipped default.
+- **What landed (test-only + KDoc).** New `arch/SingleActiveSolverLifecycleTest` (7 tests): declared
+  limbs realized exactly once per configuration (realized set == declared set in BOTH); the
+  double-realization trap driven through the registered production path with its output-equivalence
+  premise (the two single-realization frames are raw-bit identical, so a geometry-only test cannot
+  see the violation and the rejection is provably execution evidence); registration preservation at
+  FIELD level under the active stage (target, pole, straight intent, declared lengths, constraint,
+  plus the Contact Declaration) with the gated bake proven not to write limb node geometry, and an
+  authoring-configuration anti-vacuity control for exactly those node locals; and four
+  flag-lifecycle tests (fresh and reused builders, multi-limb OR merge, the re-arm that makes a
+  later successful build publish `false`, and a bent-only rebuild that cannot inherit a previous
+  drop). Records corrected to the deployed state: `SingleActiveSolverEnforcementTest` (two comments
+  and one local that labelled the authoring configuration "deployed") and
+  `RuntimeSolverOwnershipAuditTest`'s class KDoc; `IkStage.kt`'s flag KDoc no longer claims the
+  declaration "lives beside its sole reader rather than in a global flag object" — it IS a
+  file-level `var`, and the KDoc now states that, states why R14's creator-owned knob needs its own
+  §12.4 proposal, and points at the suite that proves the lifecycle.
+- **Counterfactual RED gates (each executed against the defective shape before green was accepted).**
+  (1) §12.7a realization gate removed from the three registered bakes → the new suite **7/7 FAILS**
+  (the enforcement reports `windows executed this frame = 2`).
+  (2) The pipeline's enforcement disabled (`if (BuildConfig.DEBUG && false)`) → **exactly** the
+  double-realization trap FAILS: "no violation raised".
+  (3) The F2 re-arm gated off (the WP-F defect shape) →
+  `droppedReadingIsReArmedByTheNextBuild` + `bentOnlyBuildDoesNotInheritAPreviousDrop` FAIL on the
+  stale `true`.
+  Each gate's file was restored byte-identically afterwards (`git diff` empty).
+- **No production behaviour changed.** The only production edit is KDoc in `IkStage.kt`; no pose, no
+  solver, no finalizer, no validator rule, no threshold, no golden, no RFC byte. Full forced suite and
+  release compile re-run on the branch (see the PR record for the exact counts).
+- **Still OPEN, recorded and deliberately NOT decided here — configuration ownership.** §12.7's first
+  bullet requires the declaration to move to "an engine-supplied configuration input (constructor/
+  definition-level knob supplied by the creator per R14)". The landed mechanism is the single declared
+  file-level surface — one declaration, zero production writes, reads confined to the four
+  realization-decision files, no environment/system-property channel — audited statically and at
+  runtime, but NOT creator-owned/lifetime-scoped. Reaching R14 means adding a configuration channel
+  into the authoring `build()` path (the bakes are called by pose code and receive no engine
+  configuration), i.e. the intent/carrier class of change plan §12.4 requires be raised as a separate
+  clarification proposal. Options recorded in `docs/IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md` §12.7 and
+  in `IkStage.kt`'s flag KDoc: **(A)** raise the §12.4 proposal and implement the definition-level
+  knob (largest diff: every registered authoring call site + the package-level bake signature);
+  **(B)** accept the landed surface as the R14 substitute and close the item; **(C)** carry it as an
+  open debt-ledger entry.
+- **Same owner, second recorded observation (flagged, not changed).** On the no-rebuild re-produce
+  path (`SkeletonRenderer.kt:55`, `SkeletonSnapshotRenderer.kt:83`) the engine stage re-realizes each
+  frame while the stage's F2 block re-arms only `boneLengthsVerified`, so the straight-intent reading
+  is OR-merged (`ValidationStampMerge.dropped`, strengthen-only) across those frames instead of being
+  frame-local. Not reachable in the 39-entry §12.9 corpus (0 deltas), and not a P12 regression (the
+  authoring configuration performs no realization at all on that path), so it is flagged rather than
+  changed: making it frame-local in the engine configuration would break cross-configuration parity
+  on exactly that path.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
@@ -823,5 +897,6 @@ A8/A6 leaks — resolved in the Push-Up Family pass above.)
 - Treat MonkEngine as a finished engine. Do not introduce new architecture, carriers, or API changes.
 - Fix the pose, not the engine, when a pose authors motion incorrectly.
 - Keep pose-side migrations on the **existing** carrier surface (the H2 fix is the template).
-- After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 282/0 before marking
-  a finding resolved.
+- After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
+  current baseline of record (**113 classes / 518 tests** as of the B-8b landing; the older "282"
+  figure predates P12) before marking a finding resolved.
