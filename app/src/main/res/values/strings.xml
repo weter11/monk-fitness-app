@@ -723,5 +723,8 @@
     <string name="validation_dead_hang_p2">Hanging geometry and shoulder girdle</string>
     <string name="validation_dead_hang_p3">Arm proportions and wrist orientation</string>
 
+    <!-- C2 — the exercise hero's camera mode toggle: the opt-in dynamic "camera push-in" (per-frame framing). OFF by default; the default presentation draws the exercise at one static frame. -->
+    <string name="camera_dynamic">Dynamic camera</string>
+
     <string name="ok">OK</string>
 </resources>

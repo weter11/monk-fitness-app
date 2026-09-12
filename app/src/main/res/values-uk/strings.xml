@@ -716,5 +716,8 @@
     <string name="validation_dead_hang_p2">Геометрія вису та плечовий пояс</string>
     <string name="validation_dead_hang_p3">Пропорції рук та орієнтація зап\'ясть</string>
 
+    <!-- C2 — the exercise hero's camera mode toggle: the opt-in dynamic "camera push-in" (per-frame framing). OFF by default; the default presentation draws the exercise at one static frame. -->
+    <string name="camera_dynamic">Динамічна камера</string>
+
     <string name="ok">ОК</string>
 </resources>

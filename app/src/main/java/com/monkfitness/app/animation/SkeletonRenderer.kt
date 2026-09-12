@@ -14,6 +14,9 @@ import androidx.compose.ui.graphics.lerp
  * SkeletonRenderer is a passive rendering component in the animation engine v1.0 pipeline.
  * It applies pre-computed ScreenSpaceScale values (computed by ScreenSpaceCompensation)
  * to visual parameters without performing additional perspective math or geometry modification.
+ * The one thing it does derive is the **viewport frame** — the scale and anchor a given surface is
+ * drawn at ([CameraFraming]): the exercise's static frame when the caller supplies one (the default
+ * presentation, C2), the drawn frame's own fit otherwise (the opt-in dynamic push-in, C1).
  *
  * Consistent with first-class joint rotations, SkeletonRenderer never infers rotations or orientations
  * from joint positions; all transformations are derived strictly via Forward Kinematics traversal.
@@ -33,7 +36,14 @@ fun SkeletonRenderer(
     supportedPoints: Set<SupportPoint> = pose.supportedPoints,
     showGround: Boolean = true,
     highlightedJoint: Joint? = null,
-    screenSpaceSettings: ScreenSpaceSettings = ScreenSpaceSettings.DEFAULT
+    screenSpaceSettings: ScreenSpaceSettings = ScreenSpaceSettings.DEFAULT,
+    // C2 — the exercise's static frame, derived once by [CameraFraming.exerciseFrame] for the whole
+    // motion and applied to every frame of the rep: the default presentation, and the reason the
+    // subject no longer pushes in and pulls out as it moves. The caller that holds the motion (the
+    // exercise hero) derives it and passes it; a caller that holds no exercise — a single off-screen
+    // frame — omits it and gets the frame derived from the frame itself ([CameraFraming.frameZoom]),
+    // which is also the opt-in dynamic "camera push-in" mode the hero's toggle selects.
+    staticFrame: CameraFrame? = null
 ) {
     val style = engine.style
     // M2 — route through the pipeline so the full ordered stage chain (Solver → Finalizer) runs.
@@ -56,9 +66,13 @@ fun SkeletonRenderer(
         val height = size.height
 
         val finalizedPose = pipeline.produceFrame(pose, environment, supportedPoints).pose
-        // C1 — the viewport frame: the zoom is derived from the bounds of the frame about to be drawn,
-        // so the athlete is drawn whole on this surface (image-identical when it already fits).
-        camera.zoom = framing.frameZoom(camera, finalizedPose, width, height)
+        // C2 — the viewport frame. The default presentation draws every frame of the exercise at the
+        // one frame its motion was fitted to (`staticFrame`), so the subject's size cannot breathe.
+        // Without one, the C1 rule derives the frame from the bounds of the frame about to be drawn —
+        // the opt-in dynamic camera push-in (image-identical when the frame already fits).
+        val frame = staticFrame
+        if (frame != null) frame.applyTo(camera)
+        else camera.zoom = framing.frameZoom(camera, finalizedPose, width, height)
         projector.project(
             pose = finalizedPose,
             camera = camera,

@@ -64,6 +64,11 @@ class SkeletonSnapshotRenderer(
      * declaration-derived Support Declaration is not recoverable from a bare pose (R8/R11 keep
      * Production Metadata out of the carrier), so it is an explicit parameter here, exactly as on
      * [SkeletonRenderer]. Both default to what the supplied frame already carries.
+     *
+     * C2 — [staticFrame] is the exercise's frame when the caller has one (a snapshot *sequence*
+     * derives it once and draws every frame of the motion through it, so the sheet shows one
+     * constant framing); a bare frame with no motion behind it is framed from its own drawn bounds
+     * (C1), which is the only rule available without the motion.
      */
     fun renderPose(
         pose: SkeletonPose,
@@ -74,7 +79,8 @@ class SkeletonSnapshotRenderer(
         height: Int = 512,
         showGround: Boolean = true,
         transparentBackground: Boolean = true,
-        backgroundColor: Int = android.graphics.Color.WHITE
+        backgroundColor: Int = android.graphics.Color.WHITE,
+        staticFrame: CameraFrame? = null
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -84,9 +90,12 @@ class SkeletonSnapshotRenderer(
         }
 
         val finalizedPose = pipeline.produceFrame(pose, environment, supportedPoints).pose
-        // C1 — the viewport frame: the zoom is derived from the bounds of the frame about to be drawn,
-        // so the athlete is drawn whole on the surface the caller asked for.
-        camera.zoom = framing.frameZoom(camera, finalizedPose, width.toFloat(), height.toFloat())
+        // C2 — the viewport frame: the exercise's own frame when the caller holds one (the same frame
+        // for every frame of the sequence), otherwise the drawn frame's own bounds (C1), so the
+        // athlete is drawn whole on the surface the caller asked for either way.
+        val frame = staticFrame
+        if (frame != null) frame.applyTo(camera)
+        else camera.zoom = framing.frameZoom(camera, finalizedPose, width.toFloat(), height.toFloat())
         projector.project(
             pose = finalizedPose,
             camera = camera,
@@ -117,6 +126,10 @@ class SkeletonSnapshotRenderer(
 
     /**
      * Renders multiple frames across a PoseBuilder's lifecycle into an ExerciseSnapshotSequence.
+     *
+     * C2 — the whole sequence is drawn at the exercise's own frame, derived from the builder's motion
+     * before the first frame is rendered, so the sheet shows the rep at one constant scale instead of
+     * re-framing every cell.
      */
     fun renderSequence(
         poseBuilder: PoseBuilder,
@@ -130,6 +143,18 @@ class SkeletonSnapshotRenderer(
         transparentBackground: Boolean = true,
         backgroundColor: Int = android.graphics.Color.WHITE
     ): ExerciseSnapshotSequence {
+        // C2 — one frame for the whole sequence, from the builder's motion (the camera it is measured
+        // against is the authored viewpoint, not whatever frame the previous sequence left behind).
+        // The sequence draws one side (`Side.LEFT` below), and that is the side the frame is measured
+        // over.
+        val authoredCamera = Camera(poseBuilder.metadata.camera)
+        val staticFrame = framing.exerciseFrame(
+            camera = authoredCamera,
+            builder = poseBuilder,
+            sides = listOf(Side.LEFT),
+            width = width.toFloat(),
+            height = height.toFloat()
+        )
         val snapshots = ArrayList<ExerciseSnapshot>(frameCount)
         for (i in 0 until frameCount) {
             val progress = i.toFloat() / (frameCount - 1).coerceAtLeast(1)
@@ -148,7 +173,8 @@ class SkeletonSnapshotRenderer(
                 height = height,
                 showGround = showGround,
                 transparentBackground = transparentBackground,
-                backgroundColor = backgroundColor
+                backgroundColor = backgroundColor,
+                staticFrame = staticFrame
             )
             snapshots.add(ExerciseSnapshot(i, progress, bitmap, pose))
         }
