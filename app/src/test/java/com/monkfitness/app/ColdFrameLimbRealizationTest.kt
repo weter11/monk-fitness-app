@@ -43,17 +43,28 @@ import org.junit.Test
  *     settled at the same progress, and lands its hands on the world targets the pose declared.
  *  3. Later frames stay stable (frame 1 == frame 20 == frame 150).
  *  4. Poses that already author their trunk frame are untouched (the graded control), and poses
- *     whose layout makes the engine's derivation a no-op are not rewritten either.
- *  5. The one family the task's matrix lists whose residual is NOT a trunk-frame defect
- *     (`thoracic_extension_reps`) is pinned with its measured attribution to the open item B-8b,
- *     so the residual cannot be silently mis-attributed to B-8 or hidden by a warm-up.
+ *     whose layout makes the engine's derivation a no-op are not rewritten either —
+ *     `ThoracicExtensionPose` joined that set once B-8b (below) fixed its arm-target source.
+ *  5. The one family the task's matrix lists whose residual was NOT a trunk-frame defect
+ *     (`thoracic_extension_reps`) was pinned here with its measured attribution to the open item
+ *     B-8b. **B-8b is fixed** (the pose now derives its arm target from geometry it owns instead of
+ *     the engine-owned neck node — `resolveHeadTarget`, Phase 7), so the pin is REMOVED and the
+ *     family is asserted as a cold-frame-consistent control like the rest. The focused B-8b
+ *     regression is `ThoracicExtensionArmTargetTest`, which goes RED if the target source regresses.
  *
  * Tolerance: the fix makes the cold frame and the settled frame agree EXACTLY (0.000000 measured
  * for every joint of every family below). [COLD_TOLERANCE] is set at 0.25 units — 1/60 of the
  * validator's 15-unit `POSITION_DISCONTINUITY` threshold and 1/112 of the SMALLEST pre-fix delta in
- * the fixed set (28.00, `side_plank_standard` HAND_A) — so this suite cannot pass on the pre-fix
- * implementation (see the PR: RED 3 failed / 4 passed pre-fix — the three cold-frame assertions
- * fail with the pre-fix numbers quoted above — GREEN 7/7 post-fix).
+ * the fixed set (28.00, `side_plank_standard` HAND_A) — so this suite cannot pass on the pre-B-8
+ * implementation (see the PR: RED 3 failed / 4 passed pre-B-8, the three cold-frame assertions
+ * failing with the numbers quoted above — GREEN 7/7 post-B-8).
+ *
+ * B-8b then added `ThoracicExtensionPose` to the identity-trunk control, because that family is
+ * cold-frame consistent only once its arm target is pose-owned: on the B-8b baseline
+ * (`origin/main` @ `691c6a7`, B-8 landed, B-8b open) this file is **RED 1 failed / 5 passed** —
+ * exactly `trunkFramesTheEngineDerivesAsIdentityAreNotRewritten`, with the arm-chain delta the
+ * B-8b numbers below quote — and **GREEN 6/6 post-B-8b**. The removal of the old attribution pin
+ * removed one test; no assertion was weakened.
  */
 class ColdFrameLimbRealizationTest {
 
@@ -306,7 +317,12 @@ class ColdFrameLimbRealizationTest {
         // computes an identity chest frame, so the pose publishing an identity chest IS the
         // authoritative frame. B-8's fix must not rewrite those (that would change established
         // geometry), and their limb chains must already be cold-frame consistent.
-        for (name in listOf("StaticForearmPlankPose")) {
+        //
+        // `ThoracicExtensionPose` was held OUT of this set while B-8b was open (its arm chain was
+        // NOT cold-frame consistent, for a reason that had nothing to do with the trunk frame); it
+        // now belongs here — B-8b fixed the arm TARGET source, not the frame, and the focused
+        // regression is `ThoracicExtensionArmTargetTest`.
+        for (name in listOf("StaticForearmPlankPose", "ThoracicExtensionPose")) {
             val built = MotionProbe.build(name).build(ctx(0f))
             val chest = chestNode(built)!!.localRotation
             assertTrue(
@@ -320,61 +336,18 @@ class ColdFrameLimbRealizationTest {
         }
     }
 
-    // ---- 5. the one matrix family whose residual is a DIFFERENT defect ------------------------
-
-    @Test
-    fun thoracicExtensionResidualIsAttributedToItsArmTargetNotItsTrunkFrame() {
-        // Task matrix note (measured, recorded, NOT fixed here): `thoracic_extension_reps` is not a
-        // B-8 victim. Its trunk frame is already authoritative (identity — see the control above),
-        // so B-8's mechanism cannot explain its cold/settled arm difference. The measured cause is
-        // the pose's own Phase-0 authoring: it derives both arm targets from
-        // `neck!!.worldPosition`, and the neck's local offsets are written by the ENGINE
-        // (`SkeletonPoseFinalizer.resolveHeadTarget` is the sole writer, Phase 7) — so on the first
-        // build the pose reads an un-established neck (zero local offset) and realizes its arms
-        // against a target it will never see again. Recorded as the open item B-8b (see the audit
-        // doc); fixing it changes that pose's authored reach choreography and is a separate change.
-        val name = "ThoracicExtensionPose"
-        val seq = frames(name, 0f, 151)
-        val cold = seq[0]
-        val settled = seq[150]
-
-        assertEquals(
-            "$name: trunk frame must be frame-invariant (identity on both frames) — B-8 does not apply here",
-            0f, rotationDelta(cold.chestLocal, settled.chestLocal), 1e-6f
-        )
-        assertEquals(
-            "$name: trunk WORLD frame must be frame-invariant — the residual is not a trunk-frame effect",
-            0f, rotationDelta(cold.chestWorld, settled.chestWorld), 1e-6f
-        )
-
-        val coldTargets = declaredTargets(name, 0f)
-        val settledTargets = settledBuildTargets(name)
-        val targetDelta = dist(coldTargets.getValue(Joint.HAND_A), settledTargets.getValue(Joint.HAND_A))
-        val handDelta = maxDelta(cold.world, settled.world, listOf(Joint.HAND_A))
-        assertTrue(
-            "$name: B-8b is still open — the declared arm target itself is not frame-invariant " +
-                "(delta=${f(targetDelta)}): it is derived from the engine-owned neck node. If this " +
-                "assertion fails because the target no longer moves, B-8b has been fixed — move this " +
-                "family into the cold-frame-consistency set above.",
-            targetDelta > 10f
-        )
-        assertTrue(
-            "$name: the realized hand moves with that target (hand delta=${f(handDelta)} >= target delta=${f(targetDelta)})",
-            handDelta > 10f
-        )
-    }
-
-    /**
-     * The declared arm target of the SETTLED frame: emitted by the same instance that produced the
-     * settled frame (the target is a property of the build, not of the pipeline).
-     */
-    private fun settledBuildTargets(simpleName: String): Map<Joint, Vector3> {
-        val pose = MotionProbe.build(simpleName)
-        val pipeline = SkeletonPipeline(def)
-        val ctx = ctx(0f)
-        for (i in 0..150) pipeline.produceFrame(pose, ctx)
-        // One more build on the same (now warm) instance reproduces the settled frame's authoring.
-        val built = pose.build(ctx)
-        return built.limbTargets.associate { it.joint to it.world.copy() }
-    }
+    // ---- 5. B-8b (the one matrix family whose residual was a DIFFERENT defect) -----------------
+    //
+    // This file used to PIN `ThoracicExtensionPose`'s residual here: its declared arm target was
+    // derived from the engine-owned `neck!!.worldPosition` (written by
+    // `SkeletonPoseFinalizer.resolveHeadTarget`, Phase 7), so the cold frame realized a target the
+    // pose never sees again (declared-target delta 17.8718u, published ELBOW_A/HAND_A 29.9277 /
+    // 17.9135u, cold-frame `maxIkClampAmount` 15.4668 against 5.5162 in the rep).
+    //
+    // B-8b is FIXED (pose-side: the target is projected from the authored gaze, `def.neckLength`
+    // and the declared chest frame), so the pin is gone and the family is asserted as a
+    // cold-frame-consistent control in `trunkFramesTheEngineDerivesAsIdentityAreNotRewritten`
+    // above. The measured residual is NOT carried as an accepted exception: the focused regression
+    // `ThoracicExtensionArmTargetTest` fails if the target source regresses, and no assertion here
+    // was weakened to accommodate the old value.
 }
