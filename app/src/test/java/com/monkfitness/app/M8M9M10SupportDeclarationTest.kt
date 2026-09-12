@@ -506,6 +506,10 @@ class M8M9M10SupportDeclarationTest {
         * (<= `8e-6` u float drift at four samples, and `5.29` / `10.57` / `19.38` u at `p = 0.5`, where
         * the engine's planted-hand flattening now fires because the elbow is above the hand) — with the
         * other `50` classes byte-identical. B1's own regression is `DiamondPushUpElbowClearanceTest`.
+         *
+         * **Unchanged by the B1 integration / B2 merge**: this corpus excludes the declaration group both
+         * corrected poses belong to (`DiamondPushUpPose` declares hands + toes, `DynamicWorldsGreatestStretchPose`
+         * feet + hand), so the constant stands and was re-verified equal on the merged tree.
          */
         const val UNAFFECTED_CORPUS_DIGEST = 9137988112138109314L
     }

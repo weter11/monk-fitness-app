@@ -32,7 +32,7 @@ import java.io.File
  *
  * | instrument | what it keys on | below-ground pose/joint pairs it reports |
  * |---|---|---|
- * | `ExerciseValidator.validateFeetGroundPenetration` (default config) | the **6 foot joints only** (`FEET_JOINTS`), and only when `allowFootGroundPenetration = false` | **12 issues in 1 of 10 poses** — `CatCowPose`'s feet (`HEEL_*` worst `−2.422398`). The other 9 poses report **0** |
+ * | `ExerciseValidator.validateFeetGroundPenetration` (default config) | the **6 foot joints only** (`FEET_JOINTS`), and only when `allowFootGroundPenetration = false` | **12 issues in 1 of 9 poses** — `CatCowPose`'s feet (`HEEL_*` worst `−2.422398`). The other 8 poses report **0** |
  * | `EnvironmentPenetrationTest` (B-6) | the joints of a pose's **declared support contacts** | **0 of 40** — for every one of the 9 offending poses the offending joint is OUTSIDE its declared support family ([theBelowGroundClassIsInvisibleToTheDeclarationKeyedInstrument] pins that fact) |
  * | this file | **every joint of every published frame** | **40 pose/joint pairs over 9 poses** (the `DynamicWorldsGreatestStretchPose` back-knee pair left the table with the B2 correction and the `DiamondPushUpPose` elbow pair with the B1 correction — see [knownBelowGround]) |
  *
@@ -300,7 +300,6 @@ class PublishedBelowGroundInvariantTest {
             Joint.HEEL_F to -2.4224f, Joint.HEEL_B to -2.4224f,
             Joint.ANKLE_F to -2.1292f, Joint.ANKLE_B to -2.1292f,
             Joint.TOE_F to -1.4113f, Joint.TOE_B to -1.4113f
-        ),
         ),
         "GluteBridgePose" to mapOf(
             Joint.ELBOW_A to -30.6914f, Joint.ELBOW_P to -30.6914f
@@ -622,11 +621,11 @@ class PublishedBelowGroundInvariantTest {
         )
 
         // And the identical statement about the INSTRUMENTS: the validator's floor rule covers the
-        // 6 foot joints only, so 9 of the 10 poses cannot be seen by it at all.
+        // 6 foot joints only, so 8 of the 9 poses cannot be seen by it at all.
         val footJoints = setOf(Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
         val validatorVisible = knownBelowGround.filterValues { joints -> joints.keys.any { it in footJoints } }
         assertEquals(
-            "the validator's ground rule is a FOOT rule: exactly one of the 10 offending poses " +
+            "the validator's ground rule is a FOOT rule: exactly one of the 9 offending poses " +
                 "(CatCowPose's feet) is reachable by it",
             listOf("CatCowPose"), validatorVisible.keys.toList()
         )

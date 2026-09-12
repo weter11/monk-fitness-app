@@ -623,7 +623,16 @@ class M6M7SwingBurpeeGeometryTest {
         * (<= `8e-6` u float drift at four samples, and `5.29` / `10.57` / `19.38` u at `p = 0.5`, where
         * the engine's planted-hand flattening now fires because the elbow is above the hand) — with the
         * other `50` classes byte-identical. B1's own regression is `DiamondPushUpElbowClearanceTest`.
+         *
+         * **Re-measured by the B1 integration** (this branch merges `fix/b1-diamond-pushup-elbow-plane`
+         * @ `29ee54b`, off `2fb6079`, onto the B2 merge `f8f8b24`): this corpus contains BOTH corrected
+         * poses, so neither pass's committed value was valid on the merged tree. Observed RED on the
+         * B2-merged value `-6796955727995826703` before this re-baseline (this live run, with B1 integrated,
+         * measured `3719128276989989267`). The digest's move from the B2-merged value is B1's own delta
+         * (`DiamondPushUpPose`'s `ELBOW_A`/`ELBOW_P` plus the derived hand chain — `60` rows of the
+         * whole-corpus dump, per B1's own record); from the pre-B2 value it is the union of B2's `20`
+         * rows and B1's `60`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -6796955727995826703L
+        const val UNAFFECTED_CORPUS_DIGEST = 3719128276989989267L
     }
 }
