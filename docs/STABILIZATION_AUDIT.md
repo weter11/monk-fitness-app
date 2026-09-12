@@ -872,16 +872,172 @@ and green: this change is verification + record, not a new mechanism.
   changed: making it frame-local in the engine configuration would break cross-configuration parity
   on exactly that path.
 
+### DONE — M1 the Step-Up's planted foot stands on the step the pose declares (PR #238; production geometry)
+
+Branch `fix/m1-stepup-geometry-support` off `main` `1da6458` (the §12.7 merge). **Production geometry
+change: `StepUpPose` only** — plus the re-baselined B-7 corpus digest and the new
+`M1StepUpGeometryTest` gate. This is the §3 P1 **M1** finding ("Lead/trail feet at Z=∓25.3 but step
+prop spans only Z∈[−22,+22]; both feet overhang the step"), resolved against the current tree; the
+finding's own measurement reproduced exactly as recorded.
+
+- **Diagnosis (measured on `1da6458`, published frames, `produceFrame(pose, ctx)` — the
+  metadata-derived entry point playback uses, 5 progress samples, cold and advancing pipelines).**
+  The declared step is `StepProp(center (12, 18, 0), 44 × 36 × 44)` → top plane `y = 36`, footprint
+  `X ∈ [−10, 34] × Z ∈ [−22, 22]`; both feet are declared as support contacts. The produced frames:
+  the lead ankle is at `(12, 25, −25.3)` at the seam and `(12, 36, −25.3)` at the top — i.e. the foot
+  the pose puts "on the step" is at the step's own **top plane** while lying **outside** the step's
+  footprint in `Z` (and its toe at `X = 36.85` outside the tread's front edge at `34`). The engine's
+  support rule (`supportPlaneNormalFor`: a contact's surface is a box/step/bench **top** only when the
+  contact's canonical joint centroid is inside its footprint, otherwise the ground) therefore resolves
+  **both** feet to the **ground** at every sampled frame — the declared step never supports anything —
+  and the "ascent" is a **13.0-unit** pelvis rise (11 net + the 2-unit breath) against a **36-unit**
+  step: a step-shaped prop with nothing standing on it — a leg raise beside a step, not a step-up.
+- **Root cause — the support limb is placed from the pose's body constants, not from the step it
+  declares.** `StepUpPose` derived the feet from `hipWidth * 1.15` (`Z = ∓25.3`, a body-relative
+  stance), the raw top-surface height as if it were a **joint** height, and the tread's placement from
+  an independent literal (`X = 12`), while the prop was declared from separate literals. Three
+  authorings of one physical fact (where the foot stands, where the step is, how high a foot on it
+  rides) that cannot agree by construction, and no engine derivation can reconcile them: the engine
+  orients a declared extremity against its surface, it does not move a foot onto a prop.
+- **The height half, quantified.** A foot standing on a surface rides its own contact radius above it:
+  this pose's floor rest (`footRestY = 25`), the engine's own convention
+  (`PushUpPlank.ANKLE_HEIGHT = BASE_ANKLE_HEIGHT + supportElevation`, `BASE_ANKLE_HEIGHT = 25`) and
+  the measured relationship on the one other foot-on-a-prop production pose (`DeclinePushUpPose`: a
+  `40`-unit box, foot contacts at `65.0`) all agree. Using `stepTop` as a joint height put the
+  planted foot's contacts **0.0** above the step's top plane (burying it to the ankle) instead of
+  `25.0`, and capped the ascent at a third of the step.
+- **The naive fix is refuted by measurement (and was tried, locally).** Widening the run so its
+  footprint covers the athlete's *floor* stance (`depth = 60` → `Z ∈ [−30, 30]`, the literal reading of
+  the audit's `Z` measurement) with the pre-fix feet makes the **rest** pose land inside the widened
+  footprint while it is on the floor, so the engine resolves its surface to the step's top and its
+  contact joints sit `−11.0` below the surface they are declared to rest on: `EnvironmentPenetrationTest`
+  goes **RED** with `StepUpPose LEFT_FOOT worst=-11.0 joints=[ANKLE_F, HEEL_F, TOE_F]` and the same for
+  `RIGHT_FOOT` — a foot physically inside the step's solid volume. The support foot has to be **placed
+  on the tread**; the trailing foot stays on the floor's side of the run.
+- **Exact authoring correction (`StepUpPose`, one file; no engine, no solver, no carrier, no API).**
+  The step's numbers are now one source used by BOTH the declared prop and the foot placement
+  (`stepTop`, `stepTread`, `stepRun`, `leadFootX`, `trailFootX`, `treadCenterX`):
+  1. **A foot standing on the step rides the same contact radius it rides on the floor**:
+     `onStepY = stepTop + footRestY` (`36 + 25 = 61`), so the ascent buys the step's height and the
+     planted foot is ON the tread instead of through it.
+  2. **The planted foot is placed from the run**: `onStepZ = −(stepRun/2 − 3)` (`−19.0`), reached by a
+     lateral placement tied to the same `leadUp` window as the rise, so the foot is over the tread by
+     the time it is at the step's plane and back at the floor stance at the rep's endpoints (the
+     `PING_PONG` seam is byte-identical to the pre-fix frames).
+  3. **The tread is centred on the planted foot**, not on the body (`treadCenterX = leadFootX +
+     0.42 · 17.5 = 19.35` — the default foot's mid-point offset), so the whole foot lands on the tread
+     with margin at both ends rather than overhanging the front edge.
+  4. **The trailing foot tracks the lead's height** (`trailUp` window `0.05 → 0.50` instead of the
+     pre-fix `0.30 → 0.85`): it stays on the floor's side of the run (so its own resolved surface is
+     the ground, never the step) and is lifted clear at the top. The lag is a **contract** consequence,
+     not a taste call — both legs are ~`legSpan` long, so the two ankles have to stay inside this
+     pose's own limb-asymmetry band; with the pre-fix lag and the corrected full-height ascent the gap
+     opens to `32.4` units and both asymmetry assertions fail (measured `maxLegAsymmetry = 32.35`).
+- **Measured (published frames, same pipeline, pre-fix → post-fix).**
+
+  | frame | `LEFT_FOOT` ankle | its resolved surface | its offset above that surface | `RIGHT_FOOT` surface | pelvis |
+  |---|---|---|---|---|---|
+  | p=0 (seam) | `(12, 25, −25.3)` | ground `0` → ground `0` | `25.0` → `25.0` | ground → ground | `228.0` |
+  | p=0.25 | `(12, 36, −25.3)` → `(12, 61, −19.0)` | `0` → **`36.0`** | `36.0` → **`25.0`** | ground → ground | `232.3` → **`239.8`** |
+  | p=0.5 (top) | `(12, 36, −25.3)` → `(12, 61, −19.0)` | `0` → **`36.0`** | `36.0` → **`25.0`** | ground → ground | `241.0` → **`266.0`** |
+  | p=0.75 | as p=0.25 | `0` → `36.0` | `36.0` → `25.0` | ground → ground | `232.3` → `239.8` |
+  | p=1 | = p=0 (byte-identical, both trees) | | | | `228.0` |
+
+  Pelvis rise `13.0` → **`38.0`** (`36` = the step's height + the 2-unit breath); all three
+  `LEFT_FOOT` joints inside the tread footprint at the planted frames; `RIGHT_FOOT` never resolved to
+  the step (it is the trailing foot, held on the floor's side) and lifted `36.0` clear of the floor at
+  the top; `maxIkClampAmount = 0.0`, `boneLengthsVerified = true` at every sampled frame; the planted
+  foot's XZ spread across the planted frames `≤ 1e-3` (placed = fixed).
+- **Corpus impact (measured, not inferred).** A whole-corpus dump of **51 production pose classes ×
+  5 progress samples × every joint XYZ** (`8415` rows, full float bits) on both trees differs in
+  **exactly 99 rows — all of them `StepUpPose`**, at `p ∈ {0.25, 0.5, 0.75}` (33 joints each); the
+  seam frames and the other **50 classes are byte-identical**. The M1 gate's own digest (the same
+  recipe, `StepUpPose` excluded) is **equal on both trees** (`2746720065314572970`, pinned in the new
+  test), and the B-7 digest — which includes every class — is re-baselined
+  `8354470872339933400` → `−2908768886375429885` with that attribution recorded at the constant
+  (observed RED on the pre-fix value first).
+- **Regression coverage (fresh runs).** New `M1StepUpGeometryTest` (**9 tests**): the planted foot's
+  resolved surface is the step at the planted frames and the ground at the seam; every joint of the
+  declared `LEFT_FOOT` contact inside the tread footprint and above its top plane; the contact radius
+  preserved when standing on the step (band = the engine's unchanged 2 units, checked against the
+  same pose's floor rest — no absolute rest height is invented, per B-6's own disclaimer); the ascent
+  buying the step's height; the trailing foot on the ground's side of the step, never penetrating its
+  surface and lifted clear at the top; no sampled frame penetrating its resolved surface with honest
+  carriers (`maxIkClampAmount`, `boneLengthsVerified`); published-by-value distinct snapshots carrying
+  the declaration, with the placement movement actually exercised (the anti-vacuity guard that fails on
+  a foot that never moves); the planted foot fixed while planted plus the closed `PING_PONG` seam; and
+  the 50-pose byte-identity digest. **RED on the pre-fix tree: 5 of 9 fail**, quoting the numbers
+  (`resolves to surface y=0.0000 instead of 36.0000`; `ANKLE_F=(12.0000, 36.0000, −25.3000) is OUTSIDE
+  the tread footprint`; `ride 0.0000 above the step's top plane, but the same pose's floor-rest foot
+  rides 25.0000`; `the pelvis rises 13.0000 while the declared step is 36.0000 high`;
+  `ANKLE_F.z: [−25.3, −25.3, −25.3, −25.3, −25.3]`).
+- **Counterfactual RED gates (each executed against the defective shape, then restored byte-identically
+  and re-verified by `md5sum -c`).** (1) The whole pre-fix pose (stash round-trip) → **5/9 fail**.
+  (2) Only the height correction reverted (`onStepY = stepTop`) → **3/9 fail** (ascent, containment
+  above the top plane, contact radius). (3) Only the placement correction reverted
+  (`leadZ = −floorStanceZ`) → **3/9 fail** (resolved surface, tread containment, the
+  placement-exercised guard). The two halves are independently load-bearing, and neither can be
+  removed without a specific, named failure.
+- **Movement review (published frames, settled, the pose's own camera — the same numbers the SVG of
+  the rep was drawn from).** Reviewed as a movement, not as test output:
+
+  | p | pelvis Y | lead ankle | trailing ankle | lead leg span / extension | knee interior | knee over the foot? | trunk tilt from vertical |
+  |---|---|---|---|---|---|---|---|
+  | 0 (seam) | `228.0` | `(12, 25, −25.3)` | `(−12, 25, +25.3)` | `203.4 / 96.9%` | `151.1°` | yes | `0.0°` |
+  | 0.25 | `265.0` | `(12, 61, −19.0)` | `(−12, 61, +25.3)` | `204.4 / 97.3%` | `153.4°` | yes | `5.7°` |
+  | 0.5 (top) | `266.0` | `(12, 61, −19.0)` | `(−12, 61, +25.3)` | `205.4 / 97.8%` | `155.9°` | yes | `0.0°` |
+  | 0.75 | `265.0` | `(12, 61, −19.0)` | `(−12, 61, +25.3)` | `204.4 / 97.3%` | `153.4°` | yes | `5.7°` |
+  | 1 | `228.0` | identical to `p=0` | | `203.4 / 96.9%` | `151.1°` | yes | `0.0°` |
+
+  Pre-fix, on the same measurement: the pelvis topped at `241.0`, the lead ankle never left
+  `Z = −25.3` and the knee was **not** over the ankle–toe range at `p = 0.25/0.75` (`false`, knee
+  interior `138.9°`); post-fix the knee tracks over the foot at every sampled frame (BPS §11/§13
+  "knee tracks over the toes, no valgus" and "lead hip extends fully"). Both hips stay level
+  (`Δ = 0.00`), both feet stay flat (`|heel.y − ankle.y| = 0.00`), and the trunk tilt stays inside
+  BPS §9's `0–15°` band (`0.0°` at the seam/top, `5.7°` mid-transition). 60 fps playback continuity:
+  the largest per-frame joint displacement is `2.44` against the validator's
+  `POSITION_DISCONTINUITY = 15` (pre-fix `1.38`) — the added placement movement costs about one unit
+  per frame at its fastest, nowhere near a discontinuity.
+- **Verification (fresh runs, measured in the same environment).** `./gradlew :app:testDebugUnitTest
+  --rerun-tasks` on the pre-fix tree with this change's test moved aside: **114 classes / 525 tests /
+  0F / 0E / 0S**; on this branch: **115 / 534 / 0F / 0E / 0S** — exactly `+1` class / `+9` tests (the new
+  gate), no other count moved. Focused set green: `M1StepUpGeometryTest` 9, `StepUpPoseTest` 1,
+  `LungePosesTest` 4, `EnvironmentPenetrationTest` 9, `PlankForearmSupportGeometryTest` 9,
+  `SquatMotionTest` 1, `HeadTargetBaselineTest` 1, `SupportDeclarationChannelTest` 4,
+  `SupportPointSideConsumptionTest` 6. Release/build: `:app:compileReleaseKotlin`,
+  `:app:compileReleaseJavaWithJavac`, `:app:assembleDebug`, `:app:assembleRelease -x lintVitalRelease`.
+- **Contracts preserved (measured, not weakened).** `StepUpPoseTest` green; `LungePosesTest` green with
+  `armAsym=0.0 legAsym=9.9353485 footSlide=0.0 supportDrift=0.31368256` (its `legAsym < 15` and
+  `supportDrift < 0.5` bands unchanged; the pre-fix pose measured `legAsym=11.087173 supportDrift=0.0000076`,
+  so the corrected rep sits at the same order of asymmetry, not a looser one); `SquatMotionTest` green (the pose's `8`-unit travel floor against a
+  `38`-unit rise); `HeadTargetBaselineTest` green; `EnvironmentPenetrationTest` (9) green;
+  `SupportDeclarationChannelTest` (4) / `SupportPointSideConsumptionTest` (6) green;
+  `PlankForearmSupportGeometryTest` (9) green after its documented re-baseline.
+- **Recorded, deliberately NOT decided here (product/design questions, unchanged by this pass).**
+  (i) In this variant the trailing foot comes up to the step's **level** beside the tread rather than
+  being placed **on** the tread (BPS §7: "the trailing foot is lifted off the floor (or steps up to
+  meet the box, depending on the variant)"), and it cannot simply be held on the floor while the lead
+  foot climbs — that would break the pose's limb-asymmetry band. Which of the BPS's two variants this
+  exercise should be is a design decision, not a geometry defect. (ii) The step's **height** (`36`
+  against BPS §11's "box height appropriate (lead thigh ~parallel or above when foot placed)") is the
+  authored tuning value the audit did not raise; M1 makes the ascent honest about it, it does not
+  re-tune it. (iii) `StepUpPoseTest`'s foot-slide metric samples only frames where a foot joint is
+  below `y = 12`, and no step-up foot is ever below `12` — the assertion is vacuous there today
+  (recorded as an observation of the T-5/T-7 class, not touched by this pass).
+- **Deliberately NOT touched.** The engine (no finalizer, solver, pipeline, validator-threshold or
+  `SupportMath` change — the 2-unit band included), every other pose and every other P11 finding
+  (M2–M15, B-1…B-8b residuals, §12.7's configuration half), and the renderer.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
 2. H2 complement — migrate LatStretchPose (M11) and CatCowPose (M12) onto `bakeIkLimb`/gaze
    helpers for full carrier coverage; declare the support model (`metadata.support`) for the stretch
    family (M9) and the core/hip poses (M10) and the upper/dynamic poses (M8).
-3. M1/M2/M3/M4/M6/M7 — pose-specific biomechanical-fidelity bugs (step contact, side-plank contact
+3. M2/M3/M4/M6/M7 — pose-specific biomechanical-fidelity bugs (side-plank contact
    side — **the declaration side resolved by B-4 and the pose's own planted-forearm floor debt
    resolved by B-7** — cobra/superman lumbar extension, kettlebell hinge inversion, burpee
-   foot-translation).
+   foot-translation). **M1 (the step contact) is DONE — see the record above.**
 4. M5/M13/M14 — tuning items (snow-angel arc, hamstring reach, decline plank tilt).
 
 ### TODO — P2
