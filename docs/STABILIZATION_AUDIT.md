@@ -872,7 +872,7 @@ and green: this change is verification + record, not a new mechanism.
   changed: making it frame-local in the engine configuration would break cross-configuration parity
   on exactly that path.
 
-### DONE — M1 the Step-Up's planted foot stands on the step the pose declares (production geometry)
+### DONE — M1 the Step-Up's planted foot stands on the step the pose declares (PR #238; production geometry)
 
 Branch `fix/m1-stepup-geometry-support` off `main` `1da6458` (the §12.7 merge). **Production geometry
 change: `StepUpPose` only** — plus the re-baselined B-7 corpus digest and the new
