@@ -604,7 +604,15 @@ class M3M5ProneTrunkGeometryTest {
          * repository's existing corpus-digest recipe (fresh pipeline + builder per class, progress
          * 0/0.25/0.5/0.75/1.0, every `Joint.entries` XYZ as raw float bits); validated against the two
          * older pinned digests before being used here.
+         *
+         * **Re-baselined by the M6/M7 swing/burpee correction** (`fix/m6-m7-swing-burpee-geometry`, off
+         * `fc65695`): this corpus is "every pose except the three prone-family poses", so it includes the
+         * two poses that correction owns. Observed RED on the previous value `-517042293001259057` before
+         * the re-baseline. Attribution is direct, not inferred: the whole-corpus dump (51 classes × 5
+         * progress × every joint XYZ, `8415` rows, full float bits) differs in exactly `268` rows, all of
+         * them `KettlebellSwingPose` + `BurpeePose`; the other 49 classes are byte-identical, which
+         * `M6M7SwingBurpeeGeometryTest.UNAFFECTED_CORPUS_DIGEST` (`-2275091341366878044`) gates directly.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -517042293001259057L
+        const val UNAFFECTED_CORPUS_DIGEST = -5490451701131484798L
     }
 }

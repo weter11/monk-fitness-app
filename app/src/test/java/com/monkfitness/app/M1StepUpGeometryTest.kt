@@ -582,7 +582,16 @@ class M1StepUpGeometryTest {
          * recipe with those three classes ALSO excluded is byte-identical across the two trees
          * (`M3M5ProneTrunkGeometryTest.UNAFFECTED_CORPUS_DIGEST = -517042293001259057`), which is
          * where "the other 48 classes are untouched" is actually gated.
+         *
+         * **Re-baselined again by the M6/M7 swing/burpee correction** (`fix/m6-m7-swing-burpee-geometry`,
+         * off `fc65695`): this corpus is "every pose except the step-up", so it includes the two poses
+         * that correction owns (`KettlebellSwingPose`, `BurpeePose`). Observed RED on the previous value
+         * `-8991724156081959456` before the re-baseline (the run measured the new value below). Attribution
+         * is direct, not inferred: the whole-corpus dump (51 classes × 5 progress × every joint XYZ, `8415`
+         * rows, full float bits) differs in exactly `268` rows, all of them those two poses; the other 49
+         * classes are byte-identical, which `M6M7SwingBurpeeGeometryTest.UNAFFECTED_CORPUS_DIGEST`
+         * (`-2275091341366878044`) gates directly.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -8991724156081959456L
+        const val UNAFFECTED_CORPUS_DIGEST = 6801737802461053843L
     }
 }
