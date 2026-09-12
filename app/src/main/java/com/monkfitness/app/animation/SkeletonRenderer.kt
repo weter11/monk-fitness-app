@@ -25,8 +25,12 @@ fun SkeletonRenderer(
     camera: Camera,
     engine: SkeletonEngine,
     modifier: Modifier = Modifier,
-    environment: EnvironmentDefinition = EnvironmentDefinition(),
-    supportedPoints: Set<SupportPoint> = emptySet(),
+    // B-5 — the Frame Context defaults to what the supplied frame already carries, so a caller that
+    // omits it can no longer strip a pose's declared support model. A caller that holds the
+    // declaration supplies it explicitly: `metadata.environment` + `metadata.support.supportPoints`
+    // (the single R8 resolution). An explicit argument always wins.
+    environment: EnvironmentDefinition = pose.environment,
+    supportedPoints: Set<SupportPoint> = pose.supportedPoints,
     showGround: Boolean = true,
     highlightedJoint: Joint? = null,
     screenSpaceSettings: ScreenSpaceSettings = ScreenSpaceSettings.DEFAULT

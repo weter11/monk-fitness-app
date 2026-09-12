@@ -54,11 +54,19 @@ class SkeletonSnapshotRenderer(
 
     /**
      * Renders a single frame of a SkeletonPose into a Bitmap.
+     *
+     * B-5 — the Frame Context used to DRAW is the Frame Context the frame is FINALIZED against.
+     * This method previously drew the real [environment] while finalizing through
+     * `produceFrame(pose)`, i.e. against the default flat ground and an empty support model; the
+     * declaration-derived Support Declaration is not recoverable from a bare pose (R8/R11 keep
+     * Production Metadata out of the carrier), so it is an explicit parameter here, exactly as on
+     * [SkeletonRenderer]. Both default to what the supplied frame already carries.
      */
     fun renderPose(
         pose: SkeletonPose,
         camera: Camera,
-        environment: EnvironmentDefinition = EnvironmentDefinition(),
+        environment: EnvironmentDefinition = pose.environment,
+        supportedPoints: Set<SupportPoint> = pose.supportedPoints,
         width: Int = 512,
         height: Int = 512,
         showGround: Boolean = true,
@@ -72,7 +80,7 @@ class SkeletonSnapshotRenderer(
             canvas.drawColor(backgroundColor)
         }
 
-        val finalizedPose = pipeline.produceFrame(pose).pose
+        val finalizedPose = pipeline.produceFrame(pose, environment, supportedPoints).pose
         projector.project(
             pose = finalizedPose,
             camera = camera,
@@ -126,6 +134,10 @@ class SkeletonSnapshotRenderer(
                 pose = pose,
                 camera = camera,
                 environment = environment,
+                // B-5 — the Support Declaration of the pose being rendered must reach the pipeline:
+                // without it this off-screen path finalized every snapshot against an empty support
+                // model while drawing the real environment (the exact defect the audit found here).
+                supportedPoints = poseBuilder.metadata.support.supportPoints,
                 width = width,
                 height = height,
                 showGround = showGround,

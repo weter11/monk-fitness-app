@@ -193,9 +193,8 @@ geometry on `main`. Pose-side fix only: no engine file, no phase order, no owner
   local offsets are written by the engine (`resolveHeadTarget`, Phase 7), so the first build realizes
   against a target it never sees again (declared-target delta 16.67 units). Pinned by attribution in
   `ColdFrameLimbRealizationTest` so it cannot be masked or mis-attributed.
-- **Still open (P11 backlog).** B-5 (renderer overload passes ∅), B-6
-  (`EnvironmentPenetrationTest` vacuity), §12.7 flag lifecycle. (T-7 landed as PR #230; B-2 + B-3
-  and B-4 landed — see the blocks below.)
+- **Still open (P11 backlog).** B-6 (`EnvironmentPenetrationTest` vacuity), §12.7 flag lifecycle.
+  (T-7 landed as PR #230; B-2 + B-3, B-4 and B-5 landed — see the blocks below.)
 
 ### DONE — B-2 + B-3 support declaration channel + contact-kind consumption (P11)
 
@@ -332,7 +331,7 @@ declaration, no validator rule and no tolerance was changed.**
 - **Measured (whole corpus: 49 registered pose classes × 5 progress values, EVERY joint's x/y/z,
   published frames, builder path; artifacts `/home/wer/devis/p11-audit/b4-full-{before,after}.tsv`).**
 
-  | measurement | pre-fix (`origin/main` `fa81cb6`) | post-fix |
+  | measurement | pre-fix (`origin/main` `b6ee9f1`, B-4 merged) | post-fix |
   | --- | --- | --- |
   | corpus rows compared | 245 | 245 |
   | **changed rows** | — | **5** — all `side_plank_standard` (`p = 0 … 1`) |
@@ -378,6 +377,108 @@ declaration, no validator rule and no tolerance was changed.**
     pairing is canonical, but the `+Z` sign contradicts the authored geometry (`HAND_A` at −Z) and
     `ENGINE.md` §4. The pose's authored `headings` (`HAND_A → +Z`, `HAND_P → −Z`) therefore point both
     hands inward. Flagged, NOT changed: it is pose `headings` intent, not the support mapping.
+
+### DONE — B-5 the renderer entry point can no longer drop the Frame Context (P11)
+
+PR #233 (`fix/b5-extremity-articulation-runtime-context` @ `661737a`, rebased onto the B-4 merge
+`b6ee9f1`; the numbers below were re-measured on that rebased base). Engine-side
+declaration/entry-point change only: no pose geometry, no carrier, no phase, no ownership, no
+tolerance.
+
+- **Defect.** `SkeletonPipeline.produceFrame(builtPose, environment = EnvironmentDefinition(),
+  supportedPoints = emptySet())` — the renderer / bare-pose entry point — resolved the §5 R8 Frame
+  Context from its **caller** and defaulted BOTH halves to empty, while `injectRuntimeContext`
+  overwrote whatever context the supplied frame already carried. R8's declaration source is
+  `PoseMetadata.support` / `.environment`, and R8 / R11 deliberately keep Production Metadata out of
+  the carrier, so that entry point has no declaration source of its own: every caller must hand one
+  in, and nothing made an omission visible — the audit's "fallback/default behaviour that masks a
+  missing declaration".
+- **Measured (`origin/main` `b6ee9f1`; 49 registered poses × 5 progress; artifacts in
+  `/home/wer/devis/p11-audit/b5/`).**
+
+  | measurement | pre-fix | post-fix |
+  | --- | --- | --- |
+  | re-entering a produced frame through the renderer path — Frame Context preserved | **125 / 245** frames (**24 poses erased**: support model emptied, environment replaced, republished frame `[]`) | **245 / 245** |
+  | builder path vs renderer path fed the *identical resolved context* — max joint deviation | `0.000000` | `0.000000` |
+  | renderer path with the declaration dropped — max joint deviation | `22.762941` (`pike_pushup_standard` @1.0 `TOE_F`; `pushup_standard` hand endpoints `20.117798`; `side_plank_standard` foot `17.571602`), 42 frames over 9 poses | unchanged (the declaration-free reading is still the degraded one — that is what the tests' sensitivity controls pin) |
+  | builder-path corpus (49 × 5, every joint) | md5 `0a800895dcd0b4ef00caee848a1b3b79`, 0 diff lines | md5 `0a800895…`, 0 diff lines — **byte-identical; no golden fixture updated** |
+
+- **The finding's three call sites.** `ExerciseAnimation` re-derived the Support Declaration by hand
+  (`metadata.support.contacts.map { it.point }` — a second copy of the pipeline's derivation);
+  `ValidationPoseLauncher` forwarded the environment but **omitted** the declaration, so the
+  validation viewer published `supportedPoints = []` for every declaring pose and its extremity
+  geometry disagreed with playback; `SkeletonSnapshotRenderer.renderPose` never forwarded even the
+  `environment` it draws with. The audit's "trivially correct one-line change, measurably inert until
+  the support set is supplied" is now both — one line plus the declaration it was inert without.
+- **Fix shape.** (1) `SupportDefinition.supportPoints` is the ONE production resolution of R8's
+  "Production Metadata support context"; `SkeletonPipeline.buildAndInject` uses it instead of its
+  inline copy (the B-2 block's diagram channel is unchanged — it now has a single named resolution).
+  (2) The renderer overload's parameters default to the Frame Context the frame ALREADY carries:
+  omission preserves, an explicit argument (including an explicitly empty model) is still forwarded
+  verbatim and wins; the self-aliasing case is handled inside `injectRuntimeContext`, so R8's single
+  injection point and its ordering are untouched. (3) `SkeletonRenderer` gained the same forwarding
+  defaults, `SkeletonSnapshotRenderer.renderPose` gained the parallel `supportedPoints` parameter and
+  forwards both, its `renderSequence` supplies the declaration, and `ExerciseAnimation` /
+  `ValidationPoseLauncher` resolve `metadata.support.supportPoints`.
+- **Architecture check.** R8 (one pipeline-performed injection per frame; sources = External
+  Environment Definition + the Production Metadata support declaration) and R11 / §3.1 / A29
+  ("Production Metadata bypasses the carrier") are preserved: the declaration stays external, no new
+  carrier or field, no phase or ordering change, no public signature removed (both new parameters are
+  defaulted). What changed is only *which source* the renderer overload resolves from when the caller
+  omits arguments: the frame's own injected context instead of an invented empty model. The audit's
+  other option — "carry metadata/support on `SkeletonPose`" — is barred by R8/R11 and was not taken.
+- **Regression coverage (fresh runs).** `RuntimeContextDeclarationTest` (6): the erasure sweep over
+  the whole production registry; omitted == carried == explicitly-supplied-own-context; the two entry
+  points agree to `0.000000` on identical inputs **with a sensitivity control** (dropping the
+  declaration must be detectable — 42 frames over 9 poses); an explicit empty Frame Context is still
+  honoured; plus two source-level guards (exactly one production resolution of the declaration; every
+  renderer call site resolves/forwards the Frame Context). `ExtremityArticulationTest` (6) was
+  **rewritten onto the production path**: both legs now run `produceFrame(PoseBuilder, PoseContext)`
+  on independently constructed instances of the same pose, the reference leg clearing the carrier
+  inside `build` (where the pose authors it), with the shared Frame Context ASSERTED rather than
+  assumed, non-vacuity checks (carrier on/off, distinct published frames, no shared node tree), a
+  completeness pin on the migrated set derived from the production registry (**11** poses), a
+  dropped-declaration sensitivity control, MANUAL_OVERRIDE preservation over all three carrier-only
+  endpoints plus its auto-derived control, and the 2-DOF wrist composer with its own non-vacuity.
+- **RED → GREEN.** `RuntimeContextDeclarationTest` against a worktree of `b6ee9f1` (only the two API
+  differences adapted — `contacts.map { it.point }` instead of the new accessor — so the same
+  assertions run): **6 tests / 4 failures** —
+  `rendererEntryPointNeverErasesTheFrameContextItIsHanded` (naming all 24 erased poses),
+  `omittedFrameContextIsTheContextTheFrameCarries`,
+  `productionRendererCallSitesResolveTheFrameContext`, `supportDeclarationHasOneProductionResolution`.
+  Post-fix **6 / 0F**. Full suite **110 classes / 494 tests** → **111 / 496 / 0F / 0E / 0S**;
+  `:app:compileReleaseKotlin` + `:app:assembleRelease -x lintVitalRelease` + `:app:assembleDebug`
+  green.
+- **The previous test WAS vulnerable to false-green — recorded explicitly.** `ExtremityArticulationTest`
+  compared a builder-path frame against a frame produced through the *other* entry point with a
+  test-local reconstruction of the declaration, on 7 of the 11 carrier-authoring poses. It was green
+  on `main` for the right values but for a fragile reason: its reconstruction happened to match the
+  pipeline's derivation (measured `0.000000`), the 4 unpinned poses (`chinup_standard`,
+  `pullup_neutral`, `pullup_wide`, `scapular_pullup_deadhang`) were never compared at all, and the
+  same comparison reads `10.652504 … 22.762941` units the moment the declaration is not delivered —
+  i.e. the guard could not distinguish "the carrier is equivalent" from "this leg received the new
+  input". The rewritten suite removes the second derivation and asserts the shared Frame Context.
+- **Recorded, NOT fixed.**
+  - The renderer entry point's parameters remain optional, so a caller that hands a **declaration-free
+    freshly built** pose still finalizes against the empty model. R8/R11 bar carrying the declaration
+    on the carrier, so the remaining guard is the source-level call-site test; making the argument
+    mandatory (the audit's option β) is still an open architectural decision, deliberately not taken
+    here.
+  - Re-finalizing an already-produced frame is NOT byte-idempotent for reasons unrelated to the Frame
+    Context (measured identically on both trees: `arm_circles_hold` 268.56 at `TOE_F`, `birddog_hold`
+    6.27 at `HEAD_POS`). B-5 guarantees the Frame Context survives re-entry, not that re-entry
+    reproduces the frame. New observation, recorded for its own pass.
+  - `*_KNEE` / `*_ELBOW` support kinds still have no consumer (unchanged; B-3/B-4 residual).
+  - **The carrier aliases the authoring node** (new observation, NOT fixed): the authoring helpers
+    record `JointRotation(handNode.localRotation.axis, handNode.localRotation.angle)`
+    (`BasePose.kt:171/193`) and `JointRotation.axis` is a stored reference, so the carrier's axis IS
+    the node's `Vector3` — measured `axisSameObject = true` for every migrated extremity in the whole
+    registry. A later in-place `localRotation.set(...)` on that node silently rewrites the already
+    recorded carrier, and carrier-vs-node equality on the *axis* is guaranteed by aliasing rather than
+    by value. The angle is a `Float` (copied), so the equivalence guard above still compares values
+    where it matters, and no production pose currently rewrites an articulated node after recording
+    it. Out of B-5 scope (Branch-C §11 mixed-mode authoring, §1.1 carrier hygiene); recorded for its
+    own pass.
 
 ### TODO — P1 (next pass, in priority order)
 

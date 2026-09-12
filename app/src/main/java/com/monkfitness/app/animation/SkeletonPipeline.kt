@@ -85,24 +85,26 @@ class SkeletonPipeline(
     private var lastFrameArmedSmoothingCapture = false
 
     /**
-     * Single entry point for an already-built pose (renderer path). Runs the ordered stage chain
-     * (Solver → Finalizer) on [builtPose] and returns the finalized frame. Used by
-     * [SkeletonRenderer] / [SkeletonSnapshotRenderer] which receive a `SkeletonPose` that has
-     * already been `build()`-constructed. The Solver is skipped when the pose registered no contacts
-     * (the common production case), so non-contact poses are untouched.
-     */
-    /**
      * Entry point for an already-built pose (renderer path). Runs the stage chain on [builtPose].
-     * The caller supplies the engine-owned support model ([environment] + [supportedPoints]) because
-     * this overload receives a bare SkeletonPose with no metadata; the PoseBuilder overload derives
-     * both from `metadata` itself. Both paths stamp the SAME carriers so the Finalizer derives
-     * support planes identically. A default (empty) environment is byte-identical for a pose that
-     * declares none.
+     *
+     * **B-5 — the Frame Context is never silently erased.** The caller supplies the engine-owned
+     * support model ([environment] + [supportedPoints]) because this overload receives a bare
+     * SkeletonPose whose declaration source (`metadata`) is not on the carrier by construction
+     * (R8/R11: Production Metadata bypasses the carrier). Both parameters therefore default to the
+     * Frame Context the supplied frame ALREADY carries: omission preserves the frame's context,
+     * while an explicit argument is forwarded verbatim and wins. Before B-5 both defaults were the
+     * empty model and [injectRuntimeContext] overwrote unconditionally, so re-entering a produced
+     * frame through this entry point silently rewrote the caller's frame and re-published it without
+     * its Support Declaration (measured: 24 of the 49 registered poses carry one, and dropping it
+     * moved extremity geometry by up to 22.76 units).
+     *
+     * The PoseBuilder overload derives both halves of the context from `metadata` itself (§5 R8's
+     * External-definition sources: [SupportDefinition.supportPoints] + `metadata.environment`).
      */
     fun produceFrame(
         builtPose: SkeletonPose,
-        environment: EnvironmentDefinition = EnvironmentDefinition(),
-        supportedPoints: Set<SupportPoint> = emptySet()
+        environment: EnvironmentDefinition = builtPose.environment,
+        supportedPoints: Set<SupportPoint> = builtPose.supportedPoints
     ): PipelineResult {
         injectRuntimeContext(builtPose, environment, supportedPoints)
         val finalized = runStages(builtPose)
@@ -138,11 +140,10 @@ class SkeletonPipeline(
         // no environment/support declared (byte-identical geometry elsewhere).
         // R8: deriving the support-point set from Contact Declarations counts as injection-time
         // derivation (§4.1 Group B producer text), so it feeds the single injection call below.
-        val derivedSupportedPoints = HashSet<SupportPoint>()
-        for (contact in pose.metadata.support.contacts) {
-            derivedSupportedPoints.add(contact.point)
-        }
-        injectRuntimeContext(built, pose.metadata.environment, derivedSupportedPoints)
+        // B-5 — the derivation itself lives in ONE production place
+        // (`SupportDefinition.supportPoints`), which is also what the renderer-path callers
+        // resolve; a second copy here is exactly how the renderer path silently diverged.
+        injectRuntimeContext(built, pose.metadata.environment, pose.metadata.support.supportPoints)
         return built
     }
 
@@ -153,9 +154,10 @@ class SkeletonPipeline(
      * The ONLY place the pipeline stamps [SkeletonPose.environment] and
      * [SkeletonPose.supportedPoints]. Both [produceFrame] overloads call this exactly once,
      * immediately before [runStages]; no other pipeline method writes these carriers. The
-     * renderer overload forwards its caller-supplied support model verbatim; the builder
-     * overload derives it from `pose.metadata` at the call site (Contact Declaration
-     * derivation is injection-time derivation, kept inside this boundary).
+     * renderer overload forwards its caller-supplied support model verbatim — or, when the caller
+     * supplies none, the context the frame itself already carries (B-5); the builder overload
+     * resolves it from `pose.metadata` at the call site (Contact Declaration derivation is
+     * injection-time derivation, kept inside this boundary).
      *
      * Behavior-preserving extraction: each overload previously performed exactly these writes
      * inline, at the same position in the frame sequence.
@@ -166,8 +168,13 @@ class SkeletonPipeline(
         supportedPoints: Set<SupportPoint>
     ) {
         pose.environment = environment
-        pose.supportedPoints.clear()
-        pose.supportedPoints.addAll(supportedPoints)
+        // B-5 — the renderer overload's defaults alias the carrier's own set (omission = "keep what
+        // the frame carries"). Clearing before re-adding that same instance would empty the carrier,
+        // so the rewrite is skipped when the source IS the carrier.
+        if (supportedPoints !== pose.supportedPoints) {
+            pose.supportedPoints.clear()
+            pose.supportedPoints.addAll(supportedPoints)
+        }
     }
 
     /**

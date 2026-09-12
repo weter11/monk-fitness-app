@@ -80,7 +80,9 @@ fun ExerciseAnimatedVisual(
             camera = camera,
             engine = engine,
             environment = metadata.environment,
-            supportedPoints = metadata.support.contacts.map { it.point }.toSet(),
+            // B-5 — the Support Declaration resolves through the SINGLE R8 derivation
+            // (`SupportDefinition.supportPoints`), not a hand-rolled copy of it.
+            supportedPoints = metadata.support.supportPoints,
             modifier = modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
