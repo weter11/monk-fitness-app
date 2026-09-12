@@ -70,10 +70,31 @@ class DynamicWorldsGreatestStretchPose : BaseThoracicPose() {
 
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
-        // Legs: front foot flat forward, back leg extended with toe on the floor.
-        targetF.set(pelvisX + 95f, 15f, -def.hipWidth)
-        targetB.set(pelvisX - 120f, 15f, def.hipWidth)
-        poleF.set(1f, 0.2f, -0.2f); poleB.set(0.1f, -1f, 0.2f)
+        // Legs: front foot flat forward, back leg EXTENDED behind with the toe on the floor.
+        //
+        // B2 — the back leg's stance is the extension this pose declares, derived from the chain's
+        // own reach instead of authored as a stub the leg has to fold through. The former literal
+        // (`pelvisX - 120`) left the ankle 126.4945 from the hip for a 112/98 chain, so the knee's
+        // IK locus — a circle of radius h = 83.2989 around the hip→ankle chord — had only two
+        // in-plane branches: the one the authored pole selected realized KNEE_B 46.1056 BELOW the
+        // mat this pose declares, its mirror put the knee 55.4 above the hip, and every branch that
+        // kept the knee near the mat splayed it ~78 u out of the leg's own plane. Authored one full
+        // reach behind the hip, at the definition's own floor-contact height (so the toe stays on
+        // the floor), the leg realizes the near-straight chain the runner's lunge means and the knee
+        // hangs just above the mat (the target sits at `maxReach`, i.e. inside the solver's own
+        // reach band by construction — no clamp, no relocation: measured |published ANKLE_B −
+        // declared target| <= 3e-5).
+        val ankleHeight = def.foot.ankleHeight
+        targetF.set(pelvisX + 95f, ankleHeight, -def.hipWidth)
+        val backReach = SkeletonMath.maxReach(def.thighLength, def.shinLength, def.legIKConstraint)
+        val backDrop = hipB!!.worldPosition.y - ankleHeight
+        targetB.set(pelvisX - sqrt(backReach * backReach - backDrop * backDrop), ankleHeight, def.hipWidth)
+        // The knee's bend side is the leg's own sagittal plane: the pole is derived as the chord's
+        // in-plane perpendicular pointing DOWN (the lunge's back knee hangs toward the mat), so no
+        // lateral component throws the realized knee out of the leg plane — the former
+        // `(0.1, -1, 0.2)` measured `KNEE_B.z = +38.6517` against the leg's own `z = +22`.
+        poleF.set(1f, 0.2f, -0.2f)
+        poleB.set(-(targetB.y - hipB!!.worldPosition.y), targetB.x - hipB!!.worldPosition.x, 0f).normalize()
         bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 

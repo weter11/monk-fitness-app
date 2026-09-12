@@ -1865,7 +1865,7 @@ change: no production file is touched** (the whole-tree diff is the new test cla
   |---|---|---|
   | `ExerciseValidator` ground rule (default config) | `FEET_JOINTS` — `ANKLE/HEEL/TOE_F/B` | **`12` issues in `1` of `11` poses** (`CatCowPose` feet, `HEEL_*` worst `−2.422398`); the other `10` poses report `0` |
   | `EnvironmentPenetrationTest` (B-6) | declared support-contact joints | **`0` of `43`** — every offending joint is outside its pose's own declared family |
-  | new `PublishedBelowGroundInvariantTest` | **every** joint of **every** published frame | **`43` pose/joint pairs over `11` poses** |
+  | new `PublishedBelowGroundInvariantTest` | **every** joint of **every** published frame | **`43` pose/joint pairs over `11` poses** *(post-B2 the table measures `42` pairs over `10` poses — the runner's-lunge back-knee pair's exit criterion was met by that correction; see the B2 record below)* |
 
 - **What the new invariant exposes (measured, worst depth per joint over both frame conditions).**
 
@@ -1947,13 +1947,106 @@ change: no production file is touched** (the whole-tree diff is the new test cla
   clause (c) foot residual; `BurpeePose` — M7's plant phases (the knees), with the M8/M9/M10 item (b)
   foot declaration still the remaining one-liner; `DiamondPushUpPose`, `DynamicWorldsGreatestStretchPose`,
   `IsometricSidePlankPose` — measured here for the first time, **no M-number owns them**; flagged for
-  the user to assign rather than silently absorbed.
+  the user to assign rather than silently absorbed. **`DynamicWorldsGreatestStretchPose` has since been
+  ASSIGNED and CORRECTED as B2 — see the record below**; its pinned pair left this table in that change,
+  which is why the table now measures `42` pairs over `10` poses.
 - **Deliberately NOT asserted.** (a) An absolute rest height ("no float") — the engine declares no
   per-contact rest height (see B-6). (b) The world-origin class: the `10` poses that build their own
   node tree still publish `LUMBAR`/`CLAVICLE_*`/`SCAPULA_*` at `(0,0,0)` — exactly AT the plane, so this
   invariant does not flag them (it is a lower bound); that is a different, recorded defect (§4 item 2)
   and conflating the two would make this instrument lie about what it measures. (c) The below-ground
   geometry itself: **not fixed here** — this is the instrument, the poses keep it for their own passes.
+
+### DONE — B2 the runner's-lunge back knee (branch `fix/b2-wgs-back-knee-plane`, off `2fb6079`; production geometry)
+
+**Pose-side change only**: one production file (`poses/DynamicWorldsGreatestStretchPose.kt`), the new
+focused regression, the T2 pin-table exit and the re-baselined scope digests. No engine/solver/phase/
+ownership change (the knee is an IK output — the pose owns the chain root, the ankle target and the
+pole), no RFC change, no golden change, no tolerance moved and no assertion weakened.
+
+- **Root cause — the authored back-leg STANCE, not the pole alone.** The pose declares a runner's
+  lunge (*"front foot flat forward, back leg extended with the toe on the floor"*, its own KDoc) on the
+  plane T2 measures (`thoracicGround`, `level = 0`). The authored back ankle (`pelvisX - 120`,
+  `y = 15`) sat `126.4945` from the hip for a `112 / 98` chain
+  (`minReach(112, 98, 30°) = 56.0090`, `maxReach(112, 98) = 205.8000`), so the chain had to fold: the
+  knee's locus is a circle of radius `h = 83.2989` about the hip→ankle chord, and the authored pole
+  `(0.1, -1, 0.2)` selected the branch that realizes
+  `KNEE_B = (-55.2148, -46.1056, +38.6517)` — **`46.1056` u BELOW the mat the pose itself declares**
+  (`groundBand = 0.05`), and `16.65` u out of the leg's own sagittal plane (`z = +22`), at EVERY
+  sampled phase. It is the deepest published joint of the whole pose (the next lowest is
+  `TOE_B +1.5996`). Both alternatives are measured and rejected: the mirror in-plane branch puts the
+  knee `55.4` u **above the hip** (a chicken-wing back leg, not a lunge), and every branch that keeps
+  the knee near the mat requires splaying it `~78` u laterally out of the leg plane. With that stance
+  **no** pole yields a legal back leg — which is why the correction is the stance, not a pole retune.
+- **Fix — author the extension the pose declares, derive the bend side.** The back ankle is authored
+  one full chain reach behind the hip (`SkeletonMath.maxReach(def.thighLength, def.shinLength,
+  def.legIKConstraint)`, inside the solver's own reach band by construction: measured
+  `|published ANKLE_B − declared target| = 3.4e-5`, no relocation) at the definition's own
+  floor-contact height (`def.foot.ankleHeight`, so the toe stays on the floor), and the pole is derived
+  as the hip→ankle chord's in-plane perpendicular pointing DOWN (the lunge's back knee hangs toward the
+  mat) instead of a hand-tuned literal carrying a lateral component. The front leg's stance, both arm
+  chains and the whole trunk/head chain are untouched.
+- **Measured, published path `produceFrame(pose, ctx)`, dense sweep (`51` samples × both frame
+  conditions, by-value snapshots):**
+
+  | reading | pre-fix | corrected |
+  |---|---|---|
+  | worst published joint vs the pose's own declared plane | `KNEE_B −46.1056` (every phase) | **`−0.0000`** (the lowest joint is now the back toe at `+0.9686`) |
+  | realized `KNEE_B` | `(-55.2148, -46.1056, +38.6517)` | **`(-113.8925, +13.1629, +22.0000)`** |
+  | back knee vs its own hip | `101.11` below the hip, `16.6517` out of the leg plane | `41.84` below the hip, **`0.0000`** out of the leg plane |
+  | back leg hip→ankle distance | `126.4911` (`61.5 %` of `maxReach`) | **`205.7998`** (`99.9999 %`) |
+  | realized back-knee flexion | `106.3°` | **`23.0°`** (the near-straight chain the KDoc's "extended" means) |
+  | derived back-foot chain | `HEEL_B y = 20.4734`, `TOE_B y = 1.5996`, `z = 25.0095 / 14.6320` (splayed) | `y = 20.7311 / 0.9686`, **`z = 22.0000 / 22.0000`** (in the leg plane, toe still on the floor) |
+  | `maxIkClampAmount` (p = 0 / 0.25 / 0.5) | `21.640945` / `13.396454` / `7.5872955` | identical — the pose's clamp is its support arm's; B2 adds **zero** |
+  | front leg (`KNEE_F`/`ANKLE_F`/`HEEL_F`/`TOE_F`) and both arm chains | — | byte-identical (see the corpus diff below) |
+- **Blast radius (whole corpus: `51` classes × `5` samples × every joint XYZ = `8415` rows**, dumped
+  through the production pipeline in a pristine `origin/main` @ `2fb6079` worktree (`/tmp/b1-base`) and
+  on this tree, then diffed): exactly `20` rows differ, **ALL of them inside
+  `DynamicWorldsGreatestStretchPose`** — `KNEE_B` / `ANKLE_B` / `HEEL_B` / `TOE_B` × the `5` samples
+  (max `82.2520` u at `HEEL_B`) — with the other `50` classes byte-identical. The seven scope digests
+  whose corpus contains this pose were re-baselined with a measured paragraph each:
+  `M1StepUpGeometryTest` `-6608239793215088689 → -4254161156074832348`,
+  `M3M5ProneTrunkGeometryTest` `-8408967521599715408 → -967624648643503611`,
+  `M6M7SwingBurpeeGeometryTest` `-9151034365136083044 → -6796955727995826703`,
+  `PlankForearmSupportGeometryTest` `7021051649408857128 → 8245693820516700285`,
+  `M11M12LimbRealizationMigrationTest` `-8765447390407027904 → -6411368753266771563`,
+  `HamstringForwardReachTest` `2817082625550222209 → 5171161262690478550`,
+  `M15WallSlidesWallGeometryTest` `-8128235422251913276 → -7273487059142510759`.
+  (`M8M9M10SupportDeclarationTest`'s digest is unchanged by construction: its corpus excludes the `17`
+  poses of its own declaration group, and this pose is one of them.)
+- **The T2 pin table's exit criterion was met, and it forced its entry out.**
+  `PublishedBelowGroundInvariantTest`'s stale-pin guard failed on the fixing change listing exactly
+  `DynamicWorldsGreatestStretchPose KNEE_B` — the attributed open item whose owner was *"flagged for
+  assignment"* — so the entry **and** its `attribution` line were removed in this same change, together
+  with the class KDoc's instrument-table counts (`43 → 42` pairs, `11 → 10` poses). The table's own
+  guard is the mechanism that makes a fix non-optional here.
+- **Verification.** New focused regression `WorldsGreatestStretchBackKneePlaneTest` (`5` tests: the
+  whole-body plane invariant over a **dense `51`-sample** sweep × both frame conditions with by-value
+  snapshots, the back knee's clearance and bend side, the knee's own sagittal plane, the back leg's
+  realized extension and target identity, and the guards that must not move — the declaration, the
+  motion contract, the anti-vacuity spread). **RED on the pristine base worktree**
+  (`/tmp/b1-base` @ `2fb6079`, the class copied in, `--rerun-tasks`, results purged): **`4` of `5`
+  FAILED** — `noPublishedJointPassesBelowThePosesOwnDeclaredPlane` (`KNEE_B −46.1056` at all `51`
+  samples of both conditions), `theBackKneeHoversJustAboveTheMat` (`−46.105583`),
+  `theBackKneeStaysInTheLegsOwnSagittalPlane` (`16.6517` off), and
+  `theBackLegRealizesTheExtensionItsStanceDeclares` (`d = 126.4911` of `maxReach 205.8000`).
+  **GREEN on the branch: `5/5`, `0F / 0E / 0S`** (`--rerun-tasks`). Full suite: pristine base worktree
+  **`122 classes / 592 tests / 0F / 0E / 0S`** → this branch **`123 / 597 / 0F / 0E / 0S`** — exactly
+  `+1` class / `+5` tests.
+- **Residuals recorded, NOT fixed** (all measured on the corrected tree; none of them is below the
+  plane, and each is a product/design decision the user owns rather than a B2 scope item):
+  (a) the FRONT leg keeps the family's literal pole `(1, 0.2, -0.2)`, so its realized knee sits `29.90`
+  u out of its own plane (`KNEE_F z = -51.8962` against the leg's `z = -22`) and `53.32` u ABOVE the
+  hip (`HIP_F 55.0000`, `KNEE_F 108.3214`) — a deep fold that the pose's own root height
+  (`pelvisY = 55`) forces at that stance; correcting it means re-authoring the root (which moves the
+  trunk, the arms and the declared `RIGHT_HAND` contact);
+  (b) the declared support hand never reaches the floor: `HAND_P y = 21.6371` at p = 0 → `5.2037` at
+  p = 0.75 (`FINGERTIPS_P` identical), the arm chain relocated by the solver
+  (`maxIkClampAmount = 21.640945` at p = 0) because the authored hand target sits inside the `80 + 66`
+  chain's `minReach` there — the pose's own pre-existing reach authoring, untouched by B2;
+  (c) the extended stance widens the pose's X extent from `261.68` to `343.93` u while the family camera
+  is a fixed-zoom projection (no fit-to-bounds), so the back foot can sit outside a narrow viewport — a
+  viewport/framing decision, deliberately not taken here.
 
 ### TODO — P1 (next pass, in priority order)
 
@@ -2009,7 +2102,9 @@ A8/A6 leaks — resolved in the Push-Up Family pass above.)
 - Fix the pose, not the engine, when a pose authors motion incorrectly.
 - Keep pose-side migrations on the **existing** carrier surface (the H2 fix is the template).
 - After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
-  current baseline of record (**120 classes / 577 tests** as of the M11/M12 limb-realization migration,
+  current baseline of record (**122 classes / 592 tests** on `origin/main` @ `2fb6079`, the T2 merge,
+  measured fresh in this pass's own base worktree; `123 / 597` with the B2 runner's-lunge back-knee
+  correction. Earlier standing points: **120 classes / 577 tests** as of the M11/M12 limb-realization migration,
   which added `M11M12LimbRealizationMigrationTest` and re-baselined six scope digests; the M13
   hamstring-reach correction stood at `119 / 572`, the M6/M7 landing plus the
   M8/M9/M10 declaration pass stood at `118 / 566`; `--rerun-tasks` with the results directory purged, XML-stamped fresh; the
