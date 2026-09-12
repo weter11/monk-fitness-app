@@ -87,12 +87,30 @@ class ThoracicExtensionPose : BaseThoracicPose() {
         // W1: engine now derives heel/toe from the (vertical) shank + neutral ankle.
 
         // Arms: hands behind the head, elbows flared outward/up to open the chest.
-        val neckW = neck!!.worldPosition
-        targetP.set(neckW.x - 12f, neckW.y + 6f, def.shoulderWidth * 0.55f)
+        // B-8b — the head base is PROJECTED from geometry the pose owns, never read from the
+        // engine-owned neck node. `SkeletonPoseFinalizer.resolveHeadTarget` (Phase 7) is the sole
+        // writer of the neck's local offsets, so a build that reads `neck.worldPosition` consumes
+        // the PREVIOUS frame's write — and the skeleton template's zero offset on a builder's very
+        // first build, when the neck sits AT the chest and the arms are realized against a target
+        // the pose never sees again (measured: declared-target delta 17.87u, published
+        // ELBOW_A/HAND_A delta 29.93/17.91 cold vs settled, published `maxIkClampAmount` 15.47 on
+        // the cold frame vs 5.52 in the rep). The resolver places the neck along the gaze the pose
+        // declares above (`buildGaze`, same `headDir`, same `def.neckLength`) inside the chest
+        // frame this pose declares, so the same point is expressible from authored intent alone:
+        // authored gaze direction x definition neck length, rotated to world by the declared chest
+        // frame via the family's existing frame helper (the thoracic reaches use it too).
+        reachLocal.set(
+            headDir.x * def.neckLength,
+            headDir.y * def.neckLength,
+            headDir.z * def.neckLength
+        )
+        chestLocalToWorld(reachLocal, reachWorld)
+
+        targetP.set(reachWorld.x - 12f, reachWorld.y + 6f, def.shoulderWidth * 0.55f)
         poleP.set(0f, 0.6f, 2f)
         bakeThoracicArm(shoulderP!!.worldPosition, targetP, def, poleP, elbowP!!, handP!!, armPBuffer)
 
-        targetA.set(neckW.x - 12f, neckW.y + 6f, -def.shoulderWidth * 0.55f)
+        targetA.set(reachWorld.x - 12f, reachWorld.y + 6f, -def.shoulderWidth * 0.55f)
         poleA.set(0f, 0.6f, -2f)
         bakeThoracicArm(shoulderA!!.worldPosition, targetA, def, poleA, elbowA!!, handA!!, armABuffer)
 

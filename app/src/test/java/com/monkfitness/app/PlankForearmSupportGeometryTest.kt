@@ -566,7 +566,19 @@ class PlankForearmSupportGeometryTest {
          * Measured identically on the unmodified baseline (`origin/main` @ `e075c6e`) and on the B-7
          * tree — i.e. the correction's geometry is confined to `StaticForearmPlankPose` and
          * `IsometricSidePlankPose`.
+         *
+         * **Re-baselined once, by B-8b** (`fix/b8b-thoracic-extension-target`): that change stops
+         * `ThoracicExtensionPose` deriving its arm targets from the engine-owned neck node, which
+         * moves that pose's **cold first frame only** (the first sample of the first pipeline this
+         * loop samples) — 12 arm-chain joints, 29.9277u at ELBOW_A (p=0) up to 32.2308u at p=1, with
+         * the earlier cold-frame target `(-12.000000, 253.000000)` instead of the rep's
+         * `(-14.144614, 270.871796)`. Every one of the other 48 classes is byte-identical at full
+         * precision, and `thoracic_extension_reps` is byte-identical on every NON-cold frame
+         * (`ThoracicExtensionArmTargetTest` asserts that directly). The corpus and its coverage are
+         * unchanged — all 49 classes stay in the digest, so any further drift in any of them still
+         * fails here. This guard was observed RED on this very change before the re-baseline, which
+         * is its own mutation check.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -340803699455685852L
+        const val UNAFFECTED_CORPUS_DIGEST = 8354470872339933400L
     }
 }

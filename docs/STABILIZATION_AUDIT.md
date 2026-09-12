@@ -187,12 +187,15 @@ geometry on `main`. Pose-side fix only: no engine file, no phase order, no owner
   History (`previous = SkeletonPose().apply { copyFrom(finalized) }`) — plus a sweep-independence guard
   (100 distinct frame objects + a real CHEST-height spread) so the aliasing cannot return silently. No
   assertion weakened or removed; production runtime untouched.
-- **Recorded, NOT fixed — B-8b.** `thoracic_extension_reps` is **not** a B-8 victim (its trunk frame is
+- **Recorded, NOT fixed — B-8b (NOW FIXED; see the `DONE — B-8b` block below).** `thoracic_extension_reps`
+  is **not** a B-8 victim (its trunk frame is
   already authoritative — identity and frame-invariant). Its residual (ELBOW_A 29.93 / HAND_A 17.91) is
   a different defect: the pose derives both arm targets from `neck!!.worldPosition` while the neck's
   local offsets are written by the engine (`resolveHeadTarget`, Phase 7), so the first build realizes
-  against a target it never sees again (declared-target delta 16.67 units). Pinned by attribution in
-  `ColdFrameLimbRealizationTest` so it cannot be masked or mis-attributed.
+  against a target it never sees again (declared-target delta 17.87 units). It was pinned by attribution in
+  `ColdFrameLimbRealizationTest` so it could not be masked or mis-attributed while open; that pin is
+  **removed** by the B-8b fix (the pose now projects the head base from its own authored gaze, chest
+  frame and `def.neckLength`), and the frame-consistency assertion it was excluded from now covers it.
 - **Still open (P11 backlog).** §12.7 flag lifecycle; and — recorded so the label is unambiguous — the
   **P11 branch's own B-6** (`docs/AUDIT_P11_WHOLE_SYSTEM.md` §2: `SkeletonPipeline.resetHistory()`
   clears the dynamics chain but not the smoothing history; class NEEDS ARCHITECTURAL DECISION + DEAD
@@ -702,9 +705,98 @@ explicitly left open ("the poses' own §7 debt", P11 §M2).
   all green; `:app:lintVitalRelease` fails **identically on both trees** (pre-existing `themes.xml`
   `ResourceCycle` + `ExpiredTargetSdkVersion`).
 - **Deliberately NOT touched (the mission's out-of-scope residuals, still open).** B-5's residual, the
-  P11-branch `SkeletonPipeline.resetHistory()` B-6 decision, the §12.7 flag lifecycle, B-8b /
-  `ThoracicExtensionPose`, the `*_KNEE` / `*_ELBOW` support-consumer architecture, M9/M10 (missing
-  declarations), the renderer, and every validator threshold (the 2-unit band included).
+  P11-branch `SkeletonPipeline.resetHistory()` B-6 decision, the §12.7 flag lifecycle, the
+  `*_KNEE` / `*_ELBOW` support-consumer architecture, M9/M10 (missing
+  declarations), the renderer, and every validator threshold (the 2-unit band included). (**B-8b /
+  `ThoracicExtensionPose` was in this list when B-7 landed; it is now fixed — see the `DONE — B-8b`
+  block below.**)
+
+### DONE — B-8b the thoracic-extension arm target is pose-owned (PR #236; P11; production geometry)
+
+The one family the B-8 task matrix lists whose residual was **not** a trunk-frame defect. Pose-side
+fix only: no engine file, no phase order, no carrier, no API, and **no head/neck ownership change** —
+`SkeletonPoseFinalizer.resolveHeadTarget` (Phase 7) remains the sole writer of the neck's local
+offsets.
+
+- **Defect.** `ThoracicExtensionPose` derived BOTH arm targets from the engine-owned neck node
+  (`val neckW = neck!!.worldPosition`, `ThoracicExtensionPose.kt:90` pre-fix;
+  `target* = neckW + (-12, +6, ±0.55·shoulderWidth)`). The neck's local offsets are written by the
+  engine in Phase 7 — at the END of a frame — so a build can only ever read the PREVIOUS frame's
+  neck; on a builder's first build the skeleton template still carries a zero neck offset, so the
+  COLD frame anchored its hands to the **chest** (the neck sat *at* the chest) and realized a target
+  it never sees again. Frames ≥ 1 only looked right because the reused node tree carried the
+  engine's previous write — correctness by cross-build buffer reuse, not by the frame. Same class as
+  B-8, different mechanism (B-8 was the trunk frame; this is the target source).
+- **Measured (`origin/main` @ `691c6a7`, cold first frame vs the same instance settled, p=0).**
+  Declared arm target `(-12.000000, 253.000000, ∓25.300000)` vs
+  `(-14.144614, 270.871796, ∓25.300000)` = **17.8718**; published `ELBOW_A`/`HAND_A` `29.9277` /
+  `17.9135`; published `maxIkClampAmount` **15.4668** on the cold frame against **5.5162** in the
+  rep. Cold-vs-settled arm-chain delta per progress: `29.9277` (p=0), `30.8876`, `31.5530`,
+  `31.9853`, `32.2308` (p=1).
+- **Why `neck.worldPosition` was the wrong authoritative source.** The arm target is Phase-0 pose
+  intent and must be authored from pose-owned geometry; the neck node is a Phase-7 engine product
+  whose position is rewritten *after* the limb target is read, so no build can see the value it
+  authored against. The dependency was not an explicit architectural contract — the neck was simply a
+  convenient positional reference, and it made `limbTargets` frame-dependent.
+- **Fix (smallest expression of already-existing pose geometry).** The engine places the neck along
+  the gaze the pose declares (`buildGaze`, with the pose's own `headDir` and the definition's
+  `def.neckLength`) inside the chest frame the pose declares, so that point is expressible from
+  authored intent alone: `headDir · def.neckLength`, rotated to world by the declared chest frame via
+  the family's existing helper `BaseThoracicPose.chestLocalToWorld` (`BaseThoracicPose.kt:111` — the
+  helper `QuadrupedThoracicRotationsPose` and `DynamicWorldsGreatestStretchPose` already use for a
+  thorax-following reach). The authored `(-12, +6, ±0.55·shoulderWidth)` hand offset, the poles, the
+  trunk frame and `bakeIkLimb` as the authoring path are all untouched; nothing was added to the
+  engine, and no new carrier or conversion abstraction was introduced.
+- **After.** Declared arm-target delta cold vs settled **0.0000** at every progress; cold-vs-settled
+  arm-chain delta **0.0000**; the cold frame's `maxIkClampAmount` equals the rep's
+  (`5.5162 / 4.5738 / 3.7950 / 3.1927 / 2.7763` per progress — no new clamp, and the frame-dependent
+  `15.4668` artifact is gone); `boneLengthsVerified = true`; the authored base sits exactly on the
+  neck base the engine publishes (`NECK_END`, measured `0.0000` at every progress — i.e. the target
+  is anchored to the head the engine actually produces, not to an arbitrary chest offset).
+- **Corpus impact (measured, not assumed).** 49 production pose classes (`PoseRegistry`) × 5
+  progress × {cold first frame, settled rep} × every joint plus the `limbTargets` carrier, at full
+  `%.6f`: **490 rows compared → 5 changed, all five `thoracic_extension_reps` COLD frames, 12 joints
+  each (both arm chains), max joint delta `29.9277` (p=0) … `32.2308` (p=1)**; the other **48 classes
+  byte-identical at 1e-6**, and `thoracic_extension_reps` byte-identical on every settled frame.
+  `PlankForearmSupportGeometryTest.UNAFFECTED_CORPUS_DIGEST` was re-baselined once
+  (`−340803699455685852 → 8354470872339933400`) with the reason recorded at the constant — that guard
+  was observed RED on this change first, which is its own mutation check, and its 49-class corpus is
+  unchanged so any further drift still fails there. **No other golden changed**
+  (`arch/RuntimeArchitectureBaselineTest` green and untouched — its fixtures pin the bare-pose path).
+- **Regression (fresh runs).** New `ThoracicExtensionArmTargetTest` (**6 tests**), RED **6/6** on
+  `origin/main` @ `691c6a7` with the numbers above quoted in the failures: declared-target
+  frame-invariance over the published `limbTargets` carrier (17.8718); cold == frame 1 == settled for
+  the whole published arm chain (29.9277); the authored base == the engine's published `NECK_END`
+  (2.1446 off on the cold frame); a non-vacuity guard that recomputes the **pre-fix** expression from
+  the pose's own build and requires the authored target to differ by > 5u (pre-fix: 0.0000, i.e. the
+  two were the same value); a source-scan guard that the pose may not read the neck node's world
+  position (flagged `ThoracicExtensionPose.kt:90 val neckW = neck!!.worldPosition`); and the
+  published carriers (`limbTargets` with its declared bone lengths + constraint, `boneLengthsVerified`,
+  and no clamp above the recorded pre-fix steady-state per progress). Every assertion reads primitives
+  or by-value copies — no pipeline buffer or node is retained, no cold-only or warm-only sampling.
+- **The attribution pin is removed, not weakened.** `ColdFrameLimbRealizationTest`'s B-8b pin test and
+  its `settledBuildTargets` helper are deleted, and `ThoracicExtensionPose` joins the identity-trunk
+  control (`trunkFramesTheEngineDerivesAsIdentityAreNotRewritten`) it was deliberately held out of
+  while B-8b was open. Measured accounting: on the B-8b baseline that file is RED **1 failed / 5
+  passed** — exactly that control, whose ThoracicExtension arm pair measures the `29.9277` delta —
+  and GREEN **6/6** after this change. No assertion was softened to accommodate the old value.
+- **Verification.** Full suite `--rerun-tasks`, results dir purged: `origin/main` @ `691c6a7`
+  **112 classes / 513 tests / 0F / 0E / 0S** → this branch **113 / 518 / 0F / 0E / 0S** (+1 class /
+  +5 tests = the new 6-test class minus the removed pin; no collateral anywhere). Release:
+  `:app:compileReleaseKotlin --rerun-tasks`, `:app:assembleDebug` and
+  `:app:assembleRelease -x lintVitalRelease` all green (fresh APKs); `:app:lintVitalRelease` fails
+  **identically on both trees** — the pre-existing `themes.xml` `ResourceCycle` +
+  `ExpiredTargetSdkVersion`, whose error lines `diff` empty between trees.
+- **Residual (recorded, deliberately NOT fixed — a different question from the target source).** This
+  pose authors its hands INSIDE the arm's minimum-reach annulus: `ArmConstraint.minimumFlexionAngle =
+  30°` fixes the closest reachable end-effector at `40.1344` from the shoulder while the authored
+  target sits `34.6182` away at p=0 (`24.6670` on the pre-fix cold frame), so the solver honestly
+  reports `maxIkClampAmount` `5.5162` (p=0) … `2.7763` (p=1) and places the hand on the target's own
+  ray at `40.1344`. That is a pre-existing authoring/reachability question about where this rep puts
+  its hands, not a target-source defect; this change neither introduces nor hides it (the cold stamp
+  now equals the rep's instead of being larger) and pins it as an upper bound in the new test.
+- **Not touched.** B-8 (its cold-frame limb-realization contract is verified unchanged and stays
+  green), the Finalizer, phase ordering, head/neck semantics, and every other pose.
 
 ### TODO — P1 (next pass, in priority order)
 
