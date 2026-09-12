@@ -32,10 +32,11 @@ The architectural-rules background (which the findings must respect) is in `ARCH
 
 The dominant theme is that ~14 poses were authored **before** the Branch-B/W1 IK + intent +
 contact surface was finalized, and never migrated onto it. Those poses call `SkeletonMath.solveIK`
-directly, hand-write `localPosition` world-deltas, and omit `supportContacts` — so they silently
+directly, hand-write `localPosition` world-deltas, and omit the support declaration — so they silently
 opt out of the engine's carrier instrumentation (`limbTargets`, `maxIkClampAmount`,
 `boneLengthsVerified`) and of honest contact validation. The corrective pattern is to route every
-limb through `bakeIkLimb` and to declare `supportContacts` where the body is genuinely planted.
+limb through `bakeIkLimb` and to declare their support contacts (`metadata.support`) where the body
+is genuinely planted.
 
 ---
 
@@ -53,15 +54,15 @@ limb through `bakeIkLimb` and to declare `supportContacts` where the body is gen
 | # | Exercise(s) | Finding | Class |
 |---|---|---|---|
 | M1 | StepUpPose | Lead/trail feet at Z=∓25.3 but step prop spans only Z∈[−22,+22]; both feet overhang the step. | bug |
-| M2 | IsometricSidePlankPose | `supportContacts={RIGHT_FOREARM,RIGHT_FOOT}` but planted forearm authored on P side while `SupportMath` maps `RIGHT_FOREARM→{ELBOW_A,HAND_A}` (A side). | bug |
+| M2 | IsometricSidePlankPose | `support.contacts={RIGHT_FOREARM,RIGHT_FOOT}` but planted forearm authored on P side while `SupportMath` maps `RIGHT_FOREARM→{ELBOW_A,HAND_A}` (A side). | bug |
 | M3 | ProneCobraStretchPose | Whole −1.57→−0.9 trunk extension on PELVIS, not thoracolumbar/lumbar → chest follows rigidly (same class as the S3 ThoracicExtension fix). | bug |
-| M4 | SupermanPose | Back extension by rotating pelvis→chest vector, no lumbar articulation; missing supportContacts/exerciseFamily/bodyOrientation metadata. | bug/tuning |
-| M5 | ReverseSnowAngelPose | Missing supportContacts/exerciseFamily/bodyOrientation despite planted legs; arm arc maxSweep=170° at fixed Y=15 never clears overhead. | tuning |
+| M4 | SupermanPose | Back extension by rotating pelvis→chest vector, no lumbar articulation; missing support declaration/exerciseFamily/bodyOrientation metadata. | bug/tuning |
+| M5 | ReverseSnowAngelPose | Missing support declaration/exerciseFamily/bodyOrientation despite planted legs; arm arc maxSweep=170° at fixed Y=15 never clears overhead. | tuning |
 | M6 | KettlebellSwingPose | Hinge profile inverted: `pelvisY=lerp(175,210)` makes deep hike taller than top while `leanAngle→0`. | bug |
 | M7 | BurpeePose | During plank phases feet translate −110 in X while hands stay X≈25, reversing plank geometry. | bug |
 | M8 | 7 upper/dynamic + Burpee/Kettlebell | No `SupportContact` for planted feet / plank-push-up-jump; IK targets never run through `clampTargetToReach` → unreachable authoring silently solver-clamped. | bug |
-| M9 | All 8 stretch poses | None declare `supportContacts`/`SupportDefinition` despite fully contact-bearing → CONTACT_PRESERVED/SUPPORT/ground-penetration validation silently disabled. | bug/tuning |
-| M10 | GluteBridge, PelvicTilt, MountainClimber | Missing `supportContacts` (feet/feet/hands). | tuning |
+| M9 | All 8 stretch poses | None declare a support model (`metadata.support.contacts`) despite fully contact-bearing → CONTACT_PRESERVED/SUPPORT/ground-penetration validation silently disabled. | bug/tuning |
+| M10 | GluteBridge, PelvicTilt, MountainClimber | Missing support declaration (feet/feet/hands). | tuning |
 | M11 | LatStretchPose | Bypasses `bakeIkLimb` (manual solveIK+rotAround) → not in `limbTargets` carrier. | cleanup |
 | M12 | CatCowPose | Raw world positions + fromJointPositions, bypassing bakeIkLimb/buildGaze/intent carriers. | cleanup |
 | M13 | HamstringStretchPose | Forward-reach hand target near/beyond arm reach (~200 vs max 146) → solver-clamped. | tuning |
@@ -120,9 +121,10 @@ Result: no compilation/runtime errors; 282/0 baseline holds.
   `shoulderP.worldPosition` after `buildShoulders` + FK instead of `rotAround` (geometry identical).
   Added the missing `buildShoulders` call to `BasePushUpPose` so the girdle is seated before the
   authoring-FK pass.
-- **Family consistency:** every member now declares `pivotType`, `supportContacts`,
+- **Family consistency:** every member now declares its support model (`metadata.support`),
   `exerciseFamily = "push-up"`, `motionType = "Press"`, `bodyOrientation = "Prone"` alongside the
-  existing `support`, matching the Plank family metadata contract.
+  geometry, matching the Plank family metadata contract. (The `pivotType` / `supportContacts`
+  duplicates this pass added were removed by **B-2** — the support fact now has one channel.)
 
 NOTE: this pass could not be compiled/validated in-session — the build toolchain (JDK + Android SDK)
 was absent from the sandbox. Geometry-preserving changes (poles, shoulder placement, dead-field
@@ -172,16 +174,93 @@ geometry on `main`. Pose-side fix only: no engine file, no phase order, no owner
   local offsets are written by the engine (`resolveHeadTarget`, Phase 7), so the first build realizes
   against a target it never sees again (declared-target delta 16.67 units). Pinned by attribution in
   `ColdFrameLimbRealizationTest` so it cannot be masked or mis-attributed.
-- **Still open (P11 backlog, unchanged).** T-7, B-2 (`PoseMetadata.supportContacts` write-only), B-3
-  (`*_TOES`/`*_FOREARM` never consulted), B-4 (three contradictory SupportPoint↔Joint maps), B-5
-  (renderer overload passes ∅), B-6 (`EnvironmentPenetrationTest` vacuity), §12.7 flag lifecycle.
+- **Still open (P11 backlog).** T-7 (aliased-buffer sweep repair — branch
+  `fix/t7-knee-pushup-frame-snapshot`, PR #230 open, not merged), B-4 (three contradictory
+  SupportPoint↔Joint maps), B-5 (renderer overload passes ∅), B-6
+  (`EnvironmentPenetrationTest` vacuity), §12.7 flag lifecycle.
+
+### DONE — B-2 + B-3 support declaration channel + contact-kind consumption (P11)
+
+One problem in two halves: *where* support intent is declared, and whether the extremity derivation
+consumes the contact KIND the pose declared. Both are engine/declaration changes only — no pose
+geometry, no tolerance, no validator rule was touched.
+
+- **B-2 — `PoseMetadata.supportContacts` was a write-only channel.** `PoseMetadata` carried three
+  copies of one fact: `support` (`SupportDefinition.pivot` + `.contacts`) — the channel BOTH
+  production readers already used (`SkeletonPipeline.buildAndInject` for playback and
+  `ExerciseAnimation` for the renderer path) — plus `supportContacts: Set<SupportContact>` (15
+  writers / 0 readers in `app/src/main`) and `pivotType: PivotType` (15 writers / 0 readers).
+  `StaticForearmPlankPose` and `IsometricSidePlankPose` declared their support **only** on the unread
+  channel, so the published frame carried `supportedPoints = []` at every progress value and the
+  Finalizer's support-plane derivation was entirely off; their `pivotType = ELBOWS` also contradicted
+  their own `support.pivot` (the default `FEET`). Fix: both duplicate channels are deleted —
+  `PoseMetadata` now has ONE support declaration — and the two planks declare through
+  `metadata.support`. Nothing new was introduced: the pipeline/renderer path
+  (`metadata.support.contacts → SkeletonPose.supportedPoints → Finalizer derivation`) already existed
+  and was correct; the declaration simply never reached it. Post-fix the two poses publish their
+  declared model: `plank_standard` `{LEFT_FOREARM, RIGHT_FOREARM, LEFT_TOES, RIGHT_TOES}`,
+  `side_plank_standard` `{RIGHT_FOREARM, RIGHT_FOOT}`.
+- **B-3 — `*_TOES` / `*_FOREARM` were never consulted by the extremity derivation.**
+  `SkeletonPoseFinalizer.adjustFootOrientation` resolved its support point as
+  `footSupportPointFor(ankleId) ∈ {LEFT_FOOT, RIGHT_FOOT}` and `adjustHandOrientation` as
+  `LEFT_HAND` / `RIGHT_HAND`, so a `*_TOES`-declaring pose (the whole plank/push-up family) and a
+  `*_FOREARM`-declaring pose resolved to `null`, got no support plane, and the extremity was never
+  oriented against the surface the pose declared. Fix: the resolution is now **family-aware**
+  (`declaredFootSupportPoint` / `declaredHandSupportPoint`) — the pose's declared
+  `SupportPoint` is resolved **verbatim** over its declaration family and *that value* is handed to
+  `supportPlaneNormalFor`. No contact→joint map, no side convention and no new mapping is
+  introduced: the engine's existing `contactJointsFor` already defines `*_TOES` and `*_FOOT` as the
+  same `{ankle, heel, toe}` support, and the `A/P/F/B ↔ left/right` convention (B-4) is deliberately
+  untouched.
+- **Measured (published frames, builder path, both trees; corpus = 51 production pose classes × 5
+  progress + the cold first frame, every joint).**
+
+  | measurement | pre-fix (`origin/main` `dc4cc27`) | post-fix |
+  | --- | --- | --- |
+  | `pushup_standard` `TOE_F−ANKLE_F` / `HEEL_F−ANKLE_F` | `+17.57` / `−7.18` (declared floor contact floating and pointing up) | `0.000` / `0.000` |
+  | `pushup_wide` / `military` / `diamond` / `decline` (same two readings) | `+17.57` / `−7.18` | `0.000` / `0.000` |
+  | `plank_standard` / `side_plank_standard` published support set | `[]` | the declared sets above |
+  | corpus joint diff | — | **6 poses changed** (the push-up family), and **only their 4 heel/toe joints**; the other **45 pose classes byte-identical** |
+  | every other joint family (arms, knees, pelvis, head) | — | byte-identical everywhere |
+
+- **Residual, recorded and NOT fixed (pose geometry, not declaration consumption).** The two planks'
+  *joint geometry* is identical pre/post: their feet already lie in the support plane
+  (`TOE/HEEL − ANKLE = 0.000` at every sampled progress), so the newly-armed foot flattening is a
+  no-op there, and their hands remain behind the pre-existing geometric `planted` precondition
+  (`hand.y <= elbow.y + 1`) because both poses author their support elbow **below their own floor** —
+  `plank_standard` `ELBOW_A/P = −18.68 … −44.75`, `side_plank_standard` `ELBOW_P = −37.86` (measured
+  on `origin/main`; these are the same floor violations the P11 audit lists, and the poses' own §7
+  debt). Relaxing that precondition is a pose-geometry fix with its own review, not a
+  contact-consumption fix.
+- **Validation-path effect (observed).** `EnvironmentPenetrationTest` names both planks in its
+  variant list and used to `continue` on them (`if (contacts.isEmpty()) continue`), i.e. its
+  penetration invariant asserted **nothing** for the two poses whose declaration was invisible —
+  the vacuity that hid the defect. With the declaration now published, the invariant evaluates them
+  (ankle/heel/toe at y=15…22 above the floor) and stays green. The test's own float-disclaimer
+  vacuity and its private contact→joint copy (B-6 / T-6) are untouched and still open.
+- **Regression coverage (fresh runs).** `SupportDeclarationChannelTest` (4) +
+  `SupportContactKindConsumptionTest` (7) = **11 tests**, all asserted on the **published frame** of
+  the production pipeline (never on a helper production does not call), with declaration-removal
+  controls. Pre-fix, the same two test files run against an `origin/main` `dc4cc27` worktree:
+  **11 completed, 7 failed** — `everyProductionPosePublishesExactlyItsDeclaredSupportModel`,
+  `forearmPlankPublishesItsDeclaredSupportModel` (`expected [LEFT_FOREARM, RIGHT_FOREARM, LEFT_TOES,
+  RIGHT_TOES] but was []`), `sidePlankPublishesItsDeclaredSupportModel` (`expected [RIGHT_FOREARM,
+  RIGHT_FOOT] but was []`), `removingTheDeclarationEmptiesThePublishedSupportModel`,
+  `toesDeclaredFeetAreOrientedAgainstTheirSupportPlane` (`heel/toe deviate 17.571602u from the
+  ankle`), `forearmDeclaredHandsAreOrientedAgainstTheirSupportPlane` (`palm/fingertips deviate
+  20.117798u from the hand`), `declaredContactKindsSurviveVerbatimOnThePublishedFrame`. The four
+  controls (`footDeclaredFeetResolveThroughTheSameFamily`, both `…DeclarationLeaves…OffPlane`,
+  `authoredAnkleArticulationIsNotOverridden`) are green on BOTH trees by design — they are what makes
+  the five positive assertions declaration-driven rather than "every extremity is flattened now".
+  Post-fix: **11 / 0F**, full suite **108 classes / 479 tests / 0F / 0E / 0S** (pre-fix baseline on
+  `origin/main` `dc4cc27`: 106 classes / 468 tests / 0F / 0E / 0S).
 
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
 2. H2 complement — migrate LatStretchPose (M11) and CatCowPose (M12) onto `bakeIkLimb`/gaze
-   helpers for full carrier coverage; declare `supportContacts` for the stretch family (M9) and the
-   core/hip poses (M10) and the upper/dynamic poses (M8).
+   helpers for full carrier coverage; declare the support model (`metadata.support`) for the stretch
+   family (M9) and the core/hip poses (M10) and the upper/dynamic poses (M8).
 3. M1/M2/M3/M4/M6/M7 — pose-specific biomechanical-fidelity bugs (step contact, side-plank contact
    side, cobra/superman lumbar extension, kettlebell hinge inversion, burpee foot-translation).
 4. M5/M13/M14 — tuning items (snow-angel arc, hamstring reach, decline plank tilt).
