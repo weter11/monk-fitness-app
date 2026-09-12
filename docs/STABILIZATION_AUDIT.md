@@ -1502,6 +1502,86 @@ reads.
   as a true hold; how much of the `0.98` straight-limb cap is a limb bulge) is recorded above with
   its measurement and left for the user.
 
+### DONE — M13 the hamstring stretch's forward reach is realized where the pose authored it (branch `fix/m13-hamstring-reach`, off `0301563`; production geometry)
+
+- **The audit's stated mechanism does not reproduce.** M13 reads "Forward-reach hand target near/beyond
+  arm reach (`~200` vs max `146`) → solver-clamped". Measured on the PUBLISHED frame through the whole
+  fold (`SkeletonPipeline.produceFrame(pose, ctx)`, `p = 0.00 … 1.00` step `0.05`,
+  `SkeletonDefinition.DEFAULT_ADULT`), the declared shoulder→hand distance runs `37.2108 → 115.1790` —
+  at its largest `80.5 %` of the `143.0800` band cap (`maxReach = (80 + 66)·0.98`), i.e. the reach is
+  never near and never beyond the arm's maximum. The `~200` in the finding is a frame confusion: the
+  target sits `199.4` from the **pelvis** at the end of the fold, but the fold itself carries the
+  shoulder `100.9` units forward (`(−18.02, 134.40) → (64.00, 89.59)`), so the arm chain's own
+  separation is `115.18`. `146` is the anatomical span (`80 + 66`), not the engine's cap.
+- **The reproducible violation of the same rule sits at the other end of the fold.** At `p = 0.00` the
+  authored start hand `(11.980, 154.400, ∓36.800)` is `37.2108` from its shoulder — **inside** the
+  chain's minimum-flexion reach `SkeletonMath.minReach(80, 66, 30°) = 40.1344`. The solver answers by
+  relocating the target along its own ray (`published HAND_A (14.337, 155.972, −36.077)`, relocation
+  `2.9237` per arm) and the realized chain lands on exactly its `30.00°` interior-angle stop with
+  `ELBOW_A.y − SHOULDER_A.y = +64.583` — the elbows flung above the shoulders, which BPS §6/§11 rule
+  out ("Shoulders are relaxed and down, not shrugged"). **First incorrect authored
+  representation:** the pose authors its forward reach as a FLOOR-FRAME point derived from the
+  extended leg's ankle (`reachX = targetAnkleF.x − 10`, `reachY = targetAnkleF.y + 20`, lateral
+  offset a body constant `±0.8·shoulderWidth`) and hands it to the arm chain that must realize it —
+  `startHandX/Y = chestW + (30, 20)` — with no projection onto that chain's own reachable band.
+- **Fix (pose only; smallest change supported by measurement).** The two authored hand targets are
+  projected onto the arm chain's band with the existing R2 helper
+  `SkeletonMath.clampTargetToReach` — the same reachable-by-construction fix the M8 pass applied to
+  `WallSlidesPose` / `FacePullPose` / `ScapularRetractionPose`. The authored direction and the end
+  point are unchanged (the projection is along the root→target ray and is a no-op inside the band);
+  only the two phases whose declared distance is outside the band move. No solver, finalizer, engine
+  or carrier file is touched; the clamp signal stays live rather than muted.
+- **RED → GREEN (fresh `--rerun-tasks` runs, results directory purged, XML mtimes from each run).**
+  New `HamstringForwardReachTest` (6 tests, all on the published frame): three witnesses — hands
+  realized where declared, declared reach inside the band, realized arm never pinned on the flexion
+  stop — plus a reach-intent guard (the hands still start in front of the chest and still end at the
+  extended foot), a sweep non-vacuity guard and the blast-radius digest. Base tree **3 of 6 FAILED**
+  (every witness, quoting `relocation=2.9237`, `d=37.2108` against the band's `40.9371`, and
+  `interior=30.0000°`); this branch **6/6**. Surgical counterfactual — the two projection lines
+  removed and nothing else changed → the same `3 of 6` FAILED, then the file restored byte-identically
+  (`md5sum -c` `f79fb87158f14bca68932fb11aaa8c4a`).
+- **Whole-range inspection (41 phases, step `1/40`), not one frame.** Only `p ∈ {0.000, 0.025}`
+  change; 12 arm-chain joints each; max deviation `0.9600` u (`FINGERTIPS_A` at `p = 0.025`); the
+  declared target at `p = 0.000` moves `(11.980, 154.400, −36.800) → (14.984, 156.403, −35.879)` and
+  the realized arm's interior angle leaves the stop (`30.000° → 30.699°`). `p ≥ 0.05` byte-identical.
+- **Blast radius, direct and non-inferred.** Whole-corpus dump (49 registry poses × 5 progress × every
+  joint XYZ = `245` pose-frames) measured on both trees through a `git stash` round-trip (pose file
+  `md5sum -c`-verified on restore): **exactly `1` frame differs** — `hamstring_stretch_hold` at
+  `p = 0.0`, 12 joints, max `0.8930` u — the other **`244`** frames byte-identical, with
+  `supportedPoints` and `maxIkClampAmount` unchanged everywhere. **Five** pre-existing scope digests
+  whose corpora include this pose went RED on their previous values and are re-baselined with this
+  change named at each constant (`M1StepUpGeometryTest` `2391109884830495565` → `6236906328909027759`;
+  `M3M5ProneTrunkGeometryTest` `5434130474548470574` → `5051896512474775952`;
+  `M6M7SwingBurpeeGeometryTest` `-8892365611399986406` → `-5046569167321454212`;
+  `M8M9M10SupportDeclarationTest` `-9118394861084468944` → `-3670557964446835822`;
+  `PlankForearmSupportGeometryTest` `2399534090990759846` → `-424882841079246328`). Attribution is
+  direct: all `50` of those tests were re-run GREEN with the pose file stashed, so the delta is this
+  change and not a drifted base. M13's own guard (`HamstringForwardReachTest.UNAFFECTED_CORPUS_DIGEST
+  = 6921547823364851041`, its corpus excluding `HamstringStretchPose`) is measured EQUAL on the
+  pre-fix tree and on this tree. No `RuntimeArchitectureBaselineTest` golden covers this pose, so
+  none moved.
+- **Full suite / build.** `--rerun-tasks`, results purged: merged base `118 classes / 566 tests /
+  0F / 0E` → this branch **`119 / 572 / 0F / 0E / 0S`** — exactly `+1` class / `+6` tests, no other
+  count moved. `:app:assembleDebug` + `:app:compileReleaseKotlin` successful.
+- **Recorded, deliberately NOT done (outside M13's wording).** (a) The same pose authors a
+  **tucked-leg** target outside its chain's band: `ANKLE_B` is declared `(5.000, 15.000, 11.000)` —
+  `36.6879` from `HIP_B`, i.e. `19.3211` INSIDE the leg chain's minimum reach
+  `minReach(112, 98, 30°) = 56.0090` — so the solver relocates the realized foot `19.3211` u
+  (`published (23.432, 15.000, 5.207)`) at EVERY phase and the knee stays on exactly its `30.00°`
+  stop. That is the pose's whole-pose `maxIkClampAmount = 19.32114`, unchanged by this pass (the
+  stamp is a max, so the arm's `2.9237` was never separable from it — the per-limb probe had to
+  attribute it). M13 names the forward-reach hand target only, and how close the tucked foot comes
+  to the groin is a pose-design question (the authored `35` units forward of the pelvis is beyond
+  this chain's fold limit by construction), so it is flagged with its measurement and left open;
+  the one-line shape if the fold is to stay is the same R2 projection (the realized foot would then
+  move `56.0090 → 57.1289`, `1.1` u). (b) The pose's `maxIkClampAmount` cannot attribute a clamp to a
+  limb (leg `19.32114` vs arm `2.9237`) — an engine-side instrumentation note, not in scope.
+  (c) After the projection the fold's start still asks for a near-maximal arm fold (interior angle
+  `30.699°` at `p = 0`, elbows `64.572` above the shoulders); whether the start hand should be
+  authored farther from the shoulder (a genuinely relaxed "hands on the shin" start, BPS §6
+  "Hands may hold the shin, ankle, or foot") is a design question — the R2 projection deliberately
+  preserves the authored direction and is not a re-choreography.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
@@ -1519,7 +1599,7 @@ reads.
    there: the profile's *axis*, not its direction, was the defect, and the pose owns a second
    authored error the audit sentence does not name). **M8/M9/M10 (the support-model declaration
    pass) is DONE too — see the record above**, which also covers M5's declaration half.
-4. M13/M14 — tuning items (hamstring reach, decline plank tilt).
+4. M14 — the decline plank tilt (M13 is DONE — see the record above).
 
 ### TODO — P2
 
@@ -1535,6 +1615,7 @@ A8/A6 leaks — resolved in the Push-Up Family pass above.)
 - Fix the pose, not the engine, when a pose authors motion incorrectly.
 - Keep pose-side migrations on the **existing** carrier surface (the H2 fix is the template).
 - After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
-  current baseline of record (**118 classes / 566 tests** as of the M6/M7 landing plus the
-  M8/M9/M10 declaration pass; `--rerun-tasks` with the results directory purged, XML-stamped fresh; the
+  current baseline of record (**119 classes / 572 tests** as of the M13 hamstring-reach
+  correction, which added `HamstringForwardReachTest`; the M6/M7 landing plus the
+  M8/M9/M10 declaration pass stood at `118 / 566`; `--rerun-tasks` with the results directory purged, XML-stamped fresh; the
   older "282" figure predates P12) before marking a finding resolved.

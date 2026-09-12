@@ -618,7 +618,19 @@ class PlankForearmSupportGeometryTest {
          * re-baseline below. The pass's own blast-radius guard
          * (`M8M9M10SupportDeclarationTest.UNAFFECTED_CORPUS_DIGEST`) excludes exactly its 17 classes
          * and is measured equal on the pre-fix and post-fix trees.
+         *
+         * **Re-baselined by the M13 hamstring forward-reach correction** (`fix/m13-hamstring-reach`,
+         * off `0301563`): this corpus is "every production pose outside the plank family", so it includes `HamstringStretchPose`, the one class that
+         * correction owns. Observed RED on the pre-fix value `2399534090990759846` before the re-baseline (this
+         * live run measured `-424882841079246328` below); the five scope digests were re-run with the pose file
+         * stashed and all 50 of their tests were GREEN, so the delta is attributable to M13 and not
+         * to a drifted base. Attribution is direct, not inferred from this digest: the whole-corpus
+         * dump (49 registry poses × 5 progress × every joint XYZ, `245` pose-frames) differs in
+         * exactly `1` frame — `hamstring_stretch_hold` at `p=0.0`, 12 arm-chain joints, max `0.8930`
+         * u at `FINGERTIPS_A` — with the other `244` frames (including the subject's `p ≥ 0.05`)
+         * byte-identical and `supportedPoints`/`maxIkClampAmount` unchanged everywhere. M13's own
+         * blast-radius guard is `HamstringForwardReachTest.UNAFFECTED_CORPUS_DIGEST`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 2399534090990759846L
+        const val UNAFFECTED_CORPUS_DIGEST = -424882841079246328L
     }
 }
