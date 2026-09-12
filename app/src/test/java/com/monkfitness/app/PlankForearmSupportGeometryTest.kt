@@ -674,6 +674,25 @@ class PlankForearmSupportGeometryTest {
          * reachability stamp unchanged (`maxIkClampAmount` `21.640945` / `13.396454` / `7.5872955` at
          * p = 0 / 0.25 / 0.5 on BOTH trees — that clamp is the pose's support arm, and B2 does not
          * touch the arms). B2's own blast-radius guard is `WorldsGreatestStretchBackKneePlaneTest`.
+         *
+        * **Re-baselined by the B1 diamond push-up elbow-plane correction**
+        * (`fix/b1-diamond-pushup-elbow-plane`, off `2fb6079` — the T2 merge): this corpus means "every
+        * production pose class except the ones this pass corrects", so it contains `DiamondPushUpPose`,
+        * whose elbow pole is re-authored onto the trunk's own long axis. The inherited Z-dominant pole
+        * shape is correct for a grip whose hands sit at or outside the shoulder line; the diamond grip is
+        * `0.1` (the hands come to the fused base `4.6` from the midline against the shoulder joint's
+        * `46`), so the pole's perpendicular residual collapsed onto the chord's downward basis vector and
+        * realized the elbow `19.91` u BELOW the pose's own declared plane at the bottom of the rep
+        * (measured `p = 0.5`; the pose is a pinned, attributed open item in the T2 invariant, whose entry
+        * this correction removes in the same change). Observed RED on the previous value `7021051649408857128` before
+        * the re-baseline (this live run measured `1520710032374707146`). Attribution is direct, not inferred: the
+        * whole-corpus dump (`51` classes x `5` samples x every joint XYZ, `8415` rows, a `git stash`
+        * round-trip on the corrected pose file with `md5sum -c` on restore) differs in exactly `60` rows,
+        * ALL of them inside `DiamondPushUpPose` — `ELBOW_A`/`ELBOW_P` at all five samples
+        * (`19.96 ... 46.79` u) plus the derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS` pair
+        * (<= `8e-6` u float drift at four samples, and `5.29` / `10.57` / `19.38` u at `p = 0.5`, where
+        * the engine's planted-hand flattening now fires because the elbow is above the hand) — with the
+        * other `50` classes byte-identical. B1's own regression is `DiamondPushUpElbowClearanceTest`.
          */
         const val UNAFFECTED_CORPUS_DIGEST = 8245693820516700285L
     }
