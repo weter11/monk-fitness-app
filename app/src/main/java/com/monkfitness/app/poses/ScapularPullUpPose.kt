@@ -20,9 +20,7 @@ class ScapularPullUpPose : BaseVerticalPullPose() {
         loopMode = LoopMode.PING_PONG,
         motionCurve = MotionCurve.EASE_IN_OUT,
         environment = verticalPullEnvironment,
-        pivotType = PivotType.HANDS,
         support = SupportDefinition(pivot = PivotType.HANDS, contacts = verticalPullSupportContacts),
-        supportContacts = verticalPullSupportContacts,
         exerciseFamily = "vertical_pull",
         motionType = "Scapular Activation",
         bodyOrientation = "Hanging"

@@ -11,16 +11,21 @@ class BasePoseFrameworkTest {
     fun testPoseMetadataImmutableNewFields() {
         val metadata = PoseMetadata(
             name = "PushUp",
-            pivotType = PivotType.FEET,
-            supportContacts = setOf(SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND),
+            // B-2 — the single support declaration channel. The former `pivotType` /
+            // `supportContacts` duplicates are gone: a pose that declared support on that
+            // write-only channel (the two planks) silently published an EMPTY support model.
+            support = SupportDefinition(
+                pivot = PivotType.FEET,
+                contacts = setOf(SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND)
+            ),
             exerciseFamily = "PushUpFamily",
             defaultGrip = "Wide",
             motionType = "Push",
             bodyOrientation = "Prone"
         )
         assertEquals("PushUp", metadata.name)
-        assertEquals(PivotType.FEET, metadata.pivotType)
-        assertTrue(metadata.supportContacts.contains(SupportContact.LEFT_HAND))
+        assertEquals(PivotType.FEET, metadata.support.pivot)
+        assertTrue(metadata.support.contacts.contains(SupportContact.LEFT_HAND))
         assertEquals("PushUpFamily", metadata.exerciseFamily)
         assertEquals("Wide", metadata.defaultGrip)
         assertEquals("Push", metadata.motionType)

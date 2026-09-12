@@ -38,10 +38,17 @@ class IsometricSidePlankPose : BasePlankPose() {
         loopMode = LoopMode.PING_PONG,
         motionCurve = MotionCurve.EASE_IN_OUT,
         environment = plankEnvironment,
-        pivotType = PivotType.ELBOWS,
-        supportContacts = setOf(
-            SupportContact.RIGHT_FOREARM, // down-side support forearm
-            SupportContact.RIGHT_FOOT
+        // B-2 — the plant is declared on the ONE support channel (`SupportDefinition`), the channel
+        // the pipeline derives `SkeletonPose.supportedPoints` from and the Finalizer's support-plane
+        // derivation consumes. The former duplicate `supportContacts`/`pivotType` channels had no
+        // production reader, so this pose's whole support model (down-side forearm + down-side foot)
+        // never reached the runtime and the published frame carried an EMPTY support set.
+        support = SupportDefinition(
+            pivot = PivotType.ELBOWS,
+            contacts = setOf(
+                SupportContact.RIGHT_FOREARM, // down-side support forearm
+                SupportContact.RIGHT_FOOT
+            )
         ),
         exerciseFamily = "plank",
         motionType = "Isometric Hold",
