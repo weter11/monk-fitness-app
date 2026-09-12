@@ -39,7 +39,13 @@ abstract class BasePose : PoseBuilder {
      * removed (Phase 7 complete). The head-orientation math is now inlined in the resolver.
      *
      * @param gazeDir the authored world-space gaze direction; a synthetic [HeadTarget] is recorded
-     *   a fixed distance along it from the neck's current world position for the Finalizer to resolve.
+     *   a fixed distance along it from the neck's **current-build** world position for the Finalizer
+     *   to resolve. Because the recorded target is an absolute world point and
+     *   [SkeletonPoseFinalizer.resolveHeadTarget] resolves the direction by subtracting the neck's
+     *   world position from it, this helper propagates the authored hierarchy itself before reading
+     *   that position: the node buffers are reused across builds, so a read taken before the
+     *   caller's authoring-FK pass would carry the *previous* build's tree state — and on a
+     *   builder's first build the template's zero transform — into the resolved head direction.
      */
     protected fun buildGaze(
         neck: SkeletonNode,
@@ -48,6 +54,14 @@ abstract class BasePose : PoseBuilder {
         gazeDir: Vector3,
         targetDistance: Float = 100f
     ) {
+        // The head-target origin must be THIS build's neck world position (see above). Propagating
+        // from the pose's own root here makes the helper independent of whether the caller has
+        // already run its authoring-FK pass; the callers' own pass re-runs the same idempotent
+        // propagation immediately afterwards, so this adds no second geometry path.
+        var gazeRoot: SkeletonNode = neck
+        while (gazeRoot.parent != null) gazeRoot = gazeRoot.parent!!
+        gazeRoot.updateWorldTransforms(zeroVector, identityRotation)
+
         // Record the additive intent carrier (synthetic target along the authored gaze direction).
         tempV1.set(gazeDir)
         if (tempV1.mag() < 1e-4f) tempV1.set(0f, 1f, 0f) else tempV1.normalize()
