@@ -137,9 +137,24 @@ class IsometricSidePlankPose : BasePlankPose() {
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
         // --- 5. Legs: stacked, bottom foot planted ----------------------------------------------
-        // Bottom leg (HIP_B) rests on the mat; top leg (HIP_F) stacks just above it.
+        // Bottom leg (HIP_B) is the support leg: its foot is planted at the family's floor-contact
+        // height and its down-side hip rests on the mat in the settled frame; the top leg (HIP_F)
+        // stacks just above it.
+        //
+        // B3 — the support leg's residual knee bend is authored to leave the mat, never sag through
+        // it. The stance (`ankleX`, `contactY`) spends most of the `112 / 98` chain's reach
+        // (`197.6289 … 201.3616` of the constraint's own `maxReach = 205.8000`), so the chain can
+        // never be drawn perfectly straight and its IK locus — a circle of radius `h = 29.7335 …
+        // 37.3224` across the rep, `20.846` at the capped reach — has to bow to one side. The former pole
+        // `(0, -1, 0)` aimed that bow INTO the mat and published `KNEE_B` `25.8897` below the pose's
+        // own declared plane at every phase (the B-3 pin in
+        // `PublishedBelowGroundInvariantTest`, whose exit criterion is this correction). BPS
+        // `Plank (Side)` §7/§11 declare the supporting knee extended and in line with the trunk, and
+        // the family's convention for the residual is the sibling `StaticForearmPlankPose`'s —
+        // "residual knee bend points up, never sagging through the floor" — which is also the pole
+        // the top leg below already uses.
         targetB.set(ankleX, contactY, 0f)
-        poleB.set(0f, -1f, 0f)
+        poleB.set(0f, 1f, 0f) // residual knee bend points up, never sagging through the floor
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
         targetF.set(ankleX, contactY + SkeletonMath.lerp(0f, 10f, lift), 0f)

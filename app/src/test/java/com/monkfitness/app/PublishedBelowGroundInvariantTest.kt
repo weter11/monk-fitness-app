@@ -32,9 +32,9 @@ import java.io.File
  *
  * | instrument | what it keys on | below-ground pose/joint pairs it reports |
  * |---|---|---|
- * | `ExerciseValidator.validateFeetGroundPenetration` (default config) | the **6 foot joints only** (`FEET_JOINTS`), and only when `allowFootGroundPenetration = false` | **12 issues in 1 of 10 poses** — `CatCowPose`'s feet (`HEEL_*` worst `−2.422398`). The other 9 poses report **0** |
- * | `EnvironmentPenetrationTest` (B-6) | the joints of a pose's **declared support contacts** | **0 of 42** — for every one of the 10 offending poses the offending joint is OUTSIDE its declared support family ([theBelowGroundClassIsInvisibleToTheDeclarationKeyedInstrument] pins that fact) |
- * | this file | **every joint of every published frame** | **42 pose/joint pairs over 10 poses** (the `DynamicWorldsGreatestStretchPose` back-knee pair left the table with the B2 correction — see [knownBelowGround]) |
+ * | `ExerciseValidator.validateFeetGroundPenetration` (default config) | the **6 foot joints only** (`FEET_JOINTS`), and only when `allowFootGroundPenetration = false` | **12 issues in 1 of 8 poses** — `CatCowPose`'s feet (`HEEL_*` worst `−2.422398`). The other 7 poses report **0** |
+ * | `EnvironmentPenetrationTest` (B-6) | the joints of a pose's **declared support contacts** | **0 of 39** — for every one of the 8 offending poses the offending joint is OUTSIDE its declared support family ([theBelowGroundClassIsInvisibleToTheDeclarationKeyedInstrument] pins that fact) |
+ * | this file | **every joint of every published frame** | **39 pose/joint pairs over 8 poses** (the `DynamicWorldsGreatestStretchPose` back-knee pair left the table with the B2 correction, the `DiamondPushUpPose` elbow pair with the B1 correction and the `IsometricSidePlankPose` support-knee pair with the B3 correction — see [knownBelowGround]) |
  *
  * The 4 poses whose below-ground hand chains are invisible to the declared-contact instrument are
  * exactly the classes that declare NO support at all (`BirdDogPose`, `AlternatingBirdDogPose`,
@@ -62,7 +62,7 @@ import java.io.File
  *     exists as a second, **unread** field (grep: zero production readers) and is deliberately not
  *     resurrected here.
  *  3. **Genuine ground penetration.** A published joint below the pose's own plane by more than
- *     [groundBand] — 42 pose/joint pairs today, attributed in [knownBelowGround].
+ *     [groundBand] — 39 pose/joint pairs today, attributed in [knownBelowGround].
  *
  * ## Non-vacuity (the B-6 lesson, applied to the whole body)
  *
@@ -263,11 +263,22 @@ class PublishedBelowGroundInvariantTest {
      * identical under both conditions for every entry (the geometry is not frame-condition
      * sensitive here).
      *
-     * **Entries leave this table only by the pose being FIXED.** `DynamicWorldsGreatestStretchPose`'s
-     * `KNEE_B −46.1056` was corrected by B2 (`fix/b2-wgs-back-knee-plane` off `2fb6079`, the pose-side
-     * back-leg stance + a pole derived from the leg's own chord) and this entry (with its [attribution]
-     * line) was removed in that same change — the stale-pin guard listed exactly this pair. The
-     * corrected pose publishes `KNEE_B y = +13.1629` at every phase on the same pipeline path.
+     * **Entries leave this table only by the pose being FIXED.** Two have now left it, each in the
+     * change that corrected it — and the stale-pin guard fired on each, listing exactly the corrected
+     * pairs, so the entries could not outlive their exit criterion:
+     *  * `DynamicWorldsGreatestStretchPose`'s `KNEE_B −46.1056` by B2 (`fix/b2-wgs-back-knee-plane`,
+     *    the pose-side back-leg stance + a pole derived from the leg's own chord); the corrected pose
+     *    publishes `KNEE_B y = +13.1629` at every phase on the same pipeline path;
+     *  * `DiamondPushUpPose`'s `ELBOW_A`/`ELBOW_P −19.9130` by B1 (`fix/b1-diamond-pushup-elbow-plane`,
+     *    the elbow bend re-authored onto the pose's own trunk long axis); the corrected pose measures
+     *    `ELBOW_A/P` worst `+16.3014` and is now a planted control in
+     *    [aPlantedSupportJointRestingOnTheDeclaredPlaneIsNotReported]'s family;
+     *  * `IsometricSidePlankPose`'s `KNEE_B −25.8897` by B3 (`fix/b3-sideplank-knee-plane`, the support
+     *    leg's residual knee bend authored out of the mat); the corrected pose publishes
+     *    `KNEE_B y = +44.8145 … +57.7449` and its gate is `IsometricSidePlankKneePlaneTest`.
+     *
+     * The instrument-table counts and the pinned-pair census are therefore `39` pairs over `8` poses
+     * (from `43`/`11` on `07dfe38`), re-measured on the tree that carries all three corrections.
      */
     private val knownBelowGround: Map<String, Map<Joint, Float>> = mapOf(
         "AlternatingBirdDogPose" to mapOf(
@@ -293,14 +304,8 @@ class PublishedBelowGroundInvariantTest {
             Joint.ANKLE_F to -2.1292f, Joint.ANKLE_B to -2.1292f,
             Joint.TOE_F to -1.4113f, Joint.TOE_B to -1.4113f
         ),
-        "DiamondPushUpPose" to mapOf(
-            Joint.ELBOW_A to -19.9130f, Joint.ELBOW_P to -19.9130f
-        ),
         "GluteBridgePose" to mapOf(
             Joint.ELBOW_A to -30.6914f, Joint.ELBOW_P to -30.6914f
-        ),
-        "IsometricSidePlankPose" to mapOf(
-            Joint.KNEE_B to -25.8897f
         ),
         "PelvicTiltPose" to mapOf(
             Joint.ELBOW_A to -33.3501f, Joint.ELBOW_P to -33.3501f,
@@ -339,18 +344,10 @@ class PublishedBelowGroundInvariantTest {
             "recorded OPEN in the M11/M12 record clause (c): 'the realized ankle now sits 2.1292 u below " +
             "the pose's own mat at p = 1.0'; the pose's declaration is its four-point base (hands + " +
             "knees), so its feet are outside the declared family",
-        "DiamondPushUpPose" to
-            "push-up family; the pose declares hands + toes, so its ELBOWS (which pass under at the " +
-            "bottom of the rep, p = 0.5) are outside the declared family; not named by any M-number — " +
-            "flagged for assignment",
         "GluteBridgePose" to
             "M10 owns its declaration; the supine arm authoring is recorded OPEN in the M8/M9/M10 " +
             "record clause (d): 'publish their elbows -30.69/-33.35 BELOW their own mat (measured, " +
             "unchanged by this pass: no declared contact, so no invariant covers them)'",
-        "IsometricSidePlankPose" to
-            "M2's pose (the declaration side resolved by B-4, the forearm plant by B-7); the B leg is " +
-            "hip-abducted and the knee is outside the declared RIGHT_FOREARM/RIGHT_FOOT family; not " +
-            "named by any M-number — flagged for assignment",
         "PelvicTiltPose" to
             "M10 owns its declaration; same clause (d) as GluteBridgePose for the elbows, and the " +
             "supine layout puts CHEST/SHOULDER_*/NECK_END/HEAD_POS just under the mat at the top of " +
@@ -478,8 +475,9 @@ class PublishedBelowGroundInvariantTest {
      * **Category (a) — legitimate support geometry is not a violation.** A planted contact is
      * derived ONTO the plane: the floor-planted push-up family's lowest published joint is exactly
      * `0.000000` at every sample and under both conditions, i.e. the body touches the plane and
-     * nothing passes under it. (`DiamondPushUpPose` is deliberately NOT in this list: its planted
-     * hands are on the plane, but its elbows are a pinned below-ground item in [knownBelowGround].)
+     * (`DiamondPushUpPose` joined this list when B1 corrected its elbow pole: it was the one
+     * floor-planted push-up whose realized elbow used to pass below the same plane, and with the
+     * elbow above the hand its derived hand chain flattens onto the plane like its siblings'.)
      *
      * This is also why the invariant asserts **no upper bound**: a planted toe at `25.000000` and a
      * planted knee at `15.000000` are the definition's own contact radii, not defects.
@@ -487,7 +485,8 @@ class PublishedBelowGroundInvariantTest {
     @Test
     fun aPlantedSupportJointRestingOnTheDeclaredPlaneIsNotReported() {
         val plantedPoses = listOf(
-            "StandardPushUpPose", "WidePushUpPose", "MilitaryPushUpPose", "PikePushUpPose", "KneePushUpPose"
+            "StandardPushUpPose", "WidePushUpPose", "MilitaryPushUpPose", "PikePushUpPose", "KneePushUpPose",
+            "DiamondPushUpPose"
         )
         for (name in plantedPoses) {
             val observations = scan({ MotionProbe.build(name) }, name)
@@ -591,9 +590,13 @@ class PublishedBelowGroundInvariantTest {
      * **The counterfactual the mission asks for — a declaration-keyed gate sees NONE of these.**
      * For every pinned violation, the offending joint is outside the pose's own declared support
      * family (`metadata.support.contacts` → the B-4 canonical mapping, the exact channel
-     * `EnvironmentPenetrationTest` keys on). Measured on the pinned table: 42 of 42 — which is why
+     * `EnvironmentPenetrationTest` keys on). Measured on the pinned table: 39 of 39 — which is why
      * the B-6 invariant, the sole owner of the floor on the declaration channel, is green today
-     * with all 42 pairs present.
+     * with all 39 pairs present. (`DiamondPushUpPose`'s pair left the table with the B1 correction:
+     * its elbows were never inside its declared family either, and the pose is now a planted
+     * control in [aPlantedSupportJointRestingOnTheDeclaredPlaneIsNotReported];
+     * `DynamicWorldsGreatestStretchPose`'s with the B2 correction, and
+     * `IsometricSidePlankPose`'s with the B3 correction.)
      */
     @Test
     fun theBelowGroundClassIsInvisibleToTheDeclarationKeyedInstrument() {
@@ -615,11 +618,11 @@ class PublishedBelowGroundInvariantTest {
         )
 
         // And the identical statement about the INSTRUMENTS: the validator's floor rule covers the
-        // 6 foot joints only, so 9 of the 10 poses cannot be seen by it at all.
+        // 6 foot joints only, so 7 of the 8 poses cannot be seen by it at all.
         val footJoints = setOf(Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
         val validatorVisible = knownBelowGround.filterValues { joints -> joints.keys.any { it in footJoints } }
         assertEquals(
-            "the validator's ground rule is a FOOT rule: exactly one of the 10 offending poses " +
+            "the validator's ground rule is a FOOT rule: exactly one of the 8 offending poses " +
                 "(CatCowPose's feet) is reachable by it",
             listOf("CatCowPose"), validatorVisible.keys.toList()
         )

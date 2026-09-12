@@ -487,7 +487,43 @@ class M8M9M10SupportDeclarationTest {
          * exactly `95` xyz rows — `70` in `CatCowPose`, `25` in `LatStretchPose` — and the other `48`
          * classes are byte-identical. That pass's own blast-radius guard is
          * `M11M12LimbRealizationMigrationTest.UNAFFECTED_CORPUS_DIGEST`.
+        *
+        * **Re-baselined by the B1 diamond push-up elbow-plane correction**
+        * (`fix/b1-diamond-pushup-elbow-plane`, off `2fb6079` — the T2 merge): this corpus means "every
+        * production pose class except the ones this pass corrects", so it contains `DiamondPushUpPose`,
+        * whose elbow pole is re-authored onto the trunk's own long axis. The inherited Z-dominant pole
+        * shape is correct for a grip whose hands sit at or outside the shoulder line; the diamond grip is
+        * `0.1` (the hands come to the fused base `4.6` from the midline against the shoulder joint's
+        * `46`), so the pole's perpendicular residual collapsed onto the chord's downward basis vector and
+        * realized the elbow `19.91` u BELOW the pose's own declared plane at the bottom of the rep
+        * (measured `p = 0.5`; the pose is a pinned, attributed open item in the T2 invariant, whose entry
+        * this correction removes in the same change). Observed RED on the previous value `8463731255735644640` before
+        * the re-baseline (this live run measured `9137988112138109314`). Attribution is direct, not inferred: the
+        * whole-corpus dump (`51` classes x `5` samples x every joint XYZ, `8415` rows, a `git stash`
+        * round-trip on the corrected pose file with `md5sum -c` on restore) differs in exactly `60` rows,
+        * ALL of them inside `DiamondPushUpPose` — `ELBOW_A`/`ELBOW_P` at all five samples
+        * (`19.96 ... 46.79` u) plus the derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS` pair
+        * (<= `8e-6` u float drift at four samples, and `5.29` / `10.57` / `19.38` u at `p = 0.5`, where
+        * the engine's planted-hand flattening now fires because the elbow is above the hand) — with the
+        * other `50` classes byte-identical. B1's own regression is `DiamondPushUpElbowClearanceTest`.
+         *
+         * **Unchanged by the B1 integration / B2 merge**: this corpus excludes the declaration group both
+         * corrected poses belong to (`DiamondPushUpPose` declares hands + toes, `DynamicWorldsGreatestStretchPose`
+         * feet + hand), so the constant stands and was re-verified equal on the merged tree.
+         *
+         * **Re-baselined by the B3 side-plank support-leg correction** (`fix/b3-sideplank-knee-plane`,
+         * rebased onto the B2 merge `f8f8b24`, with B1 integrated): this corpus contains
+         * `IsometricSidePlankPose`, the pose B3 corrects — the support leg's residual knee bend is
+         * authored out of the mat now (the bend plane's pole `(0, -1, 0)` → `(0, 1, 0)`), so the pose
+         * publishes `KNEE_B` above its own declared plane instead of `25.8897` below it. Observed RED on
+         * the B1-integrated value `9137988112138109314` before this re-baseline (this live run measured `-7807207721990292460`).
+         * Attribution is direct, not inferred: the whole-corpus dump (`51` classes × `5` samples × every
+         * joint XYZ, `8415` rows, over a `git stash` round-trip on the corrected pose file with
+         * `md5sum -c` on restore) differs from the pre-B3 tree in exactly `5` xyz rows — all `5` samples
+         * of `IsometricSidePlankPose`'s `KNEE_B` — while B1's `60` `DiamondPushUpPose` rows and B2's `20`
+         * `DynamicWorldsGreatestStretchPose` rows are untouched by this pass. B3's own gate is
+         * `IsometricSidePlankKneePlaneTest`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 8463731255735644640L
+        const val UNAFFECTED_CORPUS_DIGEST = -7807207721990292460L
     }
 }
