@@ -18,6 +18,9 @@ class SkeletonSnapshotRenderer(
     private val pipeline = SkeletonPipeline(engine.definition)
     private val projector = SkeletonProjector()
     private val compensator = ScreenSpaceCompensation(ScreenSpaceSettings.DEFAULT)
+    // C1 — the viewport frame, the same rule the on-screen renderer uses: the snapshot surface is
+    // whatever the caller asked for, so the athlete is framed from the pose's own drawn bounds.
+    private val framing = CameraFraming(engine)
     private val skeletonBuffer = ProjectedSkeleton()
     private val scaleBuffer = ScreenSpaceScale()
 
@@ -81,6 +84,9 @@ class SkeletonSnapshotRenderer(
         }
 
         val finalizedPose = pipeline.produceFrame(pose, environment, supportedPoints).pose
+        // C1 — the viewport frame: the zoom is derived from the bounds of the frame about to be drawn,
+        // so the athlete is drawn whole on the surface the caller asked for.
+        camera.zoom = framing.frameZoom(camera, finalizedPose, width.toFloat(), height.toFloat())
         projector.project(
             pose = finalizedPose,
             camera = camera,
