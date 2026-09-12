@@ -71,34 +71,61 @@ class StaticForearmPlankPose : BasePlankPose() {
         val lift = context.progress
         val breath = breathingSwell(lift)
 
-        // --- 1. Trunk anchoring -------------------------------------------------
-        // Pelvis height is the family contract (15f resting -> 35f braced).
-        val pelvisY = SkeletonMath.lerp(restingPelvisY, plankPelvisY, lift)
+        // --- 1. The planted feet (the family's rear support) ------------------------------------
+        // Toes are planted at a FIXED world X (neutral pelvis is x≈0), independent of the COM sway,
+        // so when the trunk drifts the legs re-solve and the toes act as real anchors. The small
+        // fold keeps the knee off full lock; the LegConstraint's 0.98 extension ratio does the rest.
+        val ankleX = -def.thighLength - def.shinLength + 24f
+        val ankleY = SkeletonMath.lerp(contactY, 22f, lift)
 
-        // The braced plank is a straight, gently inclined line: forearms prop the
-        // shoulders up, hips mid, toes low. -1.57 (flat) -> -1.38 (~11° incline).
-        val torsoPitch = SkeletonMath.lerp(-1.57f, -1.38f, lift)
+        // --- 2. The planted forearms: the support chain, authored from its CONTACT --------------
+        // Both forearms rest flat on the mat (the support `SupportContact.LEFT/RIGHT_FOREARM`
+        // declares): the elbow directly under its shoulder, the hand one forearm length ahead of
+        // it, both at the mat's planted-forearm height, and the shoulder at the top of that pillar.
+        // The settled frame leans the pillar back over its elbow; the braced hold is the vertical
+        // pillar BPS §6/§11 describe ("elbows directly under shoulders; the upper arms vertical").
+        // The elbow therefore lands on the mat as the arm chain's OWN solution — see
+        // [planPlantedForearm]: the pre-fix authoring instead aimed the solve's 60-unit bulge into
+        // the floor, which is what put `ELBOW_A`/`ELBOW_P` 38–45 units below the mat.
+        val elbowZ = def.shoulderWidth
+        val handZ = def.shoulderWidth * 0.6f
+        val pillarLean = SkeletonMath.lerp(settledPillarLean, 0f, lift)
+        planPlantedForearm(def, forearmPlantX, -elbowZ, -handZ, pillarLean)
+        val shoulderX = plantShoulder.x
+        val shoulderY = plantShoulder.y
+        targetA.set(plantHand)
+        poleA.set(plantPole)
 
-        // Scapular protraction / thoracic rounding ramps in as the person presses
-        // up, with a tiny breathing modulation. Kept small so it reads as a braced
-        // upper back, not a hunch.
+        // --- 3. Trunk: hung off the propped shoulder, hips settling into the plank line ---------
+        // The braced frame's hip height is the one the straight shoulder→hip→ankle line fixes
+        // (BPS §3: one line shoulder–hip–ankle, no sag, no butt-up); the settled frame drops the
+        // hips as far as the planted leg still reaches with a folded knee. The trunk's inclination
+        // and the hip's world X then follow from those two heights, because the trunk is rigid and
+        // the shoulder cannot slide off the plant it is propped on.
+        val bracedY = bracedBodyY(def, shoulderX, shoulderY, ankleX, ankleY)
+        val bodyY = SkeletonMath.lerp(settledBodyY, bracedY, lift)
+        val pitch = proppedTrunkPitch(def, bodyY, shoulderY)
+        val hipX = proppedHipX(def, shoulderX, pitch)
+
+        // Scapular protraction / thoracic rounding ramps in as the person presses up, with a tiny
+        // breathing modulation. Kept small so it reads as a braced upper back, not a hunch.
         val chestFlex = SkeletonMath.lerp(0f, 0.09f, lift) + breath * 0.02f
 
-        // Centre-of-mass drift: a few units forward over the forearms mid-hold and
-        // back. Zero at the endpoints (breath is 0 there) so the contract holds and
-        // the planted forearms/toes re-solve, showing weight transfer.
+        // Centre-of-mass drift: a few units forward over the forearms mid-hold and back. Zero at
+        // the endpoints (breath is 0 there) so the contract holds; the planted arms absorb it, which
+        // is what reads as weight transfer through arms that behave like fixed supports.
         val comShiftX = breath * 4f
 
-        pelvis!!.localPosition.set(comShiftX, pelvisY, 0f)
+        pelvis!!.localPosition.set(hipX + comShiftX, bodyY, 0f)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        // Phase 5 (W13/G4, W14/G5): single spine-intent call. Lower segment is the
-        // PELVIS; chest adds the braced thoracic rounding. Hips inherit the incline.
-        buildSpineCurve(pelvis!!, chest!!, torsoPitch, chestFlex)
+        // Phase 5 (W13/G4, W14/G5): single spine-intent call. Lower segment is the PELVIS; chest
+        // adds the braced thoracic rounding. Hips inherit the (derived) incline.
+        buildSpineCurve(pelvis!!, chest!!, pitch, chestFlex)
 
-        // Head neutral, gaze slightly toward the mat ahead of the hands; a tiny nod
-        // with the breath. The rest of the head motion is inherited from the thorax. Declared as
-        // a gaze target (Phase 7 Gap 7) while the legacy direction path still writes the head.
+        // Head neutral, gaze slightly toward the mat ahead of the hands; a tiny nod with the
+        // breath. The rest of the head motion is inherited from the thorax. Declared as a gaze
+        // target (Phase 7 Gap 7) while the legacy direction path still writes the head.
         val headDir = tempV3.set(0.14f, 1f, 0f)
         SkeletonMath.rotAround(headDir, axisZ, breath * 0.05f, headDir)
         headDir.normalize()
@@ -109,14 +136,7 @@ class StaticForearmPlankPose : BasePlankPose() {
 
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
-        // --- 2. Legs: long, near-straight, toes planted behind the body ---------
-        // Toes are planted at a FIXED world X (neutral pelvis is x=0), independent of
-        // the COM sway, so when the trunk drifts forward the legs re-solve and the
-        // toes act as real anchors. A small fold keeps the knee off full lock; the
-        // LegConstraint's 0.98 extension ratio does the rest.
-        val ankleX = -def.thighLength - def.shinLength + 24f
-        val ankleY = SkeletonMath.lerp(contactY, 22f, lift)
-
+        // --- 4. Legs: long, near-straight, toes planted behind the body -------------------------
         targetF.set(ankleX, ankleY, -def.hipWidth)
         poleF.set(0f, 1f, 0f) // residual knee bend points up, never sagging through the floor
         bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
@@ -129,28 +149,16 @@ class StaticForearmPlankPose : BasePlankPose() {
         // plantar-flexed (heels-lifted) foot is intentionally NOT hand-authored here; if the
         // engine derivation lands the foot flat that is an engine limitation left exposed.
 
-        // --- 3. Forearms: flat on the mat, elbows loaded under the shoulders -----
+        // --- 5. Arms: the planned plant, realized by the engine's own limb solve -----------------
+        // The A-side plant/pole were planned in step 2 (the trunk was derived from them); the
+        // P-side plant is the same chain reflected in Z.
         scratchShoulderA.set(shoulderA!!.worldPosition)
-        scratchShoulderP.set(shoulderP!!.worldPosition)
-
-        // The forearms are PLANTED: their world X is anchored to the *neutral* (no
-        // sway) shoulder position, so as the COM drifts forward by comShiftX the
-        // effective forearm reach shortens and the elbows load — visible weight
-        // transfer through arms that behave like fixed supports. Hands tuck slightly
-        // inward (mild A-frame). Hand height = forearm resting height. The reach is
-        // set so the elbow holds a loaded ~75° bend (never locked) given the engine's
-        // long upper arm vs. the low braced-shoulder height (see report §7 debt).
-        val handReach = def.forearmLength * 1.15f
-        val handZ = def.shoulderWidth * 0.6f
-        val handPlantAX = (scratchShoulderA.x - comShiftX) + handReach
-        val handPlantPX = (scratchShoulderP.x - comShiftX) + handReach
-
-        targetA.set(handPlantAX, contactY, -handZ)
-        poleA.set(-0.5f, -1f, -0.3f) // seat the elbow down/back and slightly outward onto the mat
         bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
 
-        targetP.set(handPlantPX, contactY, handZ)
-        poleP.set(-0.5f, -1f, 0.3f)
+        planPlantedForearm(def, forearmPlantX, elbowZ, handZ, pillarLean)
+        targetP.set(plantHand)
+        poleP.set(plantPole)
+        scratchShoulderP.set(shoulderP!!.worldPosition)
         bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         // Hands lie flat on the mat, fingers forward (open-hand family offsets 6/6/10).
@@ -158,4 +166,26 @@ class StaticForearmPlankPose : BasePlankPose() {
 
         return finalizePlankPose()
     }
+
+    companion object {
+        /**
+         * The settled frame's authored pillar lean in degrees (~12°): the deepest hip settle the
+         * planted leg still reaches. Measured at the settled frame with this lean: the hip→ankle
+         * span is `188.1` of the leg's `210`-unit length (`0.98` band ⇒ `205.8`), so the leg is
+         * never pulled straight and the arm solve records no clamp.
+         */
+        const val SETTLED_PILLAR_LEAN_DEGREES = 12f
+
+        /**
+         * The settled hip height: the hips drop to it from the braced line and press back up. Fixed
+         * (not a solver output) because it is the pose's authored amplitude; the constraint it
+         * satisfies is the one above — at this height the planted leg still has 17.7 units of slack
+         * inside its 0.98 reach band, and the hips' travel to the braced line (`37.2`) is the
+         * rep's own motion.
+         */
+        const val SETTLED_BODY_Y = 30f
+    }
+
+    private val settledPillarLean = SETTLED_PILLAR_LEAN_DEGREES * (PI.toFloat() / 180f)
+    private val settledBodyY = SETTLED_BODY_Y
 }
