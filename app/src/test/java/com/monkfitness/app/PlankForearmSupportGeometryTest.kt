@@ -600,7 +600,15 @@ class PlankForearmSupportGeometryTest {
          * other **48 classes are byte-identical**, which is gated by
          * `M3M5ProneTrunkGeometryTest.UNAFFECTED_CORPUS_DIGEST` (`-517042293001259057`, equal on both
          * trees with the three corrected classes excluded).
+         *
+         * **Re-baselined again by the M6/M7 swing/burpee correction** (`fix/m6-m7-swing-burpee-geometry`,
+         * off `fc65695`): this corpus is "every pose except the two forearm planks", so it includes the two
+         * poses that correction owns. Observed RED on the previous value `3799530965937589305` before the
+         * re-baseline. Attribution is direct, not inferred: the whole-corpus dump (51 classes × 5 progress
+         * × every joint XYZ, `8415` rows, full float bits) differs in exactly `268` rows, all of them
+         * `KettlebellSwingPose` + `BurpeePose`; the other 49 classes are byte-identical, which
+         * `M6M7SwingBurpeeGeometryTest.UNAFFECTED_CORPUS_DIGEST` (`-2275091341366878044`) gates directly.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 3799530965937589305L
+        const val UNAFFECTED_CORPUS_DIGEST = -8819852136411858964L
     }
 }

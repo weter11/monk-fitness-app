@@ -1177,6 +1177,172 @@ frames of these three poses are identical, so warming is a harness property, not
 - **Deliberately NOT touched.** The engine (no finalizer, solver, pipeline, validator, `SupportMath` or
   carrier change), the renderer, M1, M6–M15, and the P2 cleanup list.
 
+### DONE — M6 + M7 the swing's hip hinge / straight arms and the burpee's rep geometry (production geometry)
+
+Branch `fix/m6-m7-swing-burpee-geometry` off `main` `fc65695` (the M3/M5 merge, PR #239). **Production
+geometry change: `KettlebellSwingPose` and `BurpeePose` only** — plus the three re-baselined corpus
+digests and the new `M6M7SwingBurpeeGeometryTest` gate. Both findings re-measured against the current
+tree first; one of the two audit descriptions does **not** reproduce as written and the corrected
+statement is recorded below.
+
+- **M6 — the audit's wording does not reproduce; the defect behind it does.** §3 M6 says the hinge
+  profile is "inverted: `pelvisY=lerp(175,210)` makes deep hike taller than top while `leanAngle→0`".
+  Measured on `fc65695` (`u = (1−cos 2πp)/2`, so the hinge bottom is `u=0` at the seam, not `u=1`): the
+  hinge bottom is the **lower** pose (`175.00`) and the top the taller one (`210.00`) with
+  `leanAngle = 0` — the profile is not inverted, and the top is correctly upright. What *is* wrong is
+  the profile's **axis**: the pelvis travels `35.00` units **down** and only `20.00` **back**, so the
+  legs must shorten to keep the feet planted — the hip→ankle span collapses to `166.57` of the
+  210-unit leg, i.e. **75.23° of knee flexion at the hinge bottom** (interior `104.77°`) with the knee
+  jutting to `x = +53.07`, `46.9` in front of the ankle. That is the squat the BPS names as the
+  swing's first mistake ("Squatting instead of hinging (too much knee bend, thighs dropping)", §12;
+  "knee flexion: only slight … this distinguishes the swing from a squat", §9).
+- **M6, second authored error (the same class, measured, and inside the pose M6 owns).** The hand
+  target was lerped in **world space** from `(-35, 130)` to `(40, pelvisY + torsoLength)`, i.e. to
+  chest height **40 units in front of the shoulder** — inside the arm's own minimum reach. The solver
+  folded the elbow onto its minimum-flexion stop: published elbow interior **`30.00°`** (150° of elbow
+  flexion) at `p ∈ [0.35, 0.65]`, shoulder→hand span **`40.13`** of the 146-unit arm, and the elbow
+  flared **`80.61` units sideways** — the character *curls the load to its chest*, the BPS's "the arms
+  are straight — they do not curl or press the load" (§11) / "using the arms to curl/press the load up
+  instead of thrusting with the hips" (§12) violated on every frame of the upswing. Audit §3's M8
+  sentence covers the reach-clamp machinery for this family; the pose-side authoring error is what is
+  corrected here (no declaration/carrier work — that stays M8).
+- **M7 — reproduces as recorded, and is one defect with two faces.** Measured on `fc65695`: the
+  squat's `pelvisY = 35` with the ankle target at `15` puts the authored hip→ankle span at `20.00`,
+  inside the knee's minimum reach (`55.99`), so `clampTargetToReach` pushed the effector out along its
+  own ray and the published **feet sank through the declared ground** — ankle `-7.88` at `p=0.15`,
+  **`-21.01` at `p=0.15…0.20`** (heel/toe the same). And the plank authored the feet at `x = −110`
+  against the command's `x = 25`: a hip→ankle span of `65` units (the leg is 210) and hands `48.9`
+  behind the shoulders, so the published "plank" was a tucked crouch — knee interior `37.40°`, elbow
+  `57.53°`, hips **`13.90`** units off the straight shoulder→ankle line — while the jump-top
+  (`pelvisY = 185`, ankle target `100`) folded the legs to `47.17°` and left the "overhead" hands
+  `81` units **below** the head.
+- **Root cause, both poses, one statement.** Every target the two poses authored was an absolute world
+  point chosen by eye, with no relation to the reachable spans of the chains that must realize it: the
+  hip→ankle span is fixed by `pelvisY` alone (nothing in the pose ever asked how long a leg is), and
+  the hand target was an independent `lerp` in `X`/`Y` (nothing ever asked how long an arm is). The
+  solver's honest answer to an unrealizable target is to relocate the effector — which is what the
+  published frames show.
+- **Exact authoring correction — derive the targets from the chains, keep the poses' structure.**
+  No engine file, no solver, no carrier, no API, no new global state; both poses keep their builders,
+  metadata, loop mode, phase windows, poles (mirrored per side where the burpee had passed one pole to
+  both arms) and node hierarchies.
+  1. **A shared, in-band length definition.** Each pose now derives the span it authors from the
+     solver's **own** reachable length (`(L1 + L2) · ikConstraint.effectiveExtensionRatio`), at `0.98`
+     (swing hinge) / `0.99` (swing top, burpee limbs) of it — so the authored target is inside the
+     annulus `clampTargetToReach` respects and the realized limb is what the pose declared.
+  2. **Swing (`M6`): the pelvis's path is the hinge.** The hinge bottom pushes the hips back
+     `HINGE_HIP_BACK = 60` with the pelvis's height **derived** from the authored leg span
+     (`ankleLevel + √(span² − back²)`), the top is one authored span above the ankle. The knee now
+     tracks over the ankle (`x = −1.05` at the hinge vs `+53.07`), the shin angle barely changes, and
+     the hinge is `4.41°` more knee flexion than the top (was `40.19°`).
+  3. **Swing (`M6`): the load is a straight pendulum hung on the shoulder.** The hand target is placed
+     on the arm's own reachable circle (`shoulder + span·(sin θ, −cos θ)` with `θ` sweeping
+     `−0.52 rad → +1.45 rad` from the downward vertical), so the shoulder→hand distance is the authored
+     span at **every** frame; the load travels from behind the knees to chest height in front, both
+     phases of the BPS's pendulum, with the elbows straight throughout.
+  4. **Burpee (`M7`): the plant schedule.** The rep's contacts are now one geometry: the hands plant
+     where the squat's trunk reaches (`plantX = torsoLength·sin 60°`), stay exactly there through the
+     whole plant window, and the feet plant one full body line away (`legspan` behind the hands at the
+     plank). The squat's depth is **derived** from that plant (`squatY = armSpan − torsoLength·cos 60°`)
+     instead of chosen, so the authored span (`66.65`) can never cross the knee's minimum reach.
+  5. **Burpee (`M7`): the plank is a pivoting rigid line.** Both ends of the plank are pinned (the
+     hands at the plant, the feet at their plant) and the body is one line from the shoulder to the
+     ankle; the optional push-up pivots that line about the **planted feet** (a shoulder drop of `42`
+     units), which is why the dip now bends the elbows (`112.69°` / `82.16°` interior) while the body
+     stays straight and **neither contact moves**. The jump is authored as a whole-body rise with the
+     limbs staying extended (`ankle = pelvis − span`), and the landing keeps soft knees by absorbing
+     `40` units below the stand before extending back to it — which is also the loop's seam pose.
+- **Measured (published frames, same pipeline, pre-fix `fc65695` → this branch).**
+
+  | KettlebellSwing | pre-fix | post-fix |
+  |---|---|---|
+  | pelvis at the hinge `(x, y)` | `(−20.00, 175.00)` | `(−60.00, 202.55)` |
+  | pelvis at the top | `(0.00, 210.00)` | `(0.00, 213.74)` |
+  | hip→ankle span at the hinge (of 210) | `166.57` | `201.98` |
+  | knee interior, hinge → top | `104.77° → 144.96°` | `148.16° → 152.57°` |
+  | knee `x` at the hinge | `+53.07` | `−1.05` |
+  | elbow interior (min over the rep) | `30.00°` | `151.82°` |
+  | shoulder→hand span (min) | `40.13` | `141.65` |
+  | elbow lateral `z` at the top | `−80.61` | `−53.43` |
+  | load at the hinge `(x, y)` | `(−23.76, 139.17)` | `(−23.29, 134.32)` |
+  | load at the top `(x, y)` | `(40.00, 330.00)` | `(140.32, 316.71)` |
+  | trunk tilt, hinge → top | `63.03° → 0.00°` | `63.03° → 0.00°` |
+
+  | Burpee | pre-fix | post-fix |
+  |---|---|---|
+  | stand pelvis `y` (seam) | `140.00` | `218.74` |
+  | squat bottom pelvis `y` / hip→ankle span | `35.00` / `56.01` (clamped) | `81.65` / `66.65` |
+  | lowest ankle `y` (whole rep) | `−21.01` (`p=0.15/0.20`) | `+11.92` (mid-kick-back) |
+  | plank pelvis / feet `x` / hands `x` | `(−45.00, 45.00)` / `−110.00` / `25.00` | `(−6.51, 94.70)` / `−194.02` / `103.92` |
+  | plank hip offset from the body line | `13.90` | `0.00` |
+  | plank knee / elbow interior | `37.40°` / `57.53°` | `143.75°` / `140.39°` |
+  | push-up bottom elbow interior | `57.53°` (no bend at all) | `82.16°`, plants held to `<0.5` |
+  | jump-top pelvis / knee / elbow | `185.00` / `47.17°` / `34.47°` | `263.74` / `152.57°` / `151.82°` |
+  | jump-top hand vs head `y` | `260.00` vs `341.00` (arms folded **down**) | `525.30` vs `419.74` (arms overhead) |
+  | foot kick-back travel | `110.00` | `194.02` |
+  | loop seam (`p=0` vs `p=1`) | exact | exact |
+
+- **Movement review (published frames, the poses' own axes).** Swing: the body rises `35.00`, folds the
+  trunk `63.03°` and pushes the hips back `60.00` over barely-bent knees while the load sweeps `−23.3 →
+  +140.3` in `x` (behind the knees → chest height) on a constant-length arm. Burpee: stand tall
+  (`218.74`) → squat with the hands planted at `103.92` → feet shoot `194` back into a straight
+  body-length plank under the shoulders → the push-up dips the line with both plants held → the feet
+  return → a full-extension jump with the hands `105.6` above the head → a soft landing back to the
+  stand. Both read as the exercise their BPS describes through the whole rep, which is the bar this
+  pass was set.
+- **RED before / GREEN after (the gate is `M6M7SwingBurpeeGeometryTest`, 15 tests, published frames,
+  by-value snapshots).** With the two pose files restored to `fc65695` (`git checkout fc65695 -- <the two
+  poses>`, md5s recorded, `git diff fc65695 --stat -- poses/` empty) and the new test left in place:
+  **12 of 15 RED** — e.g. `kettlebellSwingHingeBendsTheKneesOnlySlightly` (minimum knee interior
+  `104.77°`), `kettlebellSwingArmsStayAStraightPendulum` (`30.00°` elbow, `40.13` span),
+  `kettlebellSwingHipsPushBackInsteadOfDropping` (`20.00` back vs `35.00` down),
+  `kettlebellSwingLoadTravelsFromBehindTheKneesToChestHeight` (hand `x = 40.00` at the top),
+  `burpeeFeetNeverSinkThroughTheirFloor` (`ANKLE_F = −7.88` at `p=0.15`),
+  `burpeeSquatBottomStaysInsideTheLegsReachableSpan` (`56.01`, exactly the clamp),
+  `burpeeHandsStayPlantedWhileTheyBearThePlank` (`1.01` off the floor),
+  `burpeePlankIsAStraightExtendedLineUnderTheShoulders` (`13.90` off the line),
+  `burpeePushUpDipBendsTheElbowsWithBothPlantsHeld` (no bend),
+  `burpeeFeetShootBackAFullPlankLength` (`110.00`), `burpeeJumpTopIsAFullExtensionWithTheArmsOverhead`
+  (`47.17°` knees, hands under the head), `burpeeStandsTallAtTheSeam` (`140.00`). The three that are
+  green on both trees are stated rather than hidden: two are non-discriminating spec checks
+  (the trunk's rigidity and the loop seam), and the third is the blast-radius digest, which excludes
+  the two corrected poses and is therefore green on both trees **by construction**. Restoring the fix
+  (md5-verified byte-identical, `md5sum -c /tmp/m6m7fix/hashes`) → **15/15 GREEN** (fresh, on the
+  pushed bytes).
+- **Blast radius, direct and non-inferred.** Whole-corpus dump (`51` classes × `5` progress × every
+  joint XYZ = `8415` rows, full float bits) measured on both trees: **exactly `268` rows differ, all of
+  them `KettlebellSwingPose` (`140` = 28 joints × 5 samples) and `BurpeePose` (`128` = 28 joints at each
+  interior sample, 22 at each seam sample), i.e. 49 classes are byte-identical** (largest single-joint
+  move: `188.41` `BurpeePose KNEE_F`, `126.41` `KettlebellSwingPose FINGERTIPS_A`). The residual
+  foot-joint differences are float-level (`ANKLE_F.y` `9.999992` vs `10.000000`) from the different IK
+  path, not a semantics change. The three pre-existing digests whose "every other pose" corpora include
+  these two poses went **RED on their previous values** (`PlankForearmSupportGeometryTest`
+  `3799530965937589305`, `M3M5ProneTrunkGeometryTest` `−517042293001259057`, `M1StepUpGeometryTest`
+  `−8991724156081959456`) and are re-baselined here with the responsible change named at each constant;
+  the new file pins the complementary guard (`M6M7SwingBurpeeGeometryTest.UNAFFECTED_CORPUS_DIGEST =
+  −2275091341366878044`, measured **equal on both trees** with the two corrected classes excluded).
+- **Verification (fresh runs, same environment).** Full suite `./gradlew :app:testDebugUnitTest
+  --rerun-tasks` with the results directory purged: **117 classes / 558 tests / 0F / 0E / 0S** against
+  the pre-fix tree's **116 / 543** — exactly `+1` class / `+15` tests (the new gate), no other count
+  moved. Release: `:app:compileReleaseKotlin`, `:app:compileReleaseJavaWithJavac`,
+  `:app:assembleDebug`, `:app:assembleRelease -x lintVitalRelease`.
+- **Recorded, deliberately NOT fixed (adjacent findings, measured).** (i) The planted hand's
+  derivative chain still hangs below the floor (burpee `FINGERTIPS_A.y = −21.00` at the plant) because
+  neither pose declares a support model, so the engine's extremity projection has nothing to key on —
+  the T-1/M8 class, owned by M8/M9/M10's declaration pass; the pose keeps the convention its authoring
+  already had (the wrist joint at the floor, pre-fix `FINGERTIPS_A.y = −18.79` at `p=0.2`). (ii) Both
+  poses' feet ride `10`/`15` units above the ground (the pre-existing floating-foot class, unchanged by
+  this pass). (iii) The engine's `0.98` reach cap means a straight limb is never realized — measured
+  knee bulge `28.2` on the swing's hinge and `27.6` on the plank's legs; the residual bulge is directed
+  away from the floor (the poses' leg pole is unchanged). (iv) The burpee's knee dips `2.35` units below
+  the ground for one mid-kick-back frame (the deep fold + the leg pole), pre-existing class and
+  negligible at this scale; recorded, not chased. (v) `BurpeePoseTest` stores
+  `produceFrame(...).pose` references for 30 frames (the T-7 buffer-aliasing class: it validates one
+  frame 30×) — an adjacent test-quality finding, untouched here.
+- **Deliberately NOT touched.** The engine (no finalizer, solver, pipeline, validator, `SupportMath`,
+  `bakeIkLimb` or carrier change), the renderer, the poses' metadata/declarations (`M8`/`M9`/`M10`),
+  M11–M15, and the P2 cleanup list.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
@@ -1185,9 +1351,11 @@ frames of these three poses are identical, so warming is a harness property, not
    family (M9) and the core/hip poses (M10) and the upper/dynamic poses (M8).
 3. M2/M6/M7 — pose-specific biomechanical-fidelity bugs (side-plank contact
    side — **the declaration side resolved by B-4 and the pose's own planted-forearm floor debt
-   resolved by B-7** — kettlebell hinge inversion, burpee
-   foot-translation). **M1 (the step contact) is DONE, and M3 (cobra) + M4 (superman) + M5
-   (snow angel's trunk/legacy path) are DONE — see the records above.** M5's declaration half is
+   resolved by B-7**). **M1 (the step contact), M3 (cobra) + M4 (superman) + M5
+   (snow angel's trunk/legacy path), and M6 (the swing's hinge + its straight-arm pendulum) + M7
+   (the burpee's rep geometry) are DONE — see the records above** (M6's audit wording is corrected
+   there: the profile's *axis*, not its direction, was the defect, and the pose owns a second
+   authored error the audit sentence does not name). M5's declaration half is
    split off to item 2 (M8/M9/M10's family-wide channel).
 4. M13/M14 — tuning items (hamstring reach, decline plank tilt).
 
@@ -1205,5 +1373,5 @@ A8/A6 leaks — resolved in the Push-Up Family pass above.)
 - Fix the pose, not the engine, when a pose authors motion incorrectly.
 - Keep pose-side migrations on the **existing** carrier surface (the H2 fix is the template).
 - After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
-  current baseline of record (**113 classes / 518 tests** as of the B-8b landing; the older "282"
+  current baseline of record (**117 classes / 558 tests** as of the M6/M7 landing; the older "282"
   figure predates P12) before marking a finding resolved.
