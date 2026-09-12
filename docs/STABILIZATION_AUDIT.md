@@ -1692,9 +1692,167 @@ renderer and the validators read), 5 progress samples, before any production edi
   authorship question the audit's rows do not name. (e) Both poses keep the P2 items (WRIST mirror lines,
   the duplicate PELVIS intent) — that pass owns them.
 
+### DONE — M15 the wall slide's forearms lie on the wall's own contact plane (branch `fix/m15-wallslides-wall-geometry`, off `4203fff`; production geometry)
+
+Branch off `main` `4203fff` (the M11/M12 merge, PR #243). The row reads "Wall modeled in X but forearms
+abducted in Z → 'forearms flat on wall' not enforced" — re-measured on the PUBLISHED runtime path
+(`SkeletonPipeline.produceFrame(pose, ctx)`; 9 progress samples; both the genuinely cold first frame of a
+fresh builder on a fresh pipeline and the frames an advancing pipeline publishes) before any edit. In this
+engine `WallProp.width` is the X extent, so a wall's **+X face is its contact plane**, and the exercise's
+own contract is stated in the BPS §6/§8 ("the elbows and wrists maintain wall contact throughout … elbows
+and the backs of the wrists/hands contact the wall") and in `Movement Ownership Matrix` §Wall Slide
+("Followers: … Elbow, Wrist/Hand (**on wall**)").
+
+| reading | measured on `4203fff` |
+|---|---|
+| wall prop | center `(-15, 90, 0)`, `8 × 180 × 160` → slab `x ∈ [-19, -11]` (face **`-11`**), `y ∈ [0, 180]`, `z ∈ [-80, 80]` |
+| `ELBOW_A` / `HAND_A` X | `-62.58 … -51.90` / `-5.000` — the elbow is `40.9 … 51.6` u **behind** the wall's face |
+| forearm X span (its wall-normal component) vs its `66` u length | `46.9 … 65.7` of `66` — the forearm runs roughly ALONG the wall's normal, i.e. through the wall |
+| wall contacts' Y | `ELBOW_*` `356.37 … 382.86`, `HAND_*` `332.29 … 415.00` — `152 … 235` u ABOVE the wall's top edge (`y = 180`, itself below the athlete's own pelvis at `235`) |
+| `ELBOW_*` Z | `±101.52 … ±104.51` — `21.5 … 24.5` u outside the wall's `z ∈ [-80, 80]` extent |
+| wrist above elbow (the arms slide UP the wall) | false at `p ≤ 0.125` (hand `332.29` vs elbow `356.37`) |
+
+- **First incorrect authored representation, and the root cause.** The pose declares the wall as a plane of
+  constant X and then authors its arm chain in a **different frame**, in two independent ways.
+  (i) The hands are authored at `x = -5` — the plane of the athlete's own spine — while the wall's declared
+  face is `-11`, so **no authored wall contact lies on the declared plane at all**; the elbow cannot be
+  anywhere near it either. (ii) The elbow pole `Vector3(-1f, 0f, ∓1f)` — whose comment reads "points
+  backward and outward to keep contact with the wall plane" — carries a **negative X component**.
+  `SkeletonMath.solveTriangleJoint` places the elbow on the circle of radius `h = sqrt(L1² − a²)`
+  perpendicular to the shoulder→hand chord (`h ≈ 65.9` at the W) and the pole selects only the DIRECTION of
+  that offset, so a pole pointing along `-X` throws the elbow `40.9 … 51.6` u behind the face. The first
+  incorrect point is therefore the **wall-contact authoring itself**: the pose's wall plane and the plane
+  its arms are authored in are two different planes.
+- **Second, measured defect inside the same authoring (why "put the arms on the face" is not enough on its
+  own).** The authored "W" (`handY = shoulderY − 10`, `handZ = shoulderWidth + 15` outboard) sits `19.00` u
+  from the shoulder, while the arm chain's own `minimumFlexionAngle` stop puts its minimum reachable
+  shoulder→hand distance at `SkeletonMath.minReach(80, 66, 30°) = 40.1344` u. The M8 pass's R2 helper
+  answers that by projecting the target onto the reachable annulus **along its own ray** — and because the
+  shoulder sits `6` u in front of the wall's face, that ray carries an out-of-plane component, so the
+  projection replaces the impossible W with a hand up to `6.9` u BEHIND the wall's face (`p = 0 … 0.5`).
+  The realized W is the projection, not the authoring: the authored target `(-5, 345, -61)` publishes as
+  `(-5.000, 332.292, -80.062)`.
+- **Fix (pose-side only — no engine file, no solver path, no carrier, no new global state).**
+  1. **One plane.** The prop is placed from a single `WALL_FACE_X` constant and the ARM CHAIN is authored in
+     that same plane (`handX = WALL_FACE_X`), so the declared contact plane and the authored arm plane are
+     the same plane by construction.
+  2. **The elbow's bend plane is the wall's plane.** The pole is no longer a hand-tuned vector: the pose
+     derives it (`wallPlanePole`) from the chord's own numbers — the perpendicular offset must carry
+     exactly `n.x = (WALL_FACE_X − chordFoot.x) / h` — so the elbow lands ON the face. Of the two solutions
+     the pose takes the one whose offset hangs BELOW the chord (the elbow trails the hands up the wall;
+     wrist above elbow at every phase). This is the B-7 pole-derivation shape ("derive the pole from the
+     chain's own statement of where the elbow bends"), pose-side and allocation-free.
+  3. **The authored W is made realizable IN the plane** (`extendToInPlaneReach`): the authored direction is
+     kept and extended to `minReach · (1 + 0.02)` — the R2 helper's own band and margin — using only the
+     in-plane components, so `clampTargetToReach` then copies the target unchanged and no reach projection
+     can relocate a wall contact off the wall. The authored slide (`−10 → +60` from the shoulder) and the
+     authored abduction (`15 → 25` outboard) are untouched; the realized hand path moves by ≤ `0.25` u in
+     Y/Z against the pre-fix tree.
+  4. **The wall is the surface the arms slide ON.** The prop's extent is sized from the measured contact
+     envelope: `500` tall (`y ∈ [0, 500]`, against a fingertip apex of `428.42`) and `300` deep
+     (`z ∈ [-150, 150]`, against an abducted-elbow apex of `125.72`), with the athlete's `391`-unit
+     standing height as the lower bound. Its X placement (`x ∈ [-19, -11]`, face `-11`) is H1's and is
+     deliberately NOT moved onto the spine plane — see the refuted alternative below.
+- **Measured, published frames, pre-fix → post-fix (the same numbers at every sampled progress).**
+
+  | reading | pre-fix | post-fix |
+  |---|---|---|
+  | `ELBOW_A` X | `-62.581 … -51.904` | **`-11.000`** (exactly on the face) |
+  | `ELBOW_A` Y / Z | `356.37 … 382.86` / `±101.52 … ±104.51` | `275.23 … 374.74` / `±46.95 … ±125.72` |
+  | `HAND_A` X | `-5.000` | **`-11.000`** |
+  | forearm X span (of its `66` u) | `46.9 … 65.7` | **`0.0000`** |
+  | hand chain (`PALM_*`/`KNUCKLES_*`/`FINGERTIPS_*`) X | `+0.23 … +16.89` (in front of the wall) | **`-11.000`** (on the face) |
+  | `maxIkClampAmount` | `0.047028` | `0.047028` (unchanged — no relocation introduced) |
+  | `supportedPoints` | `LEFT_FOOT` + `RIGHT_FOOT` | unchanged |
+  | feet (`HEEL_F`/`TOE_F`) | `(-15.150, 29.247, -26.445)` / `(19.850, 29.247, -26.286)` | byte-identical |
+
+- **The refuted alternative (measured, recorded because it looks like the smaller fix).** Pulling the
+  WALL's face forward onto the athlete's spine plane (`x = -5`) — which would also make BPS §3/§7/§8's
+  "back against the wall" literally true — was implemented and measured FIRST: the athlete's ankles sit at
+  that same X, and `SkeletonPoseFinalizer.supportPlaneNormalFor` resolves a declared contact's surface from
+  the centroid of its canonical joints (its `WallProp` branch takes no distance comparison), so a wall
+  footprint covering the spine plane contains the declared FOOT contact's centroid — on the cold frame the
+  heel/toe are coincident with the ankle, putting that centroid exactly on the face — and the finalizer
+  re-orients the feet onto the wall's face instead of the floor: measured `HEEL_F (-5.000, 29.247,
+  -36.549)` / `TOE_F (-5.000, 29.247, -1.549)`, i.e. the foot's long axis rotated from `+X` onto `±Z`,
+  against the correct `(-15.150, 29.247, -26.445)` / `(19.850, 29.247, -26.286)`. That is an engine-side
+  coupling, out of a pose-side finding's scope, so the `6`-u standoff stays and the BPS §3/§7/§8 back
+  contact remains unmodelled — **the H1 complement, still open**.
+- **Regression coverage (fresh runs).** New `M15WallSlidesWallGeometryTest` (**6 tests**, both frame
+  conditions × 9 progress samples): the forearms lie in the wall's own declared contact plane; the whole
+  hand chain does too (BPS §8's "backs of the wrists/hands"); the wall contacts lie inside the wall prop's
+  own Y/Z extent; the slide stays coherent through the whole rep (the authored `−10 → +60` travel, the
+  definition's segment lengths, the wrist above the elbow, the elbow outboard of the shoulder); the
+  declared foot contacts still resolve to the GROUND (the anti-collateral guard — and the measurement that
+  refutes the alternative above); and this finding's own blast-radius digest.
+- **RED → GREEN.** The class on the untouched base tree (`origin/main` @ `4203fff`, `--rerun-tasks`) is
+  **5 of 6 FAILED**, every failure quoting the numbers tabulated above; the 6th (the foot guard) is green on
+  both trees by design. On this branch all 6 are green.
+- **Per-hunk counterfactuals (fresh runs, each essential correction removed ALONE).**
+
+  | hunk removed | `M15WallSlidesWallGeometryTest` |
+  |---|---|
+  | the wall prop's extent (`500 × 300` → the pre-M15 `180 × 160`) | **1 RED** — `theWallContactJointsLieOnTheWallsOwnSurface` |
+  | the arm chain authored on the wall's face (`handX` `-11` → the body plane `-5`) | **3 RED** — the plane, the whole hand, the contacts-on-wall |
+  | the in-plane reach extension of the authored W | **3 RED** — the plane, the whole hand, the contacts-on-wall |
+  | the derived elbow pole (→ the pre-fix `(-1, 0, ∓1)`) | **4 RED** — the above plus `theSlideStaysCoherentThroughTheWholeRep` (wrist below elbow) |
+
+  In every variant the two guards (the foot guard, the scope digest) stay GREEN; the restored bytes
+  (`md5sum -c`) re-run fully GREEN.
+- **Blast radius (direct, not inferred).** Whole-corpus dump — `51` classes × `9` samples × every joint XYZ,
+  every `maxIkClampAmount`/`boneLengthsVerified`/`supportedPoints` stamp, the environment props and the
+  declared limb targets (`16524` rows) — over a `git stash` round-trip on the corrected pose file with
+  `md5sum -c` on restore: **`126` rows differ, all inside `WallSlidesPose`** (the two arm chains'
+  `ELBOW_*`/`HAND_*`/`WRIST_*`/`PALM_*`/`KNUCKLES_*`/`FINGERTIPS_*` = `12` joints × `9` samples = `108`,
+  plus the `9` `TARGETS` and `9` `ENV` rows). The other `50` classes are byte-identical (`0` differing
+  rows), the legs/spine/pelvis are untouched, and `maxIkClampAmount` is `0.047028` on both trees. The six
+  long-standing scope digests (`M1StepUpGeometryTest`, `M3M5ProneTrunkGeometryTest`,
+  `M6M7SwingBurpeeGeometryTest`, `PlankForearmSupportGeometryTest`, `M11M12LimbRealizationMigrationTest`,
+  `HamstringForwardReachTest`) were re-baselined with that measurement appended to each constant's KDoc;
+  their tests re-run with the pose file stashed (`--rerun-tasks`) are GREEN there, so the digest delta is
+  attributable to this change and not to a drifted base. `M8M9M10SupportDeclarationTest`'s digest is
+  unchanged (its corpus excludes `WallSlidesPose` — that pass owns the pose's declaration and authored
+  frame), and its anti-freeze floor for this pose stays satisfied (`maxIkClampAmount` `0.047028` inside the
+  engine's `0.1` reachability flag).
+- **Full suite / build.** `--rerun-tasks`, results purged: this branch → **`121 classes / 583 tests /
+  0F / 0E / 0S`**, with `:app:assembleDebug` and `:app:compileReleaseKotlin` in the same run. The same
+  tree with the corrected pose file stashed and the new test class set aside reads **`120 / 577`** — i.e.
+  exactly `+1` class / `+6` tests from this pass and no other count moved (that base-configuration run's
+  six failures are the re-baselined scope digests pointing the other way, which is the re-baseline
+  direction itself).
+- **Instruments that stayed blind (part of the finding, not a footnote).** (a) `ExerciseValidator` has no
+  prop-FACE check: every prop rule it has uses `center.y + height/2` — a wall's TOP edge — which is why
+  H1's waist-high stub wall passed validation for three passes. (b) `EnvironmentPenetrationTest` resolves a
+  wall's surface to the ground by design ("a wall supports on its face; Y stays the ground reference"), so
+  neither a `6`-u standoff nor a `51`-u penetration on the X axis is visible to it; the corpus invariant it
+  owns is a Y-band on declared contacts. (c) **`WallSlidesPoseTest` — the pose's own validator sweep — is
+  another instance of the T-7 reused-buffer aliasing class**: it stores
+  `pipeline.produceFrame(rawPose).pose` into a list and validates it `30` times, and MEASURED it holds
+  **`1` distinct frame with a `HAND_A` Y spread of `0.00`** — i.e. it validates one frame thirty times and
+  cannot see a temporal or contact-plane error at all. That is test-only work outside M15's scope and is
+  recorded here for the T-7 family to pick up, NOT fixed by this pass.
+- **Recorded, deliberately NOT done (tuning/design questions M15 forces but does not answer).**
+  (a) BPS §1/§3's "W" is "upper arms at ~90° abduction, elbows bent ~90°", which puts the hand ≈`103.7` u
+  from the shoulder; the pose's authored slide spans only `19.00 → 65.28` u, so the corrected W is the
+  closest a real arm gets to the authored one — the arm at its OWN tightest fold (interior `30.70°` at
+  `p = 0`), not the documented relaxed W. Whether the slide's amplitude should be re-authored to the
+  documented ROM (`103.7` u at the W) is a pose-DESIGN decision, not M15's, and is left open with its
+  measurement. (b) The same applies at the top of the rep: the arm reaches `52.04°` of interior angle at
+  `p = 1` (`d = 65.28` of the `143`-unit reach), so BPS §9/§11's "up to full overhead … at the top the arms
+  are overhead" canonical sub-pose is not realized in this pose's amplitude either. (c) The `6`-u standoff
+  (the refuted alternative above) is the H1 complement. (d) `loopMode = LOOP` on a one-way slide snaps back
+  at the seam (`p = 1 → 0`) — this pose's pre-existing shape, not M15's.
+
 ### TODO — P1 (next pass, in priority order)
 
-1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
+1. H1 complement — **M15 is DONE — see the record above** (the wall's contact plane, the arm chain
+   authored in it, the derived elbow pole, the in-plane reachable W, and the prop's extent). What remains
+   from this item is the H1 half alone: the wall's face still stands `6` u behind the plane the athlete's
+   spine is authored in, so BPS §3/§7/§8's head/upper-back/pelvis wall contact is not modelled. Moving the
+   face onto the spine plane is refuted by measurement (the declared FOOT contacts' centroid falls inside
+   such a footprint and the finalizer re-orients the feet onto the wall — see the M15 record), so the
+   remaining work is an engine-side question (`supportPlaneNormalFor`'s wall branch takes no distance
+   comparison), not a pose edit.
 2. H2 complement — **M11 (`LatStretchPose`) + M12 (`CatCowPose`) are DONE — see the record above**
    (the canonical authored hierarchy for M11; the reachable-by-construction leg targets + the four-point
    support declaration for M12). **The declaration half of this item is DONE (M8/M9/M10 — see

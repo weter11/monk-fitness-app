@@ -572,7 +572,23 @@ class M6M7SwingBurpeeGeometryTest {
          * pose files) differs in exactly `95` xyz rows — `70` in `CatCowPose`, `25` in `LatStretchPose` —
          * and the other `48` classes are byte-identical. That pass's own blast-radius guard is
          * `M11M12LimbRealizationMigrationTest.UNAFFECTED_CORPUS_DIGEST`.
+                  *
+         * **Re-baselined by the M15 wall/forearm contact-plane correction**
+         * (`fix/m15-wallslides-wall-geometry`, off `4203fff`): this corpus contains `WallSlidesPose`, the
+         * pose M15 corrects — its arm chain is now authored in the wall prop's own contact plane, its
+         * elbow is placed on that plane, and the wall prop itself spans the athlete instead of stopping
+         * below the pelvis. Observed RED on the previous value `-7395791808799176758` before the re-baseline (this live
+         * run measured `-9151034365136083044`). Attribution is direct, not inferred: the whole-corpus dump (`51`
+         * classes × `9` samples × every joint XYZ, plus every `maxIkClampAmount` /
+         * `boneLengthsVerified` / `supportedPoints` stamp, the environment props and the declared limb
+         * targets — `16524` rows — over a `git stash` round-trip on the corrected pose file with
+         * `md5sum -c` on restore) differs in exactly `126` rows, ALL of them inside `WallSlidesPose`:
+         * the two arm chains' `ELBOW_*`/`HAND_*`/`WRIST_*`/`PALM_*`/`KNUCKLES_*`/`FINGERTIPS_*`
+         * (`12` joints × `9` samples = `108`) plus the `9` `TARGETS` and `9` `ENV` rows — with the other
+         * `50` classes byte-identical and the reachability stamp unchanged
+         * (`maxIkClampAmount` `0.047028` on both trees). M15's own blast-radius guard is
+         * `M15WallSlidesWallGeometryTest.UNAFFECTED_CORPUS_DIGEST`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -7395791808799176758L
+        const val UNAFFECTED_CORPUS_DIGEST = -9151034365136083044L
     }
 }
