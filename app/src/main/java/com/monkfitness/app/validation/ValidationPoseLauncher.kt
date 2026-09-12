@@ -57,6 +57,11 @@ fun ValidationPoseViewer(
         camera = camera,
         engine = engine,
         environment = metadata.environment,
+        // B-5 — the pose's declared support model was silently dropped here (the environment was
+        // forwarded, the Support Declaration was not), so this viewer finalized against a
+        // declaration-free context and disagreed with the playback path. Both halves now resolve
+        // through the single R8 source.
+        supportedPoints = metadata.support.supportPoints,
         showGround = showGround,
         modifier = modifier
             .fillMaxSize()
