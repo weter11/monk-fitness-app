@@ -2149,6 +2149,116 @@ tolerance moved or assertion weakened.
   depth either. Both are pre-existing family geometry, unaffected by B1 (whose delta is confined to the
   elbow/derived-hand chain above).
 
+### DONE — B3 the side plank's support knee (branch `fix/b3-sideplank-knee-plane`, rebased onto the B2 merge `f8f8b24` with B1 (#246) integrated; production geometry)
+
+**Pose-side authoring only**: one production file (`poses/IsometricSidePlankPose.kt` — the support leg's
+IK bend-plane pole), the new focused regression `IsometricSidePlankKneePlaneTest`, the T2 pin-table exit,
+seven re-baselined scope digests, and one retired redundant twin in `SupportPointSideConsumptionTest`.
+No engine/solver/phase/ownership change (the knee is an IK output — the pose owns the chain root, the
+ankle target and the pole), no RFC change, no golden change, no tolerance moved, no assertion weakened.
+The branch also carries the B1 integration (below), because #246 was still open and conflicts with the
+later T2/audit state; nothing else rides along.
+
+- **Root cause — the authored POLE aimed the chain's own residual bend through the mat.** The support leg
+  is IK-realised (`bakeIkLimb`) to an authored foot at `ankleX = -(thigh + shin) + 20 = -190`,
+  `y = contactY = 15` (the family's planted-foot height), while its hip travels the pose's own lift
+  `HIP_B (7.2657, 3.0233) → (9.3040, 43.7125)`. The hip→ankle chord is therefore `197.6289 … 201.3616`
+  against the constraint's own `maxReach(112, 98) = 205.8000` (`minReach = 56.0090`): the chain must fold,
+  and the knee's locus is a circle of radius `h = 35.4172` (p=0) … `37.3224` (p=0.25) … `29.7335` (p=1)
+  about the chord, `a = 106.25 … 107.98` from the hip. The authored pole `(0, -1, 0)` selected the branch
+  that puts that bow on the **-Y side of the chord** — and the chord itself lies only `3.0 … 15.0` u above
+  the plane — so the pose published `KNEE_B` `28.9130 … 44.8487` BELOW its own hip, and below its own
+  declared plane at **all `51` sampled phases under BOTH frame conditions** (`102` readings, worst
+  **`-25.8897`** at p=0). It is the pose's deepest published joint by `28.9` u (the next lowest is the
+  settled down-side hip, `HIP_B +3.0233`). The bend's *magnitude* is not a tunable here: it is the
+  constraint's own slack, and the pose's top leg already authors the other pole `(0, 1, 0)`; the family's
+  sibling `StaticForearmPlankPose` authors `(0, 1, 0)` for BOTH legs with the comment *"residual knee bend
+  points up, never sagging through the floor"*, carrying a LARGER residual (`h = 46.6668` at `187.9900` of
+  `205.8000`).
+- **Fix — author the bend side the family already declares.** `poleB` `(0, -1, 0)` → `(0, 1, 0)` (with the
+  measured rationale in the pose's own comment). The stance (`ankleX`, `contactY`), the limb target, the
+  reach, the planted foot, the whole choreography (hip lift, breathing float, the top foot's settle, the
+  top hand on the hip) and the support declaration are untouched; BPS `Plank (Side)` §7 (*"the supporting
+  leg is straight and in line with the trunk"*) / §11 (*"knees straight (supporting leg)"*) are served by the
+  chain's own nearest-to-straight solution, and the residual bend is left where the family leaves it — out
+  of the mat.
+- **Measured, published path `produceFrame(pose, ctx)`, dense sweep (`51` samples × both frame conditions,
+  by-value snapshots):**
+
+  | reading | pre-fix | corrected |
+  |---|---|---|
+  | worst published joint vs the pose's own declared plane (`band 0.05`) | `KNEE_B -25.8897` (every phase, both conditions) | **nothing below the plane** — the lowest published joint is the settled down-side hip `HIP_B +3.0233` |
+  | realized `KNEE_B` (p = 0 / 0.5 / 1) | `(-100.9380, -25.8897)`, `(-97.7474, -18.0675)`, `(-93.3339, -1.1143)` | `(-96.6453, +44.8145)`, `(-101.1438, +56.3350)`, `(-101.8134, +57.7449)` |
+  | support knee vs its own hip | `28.9130 … 44.8487` **below** it | `41.7912 … 14.0324` **above** it |
+  | support leg chord / `maxReach 205.8000` | `197.6289 … 201.3616` | identical — the stance is untouched; `|published ANKLE_B - declared target| = 0.0000000` (no relocation, `maxIkClampAmount` unchanged) |
+  | residual bend `h` (the chain's own slack) | `35.4172 / 37.3224 / 29.7335` (p = 0 / 0.25 / 1) | identical magnitudes — now spent ABOVE the chord instead of through the mat |
+  | planted foot chain (`HEEL_B`/`TOE_B`) | `y = 15.0000` (projected onto the declared plane) | `y = 15.0000` — moved `< 3e-5` (re-projected) |
+  | `HIP_B`, `ANKLE_B`, `HIP_F`, `KNEE_F`, the trunk, both arm chains, `supportedPoints`, `maxIkClampAmount` | — | byte-identical |
+- **Blast radius (whole corpus: `51` classes × `5` samples × every joint XYZ = `8415` rows**, dumped
+  through the production pipeline in a pristine `origin/main` @ `2fb6079` worktree (`/tmp/b3-base`) and on
+  this tree, then diffed): exactly `5` rows differ, **ALL of them `IsometricSidePlankPose`'s `KNEE_B`** (the
+  five samples; max `74.6425` u) — the other `50` classes byte-identical. The seven scope digests whose
+  corpus contains this pose were re-measured on the tree that carries all three corrections:
+  `M1StepUpGeometryTest` `6261922848910983622 → -2764093049021801384`,
+  `M3M5ProneTrunkGeometryTest` `1839028987920373159 → -1423510146238240711`,
+  `M6M7SwingBurpeeGeometryTest` `3719128276989989267 → -5306887620942795739`,
+  `M8M9M10SupportDeclarationTest` `9137988112138109314 → -7807207721990292460`,
+  `M11M12LimbRealizationMigrationTest` `4104715251719044407 → -4921300646213740599`,
+  `M15WallSlidesWallGeometryTest` `-3266047490962330901 → 3910385706448508459`,
+  `HamstringForwardReachTest` `-2759498806033257096 → 7812330171039804426`.
+  (`PlankForearmSupportGeometryTest`'s digest is unchanged by construction: its corpus excludes the
+  forearm-contact plank poses, and this pose is one of them.)
+- **The T2 pin table's exit criterion was met, and it forced its entry out.** Leaving the
+  `IsometricSidePlankPose` entry in place on the corrected tree makes the stale-pin guard fail with exactly
+  *"these pinned entries no longer pass below their pose's declared plane — the pose was fixed, so the
+  `[knownBelowGround]` entry (and its `[attribution]`) must be removed in the same change:
+  `IsometricSidePlankPose KNEE_B`"* (measured, `--rerun-tasks`, that guard being the only failure in the
+  class). The entry **and** its `attribution` line were removed in this change, and the class's counts,
+  census and KDoc paragraphs were recomputed for the merged tree: `43` pairs / `11` poses on `07dfe38` →
+  `39` pairs / `8` poses here (B2 removed the `DynamicWorldsGreatestStretchPose` pair, B1 the
+  `DiamondPushUpPose` pair, B3 this one).
+- **B1 (#246) integration — union, not side-preference.** `fix/b1-diamond-pushup-elbow-plane` @ `29ee54b`
+  (off `2fb6079`) is merged in **verbatim** (its pose fix, `DiamondPushUpElbowClearanceTest`, T2 exit and
+  audit record are preserved as its own commit). Conflict resolution: the eight scope digests keep **both**
+  passes' measured KDoc paragraphs and are re-measured on the merged tree (neither side's constant is valid
+  on a tree carrying both corrections); T2 keeps **both** corrected poses' exits with the counts re-derived
+  above; the audit doc keeps B2's record then B1's. `DiamondPushUpElbowClearanceTest` measures `7/7` and
+  `WorldsGreatestStretchBackKneePlaneTest` (B2) `5/5` on this tree — both regressions GREEN.
+- **One sibling twin was retired because this correction removed its witness (measured, not weakened).**
+  `SupportPointSideConsumptionTest.theSidePlanksDeclaredSideIsWhatSelectsTheFoot` witnessed the side
+  decision through the side plank's **undeclared** B foot (`devB = 17.5716`, `HEEL_B y = 7.82`,
+  `TOE_B y = 32.57` on the pre-fix geometry). The engine derives the foot from the shank, so the
+  re-authored leg's derivation now lands IN the plane: measured `devB = 0.0000` for a twin that declares
+  NOTHING — both feet of this pose are in the support plane whatever is declared, so no assertion on that
+  vehicle can distinguish the declared side any more (it would be green by geometry, not by the side
+  decision). The rule itself is not left unwatched: the `*_FOOT` kind is witnessed on both sides by
+  `aOneSidedDeclarationFlattensThatSideForBothArmsAndLegs`'s push-up twins (whose undeclared foot still
+  measures `17.572`), the corpus-wide form by
+  `everyOneSidedFootDeclarationInTheCorpusFlattensTheDeclaredSide`, and this pose's own
+  `RIGHT_FOOT → ANKLE_B` resolution by `theIsometricSidePlankPlantsTheBottomFootItDeclares`.
+- **Verification.** New focused regression `IsometricSidePlankKneePlaneTest` (`5` tests: the whole-body
+  plane invariant over a **dense `51`-sample** sweep × both frame conditions with by-value snapshots, the
+  support knee's clearance and bend side, the stance the chain realizes and where the engine puts it, the
+  planted foot + the declaration, and the choreography/anti-vacuity guards). **RED on the pristine base
+  worktree** (`/tmp/b3-base` @ `f8f8b24`, the class copied in, `--rerun-tasks`, results purged): **`2` of `5`
+  FAILED** — `noPublishedJointPassesBelowThePosesOwnDeclaredPlane` (`KNEE_B` below the pose's own plane at
+  all `51` samples of both conditions) and `theSupportKneeLeavesTheMatOnTheUpSide`
+  (`worst -25.8897 at COLD p=0.0, clearance floor 1.0`); the three guards passed there too.
+  **GREEN on the branch: `5/5`, `0F / 0E / 0S`** (`--rerun-tasks`). Full suite: the B1-integrated tree
+  **`124 classes / 604 tests / 0F / 0E / 0S`** → this branch **`125 / 608 / 0F / 0E / 0S`** — exactly
+  `+1` class / `+4` tests (the new class's `5`, less the retired twin). `:app:compileReleaseKotlin` +
+  `:app:compileReleaseJavaWithJavac` + `:app:assembleDebug` successful (this repo's `lintVitalRelease`
+  gate is pre-existing-broken, see the release-gate note).
+- **Residuals recorded, NOT fixed** (all measured on the corrected tree; none of them is below the plane):
+  (a) the support knee still carries the IK constraint's residual bend (`h = 29.7335 … 37.3224`; the chain's
+  realized interior angle `140.4° … 146.9°`), because `maxReach` is the constraint's own `0.98` extension
+  cap — a *perfectly* straight supporting leg (BPS §7/§11) is not reachable on the family's `bakeIkLimb`
+  path (`h ≥ 20.846` even at full reach). The push-up family gets `h = 0.0000` by authoring its leg joint
+  positions directly (`d = 210.0000`); re-authoring this pose that way is a representational decision
+  outside B3's scope. (b) the derived support foot is a FLAT (plantar) derivation rather than BPS §8's
+  lateral-border contact — the pose's own KDoc already leaves that engine limitation exposed, and B3 does
+  not change it (the derived chain moves `< 3e-5`).
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement — **M15 is DONE — see the record above** (the wall's contact plane, the arm chain
@@ -2203,10 +2313,14 @@ A8/A6 leaks — resolved in the Push-Up Family pass above.)
 - Fix the pose, not the engine, when a pose authors motion incorrectly.
 - Keep pose-side migrations on the **existing** carrier surface (the H2 fix is the template).
 - After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
-- After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
-  current baseline of record (**122 classes / 592 tests** on `origin/main` @ `2fb6079`, the T2 merge,
-  measured fresh in this pass's own base worktree; `123 / 599` with the B1 diamond-elbow correction and
-  `123 / 597` with the B2 runner's-lunge back-knee correction — each measured against that same base —
-  and `124 / 604` with both integrated. Earlier standing points: **120 classes / 577 tests** as of the
-  M11/M12 limb-realization migration, which added `M11M12LimbRealizationMigrationTest` and re-baselined six scope digests; the M13
-  older "282" figure predates P12) before marking a finding resolved.
+  current baseline of record (**125 classes / 608 tests** on this branch — `f8f8b24` + the B1
+  integration + B3, which added `IsometricSidePlankKneePlaneTest` (`+5` tests), retired
+  `SupportPointSideConsumptionTest`'s redundant side-plank twin (`-1`), and re-measured the seven scope
+  digests for all three corrections; the B1-integrated tree stood at `124 / 604`, the B2 tree at
+  `123 / 597`, the B1 tree at `123 / 599`, and `origin/main` @ `2fb6079` (the T2 merge) at
+  `122 classes / 592 tests`, measured fresh in this pass's own base worktree. Earlier standing points:
+  **120 classes / 577 tests** as of the M11/M12 limb-realization migration, which added
+  `M11M12LimbRealizationMigrationTest` and re-baselined six scope digests; the M13 hamstring-reach
+  correction stood at `119 / 572`, the M6/M7 landing plus the M8/M9/M10 declaration pass stood at
+  `118 / 566`; `--rerun-tasks` with the results directory purged, XML-stamped fresh; the older "282"
+  figure predates P12) before marking a finding resolved.

@@ -43,6 +43,13 @@ import kotlin.math.max
  * | `side_plank_standard` (declares `RIGHT_FOOT`, planted foot = B) | `HEEL_B y = 7.82`, `TOE_B y = 32.57`, `devB = 17.572` — the planted foot was left un-flattened while the TOP foot claimed the declaration | `HEEL_B = TOE_B = ANKLE_B = 15.00`, `devB = 0.000` |
  * | whole corpus (49 pose classes × 5 progress × every joint) | — | **only `side_plank_standard` changed, and only its `HEEL_B`/`TOE_B`** |
  *
+ * The `side_plank_standard` row's `17.572` is that measurement on the pose **as it then was**: B3
+ * (`fix/b3-sideplank-knee-plane`, off `2fb6079`) re-authors that pose's support leg so its residual
+ * knee bend leaves the mat, and the engine's neutral derivation for the re-authored leg already lies
+ * in the plane (`devB = 0.0000` for the declaration-free twin) — the row's post-fix outcome, the
+ * planted foot in its own plane, is unchanged (the production pose's `HEEL_B`/`TOE_B` move by `< 3e-5`
+ * through the correction).
+ *
  * The hand path is the internal cross-check: it already followed the canonical convention
  * (`LEFT_HAND` flattened the A hand pre-fix), so the pre-fix tree flattened the LEFT hand and the
  * RIGHT foot for the same "LEFT…" declaration — the contradiction these tests now forbid.
@@ -213,19 +220,22 @@ class SupportPointSideConsumptionTest {
         }
     }
 
-    /** A `*_FOOT` declaration on the side plank's other side flattens the other foot (kind control). */
-    @Test
-    fun theSidePlanksDeclaredSideIsWhatSelectsTheFoot() {
-        val swapped = SidePlankWithDeclaredSupport(setOf(SupportContact.LEFT_FOOT))
-        for (p in progressValues) {
-            val published = frame(swapped, p)
-            assertTrue(
-                "p=$p: declaring LEFT_FOOT must flatten the F foot and leave the B foot un-flattened " +
-                    "(devF=${footDeviationF(published)}, devB=${footDeviationB(published)})",
-                footDeviationB(published) > offPlane
-            )
-        }
-    }
+    // The former `theSidePlanksDeclaredSideIsWhatSelectsTheFoot` twin (this pose with `LEFT_FOOT`
+    // declared, asserting the OTHER foot keeps the neutral derivation) was RETIRED by the B3
+    // correction: it witnessed the side decision through the side plank's undeclared B foot, and that
+    // foot no longer carries an off-plane derivation to witness. B3 re-authors the pose's support leg
+    // (the residual knee bend leaves the mat instead of passing through it), and the engine's derived
+    // foot for that leg follows the shank: measured `devB = 0.0000` for a twin that declares NOTHING,
+    // where the same twin measured `devB = 17.5716` (`HEEL_B y = 7.82`, `TOE_B y = 32.57`) before the
+    // correction. Both feet of this pose now lie in the support plane whatever is declared, so no
+    // assertion on this vehicle can distinguish the declared side from the other one — a test there
+    // would be green by geometry, not by the side decision.
+    //
+    // The rule it witnessed is not left unwatched: the `*_FOOT` kind is witnessed on BOTH sides by
+    // [aOneSidedDeclarationFlattensThatSideForBothArmsAndLegs]'s push-up twins (`LEFT_FOOT`/`RIGHT_FOOT`
+    // with `other > offPlane`, that pose's undeclared foot still measuring `17.572`), the corpus-wide
+    // form by [everyOneSidedFootDeclarationInTheCorpusFlattensTheDeclaredSide], and this pose's own
+    // `RIGHT_FOOT` → B-foot resolution by [theIsometricSidePlankPlantsTheBottomFootItDeclares].
 
     // ------------------------------------------------------------------
     // B.3 — the production corpus follows the declared side
@@ -378,14 +388,6 @@ class SupportPointSideConsumptionTest {
     ) : PoseBuilder by StandardPushUpPose() {
         override val metadata = StandardPushUpPose().metadata.copy(
             support = SupportDefinition(pivot = PivotType.FEET, contacts = contacts)
-        )
-    }
-
-    private class SidePlankWithDeclaredSupport(
-        contacts: Set<SupportContact>
-    ) : PoseBuilder by IsometricSidePlankPose() {
-        override val metadata = IsometricSidePlankPose().metadata.copy(
-            support = IsometricSidePlankPose().metadata.support.copy(contacts = contacts)
         )
     }
 }

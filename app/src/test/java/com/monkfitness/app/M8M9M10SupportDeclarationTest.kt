@@ -510,7 +510,20 @@ class M8M9M10SupportDeclarationTest {
          * **Unchanged by the B1 integration / B2 merge**: this corpus excludes the declaration group both
          * corrected poses belong to (`DiamondPushUpPose` declares hands + toes, `DynamicWorldsGreatestStretchPose`
          * feet + hand), so the constant stands and was re-verified equal on the merged tree.
+         *
+         * **Re-baselined by the B3 side-plank support-leg correction** (`fix/b3-sideplank-knee-plane`,
+         * rebased onto the B2 merge `f8f8b24`, with B1 integrated): this corpus contains
+         * `IsometricSidePlankPose`, the pose B3 corrects — the support leg's residual knee bend is
+         * authored out of the mat now (the bend plane's pole `(0, -1, 0)` → `(0, 1, 0)`), so the pose
+         * publishes `KNEE_B` above its own declared plane instead of `25.8897` below it. Observed RED on
+         * the B1-integrated value `9137988112138109314` before this re-baseline (this live run measured `-7807207721990292460`).
+         * Attribution is direct, not inferred: the whole-corpus dump (`51` classes × `5` samples × every
+         * joint XYZ, `8415` rows, over a `git stash` round-trip on the corrected pose file with
+         * `md5sum -c` on restore) differs from the pre-B3 tree in exactly `5` xyz rows — all `5` samples
+         * of `IsometricSidePlankPose`'s `KNEE_B` — while B1's `60` `DiamondPushUpPose` rows and B2's `20`
+         * `DynamicWorldsGreatestStretchPose` rows are untouched by this pass. B3's own gate is
+         * `IsometricSidePlankKneePlaneTest`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 9137988112138109314L
+        const val UNAFFECTED_CORPUS_DIGEST = -7807207721990292460L
     }
 }
