@@ -1497,7 +1497,8 @@ reads.
   invariant covers them) — the supine arm authoring, recorded as open **and now CLOSED by B4 (see the
   `DONE — B4` record below: the bend side was re-authored onto each pose's own lateral axis; both
   poses' `ELBOW_A/P` now lie in the floor plane, and `PelvicTiltPose`'s remaining trunk pin is a
-  separate item)**. (e) The M6/M7/M11–M15 items
+  separate item — **itself CLOSED by the B4 trunk half in the same section**: the pose now leaves the
+  T2 pin table entirely)**. (e) The M6/M7/M11–M15 items
   and the P2 cleanup list: untouched.
 - **Determination:** the pass was **not** blocked on an architectural decision; every question it met
   that is a product/design choice (declaration vocabulary for non-derivable contacts; whether the hip
@@ -2339,7 +2340,9 @@ classes are separate `PoseBuilder` implementations with no shared base.
   **`35` pairs / `7` poses** here. `GluteBridgePose` leaves the table entirely (the elbow pair was its
   only entry); `PelvicTiltPose` **keeps** its trunk entries — its static pelvis with a torso rotating
   past horizontal (`CHEST -0.3659`, `HEAD_POS -2.5384` at `p = 1.0`) is a different root cause that the
-  arm chain's bend side cannot reach, and the pin's attribution now says so.
+  arm chain's bend side cannot reach, and the pin's attribution now says so. *(Those five entries were
+  then CORRECTED by the B4 TRUNK half — see its record below: `PelvicTiltPose` leaves the table
+  entirely, which now measures `30` pairs over `6` poses.)*
 - **Verification.** New focused regression `SupineArmElbowPlaneTest` (`6` tests: the arm-chain plane
   invariant over a dense `51`-sample sweep × both frame conditions with by-value snapshots plus a
   full-strength whole-body claim for `GluteBridgePose`; the elbow's clearance, in-plane bow, outboard
@@ -2364,6 +2367,8 @@ classes are separate `PoseBuilder` implementations with no shared base.
   (a) `PelvicTiltPose`'s trunk joints stay under its own mat at the top of the rep (the T2 pin); the
   pose's `torsoAngle` amplitude is authored against a pelvis pinned at `y = 14`, which is a
   trunk-authoring decision with its own product reading, not an arm item — B4 does not widen into it.
+  **CLOSED by the B4 trunk half in the record below** (`fix/b4-pelvic-tilt-trunk-ground-plane`: the
+  tilt's DIRECTION, not its amplitude, was the defect; the pose leaves the T2 pin table entirely).
   (b) both poses' realized ankle sits off the definition's `ankleHeight = 15` when the pelvis is low
   (`12.21 … 15.24`), because the authored leg target is `45.0` from the hip against
   `minReach(112, 98) = 56.0090` — the solver's honest relocation, already visible in
@@ -2372,6 +2377,107 @@ classes are separate `PoseBuilder` implementations with no shared base.
   placement forces (an `85.17`-unit chord on a `146`-unit arm leaves `h = 58.5 … 60.7` of bend, which
   must be spent laterally or vertically); the humerus sits `≈ 47.6°` off the trunk's long axis, inside
   human shoulder range, and the alternative (a vertical bow) lifts the elbow `58` u off the mat.
+
+### DONE — B4 (trunk half) the pelvic tilt's trunk leaves the mat (branch `fix/b4-pelvic-tilt-trunk-ground-plane`, off the B4-elbow merge `7012ccb`; production geometry)
+
+**Pose-side authoring only**: one production file (`poses/PelvicTiltPose.kt` — the pelvis tilt's
+direction and the neck articulation that follows it), the new focused regression
+`PelvicTiltTrunkPlaneTest`, the T2 pin-table exit (the pose's last five entries — the pose leaves the
+table entirely) and seven re-baselined scope digests. No engine/solver/phase/ownership change, no RFC
+change, no golden change, no tolerance moved, no assertion weakened — and the B4 ELBOW correction's
+own gate (`SupineArmElbowPlaneTest`) is re-run **unchanged** and GREEN on this tree, which is what
+shows this change did not undo it. This is a separate defect from the elbow-plane one: it is not
+reachable from the arm chain's bend side, and the pose's arm authoring is untouched here.
+
+- **Root cause — the authored tilt's DIRECTION carried the rigid trunk through the mat.** The pose is
+  supine with a static pelvis at its own resting layer (`y = 14`, its comment *"Pelvis Y remains static
+  on the floor (14f)"*) and a rigid authored trunk chain on top of it (`CHEST = torsoLength 120`,
+  `NECK_END = 18`, `HEAD_POS = 18`). Laid flat by the declared supine tilt (`1.5708`) and rotated by
+  the rep's authored arc (`angleOffset = lerp(0, 0.12, progress)`), a published trunk joint is exactly
+  `pelvis + Rz(θ)·(0, chainLength, 0)`, i.e. `y = 14 + chain·cos θ`. The authored `1.5708 + angleOffset`
+  spent the arc on the chain's `sin`: the model gives the chest `120·sin(0.12) = 14.3655` and
+  `NECK_END`/`HEAD_POS` `138·sin(0.12) = 16.5203` below a pelvis that only HAS `14` of resting layer,
+  and the pipeline measured `14.3655 / 16.5290 / 16.5378` off the three joints' own layers there.
+  Measured through the production path `SkeletonPipeline.produceFrame(pose, ctx)` on `7012ccb`:
+  `CHEST`/`SHOULDER_A/P −0.3659`, `NECK_END −2.5295`, `HEAD_POS −2.5384` at `p = 1.0`, with the
+  crossing at `p ≈ 0.846` (the chest at `p ≈ 0.974`) — the pose's upper body published under its own declared plane
+  (`level = 0`) for the last ~15% of every rep. Those five pairs were the T2 open items
+  (`PublishedBelowGroundInvariantTest.knownBelowGround`), whose stale-pin guard is this correction's
+  exit criterion.
+- **The defect is the sign, provably** (the B1/B4 "re-derive from the pose's own authors" shape, not
+  inference): the chain model above reproduces the published trunk exactly on the corrected tree
+  (`≤ 0.05` on `CHEST`/`NECK_END`/`HEAD_POS` at every sampled phase), and the MIRRORED authoring — the
+  pre-fix `1.5708 + angleOffset` — lands on the ticket's numbers exactly
+  (`14 − 120·sin(0.12) = −0.3659`, `14 − 138·sin(0.12) = −2.5384`). Nothing else (solver, finalizer,
+  frame conditions, amplitude) contributes; the pose's other stamps read identically on both trees
+  (the leg chain's own min-reach relocation, `maxIkClampAmount 10.997906 → 0.000000` over the rep).
+- **Fix — author the tilt out of the mat.** `torsoAngle = 1.5708 − angleOffset`, with the neck's
+  authored articulation flipping with it (`−angleOffset → +angleOffset`) so the neck's WORLD rotation
+  stays the flat supine `1.5708` it always had and the head chain keeps the pose's supine orientation.
+  Same pivot (the static pelvis), same `0.12`-rad amplitude, same rep shape, same start configuration
+  (the pose's own supine rest). Published on the corrected tree: `CHEST`/`SHOULDER_A/P +28.3650`,
+  `NECK_END +30.5198`, `HEAD_POS +30.5197` at `p = 1.0`, and the pose's **whole body measures
+  `min y = 0.000000` at every phase** (the world-origin `CLAVICLE_A`, exactly AT the plane). The
+  elbows keep the B4 correction (`+12.7988 … +18.5614`, bow IN the floor plane, `|bow| ≤ 0.65`
+  against the `2.0` band, outboard), the hands stay at the authored static `(-35, 12, ±51)` and now
+  realize that target exactly (`0.0414 → 0.0000` at `p = 0.5`), the legs stay quiet (identical
+  published positions at all `51` phases — the pelvis's tilt does not leak into the leg IK), and the
+  declared support model (both feet) and the declared plane are the pose's own.
+- **Why the amplitude could NOT be the fix (measured, recorded so it is not re-proposed).** Bounding
+  the DOWNWARD arc so the trunk's spine centres stay legal needs `chain·sin(offset) ≤ 14`, i.e.
+  `sin(offset) ≤ 14/138 = 0.10145` — which rests those centres ON the mat's own surface while the
+  trunk's volume (its centreline layer is `14`) sinks into the floor, and it caps the rep's travel at
+  `14` against this pose's own mobility floor of `12` (`MobilityMotionTest`). The authored arc out of
+  the mat keeps the full `0.12 rad` (head travel `16.5203`, the same arc mirrored) with a healthy
+  clearance.
+- **Blast radius — the whole-corpus dump** (`51` classes × `5` samples × every joint XYZ, `8415` rows,
+  over a `git stash` round-trip on the corrected pose file with `md5sum -c` on restore): differs in
+  exactly `56` rows, **ALL of them inside `PelvicTiltPose`** — its trunk chain
+  (`CHEST`/`SHOULDER_A/P`/`NECK_END`/`HEAD_POS`) plus the arm joints that hang off the moved shoulder
+  (`ELBOW_A/P` up to `11.5020`, the derived `PALM`/`KNUCKLES`/`FINGERTIPS` chains up to `3.8339`),
+  max `33.0581` u at `HEAD_POS` `p = 1.0`. The pose's legs, pelvis and world-origin joints are
+  unchanged, the whole `p = 0.0` sample is byte-identical (the authored tilt is zero at rest, so the
+  rest configuration is untouched by construction), and the other `50` classes are byte-identical —
+  no unrelated corpus drift.
+- **Verification.** New focused regression `PelvicTiltTrunkPlaneTest` (`7` tests: the whole-body plane
+  invariant over a dense `51`-sample sweep × both frame conditions with by-value snapshots; the
+  trunk's resting-layer invariant plus the authored arc spent in full; the authored chain model with
+  the mirrored-tilt falsification; the preserved rep, static pelvis, travel and distinct-frame
+  guards; the B4 elbow correction intact; the quiet legs and the pose's own declaration; and
+  cold-vs-settled trunk/arm invariance for the B-8 class). **RED on the pre-fix tree (tests-first
+  commit, results purged): `4` of `7` FAILED** — `noPublishedJointPassesBelowThePosesOwnDeclaredPlane`
+  (`NECK_END −0.2256`/`HEAD_POS −0.2344` from `p = 0.86` of both conditions, deepest `HEAD_POS
+  −2.5384`), `theTrunkKeepsThePosesRestingLayerInsteadOfTippingThroughIt` (`13.7116` at `p = 0.02`
+  against the resting layer `14`, worst `−2.5384`), `theAuthoredTiltRepAndTheRestingConfigurationArePreserved`
+  (the end range's sign: `expected 14.365464 but was −14.365896`) and
+  `thePublishedTrunkIsTheAuthoredTiltAndTheSignIsTheDefect` (the published trunk is the MIRRORED model
+  on that tree). **GREEN on the branch: `7/7`, `0F / 0E / 0S`** (`--rerun-tasks`). T2 re-run GREEN
+  (`9/9`) with the table at **`30` pairs over `6` poses** (from `35`/`7`) — `PelvicTiltPose` leaves it
+  entirely. B1/B2/B3/B4-elbow regressions re-run fresh and GREEN:
+  `DiamondPushUpElbowClearanceTest`, `WorldsGreatestStretchBackKneePlaneTest`,
+  `IsometricSidePlankKneePlaneTest`, `SupineArmElbowPlaneTest`. Full suite: pristine `origin/main` @
+  `7012ccb` worktree (`/tmp/b4t-base`) **`126 classes / 614 tests / 0F / 0E / 0S`** → this branch
+  **`127 / 621 / 0F / 0E / 0S`** — exactly `+1` class / `+7` tests, no other count moved.
+  `:app:compileReleaseKotlin` + `:app:compileReleaseJavaWithJavac` + `:app:assembleRelease
+  -x lintVitalRelease` successful (this repo's `lintVitalRelease` gate is pre-existing-broken, see the
+  release-gate note).
+- **Residuals recorded, NOT fixed** (measured on the corrected tree):
+  (a) **PRODUCT READING — the rep's visible direction is now the tilt's away-from-the-mat half.** A
+  rigid trunk cannot render the drill's imprint half at all: with the pelvis static at `14` and the
+  trunk's centreline layer at `14`, "the low back flattening toward the floor" (BPS §5) is only
+  reachable by moving the trunk's centres onto/under the mat surface — geometrically illegal, and the
+  reason the old authoring published below the plane. The corrected pose therefore shows the pelvis's
+  superior axis tipping AWAY from the mat (BPS §5's anterior/arch half, the drill's other canonical
+  end range) at the pace the pose already authored. Whether the app should instead show a
+  smaller-amplitude imprint-flavoured motion (at the cost of the pose's own `12` mobility floor) is a
+  product reading for the user — recorded here, not decided by this pass.
+  (b) the pose still publishes `LUMBAR`, `CLAVICLE_A/P` and `SCAPULA_A/P` at the world origin
+  (`(0, 0, 0)` — exactly AT the plane) because it builds its own node tree; that is the unassigned
+  class already recorded in §4 item 2, unchanged by this pass.
+  (c) both supine poses' realized ankle still sits off the definition's `ankleHeight = 15` low in the
+  rep (`12.21 … 15.24`): the authored leg target is `45.0` from the hip against
+  `minReach(112, 98) = 56.0090`, the solver's honest relocation — unchanged by this pass (identical
+  published leg positions on both trees).
 
 ### TODO — P1 (next pass, in priority order)
 
