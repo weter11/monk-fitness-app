@@ -65,28 +65,49 @@ class IsometricSidePlankPose : BasePlankPose() {
         val lift = context.progress
         val breath = breathingSwell(lift)
 
-        // --- 1. Trunk anchoring -------------------------------------------------
-        // Hip height is the family contract (15f resting -> 35f braced). A tiny
-        // breath float (0 at the endpoints) keeps the hips alive mid-hold.
-        val pelvisY = SkeletonMath.lerp(restingPelvisY, plankPelvisY, lift) + breath * 2f
+        // --- 1. The planted support foot (the down-side rear support) ----------------------------
+        val ankleX = -def.thighLength - def.shinLength + 20f
 
-        // Incline established toward the supporting shoulder. The end incline is
-        // chosen so the rolled down-side shoulder stays ABOVE the planted elbow
-        // (otherwise the long engine upper arm would drive the elbow through the
-        // floor). This is the core geometric tension for the side plank at the
-        // contract hip height of 35 — documented as debt in the report (§7).
-        val torsoPitch = SkeletonMath.lerp(-1.57f, -1.18f, lift)
+        // --- 2. The planted support forearm: the down-side chain shoulder -> elbow -> hand ------
+        // The declared `RIGHT_FOREARM` contact is the DOWN-side arm (B-4's canonical mapping:
+        // `RIGHT_*` = the P/B family, which this pose rolls to the floor). Its forearm lies flat on
+        // the mat: the elbow under the supporting shoulder, the hand one forearm length ahead of it
+        // — and the shoulder is the top of that pillar. The settled frame leans the pillar back over
+        // its elbow; the braced hold is the vertical pillar the side-plank BPS §6/§11 describe
+        // ("supporting elbow directly under the shoulder; the supporting forearm flat"). The elbow
+        // therefore lands on the mat as the chain's own solution instead of being driven 37.9 units
+        // through it by an authored pole (the pre-fix measurement, `docs/STABILIZATION_AUDIT.md`).
+        val elbowZ = -def.shoulderWidth
+        val handZ = 0f // the hand is planted on the body's own midline
+        val pillarLean = SkeletonMath.lerp(settledPillarLean, 0f, lift)
+        planPlantedForearm(def, forearmPlantX, elbowZ, handZ, pillarLean)
+        val shoulderX = plantShoulder.x
+        val shoulderY = plantShoulder.y
+        targetP.set(plantHand)
+        poleP.set(plantPole)
 
-        pelvis!!.localPosition.set(0f, pelvisY, 0f)
-        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, torsoPitch)
-        declareJointIntent(Joint.PELVIS, JointRotation(axisZ, torsoPitch))
+        // --- 3. Trunk: the rolled torso, hung off the propped support shoulder -------------------
+        // The braced frame's hip height is the one the straight shoulder→hip→ankle line of the
+        // supporting side fixes (BPS §3/§5: the body one line, the hips lifted and level, no drop of
+        // the lower hip); the settled frame drops the hips as far as the planted support leg still
+        // reaches with a folded knee. The trunk's inclination and the hip's world X follow from
+        // those two heights — the trunk is rigid and the propped shoulder cannot slide off its plant.
+        val bracedY = bracedBodyY(def, shoulderX, shoulderY, ankleX, contactY)
+        // A tiny breath float (0 at the endpoints) keeps the hips alive mid-hold.
+        val bodyY = SkeletonMath.lerp(settledBodyY, bracedY, lift) + breath * 2f
+        val pitch = proppedTrunkPitch(def, bodyY, shoulderY)
+        val hipX = proppedHipX(def, shoulderX, pitch)
+
+        pelvis!!.localPosition.set(hipX, bodyY, 0f)
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, pitch)
+        declareJointIntent(Joint.PELVIS, JointRotation(axisZ, pitch))
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
 
         // Head continues the spine line (neutral); the thorax carries the rest.
         buildGaze(neck!!, head!!, def.neckLength, tempV3.set(0f, 1f, 0f))
 
-        // --- 2. Roll the body onto its side ------------------------------------
+        // --- 4. Roll the body onto its side ------------------------------------------------------
         // Build the neutral lateral offsets, then roll them 90° about the local
         // spine (Y) axis. This drops SHOULDER_P / HIP_B to the down side (support)
         // and lifts SHOULDER_A / HIP_F to the top (stacked).
@@ -115,8 +136,7 @@ class IsometricSidePlankPose : BasePlankPose() {
 
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
-        // --- 3. Legs: stacked, bottom foot planted -----------------------------
-        val ankleX = -def.thighLength - def.shinLength + 20f
+        // --- 5. Legs: stacked, bottom foot planted ----------------------------------------------
         // Bottom leg (HIP_B) rests on the mat; top leg (HIP_F) stacks just above it.
         targetB.set(ankleX, contactY, 0f)
         poleB.set(0f, -1f, 0f)
@@ -131,18 +151,15 @@ class IsometricSidePlankPose : BasePlankPose() {
         // shortfall from the engine's derivation is an engine limitation left exposed.
 
         scratchShoulderP.set(shoulderP!!.worldPosition)
-        // Planted: the forearm world X is anchored so the trunk loads it. The
-        // support shoulder stays lifted above the planted elbow (scapular
-        // depression — no shrug into the ear).
-        val handReach = def.forearmLength * 1.3f
-        targetP.set(scratchShoulderP.x + handReach, contactY, 0f)
-        poleP.set(-0.4f, -1f, 0f) // seat the elbow straight down onto the mat
+        // Planted: the forearm rests on the mat under the supporting shoulder (the plant planned in
+        // step 2). The support shoulder stays lifted well above the planted elbow — scapular
+        // depression, no shrug into the ear.
         bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         // The engine derives palm/knuckles/fingertips from the forearm + the neutral wrist
         // articulation; the support forearm is intentionally NOT hand-authored here.
 
-        // --- 5. Top arm (SHOULDER_A): hand resting on the top hip --------------
+        // --- 6. Top arm (SHOULDER_A): hand resting on the top hip ------------------------------
         scratchShoulderA.set(shoulderA!!.worldPosition)
         // Hand settles onto the raised top hip and floats up a touch with the breath.
         targetA.set(hipF!!.worldPosition.x, hipF!!.worldPosition.y + 6f + breath * 8f, 0f)
@@ -154,4 +171,27 @@ class IsometricSidePlankPose : BasePlankPose() {
 
         return finalizePlankPose()
     }
+
+    companion object {
+        /**
+         * The settled frame's authored pillar lean in degrees (~20°): the deepest hip settle this
+         * pose's plant can reach. The side-rolled down-side hip sits `hipWidth` off the pelvis's
+         * centre line, so the settle spends most of the support leg's slack before the hips have
+         * dropped far. Measured at the settled frame with this lean: the down-side hip→ankle span is
+         * `197.6` of the leg's `210`-unit length (`0.98` band ⇒ `205.8`) — 8.2 units of slack, no
+         * clamp — while the hips travel `44.0` units into the braced line.
+         */
+        const val SETTLED_PILLAR_LEAN_DEGREES = 20f
+
+        /**
+         * The settled hip height: the hips lift from it into the braced line (BPS §9: the only
+         * acceptable variation is steady breathing; the hips are the prime mover — the pose's
+         * declared choreography is the hip lift itself). Fixed because it is the pose's authored
+         * amplitude; the constraint it satisfies is the reach record above.
+         */
+        const val SETTLED_BODY_Y = 21f
+    }
+
+    private val settledPillarLean = SETTLED_PILLAR_LEAN_DEGREES * (PI.toFloat() / 180f)
+    private val settledBodyY = SETTLED_BODY_Y
 }

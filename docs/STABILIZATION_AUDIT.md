@@ -571,6 +571,8 @@ production file is touched** (whole-corpus dump md5 identical — see below). Br
   shoulder `36.48`, elbow `−35.81`, planted hand `15.00` with the arm unclamped; the pose's own KDoc
   records the "long upper arm vs. the low braced-shoulder height" debt), i.e. a visible pose-geometry
   change belonging to the M2/§7 item with its own review. Deliberately not silently closed.
+  **(Fixed by B-7 below: the geometry was re-authored, `attributedDebt` was deleted and the invariant
+  is now a plain `violations.isEmpty()`.)**
 - **Deliberately NOT asserted (measured, so it is not re-derived as a missing assertion).** An absolute
   rest *height* ("no float") is not expressible from the architecture: no engine channel declares a
   contact's rest height — it is authored per pose against the definition's contact-radius convention
@@ -580,6 +582,130 @@ production file is touched** (whole-corpus dump md5 identical — see below). Br
   (spread 2.1–59.8) for modelled reasons — jump-squat toe-off **19.76**, pull-up hand rotation about the
   bar **2.3–20.7**, `PikePushUpPose`'s planted toe **24.75**.
 
+### DONE — B-7 the planted forearm is one physical chain on the mat (P11; production geometry)
+
+Branch `fix/plank-forearm-support-geometry` off `origin/main` `e075c6e` (the B-6 merge). **Production
+geometry change: `BasePlankPose`, `StaticForearmPlankPose`, `IsometricSidePlankPose`** — plus the two
+B-6 / `NewEnginePosesTest` assertions those poses' anchors invalidate and the new
+`PlankForearmSupportGeometryTest` gate. Successor to B-4 (the canonical `SupportPoint ↔ Joint` mapping)
+and B-6 (the surface invariant), and the close-out of the pose-geometry residual both of those records
+explicitly left open ("the poses' own §7 debt", P11 §M2).
+
+- **Root cause — the trunk was authored independently of the plant the arm must reach.** `*_FOREARM`
+  resolves to the contact's own `elbow → hand` pair (`SupportMath.jointsFor`: `LEFT_FOREARM →
+  [ELBOW_A, HAND_A]`, `RIGHT_FOREARM → [ELBOW_P, HAND_P]`, B-4), and the engine realises the elbow from
+  the arm's IK solve — it is not a pose-authored position. Measured on pristine `e075c6e` through the
+  production pipeline (`StaticForearmPlankPose` @ p=0.5): shoulder `36.48`, elbow `−35.81`, planted hand
+  `15.00`; the side plank's support shoulder `15.10`, elbow `−37.86`, hand `15.00`. The authored hand
+  plant sat only `75.90` units ahead of the shoulder (a shoulder→hand separation of `77.26`) while the
+  arm's own segments are `80 + 66 = 146`: the solve therefore had to bulge the elbow `60.4` units out of
+  the shoulder→hand chord, and the authored pole `(-0.5, -1, -0.3)` aimed that bulge at the mat — the
+  elbow's height decomposes as `36.48 (shoulder) − 14.2 (along-chord) − 58.0 (pole side) = −35.8`, i.e.
+  the pose planted a hand and drove its elbow through the floor.
+  Both plank BPS specs state the geometry this violates: "the upper arm is vertical from the elbow
+  (under the shoulder) to the shoulder", "Elbows flexed ~90°, directly under the shoulders; the upper
+  arms vertical", "the supporting forearm lies flat on the floor" (§6/§11, Plank (Forearm) / Plank
+  (Side)) and one straight `shoulder → hip → ankle` line (§3).
+- **The quantified constraint (why the trunk had to move).** With the elbow on the mat's planted-forearm
+  plane (`BasePlankPose.contactY = 15`, the height the hand is already planted at) and the hand level
+  with it, the upper arm's `80` units place the shoulder at `15 + 80·cos(lean)` — `95.00` for a vertical
+  pillar, which is what the BPS's braced hold asks for. The pre-fix authoring put the shoulder at
+  `15.10 … 57.76` over the rep (`37.2 … 79.9` units too low), and the pose's whole authored pitch range
+  (`−1.57 → −1.38`, i.e. `120·sin 22.4° = 45.7` units of shoulder rise) cannot close that deficit: **no
+  pole and no pitch inside the pose's declared range yields a planted forearm at that trunk.** The
+  correction is therefore *not* a pole edit — it is to derive the trunk from the plant.
+- **Exact authoring correction (the geometry model before → after).** Before: author the hip height and
+  the trunk pitch, then throw a hand target (`shoulder.x + forearmLength·1.15`) at the arm and hope.
+  After, in `BasePlankPose` (one shared, allocation-free path; no new solver):
+  1. **The plant is authored from its contact** (`planPlantedForearm`): the elbow at
+     `(forearmPlantX, contactY, ±shoulderWidth)` — directly under its shoulder — and the hand one
+     forearm length ahead of it, level with it (the flat forearm keeps the pose's mild A-frame tuck,
+     `handZ = 0.6·shoulderWidth`, so the horizontal run is `√(66² − 18.4²) = 63.38`).
+  2. **The shoulder is the pillar's top**: `elbow + 80·(−sin(lean), cos(lean), 0)` — vertical at the
+     braced hold, leaning back over its elbow by the pose's authored settled lean.
+  3. **The pole is derived, not hand-tuned**: the perpendicular offset of the elbow's mat contact from
+     the shoulder→hand chord, i.e. the chain's own statement of where the elbow bends.
+  4. **The trunk hangs off the propped shoulder**: the chest is placed at the shoulder's `(x, y)`, the
+     pelvis's height is authored (settled → the braced line), and the trunk's inclination
+     (`proppedTrunkPitch`) and the hip's world X (`proppedHipX`) are derived from those two heights —
+     the trunk is rigid, so the propped shoulder and the authored hip height pin both exactly (no plant
+     drift, no second solve). `bracedBodyY` derives the braced hip height from the one straight
+     `shoulder → hip → ankle` line the BPS requires, so the braced hold is a perfect plank by
+     construction.
+  5. **Legs and feet untouched** (the same toe plant, same targets): the planted ankle/toe/heel
+     positions are unchanged to `< 5e-4` units.
+  Authored per-pose values, each recorded at its constant with the reach record that fixes it:
+  `StaticForearmPlankPose.SETTLED_BODY_Y = 30` with a `12°` settled pillar lean (the planted leg
+  measures `188.1` of its `210`-unit length, `17.7` inside the `0.98` band), and
+  `IsometricSidePlankPose.SETTLED_BODY_Y = 21` with a `20°` lean (its side-rolled down-side hip sits
+  `hipWidth` off the centre line, so the settle spends most of the leg's slack first: the hip→ankle span
+  is `197.6`, `8.2` units inside the band).
+- **Measured (published frames, both trees, same pipeline).**
+
+  | pose @ p | shoulder Y | elbow Y | hand Y | ‖elbow − hand‖ | elbow interior | IK clamp |
+  |---|---|---|---|---|---|---|
+  | `StaticForearmPlankPose` p=0.5 | `36.48` → `94.56` | `−35.81` → `+14.69` | `15.00` → `15.00` | `50.81` → `0.31` | `63.05°` → `92.73°` | `0` → `0` |
+  | `StaticForearmPlankPose` p=1 (braced) | `57.76` → `95.00` | `−18.68` → `+15.00` | `15.00` | `33.68` → `0.00` | `74.46°` → `90.00°` | `0` → `0` |
+  | `IsometricSidePlankPose` p=1 (braced) | `80.71` → `95.00` | `+7.89` → `+15.00` | `15.00` | `22.09` → `0.00` | `106.73°` → `90.00°` | `0` → `0` |
+  | `IsometricSidePlankPose` p=0 | `15.10` → `90.18` | `−37.86` → `+15.00` | `15.00` | `52.86` → `0.00` | `83.05°` → `104.20°` | `0` → `0` |
+
+  At the braced hold the support elbow is now exactly `0.000` units horizontally off its shoulder — the
+  BPS §6/§11 vertical pillar with a `90.00°` elbow — and the two forearm contacts are level to `0.000`
+  (side plank) / `0.383` (flat plank, the breath-driven COM drift mid-rep) instead of `52.9`/`59.8`
+  apart. `maxIkClampAmount = 0.0000`, `boneLengthsVerified = true`, `straightIntentDropped = false` at
+  every sampled frame on both trees: the correction introduces **no clamp** (the pre-fix chain was not
+  clamped either — that is *why* it looked "solved").
+- **The three B-6 attribution pins are gone.** `EnvironmentPenetrationTest.attributedDebt` /
+  `debtTolerance` are deleted and the invariant is a plain `violations.isEmpty()`; the 2-unit band is
+  unchanged. RED proof on the untouched baseline with the pins removed (the shipped file): the same test
+  fails on `e075c6e` listing exactly `StaticForearmPlankPose LEFT_FOREARM −44.752396`,
+  `RIGHT_FOREARM −44.752396`, `IsometricSidePlankPose RIGHT_FOREARM −37.863190` — and green on this
+  branch. A new forearm penetration is now a hard failure with nothing to absorb it.
+- **Corpus impact (measured, not assumed).** 51 production pose classes × 5 progress × every joint:
+  **only the two corrected poses change** — 43 distinct joints for the flat plank, 38 for the side plank,
+  at every sampled progress; **394 of 405** journaled observations are inside those two poses and the
+  other **49 classes are byte-identical** (digest `−340803699455685852`, computed identically on pristine
+  `e075c6e` and on this branch with the two corrected poses excluded; pinned in the new test). Maximum
+  joint delta over the two poses: `97.67` (`HEAD_POS`, flat plank p=0 — the body is now propped at the
+  pillar). Planted hand plants moved: flat plank `(195.90, 15, ∓27.60) → (183.38, 15, ∓27.60)`,
+  side plank `(205.80, 15, 0) → (167.33, 15, 0)`; the feet/ankles/toes moved `< 5e-4`.
+- **Regression coverage (fresh runs).** New `PlankForearmSupportGeometryTest` (**9 tests**): the contact
+  invariant with a flatness band (`ELBOW` and `HAND` level, both inside the engine's unchanged 2-unit
+  penetration band, both planks, both frame conditions, every sampled progress); the canonical +
+  published-carrier resolution (non-empty family, one limb family, the anchor first, the declaration
+  reaching `SkeletonPose.supportedPoints`); frame-by-value integrity (distinct objects, immune to later
+  frames); the reach/clamp/segment-length/angular-band record from the production carrier
+  (`maxIkClampAmount`, `boneLengthsVerified`, `limbTargets`); the BPS braced-hold shape (elbow directly
+  under the shoulder, `90°`); the declared limb targets; declaration and mapping preservation; and the
+  49-pose byte-identity digest. RED on pristine `e075c6e` (with the two B-7 pose constants inlined):
+  `forearmContactIsPlantedFlatOnItsDeclaredSurface` (every sample lists `ELBOW.y = −44.752 … −18.681`
+  vs `HAND.y = 15.000`) and `bracedHoldRealizesTheVerticalPillarAndElbowUnderShoulder` (the braced
+  offset measures `23.60` instead of `0.00`); the other seven pass on both trees (the declarations and
+  the mapping were already right, and the pre-fix geometry was not clamped). `NewEnginePosesTest`'s two
+  plank assertions — which encoded the old `pelvis 15 → 35` literals — now assert the derived anchors
+  instead: the settled height from the pose's own constant and the braced height derived from the
+  published frame's `shoulder → hip → ankle` line.
+- **Motion contracts preserved (measured).** The repaired hips' travel is `37.15` (flat plank,
+  `30 → 67.15`) and `44.01` (side plank, `21 → 65.01`) against `CoreMotionTest`'s `30`/`40` floors —
+  unchanged, not weakened. Real-playback continuity at 60 fps: the largest per-frame joint displacement
+  is `0.1729` (flat plank, was `0.2602`) and `0.3409` (side plank, was `0.3630`) versus the validator's
+  `15`-unit `POSITION_DISCONTINUITY` threshold; an untouched control (`StandardPushUpPose`) measures
+  `1.1234` identically on both trees. (A synthetic probe that feeds the validator *quarter-rep* jumps
+  at `1/60 s` flags fewer discontinuities than the baseline does — `11` vs `40` for the side plank,
+  `0` vs `1` for the flat plank — i.e. no discontinuity was introduced.)
+- **Verification.** Full suite `--rerun-tasks`: `origin/main` `e075c6e` **111 classes / 504 tests /
+  0F / 0E / 0S** → this branch **112 / 513 / 0F / 0E / 0S** (+1 class / +9 tests, the new gate).
+  Focused set green: `EnvironmentPenetrationTest` 9, `PlankForearmSupportGeometryTest` 9,
+  `NewEnginePosesTest` 12, `KneePushUpPlankGeometryTest` 7, `ColdFrameLimbRealizationTest` 7,
+  `PushUpPlankTest` 4, `CoreMotionTest` 1. Release: `:app:compileReleaseKotlin --rerun-tasks`,
+  `:app:compileReleaseJavaWithJavac`, `:app:assembleDebug` and `:app:assembleRelease -x lintVitalRelease`
+  all green; `:app:lintVitalRelease` fails **identically on both trees** (pre-existing `themes.xml`
+  `ResourceCycle` + `ExpiredTargetSdkVersion`).
+- **Deliberately NOT touched (the mission's out-of-scope residuals, still open).** B-5's residual, the
+  P11-branch `SkeletonPipeline.resetHistory()` B-6 decision, the §12.7 flag lifecycle, B-8b /
+  `ThoracicExtensionPose`, the `*_KNEE` / `*_ELBOW` support-consumer architecture, M9/M10 (missing
+  declarations), the renderer, and every validator threshold (the 2-unit band included).
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
@@ -587,8 +713,9 @@ production file is touched** (whole-corpus dump md5 identical — see below). Br
    helpers for full carrier coverage; declare the support model (`metadata.support`) for the stretch
    family (M9) and the core/hip poses (M10) and the upper/dynamic poses (M8).
 3. M1/M2/M3/M4/M6/M7 — pose-specific biomechanical-fidelity bugs (step contact, side-plank contact
-   side — **the declaration side resolved by B-4; the residual is the pose's own inline/floor debt** —
-   cobra/superman lumbar extension, kettlebell hinge inversion, burpee foot-translation).
+   side — **the declaration side resolved by B-4 and the pose's own planted-forearm floor debt
+   resolved by B-7** — cobra/superman lumbar extension, kettlebell hinge inversion, burpee
+   foot-translation).
 4. M5/M13/M14 — tuning items (snow-angel arc, hamstring reach, decline plank tilt).
 
 ### TODO — P2

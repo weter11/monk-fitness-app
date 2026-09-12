@@ -4,6 +4,7 @@ import com.monkfitness.app.animation.*
 import com.monkfitness.app.poses.*
 import org.junit.Assert.*
 import org.junit.Test
+import kotlin.math.sqrt
 
 class NewEnginePosesTest {
 
@@ -52,15 +53,23 @@ class NewEnginePosesTest {
         val pose = IsometricSidePlankPose()
         assertNotNull(pose.metadata)
 
-        val result0 = pose.build(context0)
-        assertNotNull(result0)
+        // B-7 — the hip height is no longer an authored literal: the pelvis is anchored on the
+        // PROPPED support forearm. The settled frame drops the hips to the pose's authored
+        // reach-limited height, and the braced frame puts them on the one straight
+        // shoulder→hip→ankle line the side-plank BPS §3/§5 requires (the line is measured from the
+        // published frame's own propped shoulder and planted support foot, so this cannot drift).
+        // Read from the PUBLISHED frame: a bare `build()` result has not been limb-finalized yet.
+        val result0 = publishedFrame(pose, 0f)
         val pelvisY0 = result0.getJoint(Joint.PELVIS).y
-        assertEquals("Pelvis Y should start at resting position (15f)", 15f, pelvisY0, 1e-4f)
+        assertEquals(
+            "Pelvis Y should settle to the plant's reach-limited hip height",
+            IsometricSidePlankPose.SETTLED_BODY_Y, pelvisY0, 1e-4f
+        )
 
-        val result1 = pose.build(context1)
-        assertNotNull(result1)
+        val result1 = publishedFrame(pose, 1f)
+        val expected1 = straightLineHipY(result1.getJoint(Joint.SHOULDER_P), result1.getJoint(Joint.ANKLE_B))
         val pelvisY1 = result1.getJoint(Joint.PELVIS).y
-        assertEquals("Pelvis Y should lift to side plank height (35f)", 35f, pelvisY1, 1e-4f)
+        assertEquals("Pelvis Y should reach the braced shoulder→hip→ankle line", expected1, pelvisY1, 1e-4f)
     }
 
     @Test
@@ -68,15 +77,43 @@ class NewEnginePosesTest {
         val pose = StaticForearmPlankPose()
         assertNotNull(pose.metadata)
 
-        val result0 = pose.build(context0)
-        assertNotNull(result0)
+        // B-7 — see the side-plank test above: the hips are anchored on the propped forearm plant.
+        val result0 = publishedFrame(pose, 0f)
         val pelvisY0 = result0.getJoint(Joint.PELVIS).y
-        assertEquals("Pelvis Y should start at resting position (15f)", 15f, pelvisY0, 1e-4f)
+        assertEquals(
+            "Pelvis Y should settle to the plant's reach-limited hip height",
+            StaticForearmPlankPose.SETTLED_BODY_Y, pelvisY0, 1e-4f
+        )
 
-        val result1 = pose.build(context1)
-        assertNotNull(result1)
+        val result1 = publishedFrame(pose, 1f)
+        val expected1 = straightLineHipY(result1.getJoint(Joint.SHOULDER_A), result1.getJoint(Joint.ANKLE_F))
         val pelvisY1 = result1.getJoint(Joint.PELVIS).y
-        assertEquals("Pelvis Y should lift to plank height (35f)", 35f, pelvisY1, 1e-4f)
+        assertEquals("Pelvis Y should reach the braced shoulder→hip→ankle line", expected1, pelvisY1, 1e-4f)
+    }
+
+    /** The frame the production pipeline PUBLISHES at [progress] (captured by value). */
+    private fun publishedFrame(pose: PoseBuilder, progress: Float): SkeletonPose {
+        val ctx = PoseContext(
+            progress = progress,
+            side = Side.LEFT,
+            definition = SkeletonDefinition.DEFAULT_ADULT,
+            deltaTime = 16.6f,
+            cycleDuration = 3000f
+        )
+        val frame = SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT).produceFrame(pose, ctx).pose
+        return SkeletonPose().apply { copyFrom(frame) }
+    }
+
+    /**
+     * The hip height the one straight shoulder→hip→ankle line fixes: the pelvis sits one torso
+     * length down that line from the frame's own propped shoulder.
+     */
+    private fun straightLineHipY(shoulder: Vector3, foot: Vector3): Float {
+        val def = SkeletonDefinition.DEFAULT_ADULT
+        val run = sqrt(
+            (foot.x - shoulder.x) * (foot.x - shoulder.x) + (foot.y - shoulder.y) * (foot.y - shoulder.y)
+        )
+        return shoulder.y + (foot.y - shoulder.y) * def.torsoLength / run
     }
 
     @Test
