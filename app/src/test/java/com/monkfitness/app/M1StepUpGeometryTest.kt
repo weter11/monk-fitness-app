@@ -604,7 +604,19 @@ class M1StepUpGeometryTest {
          * on this tree differs only in rows belonging to the pass's own classes — gated by
          * `M8M9M10SupportDeclarationTest.UNAFFECTED_CORPUS_DIGEST`, which excludes exactly those classes
          * and is equal on both trees.
+         *
+         * **Re-baselined by the M13 hamstring forward-reach correction** (`fix/m13-hamstring-reach`,
+         * off `0301563`): this corpus is "every production pose except the step-up", so it includes `HamstringStretchPose`, the one class that
+         * correction owns. Observed RED on the pre-fix value `2391109884830495565` before the re-baseline (this
+         * live run measured `6236906328909027759` below); the five scope digests were re-run with the pose file
+         * stashed and all 50 of their tests were GREEN, so the delta is attributable to M13 and not
+         * to a drifted base. Attribution is direct, not inferred from this digest: the whole-corpus
+         * dump (49 registry poses × 5 progress × every joint XYZ, `245` pose-frames) differs in
+         * exactly `1` frame — `hamstring_stretch_hold` at `p=0.0`, 12 arm-chain joints, max `0.8930`
+         * u at `FINGERTIPS_A` — with the other `244` frames (including the subject's `p ≥ 0.05`)
+         * byte-identical and `supportedPoints`/`maxIkClampAmount` unchanged everywhere. M13's own
+         * blast-radius guard is `HamstringForwardReachTest.UNAFFECTED_CORPUS_DIGEST`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 2391109884830495565L
+        const val UNAFFECTED_CORPUS_DIGEST = 6236906328909027759L
     }
 }

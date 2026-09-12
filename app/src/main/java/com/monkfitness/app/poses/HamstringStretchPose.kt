@@ -131,6 +131,25 @@ class HamstringStretchPose : BasePose() {
         val targetHandA = Vector3(handTargetX, handTargetY, -def.shoulderWidth * 0.8f)
         val targetHandP = Vector3(handTargetX, handTargetY, def.shoulderWidth * 0.8f)
 
+        // M13 — the forward reach is realized by the ARM chain, so its target must lie in that
+        // chain's own reachable band at every phase of the fold. Measured on the pre-fix authoring
+        // (published frame, `progress = 0`): the start hand sat `37.2108` from the shoulder —
+        // INSIDE the arm's minimum-flexion reach `SkeletonMath.minReach(80, 66, 30°) = 40.1344` —
+        // so the solver relocated the authored target by `2.9237` u along its own ray
+        // (published `HAND_A (14.337, 155.972, −36.077)` vs declared `(11.980, 154.400, −36.800)`)
+        // and the realized arm landed exactly on its `30.00°` interior-angle stop with
+        // `ELBOW_A.y − SHOULDER_A.y = +64.583`, i.e. the elbows flung above the shoulders
+        // (BPS §6/§11 "Shoulders are relaxed and down, not shrugged"). From `p = 0.05` the declared
+        // target is already inside the band (`41.0122 … 115.1790` of the `143.0800` cap — the
+        // reach is never near/beyond the arm's maximum, contrary to the audit's reading of M13), so
+        // only the fold's start is corrected. Projecting the declared target onto the band (R2
+        // reach-target helper — the same reachable-by-construction fix the M8 pass applied to
+        // WallSlides/FacePull/ScapularRetraction) keeps the authored reach direction and makes the
+        // realized hand exactly what the pose declared, with the clamp signal left live rather than
+        // muted.
+        SkeletonMath.clampTargetToReach(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandA)
+        SkeletonMath.clampTargetToReach(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandP)
+
         // Pole vectors flare elbows slightly outward and upward
         bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
         bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
