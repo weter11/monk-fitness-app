@@ -488,7 +488,8 @@ tolerance.
 
 ### DONE — B-6 the support-contact surface invariant is evaluated for real (P11, test-only)
 
-The active tracker's B-6 — the `EnvironmentPenetrationTest` **vacuity** — is the validation-path half of
+PR #234 (`fix/b6-support-contact-surface-invariant`). The active tracker's B-6 — the
+`EnvironmentPenetrationTest` **vacuity** — is the validation-path half of
 the P11 whole-system audit's §4 test findings (T-1 "no test asserts a declared support contact actually
 lands on its support surface", T-2 the skip, T-6 the private side-map copy). **Test-only change: no
 production file is touched** (whole-corpus dump md5 identical — see below). Branch
