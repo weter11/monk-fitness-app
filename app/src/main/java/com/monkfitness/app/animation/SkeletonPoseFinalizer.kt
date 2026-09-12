@@ -722,11 +722,15 @@ class SkeletonPoseFinalizer(
         // hand on an overhead bar sits ABOVE the elbow and must not be driven down to the ground.
         // This geometric test distinguishes "hand on the floor" from "hand on a bar" without a magic
         // distance threshold.
-        val handPoint = if (handId == Joint.HAND_A) SupportPoint.LEFT_HAND else SupportPoint.RIGHT_HAND
+        // B-3 — the hand's declared support is resolved over its DECLARATION FAMILY (HAND and
+        // FOREARM, same side): a pose that plants the forearm (a forearm plank) declares the
+        // support as `*_FOREARM`, and the hand at the end of that planted forearm is the extremity
+        // this derivation orients. See [declaredHandSupportPoint].
+        val declaredHandSupport = declaredHandSupportPoint(pose, handId)
         val planted = pose.getJoint(handId).y <= pose.getJoint(elbowId).y + 1.0f
         val poseOwnsWrist = pose.extremityArticulations.containsKey(handExt)
-        val handSupportNormal = if (pose.isSupported(handPoint) && !poseOwnsWrist && planted) {
-            supportPlaneNormalFor(pose, handPoint)
+        val handSupportNormal = if (declaredHandSupport != null && !poseOwnsWrist && planted) {
+            supportPlaneNormalFor(pose, declaredHandSupport)
         } else null
 
         // Heading (exercise intent): if the exercise declared a root-relative forward
@@ -857,9 +861,12 @@ class SkeletonPoseFinalizer(
         // W1b (environment-driven): flatten the foot onto the surface its declared support
         // contact rests on (ground, or a box/step top). Derived from pose.environment + declared
         // support — no per-pose special casing; the same code plants feet in every pose.
-        val footPoint = footSupportPointFor(ankleId)
+        // B-3 — the foot's declared support is resolved over its DECLARATION FAMILY (FOOT and TOES,
+        // same side): the plank/push-up families declare their planted foot as `*_TOES`. See
+        // [declaredFootSupportPoint].
+        val declaredFootSupport = declaredFootSupportPoint(pose, ankleId)
         val footExt = if (ankleId == Joint.ANKLE_F) Extremity.FOOT_F else Extremity.FOOT_B
-        val supportNormal = if (pose.isSupported(footPoint)) supportPlaneNormalFor(pose, footPoint) else null
+        val supportNormal = if (declaredFootSupport != null) supportPlaneNormalFor(pose, declaredFootSupport) else null
 
         // Heading (exercise intent): same pattern as hands. If the exercise declared a
         // root-relative forward direction for this foot, use it instead of the toe hint.
@@ -922,11 +929,63 @@ class SkeletonPoseFinalizer(
      * exactly the support the pose asked the solver to honor — ground, wall, prop or bar — and
      * nothing is invented here. Allocation-free: reuses [tempFootNormal] scratch.
      */
-    /** Maps an ankle joint to the front/back foot support point. */
+    /** Maps an ankle joint to the front/back foot (whole-foot) support point. */
     private fun footSupportPointFor(ankleId: Joint): SupportPoint = when (ankleId) {
         Joint.ANKLE_F -> SupportPoint.RIGHT_FOOT
         Joint.ANKLE_B -> SupportPoint.LEFT_FOOT
         else -> SupportPoint.RIGHT_FOOT
+    }
+
+    /** Maps an ankle joint to the front/back TOES support point (the same side as [footSupportPointFor]). */
+    private fun toesSupportPointFor(ankleId: Joint): SupportPoint = when (ankleId) {
+        Joint.ANKLE_F -> SupportPoint.RIGHT_TOES
+        Joint.ANKLE_B -> SupportPoint.LEFT_TOES
+        else -> SupportPoint.RIGHT_TOES
+    }
+
+    /**
+     * B-3 — resolves the support point the pose DECLARED for the foot whose ankle is [ankleId], over
+     * that foot's declaration family: the contact may be declared as a `*_FOOT` (whole foot planted)
+     * or as a `*_TOES` (toe end planted — how the whole plank/push-up family declares its feet).
+     * The two families name the same physical support in the engine's own contact→joint map
+     * ([contactJointsFor] maps both to the identical `{ankle, heel, toe}` triple), so the
+     * declaration is honoured **verbatim**: the resolved value is the pose's own [SupportPoint] and
+     * it is the value handed to [supportPlaneNormalFor]. Nothing is re-mapped, aliased or
+     * re-interpreted, and no new contact→joint or contact→side mapping is introduced by this
+     * resolver — it consults the two points the existing side map names (B-3 previously asked only
+     * the `*_FOOT` one, so a `*_TOES` declaration silently produced `null` and the foot was never
+     * planted).
+     *
+     * The SIDE resolution ([footSupportPointFor] / [toesSupportPointFor]) is exactly the one this
+     * file already used: this resolver ADDS the TOES family to it and changes no side convention.
+     * The `A/P/F/B ↔ left/right` convention and its contradictory maps are the separate, still-open
+     * B-4 finding and are deliberately untouched here.
+     *
+     * Returns `null` when the pose declared no foot support for this ankle (a free-hanging foot), so
+     * every non-declaring pose keeps its previous geometry. Allocation-free (no intermediate
+     * Pair/List — the finalizer's per-frame paths allocate nothing).
+     */
+    private fun declaredFootSupportPoint(pose: SkeletonPose, ankleId: Joint): SupportPoint? {
+        val foot = footSupportPointFor(ankleId)
+        if (pose.isSupported(foot)) return foot
+        val toes = toesSupportPointFor(ankleId)
+        return if (pose.isSupported(toes)) toes else null
+    }
+
+    /**
+     * B-3 — the hand-side twin of [declaredFootSupportPoint]: resolves the hand's declared support
+     * over its declaration family — `*_HAND` (a pressing/gripping hand) or `*_FOREARM` (a
+     * forearm-planted pose such as a forearm plank, where the planted forearm's declaration governs
+     * the hand at its end) — on the side this file already associates with [handId]
+     * (`A` → `LEFT_*`, `P` → `RIGHT_*`, the association the hand support gate has always used,
+     * unchanged; the side convention itself is B-4). Returns `null` when neither family is declared,
+     * so an unsupported hand is untouched. Allocation-free.
+     */
+    private fun declaredHandSupportPoint(pose: SkeletonPose, handId: Joint): SupportPoint? {
+        val hand = if (handId == Joint.HAND_A) SupportPoint.LEFT_HAND else SupportPoint.RIGHT_HAND
+        if (pose.isSupported(hand)) return hand
+        val forearm = if (handId == Joint.HAND_A) SupportPoint.LEFT_FOREARM else SupportPoint.RIGHT_FOREARM
+        return if (pose.isSupported(forearm)) forearm else null
     }
 
     // ---------------------------------------------------------------------------

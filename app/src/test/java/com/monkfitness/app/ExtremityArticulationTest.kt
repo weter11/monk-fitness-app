@@ -61,9 +61,21 @@ class ExtremityArticulationTest {
         for (p in listOf(0f, 0.5f, 1f)) {
             val ctx = PoseContext(p, Side.LEFT, def)
             val withCarrier = SkeletonPipeline(def).produceFrame(factory(), ctx).pose
-            val built = factory().build(ctx)
+            // The reference leg must receive the SAME Runtime Context as the builder path, or it is
+            // not a carrier comparison: this overload takes the context from its caller (B-5 — it
+            // defaults to the empty support model), and the production UI caller
+            // (`ExerciseAnimation`) supplies `metadata.support.contacts`. Leaving it empty made the
+            // reference leg render pre-B-3 geometry (no support plane → no extremity orientation)
+            // for any pose whose declared contact kind the derivation did not consult — the exact
+            // "freeze guard whose reference leg never receives the new input" trap. The carrier is
+            // the only intended difference between the two legs.
+            val builder = factory()
+            val built = builder.build(ctx)
             built.extremityArticulations.clear()
-            val withoutCarrier = SkeletonPipeline(def).produceFrame(built).pose
+            val supportPoints = HashSet<SupportPoint>()
+            for (contact in builder.metadata.support.contacts) supportPoints.add(contact.point)
+            val withoutCarrier = SkeletonPipeline(def)
+                .produceFrame(built, builder.metadata.environment, supportPoints).pose
             val d = maxDeviation(withCarrier, withoutCarrier)
             if (d > maxDev) { maxDev = d; worst = "@$p" }
         }
