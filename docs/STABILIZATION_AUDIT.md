@@ -165,19 +165,37 @@ geometry on `main`. Pose-side fix only: no engine file, no phase order, no owner
   ≤ 4.6e-5 units on settled frames (authored analytic axis vs the derivation's float-rounded axis), and
   the other **46 poses byte-identical everywhere**. One P0 golden updated
   (`RuntimeArchitectureBaselineTest.PushUpGolden`, documented in the fixture).
-- **T-7 relation (measured, three trees, same corrected sweep md5 `97144f78…`).** `origin/main` + T-7 →
+- **T-7 relation (measured, three trees, same corrected sweep md5 `97144f78…`; recorded when `origin/main`
+  was `4cd8d9a`, the B-1 merge — i.e. **pre-B-8**).** `origin/main` + T-7 →
   **32 ERRORs (28 arm-chain + 4 head/neck)**; B-8 + T-7 → **4 ERRORs (0 arm-chain)**; B-7 + B-8 + T-7 →
   **0 ERRORs (green)**. B-8 was the arm-chain blocker; the correction stays its own change.
+- **T-7 correction landed as its own PR (branch `fix/t7-knee-pushup-frame-snapshot`) — TEST FILE ONLY.**
+  `KneePushUpPoseTest.testKneePushUpPoseBiomechanicalCompliance` retained `produceFrame(...).pose`, which is
+  the Finalizer's reused `outputPose`, so all 100 sweep entries were the same object: `previousPose ===
+  currentPose` on every step, and `HAND_SLIDING` / `POSITION_DISCONTINUITY` / `VELOCITY_DISCONTINUITY` could
+  only ever compare a frame with itself. Re-measured on the post-B-8 `main` (`60ee581`): pre-fix storage =
+  **1** distinct identity, `0.00u` CHEST spread, `99/99` self-comparisons, **0** validator issues (the sweep
+  is structurally inert — it stayed green while B-1 and B-7 shipped); corrected sweep = **100/100** distinct
+  objects, **57** distinct CHEST heights, `70.44u` spread, and **4 ERRORs — 0 arm-chain + 4 head/neck**
+  (`NECK_END` 21.39u / `HEAD_POS` 42.75u position pop at frame 1, velocity jump at frame 2), i.e. exactly
+  B-7's residual. With B-7's `BasePose` overlaid the same corrected class is **0 ERRORs (green)**; on pre-B-8
+  `4cd8d9a` it was **32 (28 arm-chain + 4 head/neck)**. The corrected test was therefore RED on `main` while
+  B-7 was unmerged, and is **green on `main` once B-7 landed** (`dc4cc27`, PR #228 merged 2026-09-12:
+  corrected class **0 ERRORs**, 100/100 distinct frames; full suite **106 classes / 468 tests / 0F / 0E /
+  0S**). Fix shape: `SkeletonPose().apply { copyFrom(produceFrame(rawPose).pose) }` — the
+  by-value rule `MotionProbe` documents and the pattern `SkeletonPipeline` already uses for its own Frame
+  History (`previous = SkeletonPose().apply { copyFrom(finalized) }`) — plus a sweep-independence guard
+  (100 distinct frame objects + a real CHEST-height spread) so the aliasing cannot return silently. No
+  assertion weakened or removed; production runtime untouched.
 - **Recorded, NOT fixed — B-8b.** `thoracic_extension_reps` is **not** a B-8 victim (its trunk frame is
   already authoritative — identity and frame-invariant). Its residual (ELBOW_A 29.93 / HAND_A 17.91) is
   a different defect: the pose derives both arm targets from `neck!!.worldPosition` while the neck's
   local offsets are written by the engine (`resolveHeadTarget`, Phase 7), so the first build realizes
   against a target it never sees again (declared-target delta 16.67 units). Pinned by attribution in
   `ColdFrameLimbRealizationTest` so it cannot be masked or mis-attributed.
-- **Still open (P11 backlog).** T-7 (aliased-buffer sweep repair — branch
-  `fix/t7-knee-pushup-frame-snapshot`, PR #230 open, not merged), B-4 (three contradictory
-  SupportPoint↔Joint maps), B-5 (renderer overload passes ∅), B-6
-  (`EnvironmentPenetrationTest` vacuity), §12.7 flag lifecycle.
+- **Still open (P11 backlog).** B-4 (three contradictory SupportPoint↔Joint maps), B-5
+  (renderer overload passes ∅), B-6 (`EnvironmentPenetrationTest` vacuity), §12.7 flag lifecycle.
+  (T-7 landed as PR #230; B-2 + B-3 landed — see the block below.)
 
 ### DONE — B-2 + B-3 support declaration channel + contact-kind consumption (P11)
 
