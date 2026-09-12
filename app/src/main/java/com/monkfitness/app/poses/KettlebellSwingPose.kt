@@ -59,8 +59,8 @@ class KettlebellSwingPose : PoseBuilder {
         // `effectiveExtensionRatio` cap), so the leg is realized where it is declared.
         //   top    : hips extended — 0.99 of the reachable leg length above the ankle plant
         //   hinge  : 0.98 of it, pushed HINGE_HIP_BACK units back; the kneecap therefore stays
-        //            over the mid-foot (measured knee x: 25.4 at the top -> 7.4 at the hinge;
-        //            shin 19.9° -> 2.8° from vertical) and the knee bends only 4° more than at
+        //            over the mid-foot (measured knee x: 24.30 at the top -> -1.05 at the hinge,
+        //            shin 14.4° -> 0.6° from vertical) and the knee bends only 4.41° more than at
         //            the top ("knee flexion: only slight … this distinguishes the swing from a
         //            squat", §9; §12 lists squatting instead of hinging as mistake #1).
         // The previous authoring lerped `pelvisY` 175 -> 210 while moving the pelvis back only
