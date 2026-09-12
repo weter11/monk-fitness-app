@@ -2479,6 +2479,112 @@ reachable from the arm chain's bend side, and the pose's arm authoring is untouc
   `minReach(112, 98) = 56.0090`, the solver's honest relocation — unchanged by this pass (identical
   published leg positions on both trees).
 
+### DONE — C1 the viewport frame is derived from the pose's own drawn bounds (branch `fix/c1-viewport-framing`, off the B4 merge `6ce4f695`; framing only)
+
+**No pose, IK/solver, support-declaration, StepUp, reach-band or legacy-tree change**: four production
+files (`animation/Camera.kt`, new `animation/CameraFraming.kt`, `animation/SkeletonRenderer.kt`,
+`animation/SkeletonSnapshotRenderer.kt`), one new test class, and this record. No RFC change, no golden
+change, no tolerance moved, no assertion weakened. This record **supersedes B2's residual (c)** ("the
+extended stance widens the pose's X extent … while the family camera is a fixed-zoom projection (no
+fit-to-bounds), so the back foot can sit outside a narrow viewport — a viewport/framing decision,
+deliberately not taken here"): that decision is taken here, and the answer is not per-pose.
+
+- **Root cause — the screen mapping is viewport-independent, and the vertical anchor is a constant.**
+  `Camera.project` maps world units to pixels one-for-one (`x = width*centerX + xr*sc*zoom`,
+  `y = height*centerY - y2*sc*zoom`) and anchors the world origin at a hardcoded `centerY = 0.7`. So the
+  drawn size of a pose is `authoredZoom x sc` pixels *whatever the surface is*, and the authored zoom
+  (`1.2`-`1.3`) is composed for a tall canvas: the hero canvas the app actually uses
+  (`ExerciseHeroMedia`; measured `861x531` px) is shorter than an adult standing figure at that zoom
+  (`torsoLength 120 + neck 18 + legs 112 + 98 + head`), so the head — and, on the overhead-reach
+  families, the hands — leave the top edge. Measured with the authored camera, every production pose ×
+  `5` rep phases × `5` view angles from straight ahead to the `+-90`° the rotation gesture clamps at
+  (`AnimationController.onRotate`) = `2805` frames per canvas, on the published path
+  (`SkeletonPipeline.produceFrame` → `SkeletonProjector.project`), judging the drawn silhouette (bones
+  with their strokes, indicator discs, torso faces — not the joint centres alone):
+
+  | canvas | frames clipped | poses | deepest overshoot |
+  |---|---|---|---|
+  | `861x531` (the hero canvas) | **1282 of 2805** | **26 of 51** | `BurpeePose` @ p = 0.9, yaw −90°: `453.2` px |
+  | `1280x720` | 854 of 2805 | 22 | `BurpeePose`: `320.9` px |
+  | `1440x700` | 885 of 2805 | 22 | `BurpeePose`: `334.9` px |
+  | `1000x1000` | 15 of 2805 | 2 | `BurpeePose`: `124.9` px |
+  | `1080x1920` | **0 of 2805** | 0 | — |
+
+  A representative frame, `ArmCirclesPose` at p = 0 straight ahead: the drawn silhouette is
+  `549.5` px tall on a `531` px canvas and leaves the top edge by `196.32` px; after the fit it is
+  `360.3` px (`zoom 1.3 -> 0.8491`, `68%` of the canvas) with `170.70` px of headroom below the feet,
+  i.e. the athlete is whole and the ground anchor is where the pose put it.
+
+  i.e. the geometry is fine and the framing is not: the same frames that clip a phone-sized canvas pass
+  an oversized one, which is exactly why the defect survived a suite whose only viewport was oversized.
+  The inventory at the hero canvas: `AirSquat`, `AlternatingForwardLunges`, `AlternatingReverseLunges`,
+  `AlternatingSideLunges`, `ArmCircles`, `Burpee`, `CossackSquat`, `CouchStretch`,
+  `DynamicWorldsGreatestStretch`, `FacePull`, `HalfKneelingStretch`, `Hang`, `HipCars`, `JumpSquat`,
+  `KettlebellSwing`, `NeutralGripPullUp`, `ScapularPullUp`, `ScapularRetraction`, `Squat`,
+  `StandardPullUp`, `StepUp`, `SumoSquat`, `ThoracicExtension`, `UnderhandChinUp`, `WallSlides`,
+  `WideGripPullUp`.
+- **Fix — the frame is derived from the frame's own drawn bounds, and only the frame.** New
+  `CameraFraming` owns one rule: *the frame is the largest zoom, not exceeding the pose's authored zoom,
+  at which the whole drawn silhouette lies inside the viewport, anchored where the pose anchored it.*
+  The pose keeps authoring the viewpoint (`PoseMetadata.camera` — yaw, pitch, focal length, anchor;
+  `docs/ENGINE.md` §10), and `Camera` gains `authoredZoom` (captured at construction) as the reference
+  the fit is measured against, so the fit is a pure function of (viewpoint, pose, viewport) and cannot
+  ratchet down across a rep's frames. Both production renderers (`SkeletonRenderer`,
+  `SkeletonSnapshotRenderer`) apply it to the frame they are about to draw, immediately after the
+  pipeline publishes it. No per-pose exception, no per-viewport table: the same rule covers a squat, a
+  pull-up, a rotated profile view and a `512x512` snapshot.
+- **Why one measurement is exact.** Every drawn extent is linear in the zoom (positions through
+  `Camera.project`, bone thickness through `ScreenSpaceScale.thicknessScale`, disc radii through
+  `radiusScale`), while `sc` itself does not depend on the zoom; the single exception is the outline
+  stroke, which the renderers draw at a fixed pixel width (`outlineScale` carries no `zoom` factor), so
+  it is subtracted from the available budget as a constant. One measurement at zoom 1 anchored at the
+  origin therefore yields the frame's linear part plus that constant, and the fit reduces to four
+  closed-form limits, one per viewport edge. Measured worst residual overshoot over the corpus × the
+  six canvases × the five view angles: **`0.0000` px** (the fit closes onto the edge exactly).
+- **Verification.** New focused regression `ViewportFramingInvariantTest` (`7` tests: the containment
+  gate over the whole corpus on three realistic canvases at every reachable view angle; the
+  previously-clipped poses swept densely at `51` phases × both frame conditions; the non-vacuity anchor
+  — the authored frame must still measure as clipping, with the clipped inventory pinned **by name**
+  (`26` poses) and the oversized canvases pinned as fitting; no-regression to the byte: every frame that
+  the authored camera already fits must be projected **bit-identically**, with the wide/supine/prone
+  families (`StandardPushUp`, `WidePushUp`, `KneePushUp`, `MilitaryPushUp`, `Superman`,
+  `ReverseSnowAngel`, `DeadBug`, `LegRaise`, `GluteBridge`, `PelvicTilt`, `BirdDog`,
+  `StaticBirdDogHold`, `AlternatingBirdDog`, `CatCow`, `ProneCobraStretch`, `MountainClimber`) named
+  explicitly; the oversized canvases unaffected; the fit idempotent, history-independent and never
+  enlarging; and the viewpoint untouched). **RED on the pristine base worktree** (`/tmp/c1-base` @
+  `6ce4f695`, the class copied in with the framing replaced by the pre-fix view setup, `--rerun-tasks`):
+  **`4` of `7` FAILED** — `ArmCirclesPose` at `p = 0.0`, `zoom 1.3`, `861x531`: top `196.29521` px;
+  `AirSquatPose` at `p = 0.0`, `zoom 1.2`: top `152.7579` px; the same pose on `1000x1000`
+  (`ArmCirclesPose` `p = 0.25`: top `33.60434` px); and the history-independence assertion (the pre-fix
+  path's zoom is the camera's mutable state). **GREEN on the branch: `7/7`, `0F / 0E / 0S`**
+  (`--rerun-tasks`, class time `0.764` s). Full suite, results purged and XML-stamped fresh: pristine
+  `origin/main` @ `6ce4f695` worktree **`127 classes / 621 tests / 0F / 0E / 0S`** → this branch
+  **`128 / 628 / 0F / 0E / 0S`** — exactly `+1` class / `+7` tests, no other count moved.
+  `:app:compileReleaseKotlin` + `:app:compileReleaseJavaWithJavac` + `:app:assembleDebug` successful.
+- **No unrelated corpus drift — whole-corpus A/B.** A throwaway probe dumping the PUBLISHED geometry of
+  every discovered production pose × `11` samples × every `Joint.entries` XYZ (through
+  `SkeletonPipeline.produceFrame` against each pose's own Frame Context) produced **`18514` lines /
+  `md5 17b75c763f6d2c598ee6d240a0e5d185` on BOTH trees** — byte-identical, `diff` empty: the change
+  cannot move a joint, because it never touches the pipeline the joints come from. The same dump on the
+  branch was run with the probe test removed from the tree afterwards (it is not part of the suite).
+- **Residuals recorded, NOT fixed** (all measured; each is a presentation/product decision, not a
+  containment defect):
+  (a) **Composition on a very small canvas.** Containment shrinks a full-standing figure hard on a
+  `411x225` surface: a `SquatPose` frame measures `507.8` px of drawn silhouette at the authored frame
+  and `154.0` px after the fit (`zoom 1.2 -> 0.3571`). Containment holds; whether such a canvas should
+  show the athlete that small, or crop/recompose instead, is a design decision.
+  (b) **The scale breathes with the frame.** The fit is per-frame (a pulled-up rep is framed from its
+  own top-of-rep bounds), so the subject's size changes through a rep that changes its own bounds. A
+  smoothed/envelope camera (fit to the union of the rep's bounds) would remove that at the cost of
+  needing the rep's extremes before drawing its first frame — recorded, not taken.
+  (c) **The framing never enlarges**, so a pose whose authored zoom is smaller than the canvas could
+  afford stays at its authored size (e.g. nothing is scaled up on a `1080x1920` canvas: the fit is the
+  identity for all `2805` frames there). Whether the app should ever zoom *in* to fill a large surface
+  is a presentation decision.
+  (d) **Props, the ground grid and the contact shadows are deliberately not framed** — they are the
+  floor and the pose's furniture, laid out to a horizon (`+-260` world units) that leaves the frame by
+  construction; the rule frames the athlete.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement — **M15 is DONE — see the record above** (the wall's contact plane, the arm chain
@@ -2533,7 +2639,11 @@ A8/A6 leaks — resolved in the Push-Up Family pass above.)
 - Fix the pose, not the engine, when a pose authors motion incorrectly.
 - Keep pose-side migrations on the **existing** carrier surface (the H2 fix is the template).
 - After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
-  current baseline of record (**125 classes / 608 tests** on this branch — `f8f8b24` + the B1
+  current baseline of record (**128 classes / 628 tests** on this branch — `6ce4f695` (the B4 merge)
+  + C1, which added `ViewportFramingInvariantTest` (`+7` tests) and moved no other count; the tree
+  before C1 stood at `127 / 621`, measured fresh in this pass's own base worktree — and that is the
+  same tree the B4 trunk landing left behind (`126 / 614` -> `127 / 621`). Earlier standing points:
+  **125 classes / 608 tests** — `f8f8b24` + the B1
   integration + B3, which added `IsometricSidePlankKneePlaneTest` (`+5` tests), retired
   `SupportPointSideConsumptionTest`'s redundant side-plank twin (`-1`), and re-measured the seven scope
   digests for all three corrections; the B1-integrated tree stood at `124 / 604`, the B2 tree at

@@ -41,6 +41,9 @@ fun SkeletonRenderer(
     val pipeline = remember(engine.definition) { SkeletonPipeline(engine.definition) }
     val projector = remember { SkeletonProjector() }
     val compensator = remember(screenSpaceSettings) { ScreenSpaceCompensation(screenSpaceSettings) }
+    // C1 — the viewport frame: the frame is derived from the bounds of the frame being drawn, so a
+    // pose cannot be drawn outside the surface it is drawn on. See [CameraFraming].
+    val framing = remember(engine, screenSpaceSettings) { CameraFraming(engine, screenSpaceSettings) }
 
     val skeletonBuffer = remember { ProjectedSkeleton() }
     val renderItems = remember { Array(100) { RenderItem() } }
@@ -53,6 +56,9 @@ fun SkeletonRenderer(
         val height = size.height
 
         val finalizedPose = pipeline.produceFrame(pose, environment, supportedPoints).pose
+        // C1 — the viewport frame: the zoom is derived from the bounds of the frame about to be drawn,
+        // so the athlete is drawn whole on this surface (image-identical when it already fits).
+        camera.zoom = framing.frameZoom(camera, finalizedPose, width, height)
         projector.project(
             pose = finalizedPose,
             camera = camera,
