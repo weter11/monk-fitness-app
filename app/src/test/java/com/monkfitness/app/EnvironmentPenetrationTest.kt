@@ -57,7 +57,8 @@ import java.util.Locale
  * below their own floor; every other declared-contact joint of every other production pose is inside
  * the engine's band). Exactly the class of defect the old file's ∅ mapping could not see — and the
  * same "author support elbow below their own floor" residual the B-3 record in
- * `docs/STABILIZATION_AUDIT.md` lists as the poses' own §7 debt. See [attributedDebt].
+ * `docs/STABILIZATION_AUDIT.md` listed as the poses' own §7 debt. (B-7 has since re-authored that
+ * plant, so the invariant below runs with **no attribution table at all**.)
  *
  * ## Fix shape (test-only — no production file is touched by B-6)
  *
@@ -74,9 +75,8 @@ import java.util.Locale
  *  * Every observation is counted and reconciled against the count the declarations imply
  *    ([everyDeclaredContactJointIsActuallyEvaluated]) — a silent ∅/skip cannot cost nothing.
  *  * The invariant itself ([noDeclaredSupportContactPenetratesItsSupportSurface]) is the engine's
- *    unchanged 2-unit band applied to every observation, with the two pre-existing plank
- *    penetrations **attributed by measurement** — exact magnitude, staleness-guarded, and impossible
- *    to extend silently.
+ *    unchanged 2-unit band applied to every observation. It carries **no attribution table** (B-6
+ *    shipped the two plank forearms pinned there; B-7 fixed the geometry and the pins are gone).
  *
  * ## What is deliberately NOT asserted, and why (measured, not assumed)
  *
@@ -271,37 +271,43 @@ class EnvironmentPenetrationTest {
     )
 
     // ------------------------------------------------------------------------------------------
-    // Attribution — the pre-existing production violations this invariant exposes
+    // The invariant — no attribution table: a declared contact either holds or it fails
     // ------------------------------------------------------------------------------------------
 
-    /**
-     * Pre-existing, measured, **NOT fixed by B-6**: the two forearm planks declare their mat support
-     * and author their support elbow *below their own floor*, so the declared `*_FOREARM` contact
-     * passes through the mat. Recorded in `docs/STABILIZATION_AUDIT.md` (B-3 residual, "the poses'
-     * own §7 debt") and in the P11 audit's pose inventory (M2). Fixing it re-authors the plank arm
-     * chain (`handReach`/pole/plant height: measured `StaticForearmPlankPose` shoulder `36.48`,
-     * elbow `−35.81`, planted hand `15.00` at progress 0.5 — the pose's own KDoc notes the "long
-     * upper arm vs. the low braced-shoulder height" debt), i.e. a pose-geometry change with its own
-     * review, not a B-6 validation fix.
-     *
-     * A pinned entry is *not* a widened threshold: [penetrationBand] is unchanged and applies to
-     * every observation; the map may only contain entries that (a) are still violating and (b) match
-     * their measured magnitude to [debtTolerance]. Any new violation fails the suite, and fixing
-     * the planks forces this map to be emptied in the same change.
-     */
-    private val attributedDebt: Map<Pair<String, SupportPoint>, Float> = mapOf(
-        ("StaticForearmPlankPose" to SupportPoint.LEFT_FOREARM) to -44.752f,
-        ("StaticForearmPlankPose" to SupportPoint.RIGHT_FOREARM) to -44.752f,
-        ("IsometricSidePlankPose" to SupportPoint.RIGHT_FOREARM) to -37.863f
-    )
-
-    private val debtTolerance = 0.01f
-
+    /** The worst (most negative) delta of every declared pose/contact pair. */
     private fun worstByContact(observations: List<Observation>): Map<Pair<String, SupportPoint>, Float> =
         observations.groupBy { it.key }.mapValues { (_, v) -> v.minOf { it.delta } }
 
+    /** Every declared pose/contact pair whose worst joint is below its own surface by the band. */
     private fun violationsOf(observations: List<Observation>): Map<Pair<String, SupportPoint>, Float> =
         worstByContact(observations).filterValues { it < -penetrationBand }
+
+    /** Comparison tolerance for the control assertions' measured magnitudes. */
+    private val measuredTolerance = 0.01f
+
+    /**
+     * The invariant itself: no declared support contact may pass through the surface its own
+     * declaration names.
+     *
+     * This assertion is the whole check — there is **no attribution table**. Until B-7 the two
+     * forearm planks were pinned here as known, measured, *unfixed* violations (the poses declared
+     * the mat and authored their support elbow 38–45 units below it); B-7 re-authored that plant, so
+     * the pins are gone and a new forearm penetration fails the suite instead of being absorbed.
+     */
+    @Test
+    fun noDeclaredSupportContactPenetratesItsSupportSurface() {
+        val observations = scanCorpus()
+        val violations = violationsOf(observations)
+
+        assertTrue(
+            "declared support contacts below their support surface (band = $penetrationBand):\n" +
+                violations.entries.joinToString("\n") { (k, v) ->
+                    "  ${k.first} ${k.second} worst=$v joints=" +
+                        observations.filter { it.key == k }.map { it.joint }.distinct()
+                },
+            violations.isEmpty()
+        )
+    }
 
     // ------------------------------------------------------------------------------------------
     // 1. Declaration census (replaces the silent `continue`)
@@ -431,41 +437,6 @@ class EnvironmentPenetrationTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 4. The invariant
-    // ------------------------------------------------------------------------------------------
-
-    @Test
-    fun noDeclaredSupportContactPenetratesItsSupportSurface() {
-        val observations = scanCorpus()
-        val violations = violationsOf(observations)
-
-        val unattributed = violations.keys - attributedDebt.keys
-        assertTrue(
-            "declared support contacts below their support surface (band = $penetrationBand):\n" +
-                violations.entries
-                    .filter { it.key in unattributed }
-                    .joinToString("\n") { (k, v) -> "  ${k.first} ${k.second} worst=$v joints=" + observations.filter { it.key == k }.map { it.joint }.distinct() } +
-                "\n(attributed pre-existing debt: " + attributedDebt.keys.joinToString { "${it.first} ${it.second}" } + ")",
-            unattributed.isEmpty()
-        )
-
-        // The attribution is exact in both directions: a debt that is fixed must delete its pin, and a
-        // debt that grows must fail rather than slip under a widened threshold.
-        for ((key, pinned) in attributedDebt) {
-            val measured = violations[key]
-            assertTrue(
-                "${key.first} ${key.second} is pinned as a known violation but no longer violates " +
-                    "(measured worst=${worstByContact(observations)[key]}). Fixing the pose must remove the pin.",
-                measured != null
-            )
-            assertEquals(
-                "${key.first} ${key.second}: the pinned magnitude is the measured one",
-                pinned, measured!!, debtTolerance
-            )
-        }
-    }
-
     /** Sensitivity control: the check reports a contact sunk below its own surface. */
     @Test
     fun aContactSunkBelowItsDeclaredSurfaceIsReported() {
@@ -491,7 +462,7 @@ class EnvironmentPenetrationTest {
         )
         assertEquals(
             "the reported penetration must be the perturbed depth",
-            -60f, perturbed[name to SupportPoint.LEFT_HAND]!!, debtTolerance
+            -60f, perturbed[name to SupportPoint.LEFT_HAND]!!, measuredTolerance
         )
     }
 
