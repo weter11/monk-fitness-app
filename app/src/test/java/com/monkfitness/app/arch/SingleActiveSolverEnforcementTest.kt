@@ -166,7 +166,7 @@ class SingleActiveSolverEnforcementTest {
 
     @Test
     fun inactiveConfigurationHasExactlyOneActiveSolver() {
-        IK_STAGE_ACTIVE = false // deployed configuration: the authoring bake realizes
+        IK_STAGE_ACTIVE = false // R5 authoring configuration (NOT the deployed one): the bake realizes
 
         val pose = LimbRealizationProbe(1).build(ctx)
 
@@ -219,7 +219,7 @@ class SingleActiveSolverEnforcementTest {
 
     @Test
     fun doubleRealizationFailsEvenWithIdenticalPose() {
-        // (a) Deployed configuration: the SAME limb realized twice by the same implementation
+        // (a) Authoring configuration: the SAME limb realized twice by the same implementation
         // inside one build cycle. Identical declared inputs ⇒ identical output.
         IK_STAGE_ACTIVE = false
         val single = LimbRealizationProbe(1).build(ctx)
@@ -340,13 +340,13 @@ class SingleActiveSolverEnforcementTest {
         SkeletonPipeline(def).produceFrame(activated) // exactly one engine realization → accepted
 
         IK_STAGE_ACTIVE = false
-        val deployed = MiddleSplitPose().build(ctx)
-        assertEquals("the validation bake IS the one active solver while the stage is off", 1, deployed.limbSolverExecutions)
-        assertEquals("and it realizes each declared limb exactly once", 0, deployed.limbDuplicateRealizations)
-        assertEquals("every declared limb is registered as realized", declared, realizedJoints(deployed))
-        SkeletonPipeline(def).produceFrame(deployed)
+        val authoringFrame = MiddleSplitPose().build(ctx)
+        assertEquals("the validation bake IS the one active solver while the stage is off", 1, authoringFrame.limbSolverExecutions)
+        assertEquals("and it realizes each declared limb exactly once", 0, authoringFrame.limbDuplicateRealizations)
+        assertEquals("every declared limb is registered as realized", declared, realizedJoints(authoringFrame))
+        SkeletonPipeline(def).produceFrame(authoringFrame)
 
-        // Mixing the instrument into a frame must not turn it into a second solver: the deployed
+        // Mixing the instrument into a frame must not turn it into a second solver: the authoring
         // configuration counts exactly one authoring window even though the instrument carries
         // Contact Declarations (the Phase-2 settlement re-solve is not a limb-solver window).
         val withContacts = MiddleSplitPose().build(ctx)
