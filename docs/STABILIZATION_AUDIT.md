@@ -1843,6 +1843,118 @@ and the backs of the wrists/hands contact the wall") and in `Movement Ownership 
   (the refuted alternative above) is the H1 complement. (d) `loopMode = LOOP` on a one-way slide snaps back
   at the seam (`p = 1 → 0`) — this pose's pre-existing shape, not M15's.
 
+### DONE — T2 the published below-ground invariant is evaluated for the whole body (test-only)
+
+Branch `test/t2-published-below-ground-invariant` off `origin/main` `07dfe38` (the M15 merge). **Test-only
+change: no production file is touched** (the whole-tree diff is the new test class plus this record).
+
+- **Root cause — the floor contract is stated for the whole body and owned by two narrow instruments.**
+  `docs/ENGINE.md` §4: *"Y is up. Ground level is a Y value (`GroundDefinition.level`, default 0).
+  **'Below ground' means `y < level`**"*. Every entry of `Joint` is a physical body point (the
+  `LUMBAR` spine segment, the `CLAVICLE_*`/`SCAPULA_*` girdle bones, the derived
+  `PALM_*`/`KNUCKLES_*`/`FINGERTIPS_*`/`HEEL_*`/`TOE_*` chains), but the suite checked the floor in
+  exactly two places, both on a **subset**: `ExerciseValidator.validateFeetGroundPenetration` keys on
+  the `6` foot joints, and `EnvironmentPenetrationTest` (B-6) keys on a pose's declared support
+  contacts. The P11 floor findings all end in the same sentence — the M8/M9/M10 record's clause (d)
+  (*"publish their elbows `−30.69`/`−33.35` BELOW their own mat … **no declared contact, so no
+  invariant covers them**"*) and the M15 record (*"the corpus invariant it owns is a Y-band on declared
+  contacts"*). Measured over the whole production corpus (`51` classes × `5` progress × both frame
+  conditions, published path `SkeletonPipeline.produceFrame(pose, ctx)`, on `07dfe38`):
+
+  | instrument | keys on | below-ground pose/joint pairs reported |
+  |---|---|---|
+  | `ExerciseValidator` ground rule (default config) | `FEET_JOINTS` — `ANKLE/HEEL/TOE_F/B` | **`12` issues in `1` of `11` poses** (`CatCowPose` feet, `HEEL_*` worst `−2.422398`); the other `10` poses report `0` |
+  | `EnvironmentPenetrationTest` (B-6) | declared support-contact joints | **`0` of `43`** — every offending joint is outside its pose's own declared family |
+  | new `PublishedBelowGroundInvariantTest` | **every** joint of **every** published frame | **`43` pose/joint pairs over `11` poses** |
+
+- **What the new invariant exposes (measured, worst depth per joint over both frame conditions).**
+
+  | pose | below-ground joints (worst) |
+  |---|---|
+  | `DynamicWorldsGreatestStretchPose` | `KNEE_B −46.1056` (every phase) |
+  | `PelvicTiltPose` | `ELBOW_A/P −33.3501`, `HEAD_POS −2.5384`, `NECK_END −2.5295`, `CHEST −0.3659`, `SHOULDER_A/P −0.3659` |
+  | `GluteBridgePose` | `ELBOW_A/P −30.6914` (clause (d) above) |
+  | `IsometricSidePlankPose` | `KNEE_B −25.8897 → −1.1143` |
+  | `DiamondPushUpPose` | `ELBOW_A/P −19.9130` at `p = 0.5` |
+  | `QuadrupedThoracicRotationsPose` | `FINGERTIPS_P −19.1372`, `KNUCKLES_P −10.4384`, `PALM_P −5.2192`, `FINGERTIPS_A −0.8409` |
+  | `AlternatingBirdDogPose` / `BirdDogPose` / `StaticBirdDogHoldPose` | `FINGERTIPS_A/P −18.4842`, `KNUCKLES_A/P −10.0823`, `PALM_A/P −5.0411` (frame-independent) |
+  | `CatCowPose` | `HEEL_F/B −2.4224`, `ANKLE_F/B −2.1292`, `TOE_F/B −1.4113` at `p = 0.75/1.0` (the M11/M12 clause (c) residual) |
+  | `BurpeePose` | `KNEE_F/B −2.3537` at `p = 0.25/0.75` |
+
+  Four of the eleven (`AlternatingBirdDogPose`, `BirdDogPose`, `QuadrupedThoracicRotationsPose`,
+  `StaticBirdDogHoldPose`) declare NO support at all — the §4 item-2 "flagged for assignment" group. A
+  declaration-keyed gate can only ever be blind to exactly those, which is why the new invariant reads
+  no declaration.
+- **The three categories the invariant must distinguish, and how each is witnessed (all measured).**
+  1. *Legitimate support geometry*: the rule is a **lower bound only** (`y >= declaredLevel − 0.05`).
+     A planted contact is derived ONTO the plane — measured `HAND_A = 0.000000` and the lowest
+     published joint of a floor-planted push-up exactly `0.000000` across the family (Standard/Wide/
+     Military/Pike/Knee), pinned by `aPlantedSupportJointRestingOnTheDeclaredPlaneIsNotReported`. No
+     upper bound is asserted (a planted toe at `25.000` and knee at `15.000` are the definition's own
+     contact radii — the B-6 record's "no float" non-assertion still stands).
+  2. *Geometry a pose is allowed to publish below `y = 0`*: the repository's existing channel is the
+     pose's own declaration — `metadata.environment.ground.level`, the plane `SkeletonPoseFinalizer`,
+     `SkeletonRenderer`, `SkeletonSnapshotRenderer` and `ExerciseValidator` all resolve from the
+     environment. The invariant is measured against **that** plane, never against zero:
+     `theInvariantJudgesAgainstThePosesOwnDeclaredPlane` lowers a twin's plane to `−25`/`−50` and shows
+     (i) the published geometry is unchanged (identical joints, the twin declares no support), (ii) the
+     same body is a pinned violation at level `0` and clean at the lowered plane. **No new production
+     metadata was added** — none is needed for category (2), and `PoseMetadata.groundHeight` (a second,
+     **unread** field — zero production readers) is deliberately not resurrected.
+  3. *Genuine penetration*: the `43` attributed pairs above. The perturbation control sinks a contact
+     joint (`HAND_A`), an IK-realised joint (`ELBOW_P`) and a trunk joint (`HEAD_POS`) and requires all
+     three reported at the perturbed depth.
+- **Non-vacuity (the B-6 lesson applied to the whole body).** The corpus is every concrete production
+  pose class discovered from `poses/` (`51`); every joint of every pose is evaluated on every sample
+  under both frame conditions and the count is reconciled
+  (`51 × 33 × 5 × 2 = 16830`, asserted equal); every pose must contribute — **including the four
+  above-ground-violating poses that declare no support** (`everyPublishedJointOfEveryProductionPoseIsEvaluated`
+  pins that census explicitly, which is the silent-`continue` hole this invariant cannot inherit);
+  frames are captured **by value** (`copyFrom` — the pipeline publishes the Finalizer's reused buffer,
+  the T-7 trap).
+- **The pinned table is data, not a tolerance.** Each of the `43` pairs names its measured worst depth
+  (`attributionTolerance = 0.01`) and its owning record ([attribution] — asserted to cover exactly the
+  same poses, so an entry cannot be added without stating what owns it). An unattributed violation
+  fails; a pinned pair that no longer violates fails (**fixing a pose forces its entry out in the same
+  change**); a magnitude that moves fails. `groundBand = 0.05` sits three orders of magnitude below the
+  smallest genuine violation (`−0.8409`).
+- **RED → GREEN, and the counterfactuals (fresh runs, results purged, XML-stamped).**
+  * Invariant with the attribution table **emptied** (mutation M1): **RED**, listing exactly the `43`
+    measured pairs — e.g. `DynamicWorldsGreatestStretchPose KNEE_B worst=−46.105583`,
+    `PelvicTiltPose ELBOW_A worst=−33.350105`, `BirdDogPose FINGERTIPS_P worst=−18.484234`,
+    `CatCowPose HEEL_F worst=−2.4223979`, `BurpeePose KNEE_F worst=−2.3537445`, `PelvicTiltPose
+    CHEST worst=−0.36589622`. This is the pre-fix gate: the same file on the untouched tree (nothing
+    else changes in this PR) reports every case the mission asked it to catch.
+  * Invariant **removed** (mutation M2: rule + table emptied): the `43` cases **disappear from the
+    gate** — `noPublishedJointPassesBelowItsPosesOwnDeclaredGroundPlane` is green, and the only red
+    tests are the two sensitivity controls whose subject was removed. The rule-independent corpus probe
+    re-run in the same session reproduces the same numbers (`md5` identical), i.e. the geometry is
+    unchanged and the gate is blind, not the body fixed.
+  * Then GREEN on the restored bytes (`md5 63d5ce4c786d1fed1565da78992473d3`), focused
+    `PublishedBelowGroundInvariantTest` **9 tests / 0F / 0E / 0S** (`--rerun-tasks`).
+  * The declaration channel's blindness is also **pinned as a test**:
+    `theBelowGroundClassIsInvisibleToTheDeclarationKeyedInstrument` asserts all `43` pinned joints are
+    outside their poses' declared families (and that the validator's foot rule can reach exactly `1` of
+    the `11` poses).
+- **Full suite / build.** `--rerun-tasks`, results purged: pristine base worktree (`origin/main`
+  `07dfe38`) **`121 classes / 583 tests / 0F / 0E / 0S`** → this branch **`122 / 592 / 0F / 0E / 0S`** —
+  exactly `+1` class / `+9` tests, no other count moved. `:app:compileReleaseKotlin` +
+  `:app:compileReleaseJavaWithJavac` + `:app:assembleDebug` successful.
+- **Attribution / exit criteria (each pinned entry is an open item for its owning pass, NOT an
+  exemption).** `AlternatingBirdDogPose`, `BirdDogPose`, `StaticBirdDogHoldPose`,
+  `QuadrupedThoracicRotationsPose` — the undeclared "flagged for assignment" group; `GluteBridgePose` /
+  `PelvicTiltPose` — the M10-owned supine arm authoring, clause (d) above; `CatCowPose` — the M11/M12
+  clause (c) foot residual; `BurpeePose` — M7's plant phases (the knees), with the M8/M9/M10 item (b)
+  foot declaration still the remaining one-liner; `DiamondPushUpPose`, `DynamicWorldsGreatestStretchPose`,
+  `IsometricSidePlankPose` — measured here for the first time, **no M-number owns them**; flagged for
+  the user to assign rather than silently absorbed.
+- **Deliberately NOT asserted.** (a) An absolute rest height ("no float") — the engine declares no
+  per-contact rest height (see B-6). (b) The world-origin class: the `10` poses that build their own
+  node tree still publish `LUMBAR`/`CLAVICLE_*`/`SCAPULA_*` at `(0,0,0)` — exactly AT the plane, so this
+  invariant does not flag them (it is a lower bound); that is a different, recorded defect (§4 item 2)
+  and conflating the two would make this instrument lie about what it measures. (c) The below-ground
+  geometry itself: **not fixed here** — this is the instrument, the poses keep it for their own passes.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement — **M15 is DONE — see the record above** (the wall's contact plane, the arm chain
