@@ -1,0 +1,394 @@
+package com.monkfitness.app
+
+import com.monkfitness.app.animation.*
+import com.monkfitness.app.poses.CatCowPose
+import com.monkfitness.app.poses.LatStretchPose
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
+
+/**
+ * **M11 + M12 — the remaining limb-realization / carrier migration for `LatStretchPose` and
+ * `CatCowPose`** (P11 whole-system audit, `docs/STABILIZATION_AUDIT.md` §3 rows M11/M12 and the
+ * §4 "TODO — P1" item 2: *"H2 complement — migrate `LatStretchPose` (M11) and `CatCowPose` (M12)
+ * onto `bakeIkLimb`/gaze helpers for full carrier coverage"*).
+ *
+ * ## What the two findings say on the current tree, and what was already migrated
+ *
+ * The literal `solveIK` bypass the rows name is GONE for both poses (P12 WP-D, `5727091`): both now
+ * realize their four limbs through the registered package-level `bakeIkLimb`, both carry four
+ * `limbTargets` with a complete declared realization context, and `CatCowPose` already declares its
+ * gaze. The tests below therefore do not re-assert the migration that landed — they assert the
+ * **residue the same rows name** ("for full carrier coverage"), each measured on the PUBLISHED
+ * runtime path (`SkeletonPipeline.produceFrame(pose, ctx)` in the deployed
+ * `IK_STAGE_ACTIVE = true` configuration, i.e. the frame the renderer and the validators read):
+ *
+ *  - **M11-a (legacy authored hierarchy).** `LatStretchPose` still builds its OWN hand-rolled node
+ *    tree (the pre-factory shape) whose node set stops at `PELVIS → CHEST` and
+ *    `CHEST → SHOULDER_*`. Five canonical joints are never authored, so they publish at the WORLD
+ *    ORIGIN: measured `|LUMBAR − PELVIS| = 144.4507` (the pass-through is `0.0000` on every pose
+ *    built from `SkeletonFactory.createStandardSkeleton()`), `|CLAVICLE_A| = |SCAPULA_A| = 0.0000`.
+ *    That is the class the M3/M5 pass corrected for `ReverseSnowAngelPose` ("its hand-rolled tree
+ *    has no lower-spine segment, so `Joint.LUMBAR` publishes at the world origin").
+ *  - **M11-b (gaze — RECORDED, deliberately NOT migrated).** The audit's work item names the "gaze
+ *    helpers" as M11's other half, and the pose indeed declares no `headTarget`. Measured, a
+ *    world-space gaze target is NOT expressible for this body: `resolveHeadTarget` writes the world
+ *    delta as the neck/head LOCAL offset, which this pose's `0.95` rad trunk pitch re-applies, so the
+ *    resolved head lands `0.9147` rad off the authored axis (the B-7/B-8b constraint the M3/M5 pass
+ *    recorded for the prone family; `MIGRATION_RULES` A8 prohibits the pose-side compensation). The
+ *    pose's authored head already lives in the chain's own frame, and
+ *    [latStretchAuthoredHeadStaysOnThePosesOwnTrunkAxis] pins that resolved behaviour — and is the
+ *    trap that turns RED the moment someone declares the naive world target.
+ *  - **M12-a (raw floor-frame limb targets outside their own chain's band).** `CatCowPose` authors
+ *    its leg end-effector as an absolute world literal `(50, ankleHeight, ±hipWidth)`, which its own
+ *    leg chain cannot fold to at ANY phase: `42.5 … 45.0` against
+ *    `SkeletonMath.minReach(112, 98, 30°) = 56.0090`. The engine answers by relocating the realized
+ *    foot (`maxIkClampAmount = 11.0090 → 16.0090`, realised `ANKLE_F` `13.5090` units off the
+ *    declared point at `p = 0.5`) — the M8 second clause / M13 defect class ("unreachable authoring
+ *    silently solver-clamped").
+ *  - **M12-b (no support model on the canonical channel).** The quadruped declares NO
+ *    `metadata.support.contacts`, so `SkeletonPose.supportedPoints` publishes EMPTY for a pose whose
+ *    BPS §8 base is a four-point contact (`Cat-Cow (Reps).md`: "both hands … and both knees … remain
+ *    in contact with the floor"). `EnvironmentPenetrationTest`'s pinned census names this pose and
+ *    attributes it to M12.
+ *
+ * ## Counter-evidence / what these tests deliberately do NOT assert
+ *
+ *  * No tolerance is added to any pre-existing assertion, and nothing is `@Ignore`d or `assume`d.
+ *  * The pose's AUTHORED choreography is not re-litigated here: the leg pole's lateral component
+ *    (which splays the knee ≈`69` units outside the hip line) and the spine articulation authored
+ *    as the pelvis tilt are both measured and reported as open items rather than fixed — M11/M12's
+ *    wording (cleanup / migration) names neither.
+ */
+class M11M12LimbRealizationMigrationTest {
+
+    private val def = SkeletonDefinition.DEFAULT_ADULT
+    private val samples = listOf(0.0f, 0.25f, 0.5f, 0.75f, 1.0f)
+
+    /** The leg chain's declared realization context (`CatCowPose`'s two leg bakes). */
+    private val legConstraint = def.legIKConstraint
+    private val legMinReach = SkeletonMath.minReach(def.thighLength, def.shinLength, legConstraint)
+    private val legMaxReach = SkeletonMath.maxReach(def.thighLength, def.shinLength, legConstraint)
+
+    /** The engine's own reachability flag band (`M8M9M10SupportDeclarationTest`'s convention). */
+    private val reachabilityFlagBand = 0.1f
+
+    private fun ctx(p: Float) = PoseContext(p, Side.RIGHT, def, 0.0166f, 2500f)
+
+    /** A frame captured BY VALUE — the pipeline publishes a reused buffer (the T-7 trap). */
+    private fun snapshot(frame: SkeletonPose): SkeletonPose = SkeletonPose().apply { copyFrom(frame) }
+
+    /**
+     * The PUBLISHED frame of the production path at [p], in the deployed configuration.
+     *
+     * [warm] selects the second frame condition: a pipeline that has already produced two frames
+     * (mid-playback) instead of a genuinely cold first frame on a fresh pipeline.
+     */
+    private fun published(builder: PoseBuilder, p: Float, warm: Boolean = false): SkeletonPose {
+        val pipeline = SkeletonPipeline(def)
+        if (warm) {
+            pipeline.produceFrame(builder, ctx(0.3f))
+            pipeline.produceFrame(builder, ctx(0.4f))
+        }
+        return snapshot(pipeline.produceFrame(builder, ctx(p)).pose)
+    }
+
+    private fun dist(a: Vector3, b: Vector3): Float {
+        val dx = a.x - b.x; val dy = a.y - b.y; val dz = a.z - b.z
+        return sqrt(dx * dx + dy * dy + dz * dz)
+    }
+
+    // =========================================================================================
+    // M11-a — LatStretchPose publishes the canonical authored hierarchy
+    // =========================================================================================
+
+    /**
+     * The pose's tree must cover the canonical joint set, so the two-segment spine and the shoulder
+     * girdle publish real transforms instead of the world origin (the legacy-tree signature the
+     * M3/M5 pass measured on `ReverseSnowAngelPose`).
+     */
+    @Test
+    fun latStretchPublishesTheCanonicalAuthoredHierarchy() {
+        val pose = LatStretchPose()
+        var worstLumbar = 0f
+        var worstStray = 0f
+        var stray = ""
+
+        for (p in samples) {
+            val f = published(pose, p)
+            val pelvis = f.getJoint(Joint.PELVIS)
+            val chest = f.getJoint(Joint.CHEST)
+
+            // (1) LUMBAR is the PELVIS pass-through (Issue E): the chest resolves to the same world
+            // transform as the old single PELVIS->CHEST link, so a non-zero gap is the unpublished
+            // segment the hand-rolled tree leaves behind.
+            val lumbarGap = dist(f.getJoint(Joint.LUMBAR), pelvis)
+            if (lumbarGap > worstLumbar) worstLumbar = lumbarGap
+
+            // (2) CLAVICLE/SCAPULA lie ON the CHEST->SHOULDER segment (they are pass-throughs), and
+            // (3) no canonical joint may publish at the world origin.
+            for ((joint, side) in listOf(
+                Joint.CLAVICLE_A to Joint.SHOULDER_A,
+                Joint.SCAPULA_A to Joint.SHOULDER_A,
+                Joint.CLAVICLE_P to Joint.SHOULDER_P,
+                Joint.SCAPULA_P to Joint.SHOULDER_P
+            )) {
+                val v = f.getJoint(joint)
+                val strayMag = v.mag()
+                if (strayMag > worstStray) { worstStray = strayMag; stray = "$joint@p=$p" }
+                val onSegment = dist(v, chest) + dist(v, f.getJoint(side)) - dist(chest, f.getJoint(side))
+                assertTrue(
+                    "LatStretchPose $joint@p=$p must sit on the CHEST->$side segment (a pass-through " +
+                        "node), but it is $onSegment units off it — v=$v chest=$chest " +
+                        "shoulder=${f.getJoint(side)}",
+                    onSegment < 0.5f
+                )
+            }
+        }
+        assertEquals(
+            "LatStretchPose must publish LUMBAR as the PELVIS pass-through (Issue E: PELVIS -> LUMBAR " +
+                "-> CHEST with a coincident, identity-rotation lumbar) — the hand-rolled tree leaves " +
+                "it at the world origin, |LUMBAR - PELVIS| = $worstLumbar",
+            0f, worstLumbar, 0.001f
+        )
+        assertTrue(
+            "anti-origin: the canonical girdle joints must carry authored transforms, not (0,0,0) " +
+                "(worst |joint| = $worstStray at $stray)",
+            worstStray > 1f
+        )
+    }
+
+    // =========================================================================================
+    // M11-b — LatStretchPose declares its gaze through the canonical carrier
+    // =========================================================================================
+
+    /**
+     * M11-b — the pose's head is authored in the CHAIN'S OWN FRAME, which is the only representation
+     * that can express this body orientation, and the published frame must realize exactly it.
+     *
+     * `resolveHeadTarget` (the sole head writer) derives the gaze DIRECTION from a world delta and
+     * writes it verbatim as the neck/head LOCAL offset; the neck's parent rotation then re-applies
+     * it, so a world-space `headTarget` on a trunk pitched `0.95` rad resolves the head
+     * `0.9147` rad off the authored axis (measured — see the pose's own KDoc for the recorded
+     * finding and the M3/M5 `SupermanPose` precedent). Consequently this pose declares NO gaze
+     * target, and this guard pins the resolved behaviour that must survive instead: the published
+     * neck/head chain lies on the pose's authored trunk axis, at the authored bone lengths.
+     *
+     * This guard is GREEN on the untouched base tree by construction (the authored head is already
+     * correct); it is a trap for the naive "declare the gaze" migration, which turns it RED — which
+     * is exactly how the `0.9147` rad figure in the finding was measured.
+     */
+    @Test
+    fun latStretchAuthoredHeadStaysOnThePosesOwnTrunkAxis() {
+        val pose = LatStretchPose()
+        val leanAngle = 0.95f // the pose's authored trunk lean (about +Z), unchanged by this migration
+        val authored = Vector3(sin(leanAngle), cos(leanAngle), 0f).normalize()
+        var worstDir = 0f
+        var worstBone = 0f
+
+        for (p in samples) {
+            val f = published(pose, p)
+            val n = f.getJoint(Joint.NECK_END)
+            val h = f.getJoint(Joint.HEAD_POS)
+            val bone = dist(n, h)
+            worstBone = maxOf(worstBone, abs(bone - 18f))
+            val dir = Vector3(h.x - n.x, h.y - n.y, h.z - n.z).normalize()
+            worstDir = maxOf(worstDir, dist(dir, authored))
+        }
+        assertTrue(
+            "the published NECK_END->HEAD_POS bone must stay at the authored ~18 units " +
+                "(worst error $worstBone)",
+            worstBone < 0.18f
+        )
+        assertTrue(
+            "LatStretchPose's published head must lie on the pose's own authored trunk axis " +
+                "(worst direction error $worstDir). A world-space `headTarget` here would resolve " +
+                "the head 0.9147 rad off it — `resolveHeadTarget` writes the world delta as a LOCAL " +
+                "offset and the pitched trunk re-applies it (the recorded M11-b finding; the " +
+                "M3/M5 SupermanPose precedent authors the head in the chain's own frame for exactly " +
+                "this reason)",
+            worstDir < 1e-3f
+        )
+    }
+
+    // =========================================================================================
+    // M12-a — CatCowPose's leg targets are reachable as authored
+    // =========================================================================================
+
+    /**
+     * "Reachable-by-construction" (the R2 reach-target rule the M8 pass applied to the five standing
+     * poses and M13 to the hamstring reach): a pose authors the DIRECTION and stance it wants, and
+     * the declared target must lie inside its own chain's band, so the realized limb is exactly what
+     * the pose declared and the reachability signal stays honest.
+     */
+    @Test
+    fun catCowLegTargetsAreReachableAsAuthored() {
+        val pose = CatCowPose()
+        val witnesses = mutableListOf<String>()
+
+        for (p in samples) {
+            val built = pose.build(ctx(p))
+            val f = published(pose, p)
+            assertEquals(
+                "anti-vacuity: CatCowPose declares its four limbs (found ${built.limbTargets.size})",
+                4, built.limbTargets.size
+            )
+            for ((end, hip) in listOf(Joint.ANKLE_F to Joint.HIP_F, Joint.ANKLE_B to Joint.HIP_B)) {
+                val target = built.limbTargets.first { it.joint == end }
+                val d = dist(target.world, f.getJoint(hip))
+                witnesses.add("$end@p=$p d=$d band=[$legMinReach,$legMaxReach] clamp=${f.maxIkClampAmount}")
+                assertTrue(
+                    "CatCowPose $end@p=$p is authored $d from its chain root, OUTSIDE the leg chain's " +
+                        "reachable band [$legMinReach, $legMaxReach] — the solver relocates the " +
+                        "realized foot instead of realizing the declared target",
+                    d >= legMinReach - 0.5f && d <= legMaxReach + 0.5f
+                )
+                val realised = dist(f.getJoint(end), target.world)
+                assertTrue(
+                    "the published $end@p=$p must BE the declared target (relocation $realised)",
+                    realised <= 0.5f
+                )
+            }
+            assertTrue(
+                "the engine's own reachability flag must not fire for CatCowPose at p=$p " +
+                    "(maxIkClampAmount=${f.maxIkClampAmount}, band=$reachabilityFlagBand) — the " +
+                    "declared leg targets are unreachable authoring",
+                f.maxIkClampAmount <= reachabilityFlagBand
+            )
+        }
+        assertTrue("witnesses: $witnesses", witnesses.size == samples.size * 2)
+    }
+
+    // =========================================================================================
+    // M12-b — CatCowPose declares its four-point base on the canonical channel
+    // =========================================================================================
+
+    /**
+     * BPS §8 (`Cat-Cow (Reps).md`): "Four-point base throughout: both hands (palm/carpal arch) and
+     * both knees (patella/shin on a padded surface) remain in contact with the floor." The
+     * declaration belongs on the ONE canonical channel (`metadata.support.contacts`) and must reach
+     * the published carrier under both frame conditions — that is what the B-5/R8 resolution exists
+     * for, and what the pre-fix empty carrier meant was inert.
+     */
+    @Test
+    fun catCowDeclaresItsFourPointBaseOnTheCanonicalChannel() {
+        val pose = CatCowPose()
+        val declared = pose.metadata.support.contacts.map { it.point }.toSet()
+        assertEquals(
+            "CatCowPose's BPS §8 base is a four-point contact (both hands + both knees); the " +
+                "declaration must name exactly that on `metadata.support.contacts`",
+            setOf(SupportPoint.LEFT_HAND, SupportPoint.RIGHT_HAND, SupportPoint.LEFT_KNEE, SupportPoint.RIGHT_KNEE),
+            declared
+        )
+        for (point in declared) {
+            assertTrue(
+                "anti-vacuity: every declared contact must resolve through the ONE canonical " +
+                    "SupportPoint->Joint map (found none for $point)",
+                SupportMath.jointsFor(point).isNotEmpty()
+            )
+        }
+        assertEquals(
+            "the declared pivot must be the quadruped's own support base (the KneePushUpPose " +
+                "precedent: hands + knees, pivot KNEES)",
+            PivotType.KNEES, pose.metadata.support.pivot
+        )
+
+        for (warm in listOf(false, true)) {
+            for (p in samples) {
+                val f = published(pose, p, warm)
+                assertEquals(
+                    "the declaration must REACH the published carrier (${if (warm) "mid-playback" else "cold"} " +
+                        "frame, p=$p): published supportedPoints=${f.supportedPoints}",
+                    declared, f.supportedPoints.toSet()
+                )
+            }
+        }
+    }
+
+    // =========================================================================================
+    // Blast radius — the pass is confined to the two classes it names
+    // =========================================================================================
+
+    /** The app module root, located by walking up from the test JVM's working directory. */
+    private fun moduleRoot(): File {
+        var dir = File(System.getProperty("user.dir") ?: error("user.dir is not set"))
+        for (attempt in 0 until 8) {
+            if (File(dir, "src/main/java/com/monkfitness/app/poses").isDirectory) return dir
+            dir = dir.parentFile ?: break
+        }
+        error("Could not locate the app module root from ${System.getProperty("user.dir")}")
+    }
+
+    private fun corpusDigest(): Long {
+        val names = File(moduleRoot(), "src/main/java/com/monkfitness/app/poses")
+            .listFiles { file -> file.isFile && file.name.endsWith("Pose.kt") }!!
+            .map { it.name.removeSuffix(".kt") }
+            .filterNot { it.startsWith("Base") || it == "PoseRegistry" || it in corrected }
+            .sorted()
+        assertTrue(
+            "anti-vacuity: the digest corpus must contain the untouched poses (found ${names.size})",
+            names.size >= 45
+        )
+        assertTrue(
+            "anti-vacuity: the correction scope must be exactly the two classes this pass names",
+            corrected.size == 2
+        )
+        var hash = 1125899906842597L
+        for (name in names) {
+            val pipeline = SkeletonPipeline(def)
+            val builder = MotionProbe.build(name)
+            hash = hash * 31 + name.hashCode()
+            for (p in samples) {
+                val frame = published(builder, p)
+                for (joint in Joint.entries) {
+                    val v = frame.getJoint(joint)
+                    hash = hash * 31 + java.lang.Float.floatToIntBits(v.x)
+                    hash = hash * 31 + java.lang.Float.floatToIntBits(v.y)
+                    hash = hash * 31 + java.lang.Float.floatToIntBits(v.z)
+                }
+            }
+        }
+        return hash
+    }
+
+    @Test
+    fun unaffectedPosesPublishByteIdenticalGeometry() {
+        val digest = corpusDigest()
+        assertEquals(
+            "geometry of the production poses outside {LatStretchPose, CatCowPose} must be " +
+                "byte-identical to the pre-fix tree (every joint of every sampled frame of every " +
+                "other production pose class); a change here means the migration leaked outside its " +
+                "scope. measured=$digest pinned=$UNAFFECTED_CORPUS_DIGEST",
+            UNAFFECTED_CORPUS_DIGEST, digest
+        )
+    }
+
+    companion object {
+        /** The exact classes this pass owns. */
+        private val corrected = setOf("LatStretchPose", "CatCowPose")
+
+        /**
+         * Blast-radius guard: the production corpus MINUS the two corrected classes.
+         *
+         * Measured **equal** on the pre-fix tree (`origin/main` @ `a8d07cf`) and on the corrected
+         * tree (both `-7010204834070121618`) — the pass is confined to its own two poses. Captured
+         * with the same digest definition as the sibling scope guards
+         * (`M8M9M10SupportDeclarationTest`, `HamstringForwardReachTest`): 49 pose classes × 5 progress
+         * samples × every joint XYZ, full float bits.
+         *
+         * Attribution is direct, not inferred from this digest: the whole-corpus dump (50 classes ×
+         * 5 samples × every joint, `8415` rows, `git stash` round-trip on the two pose files) differs
+         * in exactly `95` xyz rows — `70` inside `CatCowPose` and `25` inside `LatStretchPose` — with
+         * the other `48` classes byte-identical, `165` rows carrying the `maxIkClampAmount` change
+         * (`11.0090 … 16.0090 → 0.0000`) and `165` the `supportedPoints` change
+         * (`∅ → LEFT_HAND/RIGHT_HAND/LEFT_KNEE/RIGHT_KNEE`).
+         */
+        const val UNAFFECTED_CORPUS_DIGEST = -7010204834070121618L
+    }
+}

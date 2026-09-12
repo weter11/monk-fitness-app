@@ -560,7 +560,19 @@ class M6M7SwingBurpeeGeometryTest {
          * u at `FINGERTIPS_A` — with the other `244` frames (including the subject's `p ≥ 0.05`)
          * byte-identical and `supportedPoints`/`maxIkClampAmount` unchanged everywhere. M13's own
          * blast-radius guard is `HamstringForwardReachTest.UNAFFECTED_CORPUS_DIGEST`.
+         *
+         * **Re-baselined by the M11/M12 limb-realization migration**
+         * (`fix/m11-m12-limb-realization-migration`, off `a8d07cf`): the corpus means "every production
+         * pose class except this pair's own corrected classes", so it contains `LatStretchPose` (M11 —
+         * the canonical authored hierarchy replaces the hand-rolled tree, publishing `LUMBAR`/
+         * `CLAVICLE_*`/`SCAPULA_*` instead of the world origin) and `CatCowPose` (M12 — the four-point
+         * support declaration and the reachable-by-construction leg targets). Observed RED on the
+         * previous value before this re-baseline. Attribution is direct, not inferred: the whole-corpus
+         * dump (`50` classes × `5` samples × every joint, `8415` rows, `git stash` round-trip on the two
+         * pose files) differs in exactly `95` xyz rows — `70` in `CatCowPose`, `25` in `LatStretchPose` —
+         * and the other `48` classes are byte-identical. That pass's own blast-radius guard is
+         * `M11M12LimbRealizationMigrationTest.UNAFFECTED_CORPUS_DIGEST`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -5046569167321454212L
+        const val UNAFFECTED_CORPUS_DIGEST = -7395791808799176758L
     }
 }

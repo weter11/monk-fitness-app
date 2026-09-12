@@ -272,7 +272,9 @@ class EnvironmentPenetrationTest {
      *    declaration would drive the authored pointed foot through the floor (measured `TOE_F`
      *    21.55 → −2.57 at p=0.5). It records a vocabulary gap (the seated pelvis/leg mat support has
      *    no consumed point), not a missing declaration.
-     *  - `CatCowPose` — M12 (legacy path migration), a separate finding.
+     *  - `CatCowPose` — **DECLARED by the M11/M12 migration** (`fix/m11-m12-limb-realization-migration`):
+     *    its BPS §8 four-point base (both hands + both knees) is now on the canonical channel, so the
+     *    pose left this census and the invariant below evaluates its declarations for real.
      *  - `AlternatingBirdDogPose` / `BirdDogPose` / `StaticBirdDogHoldPose` /
      *    `QuadrupedThoracicRotationsPose` / `ThoracicExtensionPose` / `DeadBugPose` / `LegRaisePose`
      *    — no M-number in `docs/STABILIZATION_AUDIT.md` §3 assigns them a declaration, and their
@@ -281,7 +283,7 @@ class EnvironmentPenetrationTest {
      *    than silently expanded into this one.
      */
     private val undeclaringPoses = setOf(
-        "AlternatingBirdDogPose", "BirdDogPose", "CatCowPose", "DeadBugPose", "HamstringStretchPose",
+        "AlternatingBirdDogPose", "BirdDogPose", "DeadBugPose", "HamstringStretchPose",
         "LegRaisePose", "QuadrupedThoracicRotationsPose", "StaticBirdDogHoldPose", "ThoracicExtensionPose"
     )
 

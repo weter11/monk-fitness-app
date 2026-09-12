@@ -48,18 +48,23 @@ class LatStretchPose : PoseBuilder {
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
 
-        // Root is Pelvis for perfect stretch mechanics
-        pelvis = SkeletonNode(Joint.PELVIS)
-        chest = pelvis!!.addChild(SkeletonNode(Joint.CHEST))
-        neck = chest!!.addChild(SkeletonNode(Joint.NECK_END)); head = neck!!.addChild(SkeletonNode(Joint.HEAD_POS))
-
-        shoulderA = chest!!.addChild(SkeletonNode(Joint.SHOULDER_A)); elbowA = shoulderA!!.addChild(SkeletonNode(Joint.ELBOW_A)); handA = elbowA!!.addChild(SkeletonNode(Joint.HAND_A)); palmA = handA!!.addChild(SkeletonNode(Joint.PALM_A)); knucklesA = palmA!!.addChild(SkeletonNode(Joint.KNUCKLES_A)); fingertipsA = knucklesA!!.addChild(SkeletonNode(Joint.FINGERTIPS_A))
-        shoulderP = chest!!.addChild(SkeletonNode(Joint.SHOULDER_P)); elbowP = shoulderP!!.addChild(SkeletonNode(Joint.ELBOW_P)); handP = elbowP!!.addChild(SkeletonNode(Joint.HAND_P)); palmP = handP!!.addChild(SkeletonNode(Joint.PALM_P)); knucklesP = palmP!!.addChild(SkeletonNode(Joint.KNUCKLES_P)); fingertipsP = knucklesP!!.addChild(SkeletonNode(Joint.FINGERTIPS_P))
-
-        hipF = pelvis!!.addChild(SkeletonNode(Joint.HIP_F)); kneeF = hipF!!.addChild(SkeletonNode(Joint.KNEE_F)); ankleF = kneeF!!.addChild(SkeletonNode(Joint.ANKLE_F)); heelF = ankleF!!.addChild(SkeletonNode(Joint.HEEL_F)); toeF = ankleF!!.addChild(SkeletonNode(Joint.TOE_F))
-        hipB = pelvis!!.addChild(SkeletonNode(Joint.HIP_B)); kneeB = hipB!!.addChild(SkeletonNode(Joint.KNEE_B)); ankleB = kneeB!!.addChild(SkeletonNode(Joint.ANKLE_B)); heelB = ankleB!!.addChild(SkeletonNode(Joint.HEEL_B)); toeB = ankleB!!.addChild(SkeletonNode(Joint.TOE_B))
-
-        roots = listOf(pelvis!!)
+        // M11-a (P11 audit §3 row M11 / §4 "TODO — P1" item 2, "for full carrier coverage"):
+        // the pose's own hand-rolled tree (PELVIS -> CHEST, CHEST -> SHOULDER_*) is replaced by the
+        // canonical authored hierarchy. The two-segment spine and the shoulder girdle are the nodes
+        // this tree simply did not have, so `LUMBAR`, `CLAVICLE_A/P` and `SCAPULA_A/P` were never
+        // authored and published at the WORLD ORIGIN (measured `|LUMBAR − PELVIS| = 144.4507`) — the
+        // exact legacy-tree signature the M3/M5 pass measured on `ReverseSnowAngelPose`. The
+        // factory's added nodes are pass-throughs (coincident, identity rotation) between the
+        // existing links, so every transform this pose authors resolves exactly as before; the
+        // three-quarter chain (pelvis -> hip, shoulder -> palm/knuckles/fingertips,
+        // knee -> ankle -> heel/toe) is the same set of nodes the hand-rolled tree built.
+        val nodes = SkeletonFactory.createStandardSkeleton()
+        roots = nodes.roots
+        pelvis = nodes.pelvis; chest = nodes.chest; neck = nodes.neck; head = nodes.head
+        shoulderA = nodes.shoulderA; elbowA = nodes.elbowA; handA = nodes.handA; palmA = nodes.palmA; knucklesA = nodes.knucklesA; fingertipsA = nodes.fingertipsA
+        shoulderP = nodes.shoulderP; elbowP = nodes.elbowP; handP = nodes.handP; palmP = nodes.palmP; knucklesP = nodes.knucklesP; fingertipsP = nodes.fingertipsP
+        hipF = nodes.hipF; kneeF = nodes.kneeF; ankleF = nodes.ankleF; heelF = nodes.heelF; toeF = nodes.toeF
+        hipB = nodes.hipB; kneeB = nodes.kneeB; ankleB = nodes.ankleB; heelB = nodes.heelB; toeB = nodes.toeB
     }
 
     override fun build(context: PoseContext): SkeletonPose {
@@ -117,6 +122,21 @@ class LatStretchPose : PoseBuilder {
         bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+
+        // M11-b (recorded, deliberately NOT migrated — measured): the audit's "gaze helpers" half of
+        // this finding is INAPPLICABLE to this pose, and declaring one would be a regression.
+        // `SkeletonPoseFinalizer.resolveHeadTarget` (the sole head writer) derives the gaze DIRECTION
+        // from a world delta (`headTarget.world − neck.worldPosition`) and writes it verbatim as the
+        // neck/head LOCAL offset, which the neck's parent rotation then re-applies: the resolved
+        // WORLD gaze is `neckParentRot · dir`. This pose's trunk is pitched `0.95` rad (`54.4°`), so a
+        // world-space target resolves the head `0.9147` rad (`52.4°`) OFF the authored trunk axis —
+        // measured by declaring the authored direction as a world target on this tree. That is the
+        // B-7/B-8b resolver constraint the M3/M5 pass recorded for the prone family (`SupermanPose`
+        // authors its head in the chain's own frame for exactly this reason, and the pose-side
+        // conversion that would compensate is prohibited by `MIGRATION_RULES` A8). The sanctioned
+        // representation for a pitched body is the one this pose already has: the head authored along
+        // the neck's own local +Y (its BPS §4 "cervical spine neutral, following the trunk"), which
+        // the published frame realizes exactly (guard: `M11M12LimbRealizationMigrationTest`).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
