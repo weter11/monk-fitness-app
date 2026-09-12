@@ -523,7 +523,27 @@ class M8M9M10SupportDeclarationTest {
          * of `IsometricSidePlankPose`'s `KNEE_B` — while B1's `60` `DiamondPushUpPose` rows and B2's `20`
          * `DynamicWorldsGreatestStretchPose` rows are untouched by this pass. B3's own gate is
          * `IsometricSidePlankKneePlaneTest`.
+         *
+         * **Re-baselined by the first reach-band cleanup batch** (`fix/reach-band-batch1-airsquat-squat`,
+         * off the C2 merge `d6f4f7f`): this corpus contains `AirSquatPose` and `SquatPose`, whose
+         * authored limb targets are now projected onto their own chains' reachable annulus (R2/R4) — the
+         * standing-phase ankle was authored as a locked-out leg (`210.288` against the engine's `0.98`
+         * extension cap at `205.800`) and the counterbalance reach never left a `9.2 … 15.9` unit radius
+         * against the arm chain's `minReach = 40.134`, so the solver relocated the realized
+         * end-effector along the authored ray (`4.488 … 30.934` u) and the publishable geometry WAS the
+         * projection. Observed RED on the previous value `-7807207721990292460` before the re-baseline (this live run
+         * measured `-8876365443930750926`). Attribution is direct, not inferred: a whole-corpus dump (`51` classes ×
+         * `5` samples × every joint XYZ plus every stamp, the declared limb targets, the supported
+         * points and the environment, `255` rows) diffed between this branch and a `git worktree` of
+         * `origin/main` @ `d6f4f7f` differs in exactly `152` rows — `76` in each of the two poses, ALL
+         * of them limb-chain joints (`KNEE_*` max `0.0495` u, `ANKLE_*`/`HEEL_*`/`TOE_*` `0.0205` u, the
+         * derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS` chain `<= 0.0056` u, `ELBOW_*`
+         * `<= 0.0006` u) — with the other `49` classes byte-identical, every `support` and `env` row
+         * byte-identical, and the two poses' reachability stamp dropping from `30.93442 / 30.00000 /
+         * 24.24812` to exactly `0.000000` (the relocation this batch removes). The batch's own gate is
+         * `SquatReachBandAuthoringTest`; the three pose files stashed on the base tree re-run this guard
+         * GREEN on the pre-baseline value (measured in the same session).
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -7807207721990292460L
+        const val UNAFFECTED_CORPUS_DIGEST = -8876365443930750926L
     }
 }

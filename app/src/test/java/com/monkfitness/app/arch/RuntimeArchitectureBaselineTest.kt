@@ -155,14 +155,28 @@ class RuntimeArchitectureBaselineTest {
     }
 
     private object SquatPostureGolden {
+        // First reach-band cleanup batch (`AirSquatPose` + `SquatPose`) — GOLDEN UPDATE, responsible
+        // change named per the fixture's golden-update policy. `SquatPose`'s authored arm target is
+        // now projected onto its chain's reachable annulus (R2/R4): at this fixture's phase the
+        // declared hand target sits `10.2` u from the shoulder against the arm chain's
+        // `minReach = 40.134` at build time, so the solver used to relocate the realized hand onto
+        // the minimum-flexion circle (`maxIkClampAmount` `30.000000`). The projection's margin
+        // (`BaseSquatPose.REACH_MARGIN = 1e-4` of the chain's span, `0.004` u here) moves handA/handP
+        // by `<= 0.0036` u and takes the stamp to exactly `0.000000`; the leg fixtures (this pose's
+        // leg target is INSIDE its band at `p = 0.5`: `120.5` of `[56.009, 205.800]`) and every other
+        // golden in this fixture — pelvis, ankleF/B, toeF/B, all stamps except `maxIkClampAmount`, the
+        // hipRom maps — are byte-identical. Cold-frame fixture: this is the same frame the pose's own
+        // build publishes.
         val pelvis = floatArrayOf(0.0f, 235.0f, 0.0f)
-        val handA = floatArrayOf(8.883305f, 342.45065f, -81.831375f)
-        val handP = floatArrayOf(8.883305f, 342.45065f, 81.831375f)
+        val handA = floatArrayOf(8.881805f, 342.44965f, -81.834946f)
+        val handP = floatArrayOf(8.881805f, 342.44965f, 81.834946f)
         val ankleF = floatArrayOf(-7.6293945E-6f, 115.000015f, -33.0f)
         val ankleB = floatArrayOf(-7.6293945E-6f, 115.000015f, 33.0f)
         val toeF = floatArrayOf(23.105614f, 115.000015f, -23.853815f)
         val toeB = floatArrayOf(23.105614f, 115.000015f, 23.853815f)
-        const val maxIkClampAmount = 30.0f
+        // moved 30.0f -> 0.0f by the same reach-band projection (the pose authors an in-band target
+        // now, so no relocation is recorded) — see the note above.
+        const val maxIkClampAmount = 0.0f
         const val straightIntentDropped = false
         const val boneLengthsVerified = true
         const val rootTranslationDelta = 90.0f
