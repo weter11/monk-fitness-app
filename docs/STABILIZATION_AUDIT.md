@@ -1291,8 +1291,9 @@ statement is recorded below.
   stand. Both read as the exercise their BPS describes through the whole rep, which is the bar this
   pass was set.
 - **RED before / GREEN after (the gate is `M6M7SwingBurpeeGeometryTest`, 15 tests, published frames,
-  by-value snapshots).** With the two pose files restored to `fc65695` and the new test left in place:
-  **13 of 15 RED** — e.g. `kettlebellSwingHingeBendsTheKneesOnlySlightly` (minimum knee interior
+  by-value snapshots).** With the two pose files restored to `fc65695` (`git checkout fc65695 -- <the two
+  poses>`, md5s recorded, `git diff fc65695 --stat -- poses/` empty) and the new test left in place:
+  **12 of 15 RED** — e.g. `kettlebellSwingHingeBendsTheKneesOnlySlightly` (minimum knee interior
   `104.77°`), `kettlebellSwingArmsStayAStraightPendulum` (`30.00°` elbow, `40.13` span),
   `kettlebellSwingHipsPushBackInsteadOfDropping` (`20.00` back vs `35.00` down),
   `kettlebellSwingLoadTravelsFromBehindTheKneesToChestHeight` (hand `x = 40.00` at the top),
@@ -1302,10 +1303,12 @@ statement is recorded below.
   `burpeePlankIsAStraightExtendedLineUnderTheShoulders` (`13.90` off the line),
   `burpeePushUpDipBendsTheElbowsWithBothPlantsHeld` (no bend),
   `burpeeFeetShootBackAFullPlankLength` (`110.00`), `burpeeJumpTopIsAFullExtensionWithTheArmsOverhead`
-  (`47.17°` knees, hands under the head), `burpeeStandsTallAtTheSeam` (`140.00`). The two that are
-  green on both trees are the two non-discriminating spec checks (the trunk's rigidity and the loop
-  seam) — stated rather than hidden. Restoring the fix (md5-verified byte-identical,
-  `md5sum -c /tmp/m6m7fix/hashes`) → **15/15 GREEN**.
+  (`47.17°` knees, hands under the head), `burpeeStandsTallAtTheSeam` (`140.00`). The three that are
+  green on both trees are stated rather than hidden: two are non-discriminating spec checks
+  (the trunk's rigidity and the loop seam), and the third is the blast-radius digest, which excludes
+  the two corrected poses and is therefore green on both trees **by construction**. Restoring the fix
+  (md5-verified byte-identical, `md5sum -c /tmp/m6m7fix/hashes`) → **15/15 GREEN** (fresh, on the
+  pushed bytes).
 - **Blast radius, direct and non-inferred.** Whole-corpus dump (`51` classes × `5` progress × every
   joint XYZ = `8415` rows, full float bits) measured on both trees: **exactly `268` rows differ, all of
   them `KettlebellSwingPose` (`140` = 28 joints × 5 samples) and `BurpeePose` (`128` = 28 joints at each
