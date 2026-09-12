@@ -83,8 +83,23 @@ package com.monkfitness.app.animation
  * realization-decision files (`RuntimeSolverOwnershipAuditTest`), the runtime value and the absence
  * of any environment/system-property selector pinned by
  * `ActivationGateTest.productionConfigurationIsStateThree`; tests flip the flag in memory only, under
- * flag-scoped restore. It lives beside its sole reader ([IkStage.apply]) rather than in a global flag
- * object.
+ * flag-scoped restore.
+ *
+ * **Lifecycle and ownership (§12.7, measured 2026-09-12).** This declaration IS a file-level
+ * process-wide `var` — the truthful reading of the configuration surface below, which sits beside its
+ * readers ([IkStage.apply] and the three registered authoring gates) because all of them consult it
+ * inside one build cycle. R14's "constructor/definition-level knob supplied by the creator" is NOT
+ * reached by it: the authoring bakes run inside pose-authored `build()` and receive no engine
+ * configuration, so a creator-owned knob needs a new configuration channel into the authoring path —
+ * an intent/carrier change that plan §12.4 requires be raised as a SEPARATE clarification proposal,
+ * never bundled into an implementation change. What the landed mechanism does guarantee, and what
+ * `arch.SingleActiveSolverLifecycleTest` proves behaviourally on the production path: exactly one
+ * implementation realizes a declared limb per build cycle in either configuration; the build-window
+ * bookkeeping (the F2 re-arm of `boneLengthsVerified`/`straightIntentDropped`) runs in BOTH
+ * configurations, so the straight-intent reading describes the current build and never leaks forward
+ * from an earlier one; and the reading is re-armed by each build rather than accumulated across
+ * builds. The ownership question stays recorded and unresolved in the plan (§12.7) — it is flagged
+ * for the architecture owner, never silently redesigned here.
  */
 var IK_STAGE_ACTIVE: Boolean = true
 
