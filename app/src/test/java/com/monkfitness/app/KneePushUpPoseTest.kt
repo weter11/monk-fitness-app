@@ -44,9 +44,40 @@ class KneePushUpPoseTest {
                 cycleDuration = 2500f
             )
             val rawPose = poseBuilder.build(context)
-            val finalizedPose = pipeline.produceFrame(rawPose).pose
-            poses.add(finalizedPose)
+            // T-7: `produceFrame` publishes a REUSED buffer (SkeletonPoseFinalizer.outputPose), so
+            // retaining `.pose` aliased all 100 entries of this list to the last produced frame: every
+            // step compared a frame with itself (`previousPose === currentPose`), so HAND_SLIDING
+            // measured a zero horizontal slide and POSITION_/VELOCITY_DISCONTINUITY measured a zero
+            // displacement. Snapshot by value instead — the rule MotionProbe documents
+            // ("never store .pose references") and the same pattern the pipeline itself uses for its
+            // Frame History (SkeletonPipeline.commitFrameHistory: `SkeletonPose().apply { copyFrom(...) }`).
+            val snapshot = SkeletonPose().apply { copyFrom(pipeline.produceFrame(rawPose).pose) }
+            poses.add(snapshot)
         }
+
+        // T-7 guard: the loops below are only a temporal check while the sweep actually holds
+        // independent frames. This is the invariant the aliasing silently destroyed — every inter-frame
+        // rule (HAND_SLIDING, POSITION_DISCONTINUITY, VELOCITY_DISCONTINUITY) degrades to a
+        // self-comparison when every entry is the same buffer, which is how this class stayed green
+        // while B-1 and B-7 shipped.
+        val distinctFrameObjects = poses.map { System.identityHashCode(it) }.distinct().size
+        assertEquals(
+            "The $frameCount sampled frames are not independent snapshots ($distinctFrameObjects distinct " +
+                "objects) — the sweep is aliasing the pipeline's reused frame buffer",
+            frameCount,
+            distinctFrameObjects
+        )
+        val chestHeights = poses.map { it.getJoint(Joint.CHEST).y }
+        val distinctChestHeights = chestHeights.distinct().size
+        val chestSpread = chestHeights.max() - chestHeights.min()
+        println("=== T-7 SWEEP INDEPENDENCE ===")
+        println("distinct frame objects: $distinctFrameObjects/$frameCount")
+        println("distinct CHEST heights: $distinctChestHeights/$frameCount (spread ${chestSpread}u)")
+        assertTrue(
+            "The $frameCount sampled frames hold the same values (only $distinctChestHeights distinct CHEST " +
+                "heights, spread ${chestSpread}u) — the temporal rules below would compare a frame with itself",
+            distinctChestHeights > 1 && chestSpread > 1f
+        )
 
         var previousPose: SkeletonPose? = null
         var prePreviousPose: SkeletonPose? = null
