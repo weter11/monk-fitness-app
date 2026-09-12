@@ -1494,7 +1494,10 @@ reads.
   `ThoracicExtensionPose`, `DeadBugPose`, `LegRaisePose`) — flagged for assignment, deliberately not
   expanded into this pass. (d) `GluteBridgePose`/`PelvicTiltPose` publish their elbows
   `−30.69`/`−33.35` BELOW their own mat (measured, unchanged by this pass: no declared contact, so no
-  invariant covers them) — the supine arm authoring, recorded as open. (e) The M6/M7/M11–M15 items
+  invariant covers them) — the supine arm authoring, recorded as open **and now CLOSED by B4 (see the
+  `DONE — B4` record below: the bend side was re-authored onto each pose's own lateral axis; both
+  poses' `ELBOW_A/P` now lie in the floor plane, and `PelvicTiltPose`'s remaining trunk pin is a
+  separate item)**. (e) The M6/M7/M11–M15 items
   and the P2 cleanup list: untouched.
 - **Determination:** the pass was **not** blocked on an architectural decision; every question it met
   that is a product/design choice (declaration vocabulary for non-derivable contacts; whether the hip
@@ -2258,6 +2261,117 @@ later T2/audit state; nothing else rides along.
   outside B3's scope. (b) the derived support foot is a FLAT (plantar) derivation rather than BPS §8's
   lateral-border contact — the pose's own KDoc already leaves that engine limitation exposed, and B3 does
   not change it (the derived chain moves `< 3e-5`).
+
+### DONE — B4 the supine poses' elbow plane (branch `fix/b4-glute-bridge-pelvic-tilt-elbow-plane`, off the B1+B2+B3 merge `ba3928b`; production geometry)
+
+**Pose-side authoring only**: two production files (`poses/GluteBridgePose.kt`,
+`poses/PelvicTiltPose.kt` — the arms' IK bend-plane pole), the new focused regression
+`SupineArmElbowPlaneTest`, the T2 pin-table exit and seven re-baselined scope digests. No
+engine/solver/phase/ownership change (the elbow is an IK output — the pose owns the chain root, the
+hand target and the pole), no RFC change, no golden change, no tolerance moved, no assertion weakened.
+The two poses are treated together because they carry **one** authored arm geometry (measured: the
+same `(-35, 12, ±51)` hand targets, the same pole constants and the same published elbow at every
+phase — identical to `0.000000` at `p = 0`), and independently in their own files because the two
+classes are separate `PoseBuilder` implementations with no shared base.
+
+- **Root cause — the authored POLE aimed the chain's own residual bend through the mat** (the B1
+  shape, on a supine body). Both poses lie on their backs and realize their arms through
+  `bakeIkLimb`: the chain root is the shoulder (`y = 12.9 … 14.0` on `GluteBridgePose`, and
+  `3.2 … 14.0` on `PelvicTiltPose` as its torso tilts), the end target is the authored static hand
+  (`-35, 12, ±51`, *"prevents hand sliding"*), and the bend side is the authored pole
+  `(0, -1, ∓1)` — the standing family's convention (`BaseSquatPose`, `BaseLungePose`,
+  `ArmCirclesPose`, `LatStretchPose`, `HipCarsPose`, `KettlebellSwingPose`), where a downward bow is
+  harmless. On a supine pose the shoulder→hand chord lies IN the floor plane, so the pole's `-Y`
+  component lands on the chord's DOWNWARD basis vector: the triangle (`d`, `a`, `h`,
+  `phat = normalize(pole - u·(pole·u))`) gives `d = 77.8899 … 85.1704`, `a = 52.0660 … 54.5909`,
+  `h = 58.4794 … 60.7382`, `phat_y = -0.7069 … -0.7075`, i.e. the elbow bows `≈ 41` u below the
+  chord — through the mat, at **all `51` sampled phases under both frame conditions**, by
+  `28.6 … 33.4` u.
+- **The pose owns the defect, provably** (not inferred): re-deriving the published elbow from that
+  triangle reproduces it exactly at every sample of both poses (`err = 0.000000` on most samples,
+  `≤ 0.0323` on the two where the pose's own leg solve is re-firing), so the solver, the finalizer and
+  the frame conditions contribute nothing — the authored pole is the whole cause. The pose's other
+  stamp is unchanged and belongs to the LEGS: `maxIkClampAmount 10.997906 → 0.000000` over the rep is
+  the leg chain's own min-reach relocation (`d = 45.0` against `minReach(112, 98) = 56.0090`), and it
+  reads identically on the pre-fix and corrected trees.
+- **Fix — author the bend side the pose's own frame declares.** `Vector3(0, -1, ∓1)` →
+  `Vector3(0, 0, ∓1)` (with the measured rationale at the constant in each file). Both poses rotate
+  about the world Z axis only (`declarePelvisTilt(..., Vector3(0, 0, 1), torsoAngle)`), so world `∓Z`
+  IS the body's lateral axis at every phase; the pole keeps the outward side the old `Z` sign already
+  selected (the elbow bows outboard, never across the torso) and the arm's plane becomes the floor
+  plane — the shape the poses' own comments declare (*"arms lying flat alongside the body"* /
+  *"arms flat on the floor alongside the body"*). Nothing else moves: the hand targets, the stance,
+  the planted feet, the leg authoring, the torso choreography and the declared support model
+  (`LEFT_FOOT`/`RIGHT_FOOT`) are untouched, and no residual bend is removed — the chain's `h` is the
+  IK constraint's own slack (`minReach 40.1344`), it is only spent horizontally now.
+- **Measured, published path `produceFrame(pose, ctx)`, dense sweep (`51` samples × both frame
+  conditions, by-value snapshots):**
+
+  | reading | pre-fix | corrected |
+  |---|---|---|
+  | `GluteBridgePose` `ELBOW_A/P` vs its own declared plane (`level 0`) | `-28.6273 … -30.6914` at every phase | **nothing below the plane**; `+12.3252 … +12.7988` |
+  | `PelvicTiltPose` `ELBOW_A/P` vs its own declared plane | `-28.6273 … -33.3501` at every phase | **nothing below the plane**; `+7.0594 … +12.7988` |
+  | pole (`phat`, the residual bow direction) | `y = -0.7069 … -0.7075` (through the mat) | `y = -0.0085 … +0.0014` (in the floor plane) |
+  | elbow's `Y` offset from its own shoulder→hand chord | `≈ -41` u | `-0.50 … +0.08` u (test band ±`2`) |
+  | elbow's lateral flare (|`elbow.z`|, outboard of the `46` shoulder line) | `90.4 … 92.1` | `107.6 … 110.0` — the chain's own `h = 58.5 … 60.7` is spent laterally because the authored hand sits `85.17` from its shoulder for a `146`-unit arm and the mat is not a legal branch |
+  | derived hand chain (`PALM`/`KNUCKLES`/`FINGERTIPS`) | rising out of the arm plane (`15.7 … 25.5` at `p = 0`) — the engine's `hand.y <= elbow.y + 1` planted predicate read FALSE | flattened onto the arm's plane (`11.7 … 13.6`) — the predicate now reads TRUE, exactly as in the corrected B1 family |
+  | hand / wrist (`HAND_*`, `WRIST_*`) | on the authored target | on the authored target (`≤ 1e-4` u move; the hand is static by declaration) |
+  | legs, torso, `supportedPoints`, every stamp | — | byte-identical (`maxIkClampAmount 10.997906 … 0.000000` unchanged: the LEGS' clamp) |
+- **Blast radius (whole corpus: `51` classes × `5` samples × every joint XYZ = `8415` rows**, dumped
+  through the production pipeline on this tree and over a `git stash` round-trip on the two corrected
+  pose files — `md5sum -c` verified on restore), then diffed): exactly **`116` rows** differ, **ALL of
+  them inside the two corrected poses** (`GluteBridgePose` `56`, `PelvicTiltPose` `60` — the two
+  `ELBOW_*` at all five samples plus each arm's derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS`
+  chain, max `43.0165` u at `GluteBridgePose` `ELBOW_A` `p = 1.0`); the other `49` classes are
+  byte-identical. The seven scope digests whose corpus contains these poses were re-measured on the
+  final tree: `PlankForearmSupportGeometryTest` `2745352203482550303 → -3055606113830305699`,
+  `M1StepUpGeometryTest` `-2764093049021801384 → -2141320411591611242`,
+  `M3M5ProneTrunkGeometryTest` `-1423510146238240711 → 8113583905073315959`,
+  `M6M7SwingBurpeeGeometryTest` `-5306887620942795739 → 966736203576399971`,
+  `M11M12LimbRealizationMigrationTest` `-4921300646213740599 → 1352323178305455111`,
+  `M15WallSlidesWallGeometryTest` `3910385706448508459 → -103273405706572933`,
+  `HamstringForwardReachTest` `7812330171039804426 → -4360790078150551480`.
+  (`M8M9M10SupportDeclarationTest`'s digest is unchanged by construction: its corpus excludes the 17
+  classes it declares, and both of these poses are among them.)
+- **The T2 pin table's exit criterion was met, and it forced its entries out.** The class is green with
+  the four elbow pairs removed and the counts/census/attribution recomputed on the tree that carries
+  all four corrections: `43` pairs / `11` poses on `07dfe38` → `39` / `8` on the B1+B2+B3 tree →
+  **`35` pairs / `7` poses** here. `GluteBridgePose` leaves the table entirely (the elbow pair was its
+  only entry); `PelvicTiltPose` **keeps** its trunk entries — its static pelvis with a torso rotating
+  past horizontal (`CHEST -0.3659`, `HEAD_POS -2.5384` at `p = 1.0`) is a different root cause that the
+  arm chain's bend side cannot reach, and the pin's attribution now says so.
+- **Verification.** New focused regression `SupineArmElbowPlaneTest` (`6` tests: the arm-chain plane
+  invariant over a dense `51`-sample sweep × both frame conditions with by-value snapshots plus a
+  full-strength whole-body claim for `GluteBridgePose`; the elbow's clearance, in-plane bow, outboard
+  bend side and chain-length realization; the authored hands + the planted feet + the support
+  declaration; the two arms' exact mirror symmetry and the shared declared authoring; the
+  choreography/motion-contract and buffer-aliasing guards; and cold-vs-settled frame invariance for
+  the B-8 class). **RED on the pre-fix tree (tests-first commit, results purged): `3` of `6`
+  FAILED** — `noArmChainJointPassesBelowThePosesOwnDeclaredPlane` (`ELBOW_A/P` below the pose's own
+  plane at all `51` samples of both conditions, `-28.6273` at `p = 0.0` for both poses), and
+  `theElbowLiesInTheFloorPlaneAndClearsTheMat` (`y=-28.6273` against the `1.0` clearance floor, bow
+  offset `-41` against the ±`2` band) — plus `theTwoArmsAreExactMirrorsOfTheAuthoredChain` (the
+  declared pole `(0, -1, ∓1)`); the three guards passed there too. **GREEN on the branch: `6/6`,
+  `0F / 0E / 0S`** (`--rerun-tasks`), read back from the JUnit XML (`tests=6 failures=0`).
+  B1/B2/B3 regressions
+  re-run fresh and GREEN: `DiamondPushUpElbowClearanceTest`, `WorldsGreatestStretchBackKneePlaneTest`,
+  `IsometricSidePlankKneePlaneTest`. Full suite: pristine `origin/main` @ `ba3928b` worktree
+  (`/tmp/b4-base`) **`125 classes / 608 tests / 0F / 0E / 0S`** → this branch
+  **`126 / 614 / 0F / 0E / 0S`** — exactly `+1` class / `+6` tests, no other count moved.
+  `:app:compileReleaseKotlin` + `:app:compileReleaseJavaWithJavac` + `:app:assembleDebug` successful
+  (this repo's `lintVitalRelease` gate is pre-existing-broken, see the release-gate note).
+- **Residuals recorded, NOT fixed** (measured on the corrected tree):
+  (a) `PelvicTiltPose`'s trunk joints stay under its own mat at the top of the rep (the T2 pin); the
+  pose's `torsoAngle` amplitude is authored against a pelvis pinned at `y = 14`, which is a
+  trunk-authoring decision with its own product reading, not an arm item — B4 does not widen into it.
+  (b) both poses' realized ankle sits off the definition's `ankleHeight = 15` when the pelvis is low
+  (`12.21 … 15.24`), because the authored leg target is `45.0` from the hip against
+  `minReach(112, 98) = 56.0090` — the solver's honest relocation, already visible in
+  `maxIkClampAmount`, and a leg-authoring item outside B4's arm scope.
+  (c) the elbows' lateral flare (`|z| ≈ 107.6 … 110.0`) is the geometry the pose's own authored hand
+  placement forces (an `85.17`-unit chord on a `146`-unit arm leaves `h = 58.5 … 60.7` of bend, which
+  must be spent laterally or vertically); the humerus sits `≈ 47.6°` off the trunk's long axis, inside
+  human shoulder range, and the alternative (a vertical bow) lifts the elbow `58` u off the mat.
 
 ### TODO — P1 (next pass, in priority order)
 

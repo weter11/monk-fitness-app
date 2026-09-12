@@ -122,9 +122,18 @@ class PelvicTiltPose : PoseBuilder {
         val targetHandA = Vector3(-35f, 12f, -def.shoulderWidth - 5f)
         val targetHandP = Vector3(-35f, 12f, def.shoulderWidth + 5f)
 
-        // P12 (§12.6): arms declared through the registered authoring bake.
-        bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, jointsBuffer)
-        bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, jointsBuffer)
+        // B4 — the elbow's BEND SIDE is this pose's own LATERAL axis, not the standing family's
+        // downward pole (see GluteBridgePose; the two supine poses share this arm authoring). The
+        // chord is horizontal (shoulder y = 3.2 … 14.0 over the rep, hand y = 12.0), so the family's
+        // pole (0, -1, ∓1) spent its -Y component on the chord's DOWNWARD basis vector: measured
+        // phat_y = -0.6995 … -0.7079 against h = 58.48 … 58.51, which realized ELBOW_A/P
+        // 28.6 … 33.4 units BELOW this pose's own mat (declared level 0) at EVERY phase. The pose
+        // rotates about world Z only (see declarePelvisTilt above), so world ∓Z IS the body's lateral
+        // axis at every phase: the pole keeps the outward side the old Z sign already selected and
+        // the arm's plane becomes the floor plane ("arms flat on the floor"). The elbow then reads
+        // +7.1 … +12.9 u, its residual bow horizontal, and nothing else about the pose moves.
+        bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 0f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, jointsBuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 0f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
         // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 

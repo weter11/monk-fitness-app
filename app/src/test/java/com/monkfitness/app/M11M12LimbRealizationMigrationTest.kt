@@ -461,7 +461,26 @@ class M11M12LimbRealizationMigrationTest {
          * of `IsometricSidePlankPose`'s `KNEE_B` — while B1's `60` `DiamondPushUpPose` rows and B2's `20`
          * `DynamicWorldsGreatestStretchPose` rows are untouched by this pass. B3's own gate is
          * `IsometricSidePlankKneePlaneTest`.
+         * **Re-baselined by the B4 supine elbow-plane correction**
+         * (`fix/b4-glute-bridge-pelvic-tilt-elbow-plane`, off `ba3928b` — the B1+B2+B3 tree): this corpus
+         * contains `GluteBridgePose` and `PelvicTiltPose`, the two supine poses B4 corrects. Their arms' bend
+         * side is re-authored onto the poses' own lateral axis: the family's `(0, -1, ∓1)` pole spent its `-Y`
+         * component on the horizontal shoulder→hand chord's DOWNWARD basis vector (measured
+         * `phat_y = -0.6995 … -0.7079` against `h = 58.48 … 60.74`), realizing `ELBOW_A/P` `28.6 … 33.4` u
+         * below each pose's own declared mat at EVERY phase. Both poses' elbows now lie in the floor plane
+         * (`+7.1 … +12.8` u) and the engine's planted-hand flattening fires with them. Observed RED on the
+         * previous value `-4921300646213740599` before the re-baseline (this live run measured `1352323178305455111`). Attribution is direct,
+         * not inferred: the whole-corpus dump (`51` classes × `5` samples × every joint XYZ, `8415` rows, over a
+         * `git stash` round-trip on the two corrected pose files with `md5sum -c` on restore) differs in
+         * exactly `116` rows, ALL of them inside those two poses (`GluteBridgePose` `56`, `PelvicTiltPose` `60`
+         * — the two `ELBOW_*` plus each arm's derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS` chain, max
+         * `43.0165` u at `GluteBridgePose` `ELBOW_A` `p = 1.0`), with the other `49` classes byte-identical and
+         * every pose's stamps
+         * unchanged (`maxIkClampAmount` reads identically on both trees — it folds the LEGS' own
+         * min-reach clamp — with `boneLengthsVerified = true` and `straightIntentDropped = false`
+         * everywhere). B4's own gate is `SupineArmElbowPlaneTest`.
+         *
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -4921300646213740599L
+        const val UNAFFECTED_CORPUS_DIGEST = 1352323178305455111L
     }
 }
