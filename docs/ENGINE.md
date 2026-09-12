@@ -176,7 +176,17 @@ The skeleton is a single-plane silhouette with a near and a far limb per pair:
 
 - **A = active / foreground** limb (left), **P = passive / background** limb
   (right) for the arms and hands.
-- **F = foreground**, **B = background** for the legs and feet.
+- **F = foreground**, **B = background** for the legs and feet — the *same*
+  left/right pairing: **F is the model's left leg, B its right leg**, so the A/F
+  family is one physical side of the body and the P/B family the other
+  (**A ≡ F**, **P ≡ B**).
+
+This pairing is the authority for the `SupportPoint` side convention: `LEFT_*`
+denotes the A/F limb family and `RIGHT_*` the P/B family (one production
+definition, `SupportMath`; see the B-4 record in `STABILIZATION_AUDIT.md`). The
+authored geometry agrees — `buildShoulders`/`buildPelvis` place
+`SHOULDER_A`/`HIP_F` at −Z and `SHOULDER_P`/`HIP_B` at +Z, and the production
+`Camera` (yaw 1.19) renders the −Z, near/foreground limb on screen-left.
 
 Named aliases (`shoulderB == shoulderP`, `hipA == hipF`, etc.) exist so poses
 can use whichever convention is clearer. the MonkEngine runtime treats both members of a
