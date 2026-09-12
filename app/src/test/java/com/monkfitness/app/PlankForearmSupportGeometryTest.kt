@@ -574,11 +574,22 @@ class PlankForearmSupportGeometryTest {
          * the earlier cold-frame target `(-12.000000, 253.000000)` instead of the rep's
          * `(-14.144614, 270.871796)`. Every one of the other 48 classes is byte-identical at full
          * precision, and `thoracic_extension_reps` is byte-identical on every NON-cold frame
-         * (`ThoracicExtensionArmTargetTest` asserts that directly). The corpus and its coverage are
-         * unchanged — all 49 classes stay in the digest, so any further drift in any of them still
-         * fails here. This guard was observed RED on this very change before the re-baseline, which
-         * is its own mutation check.
+         * (`ThoracicExtensionArmTargetTest` asserts that directly).
+         *
+         * **Re-baselined again by M1** (`fix/m1-stepup-geometry-support`, `StepUpPose` — the audit's
+         * §3 M1 finding): that change places the step-up's planted foot on the tread its own
+         * declaration names and raises the ascent to the step's height, which moves `StepUpPose`
+         * only, on the frames it is up on the step (`p ∈ {0.25, 0.5, 0.75}`, 33 joints each; the
+         * `PING_PONG` seam frames are byte-identical). Attribution is direct, not inferred from this
+         * digest: a whole-corpus dump of **51 classes × 5 progress × every joint XYZ** (`8415` rows,
+         * full float bits) measured on the pre-fix and post-fix trees differs in **exactly 99 rows,
+         * all of them `StepUpPose`** — the other **50 classes are byte-identical** — and the M1 gate's
+         * own digest, which excludes `StepUpPose`, is equal on both trees
+         * (`M1StepUpGeometryTest.UNAFFECTED_CORPUS_DIGEST`). This guard was observed RED on this
+         * change before the re-baseline (`expected:<8354470872339933400>`, the pre-fix value), which
+         * is its own mutation check. The corpus and its coverage are unchanged — all 50 classes stay
+         * in the digest, so any further drift in any of them still fails here.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 8354470872339933400L
+        const val UNAFFECTED_CORPUS_DIGEST = -2908768886375429885L
     }
 }
