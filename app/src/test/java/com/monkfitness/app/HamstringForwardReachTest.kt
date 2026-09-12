@@ -332,8 +332,24 @@ class HamstringForwardReachTest {
          * `50` classes byte-identical and the reachability stamp unchanged
          * (`maxIkClampAmount` `0.047028` on both trees). M15's own blast-radius guard is
          * `M15WallSlidesWallGeometryTest.UNAFFECTED_CORPUS_DIGEST`.
+         * **Re-baselined by the B2 runner's-lunge back-knee correction**
+         * (`fix/b2-wgs-back-knee-plane`, off `2fb6079`): this corpus contains
+         * `DynamicWorldsGreatestStretchPose`, the pose B2 corrects. Its back leg's stance is now the
+         * extension the pose's own KDoc declares — the ankle authored one full chain reach behind the
+         * hip, at the definition's own floor-contact height, with the knee's bend side derived from the
+         * hip→ankle chord — so the realized `KNEE_B` sits `+13.162892` ABOVE the mat instead of the
+         * `−46.105583` BELOW it that T2 pinned.
+         * Observed RED on the previous value `2817082625550222209` before the re-baseline (this live run measured
+         * `5171161262690478550`). Attribution is direct, not inferred: the whole-corpus dump (`51` classes × `5`
+         * samples × every joint XYZ = `8415` rows, taken in a pristine `origin/main` @ `2fb6079`
+         * worktree and on this tree, then diffed) differs in exactly `20` rows, ALL of them inside
+         * `DynamicWorldsGreatestStretchPose` (`KNEE_B`/`ANKLE_B`/`HEEL_B`/`TOE_B` × the `5` samples,
+         * max `82.2520` u at `HEEL_B`), with the other `50` classes byte-identical and the pose's
+         * reachability stamp unchanged (`maxIkClampAmount` `21.640945` / `13.396454` / `7.5872955` at
+         * p = 0 / 0.25 / 0.5 on BOTH trees — that clamp is the pose's support arm, and B2 does not
+         * touch the arms). B2's own blast-radius guard is `WorldsGreatestStretchBackKneePlaneTest`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 2817082625550222209L
+        const val UNAFFECTED_CORPUS_DIGEST = 5171161262690478550L
     }
 }
 
