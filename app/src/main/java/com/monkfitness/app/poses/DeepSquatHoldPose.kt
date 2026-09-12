@@ -33,6 +33,33 @@ class DeepSquatHoldPose : BaseSquatPose() {
         return Triple(60f, -30f, 0.5f)
     }
 
+    /**
+     * R2/R4 — reach-band authoring (second reach-band cleanup batch).
+     *
+     * The pose inherits `BaseSquatPose`'s floor-frame leg targets `(0, 25, ±1.5 · hipWidth)` while its
+     * own `computePelvis` locks the root at `(60, −30, 0.5)`, so the authored hip→ankle chord is
+     * `47.392` at EVERY frame — an interior knee angle of `24.80°` against the `IKConstraint`'s own
+     * `30°` stop (the BPS's `Squat (Deep Hold).md` states maximal knee flexion of `130–150°`, i.e.
+     * `30–50°` interior). The request is past the pose's own model, so no chain geometry can honour it:
+     * measured on the published frame at `origin/main` @ `ef9400f`, the solver relocated both ankles by
+     * `8.617` u (the reachability stamp read `8.617031`, the realized knee angle read exactly `30.00°`).
+     *
+     * Unintended authoring error of the first batch's class — an unrealizable request, not a deliberate
+     * ROM limit. The pose's DEPTH is its authored intent (a locked maximal-depth hold) and the
+     * floor-frame ankle is the `BaseSquatPose` default, so the reachable-by-construction convention is
+     * applied to the target: the hold's depth, pelvis and stance are untouched (a root-side "fix" would
+     * have shallowed the hold). `projectLegTargetsToReach` is the first batch's family helper
+     * (`REACH_MARGIN = 1e-4` of the chain's span), so the published geometry is preserved — the
+     * realized feet stay exactly where the engine already put them.
+     */
+    override fun fillLegTargets(
+        def: SkeletonDefinition, pelvisY: Float, pelvisX: Float, leanAngle: Float, progress: Float,
+        outF: Vector3, outB: Vector3
+    ) {
+        super.fillLegTargets(def, pelvisY, pelvisX, leanAngle, progress, outF, outB)
+        projectLegTargetsToReach(def, outF, outB)
+    }
+
     // Clasp hands together at centre chest (no counterbalance reach).
     override fun fillArmTargets(
         def: SkeletonDefinition, pelvisY: Float, pelvisX: Float, leanAngle: Float, progress: Float,

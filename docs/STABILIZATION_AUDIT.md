@@ -2815,6 +2815,124 @@ preserves the exercise geometry. (b) The next members of the same class, all mea
 (the shoulder's own height) remains the suspect in a plausible re-design of the counterbalance sweep; the
 projection preserves the authored direction on purpose.
 
+### DONE — second reach-band cleanup batch: `DeepSquatHoldPose` + `JumpSquatPose` (production geometry); `CossackSquatPose` measured and deliberately NOT changed (branch `fix/reach-band-batch2-deepsquat-jump-cossack`, off the first batch's merge `ef9400f`)
+
+**The finding (measured on the published frame through the production entry point).** Every authored limb
+target of the three listed poses was measured through `SkeletonPipeline.produceFrame(pose, ctx)` — `15`
+phases (`0.00, 0.05, 0.10, 0.20, 0.25, 0.30, 0.40, 0.50, 0.60, 0.70, 0.75, 0.80, 0.90, 0.95, 1.00`) × the
+four limb chains × both frame conditions (`540` readings) — against each chain's own
+`[SkeletonMath.minReach, maxReach]` (`112/98` legs → `[56.0090, 205.8000]`; `80/66` arms →
+`[40.1344, 143.0800]`).
+
+| pose | chain | authored root→target | band | relocation | realized interior angle |
+|---|---|---|---|---|---|
+| `DeepSquatHoldPose` | both ankles | `47.392` (every frame — locked hold) | `≥ 56.009` | **`8.617`** | `30.00°` (the stop) |
+| `JumpSquatPose` | both ankles | `210.288` (seam) … `225.269` (apex) | `≤ 205.800` | **`4.488 … 19.469`** | `156.99°` (apex) |
+| `JumpSquatPose` | both hands | `23.396 … 45.321` | `≥ 40.134` | **`0.605 … 16.739`** | `30.00°` (clamped frames) |
+| `CossackSquatPose` | both ankles | `207.000` (seam frames, `rootY 232.00`) | `≤ 205.800` | **`1.200`** | `156.99°` |
+| `CossackSquatPose` | both hands | `91.010 … 95.111` | in band | `0.000` | — |
+| `DeepSquatHoldPose` | both hands | `46.487` (clasped at centre chest) | in band | `0.000` | — |
+
+**Classification per site — the discriminator is whether the request is realizable by an IDEAL
+(`L1 + L2`) chain at all.** A request no chain geometry could honour is an authoring error; a request an
+ideal chain CAN honour and only the engine's deliberate numeric limits trim is a constrained intent.
+
+* **Unintended authoring error — FIXED.** `DeepSquatHoldPose`'s ankles ask for an interior knee angle of
+  `24.80°` against the constraint's own `30°` stop, i.e. past its own BPS (`Squat (Deep Hold).md` states
+  maximal knee flexion of `130–150°` — `30–50°` interior). `JumpSquatPose`'s seam and flight ankles ask
+  for `210.288 … 225.269` from a `112 + 98 = 210` limb — up to `107 %` of the limb's own length, longer
+  than the limb itself. Its hands ask for an interior elbow angle of `15.36°` against the same `30°`
+  stop. All three are the first batch's class verbatim (`210.288` from a `210` leg; a `15.8°` knee
+  against the stop).
+* **Deliberate model limit — NOT changed: `CossackSquatPose`'s straight-leg ankle.** The site is the
+  pose's seam/standing frames (`progress 0.00 / 0.50 / 1.00`), where
+  `BaseLungePose.standingPelvisY(def) = thighLength + shinLength + 22 = 232` with `footRestY = 25`
+  authors a `207.000` hip→ankle chord — an interior knee angle of `160.60°`, i.e. a REAL straight leg,
+  and exactly what the BPS demands ("the opposite (straight) leg is **fully extended** … straight-leg
+  knee fully extended … the straight foot remains flat"). Nothing about the request is unrealizable: the
+  only thing that trims it is the engine's deliberate `IKConstraint.effectiveExtensionRatio = 0.98`
+  (`205.800`), which exists so a 2-bone chain never reaches its singular fully-collinear configuration.
+  The measured `1.200` u relocation is that cap doing its job — the published leg reads `156.99°`
+  interior (the model's extension limit) and the foot publishes `1.2` u above its floor rest — so the
+  authoring is left byte-identical. The three alternating lunge variants
+  (`AlternatingForwardLungesPose` `1.2263`, `AlternatingReverseLungesPose` `1.2263`,
+  `AlternatingSideLungesPose` `1.2263`) inherit the same shared base convention and carry the same site;
+  they are OUT of this batch's scope by instruction, which is why no `BaseLungePose` change was made.
+  `ReachBandBatch2AuthoringTest.theIntentionalCossackStraightLegLimitIsPreserved` pins the verdict: it
+  fails if the site is "cleaned" (its `siteFrames > 0` guard), if the request ever exceeds the limb's own
+  length, if the realized leg stops reading the extension limit, or if the trim grows past `1.5` u.
+
+**Fix (pose-side only — no solver, engine, carrier or stamp semantics; no base-class change).**
+`DeepSquatHoldPose` and `JumpSquatPose` are `BaseSquatPose` subclasses, and that base already carries the
+first batch's R2/R4 helpers (`projectLegTargetsToReach` / `projectArmTargetsToReach`, one copy rooted at
+`hip*` / `shoulder*`, `REACH_MARGIN = 1e-4` of the chain's span). `DeepSquatHoldPose` adds a
+`fillLegTargets` override (`super` + project); `JumpSquatPose` appends the projection to its two existing
+overrides. The fix is target-side by construction — the hold's locked depth and the ballistic cycle are
+untouched, which the corpus A/B confirms (every pelvis/spine/girdle/head joint byte-identical).
+
+**RED → GREEN (fresh runs).** New `ReachBandBatch2AuthoringTest` (`6` tests; band membership, no
+relocation, no reachability stamp, the intent/anti-collateral guards, the deliberate-limit control, and a
+builder-delegation sensitivity control). On a worktree of `origin/main` @ `ef9400f`: **`5` of `6`
+FAILED** — the band gate lists the out-of-band readings (`authored root→target 47,391983 outside
+[56,009014, 205,800003] by 8,617031`), the no-relocation gate the same, the stamp gate
+(`reachability stamp = 8,6170`), and the sensitivity control (which correctly reads the pre-batch
+authoring's relocation `19.4687` on the pristine tree while the post-fix production poses read `< 1/10`
+of it). On this branch: **`6/6` GREEN**, `0F / 0E / 0S`.
+
+**Measured post-fix, published frames.** `DeepSquatHoldPose`'s legs declare `56.0146` (in band),
+relocation `≤ 2.3e-5`, reachability stamp exactly `0.000000`; `JumpSquatPose`'s legs declare
+`172.1801 … 205.7794` and its arms `40.1384 … 45.3211`, relocation `≤ 1.7e-5`, stamp exactly
+`0.000000`. The published motion is preserved: `JumpSquatPose`'s feet keep their realized trajectory
+(seam `29.482 → 29.502`, apex `69.445 → 69.466`, grounded phases exactly `25.000`), the hold keeps its
+locked `60`-u depth and its published pelvis, and the sibling contracts stay green (`SquatPosesTest`,
+`SquatMotionTest`, `SquatFamilyConsistencyTest`, `AirSquatPoseTest`, `CossackSquatPoseTest`,
+`arch/ActivationEquivalenceTest`'s `BASE.JumpSquat` fixture, `PublishedBelowGroundInvariantTest`,
+`ExerciseFramingInvariantTest`, `ViewportFramingInvariantTest`).
+
+**Blast radius (direct, not inferred).** Whole-corpus A/B — `51` classes × `14` phases × every
+`Joint.entries` XYZ × both frame conditions (`47,124` rows, full float bits), this branch vs a worktree of
+`origin/main` @ `ef9400f`: **`584` rows differ — `224` in `DeepSquatHoldPose`, `360` in `JumpSquatPose`**
+(`292` cold / `292` playing), ALL of them limb-chain joints (`KNEE_*` max `0.0484` u,
+`ANKLE_*`/`HEEL_*`/`TOE_*` `0.0206` u, the derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS` chain
+`0.0053` u, `ELBOW_*` `0.0006` u). The other `49` classes are byte-identical — `CossackSquatPose`
+included — and so is the whole declaration surface of the corpus: a `1,479`-row A/B of every pose's
+declared support, environment props, ground level, declared support contacts, straight-intent and
+bone-length stamps is IDENTICAL on both trees, with only the reachability stamp moving (`56` rows, the
+two poses' own, `8.617031 / 19.468719 → 0.000000`; the zero-stamp census goes `28 → 30` poses, exactly
+the two fixed ones). The **eight** scope digests were re-baselined with that measurement appended to each
+constant: `M1StepUpGeometryTest` `-3833979825676675382 → -7706271665562987902`,
+`M3M5ProneTrunkGeometryTest` `6978338595624143531 → 6655628533102093923`,
+`M6M7SwingBurpeeGeometryTest` `-7811950691648167273 → 6762501542175071823`,
+`M8M9M10SupportDeclarationTest` `-8876365443930750926 → 789863381076342762`,
+`M11M12LimbRealizationMigrationTest` `-7426363716919112133 → 7148088516904126963`,
+`M15WallSlidesWallGeometryTest` `-2178969791688578353 → 5471688281724201329`,
+`PlankForearmSupportGeometryTest` `8845305369195660945 → 4398860156904083017`,
+`HamstringForwardReachTest` `-8286303796776597892 → -1036273880702829004`.
+
+**T2 / audit records.** `PublishedBelowGroundInvariantTest` needed NO change: its pin table's six poses
+(`BirdDog`, `AlternatingBirdDog`, `StaticBirdDogHold`, `Burpee`, `CatCow`,
+`QuadrupedThoracicRotations`) are disjoint from this batch, its corpus-wide scan stayed GREEN on the
+final tree, and no joint of either fixed pose approaches the ground (the lowest published joint on
+either is `18.632`). Its counts were re-read, not assumed: `6` poses / `30` pose-joint pairs, unchanged.
+The `arch/RuntimeArchitectureBaselineTest` goldens needed no re-capture (neither pose is a golden
+fixture there); the only goldens touched by this batch are the eight corpus digests above.
+
+**Full suite / build.** `--rerun-tasks`, results purged, XML-stamped fresh on the final source bytes:
+pristine `origin/main` @ `ef9400f` **`130` classes / `642` tests / `0F / 0E / 0S`** → this branch
+**`131 / 648 / 0F / 0E / 0S`** — exactly `+1` class / `+6` tests, no other count moved.
+`:app:compileReleaseKotlin` + `:app:assembleDebug` successful.
+
+**Residuals recorded, NOT fixed (measured).** (a) `DeepSquatHoldPose`'s feet still publish `18.632`,
+i.e. `6.37` u BELOW the pose's own floor-rest convention (`footRestY = 25`), while the pose keeps its
+locked `60`-u depth: the reach-band convention fixes the TARGET, not the root — exactly the disposition
+the first batch took for `AirSquatPose`/`SquatPose`. Making those feet flat requires raising the authored
+depth to the fold limit (≈ `68.6`, a root-side change that shallows the hold); that is a product/owner
+decision and is left OPEN. (b) `JumpSquatPose`'s seam feet still publish `4.49` u above the rest height
+(the first batch's standing-leg residual) and its apex feet `69.47` (the cap's trim of the flight);
+both are preserved by design. (c) The `BaseLungePose` seam stance (`standingPelvisY = thigh + shin + 22`)
+is the family-wide site behind the `1.200 … 1.2263` u cap trim in all four lunge-family poses; a
+decision to project it belongs to a `BaseLungePose`-scoped batch, not this one.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement — **M15 is DONE — see the record above** (the wall's contact plane, the arm chain
@@ -2869,8 +2987,10 @@ A8/A6 leaks — resolved in the Push-Up Family pass above.)
 - Fix the pose, not the engine, when a pose authors motion incorrectly.
 - Keep pose-side migrations on the **existing** carrier surface (the H2 fix is the template).
 - After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
-  current baseline of record (**130 classes / 642 tests** on this branch — the first reach-band cleanup
-  batch added `SquatReachBandAuthoringTest` (`+7` tests) at `130 / 642` on the C2 tree, re-baselining
+  current baseline of record (**131 classes / 648 tests** on this branch — the second reach-band
+  cleanup batch added `ReachBandBatch2AuthoringTest` (`+6` tests) at `131 / 648` on the `ef9400f` tree,
+  re-baselining the same eight scope digests; before it, the first reach-band cleanup batch added
+  `SquatReachBandAuthoringTest` (`+7` tests) at `130 / 642` on the C2 tree, re-baselining
   all eight scope digests; before it, `6ce4f695` (the B4 merge)
   + C1 + C2, the last two changes adding framing only: C1 added `ViewportFramingInvariantTest` (`+7`)
   tests) at `128 / 628`, the C2 pass added `ExerciseFramingInvariantTest` (`+7`) at `129 / 635`, and
