@@ -5,6 +5,28 @@ import kotlin.math.*
 
 class ProneCobraStretchPose : BasePose() {
 
+    /**
+     * The whole-body **prone LAYOUT**: the pose's own authored rest pitch (spine local `+Y` → world
+     * `+X` = the head end, ventral `+X` → world `−Y` = face down). The root carries this and only
+     * this, constant across the rep — BPS §5/§7/§12: "the pelvis remains neutral and stays on the
+     * floor; the extension originates from the paraspinals, not from tilting the pelvis", "Hips stay
+     * grounded", "the pelvis stays grounded (hips do not lift)". (M3: the pre-fix pose drove
+     * `lerp(−1.57, −0.9)` into THIS declaration, so the pelvis itself was the rep's hinge and the
+     * chest followed rigidly.)
+     */
+    private val proneLayoutPitch = -1.57f
+
+    /** The rep's authored trunk extension (rad), measured on the pre-fix tree as the pelvis
+     *  rotation's own span — `lerp(−1.57, −0.9)` ⇒ `1.5700 − 0.9000 = 0.6700`. The correction below
+     *  moves the OWNERSHIP of this rotation onto the spine; it does not re-tune its amount. */
+    private val extensionRad = 0.67f
+
+    /** Thoracic share of the extension carried by the chest node above the trunk line. The
+     *  repository's canonical two-segment shape — the S3 `ThoracicExtensionPose` repair of this same
+     *  defect class uses `extAngle` on the thoracolumbar junction and `extAngle * 0.4` on the
+     *  thoracic spine. */
+    private val thoracicShare = 0.4f
+
     // Shared camera (duplicated literal removed). Default pitch raised ~10% (0.22 -> 0.242)
     // so the view tilts down slightly and the prone arch stays comfortably framed
     // (yaw/zoom unchanged, no camera redesign). Mirrors the Hip Flexor audit.
@@ -24,7 +46,7 @@ class ProneCobraStretchPose : BasePose() {
     )
 
     private var roots: List<SkeletonNode>? = null
-    private var pelvis: SkeletonNode? = null; private var chest: SkeletonNode? = null; private var neck: SkeletonNode? = null; private var head: SkeletonNode? = null
+    private var pelvis: SkeletonNode? = null; private var lumbar: SkeletonNode? = null; private var chest: SkeletonNode? = null; private var neck: SkeletonNode? = null; private var head: SkeletonNode? = null
     private var shoulderA: SkeletonNode? = null; private var elbowA: SkeletonNode? = null; private var handA: SkeletonNode? = null; private var palmA: SkeletonNode? = null; private var knucklesA: SkeletonNode? = null; private var fingertipsA: SkeletonNode? = null
     private var shoulderP: SkeletonNode? = null; private var elbowP: SkeletonNode? = null; private var handP: SkeletonNode? = null; private var palmP: SkeletonNode? = null; private var knucklesP: SkeletonNode? = null; private var fingertipsP: SkeletonNode? = null
     private var hipF: SkeletonNode? = null; private var kneeF: SkeletonNode? = null; private var ankleF: SkeletonNode? = null; private var heelF: SkeletonNode? = null; private var toeF: SkeletonNode? = null
@@ -38,6 +60,7 @@ class ProneCobraStretchPose : BasePose() {
         val nodes = SkeletonFactory.createStandardSkeleton()
         roots = nodes.roots
         pelvis = nodes.pelvis
+        lumbar = nodes.lumbar
         chest = nodes.chest
         neck = nodes.neck
         head = nodes.head
@@ -72,18 +95,30 @@ class ProneCobraStretchPose : BasePose() {
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 
-        // 1. Core Anchoring (Lying Flat)
+        // 1. Core Anchoring: the root carries the whole-body PRONE LAYOUT only, constant across the
+        // rep (M3 — see the constant's KDoc above; `declarePelvisTilt` already records the PELVIS
+        // joint intent, so no second, stale declaration is made here).
         val pelvisX = 0f
         val pelvisY = 15f // Rest perfectly flat on the ground
 
-        // Torso transitions from lying flat (-90 deg) to an arched extension
-        val torsoPitch = SkeletonMath.lerp(-1.57f, -0.9f, context.progress)
-
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
-        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, torsoPitch)
-        declareJointIntent(Joint.PELVIS, JointRotation(axisZ, torsoPitch))
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, proneLayoutPitch)
 
+        // Trunk geometry: the lower-spine junction stays the factory's pass-through (coincident with
+        // the pelvis, identity rotation — Issue E) and the CHEST owns the trunk length.
+        lumbar!!.localPosition.set(0f, 0f, 0f)
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
+
+        // 2. The rep's extension is ARTICULATED on the two-segment spine, not carried on the root
+        // (M3). BPS §5: "Thoracic: gently extended as the chest lifts — the upper back is the prime
+        // mover" / "The extension is smooth along the spine, not a hinge at one segment"; §13: "The
+        // chest lifts off the floor via thoracic extension while the lumbar spine stays neutral."
+        // The thoracolumbar junction lifts the chest off the floor (the rep's authored amount, see
+        // `extensionRad`) and the chest node opens the rib cage/girdle above that line. This is the
+        // repository's single authorized trunk-lean path (`buildSpineCurve`, the same shape the S3
+        // ThoracicExtension repair uses) — one call, both segments, carriers included.
+        val extension = SkeletonMath.lerp(0f, extensionRad, context.progress)
+        buildSpineCurve(lumbar!!, chest!!, extension, extension * thoracicShare, axisZ)
 
         // Head tilts up dynamically to follow the cobra stretch. Declared as a gaze target
         // (Phase 7 Gap 7) while the legacy direction path still writes the head.

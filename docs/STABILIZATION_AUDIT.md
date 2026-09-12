@@ -1028,17 +1028,168 @@ finding's own measurement reproduced exactly as recorded.
   `SupportMath` change — the 2-unit band included), every other pose and every other P11 finding
   (M2–M15, B-1…B-8b residuals, §12.7's configuration half), and the renderer.
 
+### DONE — M3 + M5 the prone trunk family's geometry: extension owned by the spine, Superman's basis, the snow angel's trunk chain (branch `fix/m3-m5-prone-trunk-geometry`; production geometry)
+
+Branch `fix/m3-m5-prone-trunk-geometry` off `main` `2bb4525` (the M1 merge). **Production geometry
+change: three pose files** (`ProneCobraStretchPose`, `SupermanPose`, `ReverseSnowAngelPose`) plus the
+new `M3M5ProneTrunkGeometryTest` gate and two re-baselined corpus digests. No engine file, no solver,
+no carrier, no API, no ownership change.
+
+**Finding status re-verified on `2bb4525` (published frames, `produceFrame(pose, ctx)` — the
+metadata-derived entry point playback uses, 5 progress samples, warmed pipeline; the cold and settled
+frames of these three poses are identical, so warming is a harness property, not a confound).**
+
+| finding | recorded as | status on `2bb4525` |
+|---|---|---|
+| **M3** `ProneCobraStretchPose` | "Whole −1.57→−0.9 trunk extension on PELVIS, not thoracolumbar/lumbar → chest follows rigidly (same class as the S3 ThoracicExtension fix)" | **STILL PRESENT** — reproduced exactly: the pelvis's own world rotation sweeps `1.5700 → 0.9000` (Δ `0.6700` rad = `38.4°`), its own trunk base reaches `0.6226` (`38.4°`) out of the floor plane, and `chest.localRotation.angle == 0.0000` at every sampled frame |
+| **M4** `SupermanPose` (the M5 record's sibling; the mission's "Superman" half) | "Back extension by rotating pelvis→chest vector, no lumbar articulation; missing support declaration/exerciseFamily/bodyOrientation metadata" | **STILL PRESENT, and worse than recorded** — the pose renders **SUPINE** (`facing.y = +1.0000`, the ventral axis points at the sky) against a BPS whose §1/§3/§8 specify a prone, anterior-fulcrum exercise; the arch also rides the root (`1.5708 → 1.3708`), the chest carries `0.0000`, and at the rest phase **12 joints sit below the pose's own declared ground** (`HEAD_POS y = −24.4818`, `HAND_A/P y = −4.2842`, `FINGERTIPS_A/P y = −9.8092`) |
+| **M5** `ReverseSnowAngelPose` | "Missing support declaration/exerciseFamily/bodyOrientation despite planted legs; arm arc maxSweep=170° at fixed Y=15 never clears overhead" | **CHANGED / SUPERSEDED — the named symptoms do not reproduce.** The basis is already prone (`facing.y = −0.9975`, spine `+X`), the pelvis rotation is already constant across the rep (`1.5000` at every sample), there is no ground violation, and the arm arc **does** reach overhead (measured `5.51°` from the trunk axis at the `p = 0/1` extremes → the BPS §9 "arms up by the head" end; the sweep is `5.5° → 85.1° → 169.7° → back`). What remains, and what this pass corrects, is the pose's **legacy trunk**: its hand-rolled tree has no lower-spine segment, so `Joint.LUMBAR` publishes at the **world origin** (`|LUMBAR − PELVIS| = 18.0278u`, with `CLAVICLE_A/P`, `SCAPULA_A/P`, `WRIST_A/P`), and its authored maintained extension rides the **root** (the pelvis is tilted out of the prone layout by `0.0708` rad while `chest.localRotation.angle == 0.0000`) |
+
+- **First incorrect production representation (one shared abstraction, three poses).** In all three
+  the *whole-body layout* and the *spine articulation* are authored as one ROOT rotation: the
+  extension amount goes into `declarePelvisTilt(...)` and the chest node carries `localRotation.angle
+  == 0.0000` — the pelvis, which every one of the three BPS documents names as the floor fulcrum
+  ("the pelvis remains neutral and stays on the floor; the extension originates from the paraspinals,
+  not from tilting the pelvis"; "Hips stay grounded"; "pelvis neutral and grounded — no arching or
+  tucking"), is the hinge, and the two-segment `PELVIS → LUMBAR → CHEST` model the engine provides has
+  no representation. In `ReverseSnowAngelPose` the same abstraction is expressed even more strongly:
+  the pose builds its **own** node tree, so its trunk has no `LUMBAR` at all. `SupermanPose` adds a
+  second, independent error on top: the P12 WP-D conversion reproduced the legacy world-position
+  layout as "trunk toward −X with a +90° root tilt", which is this engine's **supine** basis
+  (`DeadBug`/`LegRaise`), not the BPS's prone one.
+- **Diagnosis discipline — the pose was never blamed for the engine's own conventions.** Three
+  candidate mechanisms were measured and ruled out before editing: (i) the trunk length is correct in
+  all three (`|CHEST − PELVIS| = 120.0000` at every frame — the "collapsed trunk looks like the pose
+  stopped being prone" failure mode); (ii) the legs' published positions are invariant to the root's
+  rotation (the IK targets are world-space and the hips' offsets are lateral, so `KNEE_F/ANKLE_F` are
+  byte-identical at every sampled frame pre-fix — the deficit is not limb drift); (iii) the supine
+  basis is the pose's own declaration (`declarePelvisTilt(..., +π/2 + chestLean)`), not a solver or
+  finalizer relocation.
+- **Exact production corrections (three pose files).**
+  1. `ProneCobraStretchPose` — the root now carries the pose's own authored **prone layout**
+     (`proneLayoutPitch = −1.57`, constant) and the rep's extension (`extensionRad = 0.67`, measured
+     pre-fix as the pelvis span) is authored on the spine through the repository's single authorized
+     trunk-lean path: `buildSpineCurve(lumbar, chest, extension, extension*0.4, axisZ)` — the S3
+     `ThoracicExtensionPose` shape and proportion, which is the class the audit names. The stale
+     duplicate `declareJointIntent(Joint.PELVIS, …)` (it carried the animated value the root no longer
+     authors) is removed; `declarePelvisTilt` already records that carrier.
+  2. `SupermanPose` — the layout is mirrored onto the **prone** basis the sibling prone poses publish
+     (`rotZ(−π/2)`: spine `+Y` → world `+X` head end, ventral `+X` → world `−Y` face down) and is
+     constant across the rep; the arch (`0.2` rad, the pre-fix authored amount) is articulated on the
+     same two-segment shape; the arms are anchored to the pose's own prone floor line
+     (`PRONE_BODY_Y`) instead of a level that does not exist for a prone body (pre-fix the hands hung
+     `4.28u` under the ground at rest); the head is authored in the chain's **own** frame instead of a
+     world-space `headTarget` (`resolveHeadTarget` derives its direction from a world delta and writes
+     it as a LOCAL offset, which cannot express a gaze on a rolled body — the documented B-7/B-8b
+     constraint; the pose-side conversion that would recover it is prohibited by `MIGRATION_RULES` A8).
+  3. `ReverseSnowAngelPose` — the hand-rolled tree is replaced by the canonical
+     `SkeletonFactory.createStandardSkeleton()` tree (the pose's own KDoc already claimed this; the
+     factory's added nodes are pass-throughs between the chest and the shoulder, so the migration is
+     geometry-neutral for everything the pose authors), and its maintained extension
+     (`π/2 − 1.50 = 0.0708` rad, the pose's own authored tilt — not re-tuned) is held on the spine
+     instead of the root, isometrically (BPS §9 "a maintained posture … held isometrically").
+- **Measured (published frames, pre-fix → post-fix).**
+
+  | pose | quantity | pre-fix | post-fix |
+  |---|---|---|---|
+  | cobra | pelvis world rotation (span over the rep) | `1.5700 → 0.9000` (Δ`0.6700`) | `1.5700` constant (Δ`0.0000`) |
+  | cobra | pelvis own trunk base out of the floor plane (worst) | `38.4°` | `0.05°` |
+  | cobra | chest node's own rotation (thoracic share, at the top) | `0.0000` rad | `0.2680` rad (`15.4°`) |
+  | cobra | chest rise / head Y at the top | `74.59` / `95.80` | `74.59` (**identical**) / `104.97` (head extends with the spine, BPS §4) |
+  | cobra | pelvis Y, ankle Y (the grounded chain) | `15.00` / `15.00` | `15.00` / `15.00` (unchanged) |
+  | superman | basis (ventral axis `rot·X`) | `(0, +1, 0)` **SUPINE** | `(0, −0.98, 0)` **PRONE** |
+  | superman | trunk axis (`rot·Y`) | `(−1, 0, 0)` (head end `−X`) | `(+1, 0, 0)` (head end `+X`, the family convention) |
+  | superman | pelvis world rotation (span) | `1.5708 → 1.3708` (Δ`0.2000`) | `−1.5708` constant |
+  | superman | chest node's own rotation at the top | `0.0000` | `0.0800` rad (`4.6°`) |
+  | superman | `HEAD_POS` Y over the rep | `−24.48 → +2.10` (**under the floor**) | `+10.00 → +43.79` |
+  | superman | `HAND_A` Y over the rep | `−4.28 → +89.56` | `+10.00 → +66.86` (same authored lift `56.86u`) |
+  | superman | worst joint Y / joints below ground | `−24.4818` / **12** at p=0 | `+6.59` / **0** |
+  | snow angel | `LUMBAR` published position | `(0, 0, 0)` — the world origin, `18.0278u` from the pelvis | at the pelvis (`(15.00, 10.00, 0.00)`), `0.0000u` |
+  | snow angel | pelvis own trunk base out of the plane | `4.06°` | `0.00°` |
+  | snow angel | chest node's own rotation (maintained) | `0.0000` | `0.0283` rad (`1.6°`), held constant |
+  | snow angel | chest Y / head Y (maintained) | `18.49` / `21.04` | `18.49` (**identical**) / `22.05` |
+  | snow angel | worst joint Y | `0.00` (a phantom `CLAVICLE_A` at the origin) | `+6.28` (a real joint) |
+- **Corpus impact (measured, not inferred).** A whole-corpus dump of **51 production pose classes ×
+  5 progress samples × every joint XYZ** (`8415` rows, full float bits) on both trees differs in
+  **exactly 377 rows — all of them the three corrected poses** (`SupermanPose` 153,
+  `ReverseSnowAngelPose` 143, `ProneCobraStretchPose` 81); the other **48 classes are byte-identical**,
+  and the orientation census of those 48 (declared orientation, measured basis, pelvis frame) is
+  byte-identical too. The repository's two shared corpus digests are re-baselined with that
+  attribution recorded at each constant, each observed RED on its pre-fix value first:
+  `PlankForearmSupportGeometryTest.UNAFFECTED_CORPUS_DIGEST` `−2908768886375429885` →
+  `3799530965937589305`; `M1StepUpGeometryTest.UNAFFECTED_CORPUS_DIGEST` `2746720065314572970` →
+  `−8991724156081959456`. The new gate pins its own digest with the three corrected classes excluded —
+  **equal on both trees** (`−517042293001259057`), which is where "the other 48 classes are untouched"
+  is actually gated.
+- **Regression coverage (fresh runs).** New `M3M5ProneTrunkGeometryTest` (**9 tests**): the prone
+  basis of the production frame (ventral axis, head end, head/feet sides); the pelvis as the floor
+  fulcrum (its published world rotation and position constant across the rep, its own frame in the
+  layout); the dynamic reps' extension articulated on the spine (the thoracic share above the trunk
+  line, the chest lifting off the floor, the seam flat); the isometric member's maintained extension
+  held on the spine; the authored depth preserved (no re-tuning); the declared floor per pose (the
+  grounded chain on the floor line, the chest off it, the Superman's fulcrum anterior with **no** joint
+  below ground and the arms hovering and lifting); the published trunk chain complete (a real
+  `LUMBAR` junction, the chest owning the trunk length); anti-vacuity (distinct by-value snapshots
+  that move); and the 48-class byte-identity digest. **RED on the pre-fix tree: 7 of 9 fail**, quoting
+  the numbers (`body is NOT prone — facing axis (0.0000,1.0000,0.0000)`; `the pelvis frame MOVES …
+  axis (0,0,−1)/1.4025 vs the seam 1.5700`; `the chest node carries NO thoracic extension above the
+  trunk line (share 0.0000 rad)`; `HEAD_POS is BELOW the declared ground (y=−24.4818)`; `the
+  lower-spine junction LUMBAR (0,0,0) is not at the pelvis (15.00,10.00,0.00) (gap 18.0278u)`;
+  `thoracic share per sample [0.0000, …]`).
+- **Counterfactual RED gates (each executed against the defective shape, then restored and re-verified
+  by `md5sum -c`).** (1) The cobra's extension back on the root → **2/9 fail** (the pelvis guard and
+  the spine-articulation guard). (2) Superman's pre-fix authoring restored (supine basis + root arch) →
+  **4/9 fail** (basis, pelvis, articulation, authored depth). (3) Superman with the prone basis KEPT
+  but the arch back on the root (isolating the ownership correction) → **2/9 fail** (the pelvis guard
+  and the depth guard, which catches the double-applied rotation). (4) The snow angel's pre-fix bytes
+  restored from `HEAD` → **2/9 fail** (the trunk-chain guard and the maintained-extension guard). Each
+  correction is independently load-bearing.
+- **Movement review (published frames, the pose's own axes).** Cobra: the chest rises `0.10 → 74.59`
+  with the pelvis pinned to the floor line and the legs flat at `Y = 15.00`; the trunk's inclination
+  goes `0.05° → 38.43°` while the pelvis's own frame stays at the layout, and the head rides the arch
+  (`8.06 → 104.97`). Superman: flat prone at the seam (pelvis, chest and the arms all on the body's
+  floor line), then a shallow symmetric bow — chest `10.00 → 33.84`, head `10.00 → 43.79`, legs
+  `10.00 → 70.82`, arms `10.00 → 66.86` — with the pelvis held at `10.00` throughout. Snow angel: the
+  trunk held steady (chest `18.49`, head `22.05`), legs flat and still, arms sweeping
+  `5.5° → 85.1° → 169.7°` abduction and back, `p = 0` ≡ `p = 1` (the `LOOP` seam closes). Side-view
+  plots of all three at `p = 0 / 0.5 / 1` read as the exercise the BPS describes; the arm sweep of the
+  snow angel lies in the transverse plane (its side view correctly shows it edge-on).
+- **Verification (fresh runs, measured in the same environment).** `./gradlew :app:testDebugUnitTest
+  --rerun-tasks` on the pre-fix tree with this change's test moved aside: **115 classes / 534 tests /
+  0F / 0E / 0S**; on this branch: **116 / 543 / 0F / 0E / 0S** — exactly `+1` class / `+9` tests (the
+  new gate), no other count moved. Release/build: `:app:compileReleaseKotlin`,
+  `:app:compileReleaseJavaWithJavac`, `:app:assembleDebug`, `:app:assembleRelease -x lintVitalRelease`.
+- **Recorded, deliberately NOT decided here (product/tuning questions, unchanged by this pass).**
+  (i) **M5's declaration half** (`support`/`exerciseFamily`/`bodyOrientation`): not added — those
+  fields have no production consumer, the repository has no canonical family vocabulary for this group
+  (`bodyOrientation` values in use are `Prone`/`Hanging`/`Side-lying`/`upright` with no contract), and
+  the declaration channel for the contact-bearing families is owned by M8/M9/M10. Declaring them here
+  would be a vocabulary decision, not a geometry correction. (ii) The snow angel's arm arc lower bound:
+  the BPS §9 window is "~90° (arms to the sides) … ~150–180° overhead"; the pose sweeps to ~`10°`
+  abduction (arms alongside the body) at its extreme. Measured, not re-tuned — an authored tuning
+  choice outside the trunk/legacy-path finding. (iii) `SupermanPose` is `MotionCurve.LINEAR` while its
+  siblings are `EASE_IN_OUT` (the pre-existing open item the P11 report already records).
+  (iv) `cobra_stretch_hold`'s `FINGERTIPS_A/P` sit `6.99` below the declared ground at the seam — the
+  T-1/B-3 class (the pose declares no support model, so the engine's extremity projection has nothing
+  to key on); untouched, out of scope. (v) The engine's `0.98` reach cap means a straight limb is
+  never realized (measured knee bulge `38.87` on the cobra's legs, `20.85` on the Superman's) — an
+  engine-wide property, not a trunk finding.
+- **Deliberately NOT touched.** The engine (no finalizer, solver, pipeline, validator, `SupportMath` or
+  carrier change), the renderer, M1, M6–M15, and the P2 cleanup list.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
 2. H2 complement — migrate LatStretchPose (M11) and CatCowPose (M12) onto `bakeIkLimb`/gaze
    helpers for full carrier coverage; declare the support model (`metadata.support`) for the stretch
    family (M9) and the core/hip poses (M10) and the upper/dynamic poses (M8).
-3. M2/M3/M4/M6/M7 — pose-specific biomechanical-fidelity bugs (side-plank contact
+3. M2/M6/M7 — pose-specific biomechanical-fidelity bugs (side-plank contact
    side — **the declaration side resolved by B-4 and the pose's own planted-forearm floor debt
-   resolved by B-7** — cobra/superman lumbar extension, kettlebell hinge inversion, burpee
-   foot-translation). **M1 (the step contact) is DONE — see the record above.**
-4. M5/M13/M14 — tuning items (snow-angel arc, hamstring reach, decline plank tilt).
+   resolved by B-7** — kettlebell hinge inversion, burpee
+   foot-translation). **M1 (the step contact) is DONE, and M3 (cobra) + M4 (superman) + M5
+   (snow angel's trunk/legacy path) are DONE — see the records above.** M5's declaration half is
+   split off to item 2 (M8/M9/M10's family-wide channel).
+4. M13/M14 — tuning items (hamstring reach, decline plank tilt).
 
 ### TODO — P2
 

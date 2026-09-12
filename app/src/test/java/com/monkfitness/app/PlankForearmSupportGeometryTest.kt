@@ -589,7 +589,18 @@ class PlankForearmSupportGeometryTest {
          * change before the re-baseline (`expected:<8354470872339933400>`, the pre-fix value), which
          * is its own mutation check. The corpus and its coverage are unchanged — all 50 classes stay
          * in the digest, so any further drift in any of them still fails here.
+         *
+         * **Re-baselined again by M3/M5** (`fix/m3-m5-prone-trunk-geometry` off `2bb4525`): that
+         * correction owns `ProneCobraStretchPose`, `SupermanPose` and `ReverseSnowAngelPose`, all
+         * three of which are inside this "every other class" corpus. Observed RED on the pre-fix
+         * value `-2908768886375429885` before the re-baseline. Attribution is direct, not inferred:
+         * the same whole-corpus dump (51 classes × 5 progress × every joint XYZ, `8415` rows, full
+         * float bits) measured on both trees differs in **exactly 377 rows, all of them those three
+         * poses** (`SupermanPose` 153, `ReverseSnowAngelPose` 143, `ProneCobraStretchPose` 81) — the
+         * other **48 classes are byte-identical**, which is gated by
+         * `M3M5ProneTrunkGeometryTest.UNAFFECTED_CORPUS_DIGEST` (`-517042293001259057`, equal on both
+         * trees with the three corrected classes excluded).
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -2908768886375429885L
+        const val UNAFFECTED_CORPUS_DIGEST = 3799530965937589305L
     }
 }
