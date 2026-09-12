@@ -42,7 +42,20 @@ class ProneCobraStretchPose : BasePose() {
         durationSeconds = 3.0f,
         loopMode = LoopMode.PING_PONG,
         motionCurve = MotionCurve.EASE_IN_OUT,
-        environment = cobraGround
+        environment = cobraGround,
+        // M9 — the planted hands (the pillar the chest is pressed and lifted from) and the feet
+        // (the legs lie along the floor line), on the ONE canonical support channel. Declaring the
+        // hands is what makes the engine's hand derivation resolve the contact at all: measured
+        // pre-fix, the un-declared `FINGERTIPS_A/P` hung 6.99 units BELOW the floor at the seam.
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(
+                SupportContact.LEFT_HAND,
+                SupportContact.RIGHT_HAND,
+                SupportContact.LEFT_FOOT,
+                SupportContact.RIGHT_FOOT
+            )
+        )
     )
 
     private var roots: List<SkeletonNode>? = null

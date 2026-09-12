@@ -176,23 +176,39 @@ class RuntimeArchitectureBaselineTest {
     }
 
     private object ArmCirclesGolden {
+        // M8 (support declaration + authored-frame correction) — GOLDEN UPDATE, responsible change
+        // named per the fixture's golden-update policy. Two intentional corrections move this
+        // fixture's numbers, both on the POSE side (no engine change):
+        //  · the pose now authors its limb targets in the chain root's own frame instead of the
+        //    floor-anchored frame its pre-B3 root no longer provides at build time, so the solver no
+        //    longer relocates every effector along an upward direction: ankleF/B moved 288.7445 →
+        //    29.24701 (a leg-span below the pinned pelvis), toeF/B 297.8015 → 29.24701, and
+        //    maxIkClampAmount 124.935135 → 0.047027588 (the residual float-level stance-width term,
+        //    inside the engine's own 0.1 reachability flag). hipRom* follow the realized leg.
+        //  · the pose declares its planted feet on the canonical support channel, which drives the
+        //    Finalizer's declaration-derived foot derivation (the foot's long axis in the declared
+        //    surface plane) — the toes now sit level with the ankles.
+        // The fixture's ROLE is unchanged: it is still the posture-driven, zero-Contact-Declaration
+        // representative (the solver still enters via `postureDriven`, the contact guard is still
+        // empty, rootTranslationDelta is still 235.0) — the Support Declaration is Frame Context,
+        // not a Contact Declaration.
         val pelvis = floatArrayOf(0.0f, 235.0f, 0.0f)
-        val handA = floatArrayOf(-68.5891f, 480.45483f, -51.338505f)
-        val handP = floatArrayOf(-68.5891f, 480.45483f, 51.338505f)
-        val ankleF = floatArrayOf(0.0f, 288.7445f, -37.76506f)
-        val ankleB = floatArrayOf(0.0f, 288.7445f, 37.76506f)
-        val toeF = floatArrayOf(4.7040253f, 297.8015f, -15.107492f)
-        val toeB = floatArrayOf(4.7040253f, 297.8015f, 15.107492f)
-        const val maxIkClampAmount = 124.935135f
+        val handA = floatArrayOf(-128.47998f, 355.0f, -56.0f)
+        val handP = floatArrayOf(-128.47998f, 355.0f, 56.0f)
+        val ankleF = floatArrayOf(0.0f, 29.24701f, -26.398996f)
+        val ankleB = floatArrayOf(0.0f, 29.24701f, 26.398996f)
+        val toeF = floatArrayOf(24.849743f, 29.24701f, -26.28621f)
+        val toeB = floatArrayOf(24.849743f, 29.24701f, 26.28621f)
+        const val maxIkClampAmount = 0.047027588f
         const val straightIntentDropped = false
         const val boneLengthsVerified = true
         const val rootTranslationDelta = 235.0f
         const val rootRotationDelta = 0.0f
         const val bilateralSymmetryDelta = 0.0f
         const val bilateralOppositeBend = false
-        val hipRomExcursion = mapOf("HIP_B" to 114.73246f, "HIP_F" to 114.73246f)
-        val hipRomSagittal = mapOf("HIP_B" to 59.224636f, "HIP_F" to 59.224636f)
-        val hipRomFrontal = mapOf("HIP_B" to 17.131237f, "HIP_F" to 17.131237f)
+        val hipRomExcursion = mapOf("HIP_B" to 11.0318f, "HIP_F" to 11.0318f)
+        val hipRomSagittal = mapOf("HIP_B" to 10.516254f, "HIP_F" to 10.516254f)
+        val hipRomFrontal = mapOf("HIP_B" to 3.2956252f, "HIP_F" to 3.2956252f)
         val hipRomAxial = mapOf("HIP_B" to 0.0f, "HIP_F" to -0.0f)
     }
 

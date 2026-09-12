@@ -15,6 +15,15 @@ class HamstringStretchPose : BasePose() {
     )
     private val hamstringGround = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
 
+    // M9 — NO `metadata.support` declaration for this pose, deliberately. Its only floor contact
+    // whose kind the engine derives is the foot, and the pose authors BOTH feet's articulation
+    // ("Front foot points to sky, back foot lays flat sideways" — `buildAnkleArticulation`): a
+    // `*_FOOT` declaration means "this whole foot rests in the surface plane", and the engine's
+    // declaration-driven derivation would then drive the authored pointed foot through the floor
+    // (measured: `TOE_F` 21.55 → −2.57 at p=0.5, i.e. the declaration's own derivation creates the
+    // penetration). The seated pose's real support — pelvis and both legs lying on the mat — has
+    // no consumable point in the current vocabulary (`HIPS`/`PELVIS`/`BACK` resolve to joints but
+    // no derivation consumes them). Recorded as the pass's vocabulary gap, not silently declared.
     override val metadata = PoseMetadata(
         camera = hamstringCamera,
         durationSeconds = 3.5f,

@@ -591,7 +591,20 @@ class M1StepUpGeometryTest {
          * rows, full float bits) differs in exactly `268` rows, all of them those two poses; the other 49
          * classes are byte-identical, which `M6M7SwingBurpeeGeometryTest.UNAFFECTED_CORPUS_DIGEST`
          * (`-2275091341366878044`) gates directly.
+         *
+         * **Re-baselined again by the M8/M9/M10 support-declaration pass**
+         * (`fix/m8-m9-m10-support-declaration`): that pass declares support for the 7 upper/dynamic
+         * poses, the stretch family and the core/hip poses, and re-authors the 5 standing
+         * upper/dynamic poses' limb targets into the chain-root frame — all of which live inside this
+         * "every pose except the step-up" corpus. Observed RED on the pre-fix value
+         * `-8991724156081959456`, and again on the M6/M7 value `6801737802461053843` after the pass was
+         * rebased onto the M6/M7 merge (this pass originally branched off `fc65695`), before the
+         * re-baseline below. Attribution is direct, not inferred from this digest: the whole-corpus dump
+         * (51 classes × 5 progress × every joint XYZ, full float bits) measured on the rebased base and
+         * on this tree differs only in rows belonging to the pass's own classes — gated by
+         * `M8M9M10SupportDeclarationTest.UNAFFECTED_CORPUS_DIGEST`, which excludes exactly those classes
+         * and is equal on both trees.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 6801737802461053843L
+        const val UNAFFECTED_CORPUS_DIGEST = 2391109884830495565L
     }
 }

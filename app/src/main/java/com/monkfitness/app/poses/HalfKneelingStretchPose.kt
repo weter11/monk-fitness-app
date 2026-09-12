@@ -10,7 +10,14 @@ class HalfKneelingStretchPose : BaseHipFlexorPose() {
         durationSeconds = 3.0f,
         loopMode = LoopMode.PING_PONG,
         motionCurve = MotionCurve.EASE_IN_OUT,
-        environment = hipFlexorGround
+        environment = hipFlexorGround,
+        // M9 — both planted feet (the facing foot flat at the floor line, the rear foot's toes
+        // tucked under it) on the ONE canonical support channel (`metadata.support`). The kneeling
+        // rear knee is not declarable in a consumed family (no `*_KNEE` derivation).
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(SupportContact.LEFT_FOOT, SupportContact.RIGHT_FOOT)
+        )
     )
 
     override fun onBuild(context: PoseContext): SkeletonPose {

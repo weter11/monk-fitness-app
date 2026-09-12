@@ -10,7 +10,13 @@ class KettlebellSwingPose : PoseBuilder {
         durationSeconds = 2.0f,
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
+        // M8 — the planted feet (standing hinge: the feet never leave the ground), on the ONE
+        // canonical support channel (`metadata.support`).
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(SupportContact.LEFT_FOOT, SupportContact.RIGHT_FOOT)
+        )
     )
 
     private var roots: List<SkeletonNode>? = null

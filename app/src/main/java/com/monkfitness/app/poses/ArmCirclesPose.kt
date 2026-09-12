@@ -10,7 +10,15 @@ class ArmCirclesPose : PoseBuilder {
         durationSeconds = 3.0f,
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
-        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
+        // M8 — the planted feet, declared on the ONE canonical support channel (`metadata.support`).
+        // Both feet rest on the declared ground for the whole rep; the engine's declaration-driven
+        // derivation (`SkeletonPoseFinalizer.declaredFootSupportPoint`) lays each foot in the
+        // surface plane and the published frame carries the declaration to every consumer.
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(SupportContact.LEFT_FOOT, SupportContact.RIGHT_FOOT)
+        )
     )
 
     private var roots: List<SkeletonNode>? = null
@@ -77,9 +85,8 @@ class ArmCirclesPose : PoseBuilder {
         pelvis!!.localPosition = Vector3(0f, 0f, 0f)
         declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), 0f)
 
-        // standH is retained only for the arm-circle hand kinematics (a shape decision), not
-        // for the root height the solver now owns.
-        val standH = def.shinLength + def.thighLength + 25f
+        // standH is no longer read: the hand circle is authored around the shoulder the pose owns
+        // at build time (M8), not around the floor-anchored root height the solver pins later.
 
         chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)
         neck!!.localPosition = Vector3(0f, def.neckLength, 0f)
@@ -94,8 +101,16 @@ class ArmCirclesPose : PoseBuilder {
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
         // 1. Static Standing Feet (no foot sliding or penetration)
-        val targetAnkleF = Vector3(0f, def.foot.ankleHeight, -def.hipWidth * 1.2f)
-        val targetAnkleB = Vector3(0f, def.foot.ankleHeight, def.hipWidth * 1.2f)
+        // M8 — every IK target below is authored in the frame this pose actually OWNS: the chain
+        // root's own world position. The root height is solver-owned (B3: the STANDING intent pins
+        // the pelvis AFTER this build), so a floor-anchored target (`def.foot.ankleHeight`) sits a
+        // whole standing root height above the hip — below the chain's minimum reach on the wrong
+        // side — and the solver answers by relocating the effector along that upward direction.
+        // The span is the chain's own reachable length (`SkeletonMath.maxReach`, the engine's
+        // existing definition), so the authored target is realizable exactly as declared.
+        val legSpan = SkeletonMath.maxReach(def.thighLength, def.shinLength, def.legIKConstraint)
+        val targetAnkleF = Vector3(0f, hipF!!.worldPosition.y - legSpan, -def.hipWidth * 1.2f)
+        val targetAnkleB = Vector3(0f, hipB!!.worldPosition.y - legSpan, def.hipWidth * 1.2f)
 
         bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
         bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
@@ -108,7 +123,9 @@ class ArmCirclesPose : PoseBuilder {
         val theta = context.progress * 2.0f * kotlin.math.PI.toFloat()
 
         val handX = radius * cos(theta)
-        val handY = standH + def.torsoLength + radius * sin(theta)
+        // M8 — same frame rule as the feet: the circle is centred on the shoulder the pose
+        // actually has at build time, not on the floor-anchored height the solver pins later.
+        val handY = shoulderA!!.worldPosition.y + radius * sin(theta)
 
         val targetHandA = Vector3(handX, handY, -def.shoulderWidth - 10f)
         val targetHandP = Vector3(handX, handY, def.shoulderWidth + 10f)

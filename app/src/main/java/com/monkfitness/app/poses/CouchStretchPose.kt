@@ -14,6 +14,14 @@ class CouchStretchPose : BaseHipFlexorPose() {
             ground = GroundDefinition(visible = true, level = 0f),
             // The box face rests exactly at X = -40, providing the wall for the back shin
             props = listOf(BoxProp(center = Vector3(-65f, 50f, 0f), width = 50f, height = 100f, depth = 80f))
+        ),
+        // M9 — the FRONT foot (F: the facing knee-up leg, planted at the floor line for the whole
+        // hold) on the ONE canonical support channel (`metadata.support`). The rear shin/knee
+        // contact is not declarable in a consumed family: the engine has no derivation for
+        // `*_KNEE` (measured: it is a decoration — see the finding record).
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(SupportContact.LEFT_FOOT)
         )
     )
 

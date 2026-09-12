@@ -26,7 +26,18 @@ class DynamicWorldsGreatestStretchPose : BaseThoracicPose() {
         durationSeconds = 3.8f,
         loopMode = LoopMode.PING_PONG,
         motionCurve = MotionCurve.EASE_IN_OUT,
-        environment = thoracicGround
+        environment = thoracicGround,
+        // M9 — the two planted feet and the SUPPORT hand (P/right: the pose's own KDoc names the
+        // "support hand pinned to the floor as a stable pillar"; the A/left hand reaches overhead
+        // and is deliberately not declared). One canonical channel, `metadata.support`.
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(
+                SupportContact.LEFT_FOOT,
+                SupportContact.RIGHT_FOOT,
+                SupportContact.RIGHT_HAND
+            )
+        )
     )
 
     override fun onBuild(context: PoseContext): SkeletonPose {

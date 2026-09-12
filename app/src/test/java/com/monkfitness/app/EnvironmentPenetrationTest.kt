@@ -253,21 +253,36 @@ class EnvironmentPenetrationTest {
     // ------------------------------------------------------------------------------------------
 
     /**
-     * The 26 production pose classes that declare no `metadata.support.contacts` (measured on
-     * `origin/main` @ `6e96275`). This list is DATA, not a tolerance: it is the set the corpus
-     * census is asserted against, so a pose that silently loses its declaration becomes a new member
-     * and fails. Declaring support for the stretch family (M9) and the core/hip poses (M10) is
-     * pending work tracked in `docs/STABILIZATION_AUDIT.md`; landing it moves names out of this list
-     * and the census must be updated in that change.
+     * The production pose classes that declare NO `metadata.support.contacts`.
+     *
+     * This list is DATA, not a tolerance: it is the set the corpus census is asserted against, so a
+     * pose that silently loses its declaration becomes a new member and fails.
+     *
+     * **M8/M9/M10 declaration pass (17 poses landed).** The pass declared support for the 7
+     * upper/dynamic poses (M8), the stretch family (M9) and the core/hip poses (M10) on the one
+     * canonical channel, and those names are gone from this list: `ArmCirclesPose`, `BurpeePose`,
+     * `CouchStretchPose`, `DynamicWorldsGreatestStretchPose`, `FacePullPose`, `GluteBridgePose`,
+     * `HalfKneelingStretchPose`, `HipCarsPose`, `KettlebellSwingPose`, `LatStretchPose`,
+     * `MountainClimberPose`, `PelvicTiltPose`, `ProneCobraStretchPose`, `ReverseSnowAngelPose`,
+     * `ScapularRetractionPose`, `SupermanPose`, `WallSlidesPose`.
+     *
+     * The remaining members are NOT in the M8/M9/M10 group, and each has a measured reason:
+     *  - `HamstringStretchPose` (M9) — its only derivable floor contact is the foot, and both feet
+     *    are authored with an ankle articulation ("front foot points to sky"); a `*_FOOT`
+     *    declaration would drive the authored pointed foot through the floor (measured `TOE_F`
+     *    21.55 → −2.57 at p=0.5). It records a vocabulary gap (the seated pelvis/leg mat support has
+     *    no consumed point), not a missing declaration.
+     *  - `CatCowPose` — M12 (legacy path migration), a separate finding.
+     *  - `AlternatingBirdDogPose` / `BirdDogPose` / `StaticBirdDogHoldPose` /
+     *    `QuadrupedThoracicRotationsPose` / `ThoracicExtensionPose` / `DeadBugPose` / `LegRaisePose`
+     *    — no M-number in `docs/STABILIZATION_AUDIT.md` §3 assigns them a declaration, and their
+     *    floor contact is torso/hips (no derivation consumes `HIPS`/`PELVIS`/`BACK`) plus a planted
+     *    hand or hand-on-mat chain that a future pass owns. Flagged for the user to assign rather
+     *    than silently expanded into this one.
      */
     private val undeclaringPoses = setOf(
-        "AlternatingBirdDogPose", "ArmCirclesPose", "BirdDogPose", "BurpeePose", "CatCowPose",
-        "CouchStretchPose", "DeadBugPose", "DynamicWorldsGreatestStretchPose", "FacePullPose",
-        "GluteBridgePose", "HalfKneelingStretchPose", "HamstringStretchPose", "HipCarsPose",
-        "KettlebellSwingPose", "LatStretchPose", "LegRaisePose", "MountainClimberPose",
-        "PelvicTiltPose", "ProneCobraStretchPose", "QuadrupedThoracicRotationsPose",
-        "ReverseSnowAngelPose", "ScapularRetractionPose", "StaticBirdDogHoldPose", "SupermanPose",
-        "ThoracicExtensionPose", "WallSlidesPose"
+        "AlternatingBirdDogPose", "BirdDogPose", "CatCowPose", "DeadBugPose", "HamstringStretchPose",
+        "LegRaisePose", "QuadrupedThoracicRotationsPose", "StaticBirdDogHoldPose", "ThoracicExtensionPose"
     )
 
     // ------------------------------------------------------------------------------------------

@@ -22,6 +22,13 @@ class WallSlidesPose : PoseBuilder {
                     depth = 160f
                 )
             )
+        ),
+        // M8 — the planted feet, on the ONE canonical support channel (`metadata.support`). The
+        // WALL contact (the forearms the exercise slides up the wall) is deliberately NOT declared
+        // here: the wall's contact plane is M15's finding, not this pass's.
+        support = SupportDefinition(
+            pivot = PivotType.FEET,
+            contacts = setOf(SupportContact.LEFT_FOOT, SupportContact.RIGHT_FOOT)
         )
     )
 
@@ -86,7 +93,8 @@ class WallSlidesPose : PoseBuilder {
         // The -5f x is a shape decision (lean toward the wall) and stays authored.
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.STANDING)
 
-        val standH = def.shinLength + def.thighLength + 25f
+        // standH is no longer read: every target below is authored in the chain root's own frame
+        // (M8), so the pose does not need to name the solver-owned root height.
         pelvis!!.localPosition = Vector3(-5f, 0f, 0f)
         declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), 0f)
 
@@ -103,8 +111,14 @@ class WallSlidesPose : PoseBuilder {
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
         // 1. Static Standing Feet (no foot sliding or penetration)
-        val targetAnkleF = Vector3(-5f, def.foot.ankleHeight, -def.hipWidth * 1.2f)
-        val targetAnkleB = Vector3(-5f, def.foot.ankleHeight, def.hipWidth * 1.2f)
+        // M8 — targets are authored in the frame this pose OWNS (the chain root's own world
+        // position). The root height is solver-owned (B3: the STANDING intent pins the pelvis after
+        // this build), so a floor-anchored Y sits a whole standing root height above the hip and
+        // the solver relocates the effector along that upward direction. `SkeletonMath.maxReach` is
+        // the chain's own reachable length, so the authored target is realizable as declared.
+        val legSpan = SkeletonMath.maxReach(def.thighLength, def.shinLength, def.legIKConstraint)
+        val targetAnkleF = Vector3(-5f, hipF!!.worldPosition.y - legSpan, -def.hipWidth * 1.2f)
+        val targetAnkleB = Vector3(-5f, hipB!!.worldPosition.y - legSpan, def.hipWidth * 1.2f)
 
         bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
         bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
@@ -113,13 +127,22 @@ class WallSlidesPose : PoseBuilder {
 
         // 2. Arms (sliding along the wall)
         val handX = -5f
-        val handY = lerp(standH + def.torsoLength - 10f, standH + def.torsoLength + 60f, context.progress)
+        // M8 — same frame rule as the feet: the slide's travel (−10 → +60 from the shoulder) is
+        // authored around the shoulder the pose owns at build time, not the floor-anchored height.
+        val handY = lerp(shoulderA!!.worldPosition.y - 10f, shoulderA!!.worldPosition.y + 60f, context.progress)
 
         val handZ_A = lerp(-def.shoulderWidth - 15f, -def.shoulderWidth - 25f, context.progress)
         val handZ_P = lerp(def.shoulderWidth + 15f, def.shoulderWidth + 25f, context.progress)
 
         val targetHandA = Vector3(handX, handY, handZ_A)
         val targetHandP = Vector3(handX, handY, handZ_P)
+
+        // M8 — the same reach band as everywhere else: the authored contact height is reserved
+        // against the arm chain's minimum reach (`SkeletonMath.minReach` at the 30° stop), so the
+        // declared target is projected onto the reachable band first (R2 reach-target helper) and
+        // the realized arm is exactly what the pose declared.
+        SkeletonMath.clampTargetToReach(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandA)
+        SkeletonMath.clampTargetToReach(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandP)
 
         // Elbow pole vector points backward and outward to keep contact with the wall plane
         bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(-1f, 0f, -1f), def.armIKConstraint, JointRotation(), elbowA!!, handA!!, armABuffer, jointsBuffer)

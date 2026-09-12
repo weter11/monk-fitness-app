@@ -536,7 +536,19 @@ class M6M7SwingBurpeeGeometryTest {
          * corrected tree** — i.e. the M6/M7 change is confined to the two poses it owns. Computed
          * with the repository's existing corpus-digest recipe (fresh pipeline + builder per class,
          * progress 0/0.25/0.5/0.75/1.0, every `Joint.entries` XYZ as raw float bits).
+         *
+         * **Re-baselined by the M8/M9/M10 support-declaration pass**
+         * (`fix/m8-m9-m10-support-declaration`, itself rebased onto this M6/M7 merge `eea705c`):
+         * that pass's 17 declared / re-authored classes are all inside this "every pose except the
+         * swing/burpee pair" corpus, so its arrivals move this digest. Observed RED on the pre-fix
+         * value `-2275091341366878044` before the re-baseline. Attribution is direct, not inferred:
+         * the whole-corpus dump (51 classes × 5 progress × every joint XYZ, `8415` rows, full float
+         * bits) measured on the rebased base and on the pass's tree differs in exactly `717` rows,
+         * every one of them inside the pass's own classes (which this guard's corpus includes); the
+         * pass's own blast-radius guard
+         * (`M8M9M10SupportDeclarationTest.UNAFFECTED_CORPUS_DIGEST`) excludes those classes and is
+         * measured equal on both trees.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -2275091341366878044L
+        const val UNAFFECTED_CORPUS_DIGEST = -8892365611399986406L
     }
 }
