@@ -4,6 +4,38 @@ import com.monkfitness.app.animation.*
 import com.monkfitness.app.animation.SkeletonMath.lerp
 import kotlin.math.*
 
+/**
+ * Reverse Snow Angel (prone) — `docs/Biomechanical Pose Specification (BPS)/Reverse Snow Angel (Prone).md`.
+ *
+ * Prone scapular/thoracic exercise: the pelvis and legs stay grounded, the thoracic spine is held in
+ * a gentle maintained extension, and the arms sweep through the "angel" arc along the floor.
+ *
+ * ## The authored hierarchy (M5 — corrected here)
+ *
+ * The pose previously built its own hand-rolled node tree (`pelvis → chest → shoulders/hips…`) and
+ * so published a trunk chain with **no lower-spine segment**: `Joint.LUMBAR` (the engine's
+ * two-segment `PELVIS → LUMBAR → CHEST` model) was absent from the tree and therefore published at
+ * the **world origin** `(0, 0, 0)` — 18.03 units from the pelvis it belongs to — together with
+ * `CLAVICLE_A/P`, `SCAPULA_A/P` and `WRIST_A/P`. The pose's own KDoc already claimed the §12.6
+ * conversion "converted it to the authored-hierarchy idiom (SkeletonFactory tree …)"; the tree was
+ * never migrated. It now uses the canonical factory tree like every other production pose, which
+ * restores the trunk's lower-spine junction (and the clavicle/scapula girdle nodes) at their real
+ * published positions. The migration is geometry-neutral for everything the pose authors: the
+ * factory's added nodes are pass-throughs (coincident, identity rotation) between the chest and the
+ * shoulder, so the limb targets, the arm sweep and the legs realize exactly as before.
+ *
+ * ## The maintained extension is a SPINE posture (M5)
+ *
+ * BPS §5/§9: "Thoracic spine maintained in gentle extension: the chest is long and open, the upper
+ * back does not round"; "Thoracic extension: a maintained posture (small ROM), held isometrically";
+ * "Lumbar spine neutral (natural lordosis), pelvis neutral and grounded — no arching or tucking".
+ * The pose's authored maintained tilt (its own `leanAngle = 1.50` against the family's prone layout
+ * of `−π/2`, i.e. `0.0708 rad` ≈ `4.1°`) was carried entirely by the ROOT, which tilted the pelvis
+ * out of the prone layout and left the chest node with `localRotation.angle == 0.0000` at every
+ * sampled frame — one rigid segment. It is now held on the two-segment spine (the same shape the
+ * dynamic prone members use), so the pelvis stays neutral and the "chest long and open" is a real
+ * thoracic posture. The amount is unchanged.
+ */
 class ReverseSnowAngelPose : PoseBuilder {
     override val metadata = PoseMetadata(
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
@@ -14,7 +46,7 @@ class ReverseSnowAngelPose : PoseBuilder {
     )
 
     private var roots: List<SkeletonNode>? = null
-    private var pelvis: SkeletonNode? = null; private var chest: SkeletonNode? = null; private var neck: SkeletonNode? = null; private var head: SkeletonNode? = null
+    private var pelvis: SkeletonNode? = null; private var lumbar: SkeletonNode? = null; private var chest: SkeletonNode? = null; private var neck: SkeletonNode? = null; private var head: SkeletonNode? = null
     private var shoulderA: SkeletonNode? = null; private var elbowA: SkeletonNode? = null; private var handA: SkeletonNode? = null; private var palmA: SkeletonNode? = null; private var knucklesA: SkeletonNode? = null; private var fingertipsA: SkeletonNode? = null
     private var shoulderP: SkeletonNode? = null; private var elbowP: SkeletonNode? = null; private var handP: SkeletonNode? = null; private var palmP: SkeletonNode? = null; private var knucklesP: SkeletonNode? = null; private var fingertipsP: SkeletonNode? = null
     private var hipF: SkeletonNode? = null; private var kneeF: SkeletonNode? = null; private var ankleF: SkeletonNode? = null; private var heelF: SkeletonNode? = null; private var toeF: SkeletonNode? = null
@@ -26,21 +58,22 @@ class ReverseSnowAngelPose : PoseBuilder {
     private val armABuffer = SkeletonMath.IKResult()
     private val armPBuffer = SkeletonMath.IKResult()
 
+    private val axisZ = Vector3(0f, 0f, 1f)
+
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
 
-        // Root is Pelvis for perfect prone mechanics
-        pelvis = SkeletonNode(Joint.PELVIS)
-        chest = pelvis!!.addChild(SkeletonNode(Joint.CHEST))
-        neck = chest!!.addChild(SkeletonNode(Joint.NECK_END)); head = neck!!.addChild(SkeletonNode(Joint.HEAD_POS))
-
-        shoulderA = chest!!.addChild(SkeletonNode(Joint.SHOULDER_A)); elbowA = shoulderA!!.addChild(SkeletonNode(Joint.ELBOW_A)); handA = elbowA!!.addChild(SkeletonNode(Joint.HAND_A)); palmA = handA!!.addChild(SkeletonNode(Joint.PALM_A)); knucklesA = palmA!!.addChild(SkeletonNode(Joint.KNUCKLES_A)); fingertipsA = knucklesA!!.addChild(SkeletonNode(Joint.FINGERTIPS_A))
-        shoulderP = chest!!.addChild(SkeletonNode(Joint.SHOULDER_P)); elbowP = shoulderP!!.addChild(SkeletonNode(Joint.ELBOW_P)); handP = elbowP!!.addChild(SkeletonNode(Joint.HAND_P)); palmP = handP!!.addChild(SkeletonNode(Joint.PALM_P)); knucklesP = palmP!!.addChild(SkeletonNode(Joint.KNUCKLES_P)); fingertipsP = knucklesP!!.addChild(SkeletonNode(Joint.FINGERTIPS_P))
-
-        hipF = pelvis!!.addChild(SkeletonNode(Joint.HIP_F)); kneeF = hipF!!.addChild(SkeletonNode(Joint.KNEE_F)); ankleF = kneeF!!.addChild(SkeletonNode(Joint.ANKLE_F)); heelF = ankleF!!.addChild(SkeletonNode(Joint.HEEL_F)); toeF = ankleF!!.addChild(SkeletonNode(Joint.TOE_F))
-        hipB = pelvis!!.addChild(SkeletonNode(Joint.HIP_B)); kneeB = hipB!!.addChild(SkeletonNode(Joint.KNEE_B)); ankleB = kneeB!!.addChild(SkeletonNode(Joint.ANKLE_B)); heelB = ankleB!!.addChild(SkeletonNode(Joint.HEEL_B)); toeB = ankleB!!.addChild(SkeletonNode(Joint.TOE_B))
-
-        roots = listOf(pelvis!!)
+        // The canonical factory tree (PELVIS → LUMBAR → CHEST → girdle/limbs). Its LUMBAR defaults to
+        // a pass-through (coincident with the pelvis, identity rotation) and its CLAVICLE → SCAPULA →
+        // SHOULDER chain defaults to a zero offset, so this tree realizes exactly what the previous
+        // hand-rolled one did while also carrying the trunk's lower-spine segment.
+        val nodes = SkeletonFactory.createStandardSkeleton()
+        roots = nodes.roots
+        pelvis = nodes.pelvis; lumbar = nodes.lumbar; chest = nodes.chest; neck = nodes.neck; head = nodes.head
+        shoulderA = nodes.shoulderA; elbowA = nodes.elbowA; handA = nodes.handA; palmA = nodes.palmA; knucklesA = nodes.knucklesA; fingertipsA = nodes.fingertipsA
+        shoulderP = nodes.shoulderP; elbowP = nodes.elbowP; handP = nodes.handP; palmP = nodes.palmP; knucklesP = nodes.knucklesP; fingertipsP = nodes.fingertipsP
+        hipF = nodes.hipF; kneeF = nodes.kneeF; ankleF = nodes.ankleF; heelF = nodes.heelF; toeF = nodes.toeF
+        hipB = nodes.hipB; kneeB = nodes.kneeB; ankleB = nodes.ankleB; heelB = nodes.heelB; toeB = nodes.toeB
     }
 
     override fun build(context: PoseContext): SkeletonPose {
@@ -52,17 +85,32 @@ class ReverseSnowAngelPose : PoseBuilder {
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
 
-        // 1. Prone Core Positioning
+        // 1. Prone core positioning: the root carries the whole-body PRONE LAYOUT only and is CONSTANT
+        // across the rep — BPS §5/§7 "pelvis neutral and grounded — no arching or tucking", "The
+        // pelvis stays grounded and neutral"; "the pelvis stays grounded". No second PELVIS joint
+        // intent is declared: `declarePelvisTilt` already records that carrier.
         val pelvisX = 15f
         val pelvisY = 10f
-        val leanAngle = 1.50f // Horizontal lying face down
 
         pelvis!!.localPosition = Vector3(pelvisX, pelvisY, 0f)
-        declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), -leanAngle)
-        SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.PELVIS, JointRotation(Vector3(0f, 0f, 1f), -leanAngle))
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, PRONE_LAYOUT_PITCH)
 
+        // The trunk chain: pass-through lower-spine junction, chest owns the trunk length, head/neck
+        // authored in the chain's own frame (BPS §4: "The cervical spine is in neutral/gentle extension
+        // consistent with the thoracic lift").
+        lumbar!!.localPosition = Vector3(0f, 0f, 0f)
         chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)
         neck!!.localPosition = Vector3(0f, def.neckLength, 0f); head!!.localPosition = Vector3(0f, 18f, 0f)
+
+        // The maintained thoracic extension is a held SPINE posture (BPS §5/§9), authored once on the
+        // two-segment spine: the thoracolumbar junction carries the trunk's maintained tilt and the
+        // chest node holds the rib cage open above it. Isometric — constant across the rep by contract.
+        lumbar!!.localRotation.set(axisZ, MAINTAINED_EXTENSION_RAD)
+        chest!!.localRotation.set(axisZ, MAINTAINED_EXTENSION_RAD * THORACIC_SHARE)
+        SkeletonPose.IntentBuilder(jointsBuffer).spine(MAINTAINED_EXTENSION_RAD, MAINTAINED_EXTENSION_RAD * THORACIC_SHARE, axisZ)
+        SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.LUMBAR, JointRotation(axisZ, MAINTAINED_EXTENSION_RAD))
+        SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.CHEST, JointRotation(axisZ, MAINTAINED_EXTENSION_RAD * THORACIC_SHARE))
+
         hipF!!.localPosition = Vector3(0f, 0f, -def.hipWidth)
         hipB!!.localPosition = Vector3(0f, 0f, def.hipWidth)
         shoulderA!!.localPosition = Vector3(0f, 0f, -def.shoulderWidth)
@@ -113,5 +161,29 @@ class ReverseSnowAngelPose : PoseBuilder {
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
         jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer
+    }
+
+    private companion object {
+        /**
+         * The whole-body prone LAYOUT (`rotZ(−π/2)`): spine local `+Y` → world `+X` (the head end),
+         * ventral `+X` → world `−Y` (face down). The root carries this and only this, constant across
+         * the rep (BPS §5/§7: pelvis neutral and grounded).
+         */
+        private const val PRONE_LAYOUT_PITCH = -PI.toFloat() / 2f
+
+        /**
+         * The pose's authored maintained thoracic extension above that layout, in radians: the pre-fix
+         * authored root tilt was `leanAngle = 1.50` against the layout's `π/2`, i.e.
+         * `π/2 − 1.5000 = 0.0708` (`4.06°`). Held isometrically (BPS §9) — not re-tuned by this
+         * correction, only moved from the root onto the spine.
+         */
+        private val MAINTAINED_EXTENSION_RAD = (PI.toFloat() / 2f) - 1.50f
+
+        /**
+         * Thoracic share of that maintained extension carried by the chest node above the trunk line —
+         * the repository's canonical two-segment shape (the S3 `ThoracicExtensionPose` repair of the
+         * same defect class uses 0.4).
+         */
+        private const val THORACIC_SHARE = 0.4f
     }
 }

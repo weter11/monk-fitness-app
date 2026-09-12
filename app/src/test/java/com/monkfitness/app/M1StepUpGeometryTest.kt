@@ -574,7 +574,15 @@ class M1StepUpGeometryTest {
          * on the corrected tree** — i.e. the M1 change is confined to `StepUpPose`. Captured on
          * `origin/main` @ `1da6458` (pre-fix) and re-verified after the fix; its own mutation check is
          * the observed RED when the step-up is included in this digest.
+         *
+         * **Re-baselined by the M3/M5 prone-trunk correction** (`fix/m3-m5-prone-trunk-geometry`, off
+         * `2bb4525`): this corpus is "every pose except the step-up", so it includes the three poses
+         * that correction owns (`ProneCobraStretchPose`, `SupermanPose`, `ReverseSnowAngelPose`).
+         * Observed RED on the pre-fix value `2746720065314572970` before the re-baseline; the same
+         * recipe with those three classes ALSO excluded is byte-identical across the two trees
+         * (`M3M5ProneTrunkGeometryTest.UNAFFECTED_CORPUS_DIGEST = -517042293001259057`), which is
+         * where "the other 48 classes are untouched" is actually gated.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 2746720065314572970L
+        const val UNAFFECTED_CORPUS_DIGEST = -8991724156081959456L
     }
 }
