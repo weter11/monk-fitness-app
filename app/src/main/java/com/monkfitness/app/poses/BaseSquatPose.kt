@@ -52,6 +52,52 @@ abstract class BaseSquatPose : BasePose() {
     /** Optional extra articulation (e.g. jump plantar-flexion / wrist flick). No-op by default. */
     protected open fun articulateExtras(def: SkeletonDefinition, progress: Float, leanAngle: Float, footLift: Float) {}
 
+    // --- R2/R4 reach-band authoring (see the helpers' KDoc) ---
+
+    /**
+     * R2/R4 — reach-band authoring for the family's DEFAULT geometry.
+     *
+     * The default hooks above author their targets in the FLOOR frame (the ankle at the definition's
+     * rest height, the hands sweeping forward from the shoulder line). Measured on the production
+     * entry point, two of those targets sit OUTSIDE their own chain's reachable annulus
+     * `[SkeletonMath.minReach, maxReach]`: the standing-phase ankle is a locked-out leg
+     * (`210.288` against the engine's `0.98` extension cap → `205.800`), and the counterbalance reach
+     * never leaves a `9.2 … 15.9` unit radius (the arm chain's `minReach = 40.134`). The solver
+     * answers by relocating the realized end-effector along the authored ray, so the published frame
+     * is the projection and not the authoring.
+     *
+     * These helpers apply the reachable-by-construction convention the family already uses
+     * (`SumoSquatPose`'s wide track, `BaseVerticalPullPose`'s pendulum legs): the authored target is
+     * projected onto its own chain's annulus along its own ray. The projection is taken to the
+     * annulus BOUNDARY (`margin = 0`) — each of these targets *is* the intended end position, and the
+     * solver's own relocation is exactly that boundary projection, so the realized geometry is
+     * preserved to float noise while the declared target becomes the realized position.
+     *
+     * Pose-side only: no solver, engine, carrier or stamp semantics change, and `maxIkClampAmount`
+     * stays live for any target that is genuinely out of band.
+     */
+    protected fun projectLegTargetsToReach(def: SkeletonDefinition, outF: Vector3, outB: Vector3) {
+        SkeletonMath.clampTargetToReach(
+            hipF!!.worldPosition, outF, def.thighLength, def.shinLength, def.legIKConstraint,
+            outF, REACH_MARGIN
+        )
+        SkeletonMath.clampTargetToReach(
+            hipB!!.worldPosition, outB, def.thighLength, def.shinLength, def.legIKConstraint,
+            outB, REACH_MARGIN
+        )
+    }
+
+    protected fun projectArmTargetsToReach(def: SkeletonDefinition, outA: Vector3, outP: Vector3) {
+        SkeletonMath.clampTargetToReach(
+            shoulderA!!.worldPosition, outA, def.upperArmLength, def.forearmLength, def.armIKConstraint,
+            outA, REACH_MARGIN
+        )
+        SkeletonMath.clampTargetToReach(
+            shoulderP!!.worldPosition, outP, def.upperArmLength, def.forearmLength, def.armIKConstraint,
+            outP, REACH_MARGIN
+        )
+    }
+
     // --- pole vectors (variant-tunable) ---
     protected open val legPoleF: Vector3 = Vector3(1f, 0f, -0.2f)
     protected open val legPoleB: Vector3 = Vector3(1f, 0f, 0.2f)
@@ -152,5 +198,25 @@ abstract class BaseSquatPose : BasePose() {
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A)); jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer
+    }
+
+    companion object {
+        /**
+         * The R2/R4 projection margin — a hundredth of a percent of the chain's span.
+         *
+         * The authored target is placed just INSIDE its annulus, not exactly on the boundary: the
+         * carrier stores coordinates at ~`3e-5` absolute resolution at these radii, so a
+         * boundary-exact target re-fires a float-noise relocation (measured: `3e-6` outside the bound,
+         * with the reachability stamp reading `8e-6`), while this margin makes "inside the band" hold by
+         * construction and the relocation stamp read exactly `0` (measured `0.000000` on every frame).
+         *
+         * The published geometry cost is bounded by the margin itself — `0.004` u at the arm's
+         * `minReach` and `0.021` u at the leg's `maxReach`, i.e. ~`1/10000` of the athlete's height.
+         * The helper's canonical `0.02` is NOT used here on purpose: it would lift the standing-phase
+         * ankle a further `4.12` u off this family's floor and pull the counterbalance hand `0.80` u
+         * in — geometry changes the reach defect does not require (measured; see the batch record in
+         * `docs/STABILIZATION_AUDIT.md`).
+         */
+        const val REACH_MARGIN = 1e-4f
     }
 }
