@@ -1582,15 +1582,139 @@ reads.
   "Hands may hold the shin, ankle, or foot") is a design question — the R2 projection deliberately
   preserves the authored direction and is not a re-choreography.
 
+### DONE — M11 + M12 the remaining limb-realization / carrier migration (branch `fix/m11-m12-limb-realization-migration`, off `a8d07cf`; pose-side representation + carrier declarations)
+
+Branch off `main` `a8d07cf` (the M13 merge, PR #242). **Neither row's literal mechanism reproduces on the
+current tree**: P12 WP-D (`5727091`) already removed the direct-`solveIK` bypass from both poses — each
+realizes its four limbs through the registered package `bakeIkLimb`, each carries four `limbTargets` with a
+complete declared realization context (target, pole, `length1`/`length2`, constraint), and `CatCowPose`
+already declares its gaze. What remains is the residue the same rows and §4's "TODO — P1" item 2 name
+("for full carrier coverage"), re-measured on the PUBLISHED runtime path
+(`SkeletonPipeline.produceFrame(pose, ctx)` — the deployed `IK_STAGE_ACTIVE = true` configuration the
+renderer and the validators read), 5 progress samples, before any production edit:
+
+| finding | recorded as | status on `a8d07cf` |
+|---|---|---|
+| **M11** `LatStretchPose` | "Bypasses `bakeIkLimb` (manual solveIK+rotAround) → not in `limbTargets` carrier" | **mechanism GONE, residue present** — the pose still builds its **own hand-rolled node tree** (`PELVIS → CHEST`, `CHEST → SHOULDER_*`), so five canonical joints are never authored and publish at the WORLD ORIGIN: `\|LUMBAR − PELVIS\| = 144.4507` at every sampled phase (the canonical two-segment pass-through measures `0.0000`), and `\|CLAVICLE_A\| = \|CLAVICLE_P\| = \|SCAPULA_A\| = \|SCAPULA_P\| = 0.0000` |
+| **M12** `CatCowPose` | "Raw world positions + `fromJointPositions`, bypassing `bakeIkLimb`/buildGaze/intent carriers" | **mechanism GONE, residue present** — the leg end-effectors are still raw floor-frame literals `(50, ankleHeight, ±hipWidth)` that the pose's own leg chain cannot fold to at ANY phase (`42.5 … 45.0` against `SkeletonMath.minReach(112, 98, 30°) = 56.0090`), so the engine relocates the realized foot (`maxIkClampAmount = 11.0090 → 16.0090`, realized `ANKLE_F` `13.5090` off the declared point at `p = 0.5`) — the M8-second-clause / M13 class; and the pose declares NO support model (`supportedPoints = []`) although its BPS §8 base is a four-point contact — the item `EnvironmentPenetrationTest`'s pinned census already attributes to M12 |
+
+- **First incorrect/legacy ownership point, per pose.** (i) `LatStretchPose`: the **legacy authored
+  hierarchy** — the pre-factory node list, which has no lower-spine segment and no shoulder girdle, so the
+  five joints above are owned by nobody and publish at the origin (exactly the class the M3/M5 pass
+  corrected for `ReverseSnowAngelPose`: "its hand-rolled tree has no lower-spine segment, so
+  `Joint.LUMBAR` publishes at the world origin"). (ii) `CatCowPose`: the **leg end-effector authored as an
+  absolute floor-frame world literal** — the "raw world positions" the row names, kept by WP-D's
+  representation migration and never projected onto the chain's own band — so the realized chain lands on
+  exactly its `30.00°` stop at every frame instead of where the pose declared it, with `KNEE_F` publishing
+  at `(−19.2853, 3.2497, −91.2853)`: `69.3` units OUT of the hip line the BPS §7/§11 pins ("Knees under
+  hips … the thighs do not splay").
+- **Fix (pose-side only — no engine file, no solver path, no carrier API, no new state).**
+  1. `LatStretchPose.ensureHierarchy` adopts the canonical `SkeletonFactory.createStandardSkeleton()`
+     tree (the M3/M5 `ReverseSnowAngelPose` shape and the WP-D idiom). The factory's added nodes are
+     pass-throughs (coincident, identity rotation) between the links the pose already authored, so every
+     transform it writes resolves exactly as before; what changes is that `LUMBAR`/`CLAVICLE_*`/`SCAPULA_*`
+     now carry their authored transforms instead of `(0,0,0)`.
+  2. `CatCowPose`'s two leg targets are projected onto their chain's own reachable band with the engine's
+     existing R2 helper `SkeletonMath.clampTargetToReach` — the same reachable-by-construction fix the M8
+     pass applied to the five standing poses and M13 to the hamstring reach. The authored direction and
+     stance are unchanged (a no-op for a target inside the band), and the reachability signal stays live
+     rather than muted.
+  3. `CatCowPose` declares its four-point base (`LEFT_HAND`/`RIGHT_HAND`/`LEFT_KNEE`/`RIGHT_KNEE`,
+     `pivot = KNEES` — the `KneePushUpPose` precedent) on the ONE canonical channel `metadata.support`,
+     plus the flat ground its BPS names.
+- **RED → GREEN (fresh runs, results directory purged, XML-stamped).** New
+  `M11M12LimbRealizationMigrationTest` (**5 tests**, all on the published frame): the canonical-hierarchy
+  witness; the authored-head guard (M11-b, below); the leg witness (declared distance inside
+  `[minReach, maxReach]` **and** the published end joint equal to the declared target **and** the engine's
+  own `0.1` reachability band); the four-point-base witness (the declared set reaching
+  `SkeletonPose.supportedPoints` under BOTH frame conditions — cold and mid-playback — with the canonical
+  `SupportMath.jointsFor` resolution as the anti-vacuity guard); and the blast-radius digest. On the
+  untouched base tree the gate is **3 of 5 RED** (every behavioural witness, quoting `|LUMBAR − PELVIS| =
+  144.4507`, `45.0` vs `56.009014`, and the empty carrier); on this branch **5/5**.
+- **Counterfactual (each hunk removed ALONE, file restored `md5sum`-verified).** Full production stash ⇒
+  the same **3 of 5 RED**; the canonical tree reverted alone ⇒ exactly
+  `latStretchPublishesTheCanonicalAuthoredHierarchy` RED; the two projection lines removed alone ⇒ exactly
+  `catCowLegTargetsAreReachableAsAuthored` RED; the declaration removed alone ⇒ exactly
+  `catCowDeclaresItsFourPointBaseOnTheCanonicalChannel` RED; restored ⇒ `5/5` GREEN (restore hashes
+  `a5c9f671320e8765c910678faef8a6b4` / `d9e8cca6811fb6f5d92f351e9494f12d`).
+- **Blast radius, direct and non-inferred.** Whole-corpus dump (`50` classes × `5` samples × every joint
+  XYZ = `8415` rows, full float bits, `git stash` round-trip on the two pose files): **`95` xyz rows
+  differ — `70` in `CatCowPose`, `25` in `LatStretchPose`; the other `48` classes are byte-identical.**
+  The `25` `LatStretchPose` rows are exactly the five canonical joints × five samples (worst `204.8020` u,
+  `CLAVICLE_A` at `p = 0`: origin → the chest pass-through); the `70` `CatCowPose` rows are the
+  reachability correction (ankle `1.1202`, heel `1.2313`, toe `0.8481`, knee `0.0455` u) and the
+  declaration's own hand derivation flattening the hand chain onto the mat (`FINGERTIPS_*` `4.3222 → 0`,
+  `PALM_*` `1.1788 → 0`, `KNUCKLES_*` `2.3576 → 0` at `p = 0` — those joints sat BELOW the mat before,
+  which the declaration now forbids). `165` rows carry the clamp change (`11.0090 … 16.0090 → 0.0000` at
+  every phase) and `165` the `supportedPoints` change (`∅ →` the four points). **Six** pre-existing scope
+  digests whose corpora include these classes went RED on their previous values and are re-baselined with
+  this pass named at each constant (`M1StepUpGeometryTest` `6236906328909027759 → -4852997236878182403`;
+  `M3M5ProneTrunkGeometryTest` `5051896512474775952 → -6653724965262809122`;
+  `M6M7SwingBurpeeGeometryTest` `-5046569167321454212 → -7395791808799176758`;
+  `M8M9M10SupportDeclarationTest` `-3670557964446835822 → 8463731255735644640`;
+  `PlankForearmSupportGeometryTest` `-424882841079246328 → 8776294205745763414`;
+  `HamstringForwardReachTest` `6921547823364851041 → 4572325181887128495`), and this pass's own guard
+  (`M11M12LimbRealizationMigrationTest.UNAFFECTED_CORPUS_DIGEST = -7010204834070121618`) is measured
+  **equal on both trees**. `EnvironmentPenetrationTest`'s pinned declaration census moves `9 → 8` names
+  (this pose leaves it), so its B-6 invariant now evaluates the new declarations for real: `2` hands ×
+  `4` joints + `2` knees × `1` joint × `5` samples × `2` frame conditions = `100` new observations.
+- **Full suite / build.** `--rerun-tasks`, results purged: pre-fix **`119 classes / 572 tests / 0F / 0E`**
+  → this branch **`120 / 577 / 0F / 0E / 0S`** — exactly `+1` class / `+5` tests, no other count moved.
+  `:app:compileReleaseKotlin` + `:app:compileReleaseJavaWithJavac` + `:app:assembleDebug` successful.
+- **M11-b, recorded and deliberately NOT migrated (measured).** §4's item names the "gaze helpers" as
+  M11's other half, and `LatStretchPose` declares no `headTarget`. Migrating it is NOT available as a
+  representation change: `SkeletonPoseFinalizer.resolveHeadTarget` derives the gaze DIRECTION from a world
+  delta (`headTarget.world − neck.worldPosition`) and writes it verbatim as the neck/head LOCAL offset,
+  which the neck's parent rotation then re-applies (`neckParentRot · dir`). This pose's trunk is pitched
+  `0.95` rad (`54.4°`), so declaring the authored direction as a world target resolves the head `0.9147`
+  rad (`52.4°`) OFF the authored trunk axis — measured by declaring it on this tree (the same constraint
+  the M3/M5 record documents for the prone family, where `SupermanPose` authors its head in the chain's
+  own frame and the pose-side compensation is prohibited by `MIGRATION_RULES` A8). The pose's authored
+  head already lives in the chain's own frame (BPS §4: cervical spine neutral, following the trunk), which
+  is the sanctioned representation; the gate pins that resolved behaviour
+  (`latStretchAuthoredHeadStaysOnThePosesOwnTrunkAxis`) and is the trap that turns RED the moment someone
+  declares the naive world target.
+- **Recorded, deliberately NOT fixed (adjacent, measured).** (a) `CatCowPose`'s leg GEOMETRY: the realized
+  knee publishes `69.3` units out of the hip line because of the authored pole `(−1, 0, ∓1)` (the bend
+  plane is the pose's choice; the BPS wants the knee under the hip with the shin ON the mat and the ankle
+  behind the knee — a re-authoring this pass does not own, and the target projection deliberately keeps
+  the authored direction/stance). (b) The same pose's spine articulation is authored as the pelvis tilt
+  (the M3-class "whole-body layout as one ROOT rotation": `chest.localRotation ≡ 0`, `spineIntent = (0,0)`
+  while the pelvis tilt spans only `1.5708 → 1.6124` rad across the rep) — a fidelity question, not a
+  carrier one. (c) The realized ankle now sits `2.1292` u below the pose's own mat at `p = 1.0` (pre-fix
+  `1.0090`): the reachability projection moves the declared target along its own ray to
+  `minReach·(1 + margin) = 57.1290` (the helper's canonical `0.02`), and the pose's `pelvisPos` descends
+  across the rep while the floor-frame ankle target does not. The pose's declared four-point base is the
+  hands and the knees, so no declared contact is violated; no M-number assigns the foot height. (d)
+  `LatStretchPose`'s authored arms put the hands on the wall `84.8` below and `12.4` forward of the
+  shoulder with the elbow `51.5` units outboard in Z (shoulder→hand `86.2` of the `146` arm span), against
+  a BPS §6/§9/§11 that asks for a full-elevation overhead reach with a straight elbow — an M-class
+  authorship question the audit's rows do not name. (e) Both poses keep the P2 items (WRIST mirror lines,
+  the duplicate PELVIS intent) — that pass owns them.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
-2. H2 complement — migrate LatStretchPose (M11) and CatCowPose (M12) onto `bakeIkLimb`/gaze
-   helpers for full carrier coverage. **The declaration half of this item is DONE (M8/M9/M10 — see
+2. H2 complement — **M11 (`LatStretchPose`) + M12 (`CatCowPose`) are DONE — see the record above**
+   (the canonical authored hierarchy for M11; the reachable-by-construction leg targets + the four-point
+   support declaration for M12). **The declaration half of this item is DONE (M8/M9/M10 — see
    the record above): the 7 upper/dynamic poses, the stretch family and the core/hip poses now
-   declare on `metadata.support`.** Still open from that pass: `HamstringStretchPose`'s declaration
+   declare on `metadata.support`.** Still open from those passes: `LatStretchPose`'s gaze migration
+   (M11-b — recorded as unavailable: the world-space `headTarget` carrier cannot express this pose's
+   pitched trunk, `0.9147` rad of error, and `MIGRATION_RULES` A8 prohibits the pose-side compensation;
+   the pose authors its head in the chain's own frame, which the gate pins);
+   `HamstringStretchPose`'s declaration
    (blocked on the foot-vocabulary gap), `BurpeePose`'s feet (now unblocked — the M7 plant landed
    as PR #240 / `eea705c` and that foot chain measures clean there), and the 7 undeclared classes with no owning M-number (flagged for assignment).
+   **Newly measured and unassigned:** the `10` OTHER poses that still publish `LUMBAR`, `CLAVICLE_A/P` and
+   `SCAPULA_A/P` at the world origin because they build their own node tree — `ArmCirclesPose`,
+   `BurpeePose`, `FacePullPose`, `GluteBridgePose`, `HipCarsPose`, `KettlebellSwingPose`,
+   `MountainClimberPose`, `PelvicTiltPose`, `ScapularRetractionPose`, `WallSlidesPose` — the same class
+   this pass corrected for `LatStretchPose` (each measures `|LUMBAR| = 0.0000` with the girdle joints at
+   the origin); flagged for the user to assign rather than silently expanded into M11.
+   Also unassigned: `CatCowPose`'s leg GEOMETRY (the pole's lateral component splays the realized knee
+   `69.3` units out of the hip line, against BPS §7/§11) and its spine articulation authored as the pelvis
+   tilt — both recorded with measurements in this pass's record.
 3. M2/M6/M7 — pose-specific biomechanical-fidelity bugs (side-plank contact
    side — **the declaration side resolved by B-4 and the pose's own planted-forearm floor debt
    resolved by B-7**). **M1 (the step contact), M3 (cobra) + M4 (superman) + M5
@@ -1615,7 +1739,8 @@ A8/A6 leaks — resolved in the Push-Up Family pass above.)
 - Fix the pose, not the engine, when a pose authors motion incorrectly.
 - Keep pose-side migrations on the **existing** carrier surface (the H2 fix is the template).
 - After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
-  current baseline of record (**119 classes / 572 tests** as of the M13 hamstring-reach
-  correction, which added `HamstringForwardReachTest`; the M6/M7 landing plus the
+  current baseline of record (**120 classes / 577 tests** as of the M11/M12 limb-realization migration,
+  which added `M11M12LimbRealizationMigrationTest` and re-baselined six scope digests; the M13
+  hamstring-reach correction stood at `119 / 572`, the M6/M7 landing plus the
   M8/M9/M10 declaration pass stood at `118 / 566`; `--rerun-tasks` with the results directory purged, XML-stamped fresh; the
   older "282" figure predates P12) before marking a finding resolved.

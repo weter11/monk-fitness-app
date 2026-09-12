@@ -304,8 +304,20 @@ class HamstringForwardReachTest {
          * dump re-measured on both trees via a `git stash` round-trip, `md5sum -c` on the restored
          * pose file). This guard's own mutation check is the observed RED when the corrected pose is
          * folded back into the corpus.
+         *
+         * **Re-baselined by the M11/M12 limb-realization migration**
+         * (`fix/m11-m12-limb-realization-migration`, off `a8d07cf`): `HamstringStretchPose` is still the
+         * only excluded class, so this corpus contains `LatStretchPose` (M11 — the canonical authored
+         * hierarchy replaces the hand-rolled tree, publishing `LUMBAR`/`CLAVICLE_*`/`SCAPULA_*` instead
+         * of the world origin) and `CatCowPose` (M12 — the four-point support declaration and the
+         * reachable-by-construction leg targets). Observed RED on the previous value before this
+         * re-baseline. Attribution is direct, not inferred: the whole-corpus dump (`50` classes × `5`
+         * samples × every joint, `8415` rows, `git stash` round-trip on the two pose files) differs in
+         * exactly `95` xyz rows — `70` in `CatCowPose`, `25` in `LatStretchPose` — and the other `48`
+         * classes are byte-identical. That pass's own blast-radius guard is
+         * `M11M12LimbRealizationMigrationTest.UNAFFECTED_CORPUS_DIGEST`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 6921547823364851041L
+        const val UNAFFECTED_CORPUS_DIGEST = 4572325181887128495L
     }
 }
 

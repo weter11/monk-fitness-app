@@ -43,7 +43,23 @@ class CatCowPose : PoseBuilder {
         defaultZoom = 1.3f),
         durationSeconds = 4.0f,
         loopMode = LoopMode.LOOP,
-        motionCurve = MotionCurve.SINE
+        motionCurve = MotionCurve.SINE,
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
+        // M12-b (P11 audit §3 row M12 / §4 "TODO — P1" item 2): the quadruped's four-point base,
+        // declared on the ONE canonical support channel (`metadata.support`). `Cat-Cow (Reps)` BPS §8
+        // — "both hands (palm/carpal arch) and both knees (patella/shin on a padded surface) remain in
+        // contact with the floor" — is exactly the `KneePushUpPose` base (hands + knees, pivot
+        // KNEES), and the pose declared none of it, so `SkeletonPose.supportedPoints` published EMPTY
+        // and the declaration-driven derivations were inert for a pose that rests on four points.
+        support = SupportDefinition(
+            pivot = PivotType.KNEES,
+            contacts = setOf(
+                SupportContact.LEFT_HAND,
+                SupportContact.RIGHT_HAND,
+                SupportContact.LEFT_KNEE,
+                SupportContact.RIGHT_KNEE
+            )
+        )
     )
 
     private fun ensureHierarchy(definition: SkeletonDefinition) {
@@ -90,9 +106,21 @@ class CatCowPose : PoseBuilder {
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
         // LEG TARGETS: ankles planted at the knee-base floor points (unchanged targets/poles).
-        val kneeBaseR = tempV1.set(50f, ankleHeight, -definition.hipWidth)
+        // M12-a (P11 audit §3 row M12: "raw world positions"): the floor-frame literals below are
+        // inside the leg chain's own minimum reach at EVERY phase — measured `42.5 … 45.0` against
+        // `SkeletonMath.minReach(112, 98, 30°) = 56.0090` — so the engine relocated the realized foot
+        // instead of realizing the declared point (`maxIkClampAmount = 11.0090 … 16.0090`, the
+        // realized `ANKLE_F` 13.5090 units off the declaration at p = 0.5), the M8-second-clause /
+        // M13 defect class. The authored direction and stance are unchanged; each target is projected
+        // onto its chain's reachable band with the engine's own R2 helper
+        // (`SkeletonMath.clampTargetToReach` — the same reachable-by-construction fix the M8 pass
+        // applied to the five standing poses and M13 to the hamstring reach), which is a no-op for a
+        // target already inside the band and leaves the reachability signal live rather than muted.
+        val kneeBaseR = Vector3(50f, ankleHeight, -definition.hipWidth)
+        SkeletonMath.clampTargetToReach(hipF!!.worldPosition, kneeBaseR, definition.thighLength, definition.shinLength, IKConstraint.LegConstraint, kneeBaseR)
         bakeIkLimb(hipF!!.worldPosition, kneeBaseR, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f), IKConstraint.LegConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFIK, jointsBuffer)
         val kneeBaseL = Vector3(50f, ankleHeight, definition.hipWidth)
+        SkeletonMath.clampTargetToReach(hipB!!.worldPosition, kneeBaseL, definition.thighLength, definition.shinLength, IKConstraint.LegConstraint, kneeBaseL)
         bakeIkLimb(hipB!!.worldPosition, kneeBaseL, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f), IKConstraint.LegConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBIK, jointsBuffer)
 
         // ARM TARGETS: hands under the shoulders (same offsets, now read from FK).
