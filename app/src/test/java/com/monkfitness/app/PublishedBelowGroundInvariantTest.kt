@@ -32,9 +32,9 @@ import java.io.File
  *
  * | instrument | what it keys on | below-ground pose/joint pairs it reports |
  * |---|---|---|
- * | `ExerciseValidator.validateFeetGroundPenetration` (default config) | the **6 foot joints only** (`FEET_JOINTS`), and only when `allowFootGroundPenetration = false` | **12 issues in 1 of 8 poses** — `CatCowPose`'s feet (`HEEL_*` worst `−2.422398`). The other 7 poses report **0** |
- * | `EnvironmentPenetrationTest` (B-6) | the joints of a pose's **declared support contacts** | **0 of 39** — for every one of the 8 offending poses the offending joint is OUTSIDE its declared support family ([theBelowGroundClassIsInvisibleToTheDeclarationKeyedInstrument] pins that fact) |
- * | this file | **every joint of every published frame** | **39 pose/joint pairs over 8 poses** (the `DynamicWorldsGreatestStretchPose` back-knee pair left the table with the B2 correction, the `DiamondPushUpPose` elbow pair with the B1 correction and the `IsometricSidePlankPose` support-knee pair with the B3 correction — see [knownBelowGround]) |
+ * | `ExerciseValidator.validateFeetGroundPenetration` (default config) | the **6 foot joints only** (`FEET_JOINTS`), and only when `allowFootGroundPenetration = false` | **12 issues in 1 of 7 poses** — `CatCowPose`'s feet (`HEEL_*` worst `−2.422398`). The other 6 poses report **0** |
+ * | `EnvironmentPenetrationTest` (B-6) | the joints of a pose's **declared support contacts** | **0 of 35** — for every one of the 7 offending poses the offending joint is OUTSIDE its declared support family ([theBelowGroundClassIsInvisibleToTheDeclarationKeyedInstrument] pins that fact) |
+ * | this file | **every joint of every published frame** | **35 pose/joint pairs over 7 poses** (the `DynamicWorldsGreatestStretchPose` back-knee pair left the table with the B2 correction, the `DiamondPushUpPose` elbow pair with the B1 correction, the `IsometricSidePlankPose` support-knee pair with the B3 correction, and the `GluteBridgePose`/`PelvicTiltPose` elbow pairs with the B4 correction — see [knownBelowGround]) |
  *
  * The 4 poses whose below-ground hand chains are invisible to the declared-contact instrument are
  * exactly the classes that declare NO support at all (`BirdDogPose`, `AlternatingBirdDogPose`,
@@ -62,7 +62,7 @@ import java.io.File
  *     exists as a second, **unread** field (grep: zero production readers) and is deliberately not
  *     resurrected here.
  *  3. **Genuine ground penetration.** A published joint below the pose's own plane by more than
- *     [groundBand] — 39 pose/joint pairs today, attributed in [knownBelowGround].
+ *     [groundBand] — 35 pose/joint pairs today, attributed in [knownBelowGround].
  *
  * ## Non-vacuity (the B-6 lesson, applied to the whole body)
  *
@@ -263,7 +263,7 @@ class PublishedBelowGroundInvariantTest {
      * identical under both conditions for every entry (the geometry is not frame-condition
      * sensitive here).
      *
-     * **Entries leave this table only by the pose being FIXED.** Two have now left it, each in the
+     * **Entries leave this table only by the pose being FIXED.** Four have now left it, each in the
      * change that corrected it — and the stale-pin guard fired on each, listing exactly the corrected
      * pairs, so the entries could not outlive their exit criterion:
      *  * `DynamicWorldsGreatestStretchPose`'s `KNEE_B −46.1056` by B2 (`fix/b2-wgs-back-knee-plane`,
@@ -275,10 +275,19 @@ class PublishedBelowGroundInvariantTest {
      *    [aPlantedSupportJointRestingOnTheDeclaredPlaneIsNotReported]'s family;
      *  * `IsometricSidePlankPose`'s `KNEE_B −25.8897` by B3 (`fix/b3-sideplank-knee-plane`, the support
      *    leg's residual knee bend authored out of the mat); the corrected pose publishes
-     *    `KNEE_B y = +44.8145 … +57.7449` and its gate is `IsometricSidePlankKneePlaneTest`.
+     *    `KNEE_B y = +44.8145 … +57.7449` and its gate is `IsometricSidePlankKneePlaneTest`;
+     *  * `GluteBridgePose`'s `ELBOW_A`/`ELBOW_P −30.6914` and `PelvicTiltPose`'s
+     *    `ELBOW_A`/`ELBOW_P −33.3501` by B4 (`fix/b4-glute-bridge-pelvic-tilt-elbow-plane`, the supine
+     *    arms' bend side re-authored onto the poses' own lateral axis); both corrected poses publish
+     *    `ELBOW_A/P y = +7.0594 … +12.7988` (measured over the dense sweep) and their gate is
+     *    `SupineArmElbowPlaneTest`. `GluteBridgePose` leaves this table entirely (the elbow pair was
+     *    its only entry); `PelvicTiltPose` KEEPS its trunk entries — its static pelvis with a torso
+     *    rotating past horizontal is a different root cause, not reachable from the arm chain's bend
+     *    side, and it stays open here.
      *
-     * The instrument-table counts and the pinned-pair census are therefore `39` pairs over `8` poses
-     * (from `43`/`11` on `07dfe38`), re-measured on the tree that carries all three corrections.
+     * The instrument-table counts and the pinned-pair census are therefore `35` pairs over `7` poses
+     * (from `43`/`11` on `07dfe38`, `39`/`8` on the B2+B1+B3 tree), re-measured on the tree that
+     * carries all four corrections.
      */
     private val knownBelowGround: Map<String, Map<Joint, Float>> = mapOf(
         "AlternatingBirdDogPose" to mapOf(
@@ -304,11 +313,7 @@ class PublishedBelowGroundInvariantTest {
             Joint.ANKLE_F to -2.1292f, Joint.ANKLE_B to -2.1292f,
             Joint.TOE_F to -1.4113f, Joint.TOE_B to -1.4113f
         ),
-        "GluteBridgePose" to mapOf(
-            Joint.ELBOW_A to -30.6914f, Joint.ELBOW_P to -30.6914f
-        ),
         "PelvicTiltPose" to mapOf(
-            Joint.ELBOW_A to -33.3501f, Joint.ELBOW_P to -33.3501f,
             Joint.HEAD_POS to -2.5384f, Joint.NECK_END to -2.5295f,
             Joint.CHEST to -0.3659f, Joint.SHOULDER_A to -0.3659f, Joint.SHOULDER_P to -0.3659f
         ),
@@ -344,14 +349,15 @@ class PublishedBelowGroundInvariantTest {
             "recorded OPEN in the M11/M12 record clause (c): 'the realized ankle now sits 2.1292 u below " +
             "the pose's own mat at p = 1.0'; the pose's declaration is its four-point base (hands + " +
             "knees), so its feet are outside the declared family",
-        "GluteBridgePose" to
-            "M10 owns its declaration; the supine arm authoring is recorded OPEN in the M8/M9/M10 " +
-            "record clause (d): 'publish their elbows -30.69/-33.35 BELOW their own mat (measured, " +
-            "unchanged by this pass: no declared contact, so no invariant covers them)'",
         "PelvicTiltPose" to
-            "M10 owns its declaration; same clause (d) as GluteBridgePose for the elbows, and the " +
-            "supine layout puts CHEST/SHOULDER_*/NECK_END/HEAD_POS just under the mat at the top of " +
-            "the rep (p = 1.0)"
+            "M10 owns its declaration; the elbow pair was recorded OPEN in the M8/M9/M10 record " +
+            "clause (d) shared with GluteBridgePose and is CLOSED by B4 " +
+            "(fix/b4-glute-bridge-pelvic-tilt-elbow-plane: the supine arms' bend side re-authored onto " +
+            "the pose's own lateral axis; ELBOW_A/P now read +7.1 … +12.8, where they read " +
+            "-28.6 … -33.4). The pose REMAINS pinned for its trunk: the supine layout puts " +
+            "CHEST/SHOULDER_*/NECK_END/HEAD_POS just under the mat at the top of the rep (p = 1.0) — " +
+            "a trunk-authoring item with its own root cause (a static pelvis with the torso rotating " +
+            "past horizontal), not reachable from the arm chain's bend side, and not fixed here"
     )
 
     @Test
@@ -590,13 +596,15 @@ class PublishedBelowGroundInvariantTest {
      * **The counterfactual the mission asks for — a declaration-keyed gate sees NONE of these.**
      * For every pinned violation, the offending joint is outside the pose's own declared support
      * family (`metadata.support.contacts` → the B-4 canonical mapping, the exact channel
-     * `EnvironmentPenetrationTest` keys on). Measured on the pinned table: 39 of 39 — which is why
+     * `EnvironmentPenetrationTest` keys on). Measured on the pinned table: 35 of 35 — which is why
      * the B-6 invariant, the sole owner of the floor on the declaration channel, is green today
-     * with all 39 pairs present. (`DiamondPushUpPose`'s pair left the table with the B1 correction:
+     * with all 35 pairs present. (`DiamondPushUpPose`'s pair left the table with the B1 correction:
      * its elbows were never inside its declared family either, and the pose is now a planted
      * control in [aPlantedSupportJointRestingOnTheDeclaredPlaneIsNotReported];
-     * `DynamicWorldsGreatestStretchPose`'s with the B2 correction, and
-     * `IsometricSidePlankPose`'s with the B3 correction.)
+     * `DynamicWorldsGreatestStretchPose`'s with the B2 correction,
+     * `IsometricSidePlankPose`'s with the B3 correction, and the supine poses' elbow pairs with the
+     * B4 correction — `GluteBridgePose` leaves this table entirely, `PelvicTiltPose` keeps its trunk
+     * entries.)
      */
     @Test
     fun theBelowGroundClassIsInvisibleToTheDeclarationKeyedInstrument() {
@@ -618,11 +626,11 @@ class PublishedBelowGroundInvariantTest {
         )
 
         // And the identical statement about the INSTRUMENTS: the validator's floor rule covers the
-        // 6 foot joints only, so 7 of the 8 poses cannot be seen by it at all.
+        // 6 foot joints only, so 6 of the 7 poses cannot be seen by it at all.
         val footJoints = setOf(Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
         val validatorVisible = knownBelowGround.filterValues { joints -> joints.keys.any { it in footJoints } }
         assertEquals(
-            "the validator's ground rule is a FOOT rule: exactly one of the 8 offending poses " +
+            "the validator's ground rule is a FOOT rule: exactly one of the 7 offending poses " +
                 "(CatCowPose's feet) is reachable by it",
             listOf("CatCowPose"), validatorVisible.keys.toList()
         )

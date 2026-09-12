@@ -129,9 +129,20 @@ class GluteBridgePose : PoseBuilder {
         val targetHandA = Vector3(-35f, 12f, -def.shoulderWidth - 5f)
         val targetHandP = Vector3(-35f, 12f, def.shoulderWidth + 5f)
 
-        // P12 (§12.6): arms declared through the registered authoring bake.
-        bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, jointsBuffer)
-        bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, jointsBuffer)
+        // B4 — the elbow's BEND SIDE is this pose's own LATERAL axis, not the standing family's
+        // downward pole. A supine pose lays its arms in the floor plane, so the shoulder->hand chord
+        // is horizontal (shoulder y = 12.9 … 14.0, hand y = 12.0) and the family's pole
+        // (0, -1, ∓1) spends its -Y component on the chord's DOWNWARD basis vector: measured
+        // phat_y = -0.7069 … -0.7075 against h = 58.49 … 60.74, which realized ELBOW_A/P 28.6 … 30.7
+        // units BELOW this pose's own mat (declared level 0) at EVERY phase of the rep. The pose
+        // rotates about world Z only (see declarePelvisTilt above), so world ∓Z IS the body's lateral
+        // axis at every phase: the pole keeps the outward side the old Z sign already selected (the
+        // elbow bows outboard, never across the torso) and the arm's plane becomes the floor plane
+        // ("lying flat alongside the body"). The elbow then reads +7.1 … +12.9 u, its residual bow
+        // horizontal. Only the bend side changes: the hand target, the stance, the plant and the leg
+        // authoring are untouched (SupineArmElbowPlaneTest).
+        bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 0f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, jointsBuffer)
+        bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 0f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
         // W1 migration: the engine derives palm/knuckles/fingertips from the forearm + the wrist
         // articulation relative to the forearm, so the old `hand.localRotation = -torsoAngle`
