@@ -193,8 +193,14 @@ geometry on `main`. Pose-side fix only: no engine file, no phase order, no owner
   local offsets are written by the engine (`resolveHeadTarget`, Phase 7), so the first build realizes
   against a target it never sees again (declared-target delta 16.67 units). Pinned by attribution in
   `ColdFrameLimbRealizationTest` so it cannot be masked or mis-attributed.
-- **Still open (P11 backlog).** B-6 (`EnvironmentPenetrationTest` vacuity), §12.7 flag lifecycle.
-  (T-7 landed as PR #230; B-2 + B-3, B-4 and B-5 landed — see the blocks below.)
+- **Still open (P11 backlog).** §12.7 flag lifecycle; and — recorded so the label is unambiguous — the
+  **P11 branch's own B-6** (`docs/AUDIT_P11_WHOLE_SYSTEM.md` §2: `SkeletonPipeline.resetHistory()`
+  clears the dynamics chain but not the smoothing history; class NEEDS ARCHITECTURAL DECISION + DEAD
+  API — zero production callers — and deliberately pinned by
+  `arch/InterFrameSmoothingTest.resetHistoryKeepsPreP5Semantics`), which this tracker does not carry
+  and this change does not touch.
+  (T-7 landed as PR #230; B-2 + B-3, B-4, B-5 and B-6 — this tracker's B-6, the `EnvironmentPenetrationTest`
+  vacuity — landed; see the blocks below.)
 
 ### DONE — B-2 + B-3 support declaration channel + contact-kind consumption (P11)
 
@@ -479,6 +485,100 @@ tolerance.
     where it matters, and no production pose currently rewrites an articulated node after recording
     it. Out of B-5 scope (Branch-C §11 mixed-mode authoring, §1.1 carrier hygiene); recorded for its
     own pass.
+
+### DONE — B-6 the support-contact surface invariant is evaluated for real (P11, test-only)
+
+PR #234 (`fix/b6-support-contact-surface-invariant`). The active tracker's B-6 — the
+`EnvironmentPenetrationTest` **vacuity** — is the validation-path half of
+the P11 whole-system audit's §4 test findings (T-1 "no test asserts a declared support contact actually
+lands on its support surface", T-2 the skip, T-6 the private side-map copy). **Test-only change: no
+production file is touched** (whole-corpus dump md5 identical — see below). Branch
+`fix/b6-support-contact-surface-invariant` off `origin/main` `6e96275`.
+
+- **Root cause — the file asserted nothing about most of what it claimed.** Measured by running the
+  pre-fix file (verbatim logic, instrumented with coverage counters) on the unmodified baseline:
+  | measurement | value |
+  |---|---|
+  | `evaluatedJointObservations` | **790** |
+  | `posesActuallyEvaluated` | **18** of its own 25 hand-picked `variants` (the corpus is **51** classes) |
+  | `variantsSkippedForEmptyDeclaration` (`if (contacts.isEmpty()) continue`) | **7** — `GluteBridgePose`, `BirdDogPose`, `CatCowPose`, `DeadBugPose`, `SupermanPose`, `LegRaisePose`, `HipCarsPose` |
+  | `declaredContactsResolvedToEmptyList` (private `supportJoints()`'s `else -> emptyList()`) | **[`LEFT_FOREARM`, `RIGHT_FOREARM`]** — 20 declared-contact joint-observations compared against nothing |
+  | `failuresReported` | **0** (green, one-sided, with no count of what was evaluated) |
+
+  Because a pose that silently LOSES its declaration (the B-2 defect class) could only shrink what the
+  file asserted, and because the file carried a fourth copy of the `SupportPoint ↔ Joint` mapping B-4
+  had established authority for, the invariant could not fail for the defects it was written for.
+- **…and the vacuity hid a real production violation.** With the canonical mapping
+  (`SupportMath.jointsFor`), the engine's own surface rule (ONE plane per contact, from that contact's
+  canonical centroid — `SkeletonPoseFinalizer.supportPlaneNormalFor`) and the whole corpus, the
+  unmodified baseline reports exactly three pose/contact pairs below their declared surface:
+
+  | pose | declared contact | worst penetration | offending joint |
+  |---|---|---|---|
+  | `StaticForearmPlankPose` | `LEFT_FOREARM` | **−44.752396** | `ELBOW_A` |
+  | `StaticForearmPlankPose` | `RIGHT_FOREARM` | **−44.752396** | `ELBOW_P` |
+  | `IsometricSidePlankPose` | `RIGHT_FOREARM` | **−37.863190** | `ELBOW_P` |
+
+  Both poses declare the mat as their support and author their support elbow *below their own floor* —
+  the residual the B-3 record lists as the poses' own §7 debt and the P11 pose inventory lists as M2 —
+  invisible to the pre-fix file precisely because `*_FOREARM` resolved to ∅. Every other
+  declared-contact joint of every other production pose sits inside the engine's unchanged 2-unit band.
+- **A false-positive class the same rule change removes (measured).** Under the replaced per-joint
+  surface rule `UnderhandChinUpPose`'s hand joints read as penetrating by up to **−5.109** — a grip on a
+  bar being compared against the floor; under the production per-contact rule they are not violations at
+  all (pinned by `aBarGripIsNotReportedAsPenetratingTheFloor`). The same rule also split single
+  contacts across unrelated surfaces: measured `HangPose` `LEFT_HAND`, `HAND_A` against the bar top
+  (`500.000`) while `PALM_A`/`KNUCKLES_A`/`FINGERTIPS_A` of that same declaration were compared against
+  the ground (`0.000`).
+- **Fix (test-only).** `EnvironmentPenetrationTest` now: enumerates **every** concrete production pose
+  class and pins the **26** non-declaring classes as an exact census, so a pose that drops its
+  declaration becomes a new member and fails (sensitivity control:
+  `theDeclarationCensusDetectsASilentlyDroppedDeclaration`); resolves every declared contact through the
+  ONE canonical map and asserts a non-empty joint family
+  (`everyDeclaredSupportContactResolvesThroughTheOneCanonicalMap`); resolves the surface **once per
+  contact** by the engine's own rule and asserts every joint of a contact is judged against that one
+  surface (`everyJointsOfAContactIsComparedAgainstThatContactsOwnSurface`); reconciles the observation
+  count against the count the declarations imply, so a silent ∅/skip cannot cost nothing
+  (`everyDeclaredContactJointIsActuallyEvaluated`); applies the unchanged 2-unit band to every
+  observation (`noDeclaredSupportContactPenetratesItsSupportSurface`); samples both frame conditions — a
+  genuinely cold first frame (fresh pose, fresh pipeline) and an advancing-frame frame — captures every
+  frame BY VALUE (`copyFrom`; the pipeline publishes the Finalizer's reused buffer) and refuses to treat
+  one reused buffer as five observations (`sampledFramesAreDistinctObservationsNotTheReusedOutputBuffer`);
+  and carries a controlled perturbation proving the check is live
+  (`aContactSunkBelowItsDeclaredSurfaceIsReported`: a hand 60 units under the floor is reported at −60.000).
+- **Measured.** Focused `EnvironmentPenetrationTest` **9 tests / 0F / 0E / 0S** (`--rerun-tasks`). RED on
+  the untouched baseline: the same file with the attribution block emptied fails
+  `noDeclaredSupportContactPenetratesItsSupportSurface` listing the three pairs above; with the
+  attribution as shipped the same file is green on the untouched baseline **and** on this branch
+  (the pins are the baseline's own numbers, to 1e-3: |−44.752396 − (−44.752)| = 3.96e-4). The pre-fix
+  file, run on the same baseline, is green (`failuresReported = 0`) while the invariant it names is
+  violated — the false-green this change replaces.
+- **Corpus validation.** 51 production pose classes × 5 progress × 2 frame conditions × every canonical
+  joint of every declared contact = **2,170 observations** (equal to the declaration-implied count; the
+  pre-fix file evaluated 790). Full suite: `origin/main` `6e96275` **111 classes / 496 tests / 0F / 0E /
+  0S** → this branch **111 / 504 / 0F / 0E / 0S** (one vacuous test replaced by nine real ones). Release:
+  `:app:compileReleaseKotlin --rerun-tasks` green, `:app:assembleRelease -x lintVitalRelease` green;
+  `:app:lintVitalRelease` fails **identically on both trees** (pre-existing `themes.xml` `ResourceCycle`
+  + `ExpiredTargetSdkVersion`) — not a regression of this branch.
+- **Production geometry impact: NONE.** Whole-corpus dump (51 poses × 5 progress × cold/warm, every
+  declared-contact joint with its y, resolved surface and delta) is byte-identical between pristine
+  `6e96275` and this branch: md5 `9d516fb8fb06b12e6756c90b00bcbb78` on both.
+- **Residual — recorded, NOT fixed (pose geometry, not B-6).** The two plank forearms' penetration is
+  attributed in `EnvironmentPenetrationTest.attributedDebt` with its exact measured magnitude and two
+  guards: any NEW violation fails the suite, and the pin must be **deleted** when the pose is fixed (a
+  stale pin fails). It is not a widened threshold — the 2-unit band is unchanged and applies everywhere.
+  Fixing it re-authors the plank arm chain (measured on `StaticForearmPlankPose` at progress 0.5:
+  shoulder `36.48`, elbow `−35.81`, planted hand `15.00` with the arm unclamped; the pose's own KDoc
+  records the "long upper arm vs. the low braced-shoulder height" debt), i.e. a visible pose-geometry
+  change belonging to the M2/§7 item with its own review. Deliberately not silently closed.
+- **Deliberately NOT asserted (measured, so it is not re-derived as a missing assertion).** An absolute
+  rest *height* ("no float") is not expressible from the architecture: no engine channel declares a
+  contact's rest height — it is authored per pose against the definition's contact-radius convention
+  (`FootDefinition.ankleHeight = 15`, `PushUpPlank.BASE_KNEE_HEIGHT = 15`), which is why a planted
+  push-up toe legitimately reads `y = 25.000` and a planted knee `y = 15.000`. In-plane coplanarity of a
+  contact's joints is likewise not a contract: 18 pose/contact pairs measure off-plane within the band
+  (spread 2.1–59.8) for modelled reasons — jump-squat toe-off **19.76**, pull-up hand rotation about the
+  bar **2.3–20.7**, `PikePushUpPose`'s planted toe **24.75**.
 
 ### TODO — P1 (next pass, in priority order)
 
