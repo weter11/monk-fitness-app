@@ -67,13 +67,16 @@ import kotlin.math.sqrt
  *     ([theArmGeometryIsFrameConditionInvariant]) — this change must not introduce a cold-frame
  *     defect (the B-8 class).
  *
- * **Out of scope, deliberately: `PelvicTiltPose`'s trunk joints.** That pose's static pelvis with a
- * torso rotating past horizontal puts `CHEST`/`SHOULDER_*`/`NECK_END`/`HEAD_POS` just under its own
- * mat at the top of the rep (`CHEST −0.3659`, `HEAD_POS −2.5384` at `p = 1.0`). That is a TRUNK
- * authoring item with its own root cause (the pose's `torsoAngle` amplitude against a pelvis pinned
- * at `y = 14`), it is not reachable from the arm chain's bend side, and it stays pinned in T2 where
- * it is already recorded. This file therefore claims the plane only for GluteBridgePose's whole body
- * and for both poses' arm chains, and says so rather than widening the fix.
+ * **Out of scope of THIS file: `PelvicTiltPose`'s trunk chain.** This file's subject is the two poses'
+ * arm authoring. That pose's rigid trunk was authored through its own mat by the same class of defect
+ * — a pose-side authoring constant, not an engine item — but with its own root cause: the trunk's
+ * tilt direction, on a pelvis pinned at `y = 14` (`CHEST`/`SHOULDER_*` `−0.3659`, `NECK_END` `−2.5295`,
+ * `HEAD_POS` `−2.5384` at `p = 1.0`). It was recorded and pinned in T2 as a separate open item and is
+ * corrected separately by the B4 trunk change (`fix/b4-pelvic-tilt-trunk-ground-plane`: the tilt arc
+ * is authored out of the mat, the arms' bend side untouched), whose gate is
+ * `PelvicTiltTrunkPlaneTest`. This file therefore keeps claiming the plane for `GluteBridgePose`'s
+ * whole body and for both poses' arm chains — and its assertions are re-run **unchanged** on the
+ * trunk-corrected tree, which is what shows that correction did not undo this one.
  */
 class SupineArmElbowPlaneTest {
 

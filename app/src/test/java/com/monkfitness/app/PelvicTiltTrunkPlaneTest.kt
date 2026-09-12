@@ -24,11 +24,11 @@ import kotlin.math.sqrt
  * path `SkeletonPipeline.produceFrame(pose, ctx)`:** the authored tilt is `torsoAngle = 1.5708 +
  * angleOffset`, i.e. the pelvis's superior axis tips PAST the flat supine orientation on every phase
  * of the rep, so every trunk joint is carried BELOW the pose's own declared ground plane
- * (`metadata.environment.ground.level = 0`) from `p ≈ 0.855` onward — at `p = 1.0`: `CHEST −0.3659`,
- * `SHOULDER_A/P −0.3659`, `NECK_END −2.5295`, `HEAD_POS −2.5384`; the whole-body minimum is
- * `HEAD_POS −2.5384`. Those five pairs are pinned as attributed open items by
- * `PublishedBelowGroundInvariantTest.knownBelowGround` (T2); that table's stale-pin guard is this
- * correction's exit criterion, so the entries cannot outlive it.
+ * (`metadata.environment.ground.level = 0`) from `p ≈ 0.846` onward (the chest crosses at
+ * `p ≈ 0.974`) — at `p = 1.0`: `CHEST −0.3659`, `SHOULDER_A/P −0.3659`, `NECK_END −2.5295`,
+ * `HEAD_POS −2.5384`; the whole-body minimum is `HEAD_POS −2.5384`. Those five pairs are pinned as
+ * attributed open items by `PublishedBelowGroundInvariantTest.knownBelowGround` (T2); that table's
+ * stale-pin guard is this correction's exit criterion, so the entries cannot outlive it.
  *
  * **The root cause is the tilt's DIRECTION, never its magnitude (the B1/B4 shape: reproduce the
  * published geometry from the pose's own authoring).** The trunk is a rigid chain hanging off the
@@ -37,9 +37,12 @@ import kotlin.math.sqrt
  * `CHEST 120`, `NECK_END 138`, `HEAD_POS` at the flat orientation (the neck's authored articulation
  * `∓angleOffset` cancels the trunk's tilt exactly, so the head chain keeps the supine orientation
  * `1.5708`). The tilt's `+0.12` therefore spends itself on `sin`: the chain's Y drops by
- * `chainLength · sin(0.12)` — `14.3659` at the chest, `16.5205` at `NECK_END`/`HEAD_POS` — against a
+ * `chainLength · sin(0.12)` — the model gives `14.3655` at the chest and `16.5203` at
+ * `NECK_END`/`HEAD_POS` (`14.3655 / 16.5290 / 16.5378` measured off the three joints' own layers) — against a
  * pelvis that only has `14` of resting layer above the mat. The deficit is the measurement:
- * `CHEST −0.3659 = 14 − 120·sin(0.12)` and `HEAD_POS −2.5384 = 14 − 138·sin(0.12)`, reproduced here
+ * `CHEST ≈ 14 − 120·sin(0.12)` and `HEAD_POS ≈ 14 − 138·sin(0.12)` (the published `−0.3659` /
+ * `−2.5384` sit `0.0004` / `0.0175` lower, the pose's own `1.5708f`-vs-`π/2` literal and the head
+ * chain's flat-offset residue), reproduced here
  * from the pose's own authors (see [thePublishedTrunkIsTheAuthoredTiltAndTheSignIsTheDefect]).
  *
  * **The correction is pose-side tilt-direction authoring only** (no solver/engine/phase/ownership
@@ -226,7 +229,7 @@ class PelvicTiltTrunkPlaneTest {
     /**
      * The trunk keeps the pose's own resting layer: no trunk joint may descend below the layer the
      * pose's static pelvis declares, at any phase of the rep. The pre-fix authoring crossed it at
-     * `p ≈ 0.855` and reached `HEAD_POS −2.5384`; the corrected authoring measures its minimum on the
+     * `p ≈ 0.846` (chest `0.974`) and reached `HEAD_POS −2.5384`; the corrected authoring measures its minimum on the
      * layer itself (`13.9996` at `p = 0.0`).
      */
     @Test

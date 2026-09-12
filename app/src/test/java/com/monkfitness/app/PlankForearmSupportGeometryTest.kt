@@ -721,7 +721,21 @@ class PlankForearmSupportGeometryTest {
          * min-reach clamp — with `boneLengthsVerified = true` and `straightIntentDropped = false`
          * everywhere). B4's own gate is `SupineArmElbowPlaneTest`.
          *
+         * **Re-baselined by the B4 trunk correction** (`fix/b4-pelvic-tilt-trunk-ground-plane`, off the
+         * B4-elbow merge `7012ccb`): this corpus contains `PelvicTiltPose`, whose rigid trunk is
+         * re-authored out of the mat (the tilt's DIRECTION — the pose was carrying
+         * `CHEST`/`SHOULDER_A/P`/`NECK_END`/`HEAD_POS` `120/138·sin(0.12)` below a pelvis whose resting
+         * layer is `14`). Observed RED on the previous value `-3055606113830305699` before the
+         * re-baseline (this live run measured `-4097949659781345677`). Attribution is direct, not
+         * inferred: the whole-corpus dump (`51` classes × `5` samples × every joint XYZ, `8415` rows,
+         * over a `git stash` round-trip on the corrected pose file with `md5sum -c` on restore) differs
+         * in exactly `56` rows, ALL of them inside `PelvicTiltPose` (its trunk chain plus the arm joints
+         * that hang off the moved shoulder, max `33.0581` u at `HEAD_POS` `p = 1.0`; the pose's legs,
+         * pelvis and the world-origin joints are unchanged, and the whole `p = 0.0` sample is
+         * byte-identical because the authored tilt is zero at rest), with the other `50` classes
+         * byte-identical. The trunk's own gate is `PelvicTiltTrunkPlaneTest`.
+         *
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -3055606113830305699L
+        const val UNAFFECTED_CORPUS_DIGEST = -4097949659781345677L
     }
 }

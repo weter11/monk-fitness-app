@@ -79,11 +79,32 @@ class PelvicTiltPose : PoseBuilder {
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
 
         // Posterior pelvic tilt: lying on the back (supine) with bent knees
-        // Pelvis Y remains static on the floor (14f)
+        // Pelvis Y remains static on the floor (14f) — the pelvis joint IS this pose's resting layer:
+        // the whole authored trunk chain (chest 120, neck 18, head 18) lies ON it at the flat supine
+        // tilt, so a trunk joint leaving that layer downward leaves the body's volume in the mat.
         val pelvisY = 14f
-        // Dynamic subtle backward tilt of the pelvis (from horizontal to slightly rotated towards the head)
+        // Dynamic subtle tilt of the pelvis: the rep's authored arc, 0 -> 0.12 rad (EASE_IN_OUT).
+        //
+        // The SIGN of this arc is the pose's whole relationship to the mat (B4 — trunk half). The
+        // trunk is rigid and hangs off the static pelvis, so a published trunk joint is
+        // `pelvis + Rz(θ)·(0, chainLength, 0)`, i.e. `y = 14 + chain·cos θ`: the old `+0.12` spent the
+        // arc on that chain's sin — the model gives 120·sin(0.12) = 14.3655 off the chest and
+        // 138·sin(0.12) = 16.5203 off neck/head, and the pipeline measured CHEST/SHOULDER_A/P
+        // −0.3659, NECK_END −2.5295, HEAD_POS −2.5384 at p = 1.0 (14.3655 / 16.5290 / 16.5378 below
+        // this pose's own layer; the head chain sits at the flat orientation, so its own offset adds
+        // no vertical drop) — against a pelvis that only HAS 14 of it. The upper body was therefore
+        // published UNDER the mat from p ≈ 0.846 (the chest crosses at p ≈ 0.974); that was the T2
+        // pin, and the whole-body gate is PelvicTiltTrunkPlaneTest. The authored arc tips the pelvis's
+        // superior axis AWAY from the mat instead: same pivot, same 0.12-rad amplitude, same rep shape
+        // and the same start configuration (the pose's own supine rest), with the trunk's swing in the
+        // half-space the resting layer allows (CHEST/SHOULDER_A/P +28.3650, NECK_END +30.5198,
+        // HEAD_POS +30.5197 at p = 1.0) — and nothing else moves (pelvis, arms' B4 bend side, legs'
+        // authored stance and the support model are untouched). Bounding the DOWNWARD arc instead
+        // cannot work: keeping the trunk's spine centres legal needs sin(offset) ≤ 14/138, which rests
+        // them on the mat's own surface (their layer is 14) while the trunk's volume sinks into it, for
+        // ≤ 14 of travel.
         val angleOffset = lerp(0f, 0.12f, context.progress)
-        val torsoAngle = 1.5708f + angleOffset
+        val torsoAngle = 1.5708f - angleOffset
 
         pelvis!!.localPosition = Vector3(0f, pelvisY, 0f)
         declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), torsoAngle)
@@ -91,12 +112,15 @@ class PelvicTiltPose : PoseBuilder {
 
         chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)
 
-        // Neck and Head stay horizontal, resting on the floor.
+        // Neck and Head stay horizontal, resting on the floor: the neck's articulation cancels the
+        // trunk's tilt exactly (its signed value follows the trunk's), so the neck's world rotation is
+        // the flat supine 1.5708 under either tilt direction and the head chain keeps the pose's
+        // supine orientation.
         neck!!.localPosition = Vector3(0f, def.neckLength, 0f)
-        neck!!.localRotation.set(Vector3(0f, 0f, 1f), -angleOffset)
+        neck!!.localRotation.set(Vector3(0f, 0f, 1f), angleOffset)
         // B4a — carrier-backed neck ROM: record the neck articulation as a joint intent so the
         // Finalizer (B2) consumes it idempotently (mixed mode, byte-identical to the bare write).
-        SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.NECK_END, JointRotation(Vector3(0f, 0f, 1f), -angleOffset))
+        SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.NECK_END, JointRotation(Vector3(0f, 0f, 1f), angleOffset))
         head!!.localPosition = Vector3(0f, 18f, 0f)
 
         hipF!!.localPosition = Vector3(0f, 0f, -def.hipWidth)
