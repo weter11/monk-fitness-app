@@ -923,69 +923,45 @@ class SkeletonPoseFinalizer(
     }
 
     /**
-     * Returns the support-plane normal for a foot whose [ankleId] is registered as a fixed
-     * support contact, or `null` when the ankle is not a contact (a free-hanging foot). The
-     * normal comes straight from the contact the pose already declared, so the foot inherits
-     * exactly the support the pose asked the solver to honor — ground, wall, prop or bar — and
-     * nothing is invented here. Allocation-free: reuses [tempFootNormal] scratch.
-     */
-    /** Maps an ankle joint to the front/back foot (whole-foot) support point. */
-    private fun footSupportPointFor(ankleId: Joint): SupportPoint = when (ankleId) {
-        Joint.ANKLE_F -> SupportPoint.RIGHT_FOOT
-        Joint.ANKLE_B -> SupportPoint.LEFT_FOOT
-        else -> SupportPoint.RIGHT_FOOT
-    }
-
-    /** Maps an ankle joint to the front/back TOES support point (the same side as [footSupportPointFor]). */
-    private fun toesSupportPointFor(ankleId: Joint): SupportPoint = when (ankleId) {
-        Joint.ANKLE_F -> SupportPoint.RIGHT_TOES
-        Joint.ANKLE_B -> SupportPoint.LEFT_TOES
-        else -> SupportPoint.RIGHT_TOES
-    }
-
-    /**
-     * B-3 — resolves the support point the pose DECLARED for the foot whose ankle is [ankleId], over
-     * that foot's declaration family: the contact may be declared as a `*_FOOT` (whole foot planted)
-     * or as a `*_TOES` (toe end planted — how the whole plank/push-up family declares its feet).
-     * The two families name the same physical support in the engine's own contact→joint map
-     * ([contactJointsFor] maps both to the identical `{ankle, heel, toe}` triple), so the
-     * declaration is honoured **verbatim**: the resolved value is the pose's own [SupportPoint] and
-     * it is the value handed to [supportPlaneNormalFor]. Nothing is re-mapped, aliased or
-     * re-interpreted, and no new contact→joint or contact→side mapping is introduced by this
-     * resolver — it consults the two points the existing side map names (B-3 previously asked only
-     * the `*_FOOT` one, so a `*_TOES` declaration silently produced `null` and the foot was never
-     * planted).
+     * B-4 — resolves the support point the pose DECLARED for the foot whose ankle is [ankleId], over
+     * that ankle's canonical declaration family: the whole-foot kind (`*_FOOT`) and the toe-end kind
+     * (`*_TOES`) of THE SAME physical foot, in that precedence. The family is derived from the one
+     * canonical `SupportPoint ↔ Joint` map ([SupportMath.supportPointsFor], the exact inverse of
+     * [SupportMath.jointsFor]), so this resolver owns no side convention: a `*_TOES` declaration
+     * (how the whole plank/push-up family declares its planted foot) and a `*_FOOT` declaration both
+     * resolve to the foot they name, and `ANKLE_F` can only ever resolve to `LEFT_*`.
      *
-     * The SIDE resolution ([footSupportPointFor] / [toesSupportPointFor]) is exactly the one this
-     * file already used: this resolver ADDS the TOES family to it and changes no side convention.
-     * The `A/P/F/B ↔ left/right` convention and its contradictory maps are the separate, still-open
-     * B-4 finding and are deliberately untouched here.
+     * The resolved value is the pose's own [SupportPoint], handed verbatim to
+     * [supportPlaneNormalFor]: nothing is re-mapped, aliased or re-interpreted.
      *
      * Returns `null` when the pose declared no foot support for this ankle (a free-hanging foot), so
-     * every non-declaring pose keeps its previous geometry. Allocation-free (no intermediate
-     * Pair/List — the finalizer's per-frame paths allocate nothing).
+     * every non-declaring pose keeps its previous geometry. Allocation-free (a precomputed lookup and
+     * an index loop — the finalizer's per-frame paths allocate nothing).
      */
     private fun declaredFootSupportPoint(pose: SkeletonPose, ankleId: Joint): SupportPoint? {
-        val foot = footSupportPointFor(ankleId)
-        if (pose.isSupported(foot)) return foot
-        val toes = toesSupportPointFor(ankleId)
-        return if (pose.isSupported(toes)) toes else null
+        val family = SupportMath.supportPointsFor(ankleId)
+        for (i in family.indices) {
+            if (pose.isSupported(family[i])) return family[i]
+        }
+        return null
     }
 
     /**
-     * B-3 — the hand-side twin of [declaredFootSupportPoint]: resolves the hand's declared support
-     * over its declaration family — `*_HAND` (a pressing/gripping hand) or `*_FOREARM` (a
-     * forearm-planted pose such as a forearm plank, where the planted forearm's declaration governs
-     * the hand at its end) — on the side this file already associates with [handId]
-     * (`A` → `LEFT_*`, `P` → `RIGHT_*`, the association the hand support gate has always used,
-     * unchanged; the side convention itself is B-4). Returns `null` when neither family is declared,
-     * so an unsupported hand is untouched. Allocation-free.
+     * B-4 — the hand-side twin of [declaredFootSupportPoint]: resolves the hand's declared support
+     * over the canonical declaration family of [handId] — `*_HAND` (a pressing/gripping hand) before
+     * `*_FOREARM` (a forearm-planted pose such as a forearm plank, where the planted forearm's
+     * declaration governs the hand at its end) — from the same single canonical source, so
+     * `HAND_A`/`HAND_P` resolve to `LEFT_*`/`RIGHT_*` and never to the opposite arm.
+     *
+     * Returns `null` when neither family is declared, so an unsupported hand is untouched.
+     * Allocation-free.
      */
     private fun declaredHandSupportPoint(pose: SkeletonPose, handId: Joint): SupportPoint? {
-        val hand = if (handId == Joint.HAND_A) SupportPoint.LEFT_HAND else SupportPoint.RIGHT_HAND
-        if (pose.isSupported(hand)) return hand
-        val forearm = if (handId == Joint.HAND_A) SupportPoint.LEFT_FOREARM else SupportPoint.RIGHT_FOREARM
-        return if (pose.isSupported(forearm)) forearm else null
+        val family = SupportMath.supportPointsFor(handId)
+        for (i in family.indices) {
+            if (pose.isSupported(family[i])) return family[i]
+        }
+        return null
     }
 
     // ---------------------------------------------------------------------------
@@ -999,24 +975,13 @@ class SkeletonPoseFinalizer(
     // no pose re-declares "the floor is at y=0". A pose with no environment is byte-identical.
     // ---------------------------------------------------------------------------
 
-    /** Maps a support point to the joints that physically touch the surface for that extremity. */
-    private fun contactJointsFor(point: SupportPoint): List<Joint> = when (point) {
-        SupportPoint.LEFT_FOOT, SupportPoint.LEFT_TOES -> listOf(Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F)
-        SupportPoint.RIGHT_FOOT, SupportPoint.RIGHT_TOES -> listOf(Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
-        SupportPoint.LEFT_KNEE -> listOf(Joint.KNEE_F)
-        SupportPoint.RIGHT_KNEE -> listOf(Joint.KNEE_B)
-        SupportPoint.LEFT_HAND -> listOf(Joint.HAND_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A)
-        SupportPoint.RIGHT_HAND -> listOf(Joint.HAND_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
-        SupportPoint.LEFT_FOREARM, SupportPoint.RIGHT_FOREARM -> listOf(Joint.ELBOW_A, Joint.ELBOW_P)
-        SupportPoint.HIPS, SupportPoint.BACK, SupportPoint.PELVIS -> listOf(Joint.HIP_F, Joint.HIP_B, Joint.PELVIS)
-        SupportPoint.CUSTOM -> emptyList()
-        SupportPoint.LEFT_ELBOW, SupportPoint.RIGHT_ELBOW -> emptyList()
-    }
-
     /** For each supported extremity, the surface normal it should rest flat against. */
     private fun supportPlaneNormalFor(pose: SkeletonPose, point: SupportPoint): Vector3? {
         val env = pose.environment
-        val joints = contactJointsFor(point).map { pose.getJoint(it) }
+        // B-4 — the contact surface joints come from the ONE canonical `SupportPoint ↔ Joint` map
+        // (the same map the declaration gate above resolves the side from), so a plane can never be
+        // derived from the opposite side's joints.
+        val joints = SupportMath.jointsFor(point).map { pose.getJoint(it) }
         if (joints.isEmpty()) return null
         val cx = joints.sumOf { it.x.toDouble() }.toFloat() / joints.size
         val cy = joints.sumOf { it.y.toDouble() }.toFloat() / joints.size

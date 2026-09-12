@@ -193,9 +193,9 @@ geometry on `main`. Pose-side fix only: no engine file, no phase order, no owner
   local offsets are written by the engine (`resolveHeadTarget`, Phase 7), so the first build realizes
   against a target it never sees again (declared-target delta 16.67 units). Pinned by attribution in
   `ColdFrameLimbRealizationTest` so it cannot be masked or mis-attributed.
-- **Still open (P11 backlog).** B-4 (three contradictory SupportPoint↔Joint maps), B-5
-  (renderer overload passes ∅), B-6 (`EnvironmentPenetrationTest` vacuity), §12.7 flag lifecycle.
-  (T-7 landed as PR #230; B-2 + B-3 landed — see the block below.)
+- **Still open (P11 backlog).** B-5 (renderer overload passes ∅), B-6
+  (`EnvironmentPenetrationTest` vacuity), §12.7 flag lifecycle. (T-7 landed as PR #230; B-2 + B-3
+  and B-4 landed — see the blocks below.)
 
 ### DONE — B-2 + B-3 support declaration channel + contact-kind consumption (P11)
 
@@ -273,6 +273,112 @@ geometry, no tolerance, no validator rule was touched.
   Post-fix: **11 / 0F**, full suite **108 classes / 479 tests / 0F / 0E / 0S** (pre-fix baseline on
   `origin/main` `dc4cc27`: 106 classes / 468 tests / 0F / 0E / 0S).
 
+### DONE — B-4 one authoritative SupportPoint ↔ Joint mapping (P11)
+
+The engine defined the `SupportPoint ↔ Joint` relation **four times in production plus once in a
+test**, with two opposite side conventions — including two mutually contradictory maps in one file
+area. B-2/B-3 deliberately left it open (`IsometricSidePlankPose` declared `RIGHT_FOOT` while the
+side convention in force resolved that declaration to the opposite physical foot). B-4 establishes
+the authority from repository evidence and removes the duplicates. **No pose geometry, no contact
+declaration, no validator rule and no tolerance was changed.**
+
+- **Inventory — every production definition, with the convention it encoded.**
+  | # | site | relation | convention | consumer |
+  | --- | --- | --- | --- | --- |
+  | M1 | `SupportMath.kt:12-30` `jointsForContactMap` | `SupportPoint → List<Joint>` | **LEFT = B/P family** | `computeSupportCentroid` — its only caller is `SupportMathTest` (production-dead) |
+  | M1b | `SupportMath.kt:84-95` `getPivotPosition` locals (`left = ANKLE_B`, `left = HAND_P`, …) | implicit encoding of M1 | **LEFT = B/P** | symmetric midpoint (behaviour-neutral, convention-teaching) |
+  | M2 | `SkeletonPoseFinalizer.kt:933-944` `footSupportPointFor` / `toesSupportPointFor` | `Joint(ankle) → SupportPoint` | **RIGHT_FOOT = the F foot** | `declaredFootSupportPoint` → the foot support-plane gate (**live**) |
+  | M3 | `SkeletonPoseFinalizer.kt:1003-1013` `contactJointsFor` | `SupportPoint → List<Joint>` | **LEFT = A/F family** (forearms side-agnostic: both elbows) | `supportPlaneNormalFor` (**live**) |
+  | M4 | `SkeletonPoseFinalizer.kt:984-989` `declaredHandSupportPoint` | `Joint(hand) → SupportPoint` | **LEFT = A family** | the hand support-plane gate (**live**) |
+  | M5 | `EnvironmentPenetrationTest.kt:80-88` `supportJoints` | test-only copy of M3 | LEFT = A/F | test-only |
+  Contradictions: **M1 ↔ M3/M4/M5** (every paired point inverted) and, inside the same file area,
+  **M2 ↔ M3** (M2 and the consumer of M3 are meant to be inverses of each other and were not). M3's
+  `LEFT_FOREARM`/`RIGHT_FOREARM` → `{ELBOW_A, ELBOW_P}` was a third variant (side-agnostic).
+- **Authority (evidence, in the priority order that decided it).** (1) **`ENGINE.md` §4 "Joint
+  naming: A/P and F/B"** (ACTIVE architecture doc): "A = active / foreground limb (left), P = passive
+  / background limb (right) for the arms and hands. F = foreground, B = background for the legs and
+  feet" — the doc is now explicit that F/B is the same left/right pairing (§4 amended by this PR).
+  (2) **Authored geometry** (published frames): `buildPelvis`/`buildShoulders` put `HIP_F` and
+  `SHOULDER_A` at −Z and `HIP_B`/`SHOULDER_P` at +Z, so A ≡ F and P ≡ B are the two physical sides;
+  the production `Camera` (yaw 1.19, `screenX = 0.37x + 0.93z`) renders the −Z (A/F, near/foreground)
+  limb on screen-left. (3) **Pose declarations/comments**: `BirdDogPose` ("RIGHT side -> left arm
+  (A) + right leg (B)"; `AlternatingBirdDogPose` names P+left leg / A+right leg), `PikePushUpPose`
+  ("Correcting the Right-Side (Side B) Floating Leg Asymmetry", `hipB` at +Z), `WidePushUpPose`
+  ("LEFT_HAND (HAND_A)"), `IsometricSidePlankPose` (down-side support = `SHOULDER_P`/`HIP_B`, and it
+  declares `RIGHT_FOREARM` + `RIGHT_FOOT`), `ARCHITECTURAL_AUDIT_SKELETON_MODEL.md` (A/F = Left, P/B =
+  Right). (4) **Canonical production consumers**: M3 and M4 already encoded LEFT = A/F — and the hand
+  gate is the internal cross-check the feet contradicted (a `LEFT_TOES`-only declaration flattened
+  the RIGHT foot while `LEFT_HAND` flattened the LEFT hand, in the same frame).  **Minority/legacy:
+  M1, M1b, M2.**  Note the `RFC_JOINT_OWNERSHIP_MATRIX.md` §1 table labels the legs "front/back"
+  (stride-legacy wording); the geometry shows `HIP_F`/`HIP_B` differ only along Z, and `ENGINE.md` §4
+  resolves F/B = foreground/background = the near/far (left/right) pair.
+- **Canonical mapping after the fix** (one definition, `SupportMath.jointsBySupportPoint`; first joint
+  = the anchor used by centroid math): `LEFT_FOOT → {ANKLE_F, HEEL_F, TOE_F}` · `RIGHT_FOOT →
+  {ANKLE_B, HEEL_B, TOE_B}` · `LEFT_TOES → {TOE_F, ANKLE_F, HEEL_F}` · `RIGHT_TOES → {TOE_B, ANKLE_B,
+  HEEL_B}` · `LEFT_KNEE → KNEE_F` · `RIGHT_KNEE → KNEE_B` · `LEFT_HAND → {HAND_A, PALM_A, KNUCKLES_A,
+  FINGERTIPS_A}` · `RIGHT_HAND → {HAND_P, …}` · `LEFT_ELBOW → ELBOW_A` · `RIGHT_ELBOW → ELBOW_P` ·
+  `LEFT_FOREARM → {ELBOW_A, HAND_A}` · `RIGHT_FOREARM → {ELBOW_P, HAND_P}` · `HIPS`/`BACK`/`PELVIS` →
+  `{PELVIS, HIP_F, HIP_B}` · `CUSTOM` → ∅ (opaque; no invented joint).
+- **Removed / redirected.** M1's inverted table → the canonical table above; M1's private
+  `getJointsForContact` deleted (replaced by `SupportMath.jointsFor`, one lookup, still
+  allocation-free); M1b's `left`/`right` locals renamed to the canonical `f`/`b`, `a`/`p` (a
+  behaviour-neutral name that no longer teaches the inversion); **M2 and M4 deleted entirely** — the
+  gates now resolve the declaration family from the canonical map's inverse
+  (`SupportMath.supportPointsFor`, ordered `*_FOOT` before `*_TOES`, `*_HAND` before `*_FOREARM`), so
+  a joint→side pair can no longer disagree with the joints the same map names; **M3 deleted** —
+  `supportPlaneNormalFor` reads the same canonical map (the forearm rows also stop mixing both arms:
+  a forearm support is now its OWN elbow→hand). Result: **exactly one production definition**, with
+  two thin consumers and no duplicate semantic copy.
+- **Measured (whole corpus: 49 registered pose classes × 5 progress values, EVERY joint's x/y/z,
+  published frames, builder path; artifacts `/home/wer/devis/p11-audit/b4-full-{before,after}.tsv`).**
+
+  | measurement | pre-fix (`origin/main` `fa81cb6`) | post-fix |
+  | --- | --- | --- |
+  | corpus rows compared | 245 | 245 |
+  | **changed rows** | — | **5** — all `side_plank_standard` (`p = 0 … 1`) |
+  | **changed joints** | — | only `HEEL_B` (`y 7.82 → 15.00`) and `TOE_B` (`y 32.57 → 15.00`) |
+  | other 48 pose classes | — | **byte-identical, every joint** |
+  | published `supportedPoints` | — | **identical everywhere** (B-2/B-3 semantics untouched) |
+  | `side_plank_standard` foot deviation | `devB = 17.572` (planted foot un-flattened) | `devB = 0.000` |
+  | one-sided push-up fixture (`LEFT_TOES` only) | `devF = 17.572` / `devB = 0.000` | `devF = 0.000` / `devB = 17.572` |
+
+- **RED → GREEN (fresh runs, semantic not string assertions).** Two counterfactuals, both measured:
+  1. **The pre-fix finalizer maps restored** (M2+M3+M4 verbatim, canonical `SupportMath` present):
+     `15 tests completed, 6 failed` — both static-audit tests
+     (`expected:<[SupportMath.kt]> but was:<[SupportMath.kt, SkeletonPoseFinalizer.kt]>`, plus the five
+     contradictory pair lines at `SkeletonPoseFinalizer.kt:934/935/941/942/985`) and all four
+     production-behaviour tests (`LEFT_TOES p=0.0 … deviate 17.571602u`; `side_plank_standard p=0.0 …
+     deviates 17.571602u`; the swapped `LEFT_FOOT` side-plank fixture `devF=0.0, devB=0.0` — the
+     declaration landing on the other foot; the planted-foot assertion).
+  2. **The canonical table's sides inverted** (the legacy convention restored in the map itself):
+     `15 tests completed, 9 failed` — the five canonical-mapping/side-semantics tests
+     (`expected:<[ANKLE_F, HEEL_F, TOE_F]> but was:<[ANKLE_B, HEEL_B, TOE_B]>`, …) and the same four
+     production-behaviour tests. The static guards stay green here (one file, self-consistent but
+     inverted) — the two counterfactuals exercise different failure modes by design.
+- **Regression coverage (fresh runs).** `SupportPointMappingAuthorityTest` (9: canonical mapping per
+  family, the general "no paired point crosses the side boundary" invariant, canonical inverse +
+  precedence, map↔inverse agreement, side semantics with the production projection, and the two
+  static contradiction guards) + `SupportPointSideConsumptionTest` (6: one-sided declaration on a
+  production push-up for both kinds and both extremities, `IsometricSidePlankPose`, the swapped
+  side-plank control, the corpus-wide one-sided rule over the production registry, and the two
+  `BirdDogPose`/`AlternatingBirdDogPose` convention witnesses) = **15 tests**, all asserted on the
+  **published frame**. Whole suite: **110 classes / 494 tests / 0F / 0E / 0S** (pre-fix baseline,
+  measured in this same environment: 108 classes / 479 tests / 0F / 0E / 0S).
+- **Recorded, NOT fixed (out of B-4 scope).**
+  - `SupportPoint.*_KNEE` declarations still have **no consumer** in the extremity derivation (the
+    gate is keyed on the ankle/hand joints), so `pushup_knee`'s published `LEFT_KNEE`/`RIGHT_KNEE`
+    are declared but never flatten a knee — unchanged by B-4 (B-3 scope; the canonical knee entries
+    are now defined and asserted but inert).
+  - `*_ELBOW` support points now map to their own elbow instead of ∅; still inert for the same reason
+    (no pose declares one, and the derivation's gate never asks for an elbow).
+  - `EnvironmentPenetrationTest.supportJoints` (M5) is still a private test copy of the canonical map
+    — deliberately not redirected here (that file is B-6's subject: its float-vacuity and its copy are
+    the open B-6 finding).
+  - `WidePushUpPose.kt:14-15`'s comment states `LEFT_HAND (HAND_A) points left (+Z …)`; the *name*
+    pairing is canonical, but the `+Z` sign contradicts the authored geometry (`HAND_A` at −Z) and
+    `ENGINE.md` §4. The pose's authored `headings` (`HAND_A → +Z`, `HAND_P → −Z`) therefore point both
+    hands inward. Flagged, NOT changed: it is pose `headings` intent, not the support mapping.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement + M15 — WallSlides wall prop geometry/tuning + forearm contact plane.
@@ -280,7 +386,8 @@ geometry, no tolerance, no validator rule was touched.
    helpers for full carrier coverage; declare the support model (`metadata.support`) for the stretch
    family (M9) and the core/hip poses (M10) and the upper/dynamic poses (M8).
 3. M1/M2/M3/M4/M6/M7 — pose-specific biomechanical-fidelity bugs (step contact, side-plank contact
-   side, cobra/superman lumbar extension, kettlebell hinge inversion, burpee foot-translation).
+   side — **the declaration side resolved by B-4; the residual is the pose's own inline/floor debt** —
+   cobra/superman lumbar extension, kettlebell hinge inversion, burpee foot-translation).
 4. M5/M13/M14 — tuning items (snow-angel arc, hamstring reach, decline plank tilt).
 
 ### TODO — P2
