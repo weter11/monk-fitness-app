@@ -2585,6 +2585,114 @@ deliberately not taken here"): that decision is taken here, and the answer is no
   floor and the pose's furniture, laid out to a horizon (`+-260` world units) that leaves the frame by
   construction; the rule frames the athlete.
 
+### DONE — C2 the exercise frame is derived once for the whole motion (branch `fix/c2-static-exercise-framing`, off the C1 merge `d0b8449`; framing only)
+
+**No pose, IK/solver, support-declaration, StepUp, reach-band or legacy-tree change**: four production
+files (`animation/CameraFraming.kt`, `animation/SkeletonRenderer.kt`, `animation/SkeletonSnapshotRenderer.kt`,
+`ui/components/ExerciseAnimation.kt`), one string per locale (`values`, `values-ru`, `values-uk`), one new
+test class, and this record. No RFC change, no golden change, no tolerance moved, no assertion weakened.
+This record **supersedes C1's residuals (a) and (b)** — (b) verbatim: *"The scale breathes with the
+frame. The fit is per-frame … A smoothed/envelope camera (fit to the union of the rep's bounds) would
+remove that at the cost of needing the rep's extremes before drawing its first frame — recorded, not
+taken."* That decision is taken here, and the answer is one frame per exercise, not a smoothed one.
+
+- **Root cause — the frame was re-derived from every drawn frame, and its anchor was a constant.**
+  C1's rule was correct per frame and made the subject's *size* a function of the subject's *current*
+  pose. Measured on the production path (the per-frame fit of every drawn frame, both sides, the whole
+  reachable yaw range), one rep breathes: `BurpeePose 0.585 -> 1.300` (a `2.2x` push-in), `CossackSquat
+  0.856 -> 1.300`, the lunges `0.856 -> 1.240`, `AirSquat`/`Squat`/`SumoSquat 0.849 -> 1.200`,
+  `KettlebellSwing 0.900 -> 1.233`, `JumpSquat 0.766 -> 0.997`, `ArmCircles 0.644 -> 0.849`,
+  `ThoracicExtension 1.063 -> 1.248` — `17` of the `51` production classes move by `5%` or more, `11`
+  by `20%` or more. The composition defect the same measurement exposed is structural: `Camera` anchored
+  the world origin at a hardcoded `centerY = 0.7`, so `30%` of every surface was reserved below a ground
+  plane the athlete was already standing on — a standing pose's drawn height could never exceed `70%` of
+  the canvas (measured: `AirSquat` left `120.2` px of empty space under the athlete on the hero canvas).
+- **Fix — one frame for the exercise, derived before its first frame is drawn.** New
+  `CameraFraming.exerciseFrame(camera, builder, sides, width, height)` plays the builder through its
+  **own** `SkeletonPipeline` (the renderer's pipeline and its Frame History are never touched;
+  `resetHistory()` makes the pre-pass independent of how often the exercise has been framed) over every
+  phase of every side the play advances through (`RIGHT`, or `RIGHT` then `LEFT` for an alternating
+  exercise — `AnimationController`), at every yaw the pose's own declaration allows
+  (`CameraDefinition.defaultYaw` +/- `minYaw`/`maxYaw`, the arc the drag gesture's clamp mirrors;
+  pitch is authored and fixed, so it is not swept). It unions the **drawn** box — the silhouette the
+  renderers stroke (bones with their half thickness, indicator discs with their radii, torso faces) plus
+  the contact shadows, i.e. the athlete **and the ground it contacts** — and returns
+  `CameraFrame(zoom, centerX, centerY)`: `zoom` = the largest value not exceeding the pose's authored
+  zoom at which that box fits the surface, and the anchor that centres it. `SkeletonRenderer` applies it
+  for every frame when the caller supplies it, and C1's per-frame rule (`CameraFraming.frameZoom`,
+  bit-identical) remains what a caller without an exercise — or the hero's "Dynamic camera" toggle —
+  draws with. `SkeletonSnapshotRenderer.renderSequence` derives one frame for its whole sheet.
+- **The ground is in the frame by construction, not by a pixel constant.** The content box's bottom edge
+  *is* the deepest drawn ground point under the athlete, so centring it leaves the feet just above the
+  bottom edge with the floor directly beneath them, and the athlete using the whole surface. Measured on
+  the hero canvas, the athlete's tallest drawn frame now reads (share of the surface)
+  `NeutralGripPullUp 0.927`, `UnderhandChinUp 0.924`, `StandardPullUp 0.912`, `Hang 0.911`,
+  `Squat 0.906`, `KettlebellSwing 0.907`, `AirSquat 0.900`, `WallSlides 0.889`, `FacePull 0.874`,
+  `ThoracicExtension 0.871`, `StepUp 0.859`, `JumpSquat 0.860`, `CossackSquat 0.839`, `Burpee 0.771`
+  where the old anchor capped every one of them at `0.70`. Per-edge margin asymmetry (the sampling
+  margin the motion itself needs) is `<= 14.8` px of `531` worst case; every other class is within
+  `2.6` px.
+- **One measurement is exact; the motion's two continuous dimensions are sampled and their peaks are
+  paid for.** Every drawn extent is linear in the zoom (`Camera.project`, `thicknessScale`,
+  `radiusScale`, `shadowScale`) while `sc` does not depend on the zoom, so the box is measured once at
+  zoom 1 anchored at the origin and the fit is closed-form; the outline stroke is the single
+  zoom-independent term, so it comes off the budget (`zoom <= (width - 2*stroke)/spanX`) rather than
+  scaling with the box. The union is over a `1/32` x `5`-degree grid, and each edge is grown by the
+  largest **second difference of that edge over the grid, divided by eight** — the exact overshoot of a
+  locally quadratic edge at the middle of a sampling cell, i.e. the margin is a function of the motion's
+  own curvature (measured: a slow rep contributes a fraction of a pixel; the burpee's jump contributes
+  `24.6` px because that is how far it climbs between samples). Without it the fit clips by up to
+  `1.34` px (burpee, dense sweep); with it, the residual is `0.000` px. Cost: `~10` ms per
+  (exercise, surface), once, before the first frame.
+- **Verification.** New focused regression `ExerciseFramingInvariantTest` (`7` tests: the containment
+  gate over the whole corpus on three realistic canvases at `33` phases x both sides x `13` reachable
+  view angles; the frame bit-identical at every phase and view angle while the opt-in dynamic mode still
+  varies; the size claim pinned **by name** (`23` classes drawn larger than the per-frame fit at
+  mid-rep, `28` measured exceptions — a compact mid-rep frame inside a large envelope, or both rules
+  capped at the authored zoom — with the athlete's surface share pinned per family); the composition
+  (content centred, ground contact inside the frame and never above the athlete's own lowest drawn
+  point, the anchor no longer the fixed `0.7`); the authored viewpoint preserved and the frame pure
+  (idempotent, independent of the camera's zoom/anchor/yaw, never above the authored zoom); C1's
+  dynamic numbers unchanged; and the pose's furniture — every prop pose keeps at least as many prop
+  corners on the surface as the pre-C2 presentation kept).
+  **RED on the pristine base worktree** (`/tmp/c2-base` @ `d0b8449`, the class copied in with the C2
+  derivation replaced by the pre-C2 view setup — the C1 per-frame fit at the authored anchor,
+  `--rerun-tasks`): **`5` of `7` FAILED**, each on the behaviour this change removes —
+  `theFrameIsOneAndTheSameForEveryFrameOfTheRep` (`AirSquatPose` at `p = 0.0`, yaw `-90`°: the frame the
+  renderer draws with `expected:<1.2> but was:<0.8491>`), `theGroundIsPlacedJustBelowTheFigureAndTheContentIsCentred`
+  (vertical margins `-5.0e-5 / 120.189` — the `30%` reserve), `standingPosesAreFramedLargerThanThePerFrameFit`
+  (`ArmCirclesPose` pinned as an exception: `1.3` vs `0.849`), `propPosesKeepTheirFurniture`
+  (`HangPose` prop#0: pre-C2 kept `8` of `8` corners and the authored frame keeps `0` — the bar leaves
+  the top) and `everyFrameOfEveryPoseIsDrawnWholeAtEveryReachableViewpoint` (`DeclinePushUpPose` at
+  `p = 0.0`, yaw `-60`°: `right=6.07` px — C1 framed the athlete and not its footing, which is exactly
+  what the new gate measures). **GREEN on the branch: `7/7`, `0F / 0E / 0S`** (`--rerun-tasks`).
+  Full suite, results purged and XML-stamped fresh: pristine `origin/main` @ `d0b8449` baseline
+  **`128` classes / `628` tests** → this branch **`129 / 635 / 0F / 0E / 0S`** — exactly `+1` class /
+  `+7` tests, no other count moved. `:app:compileReleaseKotlin` + `:app:compileReleaseJavaWithJavac` +
+  `:app:assembleDebug` successful.
+- **No unrelated corpus drift — whole-corpus A/B (the published geometry is byte-identical).** A
+  throwaway probe dumping the PUBLISHED geometry of every production pose x `11` samples x every
+  `Joint.entries` XYZ through `SkeletonPipeline.produceFrame` produced `18513` lines /
+  `md5 a7033ebe80b920cfb4a9dda38c431825` on **both** trees (`/tmp/c2-framing/corpus-base.tsv` vs
+  `corpus-branch.tsv`, `diff` empty): the change cannot move a joint, because it never touches the
+  pipeline the joints come from. The probe was moved out of the tree before the counted run.
+- **Residuals recorded, NOT fixed** (all measured; each is a presentation/product decision):
+  (a) **Constancy costs size at the compact phases.** A pose whose mid-rep frame is compact inside a
+  large envelope is now drawn at the envelope's frame: `BurpeePose` at mid-rep reads `0.712` where the
+  per-frame fit read `1.300` (its own crouch is smaller than its standing jump), the push-up family
+  `1.300 -> 1.251`, `ArmCirclesPose 0.849 -> 0.847`. This is the price of "no breathing" and it is
+  pinned by name in the regression; whether such a pose should instead animate its camera is the
+  product question the toggle answers.
+  (b) **The frame still never enlarges** (C1's residual (c), unchanged): it is capped at the pose's
+  authored zoom, so a short pose on a large surface is not scaled up to fill it.
+  (c) **Props and the ground grid are still not framed** (C1's residual (d), unchanged); every prop pose
+  was measured to keep at least as much of its prop on the surface as before, and the wall-slide's wall
+  — which already left the surface — now covers more of it vertically (`-84 … 512` px from `-109 …
+  381`).
+  (d) **The sweep is the yaw range the pose declares.** The app can only rotate yaw
+  (`AnimationController.onRotate`); if a pitch gesture is ever added, its range has to join the sweep or
+  the frame will not cover it.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement — **M15 is DONE — see the record above** (the wall's contact plane, the arm chain
@@ -2639,8 +2747,10 @@ A8/A6 leaks — resolved in the Push-Up Family pass above.)
 - Fix the pose, not the engine, when a pose authors motion incorrectly.
 - Keep pose-side migrations on the **existing** carrier surface (the H2 fix is the template).
 - After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
-  current baseline of record (**128 classes / 628 tests** on this branch — `6ce4f695` (the B4 merge)
-  + C1, which added `ViewportFramingInvariantTest` (`+7` tests) and moved no other count; the tree
+  current baseline of record (**129 classes / 635 tests** on this branch — `6ce4f695` (the B4 merge)
+  + C1 + C2, the last two changes adding framing only: C1 added `ViewportFramingInvariantTest` (`+7`
+  tests) at `128 / 628`, this C2 pass added `ExerciseFramingInvariantTest` (`+7`) at `129 / 635`, and
+  neither moved any other count; the tree
   before C1 stood at `127 / 621`, measured fresh in this pass's own base worktree — and that is the
   same tree the B4 trunk landing left behind (`126 / 614` -> `127 / 621`). Earlier standing points:
   **125 classes / 608 tests** — `f8f8b24` + the B1
