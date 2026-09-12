@@ -1236,10 +1236,10 @@ statement is recorded below.
      tracks over the ankle (`x = −1.05` at the hinge vs `+53.07`), the shin angle barely changes, and
      the hinge is `4.41°` more knee flexion than the top (was `40.19°`).
   3. **Swing (`M6`): the load is a straight pendulum hung on the shoulder.** The hand target is placed
-     on the arm's own reachable circle (`shoulder + span·(sin θ, −cos θ)`, `θ = 
-     −0.52 rad → +1.45 rad`), so the shoulder→hand distance is the authored span at **every** frame;
-     the load travels from behind the knees to chest height in front, both phases of the BPS's
-     pendulum, with the elbows straight throughout.
+     on the arm's own reachable circle (`shoulder + span·(sin θ, −cos θ)` with `θ` sweeping
+     `−0.52 rad → +1.45 rad` from the downward vertical), so the shoulder→hand distance is the authored
+     span at **every** frame; the load travels from behind the knees to chest height in front, both
+     phases of the BPS's pendulum, with the elbows straight throughout.
   4. **Burpee (`M7`): the plant schedule.** The rep's contacts are now one geometry: the hands plant
      where the squat's trunk reaches (`plantX = torsoLength·sin 60°`), stay exactly there through the
      whole plant window, and the feet plant one full body line away (`legspan` behind the hands at the
