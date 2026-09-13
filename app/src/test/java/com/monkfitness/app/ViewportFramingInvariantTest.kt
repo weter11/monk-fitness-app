@@ -511,16 +511,23 @@ class ViewportFramingInvariantTest {
         /**
          * The production poses the AUTHORED frame clips on the hero canvas, measured — the inventory of
          * the defect this gate was built for, not a list of exceptions (the fit is per-bound and applies
-         * to all 51 poses identically).
+         * to all poses identically).
+         *
+         * **Re-measured by the animation-coverage phase, batch 1** (`feat/animation-coverage-01`): the four
+         * pose classes the batch added (`AnkleMobilityPose`, `CalfStretchPose`, `HorseStancePose`,
+         * `WallSitPose`) join the inventory, like 26 of the 49 pre-existing production poses. They carry the
+         * family's own `CameraDefinition`; NO camera or framing behaviour is changed by the phase, so this is
+         * the defect's record extended by four more authored frames.
          */
         val CLIPPED_AT_HERO = setOf(
             "AirSquatPose", "AlternatingForwardLungesPose", "AlternatingReverseLungesPose",
-            "AlternatingSideLungesPose", "ArmCirclesPose", "BurpeePose", "CossackSquatPose",
-            "CouchStretchPose", "DynamicWorldsGreatestStretchPose", "FacePullPose",
-            "HalfKneelingStretchPose", "HangPose", "HipCarsPose", "JumpSquatPose", "KettlebellSwingPose",
-            "NeutralGripPullUpPose", "ScapularPullUpPose", "ScapularRetractionPose", "SquatPose",
-            "StandardPullUpPose", "StepUpPose", "SumoSquatPose", "ThoracicExtensionPose",
-            "UnderhandChinUpPose", "WallSlidesPose", "WideGripPullUpPose"
+            "AlternatingSideLungesPose", "AnkleMobilityPose", "ArmCirclesPose", "BurpeePose",
+            "CalfStretchPose", "CossackSquatPose", "CouchStretchPose", "DynamicWorldsGreatestStretchPose",
+            "FacePullPose", "HalfKneelingStretchPose", "HangPose", "HipCarsPose", "HorseStancePose",
+            "JumpSquatPose", "KettlebellSwingPose", "NeutralGripPullUpPose", "ScapularPullUpPose",
+            "ScapularRetractionPose", "SquatPose", "StandardPullUpPose", "StepUpPose", "SumoSquatPose",
+            "ThoracicExtensionPose", "UnderhandChinUpPose", "WallSitPose", "WallSlidesPose",
+            "WideGripPullUpPose"
         )
 
         /**
