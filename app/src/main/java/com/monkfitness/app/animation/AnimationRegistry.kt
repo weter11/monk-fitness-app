@@ -60,6 +60,11 @@ object AnimationRegistry {
         register("wall_sit_hold", WallSitPose())
         register("ankle_mobility_standard", AnkleMobilityPose())
         register("calf_stretch_hold", CalfStretchPose())
+        // Animation-coverage phase (batch 2) — the upper-body pull / bar-support family.
+        register("row_standard", RowsPose())
+        register("dip_parallel_bar", DipsPose())
+        register("band_pull_aparts_standard", BandPullApartPose())
+        register("yt_raises_standard", YTRaisesPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {

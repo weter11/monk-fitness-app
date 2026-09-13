@@ -1,7 +1,7 @@
 # Animation Coverage Phase — 49/66 → 66/66
 
-**Status:** ACTIVE. Brings every catalog exercise from an animated *illustration* to a real skeletal
-animation driven by the engine.
+**Status:** ACTIVE — **`57/66`** after batch 2 (batch 1 landed `53/66`). Brings every catalog exercise from
+an animated *illustration* to a real skeletal animation driven by the engine.
 
 **Metric (kept honest):** `animated` = **a real skeletal animation exists AND `ExerciseHero` uses it**
 — i.e. `Exercise.skeletonAnimation != null` (the hero takes the animated branch) **and**
@@ -94,6 +94,38 @@ vertical`, `knee interior 30.0°`), `WallSitPoseTest` 6/12, `AnkleMobilityPoseTe
 (`ViewportFramingInvariantTest.CLIPPED_AT_HERO`), like 26 of the 49 pre-existing poses. The pin is
 re-measured and recorded; no framing/camera behaviour is changed by this phase.
 
+### Batch 2 — the upper-body pull / bar-support family (4 exercises)
+
+The batch's two bar-supported members share a new family base, **`BaseBarSupportPose`**: the bar contract (a
+**FIXED** grip the body is realized *against*, the flat-in-the-bar's-plane grip derivation, the scapular
+girdle drive on the one canonical channel, IK baking through `bakeIkLimb`, and the shared finalization).
+Each member discloses its own bar layout, reach schedule, body placement and second contact, because those
+are exercise biomechanics and not engine knowledge — the same split `BaseVerticalPullPose` draws.
+
+| exercise | pose class | canonical family | tests | authored cycle | measured |
+|---|---|---|---|---|---|
+| `rows` | `RowsPose` | `BaseBarSupportPose` (canonical `SkeletonFactory` tree) | `RowsPoseTest` (13) | the body rises from the arms' near-full extension to the elbows-folded top of an inverted row, the heels planted throughout | reach `138 → 76` authored (realized `138.000 → 73.548`), incline `22.4° → 36.4°` (`BOTTOM_INCLINE`/`TOP_INCLINE`, both asserted), hand chain `22 u` lying `0.0000 u` off the bar's plane at all five phases, floor clamp `0.0000` |
+| `dips` | `DipsPose` | `BaseBarSupportPose` | `DipsPoseTest` (16) | lockout → the copy's own 90°-elbow bottom → lockout, on two parallel bars | lockout `138.000` → the 90° reach `103.711` (`sqrt(upperArm² + forearm²)` derived from the definition, so `mistakes`' "below 90 degrees" is unreachable by construction), descent `34.289 u`, two bars at `±50.6` (one per hand, its own anchor), trunk lean `10°`, feet clear the floor (`64.821 u` at the lockout), clamp `0.0000` |
+| `band_pull_aparts` | `BandPullApartPose` | `posture` (standing; `FacePullPose`'s sibling) | `BandPullApartPoseTest` (11) | a straight-armed sweep from in front of the shoulders out to the sides, the blades retracting as the hands widen | hand radius `137.600 u` constant (arm interior `140.75°`), sweep `15° → 72°` (`START_SWEEP`/`END_SWEEP`), shoulder retracts posteriorly `0 → −12.709 u` with no shrug, feet travel `0.00`, reachability clamp `0.047` (the validator's own flag is `0.1`) |
+| `y_t_raises` | `YTRaisesPose` | `posture` (prone; `ReverseSnowAngelPose`'s sibling) | `YTRaisesPoseTest` (12) | two raises per cycle — the Y (hands overhead), then the T (out at the sides) — with a controlled lowering between them | prone body on the mat (`PRONE_MAT_Y = 10`), Y peak hand `(243.29, 30.55, −103.54)` vs T peak `(120.00, 30.61, −182.05)`, hand travel `260.89 u` in X and `136.05 u` in Z, `5` distinct published frames from the `9`-point sweep (the symmetric rep: `p = ⅛ ≡ ⅜`, `⅝ ≡ ⅞`, and the rest seam `0 ≡ ½ ≡ 1`), clamp `0.0000` |
+
+RED-before evidence (the same test files and harness, with the pre-phase shape each exercise's *own*
+illustration grouping implies restored on this exercise's declarations — `rows` → `HangPose`, `dips` →
+`PikePushUpPose`, `band_pull_aparts` → `FacePullPose`, `y_t_raises` → `ReverseSnowAngelPose`): **28 of the
+52 tests RED** — `RowsPoseTest` 9/13, `DipsPoseTest` 10/16, `BandPullApartPoseTest` 3/11,
+`YTRaisesPoseTest` 6/12 — every message quoting the number it measured, e.g. `HAND_A is 215.000 u off the
+bar's top plane at p=0.000`, `the hip is 7.98 u off the heel→chest line at p=0.000 — the body must be one
+line`, `the bottom of the rep must BE the copy's 90-degree elbow (measured 38.87 deg)`, `the arm is at 0.38
+of the chain's 143.08 extension at p=0.000`, `the Y raise must take the hands overhead (hand X 146.66 vs
+head 170.52)`, `CHEST left the mat's plane at p=0.000 expected:<10.0> but was:<18.49>`.
+
+**Flagged for the user (not resolved here):** three of the four exercises' authored cameras
+(`BandPullApartPose`, `DipsPose`, `RowsPose` — the standing and bar-supported families' own
+`CameraDefinition`s) are in the hero canvas's *authored-frame clip* inventory
+(`ViewportFramingInvariantTest.CLIPPED_AT_HERO`, `30 → 33`); the fourth, the prone `YTRaisesPose`, fits the
+hero canvas as authored. The pin is re-measured and recorded; **no camera or framing behaviour is changed
+by this batch**.
+
 ## 4. Gaps recorded per pose (no invented behaviour)
 
 * `horse_stance`: "Tuck your pelvis slightly to avoid overarching the lower back" is not authored —
@@ -108,6 +140,33 @@ re-measured and recorded; no framing/camera behaviour is changed by this phase.
   end-of-drive position.
 * `calf_stretch`: the arm chain's band bounds the shift (`121.53` / `101.37` u of `143.00`); the
   hands are authored on the wall's plane and re-solved as the body travels (the elbows bend).
+
+### Batch 2 gaps (recorded, not invented)
+
+* `rows`: the catalog's `steps`/`tech`/`mistakes` copy describes a *bent-over weighted row* while the id,
+  the title, the equipment and the illustration all declare the *inverted* one — the stale-copy call §2
+  already recorded, implemented and re-stated in the pose's KDoc; the foot plant is the rig's declared flat
+  foot (the copy is silent on how the feet take the load, and the "heels only, toes up" variant needs an
+  out-of-plane ankle DOF the declared-foot derivation deliberately flattens); "the chest touches the bar" is
+  realized as the shoulder arriving within `40 u` of the bar's X plane (`BAR_ARRIVAL_X`, measured `34.2 u`)
+  and is **not** asserted as a thorax surface contact — the rig carries no thorax-depth constant.
+* `dips`: the foot posture is authored by convention (the copy says nothing about the legs/feet); the bar
+  height is a product decision, recorded as such rather than presented as biomechanics; `steps` §3's torso
+  angle is a copy-stated **choice** and the upright (triceps) variant is recorded, not authored; the girdle
+  is left neutral — a driven depression is expressible but `reconstructChestFrame`'s unauthored-thorax
+  fallback reads it back into the thorax's roll (measured `1.5 u` of shoulder→grip error at `1.5` activation
+  units, which would put the copy's own "90-degree" bottom at `88.3°`).
+* `band_pull_aparts`: **the band is not modeled** — the rig's environment vocabulary has no band primitive
+  and the family's own banded member (`FacePullPose`) declares none either, so the band is implied by the
+  name and by the hand travel (a `BandProp` is an engine/vocabulary change, outside this phase); the band's
+  tension/stiffness is not simulated; the start width is an authored constant, not specification.
+* `y_t_raises`: "the forehead lightly supported" has no representation (`SupportPoint` carries no head
+  entry), so the head's floor relationship is authored geometry and is not declared; "keep the thumbs
+  pointing up" is not expressible (the hand is one long axis with no thumb or roll DOF); the lift height is
+  an authored fraction of the arm length; and the girdle is left neutral — in the prone layout its rotation
+  is a vertical shoulder displacement that the unauthored-chest fallback carries twice (measured: `4`
+  activation units publish `±12.7 u` of asymmetric shoulder travel, with the passive shoulder below the
+  mat), recorded as a residual.
 
 ## 5. Verification (batch 1)
 
@@ -141,3 +200,75 @@ classes join them. `M8M9M10SupportDeclarationTest` needed no re-baseline at all 
 (its measured value is tree-independent here, which independently corroborates the migration's own
 byte-identical claim). `ViewportFramingInvariantTest.CLIPPED_AT_HERO` is re-measured with the four
 new poses — **no camera/framing behaviour is changed by this batch**.
+
+## 6. Verification (batch 2)
+
+| run | tree | result |
+|---|---|---|
+| baseline | pristine `origin/main` @ `6887738` (a fresh worktree, `--rerun-tasks`) | `139` classes / `718` tests / `0F` / `0E` / `0S` |
+| focused, fresh | branch on `6887738` | `RowsPoseTest` 13, `DipsPoseTest` 16, `BandPullApartPoseTest` 11, `YTRaisesPoseTest` 12, `AnimationCoverageTest` 3 — all green |
+| full, fresh (`--rerun-tasks`, results purged, throwaway probes removed) | branch on `6887738` | `143` / `770` / `0F` / `0E` / `0S` = **exactly +4 classes / +52 tests** (the four new pose test classes), no collateral |
+| release build | branch on `6887738` | `:app:compileReleaseKotlin` + `:app:compileReleaseJavaWithJavac` + `:app:assembleDebug` **SUCCESS** (`app-debug.apk` produced); `:app:assembleRelease` stops at `:app:lintVitalRelease`, which fails with **2 pre-existing errors** — `app/src/main/res/values/themes.xml:2` (`ResourceCycle`) and `app/build.gradle.kts:25` (`ExpiredTargetSdkVersion`) — reproduced identically on the pristine base tree, i.e. not this batch's |
+
+**Coverage moved `53/66 → 57/66`**, asserted by `AnimationCoverageTest` (the four ids added to
+`REQUIRED_SKELETAL_ANIMATION_IDS`, plus `REQUIRED_COVERAGE_MILESTONE = 57` measured from the app's own
+`LibraryStats.animatedExercisesCount`).
+
+**Unrelated poses unchanged — measured, on both trees.** The batch's own per-pose digest probe (the guards'
+own hashing recipe: a fresh `SkeletonPipeline` per pose, the metadata-derived entry point, `progress ∈
+{0, ¼, ½, ¾, 1}`, every joint, `hash * 31 + floatToIntBits`) run in a pristine `origin/main` worktree
+(`6887738`) and on this branch:
+
+| base | pre-existing pose classes compared | differing | added | removed |
+|---|---|---|---|---|
+| `6887738` | 55 | **0** | 4 (`RowsPose`, `DipsPose`, `BandPullApartPose`, `YTRaisesPose`) | 0 |
+
+So all nine guard REDs were **corpus membership, not geometry drift**: the eight `UNAFFECTED_CORPUS_DIGEST`
+guards' corpora are "every production pose class except their own corrected pose", and the four new classes
+join them. The digest values were re-measured from the live run (each failure message printed its
+`measured=`), and `ViewportFramingInvariantTest.CLIPPED_AT_HERO` is re-measured with the new poses
+(`30 → 33`) — **no camera/framing behaviour is changed by this batch**.
+
+**Two further production censuses moved with the batch, and both were re-measured rather than relaxed:**
+
+* `ExtremityArticulationTest` — `DipsPose` authors its hanging feet through `buildAnkleArticulation` (the
+  Branch-C carrier), so the registry-derived migrated corpus gained exactly `dip_parallel_bar`
+  (`11 → 12`), which also puts that pose under the carrier-vs-node equivalence guard.
+* `RuntimeSolverOwnershipAuditTest.limbRealizationWritesStayInsideTheRegisteredImplementations` — the new
+  family base is the corpus's **only pose-side writer** of the realization write idiom
+  (`toLocalDirection(… .localPosition)`), for the *distal* hand chain of a `MANUAL_OVERRIDE` hand. The
+  census now carries it as a classified, structurally anchored entry (the write lives inside `setSegment`;
+  all three call sites are handed palm/knuckles/fingertips nodes; the two flat-grip calls are on each
+  hand's distal chain and never on an IK middle/end node). Why the pose must author that geometry at all:
+  `SkeletonPoseFinalizer` completes a hand's distal joints **only while the extremity is `AUTOMATIC`**
+  (`adjustHandOrientation` is gated by `isExtremityAutomatic`), so a `MANUAL_OVERRIDE` hand is the pose's
+  own — measured on the row's published frames: the authored chain is `22 u` long and lies `0.000 u` off
+  the bar's plane at all five phases; with the authoring helper neutered it collapses to a zero-length
+  chain at the wrist; and under the engine's `AUTOMATIC` derivation (override dropped) the same chain tilts
+  up to `20.927 u` out of that plane. **Flagged (recorded, not resolved):** whether a pose should be able
+  to state a `MANUAL_OVERRIDE` extremity through the offset idiom at all — versus the wrist-articulation
+  channel `PikePushUpPose` uses — is an ownership decision for the architecture owner.
+
+### What the batch's own verification forced (recorded, not silent)
+
+1. **`YTRaisesPoseTest` did not compile.** The batch's last edit renamed the mat constant
+   (`PRONY_MAT_PLANE` → `PRONE_MAT_Y`) and the pose kept the old spelling at 10 of its 11 sites, so the
+   tree was mid-rename and non-compiling. The rename was completed **in the test**; production untouched.
+2. **A real geometry defect — the YT raises' elbow went through the mat.** The arm pole was `(0, 0, ∓1)`,
+   nearly parallel to the T raise's own chord (the arm lies along ±Z there), so the solver's residual
+   perpendicular pointed DOWN: `ELBOW_A` published at `y = -2.584` at the T peak — `2.584 u` through the
+   mat, caught by that class's own floor invariant. The pole is now the prone family's own `(0, 1, ∓1)`
+   (`ReverseSnowAngelPose`/`SupermanPose`/`ProneCobraStretchPose` author the same), which puts the same
+   elbow `35.423 u` above the shoulder line. Measured A/B of elbow-above-shoulder: rest `0.000 → 17.167`,
+   Y peak `9.715 → 28.537`, T peak `-12.584 → 35.423`.
+3. **Two test-side defects.** (a) the dips bar-position assertion compared an exact `Float` set against a
+   value it had already rounded to `0.1 u` (`expected:<[-50.600002, 50.600002]> but was:<[-50.6, 50.6]>`);
+   it now derives the expectation from the pose's published factor and compares with a tolerance. (b) the
+   YT raises' `theSweepSamplesDistinctPublishedFrames` asserted "as many distinct frames as samples",
+   which the drill's own **symmetric** rhythm cannot satisfy by construction (a raise and its controlled
+   lowering pass through the same arm position); it now asserts the rhythm's own `5` frames and
+   additionally proves the rest/Y/T frames differ — it reads `7` on the pre-phase shape, so the assertion
+   is not vacuous.
+4. **A batch-1 record repaired while here.** `M8M9M10SupportDeclarationTest`'s batch-1 KDoc paragraph
+   recorded its pre-rebaseline measurement as a literal `%d` placeholder; the value
+   (`7499664576150638435`) was recovered from the pre-batch-1 tree (`7df32c0`) and written in.

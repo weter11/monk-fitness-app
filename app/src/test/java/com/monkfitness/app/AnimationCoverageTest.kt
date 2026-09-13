@@ -41,9 +41,12 @@ import org.junit.Test
  * ## Coverage (this phase)
  *
  * `49/66` at the phase's start (measured on `origin/main` @ `4a32d84` with `ZzCoverageProbeTest`'s
- * census: `REAL-ANIMATED=49 UNCOVERED=17`) → `66/66` at its end. [REQUIRED_SKELETAL_ANIMATION_IDS]
- * grows with each batch of the phase and is asserted as a **superset** so the batches stay
- * independently mergeable; the phase's completion PR additionally pins the total.
+ * census: `REAL-ANIMATED=49 UNCOVERED=17`) → `53/66` after batch 1 → `57/66` after batch 2 (both
+ * re-measured on the branch and recorded in `docs/ANIMATION_COVERAGE_PHASE.md`) → `66/66` at the
+ * phase's end. [REQUIRED_SKELETAL_ANIMATION_IDS] grows with each batch of the phase and is asserted
+ * as a **superset** so the batches stay independently mergeable, while
+ * [REQUIRED_COVERAGE_MILESTONE] pins the count each batch actually reached; the phase's completion PR
+ * additionally pins the total.
  */
 class AnimationCoverageTest {
 
@@ -67,8 +70,21 @@ class AnimationCoverageTest {
             "horse_stance_hold",
             "wall_sit_hold",
             "ankle_mobility_standard",
-            "calf_stretch_hold"
+            "calf_stretch_hold",
+            // Batch 2 — the upper-body pull / bar-support family.
+            "row_standard",
+            "dip_parallel_bar",
+            "band_pull_aparts_standard",
+            "yt_raises_standard"
         )
+
+        /**
+         * The coverage the phase has reached so far (`57` of the catalog's `66` after batch 2). Pinned
+         * so a batch cannot quietly add an id to the set above without the phase doc's measured
+         * before → after being updated with it: the count is the app's own metric
+         * (`LibraryStats.animatedExercisesCount`), recomputed from the registry rather than trusted.
+         */
+        const val REQUIRED_COVERAGE_MILESTONE = 57
     }
 
     /** The hero renders the engine skeleton for these exercises, not the keyframe illustration. */
@@ -106,6 +122,11 @@ class AnimationCoverageTest {
             expected, stats.animatedExercisesCount
         )
         assertEquals("the catalog size moved — re-measure the phase's coverage", 66, stats.totalExercises)
+        assertEquals(
+            "the phase's coverage milestone moved — re-measure it and record the before → after in " +
+                "docs/ANIMATION_COVERAGE_PHASE.md",
+            REQUIRED_COVERAGE_MILESTONE, stats.animatedExercisesCount
+        )
         assertTrue(
             "the phase's required set ($REQUIRED_SKELETAL_ANIMATION_IDS) is not covered",
             REQUIRED_SKELETAL_ANIMATION_IDS.all { it in real }

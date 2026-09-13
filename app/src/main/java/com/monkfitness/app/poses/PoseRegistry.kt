@@ -63,7 +63,12 @@ object PoseRegistry {
         "horse_stance_hold" to false,
         "wall_sit_hold" to false,
         "ankle_mobility_standard" to false,
-        "calf_stretch_hold" to false
+        "calf_stretch_hold" to false,
+        // Animation-coverage phase (batch 2) — the upper-body pull / bar-support family.
+        "row_standard" to false,
+        "dip_parallel_bar" to false,
+        "band_pull_aparts_standard" to false,
+        "yt_raises_standard" to false
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? {

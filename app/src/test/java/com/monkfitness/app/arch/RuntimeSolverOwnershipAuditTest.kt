@@ -296,12 +296,13 @@ class RuntimeSolverOwnershipAuditTest {
         }
         assertEquals(
             "limb realization writes must be exactly {registered implementations + the classified " +
-                "Phase-2 contact re-solve}, two offsets (middle + end) per realization site: $perFile",
+                "writers below}, two offsets (middle + end) per realization site: $perFile",
             mapOf(
                 "BasePose.kt" to 4,             // member bake + package bake
                 "BaseValidationPose.kt" to 2,   // validation bake
                 "IkStage.kt" to 2,              // engine stage
-                "ConstraintSolver.kt" to 2      // CLASSIFIED: contact re-solve (below)
+                "ConstraintSolver.kt" to 2,     // CLASSIFIED: contact re-solve (below)
+                "BaseBarSupportPose.kt" to 1    // CLASSIFIED: MANUAL_OVERRIDE distal-hand authoring (below)
             ),
             perFile
         )
@@ -328,6 +329,56 @@ class RuntimeSolverOwnershipAuditTest {
             "the only non-implementation limb writes must be the Phase-2 contact re-solve loop " +
                 "(writes at ${solverWrites.map { it + 1 }}, re-solve loops at $reSolveRanges)",
             solverWrites.all { write -> reSolveRanges.any { write in it } }
+        )
+
+        // The second classified writer, anchored. The bar-support family's flat-grip authoring writes the
+        // DISTAL hand chain (palm → knuckles → fingertips) of a MANUAL_OVERRIDE hand — never the middle/end
+        // node of an IK chain, and never a realization. Why a pose must author that geometry at all:
+        // `SkeletonPoseFinalizer` completes a hand's distal joints ONLY while the extremity is AUTOMATIC
+        // (`if (pose.isExtremityAutomatic(Extremity.HAND_A))` gates `adjustHandOrientation`), so a pose that
+        // declares `overrideExtremityOrientation` (W1 MANUAL_OVERRIDE) owns that geometry verbatim and the
+        // factory ships those nodes with zero offsets. Measured on the row's own published frames: with the
+        // authored offsets the chain is `22 u` long and lies `0.000 u` off the bar's top plane at all five
+        // sampled phases; with the authoring helper neutered it collapses to a zero-length chain at the
+        // wrist; and under the engine's AUTOMATIC derivation (override dropped, no authored grip) the same
+        // chain tilts out of that plane by up to `20.927 u` at the bottom of the rep.
+        //
+        // NOTE (open, recorded not resolved): whether a pose should be able to state a
+        // `MANUAL_OVERRIDE` extremity through this offset idiom at all — versus the wrist-articulation
+        // channel `PikePushUpPose` uses — is an ownership question for the architecture owner; the corpus
+        // has no other pose-side writer of this idiom, and this guard is where it would be decided.
+        val barLines = sources.entries.first { it.key.endsWith("/BaseBarSupportPose.kt") }.value
+        val barWrites = barLines.withIndex()
+            .filter { idiom.containsMatchIn(stripComment(it.value)) }
+            .map { it.index }
+        assertEquals("the bar-support family authors one distal-hand write site", 1, barWrites.size)
+        val segmentHelper = barLines.indexOfFirst { it.contains("private fun setSegment(") }
+        assertTrue("the distal-hand authoring helper must be locatable", segmentHelper >= 0)
+        assertTrue(
+            "the bar-support limb write must live inside its distal-hand authoring helper " +
+                "(write at ${barWrites.map { it + 1 }}, helper at ${segmentHelper + 1})",
+            barWrites.all { it >= segmentHelper && it < segmentHelper + functionBody(barLines, segmentHelper).size }
+        )
+        val segmentCalls = barLines.withIndex()
+            .filter { it.value.contains("setSegment(") && !it.value.contains("private fun") }
+        assertEquals("the helper authors the three distal hand segments", 3, segmentCalls.size)
+        assertTrue(
+            "the helper is only ever handed a DISTAL hand node — never an IK middle/end node: " +
+                segmentCalls.map { it.index + 1 },
+            segmentCalls.all { (_, line) ->
+                listOf("palmNode", "knucklesNode", "fingertipsNode").any { line.contains(it) }
+            }
+        )
+        val rowsLines = sources.entries.first { it.key.endsWith("/RowsPose.kt") }.value
+        val gripCalls = rowsLines.filter { it.contains("authorFlatBarGrip(") && !it.contains("protected fun") }
+        assertEquals("both hands' flat grips are authored", 2, gripCalls.size)
+        assertTrue(
+            "the flat grip must be authored on each hand's DISTAL chain (palm + knuckles + fingertips), " +
+                "never on an IK middle/end node: ${gripCalls.map { it.trim() }}",
+            gripCalls.all { line ->
+                listOf("palmA!!", "knucklesA!!", "fingertipsA!!", "palmP!!", "knucklesP!!", "fingertipsP!!")
+                    .count { line.contains(it) } == 3 && !line.contains("elbow")
+            }
         )
     }
 
