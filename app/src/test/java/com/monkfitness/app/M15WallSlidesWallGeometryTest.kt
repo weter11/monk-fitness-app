@@ -453,7 +453,8 @@ class M15WallSlidesWallGeometryTest {
         * realized the elbow `19.91` u BELOW the pose's own declared plane at the bottom of the rep
         * (measured `p = 0.5`; the pose is a pinned, attributed open item in the T2 invariant, whose entry
         * this correction removes in the same change). Observed RED on the previous value `-8128235422251913276` before
-        * the re-baseline (this live run measured `-4120795854071733418`). Attribution is direct, not inferred: the
+        * the re-baseline (this live run measured `-4120795854071733418`). Attribution is direct, not
+        * inferred
         * whole-corpus dump (`51` classes x `5` samples x every joint XYZ, `8415` rows, a `git stash`
         * round-trip on the corrected pose file with `md5sum -c` on restore) differs in exactly `60` rows,
         * ALL of them inside `DiamondPushUpPose` — `ELBOW_A`/`ELBOW_P` at all five samples
@@ -536,7 +537,23 @@ class M15WallSlidesWallGeometryTest {
          * 24.24812` to exactly `0.000000` (the relocation this batch removes). The batch's own gate is
          * `SquatReachBandAuthoringTest`; the three pose files stashed on the base tree re-run this guard
          * GREEN on the pre-baseline value (measured in the same session).
+          *
+          * **Re-baselined by the second reach-band cleanup batch** (`fix/reach-band-batch2-deepsquat-jump-cossack`,
+          * off the first reach-band batch's merge `ef9400f`): this corpus is "every production pose class
+          * except the classes this correction owns", so it includes the batch's two corrected poses
+          * (`DeepSquatHoldPose`, `JumpSquatPose`). Observed RED on the pre-baseline value `-2178969791688578353`
+          * before the re-baseline (this live run measured `5471688281724201329` below). Attribution is direct, not
+          * inferred
+          * from this digest: the whole-corpus dump (`51` classes × `14` phases × every `Joint.entries` XYZ ×
+          * both frame conditions — `47,124` rows, full float bits) measured on a worktree of `origin/main` @
+          * `ef9400f` and on this branch differs in exactly `584` rows — `224` in `DeepSquatHoldPose`, `360` in
+          * `JumpSquatPose` — ALL of them limb-chain joints (`KNEE_*` max `0.0484` u, `ANKLE_*`/`HEEL_*`/`TOE_*`
+          * `0.0206` u, the derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS` chain `0.0053` u, `ELBOW_*`
+          * `0.0006` u), with the other `49` classes byte-identical — `CossackSquatPose` included, which this
+          * batch deliberately does NOT change — and every pelvis/spine/girdle/head joint byte-identical, i.e.
+          * the batch is target-side only (a root-side "fix" would have moved the holds' depths). The batch's
+          * own gate is `ReachBandBatch2AuthoringTest`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -2178969791688578353L
+        const val UNAFFECTED_CORPUS_DIGEST = 5471688281724201329L
     }
 }
