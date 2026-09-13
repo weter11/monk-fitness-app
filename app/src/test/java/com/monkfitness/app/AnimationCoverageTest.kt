@@ -42,11 +42,13 @@ import org.junit.Test
  *
  * `49/66` at the phase's start (measured on `origin/main` @ `4a32d84` with `ZzCoverageProbeTest`'s
  * census: `REAL-ANIMATED=49 UNCOVERED=17`) → `53/66` after batch 1 → `57/66` after batch 2 → `61/66`
- * after batch 3 → `63/66` after batch 4 (each re-measured on the branch and recorded in
- * `docs/ANIMATION_COVERAGE_PHASE.md`) → `66/66` at the phase's end. [REQUIRED_SKELETAL_ANIMATION_IDS] grows with each batch of the phase and is asserted
- * as a **superset** so the batches stay independently mergeable, while
- * [REQUIRED_COVERAGE_MILESTONE] pins the count each batch actually reached; the phase's completion PR
- * additionally pins the total.
+ * after batch 3 → `63/66` after batch 4 → **`66/66` after batch 5** (the phase's tail: the three
+ * exercises no family grouping carried). Every step was re-measured on its branch and recorded in
+ * `docs/ANIMATION_COVERAGE_PHASE.md`. [REQUIRED_SKELETAL_ANIMATION_IDS] grew with each batch and is
+ * asserted as a **superset** so the batches stayed independently mergeable, while
+ * [REQUIRED_COVERAGE_MILESTONE] pins the count each batch actually reached — the phase's completion
+ * PR pins the total, and the third assertion below is what makes `66/66` mean *every* catalog
+ * exercise rather than the phase's own list.
  */
 class AnimationCoverageTest {
 
@@ -83,16 +85,21 @@ class AnimationCoverageTest {
             "piriformis_stretch_hold",
             // Batch 4 — the cervical-mobility family.
             "chin_tuck_standard",
-            "neck_circles_hold"
+            "neck_circles_hold",
+            // Batch 5 — the phase's tail: the three exercises no family grouping carried
+            // (a standing one-arm shoulder CAR, the ballistic jack, the kneeling fold).
+            "shoulder_cars_standard",
+            "jumping_jack_standard",
+            "child_pose_hold"
         )
 
         /**
-         * The coverage the phase has reached so far (`63` of the catalog's `66` after batch 4). Pinned
-         * so a batch cannot quietly add an id to the set above without the phase doc's measured
-         * before → after being updated with it: the count is the app's own metric
+         * The coverage the phase has reached so far — **`66` of the catalog's `66`** after batch 5, the
+         * phase's tail. Pinned so a batch cannot quietly add an id to the set above without the phase
+         * doc's measured before → after being updated with it: the count is the app's own metric
          * (`LibraryStats.animatedExercisesCount`), recomputed from the registry rather than trusted.
          */
-        const val REQUIRED_COVERAGE_MILESTONE = 63
+        const val REQUIRED_COVERAGE_MILESTONE = 66
     }
 
     /** The hero renders the engine skeleton for these exercises, not the keyframe illustration. */
@@ -138,6 +145,30 @@ class AnimationCoverageTest {
         assertTrue(
             "the phase's required set ($REQUIRED_SKELETAL_ANIMATION_IDS) is not covered",
             REQUIRED_SKELETAL_ANIMATION_IDS.all { it in real }
+        )
+    }
+
+    /**
+     * The phase's own completion criterion, stated independently of its own list: **no catalog
+     * exercise is left on the legacy illustration path.** [REQUIRED_COVERAGE_MILESTONE] pinned at the
+     * catalog's total says the same thing arithmetically, but this assertion says it structurally —
+     * every exercise the app can show resolves to the engine, and the metric's denominator is checked
+     * against the catalog rather than assumed.
+     */
+    @Test
+    fun noCatalogExerciseIsLeftOnTheLegacyIllustrationPath() {
+        val real = PoseRegistry.getDedicatedAnimationIds()
+        val uncovered = catalog().filterNot { it.animationId in real }
+        assertTrue(
+            "the phase is not complete — these exercises still resolve to the keyframe illustration: " +
+                uncovered.joinToString { "${it.id}(${it.animationId})" },
+            uncovered.isEmpty()
+        )
+        val stats = generator.getLibraryStats()
+        assertEquals("the catalog's size moved — re-measure the coverage", 66, stats.totalExercises)
+        assertTrue(
+            "the library reports ${stats.animatedExercisesCount} of ${stats.totalExercises} animated",
+            stats.animatedExercisesCount == stats.totalExercises
         )
     }
 

@@ -73,6 +73,11 @@ object AnimationRegistry {
         // Animation-coverage phase (batch 4) — the cervical-mobility family.
         register("chin_tuck_standard", ChinTuckPose())
         register("neck_circles_hold", NeckCirclesPose())
+        // Animation-coverage phase (batch 5) — the phase's tail: the three exercises the earlier,
+        // family-grouped batches could not carry (a shoulder CAR, a ballistic jack and a kneeling fold).
+        register("shoulder_cars_standard", ShoulderCarsPose())
+        register("jumping_jack_standard", JumpingJacksPose())
+        register("child_pose_hold", ChildPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {

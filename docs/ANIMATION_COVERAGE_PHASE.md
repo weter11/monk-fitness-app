@@ -1,7 +1,8 @@
 # Animation Coverage Phase — 49/66 → 66/66
 
-**Status:** ACTIVE — **`63/66`** after batch 4 (batch 1 landed `53/66`, batch 2 `57/66`, batch 3 `61/66`). Brings every catalog
-exercise from an animated *illustration* to a real skeletal animation driven by the engine.
+**Status:** COMPLETE — **`66/66`** after batch 5 (batch 1 landed `53/66`, batch 2 `57/66`, batch 3 `61/66`, batch 4 `63/66`).
+Every catalog exercise now runs a real skeletal animation driven by the engine; the legacy illustration path is
+empty and `AnimationCoverageTest.noCatalogExerciseIsLeftOnTheLegacyIllustrationPath` asserts it structurally.
 
 **Metric (kept honest):** `animated` = **a real skeletal animation exists AND `ExerciseHero` uses it**
 — i.e. `Exercise.skeletonAnimation != null` (the hero takes the animated branch) **and**
@@ -210,6 +211,50 @@ family's own `CameraDefinition`) are in the hero canvas's *authored-frame clip* 
 (`ViewportFramingInvariantTest.CLIPPED_AT_HERO`, `35 → 37`), exactly like the other 35 standing/overhead
 members. The pin is re-measured and recorded; **no camera or framing behaviour is changed by this batch.**
 
+### Batch 5 — the phase's tail (3 exercises), and why it is three poses rather than a family
+
+The last three uncovered exercises are the ones **no family grouping can carry**: a standing *single-arm*
+shoulder mobility drill, a ballistic full-body jack and a floor-bound kneeling fold. They share no chassis, no
+limb convention and no support base, so each is authored as its own pose class on the canonical
+`SkeletonFactory` tree through [BasePose] — **no shared base class, no shared authoring helper, and no
+implementation reused between them.** They are one PR (`feat/animation-coverage-05`) — and, deliberately, **not
+one PR per exercise**, because everything the batch changes outside the three new files is *tree-level*: the
+eight `UNAFFECTED_CORPUS_DIGEST` constants, the two registry-derived censuses and the coverage milestone are all
+measured on ONE final tree. Three independently-merged PRs would each have re-baselined the same constants and
+collided on the merge (the pattern the phase's earlier batches avoided by landing sequentially with a rebase
+onto each new `main`), and splitting the branch's own commits per exercise would re-pin those same constants
+three times without any of the three trees being the one the constants describe. The branch is therefore three
+commits by *concern*: the poses and their tests, then the guards re-baselined from this batch's measured final
+tree, then this record.
+
+| exercise | pose class | canonical family | tests | authored cycle | measured |
+|---|---|---|---|---|---|
+| `shoulder_cars` | `ShoulderCarsPose` | `BasePose` + `SkeletonFactory` (the torso-quiet standing chassis) | `ShoulderCarsPoseTest` (13) | **one full revolution of ONE arm** per cycle — hanging → *straight in front* → *overhead* → *behind* → hanging — on a constant radius, with the azimuth schedule slowing through the posterior quadrant | radius **`137.600 u` constant**, elbow interior **`140.751°` constant**, hand travel `272.277 u` (elbow `153.097 u`), **every joint outside the working arm travels `0.000 u`** (the other arm, both girdles, the trunk, the neck/head and the planted stance), azimuth `0.000 → 6.283 rad` strictly increasing with per-sample steps `0.888 / 1.032 / 1.032 / 0.888 | 0.683 / 0.539 / 0.539 / 0.683`, clamp `0.00000`, worst clearance `25.000 u`, `9` of `9` distinct frames |
+| `jumping_jacks` | `JumpingJacksPose` | `BasePose` + `SkeletonFactory` (the standing chassis with a ballistic root) | `JumpingJacksPoseTest` (13) | **two coordinated hops per cycle**: closed stance → flight 1 (opening) → open stance → flight 2 (closing) → closed stance, one `openness` signal driving the arms *and* the legs | closed stance `24.200 u` → open `105.600 u` (both symmetric about the mid-line); hands `(0, −136, 0)` at the hips → `(0, 0, ∓136)` level → `(0, +136, 0)` overhead at a constant `136.000 u` radius; ankles `25.000 → 45.000 u` through each flight; pelvis `226.000` (touch-down) → `240.000` (apex) → `212.000` (loaded); knee interior `146.716° → 128.848°`; feet flat (`0.000 u` toe-to-heel) at the closed stance and pointed (`15.2 u` toe under heel) at the apex; worst leg chord `203.3 u` of the chain's `205.80 u` cap; clamp `0.00000`; worst clearance `23.987 u`; `7` of `9` distinct frames (the drill's own symmetric rhythm) |
+| `child_pose` | `ChildPose` | `BasePose` + `SkeletonFactory` (kneeling: the pinned knee is the drill's axis) | `ChildPoseTest` (16) | kneel → **sit the hips back and fold** (entry, `35 %` of the cycle) → **hold** (`45 %`) → **rise back** (`20 %`) | knees/ankles/toes **pinned** (`travel 0.000 u`) with the knee on the mat's own `15.000 u` layer; the hip rides the **femur's circle** (`112 u` about the pinned knee) travelling `92.0 u` back / `47.8 u` down; shins flat (`y 0.000`, `Δz 0.000`); trunk `109°` + thorax `26°` + cervical `15°`; head tip `8.999 u` (the corpus's mat layer); hands `139.810 u` from their shoulder at `y = 15.000` (elbow `146.353°`), ahead of the head; feet lie back along the shins; deepest hip→ankle chord `64.5 u` against the chain's `56.01 u` fold stop; the plateau flat to `0.0000 u`; clamp `0.00000`; `5` of `9` distinct frames |
+
+RED-before evidence (the same test files and harness, with **each exercise's own legacy illustration grouping**
+restored on that exercise's declarations — `shoulder_cars` → the `ArmCirclesPose` generic two-arm circle it is
+grouped with, `jumping_jacks` → the illustration's own closed frame held, `child_pose` → the **prone** layout it
+is grouped with): **17 of the 42 tests RED** — `ShoulderCarsPoseTest` 5/13, `JumpingJacksPoseTest` 7/13,
+`ChildPoseTest` 5/16 — every message quoting the number it measured, e.g. `the shoulder→hand radius is
+128.8686 u … against the authored 137.6000 u`, `at p=0.1250 the hand is 90.8491 u above its shoulder — the low
+half of the arc is missing`, `the arc's slow-down is only 1.0000 of its fast part`, `the ankles are 25.0000 u
+high at p=0.1250 against the flight's own 8.0784 u`, `the open shape's stance is 24.2000 u`, `1` distinct
+published frame of `9` (the T-7 aliasing signature), `the trunk's own fold at the hold is 90.0000° … expected
+108.99949`, `the hold's hip X moved expected:<6.2569656> but was:<98.0>`, and — from the child-pose
+counterfactual, a real defect of the naive authoring — `HAND_A is -12.4918 u below the mat`. All three
+production files were fingerprinted and restored (`md5sum -c` OK) before the next run. The guard-style
+assertions (the pinned kneel, the planted stance, the declared support reaching the frame, the bone lengths,
+the reach band) stay GREEN in every counterfactual — they pin behaviour that must not change.
+
+**Flagged for the user (not resolved here):** all three poses' authored cameras are in the hero canvas's
+*authored-frame clip* inventory (`ViewportFramingInvariantTest.CLIPPED_AT_HERO`, `37 → 40`) — the standing CAR
+(whose arc is a full revolution about one shoulder), the ballistic jack (whose wide stance and overhead hands
+both exceed the canvas) and the kneeling fold (whose body lies the mat's full width from the toes to the
+reaching hands). The pin is re-measured and recorded; **no camera or framing behaviour is changed by this
+batch.**
+
 ## 4. Gaps recorded per pose (no invented behaviour)
 
 * `horse_stance`: "Tuck your pelvis slightly to avoid overarching the lower back" is not authored —
@@ -310,6 +355,61 @@ members. The pin is re-measured and recorded; **no camera or framing behaviour i
 * Both members: **the "one arm at a time / arms relaxed" and the whole standing chassis** (stance width,
   depth and height, the rest-arm radius) are authored conventions — stated at `BaseCervicalPose` — because
   neither entry's copy says anything about the arms.
+
+### Batch 5 gaps (recorded, not invented)
+
+* `shoulder_cars` — four records. (a) **The working girdle does not carry the arm, and that is a measured
+  engine residual rather than an oversight.** A real CAR includes the scapulohumeral rhythm; this rig's
+  thorax is *unauthored* here, so `SkeletonPoseFinalizer.reconstructChestFrame` re-derives it from the
+  shoulder line, which a one-sided clavicular elevation tilts. Measured with a driven elevation of `0.6`
+  activation units on this pose: the working shoulder rises `13.8 u` and the thorax is read back into a
+  **`5.4°` roll that the neck carries** — the same residual `DipsPose` records for its driven depression, and
+  the same reason `BandPullApartPose` drives the girdle *symmetrically*. Publishing that roll would break the
+  drill's own cue (*"Keep the torso quiet"* / *"Twisting through the spine"*), so the girdle is left neutral and
+  the scapular component is recorded rather than faked; the pose's own test pins the consequence (both
+  shoulders hold one height for the whole cycle). (b) **The drill is one arm at a time and the far side is not
+  duplicated**: the catalog's `alternating` flag is `false` and the copy says *"then switch arms"* — the mirror
+  is the same authored geometry, recorded here rather than authored twice (the same call the neck pair's supine
+  option records). (c) **The rig carries no humeral axial-rotation channel**, so the humeral roll a real CAR
+  also owns is not representable. (d) *"Brace your ribs down"* is honoured structurally (a vertical trunk that
+  never extends); the rig has no separate rib channel. The radius (`0.96 × maxReach`, the corpus's own
+  straight-arm convention), the **sticky-spot schedule** (`20°` of re-distributed azimuth, the direct
+  structural reading of `mistakes`' *"Speeding through the sticky spots"*), the outboard plane offset and the
+  cycle length are **authored constants** — the copy names no number, saying only "as far as you can control" /
+  "smooth, not fast".
+* `jumping_jacks` — **no copy exists at all** (`R.string.ex_jumping_jacks` is the whole entry, in all three
+  locales), so the identity is the exercise's name across the three titles plus the one illustration that shows
+  it: a two-frame open/close cycle whose *closed* frame has the hands at the hips with the toes together and
+  whose *open* frame has the hands overhead (`0.19`, above the head at `0.20`) with the toes wide apart. Three
+  records follow. (a) **The flight cannot be declared**: `metadata.support` is per-pose, so the declaration
+  names the drill's base of support (both feet — the floor it leaves twice and lands on twice per cycle), which
+  is exactly how the corpus's other jump (`JumpSquatPose`) declares it; the two airborne windows are stated at
+  the pose instead. (b) **The wide stance's natural toe-out is not authored** — the rig's foot-heading channel
+  exists, but the copy is silent, so both feet keep the standing family's forward heading all cycle. (c) **The
+  hop's height is authored geometry**, not a physics result: the rig carries no ballistic or ground-reaction
+  model, and the catalog states no amplitude. The arms' radius and the two stance factors are authored too,
+  chosen so the arms stay long (no elbow cheat) and the widest stance remains inside the leg chain's reach band
+  (`203.3 u` of `205.80 u`, measured).
+* `child_pose` — five records. (a) **The declared contacts are the hold's**: `metadata.support` is per-pose, so
+  the kneeling base (both knees + both hands, pivot `KNEES`) is the position the catalog's timer *is*; through
+  the entry and the rise the hands are lifted (they hang at the sides at `p = 0`) — the reading `YTRaisesPose`
+  records for its lifted hands and `NinetyNinetyHipsPose` for its picked-up feet. The **knees are on the mat at
+  every phase**, so their half of the declaration is true throughout. (b) **The feet are declared on the
+  canonical foot channel** (`LEFT_FOOT`/`RIGHT_FOOT`): in a kneel the foot's *dorsum* is the surface, which the
+  rig's vocabulary has no separate point for, and the declaration is also what activates the foot's own
+  heading/flattening derivation — without it the channel's neutral fallback lays the feet *forward* under the
+  shins they are meant to continue (measured `TOE_F` at `+24.85`; with the declaration, `−24.85` and the heading
+  is authored in the pelvis's own frame because the channel is root-relative). (c) **The forehead has no
+  `SupportPoint`** (`SupportMath.jointsFor` carries no head entry), so the head's mat relationship is authored
+  geometry (`8.999 u`) and is not declared — the vocabulary gap `YTRaisesPose` also records. (d) **The grip is
+  not expressed**: `HandDefinition` is a single long axis, so the hands rest on the mat rather than curling into
+  it. (e) **The `tech`'s conditional knee-widening** (*"Widen the knees if you need more space for the torso"*)
+  is a variant for a lifter who needs it; the authored stance is the neutral one (the thighs in their own
+  sagittal planes) and the wider variant is recorded rather than authored as a second exercise. *"Breathe into
+  the ribcage"* has no channel at all. The fold angles, the hold's fraction of the cycle, the hands' placement
+  and the cycle length are authored constants (the copy says only "gently" / "slowly"), and the **sit-back is
+  bounded by the leg chain's own fold stop** — `55°` of femur leaves `8.5 u` of the chain's `56.01 u` stop, so
+  the drill's `mistakes` line (*"forcing the hips to the heels when mobility is limited"*) holds structurally.
 
 ## 5. Verification (batch 1)
 
@@ -523,3 +623,134 @@ literal. It is a default-valued constructor parameter, so no existing call site 
 touched by this batch:** the diff is the family base, two pose classes, their two test classes, the two
 registries, the coverage guard, the shared sweep helper's additive field and the re-baselined guards (plus
 this record).
+
+
+## 9. Verification (batch 5) — and the phase's completion
+
+| run | tree | result |
+|---|---|---|
+| baseline | pristine `origin/main` @ `b0e4edd` (a fresh worktree, `/tmp/ac05-base`, `--rerun-tasks`) | `149` classes / `846` tests / `0F` / `0E` / `0S` |
+| focused, fresh | branch on `b0e4edd` | `ShoulderCarsPoseTest` 13, `JumpingJacksPoseTest` 13, `ChildPoseTest` 16, `AnimationCoverageTest` 4 — all green |
+| full, fresh (`--rerun-tasks`, results purged, throwaway probes moved out of the tree) | branch on `b0e4edd` | `152` / `889` / `0F` / `0E` / `0S` = **exactly +3 classes / +43 tests** (the three new pose test classes and the coverage guard's new completion assertion), no collateral |
+| release build | branch on `b0e4edd` | `:app:compileReleaseKotlin` + `:app:compileReleaseJavaWithJavac` + `:app:assembleDebug` **SUCCESS** (`app-debug.apk`, `11259769` bytes); `:app:assembleRelease` fails at `:app:lintVitalRelease` **only** — `app/src/main/res/values/themes.xml:2` `ResourceCycle` + `app/build.gradle.kts:25` `ExpiredTargetSdkVersion` — the repository's documented pre-existing pair, neither file in this batch's diff |
+| RED-before | branch, each pose's own illustration-grouping counterfactual in turn | `17` of the `42` tests RED (`5/13`, `7/13`, `5/16`), messages quoting the measured numbers (see §3 batch 5); all three production files restored from their fingerprints (`md5sum -c` OK) |
+
+**Coverage moved `63/66 → 66/66`**, asserted by `AnimationCoverageTest`: the three ids added to
+`REQUIRED_SKELETAL_ANIMATION_IDS`, `REQUIRED_COVERAGE_MILESTONE = 66` measured from the app's own
+`LibraryStats.animatedExercisesCount`, **and a new structural assertion** —
+`noCatalogExerciseIsLeftOnTheLegacyIllustrationPath` — which checks the whole catalog rather than the phase's
+own list: every exercise the app can show resolves to the engine, and the metric's denominator is read from the
+catalog instead of assumed. A registry-level census corroborates it: the catalog's `66` exercise entries, the
+`66` `AnimationRegistry` registrations and the `66` `PoseRegistry` configs match **one-to-one with no
+unregistered id on either side**, and every id's builder is a `com.monkfitness.app.poses.*` engine pose.
+
+**Unrelated poses unchanged — measured, on both trees.** The batch's own per-pose digest probe (the guards' own
+hashing recipe: a fresh `SkeletonPipeline` per pose, the production entry point, `progress ∈ {0, ¼, ½, ¾, 1}`,
+every joint, `hash * 31 + floatToIntBits`, one line per class) run in a pristine `origin/main` worktree
+(`b0e4edd`) and on this branch:
+
+| base | pre-existing pose classes compared | differing | added | removed |
+|---|---|---|---|---|
+| `b0e4edd` | 65 | **0** | 3 (`ShoulderCarsPose`, `JumpingJacksPose`, `ChildPose`) | 0 |
+
+So all eleven guard REDs were **corpus membership, not geometry drift**: the eight `UNAFFECTED_CORPUS_DIGEST`
+guards' corpora are "every production pose class except their own corrected pose", and the three new classes
+join them. Each digest was re-baselined to its printed `measured=` value with the responsible change named at
+the constant, and `ViewportFramingInvariantTest.CLIPPED_AT_HERO` was re-measured (`37 → 40`) — **no
+camera/framing behaviour is changed by this batch.**
+
+**Two further production censuses moved with the batch, and both were re-measured rather than relaxed:**
+
+* `ExtremityArticulationTest` — `JumpingJacksPose` authors its feet through `buildAnkleArticulation` (the toes
+  pointed through each flight, flat on each landing), so the registry-derived Branch-C carrier corpus gained
+  exactly `jumping_jack_standard` (`13 → 14`), which also puts that pose under the carrier-vs-node equivalence
+  guard.
+* The `PublishedBelowGroundInvariantTest` (T2) pin table and `EnvironmentPenetrationTest` (B-6) needed **no**
+  new entries, and B-6's *undeclaring* census is **unchanged** — all three poses declare their support on the
+  one canonical channel (the first batch of the phase whose additions are all declaring), and every joint of
+  every published frame clears its declared surface (worst clearances `25.000 u` / `23.987 u` / `8.999 u`, the
+  last being `ChildPose`'s own head tip resting at the corpus's mat layer).
+
+**No part of the engine, the solver, the reach band, the camera layer or the legacy illustration map was
+touched by this batch:** the diff is three new pose classes, their three test classes, the two registries, the
+coverage guard, the re-baselined guards and this record.
+
+### The complete `66/66` inventory (the phase's final state)
+
+Every catalog exercise, its animation id, the engine pose that now drives it, and the phase batch that
+converted it (the 49 `pre-phase` rows were already engine-driven when the phase opened — its audit's baseline —
+and the 17 batch rows are the exercises the phase converted, all listed in §1):
+
+| # | exercise id | animationId | pose class | phase batch |
+|---|---|---|---|---|
+| 1 | `ankle_mobility` | `ankle_mobility_standard` | `AnkleMobilityPose` | batch 1 |
+| 2 | `calf_stretch` | `calf_stretch_hold` | `CalfStretchPose` | batch 1 |
+| 3 | `horse_stance` | `horse_stance_hold` | `HorseStancePose` | batch 1 |
+| 4 | `wall_sit` | `wall_sit_hold` | `WallSitPose` | batch 1 |
+| 5 | `band_pull_aparts` | `band_pull_aparts_standard` | `BandPullApartPose` | batch 2 |
+| 6 | `dips` | `dip_parallel_bar` | `DipsPose` | batch 2 |
+| 7 | `rows` | `row_standard` | `RowsPose` | batch 2 |
+| 8 | `y_t_raises` | `yt_raises_standard` | `YTRaisesPose` | batch 2 |
+| 9 | `hip_circles` | `hip_circles_hold` | `HipCirclesPose` | batch 3 |
+| 10 | `leg_swings` | `leg_swings_hold` | `LegSwingsPose` | batch 3 |
+| 11 | `ninety_ninety_hips` | `ninety_ninety_hips` | `NinetyNinetyHipsPose` | batch 3 |
+| 12 | `piriformis_stretch` | `piriformis_stretch_hold` | `PiriformisStretchPose` | batch 3 |
+| 13 | `chin_tucks` | `chin_tuck_standard` | `ChinTuckPose` | batch 4 |
+| 14 | `neck_circles` | `neck_circles_hold` | `NeckCirclesPose` | batch 4 |
+| 15 | `child_pose` | `child_pose_hold` | `ChildPose` | batch 5 |
+| 16 | `jumping_jacks` | `jumping_jack_standard` | `JumpingJacksPose` | batch 5 |
+| 17 | `shoulder_cars` | `shoulder_cars_standard` | `ShoulderCarsPose` | batch 5 |
+| 18 | `arm_circles` | `arm_circles_hold` | `ArmCirclesPose` | pre-phase |
+| 19 | `bird_dog` | `birddog_hold` | `StaticBirdDogHoldPose` | pre-phase |
+| 20 | `bird_dog_reps` | `birddog_reps` | `AlternatingBirdDogPose` | pre-phase |
+| 21 | `burpees` | `burpee_standard` | `BurpeePose` | pre-phase |
+| 22 | `cat_cow` | `cat_cow_reps` | `CatCowPose` | pre-phase |
+| 23 | `cobra_stretch` | `cobra_stretch_hold` | `ProneCobraStretchPose` | pre-phase |
+| 24 | `cossack_squat` | `cossack_squat` | `CossackSquatPose` | pre-phase |
+| 25 | `couch_stretch` | `couch_stretch_hold` | `CouchStretchPose` | pre-phase |
+| 26 | `dead_bug` | `dead_bug_standard` | `DeadBugPose` | pre-phase |
+| 27 | `decline_pushups` | `pushup_decline` | `DeclinePushUpPose` | pre-phase |
+| 28 | `deep_squat` | `deep_squat_hold` | `DeepSquatHoldPose` | pre-phase |
+| 29 | `diamond_pushups` | `pushup_diamond` | `DiamondPushUpPose` | pre-phase |
+| 30 | `face_pull` | `face_pull_banded` | `FacePullPose` | pre-phase |
+| 31 | `glute_bridge` | `glute_bridge_standard` | `GluteBridgePose` | pre-phase |
+| 32 | `hamstring_stretch` | `hamstring_stretch_hold` | `HamstringStretchPose` | pre-phase |
+| 33 | `hang` | `dead_hang` | `HangPose` | pre-phase |
+| 34 | `hip_cars` | `hip_cars_standard` | `HipCarsPose` | pre-phase |
+| 35 | `hip_flexor_stretch` | `hip_flexor_stretch_hold` | `HalfKneelingStretchPose` | pre-phase |
+| 36 | `kettlebell_swing` | `kb_swing_backpack` | `KettlebellSwingPose` | pre-phase |
+| 37 | `lat_stretch` | `lat_stretch_hold` | `LatStretchPose` | pre-phase |
+| 38 | `leg_raises` | `leg_raise_standard` | `LegRaisePose` | pre-phase |
+| 39 | `lunges` | `lunge_forward` | `AlternatingForwardLungesPose` | pre-phase |
+| 40 | `lunges_reverse` | `lunge_reverse` | `AlternatingReverseLungesPose` | pre-phase |
+| 41 | `lunges_side` | `lunge_side` | `AlternatingSideLungesPose` | pre-phase |
+| 42 | `mountain_climbers` | `mountain_climber_standard` | `MountainClimberPose` | pre-phase |
+| 43 | `pelvic_tilt` | `pelvic_tilt_standard` | `PelvicTiltPose` | pre-phase |
+| 44 | `pike_pushups` | `pike_pushup_standard` | `PikePushUpPose` | pre-phase |
+| 45 | `plank` | `plank_standard` | `StaticForearmPlankPose` | pre-phase |
+| 46 | `pullups` | `pullup_standard` | `StandardPullUpPose` | pre-phase |
+| 47 | `pullups_chin` | `chinup_standard` | `UnderhandChinUpPose` | pre-phase |
+| 48 | `pullups_neutral` | `pullup_neutral` | `NeutralGripPullUpPose` | pre-phase |
+| 49 | `pullups_wide` | `pullup_wide` | `WideGripPullUpPose` | pre-phase |
+| 50 | `pushups` | `pushup_standard` | `StandardPushUpPose` | pre-phase |
+| 51 | `pushups_knee` | `pushup_knee` | `KneePushUpPose` | pre-phase |
+| 52 | `pushups_military` | `pushup_military` | `MilitaryPushUpPose` | pre-phase |
+| 53 | `pushups_wide` | `pushup_wide` | `WidePushUpPose` | pre-phase |
+| 54 | `reverse_snow_angels` | `reverse_snow_angel_prone` | `ReverseSnowAngelPose` | pre-phase |
+| 55 | `scapular_pullups` | `scapular_pullup_deadhang` | `ScapularPullUpPose` | pre-phase |
+| 56 | `scapular_retraction_hold` | `scapular_retraction_hold` | `ScapularRetractionPose` | pre-phase |
+| 57 | `side_plank` | `side_plank_standard` | `IsometricSidePlankPose` | pre-phase |
+| 58 | `squats` | `squat_standard` | `AirSquatPose` | pre-phase |
+| 59 | `squats_jump` | `squat_jump` | `JumpSquatPose` | pre-phase |
+| 60 | `squats_sumo` | `squat_sumo` | `SumoSquatPose` | pre-phase |
+| 61 | `step_ups` | `step_up_standard` | `StepUpPose` | pre-phase |
+| 62 | `superman` | `superman_prone` | `SupermanPose` | pre-phase |
+| 63 | `thoracic_extension` | `thoracic_extension_reps` | `ThoracicExtensionPose` | pre-phase |
+| 64 | `thoracic_rotations` | `thoracic_rotations_reps` | `QuadrupedThoracicRotationsPose` | pre-phase |
+| 65 | `wall_slides` | `wall_slide_standard` | `WallSlidesPose` | pre-phase |
+| 66 | `world_greatest_stretch` | `world_greatest_stretch` | `DynamicWorldsGreatestStretchPose` | pre-phase |
+
+**Phase completion.** `66` of `66` exercises take the engine path in `ExerciseHero`
+(`Exercise.skeletonAnimation != null` **and** `PoseRegistry.getPoseConfig(animationId) != null`); the legacy
+keyframe illustration is no longer any exercise's hero representation. The measured final tree is
+`152` classes / `889` tests / `0F` / `0E` / `0S`, and the release compilation path is green.

@@ -621,7 +621,17 @@ class M11M12LimbRealizationMigrationTest {
          * branch reported **all `63` pre-existing pose classes byte-identical** — `0` differing digests, `2`
          * added, `0` removed — so the observed RED was corpus membership, not geometry drift. Pre-rebaseline
          * measurement: `2805697623221016767`.
+         *
+         * **Re-baselined by the animation-coverage phase, batch 5** (`feat/animation-coverage-05`, based on the
+         * #261 merge `b0e4edd` — the phase's TAIL): this corpus is "every production pose class except its own
+         * corrected pose", so the three pose classes the batch ADDED (`ShoulderCarsPose`, `JumpingJacksPose`,
+         * `ChildPose` — a standing one-arm shoulder CAR, the ballistic jack and the kneeling fold: the three
+         * exercises no family grouping carried) entered it. Attribution measured, not inferred: the per-pose
+         * digest probe (this guard's own hashing recipe, a fresh pipeline per pose) run on the pristine
+         * `origin/main` worktree (`b0e4edd`) and on this branch reported **all `65` pre-existing pose classes
+         * byte-identical** — `0` differing digests, `3` added, `0` removed — so the observed RED was corpus
+         * membership, not geometry drift. Pre-rebaseline measurement: `-5950323099995680912`.
 */
-        const val UNAFFECTED_CORPUS_DIGEST = -5950323099995680912L
+        const val UNAFFECTED_CORPUS_DIGEST = 5316475324191770694L
     }
 }
