@@ -3,6 +3,7 @@ package com.monkfitness.app.poses
 import com.monkfitness.app.animation.*
 import com.monkfitness.app.animation.SkeletonMath.lerp
 import kotlin.math.PI
+import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -39,9 +40,12 @@ import kotlin.math.sin
  * canonical two-segment spine (`PELVIS -> LUMBAR -> CHEST`, Issue E):
  *
  *  * `flexion` is the wave in world space — the pelvis→chest chord's flexion, `+` at Cat
- *    (the shoulder end of the chord rises `torsoLength·sin(0.12) = 14.36` u above the
- *    pelvis) and `−` at Cow (it sinks `torsoLength·sin(0.0417) = 5.00` u below it — the
- *    authored Cow end, preserved);
+ *    (the shoulder end of the chord rises `torsoLength·sin(A) = 5.00` u above the pelvis) and `−`
+ *    at Cow (it sinks `torsoLength·sin(0.0417) = 5.00` u below it — the authored Cow end,
+ *    preserved). `A = asin(5/120) ≈ 0.0417` rad is the **strict pre-fix motion envelope** (owner
+ *    decision): the pre-correction rep's own largest trunk angle was that same `5` u sag at the
+ *    Cow end (`2.3867°`), so the Cat end mirrors it rather than exceeding it, and the rep's total
+ *    chord excursion is the pre-fix `10.00` u of chest travel re-expressed as curvature;
  *  * the PELVIS carries its own **pelvic tilt**, which REVERSES with the wave (BPS §3/§7/§9:
  *    "the pelvis posteriorly tilts (tail tuck)" in Cat, "anteriorly tilts (tail lifts)" in
  *    Cow) — the amount the exercise justifies for the pelvis, not the wave itself;
@@ -229,18 +233,32 @@ class CatCowPose : PoseBuilder {
         val QUADRUPED_PITCH = (PI / 2.0).toFloat()
 
         /**
-         * The Cat end range's world-space chord flexion: `torsoLength · sin(0.12) = 14.36` u of
-         * rise at the shoulder end (BPS §5/§9: "the entire spine rounds — thoracic and lumbar
-         * flexion maximal … the vertebral column lifts toward the ceiling"). Authored, like the
-         * corpus's other mobility amplitudes: the BPS names no number, only "full but controlled".
+         * The rep's chord amplitude at each end range: `asin(CHORD_RISE / TRUNK_LENGTH) = asin(5/120)
+         * ≈ 0.0417` rad — the trunk bone's ends `5.00` u apart vertically (`torsoLength · sin(A) = 5`).
+         *
+         * This is the **strict pre-fix motion envelope**, by owner decision: the pre-correction rep's
+         * own largest trunk angle was the Cow end's `5` u sag (`2.3867°`), and the Cat end now mirrors
+         * that same `5` u as a rise instead of exceeding it. The first cut of this correction authored
+         * `0.12` rad (`14.36` u / `6.875°`) and was rejected as ROM growth — this batch corrects the
+         * anatomical ownership of the existing motion, it does not increase the exercise's range. Both
+         * ends are the same amplitude, so the chord's total excursion is `2 · 5.00 = 10.00` u: exactly
+         * the pre-fix rep's own chest excursion, re-expressed as curvature.
          */
-        const val CAT_FLEXION = 0.12f
+        val CAT_FLEXION = asin(CHORD_RISE / TRUNK_LENGTH)
+
+        /** The trunk bone's end-to-end vertical offset at each end range, u (the pre-fix Cow sag). */
+        private const val CHORD_RISE = 5f
+
+        /** `SkeletonDefinition.DEFAULT_ADULT.torsoLength`, u — the length the amplitude is derived in. */
+        private const val TRUNK_LENGTH = 120f
 
         /**
          * The Cow end range's world-space chord extension: `torsoLength · sin(0.0417) = 5.00` u of
          * drop at the shoulder end — the pose's authored Cow extreme (BPS §5: "the entire spine
          * arches — thoracic and lumbar extension maximal; the abdomen drops"), preserved exactly
-         * from the pre-correction authoring so the exercise's other end range does not move.
+         * from the pre-correction authoring so the exercise's other end range does not move. The
+         * literal is the pre-fix authored value; it equals `CAT_FLEXION` to `1.3e-5` rad
+         * (`2.0e-4` u), so the two ends are the same `5` u (see `CAT_FLEXION`).
          */
         const val COW_EXTENSION = 0.0417f
 

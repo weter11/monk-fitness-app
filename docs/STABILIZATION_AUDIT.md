@@ -3358,11 +3358,15 @@ Both rows this batch closes are the audit's own unassigned spine items:
   published **no articulation at all** (`LUMBAR`'s world rotation bit-identical to the `PELVIS`'s,
   `CHEST.localRotation ≡ 0`) while the trunk chord swept `2.386°` in a rigid `5` u root bob / `10` u
   chest drop, and `HEAD_POS`'s `33.0844` u of travel was almost entirely the authored gaze sweep. The
-  rep is now the exercise's own sagittal wave — the chord's flexion `lerp(0.12, −0.0417, p)`, the
-  pelvis's own tilt reversing with it (`+0.045 → −0.045`, BPS §3/§7/§9 "tail tuck"/"tail lift"), the
-  `LUMBAR` carrying the remainder and the `CHEST` the thoracic share — with the pelvis's placement, the
-  planted leg authoring, the four-point base, the gaze sweep and the cycle timing untouched (chord
-  swing `2.386° → 9.264°`; `CHEST`'s y travel `9.9957 → 24.3680` u; the T2 foot pin identical).
+  rep is now the exercise's own sagittal wave — the chord's flexion `lerp(A, −0.0417, p)` with
+  **`A = asin(5/120) ≈ 0.0417` rad (owner decision: the strict pre-fix motion envelope**, i.e. the `5` u
+  the pre-fix Cow end already sagged, mirrored at the Cat end; the first cut's `0.12` rad was rejected as
+  ROM growth**)`, the pelvis's own tilt reversing with it (`+0.045 → −0.045`, BPS §3/§7/§9 "tail
+  tuck"/"tail lift"), the `LUMBAR` carrying the remainder and the `CHEST` the thoracic share — with the
+  pelvis's placement, the planted leg authoring, the four-point base, the gaze sweep and the cycle timing
+  untouched (chord swing `2.386° → 4.777°`; segment swings pelvis `2.386° → 5.157°`, lumbar `0 → 9.934°`,
+  chest `0 → 1.194°`; the Cat end's worst departure from the pre-fix published geometry `5.0000` u; the
+  T2 foot pin identical to `5e-6`).
 * **`PelvicTiltPose`** — the same class, re-measured: the whole `0.12`-rad arc on the `PELVIS`,
   `LUMBAR` bit-identical to it at every phase, against a BPS §9 that says the pelvis's own rotation is
   *"a small arc (often only a few degrees … with the lumbar spine moving through its lordosis range)"*.
@@ -3372,16 +3376,24 @@ Both rows this batch closes are the audit's own unassigned spine items:
   at the top of the rep).
 
 Verification: focused `CatCowSpineWaveTest` (7) + `PelvicTiltSpineArticulationTest` (6) written first
-and **RED on the untouched tree (6 of 13, every message quoting its measurement)**, GREEN after; the
-whole-corpus A/B (`68` classes × `5` samples × every joint XYZ = `11,220` rows, pristine `9cf4c32`
-worktree vs the branch) differs in exactly `183` rows, **all inside the two corrected poses** (the other
-`66` classes byte-identical); nine scope digests re-baselined with this batch named at each constant
-and no tolerance loosened; `CanonicalSkeletonFactoryPoseBatchTest`'s pass-through assertion re-pointed
-to exclude the pose that now authors the lower spine, with its divergence witnessed instead. Full suite
-pristine `9cf4c32` `152` / `889` / `0F` / `0E` / `0S` → branch **`154` / `902` / `0F` / `0E` / `0S`**
-(exactly `+2` classes / `+13` tests); release compilation green. No engine, solver, RFC, golden, camera
-or legacy-engine file is touched; the poses' recorded residuals (CatCow's leg geometry and its T2 foot
-pin, the quadruped arm plane) and the B4 trunk record's *product reading* stay open exactly as recorded.
+and **RED on the untouched tree (6 of 13, every message quoting its measurement; re-confirmed at the
+envelope landing against the same pristine bytes)**, GREEN after; the whole-corpus A/B (`68` classes ×
+`5` samples × every joint XYZ = `11,220` rows, pristine `9cf4c32` worktree vs the branch) differs in
+exactly `183` rows, **all inside the two corrected poses** (the other `66` classes byte-identical), with
+`CatCowPose`'s worst row now **`5.0000` u** (the envelope; `14.3655` u under the rejected first cut) and
+`PelvicTiltPose`'s census identical under both amplitudes; nine scope digests re-baselined with this
+batch named at each constant and no tolerance loosened (the envelope landing moved **seven** of them —
+the seven whose corpora contain `CatCowPose` — and left `M11M12LimbRealizationMigrationTest` and
+`CanonicalSkeletonFactoryPoseBatchTest` untouched, which is the measured proof the decision is
+`CatCowPose`-only); `CanonicalSkeletonFactoryPoseBatchTest`'s pass-through assertion re-pointed to
+exclude the pose that now authors the lower spine, with its divergence witnessed instead; two
+`CatCowSpineWaveTest` anti-vacuity floors re-pointed from an absolute angle calibrated to the first cut's
+amplitude to the comparison band itself (no primary assertion or tolerance touched — see
+`docs/ANIMATION_LOGIC_CORRECTIONS.md` §5). Full suite pristine `9cf4c32` `152` / `889` / `0F` / `0E` /
+`0S` → branch **`154` / `902` / `0F` / `0E` / `0S`** (exactly `+2` classes / `+13` tests); release
+compilation green. No engine, solver, RFC, golden, camera or legacy-engine file is touched; the poses'
+recorded residuals (CatCow's leg geometry and its T2 foot pin, the quadruped arm plane) and the B4 trunk
+record's *product reading* stay open exactly as recorded.
 
 ### TODO — P1 (next pass, in priority order)
 

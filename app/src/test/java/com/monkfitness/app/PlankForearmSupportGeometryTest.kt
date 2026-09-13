@@ -883,7 +883,18 @@ class PlankForearmSupportGeometryTest {
          * `14.3655` u at `CHEST`/`SHOULDER_*`/`CLAVICLE_*`/`SCAPULA_*` — and `28` in
          * `PelvicTiltPose` — its leg chain, worst `1.526e-05` u), with the other `66` pose classes
          * byte-identical. Pre-rebaseline measurement: `-1229470257816681828`.
+         *
+         * **Re-baselined again by the same batch's strict-envelope landing** (owner decision: the
+         * pose's Cat-side amplitude `0.12` rad → `asin(5/120) ≈ 0.0417` rad, so the correction
+         * re-attributes the pre-fix motion instead of increasing the exercise's range). `CatCowPose`'s
+         * published geometry moved again with it — its chest's worst deviation from the pre-fix tree is
+         * now `5.0000` u (the rep's own end-to-end `5` u envelope, mirrored at both ends) against
+         * `14.3655` u under the first amplitude — so this digest moves with the pose. The same
+         * whole-corpus A/B (`68` classes × `5` samples × `33` joints = `11,220` rows, pristine
+         * `origin/main` @ `9cf4c32` vs the final tree) still differs in exactly `183` rows, ALL inside
+         * the two corrected poses (`155` `CatCowPose`, `28` `PelvicTiltPose`), the other `66` classes
+         * byte-identical. Pre-rebaseline measurement: `-1474130064244243623`.
 */
-        const val UNAFFECTED_CORPUS_DIGEST = -1474130064244243623L
+        const val UNAFFECTED_CORPUS_DIGEST = -1362045000586141575L
     }
 }

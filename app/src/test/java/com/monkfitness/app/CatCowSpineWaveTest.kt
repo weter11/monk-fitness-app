@@ -7,6 +7,7 @@ import org.junit.Test
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -29,8 +30,9 @@ import kotlin.math.sqrt
  * The authored wave this file pins (`CAT_FLEXION` … `COW_EXTENSION`, the pelvis's own tilt share and
  * the thoracic share) is the pose's declaration, restated here as the contract:
  *
- *  * the pelvis→chest chord's flexion `= lerp(0.12, −0.0417, progress)` — the Cat end's shoulder end
- *    rises `torsoLength · sin(0.12) = 14.36` u above the pelvis, the Cow end sinks
+ *  * the pelvis→chest chord's flexion `= lerp(A, −0.0417, progress)`, `A = asin(5/120) ≈ 0.0417` —
+ *    the Cat end's shoulder end rises `torsoLength · sin(A) = 5.00` u above the pelvis, the Cow end
+ *    sinks
  *    `torsoLength · sin(0.0417) = 5.00` u below it;
  *  * the PELVIS's own tilt reverses with the wave (BPS §3/§7/§9: posterior "tail tuck" in Cat,
  *    anterior "tail lift" in Cow) and is a fraction of the wave, never the whole of it;
@@ -58,8 +60,12 @@ class CatCowSpineWaveTest {
     /** The pose's authored quadruped layout: the trunk chord lies horizontally. */
     private val quadrupedPitch = (PI / 2.0).toFloat()
 
-    /** The Cat end's world-space chord flexion (`torsoLength·sin(0.12) = 14.3655` u of rise). */
-    private val catFlexion = 0.12f
+    /**
+     * The Cat end's world-space chord flexion — `asin(5/120) ≈ 0.0417` rad, i.e.
+     * `torsoLength·sin(A) = 5.00` u of rise: the STRICT pre-fix envelope (the pre-correction rep's
+     * own Cow-end `5` u sag, mirrored at the Cat end), by owner decision.
+     */
+    private val catFlexion = asin(5f / 120f)
 
     /**
      * The Cow end's world-space chord extension (`torsoLength·sin(0.0417) = 5.00` u of drop) — the
@@ -206,15 +212,22 @@ class CatCowSpineWaveTest {
 
         // The three articulations are three DIFFERENT motions: at the Cat end the lower spine and the
         // rib cage are both articulated, and neither equals the root's.
+        //
+        // The floors are the MEASUREMENT band (the articulations must exceed the tolerance they are
+        // compared in and differ from one another), not an absolute angle calibrated to an amplitude:
+        // under the strict pre-fix envelope (`CAT_FLEXION = asin(5/120) ≈ 0.0417` rad) the thoracic
+        // share is `0.0104` rad, i.e. `2.1 ×` this band, which is the owner-decided amplitude's own
+        // consequence. The primary assertion above (each segment EQUALS its authored share) is
+        // unchanged and is the real contract.
         val cat = frames.first().second
         val catPelvis = zAngle(cat, Joint.PELVIS) - quadrupedPitch
         val catLumbar = zAngle(cat, Joint.LUMBAR) - zAngle(cat, Joint.PELVIS)
         val catChest = zAngle(cat, Joint.CHEST) - zAngle(cat, Joint.LUMBAR)
         assertTrue(
             "anti-vacuity: the Cat end must articulate all three segments differently " +
-                "(pelvis ${f(catPelvis)}, lumbar ${f(catLumbar)}, chest ${f(catChest)})",
-            abs(catLumbar) > angleBand * 4f && abs(catChest) > angleBand * 4f &&
-                abs(catPelvis) > angleBand * 4f &&
+                "(pelvis ${f(catPelvis)}, lumbar ${f(catLumbar)}, chest ${f(catChest)}; band ${f(angleBand)})",
+            abs(catLumbar) > angleBand && abs(catChest) > angleBand &&
+                abs(catPelvis) > angleBand &&
                 abs(catLumbar - catPelvis) > angleBand && abs(catLumbar - catChest) > angleBand
         )
     }
@@ -293,8 +306,14 @@ class CatCowSpineWaveTest {
             lumbarSwing > pelvisSwing * 1.5f && lumbarSwing > chordSwing * 0.8f
         )
         assertTrue(
-            "the thoracic segment must carry a real share of the same wave (measured ${deg(thoracicSwing)}°)",
-            thoracicSwing > 0.02f
+            "the thoracic segment must carry a real share of the same wave (measured " +
+                "${deg(thoracicSwing)}° = ${f(thoracicSwing)} rad; the authored share at each end is " +
+                "${f(abs(authoredThoracic(0f)))} rad, the comparison band ${f(angleBand)} rad)",
+            // The floor is the comparison band (2×), not an absolute angle calibrated to an older
+            // amplitude: under the strict pre-fix envelope the total thoracic swing is
+            // `2 · 0.25 · asin(5/120) = 0.0208` rad = `2.1 ×` the band. The exact-share assertion is
+            // the wave test's own (`theSpinalWaveIsCarriedByTheCanonicalSpineSegmentsNotByThePelvis`).
+            thoracicSwing > angleBand * 2f
         )
 
         // The pelvis's tilt REVERSES with the wave (BPS §3/§7/§9): posterior in Cat, anterior in Cow.
