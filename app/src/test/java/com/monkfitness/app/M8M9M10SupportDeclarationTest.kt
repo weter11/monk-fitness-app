@@ -597,7 +597,15 @@ class M8M9M10SupportDeclarationTest {
           * ROTATION byte-identical everywhere, every pelvis/spine/girdle/head joint of the five unchanged, and every
           * support set, ground level, environment prop and state flag identical, i.e. the batch is target-side only.
           * The batch's own gate is `ReachBandBatch4AuthoringTest`.
+          *
+          * **Re-baselined by the animation-coverage phase, batch 1** (`feat/animation-coverage-01`): this corpus
+          * is "every production pose class except its own corrected pose", so the four pose classes the batch
+          * ADDED (`HorseStancePose`, `WallSitPose`, `AnkleMobilityPose`, `CalfStretchPose`) entered it. The
+          * per-pose digest probe (`ZzPoseDigestProbeTest`, the guards' own hashing recipe, fresh pipeline per
+          * pose) run on BOTH the pristine `origin/main` @ `4a32d84` worktree and this branch measured **all 51
+          * pre-existing pose classes byte-identical** (0 differing digests, 4 added, 0 removed): the observed RED
+          * was corpus membership, not geometry drift. Pre-rebaseline measurement: `%d`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 7499664576150638435L
+        const val UNAFFECTED_CORPUS_DIGEST = -3771790856666150618L
     }
 }

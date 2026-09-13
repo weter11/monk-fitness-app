@@ -56,6 +56,10 @@ object AnimationRegistry {
         register("reverse_snow_angel_prone", ReverseSnowAngelPose())
         register("scapular_pullup_deadhang", ScapularPullUpPose())
         register("lat_stretch_hold", LatStretchPose())
+        register("horse_stance_hold", HorseStancePose())
+        register("wall_sit_hold", WallSitPose())
+        register("ankle_mobility_standard", AnkleMobilityPose())
+        register("calf_stretch_hold", CalfStretchPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {

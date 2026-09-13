@@ -58,7 +58,12 @@ object PoseRegistry {
         "lunge_reverse" to false,
         "lunge_side" to false,
         "cossack_squat" to false,
-        "step_up_standard" to false
+        "step_up_standard" to false,
+        // Animation-coverage phase (batch 1) — the standing lower-body family.
+        "horse_stance_hold" to false,
+        "wall_sit_hold" to false,
+        "ankle_mobility_standard" to false,
+        "calf_stretch_hold" to false
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? {
