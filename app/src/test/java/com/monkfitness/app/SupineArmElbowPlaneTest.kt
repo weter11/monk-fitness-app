@@ -91,6 +91,23 @@ class SupineArmElbowPlaneTest {
     /** The T2 band: a joint the derivation places ON the plane reads `0.000000`, so this absorbs noise only. */
     private val planeBand = 0.05f
 
+    /**
+     * Cosine tolerance for "the declared target still lies on the pose's authored ray" — the property
+     * the R2/R4 reach projection preserves (fourth reach-band batch). The projection is exact (the
+     * same float expression from the same root), so `1e-5` is float slack.
+     */
+    private val rayTolerance = 1f - 1e-5f
+
+    /** cos of the angle between `declared − root` and `authored − root`. */
+    private fun rayCos(root: Vector3, declared: Vector3, authored: Vector3): Float {
+        val a = Vector3(declared.x - root.x, declared.y - root.y, declared.z - root.z)
+        val b = Vector3(authored.x - root.x, authored.y - root.y, authored.z - root.z)
+        val am = sqrt(a.x * a.x + a.y * a.y + a.z * a.z)
+        val bm = sqrt(b.x * b.x + b.y * b.y + b.z * b.z)
+        if (am < 1e-6f || bm < 1e-6f) return 0f
+        return ((a.x * b.x + a.y * b.y + a.z * b.z) / (am * bm)).coerceIn(-1f, 1f)
+    }
+
     /** A real floor for the realized elbow — an order of magnitude above [planeBand]. */
     private val clearanceFloor = 1.0f
 
@@ -312,16 +329,19 @@ class SupineArmElbowPlaneTest {
                     }
                 }
                 // The legs are not this fix's subject: their DECLARED stance and their clearance from
-                // the mat must be what the pose authored. (Their realized ankle height is the leg
-                // chain's own pre-existing min-reach relocation — `d = 45.0` against `minReach =
-                // 56.0090` — and is deliberately NOT pinned here: it is not an arm item.)
-                for ((joint, sign) in listOf(Joint.ANKLE_F to -1f, Joint.ANKLE_B to 1f)) {
+                // the mat must be what the pose authored. The fourth (final) reach-band batch moved
+                // that declaration ALONG the pose's own ray (`45, ankleHeight, ±hipWidth` seen from the
+                // hip) onto the leg chain's annulus — the authored stance folded the knee to an interior
+                // 23.52° against the constraint's 30° stop, so the projection re-declares the stance the
+                // solver had always published (`56.0008, 15.2445, ±22`) and leaves the realized legs
+                // byte-identical. The pose's MEANING is the ray, so the ray is what is pinned here.
+                for ((joint, hip, sign) in listOf(
+                    Triple(Joint.ANKLE_F, Joint.HIP_F, -1f), Triple(Joint.ANKLE_B, Joint.HIP_B, 1f)
+                )) {
                     val legTarget = frame.limbTargets.firstOrNull { it.joint == joint }
                         ?: error("$name: the published frame must carry the leg's declared target")
-                    if (abs(legTarget.world.x - 45f) > planeBand ||
-                        abs(legTarget.world.y - def.foot.ankleHeight) > planeBand ||
-                        abs(legTarget.world.z - sign * def.hipWidth) > planeBand
-                    ) {
+                    val authoredLeg = Vector3(45f, def.foot.ankleHeight, sign * def.hipWidth)
+                    if (rayCos(frame.getJoint(hip), legTarget.world, authoredLeg) < rayTolerance) {
                         legDeclaration.add("$name $condition p=$p $joint target=${legTarget.world.x}")
                     }
                     val y = frame.getJoint(joint).y

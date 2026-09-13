@@ -379,10 +379,23 @@ class ReachBandBatch3AuthoringTest {
 
     /**
      * `CouchStretchPose` composes its hands through the SAME `BaseHipFlexorPose.solveArmsOnKnee`
-     * choreography and carries the same class of out-of-band site. It is out of this batch, so the
-     * batch opts the projection in per variant: this test fails if someone "fixes" the shared base
-     * (which would silently re-scope the sibling into a pose-only pass), and equally if the sibling's
-     * site ever becomes in-band without its own measurement record.
+     * choreography and carried the same class of site (`13.5995` u) when this batch landed: this
+     * batch opts the projection in per variant, so the shared base is NOT re-scoped and the sibling
+     * keeps its authoring. (The FOURTH, final reach-band batch then measured the sibling and fixed it
+     * — again at the variant level, through the hook this batch installed; see
+     * `ReachBandBatch4AuthoringTest`.)
+     *
+     * The sibling's site was then measured and corrected by the FOURTH (final) reach-band batch with
+     * its own record (`ReachBandBatch4AuthoringTest`) — again at the VARIANT level, through the hook
+     * this batch installed. What this test guards after that correction is therefore:
+     *
+     *  * the shared composition is still the declaration channel (the sibling's declared arm target
+     *    still lies on the ray from its own shoulder to the knee-composed point), and
+     *  * **the base's DEFAULT projection is still inert** — a probe variant that composes the same
+     *    arms through this base and does NOT override the hook still declares the composed target
+     *    verbatim and still reads the pre-batch site through the production entry point
+     *    (`13.5995` u, `156.6795` against the `143.0800` cap). A base-wide change would be its own
+     *    decision and it fails right here.
      */
     @Test
     fun theSharedFamilyChoreographyIsNotReScopedByThisBatch() {
@@ -390,14 +403,44 @@ class ReachBandBatch3AuthoringTest {
         val arms = sibling.filter { it.chain == Joint.HAND_A || it.chain == Joint.HAND_P }
         val worst = arms.maxOf { it.relocation }
         assertTrue(
-            "CouchStretchPose's arm site is out of this batch's scope and must read as measured " +
-                "(13.5995 u relocation; measured ${f(worst)}) — a base-scoped change is its own decision",
-            abs(worst - 13.5995f) < 0.01f
+            "CouchStretchPose's arm site was corrected by the fourth reach-band batch (variant-level " +
+                "override): its measured relocation must read within the batch's 0.05 gate " +
+                "(measured ${f(worst)})",
+            worst <= 0.05f
         )
         assertTrue(
-            "the sibling's superseded declaration must still be the pre-batch one (worst declared " +
-                "${f(arms.maxOf { it.declaredDistance })} of the ${f(arms.first().maxReach)} cap)",
-            arms.maxOf { it.declaredDistance } > arms.first().maxReach
+            "CouchStretchPose's hands must now declare inside the cap " +
+                "(worst declared ${f(arms.maxOf { it.declaredDistance })} of the ${f(arms.first().maxReach)} cap)",
+            arms.maxOf { it.declaredDistance } <= arms.first().maxReach
+        )
+        // (b) THE BASE-DEFAULT PIN: the composed target declared verbatim, no projection. (The ray
+        //     check for the sibling's own composition lives in the fourth batch's record,
+        //     `ReachBandBatch4AuthoringTest.theCouchStretchKeepsItsAuthoredStanceAndAimsAtTheFrontKnee`,
+        //     where the variant's own front-leg literal is known.)
+        val measured = SkeletonPipeline(def).produceFrame(BaseChoreographyProbe(), context(1.0f)).pose
+        val handTarget = measured.limbTargets.first { it.joint == Joint.HAND_A }
+        val shoulder = measured.getJoint(Joint.SHOULDER_A)
+        val declaredDistance = sqrt(
+            (handTarget.world.x - shoulder.x).let { it * it } +
+                (handTarget.world.y - shoulder.y).let { it * it } +
+                (handTarget.world.z - shoulder.z).let { it * it }
+        )
+        val cap = SkeletonMath.maxReach(handTarget.length1, handTarget.length2, handTarget.constraint!!)
+        assertTrue(
+            "the base's DEFAULT projection must stay inert: the probe variant must still declare the " +
+                "composed target verbatim and past the cap (measured ${f(declaredDistance)} of the " +
+                "${f(cap)} cap)",
+            abs(declaredDistance - 156.6795f) < 0.01f && declaredDistance > cap
+        )
+        val relocated = sqrt(
+            (measured.getJoint(Joint.HAND_A).x - handTarget.world.x).let { it * it } +
+                (measured.getJoint(Joint.HAND_A).y - handTarget.world.y).let { it * it } +
+                (measured.getJoint(Joint.HAND_A).z - handTarget.world.z).let { it * it }
+        )
+        assertTrue(
+            "the base's default must still read the pre-batch relocation (13.5995 u; measured " +
+                f(relocated) + ") — a base-wide change is its own decision",
+            abs(relocated - 13.5995f) < 0.01f
         )
         // …and its legs, which never had a site, stay in band.
         assertTrue(
@@ -517,14 +560,27 @@ class ReachBandBatch3AuthoringTest {
     // 7 — the corpus's other measured out-of-band sites are untouched (blast radius, reach dimension)
     // ----------------------------------------------------------------------------------------------
 
-    /** pose → the worst relocation its authoring read on the base tree (`origin/main` @ `cf8a14f`). */
+    /**
+     * pose → the worst relocation its published frame carries on the tree this test runs against.
+     *
+     * The five poses the FOURTH (final) reach-band batch corrected — `CouchStretchPose`,
+     * `QuadrupedThoracicRotationsPose`, `GluteBridgePose`, `PelvicTiltPose` and
+     * `ThoracicExtensionPose` — read `0` here now: their sites were measured and fixed with their own
+     * record (`ReachBandBatch4AuthoringTest`), at the VARIANT level, so this census keeps its meaning
+     * ("this batch is confined to its own poses and every other pose reads exactly as measured").
+     *
+     * `GluteBridgePose`'s `0.0409` is its ARM chain's own pre-existing residual: that declaration is
+     * IN band (no clamp — the pose's stamp reads `0`), so the reach convention does not touch it; it
+     * is one reading below this batch's `0.05` gate and is pinned so it cannot drift. The pose's LEG
+     * chain, which is the reach-band site, reads `0`.
+     */
     private val corpusSites = mapOf(
-        "CouchStretchPose" to 13.5995f,
-        "GluteBridgePose" to 10.9979f,
-        "PelvicTiltPose" to 10.9979f,
+        "CouchStretchPose" to 0.0000f,
+        "GluteBridgePose" to 0.0409f,
+        "PelvicTiltPose" to 0.0000f,
         "SupermanPose" to 4.2000f,
-        "ThoracicExtensionPose" to 5.5162f,
-        "QuadrupedThoracicRotationsPose" to 32.5176f,
+        "ThoracicExtensionPose" to 0.0000f,
+        "QuadrupedThoracicRotationsPose" to 0.0000f,
         "DynamicWorldsGreatestStretchPose" to 21.6410f,
         "AlternatingForwardLungesPose" to 1.2263f,
         "AlternatingReverseLungesPose" to 1.2263f,
@@ -590,4 +646,38 @@ private fun planFrontKneeFromHip(hip: Vector3, def: SkeletonDefinition): Vector3
         Vector3(1f, 0f, -0.5f), def.legIKConstraint, out
     )
     return out.joint
+}
+
+/**
+ * The base's own arm choreography with NO projection opted in: `BaseHipFlexorPose.solveArmsOnKnee`
+ * composes both hands and they are declared verbatim (the hook's default body is empty).
+ *
+ * Built at `CouchStretchPose`'s own end-of-rep root (pelvis `(−15, 124.1742)`, torso lean `−0.05`,
+ * front-leg target `(55, 25, −22)`) — the exact frame whose composition reads the sibling's pre-batch
+ * site — so
+ * [ReachBandBatch3AuthoringTest.theSharedFamilyChoreographyIsNotReScopedByThisBatch] can prove the
+ * base default is still inert after the fourth batch's variant-level correction.
+ */
+private class BaseChoreographyProbe : BaseHipFlexorPose() {
+    override val metadata = PoseMetadata(
+        camera = CameraDefinition.DEFAULT,
+        durationSeconds = 3.0f,
+        loopMode = LoopMode.PING_PONG,
+        motionCurve = MotionCurve.EASE_IN_OUT,
+        environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f))
+    )
+
+    override fun onBuild(context: PoseContext): SkeletonPose {
+        val def = context.definition
+        ensureHierarchy(def)
+        declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
+        leanAngle = -0.05f
+        pelvis!!.localPosition.set(-15f, 124.1742f, 0f)
+        declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, -leanAngle)
+        setUpperBodyLocal(def)
+        roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
+        targetAnkleF.set(55f, 25f, -def.hipWidth)
+        solveArmsOnKnee(planFrontLegKnee(def).joint, def)
+        return finalizeHipFlexorPose()
+    }
 }

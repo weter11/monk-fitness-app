@@ -577,7 +577,27 @@ class M8M9M10SupportDeclarationTest {
           * and is deliberately NOT re-scoped — and every pelvis/spine/girdle/head joint of the three
           * byte-identical too, i.e. the batch is target-side only (a root-side "fix" would have moved their
           * stances). The batch's own gate is `ReachBandBatch3AuthoringTest`.
+          *
+          * **Re-baselined by the fourth (final) reach-band cleanup batch**
+          * (`fix/reach-band-batch4-remaining-candidates`, off the #255 merge `ca011ad`): this corpus is "every
+          * production pose class except the classes each correction owns", so it contains the batch's five poses
+          * (`CouchStretchPose`, `QuadrupedThoracicRotationsPose`, `GluteBridgePose`, `PelvicTiltPose`,
+          * `ThoracicExtensionPose`). Their authored limb targets sat outside their own chains' reachable annulus and
+          * are now projected onto it (R2/R4). Observed RED on the pre-baseline value `1604810780889823966` before this re-baseline
+          * (the live run measured `7499664576150638435`). Attribution is direct, not inferred: the whole-corpus A/B (`51` classes ×
+          * `16` frames — a fresh pipeline's cold first frame plus `15` phases of an advancing pipeline — × every
+          * `Joint.entries` XYZ AND every joint rotation, full float bits, `58,464` rows) measured on a worktree of
+          * `origin/main` @ `ca011ad` and on this branch differs in exactly `852` rows — `240` in
+          * `ThoracicExtensionPose`, `197` in `CouchStretchPose`, `176` in `PelvicTiltPose`, `146` in
+          * `GluteBridgePose`, `93` in `QuadrupedThoracicRotationsPose` — i.e. `652` published joint rows, `128`
+          * declared-target rows and `72` state rows whose ONLY moving field is the reachability stamp. Every differing
+          * joint belongs to the pose's own corrected limb chain (arms: `ELBOW_*`/`HAND_*`/`WRIST_*`/`PALM_*`/
+          * `KNUCKLES_*`/`FINGERTIPS_*`; legs: `KNEE_*`/`ANKLE_*`/`HEEL_*`/`TOE_*`), max published move `0.0324` u
+          * (`QuadrupedThoracicRotationsPose`), and the other `46` production classes are byte-identical — every joint
+          * ROTATION byte-identical everywhere, every pelvis/spine/girdle/head joint of the five unchanged, and every
+          * support set, ground level, environment prop and state flag identical, i.e. the batch is target-side only.
+          * The batch's own gate is `ReachBandBatch4AuthoringTest`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 1604810780889823966L
+        const val UNAFFECTED_CORPUS_DIGEST = 7499664576150638435L
     }
 }

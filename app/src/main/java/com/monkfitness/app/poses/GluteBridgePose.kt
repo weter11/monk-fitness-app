@@ -113,6 +113,39 @@ class GluteBridgePose : PoseBuilder {
         val targetAnkleF = Vector3(45f, def.foot.ankleHeight, -def.hipWidth)
         val targetAnkleB = Vector3(45f, def.foot.ankleHeight, def.hipWidth)
 
+        // R2/R4 — reach-band authoring (fourth reach-band cleanup batch). The authored stance above
+        // is a resting place, not a request to fold: measured through the production entry point on
+        // the PUBLISHED frame, the supine hip sits at y = 14 (p = 0) while both feet are authored at
+        // (±45, ankleHeight 15), so the hip→ankle chord is 45.0111 at the rep's start — 10.9979 u
+        // INSIDE the leg chain's own minimum-flexion reach
+        // `SkeletonMath.minReach(112, 98, 30°) = 56.0090`, i.e. the authored stance asks for an
+        // interior knee angle of 23.52° against the `IKConstraint`'s own 30° stop (150° of flexion),
+        // for 12 of the 15 sampled phases. The solver answered by relocating both feet along the
+        // authored rays (the realized knees read exactly 30.0000° interior) and the reachability
+        // stamp carried the same number.
+        //
+        // Verdict: unintended authoring error, not a deliberate ROM limit — the pose's own BPS
+        // (§7/§9) specifies "knees bent ~90°, feet flat ... shins near vertical", a configuration
+        // that sits comfortably INSIDE the band (a 90° interior is a 148.81 u chord), so nothing in
+        // this exercise requires the chain's fold stop. The projection preserves each authored ray
+        // and only moves the radius onto the annulus — the position the solver already publishes —
+        // so the stance, the pelvis arc (14 → 54), the arm authoring and the B4 elbow plane are
+        // untouched.
+        //
+        // Residual, recorded and NOT resolved here: the PUBLISHED stance is unchanged by this
+        // declaration fix, so the feet still publish at `(55.9952, 15.2443)` with the knees on the
+        // 150° fold — the BPS's ~90° setup needs the feet authored further from the hip (a ~148.8 u
+        // chord), which moves the visible geometry and is a pose-design (owner) decision. The
+        // reach-band convention fixes the TARGET, not the stance.
+        SkeletonMath.clampTargetToReach(
+            hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength,
+            def.legIKConstraint, targetAnkleF, REACH_MARGIN
+        )
+        SkeletonMath.clampTargetToReach(
+            hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength,
+            def.legIKConstraint, targetAnkleB, REACH_MARGIN
+        )
+
         // P12 (§12.6): legs declared through the registered authoring bake (was direct
         // solveIK + raw-offset writes — the bypass family; knee points upwards/forwards via
         // the same upper pole vector).
@@ -153,5 +186,24 @@ class GluteBridgePose : PoseBuilder {
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
         jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer
+    }
+
+    private companion object {
+        /**
+         * The R2/R4 projection margin — a hundredth of a percent of the chain's span.
+         *
+         * The authored target is placed just INSIDE its annulus, not exactly on the boundary: the
+         * carrier stores coordinates at ~`3e-5` absolute resolution at these radii, so a
+         * boundary-exact target re-fires a float-noise relocation (the reachability stamp reads
+         * `8e-6`), while this margin makes "inside the band" hold by construction and the stamp read
+         * exactly `0`.
+         *
+         * The published geometry cost is bounded by the margin itself (`0.006` u at the leg's
+         * `minReach`), because the solver's own relocation WAS the boundary projection this
+         * replaces. The helper's canonical `0.02` is NOT used: here it would pull the feet a further
+         * `1.12` u out along the stance ray — geometry the reach defect does not require (the same
+         * measurement that chose `1e-4` for the squat, hip-flexor and hamstring families).
+         */
+        const val REACH_MARGIN = 1e-4f
     }
 }

@@ -137,12 +137,38 @@ abstract class BaseThoracicPose : BasePose() {
         handNode: SkeletonNode,
         buffer: SkeletonMath.IKResult
     ): SkeletonMath.IKResult {
+        // R2/R4 reach-band authoring (fourth reach-band cleanup batch): the composed target is
+        // passed through [projectArmTargetToReach] BEFORE the bake, so a variant whose own root /
+        // thorax composition puts the hand outside its chain's annulus can correct the declaration
+        // without re-scoping its siblings. The default is the family's pre-batch behaviour: the
+        // hand is declared verbatim.
+        projectArmTargetToReach(def, rootWorld, targetWorld)
         val poleWorld = SkeletonMath.toWorldDirection(poleLocal, chest!!.worldRotation, tempPoleWorld)
         return bakeIkLimb(
             rootWorld, targetWorld, def.upperArmLength, def.forearmLength,
             poleWorld, def.armIKConstraint, chest!!.worldRotation,
             elbowNode, handNode, buffer, jointsBuffer
         )
+    }
+
+    /**
+     * R2/R4 reach-band authoring hook for the family's arm choreography.
+     *
+     * Each variant composes its arm targets in the frame the pose owns (the chest's rotating frame
+     * for the reaches, the floor for a planted pillar) and hands them to [bakeThoracicArm]. Whether
+     * that composed point lies inside its own chain's reachable annulus
+     * `[SkeletonMath.minReach, SkeletonMath.maxReach]` (`[40.1344, 143.0800]` for the `80 + 66` arm)
+     * depends on the VARIANT's root, lean and twist: two variants were measured past the band's ends
+     * (see their overrides). The default here is the family's pre-batch behaviour — declare the
+     * composed target verbatim — so a variant that is not part of the batch
+     * (`DynamicWorldsGreatestStretchPose`, `21.6410` u, measured and reported, not changed) keeps its
+     * authoring byte-identically.
+     */
+    protected open fun projectArmTargetToReach(
+        def: SkeletonDefinition,
+        shoulderWorld: Vector3,
+        target: Vector3
+    ) {
     }
 
     /** W1: the engine now derives hand orientation; the open-hand offsets and tilt counter-rotation are removed. */
@@ -161,5 +187,25 @@ abstract class BaseThoracicPose : BasePose() {
         val out = SkeletonPose()
         out.copyFrom(jointsBuffer)
         return out
+    }
+
+    companion object {
+        /**
+         * The R2/R4 projection margin — a hundredth of a percent of the chain's span.
+         *
+         * The authored target is placed just INSIDE its annulus, not exactly on the boundary: the
+         * carrier stores coordinates at ~`3e-5` absolute resolution at these radii, so a
+         * boundary-exact target re-fires a float-noise relocation (the reachability stamp reads
+         * `8e-6`), while this margin makes "inside the band" hold by construction and the stamp read
+         * exactly `0`.
+         *
+         * The published geometry cost is bounded by the margin itself (`0.004` u at the arm's
+         * `minReach`), because the solver's own relocation WAS the boundary projection this
+         * replaces. The helper's canonical `0.02` is NOT used: on these poses it would move the
+         * hands `2.8` u (the `143.0800` cap) further in than the engine already publishes them —
+         * geometry the reach defect does not require (the same measurement that chose `1e-4` for the
+         * squat, hip-flexor and supine families).
+         */
+        const val REACH_MARGIN = 1e-4f
     }
 }
