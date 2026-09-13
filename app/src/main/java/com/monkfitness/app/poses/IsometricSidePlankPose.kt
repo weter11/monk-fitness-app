@@ -20,8 +20,12 @@ import kotlin.math.*
  *  - CENTRE OF MASS: rises over the bottom forearm/foot base as the hips lift, and
  *    settles — the obliques do the work, not a rigid roll.
  *  - SCAPULA (down side): actively stabilized — the shoulder is pushed away from
- *    the ear (never collapsed into the joint). Modeled by keeping the support
- *    shoulder lifted well above the planted elbow.
+ *    the ear (never collapsed into the joint). Authored on the canonical girdle
+ *    channel ([driveScapula] -> `SkeletonMath.buildScapularRotation`): the support
+ *    blade protracts toward its own planted elbow (the direction the propped plant
+ *    itself names) on the hold's own zero-at-the-endpoints stabilization cycle, at
+ *    the family's [GIRDLE_PROTRACTION] — the glenoid travel this pose's planted
+ *    forearm can absorb, not the pull family's free-hands amplitude.
  *  - RIB CAGE / PELVIS: pelvis is the driver here (it lifts the line); the rib
  *    cage follows with a gentle breathing swell.
  *  - TOP ARM: rests along the top hip and floats up slightly with the breath
@@ -133,6 +137,32 @@ class IsometricSidePlankPose : BasePlankPose() {
         // target (B-8).
         chest!!.localRotation.set(axisY, spineRoll)
         declareJointIntent(Joint.CHEST, JointRotation(axisY, spineRoll))
+
+        // --- 4b. The down-side scapula: the support girdle's protraction --------------------------
+        // BPS `Plank (Side)` §"Scapular strategy"/§5/§8/§11 — *"On the supporting side, the scapula is
+        // protracted and depressed, flat against the rib cage; the shoulder is set and stable"*, *"no
+        // winging, no shrug"* — and this pose's own copy (§SCAPULA above: *"actively stabilized — the
+        // shoulder is pushed away from the ear (never collapsed into the joint)"*). Before this
+        // correction both SCAPULA joints published `0.0000` rad at every phase: the stated
+        // stabilization was carried by the propped plant's geometry alone.
+        //
+        // ONLY the support (P) blade is driven: the copy's subject is the down-side girdle ("the
+        // down-side shoulder girdle (must stay depressed + protracted…)"), the top arm's shoulder is
+        // not part of this exercise's girdle statement, and — unlike the family's other member — this
+        // pose authors its own thorax frame outright (the B-8 roll above), so the Finalizer's
+        // fallback never runs and a single-sided drive cannot leak into the chest frame.
+        //
+        // The sign is this layout's protraction direction, measured rather than assumed: this pose's
+        // own B-8 roll puts the shoulder offsets on the chest's local `X`, so a `+Y` rotation carries
+        // the support glenoid along local `Z` (world `(0.577, -0.817, 0)`) — the direction toward its
+        // planted elbow. `-` is therefore protraction here (measured: the support shoulder travels
+        // `6.21` u toward the mat at `4` units), while the forearm plank's P blade needs `+`.
+        //
+        // The schedule is the hold's own stabilization cycle ([breathingSwell], zero at BOTH authored
+        // endpoints) for the reason [driveScapula] and the sibling plank record: a non-zero
+        // protraction at the braced endpoint lowers the glenoid off the `80`-unit vertical support
+        // pillar and the planted elbow leaves the mat.
+        driveScapula(0f, -GIRDLE_PROTRACTION * breath)
 
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 

@@ -49,6 +49,10 @@ abstract class BasePlankPose : BasePose() {
     // --- Skeleton nodes (bound once via SkeletonFactory) ---
     protected var roots: List<SkeletonNode>? = null
     protected var pelvis: SkeletonNode? = null; protected var chest: SkeletonNode? = null; protected var neck: SkeletonNode? = null; protected var head: SkeletonNode? = null
+    // The shoulder girdle's own nodes (CHEST -> CLAVICLE -> SCAPULA -> SHOULDER). The two planks are
+    // supported BY the girdle, so their scapular articulation is authored on this canonical pair.
+    protected var clavicleA: SkeletonNode? = null; protected var scapulaA: SkeletonNode? = null
+    protected var clavicleP: SkeletonNode? = null; protected var scapulaP: SkeletonNode? = null
     protected var shoulderA: SkeletonNode? = null; protected var elbowA: SkeletonNode? = null; protected var handA: SkeletonNode? = null; protected var palmA: SkeletonNode? = null; protected var knucklesA: SkeletonNode? = null; protected var fingertipsA: SkeletonNode? = null
     protected var shoulderP: SkeletonNode? = null; protected var elbowP: SkeletonNode? = null; protected var handP: SkeletonNode? = null; protected var palmP: SkeletonNode? = null; protected var knucklesP: SkeletonNode? = null; protected var fingertipsP: SkeletonNode? = null
     protected var hipF: SkeletonNode? = null; protected var kneeF: SkeletonNode? = null; protected var ankleF: SkeletonNode? = null; protected var heelF: SkeletonNode? = null; protected var toeF: SkeletonNode? = null
@@ -199,6 +203,8 @@ abstract class BasePlankPose : BasePose() {
         val nodes = SkeletonFactory.createStandardSkeleton()
         roots = nodes.roots
         pelvis = nodes.pelvis; chest = nodes.chest; neck = nodes.neck; head = nodes.head
+        clavicleA = nodes.clavicleA; scapulaA = nodes.scapulaA
+        clavicleP = nodes.clavicleP; scapulaP = nodes.scapulaP
         shoulderA = nodes.shoulderA; elbowA = nodes.elbowA; handA = nodes.handA; palmA = nodes.palmA; knucklesA = nodes.knucklesA; fingertipsA = nodes.fingertipsA
         shoulderP = nodes.shoulderP; elbowP = nodes.elbowP; handP = nodes.handP; palmP = nodes.palmP; knucklesP = nodes.knucklesP; fingertipsP = nodes.fingertipsP
         hipF = nodes.hipF; kneeF = nodes.kneeF; ankleF = nodes.ankleF; heelF = nodes.heelF; toeF = nodes.toeF
@@ -219,6 +225,39 @@ abstract class BasePlankPose : BasePose() {
     protected fun breathingSwell(progress: Float): Float = sin(progress * PI.toFloat())
 
     /**
+     * The Plank family's scapular girdle drive, on the ONE canonical channel
+     * ([SkeletonMath.buildScapularRotation]) — the same expression the corpus's other driven girdles
+     * use (`RowsPose`/`BaseBarSupportPose.driveScapula`, `BandPullApartPose`, `BaseVerticalPullPose`).
+     *
+     * [a] and [p] are the SIGNED per-blade activation in the shared girdle units, and each member
+     * derives its own signs from its own layout (measured, never assumed): the canonical girdle
+     * nodes share the chest's frame and their shoulder offsets sit on different local axes in these
+     * two layouts, so "toward this blade's planted elbow" — the protraction direction both BPS files
+     * name — is a different sign in each. Driving both blades the same anatomical way therefore
+     * mirrors the sign per side, which is also what makes the published shoulder line move as one
+     * (an unmirrored drive is a twist about the trunk's long axis: measured on the forearm plank's
+     * braced frame, one glenoid travels `6.08` u toward the mat — flat against the rib cage — while
+     * the other travels `6.08` u away from it, i.e. the winging the BPS files explicitly forbid).
+     *
+     * **The rig coupling this family authors around (measured, not assumed).** The scapula is the
+     * shoulder's PARENT (`CHEST -> CLAVICLE -> SCAPULA -> SHOULDER`), so rotating it displaces the
+     * glenoid — and in these two floor-supported layouts the glenoid is the arm chain's IK root while
+     * the ELBOW and HAND are the declared, planted `*_FOREARM` contacts. The retraction/protraction
+     * DOF's displacement is `~94 %` aligned with the shoulder→hand chord (the braced forearm plank:
+     * `|(S-H)| = 103.6` u along the chest's local `+X`, while the rotation about local `+Y` moves the
+     * glenoid along local `X`), so the planted arm absorbs it as a rigid-chain translation: the
+     * elbow's height is the glenoid's height minus the upper arm's `80` u, i.e. **the planted elbow
+     * sinks or floats by the glenoid's own vertical travel** (`1.52` u per activation unit, `6.06` u
+     * at the pull family's `4`; `1.55` u/unit on the side plank's support arm) — no authored pole can
+     * change that. [GIRDLE_PROTRACTION] is derived from that measurement and the family's own planted
+     * plant contract, not chosen.
+     */
+    protected fun driveScapula(a: Float, p: Float) {
+        SkeletonMath.buildScapularRotation(a, 0f, -1f, scapulaA!!.localRotation)
+        SkeletonMath.buildScapularRotation(p, 0f, 1f, scapulaP!!.localRotation)
+    }
+
+    /**
      * Flattens the hierarchy, mirrors wrist joints onto the hand joints (the
      * renderer expects WRIST_*), and surfaces the worst IK clamp for validation.
      */
@@ -227,5 +266,31 @@ abstract class BasePlankPose : BasePose() {
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
         jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer
+    }
+
+    companion object {
+        /**
+         * The family's authored scapular protraction at the peak of the hold's stabilization cycle,
+         * in the shared girdle activation units (`SkeletonMath.SCAPULA_RETRECTION_TO_RAD` = `2.005°`
+         * unit, so this is `1.203°` at the peak).
+         *
+         * **Derived from the plant's own flat-forearm budget, not chosen.** [driveScapula] records
+         * the measured rigid-chain coupling: the planted elbow travels with the glenoid's own vertical
+         * travel (`1.52` u per activation unit on the braced forearm plank, `1.55` u/unit on the side
+         * plank's support arm, worst `1.91` u/unit across the rep), so the family's declared
+         * flat-forearm contact (`PlankForearmSupportGeometryTest`'s `1.5` u band between the two ends
+         * of one physical forearm — the BPS `Plank (Forearm)` §"Elbows drifting forward of shoulders"
+         * fault is this same coupling at the pull family's `4` units, `6.06` u) bounds the amplitude
+         * at `~0.8` units.
+         *
+         * Measured at the authored value, per phase, on the published frames of both members: the
+         * scapular articulation peaks at `1.2033°` (`0.0210` rad), the glenoid travels `0.9660` u
+         * toward its planted elbow, and the worst flatness of the declared forearm is `1.2223` u —
+         * `81.5 %` of the band (`61.7 %`, `0.9258` u, on the side plank). Both members' two authored
+         * endpoints publish their fields **bit-identically** to the pre-fix tree. The pull family's
+         * `4` units (`Rows`/`BandPullApart`/the vertical pulls) is NOT available here: those poses'
+         * hands are free, so their girdle travel costs their plant nothing.
+         */
+        const val GIRDLE_PROTRACTION = 0.60f
     }
 }
