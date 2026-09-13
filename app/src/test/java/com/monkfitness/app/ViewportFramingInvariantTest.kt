@@ -518,16 +518,23 @@ class ViewportFramingInvariantTest {
          * `WallSitPose`) join the inventory, like 26 of the 49 pre-existing production poses. They carry the
          * family's own `CameraDefinition`; NO camera or framing behaviour is changed by the phase, so this is
          * the defect's record extended by four more authored frames.
+         *
+         * **Re-measured by the animation-coverage phase, batch 2** (`feat/animation-coverage-02`, off the
+         * #258 merge `6887738`): three of the four pose classes the batch added (`BandPullApartPose`,
+         * `DipsPose`, `RowsPose` — the standing banded sweep and the two bar-supported members, whose authored
+         * cameras are the standing/plank families' own) join the inventory; the fourth (`YTRaisesPose`, the
+         * prone drill — the family's flat layout) fits the hero canvas as authored, so the inventory is
+         * `30 → 33` frames. Again: NO camera or framing behaviour is changed by the phase.
          */
         val CLIPPED_AT_HERO = setOf(
             "AirSquatPose", "AlternatingForwardLungesPose", "AlternatingReverseLungesPose",
-            "AlternatingSideLungesPose", "AnkleMobilityPose", "ArmCirclesPose", "BurpeePose",
-            "CalfStretchPose", "CossackSquatPose", "CouchStretchPose", "DynamicWorldsGreatestStretchPose",
-            "FacePullPose", "HalfKneelingStretchPose", "HangPose", "HipCarsPose", "HorseStancePose",
-            "JumpSquatPose", "KettlebellSwingPose", "NeutralGripPullUpPose", "ScapularPullUpPose",
-            "ScapularRetractionPose", "SquatPose", "StandardPullUpPose", "StepUpPose", "SumoSquatPose",
-            "ThoracicExtensionPose", "UnderhandChinUpPose", "WallSitPose", "WallSlidesPose",
-            "WideGripPullUpPose"
+            "AlternatingSideLungesPose", "AnkleMobilityPose", "ArmCirclesPose", "BandPullApartPose",
+            "BurpeePose", "CalfStretchPose", "CossackSquatPose", "CouchStretchPose", "DipsPose",
+            "DynamicWorldsGreatestStretchPose", "FacePullPose", "HalfKneelingStretchPose", "HangPose",
+            "HipCarsPose", "HorseStancePose", "JumpSquatPose", "KettlebellSwingPose",
+            "NeutralGripPullUpPose", "RowsPose", "ScapularPullUpPose", "ScapularRetractionPose",
+            "SquatPose", "StandardPullUpPose", "StepUpPose", "SumoSquatPose", "ThoracicExtensionPose",
+            "UnderhandChinUpPose", "WallSitPose", "WallSlidesPose", "WideGripPullUpPose"
         )
 
         /**

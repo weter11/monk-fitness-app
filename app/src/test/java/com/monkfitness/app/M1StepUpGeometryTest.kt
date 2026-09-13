@@ -834,7 +834,16 @@ class M1StepUpGeometryTest {
           * pre-existing pose classes byte-identical** — `0` differing digests, `4` added, `0` removed — on both the
           * `4a32d84` and the rebased `7df32c0` base, so the observed RED was corpus membership, not geometry drift.
           * Pre-rebaseline measurement: `-853746479693335913`.
+         *
+         * **Re-baselined by the animation-coverage phase, batch 2** (`feat/animation-coverage-02`, based on the
+          * #258 merge `6887738`): this corpus is "every production pose class except its own corrected pose", so the
+          * four pose classes the batch ADDED (`RowsPose`, `DipsPose`, `BandPullApartPose`, `YTRaisesPose`) entered it
+          * (the family base `BaseBarSupportPose` is filtered out of every corpus by the `Base*` rule). Attribution
+          * measured, not inferred: the per-pose digest probe (this guard's own hashing recipe, a fresh pipeline per
+          * pose) run on the pristine `origin/main` worktree (`6887738`) and on this branch reported **all `55`
+          * pre-existing pose classes byte-identical** — `0` differing digests, `4` added, `0` removed — so the
+          * observed RED was corpus membership, not geometry drift. Pre-rebaseline measurement: `4106542327401210458`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 4106542327401210458L
+        const val UNAFFECTED_CORPUS_DIGEST = 6372502693407939644L
     }
 }

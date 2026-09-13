@@ -99,11 +99,16 @@ class ExtremityArticulationTest {
 
     @Test
     fun migratedCorpusIsExactlyTheCarrierPopulatedProductionPoses() {
+        // Animation-coverage phase, batch 2 (`feat/animation-coverage-02`, off the #258 merge `6887738`):
+        // `DipsPose` authors its hanging feet through `buildAnkleArticulation` (the Branch-C carrier), so
+        // the registry-derived set gained exactly `dip_parallel_bar` (`11 → 12`); the batch's other three
+        // poses author no articulation and stay outside the corpus. The membership below is therefore
+        // re-measured against the derivation, not hand-extended.
         assertEquals(
             "the Branch-C equivalence guard must cover EVERY migrated production pose " +
                 "(carrier-authoring pose), derived from the production registry",
             listOf(
-                "chinup_standard", "dead_hang", "hamstring_stretch_hold", "pike_pushup_standard",
+                "chinup_standard", "dead_hang", "dip_parallel_bar", "hamstring_stretch_hold", "pike_pushup_standard",
                 "pullup_neutral", "pullup_standard", "pullup_wide", "scapular_pullup_deadhang",
                 "squat_jump", "thoracic_extension_reps", "world_greatest_stretch"
             ),
@@ -129,7 +134,9 @@ class ExtremityArticulationTest {
     @Test
     fun carrierReproducesTheLegacyNodePathForEveryMigratedPose() {
         val corpus = migratedCorpus()
-        assertEquals("corpus must not shrink silently", 11, corpus.size)
+        // `11 → 12` in the animation-coverage phase's batch 2: `DipsPose` joins the corpus (see
+        // [migratedCorpusIsExactlyTheCarrierPopulatedProductionPoses]).
+        assertEquals("corpus must not shrink silently", 12, corpus.size)
         for ((name, factory) in corpus) {
             for (p in progresses) {
                 val ctx = PoseContext(p, Side.LEFT, def)
