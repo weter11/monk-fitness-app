@@ -789,7 +789,24 @@ class M3M5ProneTrunkGeometryTest {
           * batch deliberately does NOT change — and every pelvis/spine/girdle/head joint byte-identical, i.e.
           * the batch is target-side only (a root-side "fix" would have moved the holds' depths). The batch's
           * own gate is `ReachBandBatch2AuthoringTest`.
+          *
+          * **Re-baselined by the third reach-band cleanup batch**
+          * (`fix/reach-band-batch3-halfkneel-hamstring-cobra`, off the #254 merge `cf8a14f`): this corpus is
+          * "every production pose class except the classes this correction owns", so it contains
+          * `HalfKneelingStretchPose` and `HamstringStretchPose` — the batch's poses. Their authored limb targets sat outside their own
+          * chains' reachable annulus and are now projected onto it (R2/R4). Observed RED on the pre-baseline value `6655628533102093923` before the re-baseline
+          * (this live run measured `1787803362589852341`). Attribution is direct, not inferred: the whole-corpus A/B (`51`
+          * classes × `15` phases × every `Joint.entries` XYZ × both frame conditions — `60,660` rows, full
+          * float bits) measured on a worktree of `origin/main` @ `cf8a14f` and on this branch differs in
+          * exactly `828` rows — `450` in `HalfKneelingStretchPose`, `180` in `HamstringStretchPose`, `198` in
+          * `ProneCobraStretchPose`, ALL of them limb-chain joints (the arm chain's `ELBOW_*` max `0.0356` u,
+          * the derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS` chain `0.0206` u, the tucked leg's
+          * `TOE_B`/`HEEL_B`/`ANKLE_B` `0.0059` u and `KNEE_B` `0.0002` u), with the other `48` production
+          * classes byte-identical — `CouchStretchPose` included, which shares this site's authoring helper
+          * and is deliberately NOT re-scoped — and every pelvis/spine/girdle/head joint of the three
+          * byte-identical too, i.e. the batch is target-side only (a root-side "fix" would have moved their
+          * stances). The batch's own gate is `ReachBandBatch3AuthoringTest`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 6655628533102093923L
+        const val UNAFFECTED_CORPUS_DIGEST = 1787803362589852341L
     }
 }

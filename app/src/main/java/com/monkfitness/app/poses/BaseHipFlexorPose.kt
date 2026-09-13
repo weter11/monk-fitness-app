@@ -120,17 +120,51 @@ abstract class BaseHipFlexorPose : BasePose() {
         return plan
     }
 
-    /** Both arms rest on the front knee — identical choreography for both variants. */
+    /** Both arms rest on the front knee — identical choreography for both variants.
+     *
+     *  R2/R4 reach-band authoring (third reach-band cleanup batch): the composed target is passed
+     *  through [projectArmTargetToReach] for EACH arm — after composition, before its bake — so a
+     *  variant whose own root puts the front knee beyond its arm chain's annulus can correct the
+     *  declaration without re-scoping its sibling. */
     protected fun solveArmsOnKnee(kneeJointWorld: Vector3, def: SkeletonDefinition) {
-        handTarget.set(kneeJointWorld.x - 10f, kneeJointWorld.y + 15f, 0f)
+        // The composed x/y are SHARED intent; each arm's z is its own. `handTarget` is a reused
+        // scratch and the projection below rewrites it in place, so the shared terms are re-established
+        // per arm rather than inherited from the other side's projected result.
+        val targetX = kneeJointWorld.x - 10f
+        val targetY = kneeJointWorld.y + 15f
 
-        handTarget.z = -def.shoulderWidth * 0.8f
+        handTarget.set(targetX, targetY, -def.shoulderWidth * 0.8f)
+        projectArmTargetToReach(def, shoulderA!!.worldPosition, handTarget)
         bakeIkLimb(shoulderA!!.worldPosition, handTarget, def.upperArmLength, def.forearmLength, armAPole, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
 
-        handTarget.z = def.shoulderWidth * 0.8f
+        handTarget.set(targetX, targetY, def.shoulderWidth * 0.8f)
+        projectArmTargetToReach(def, shoulderP!!.worldPosition, handTarget)
         bakeIkLimb(shoulderP!!.worldPosition, handTarget, def.upperArmLength, def.forearmLength, armPPole, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         // W1: engine now derives hand orientation (removed wrist tilt counter-rotation + 6/6/10 offsets).
+    }
+
+    /**
+     * R2/R4 reach-band authoring hook for the family's shared arm choreography.
+     *
+     * [solveArmsOnKnee] composes both hands from the front knee's planning apex — `(knee.x − 10,
+     * knee.y + 15, ±0.8 · shoulderWidth)`. Whether that composed target lies inside its own chain's
+     * reachable annulus `[SkeletonMath.minReach, maxReach]` depends on the VARIANT's root: the
+     * half-kneeling variant's pelvis sits at `kneeBY + thighLength` with the torso upright, which
+     * puts the front knee `155.160 … 166.868` u from the shoulder of a `80 + 66` u arm (measured on
+     * the production entry point; the annulus cap is `143.080`), so the solver relocated both hands
+     * along the authored ray instead of publishing them where the pose declared them.
+     *
+     * The default is the family's pre-batch behaviour (declare the composed target verbatim):
+     * `CouchStretchPose` carries a site of the same class through this same helper and is out of
+     * this batch's scope, so the projection is opted into per variant rather than re-scoping both
+     * siblings from the base.
+     */
+    protected open fun projectArmTargetToReach(
+        def: SkeletonDefinition,
+        shoulderWorld: Vector3,
+        target: Vector3
+    ) {
     }
 
     /** Front foot flat on the floor. */
@@ -149,5 +183,24 @@ abstract class BaseHipFlexorPose : BasePose() {
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
         jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer
+    }
+
+    companion object {
+        /**
+         * The R2/R4 projection margin — a hundredth of a percent of the chain's span.
+         *
+         * The authored target is placed just INSIDE its annulus, not exactly on the boundary: the
+         * carrier stores coordinates at ~`3e-5` absolute resolution at these radii, so a
+         * boundary-exact target re-fires a float-noise relocation (the reachability stamp reads
+         * `8e-6`), while this margin makes "inside the band" hold by construction and the stamp read
+         * exactly `0`.
+         *
+         * The published geometry cost is bounded by the margin itself (`0.004` u at the arm's
+         * `minReach`), i.e. ~`1/10000` of the athlete's height, because the solver's own relocation
+         * WAS the boundary projection this replaces. The helper's canonical `0.02` is NOT used: on
+         * this family's `143.080` cap it would pull the hands `2.86` u further in than the engine
+         * already publishes them — geometry the reach defect does not require.
+         */
+        const val REACH_MARGIN = 1e-4f
     }
 }
