@@ -646,7 +646,19 @@ class M11M12LimbRealizationMigrationTest {
          * `14.3655` u at `CHEST`/`SHOULDER_*`/`CLAVICLE_*`/`SCAPULA_*` — and `28` in
          * `PelvicTiltPose` — its leg chain, worst `1.526e-05` u), with the other `66` pose classes
          * byte-identical. Pre-rebaseline measurement: `5316475324191770694`.
+         * **Re-baselined by the animation-logic correction batch 2**
+         * (`fix/animation-logic-b2-scapular-articulation`, off the #263 merge `ae8c063`): this corpus
+         * is "every production pose class except the classes the correction owns", so it contains BOTH
+         * poses that batch corrects (`StaticForearmPlankPose`, `IsometricSidePlankPose`). Attribution
+         * is measured, not inferred: the batch's whole-corpus A/B (`68` classes × `5` progress samples
+         * × every `Joint.entries` XYZ = `11,220` rows, run in a pristine `origin/main` worktree
+         * (`ae8c063`) and on this branch) differs in exactly `63` rows — `42` in
+         * `StaticForearmPlankPose`, `21` in `IsometricSidePlankPose`, every one of them arm-chain
+         * geometry (`SHOULDER_*`/`ELBOW_*`/`HAND_*`/`WRIST_*`/`PALM_*`/`KNUCKLES_*`/`FINGERTIPS_*`,
+         * worst `0.9258` u) — with the other `66` pose classes byte-identical on every joint position,
+         * every joint rotation and every stamp, and no support set, ground level or clamp moving.
+         * Pre-rebaseline measurement: `-5902184305628532914`.
 */
-        const val UNAFFECTED_CORPUS_DIGEST = -5902184305628532914L
+        const val UNAFFECTED_CORPUS_DIGEST = -4784460043153301629L
     }
 }

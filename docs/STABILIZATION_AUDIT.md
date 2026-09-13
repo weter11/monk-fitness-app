@@ -3395,6 +3395,80 @@ compilation green. No engine, solver, RFC, golden, camera or legacy-engine file 
 recorded residuals (CatCow's leg geometry and its T2 foot pin, the quadruped arm plane) and the B4 trunk
 record's *product reading* stay open exactly as recorded.
 
+### DONE — animation-logic correction batch 2: the scapular articulation of `StaticForearmPlankPose` + `IsometricSidePlankPose` (branch `fix/animation-logic-b2-scapular-articulation`, off the #263 merge `ae8c063`; pose-side authoring only)
+
+The second batch of the **animation-logic** phase (batch 1 is the record above). Full measurement tables,
+the coupling that bounds the correction, the RED/GREEN evidence, the whole-corpus A/B census, the guard
+re-baselines and the recorded residuals: **`docs/ANIMATION_LOGIC_CORRECTIONS.md` §B2** (§B2.0–§B2.8).
+
+Both rows are the audit's (`monk-pose-qa`'s `canonical-joint-articulation-audit` §5) scapular items, and
+both were re-measured on the pre-fix tree before any edit: the canonical `SCAPULA_A`/`SCAPULA_P` joints
+published **`0.0000` rad at every one of the 13 sampled phases** with `0.0000` u of glenoid travel off the
+chest, while `StaticForearmPlankPose`'s own copy (*"the shoulder girdle (scapular protraction)"* among
+MOVING joints; *"SCAPULAE: protracted ('push the mat away'), never winged/retracted"*) and BPS
+`Plank (Forearm)` §"Scapular strategy" (*"protracted … depressed, flat against the rib cage; the shoulder
+girdle is set, not collapsed or shrugged"*) — and `IsometricSidePlankPose`'s own *"down-side shoulder
+girdle (must stay depressed + protracted, not shrug to the ear)"*, *"SCAPULA (down side): actively
+stabilized"* with BPS `Plank (Side)`'s *"supporting scapula protracted and depressed … no winging, no
+shrug"* — make the girdle part of the exercise. The stated girdle was being carried by the thorax's
+rounding (forearm plank) or by the propped plant alone (side plank).
+
+The correction is one family-scoped pose-side drive, `BasePlankPose.driveScapula(a, p)` →
+`SkeletonMath.buildScapularRotation` (the ONE canonical channel the corpus's other driven girdles use),
+authored on the hold's own `breathingSwell` driver so it is **zero at both authored endpoints**;
+`StaticForearmPlankPose` drives both blades with mirrored signs, `IsometricSidePlankPose` drives the
+support blade only. **The amplitude is derived, not chosen**: `GIRDLE_PROTRACTION = 0.60` activation
+units. Measured, on the published frames of the final tree:
+
+| quantity | `StaticForearmPlankPose` | `IsometricSidePlankPose` |
+|---|---|---|
+| `SCAPULA_*` own articulation span | `1.2033°` (`0.0210` rad), peak mid-hold | `1.2033°` (support blade; top blade `0.0000`) |
+| glenoid travel toward its planted elbow | `0.9660` u | `0.9660` u |
+| worst flatness of the declared forearm (B-7 band `1.5`) | `1.2223` u (`81.5 %`) | `0.9258` u (`61.7 %`) |
+| both authored endpoints vs the pre-fix tree | **bit-identical** | **bit-identical** |
+| clamp / support set / thorax articulation | `0.000000000` / unchanged / the pose's own | `0.000000000` / unchanged / the pose's own |
+
+**Why the amplitude is what it is (the batch's main finding, measured):** the scapula is the shoulder's
+PARENT, so the canonical girdle DOF displaces the glenoid — which in these layouts is the arm chain's IK
+root while the ELBOW and HAND are the declared planted `*_FOREARM` contacts. The retraction axis's
+displacement is `~94 %` aligned with the shoulder→hand chord, so the planted elbow's height is the
+glenoid's height minus the definition's `80` u upper arm: **`1.52` u of elbow travel per activation unit**
+(worst `1.91` across the plane; `6.06` u at the pull family's `4` units, measured — exactly the BPS's own
+*"Elbows drifting forward of shoulders"* fault). `PlankForearmSupportGeometryTest`'s flat-forearm band
+therefore caps the drive at `~0.8` units, and the first cut's `0.75` measured `95.7 %` of that band and was
+reduced. A drive at the braced endpoint is additionally impossible with the plant intact (the braced upper
+arm is exactly `80` u and exactly vertical, so any glenoid drop pulls the elbow off the mat), which is the
+measured reason for the zero-at-both-endpoints schedule. The same-sign convention the pull family uses is a
+shoulder-line *twist* in these layouts (one glenoid `6.08` u toward the mat, the other `6.08` u away — i.e.
+winging); both members therefore mirror the sign per blade so both blades protract together, proven by
+measurement (equal displacements to `%.9f`).
+
+Verification: `ForearmPlankScapularProtractionTest` (5) and `SidePlankScapularStabilizationTest` (5)
+written first and **RED on the untouched tree — `8` of `10`, every message quoting its measurement**
+(production bytes fingerprinted `md5sum` vs `git show origin/main:` before the run: MATCH), GREEN after;
+the whole-corpus A/B (`68` classes × `5` samples × every joint XYZ = `11,220` rows, pristine `ae8c063`
+worktree vs this branch) differs in exactly `63` rows — `42` `StaticForearmPlankPose`, `21`
+`IsometricSidePlankPose`, **all arm-chain geometry** (`SHOULDER_*`/`ELBOW_*`/`HAND_*`/`WRIST_*`/`PALM_*`/
+`KNUCKLES_*`/`FINGERTIPS_*`, worst `0.9258` u), the other `66` classes byte-identical, and no row's
+stamps/support set moving. Seven scope digests re-baselined with this batch named at each constant
+(`HamstringForwardReachTest`, `M11M12LimbRealizationMigrationTest`, `M15WallSlidesWallGeometryTest`,
+`M1StepUpGeometryTest`, `M3M5ProneTrunkGeometryTest`, `M6M7SwingBurpeeGeometryTest`,
+`M8M9M10SupportDeclarationTest`), and **two of the nine did not move** —
+`CanonicalSkeletonFactoryPoseBatchTest` and `PlankForearmSupportGeometryTest`, whose corpora exclude both
+corrected poses — which is the measured proof the batch did not touch a guard it did not have to. No
+tolerance, band or floor was loosened; the two new files' anti-vacuity floors were pointed at the
+comparison band rather than a multiple of the decided amplitude, and both files copy published frames by
+value with a structural (content-distinctness + immutability) independence proof. Full suite pristine
+`ae8c063` `154` / `902` / `0F` / `0E` / `0S` → branch **`156` / `912` / `0F` / `0E` / `0S`** (exactly `+2`
+classes / `+10` tests); `:app:assembleDebug` + `:app:compileReleaseKotlin` green in the same
+`--rerun-tasks` invocation (`:app:lintVitalRelease` is the repository's documented pre-existing failure).
+No engine, solver, IK, factory, finalizer, carrier, camera/framing, reach-band or RFC file is touched, and
+no other animation-logic batch is affected (batch 1's `CatCowSpineWaveTest` and
+`PelvicTiltSpineArticulationTest` stay green). Recorded, not resolved: the amplitude lever and the
+trunk-compensation alternative, the static-protraction-at-the-endpoints trade-off, the corpus's
+unmirrored girdle sign convention, the depression axis's direction/sign (and its inertness on the side
+plank), and the audit's four alias-vacuous template tests (other poses — left to their batches).
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement — **M15 is DONE — see the record above** (the wall's contact plane, the arm chain
@@ -3464,7 +3538,11 @@ A8/A6 leaks — resolved in the Push-Up Family pass above.)
 - Fix the pose, not the engine, when a pose authors motion incorrectly.
 - Keep pose-side migrations on the **existing** carrier surface (the H2 fix is the template).
 - After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
-  current baseline of record (**154 classes / 902 tests** on this branch — the animation-logic correction
+  current baseline of record (**156 classes / 912 tests** on this branch — the animation-logic correction
+  batch 2 added `ForearmPlankScapularProtractionTest` (`+5`) and `SidePlankScapularStabilizationTest`
+  (`+5`) at `156 / 912`, re-baselining the seven scope digests listed in the batch-2 ledger
+  (`docs/ANIMATION_LOGIC_CORRECTIONS.md` §B2.5), against `154 / 902` measured fresh in this batch's own
+  pristine `ae8c063` worktree; before it, the animation-logic correction
   batch 1 added `CatCowSpineWaveTest` (`+7`) and `PelvicTiltSpineArticulationTest` (`+6`) at `154 / 902`,
   re-baselining the nine scope digests listed in `docs/ANIMATION_LOGIC_CORRECTIONS.md` §5, against
   `152 / 889` measured fresh in this batch's own pristine `9cf4c32` worktree; the animation-coverage

@@ -21,9 +21,14 @@ import kotlin.math.*
  *    mass drifts forward over the forearms and back.
  *  - CENTRE OF MASS: shifts a few units forward toward the forearms mid-hold
  *    (bracing) and returns — visible weight transfer through the planted arms.
- *  - SCAPULAE: protracted ("push the mat away"), never winged/retracted. Modeled
- *    as the forearm support lifting the shoulders away from the floor plus a small
- *    thoracic rounding that ramps in as the person presses up.
+ *  - SCAPULAE: protracted ("push the mat away"), never winged/retracted. Authored on the canonical
+ *    girdle channel (`SkeletonMath.buildScapularRotation` via [driveScapula]): both blades protract
+ *    toward their own planted elbows, flat against the rib cage (BPS §"Scapular strategy"), on the
+ *    hold's own stabilization cycle — the same zero-at-the-endpoints [breathingSwell] driver the rib
+ *    cage's swell uses. The amplitude is the family's [GIRDLE_PROTRACTION], derived from the planted
+ *    forearm's own flat contact rather than the pull family's `4` units ([driveScapula] records the
+ *    measured coupling); the thoracic rounding that carried this statement before it had a girdle
+ *    drive stays as authored.
  *  - RIB CAGE: follows the shoulder girdle; gentle breathing swell mid-hold.
  *  - PELVIS: stabiliser. It sets the trunk height/line and holds a neutral tilt;
  *    it does not drive the motion.
@@ -133,6 +138,30 @@ class StaticForearmPlankPose : BasePlankPose() {
 
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
+
+        // --- 3b. The scapular girdle: the BPS's protraction, on the canonical channel -------------
+        // BPS `Plank (Forearm)` §"Scapular strategy"/§5/§8/§11 — *"Scapulae protracted (serratus
+        // anterior) and depressed, flat against the rib cage; the shoulder girdle is set"*, *"no
+        // winging, no shrug"* — and this pose's own copy (`useScapula`… §SCAPULAE above). Before this
+        // correction the two canonical SCAPULA joints published `0.0000` rad at every phase while the
+        // pose drove only the chest's rounding, i.e. the exercise's stated girdle was carried by the
+        // thorax alone.
+        //
+        // The drive is the hold's own stabilization cycle ([breathingSwell], zero at BOTH authored
+        // endpoints) rather than a ramp onto the braced frame, and that is a measured necessity: the
+        // PLANT is the constraint. At the braced endpoint the upper arm is exactly `80` u long and
+        // exactly vertical (BPS §6/§11 — the pillar [planPlantedForearm] authors), so the support
+        // shoulder sits exactly `80` u above its mat contact; a non-zero protraction lowers the
+        // glenoid (`1.21` u at the authored amplitude) and an upper arm of fixed length can then no
+        // longer reach a mat contact that stays DIRECTLY under it — the planted elbow leaves the mat
+        // (measured `6.06` u at the pull family's `4` units; `PlankForearmSupportGeometryTest` pins
+        // the braced hold's elbow-under-shoulder). The girdle's motion therefore lives inside the hold,
+        // where the pose's own copy puts it ("a continuous, controlled stabilization cycle",
+        // "bracing"), and the rep's two authored endpoints stay the pose's own frames.
+        //
+        // Both blades protract — the sign mirrors per side ([driveScapula]): a same-directions drive is
+        // a shoulder-line twist in this layout, which would flatten one blade while winging the other.
+        driveScapula(-GIRDLE_PROTRACTION * breath, GIRDLE_PROTRACTION * breath)
 
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
