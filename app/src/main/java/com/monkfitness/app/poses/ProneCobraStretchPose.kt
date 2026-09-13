@@ -165,6 +165,26 @@ class ProneCobraStretchPose : BasePose() {
         val targetHandA = Vector3(reachX, reachY, -def.shoulderWidth * 1.5f)
         val targetHandP = Vector3(reachX, reachY, def.shoulderWidth * 1.5f)
 
+        // R2/R4 reach-band authoring (third reach-band cleanup batch) — the authored sweep is
+        // projected onto each arm chain's own annulus along its own ray. Measured through the
+        // production entry point at `origin/main` @ `cf8a14f`, the sweep leaves the band at BOTH
+        // ends: its start (`23.000` from the shoulder) asks for an interior elbow angle of `14.39°`
+        // against the `IKConstraint`'s own `30°` stop, and its end (`154.027`) is LONGER than the
+        // arm's `80 + 66 = 146` u, so no chain geometry can honour it (the annulus is
+        // `[40.134, 143.080]`). The solver answered by relocating both hands `17.134` (p = 0) …
+        // `10.947` (p = 1) u along the authored ray and published them pinned on the chain's own
+        // stops (`30.00°` interior at the start, the `0.98` cap at the end). Unintended authoring
+        // error at both sites, of the same class as `JumpSquatPose`'s hands (`15.36°` against the
+        // `30°` stop) and its flight ankles (`107 %` of the limb): the request is past the pose's own
+        // model. The authored sweep — its direction, its extent along the ray and the sweep's own
+        // choreography in `x`/`y` — is preserved; only the radius moves onto the annulus, which is
+        // where the engine already publishes the hands. NOTE: the pose's own arm choreography
+        // (a "lift off the floor and sweep back toward the hips/heels", per its comment) is a
+        // separate exercise-design question from this reach-band correction — the BPS for this
+        // exercise describes a static "W" hold — and is deliberately NOT re-authored here.
+        SkeletonMath.clampTargetToReach(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandA, REACH_MARGIN)
+        SkeletonMath.clampTargetToReach(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandP, REACH_MARGIN)
+
         // Pole vectors orient elbows upward and outward to squeeze the shoulder blades
         bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
         bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
@@ -176,5 +196,20 @@ class ProneCobraStretchPose : BasePose() {
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
         jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer
+    }
+
+    companion object {
+        /**
+         * R2/R4 projection margin for the hand sweep's two authored endpoints — a hundredth of a
+         * percent of the chain's span (`0.014` u on this pose's `146` u arm).
+         *
+         * Both endpoints ARE effector positions the engine already publishes (its relocation was the
+         * boundary projection), so the margin only has to keep the target strictly inside the
+         * annulus: at `3e-5` carrier resolution a boundary-exact target re-fires a float-noise
+         * relocation and a non-zero stamp. The helper's canonical `0.02` would instead move the start
+         * hand `0.81` u and the swept hand `2.87` u away from where the engine publishes them —
+         * geometry the reach defect does not require.
+         */
+        const val REACH_MARGIN = 1e-4f
     }
 }

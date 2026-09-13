@@ -68,4 +68,39 @@ class HalfKneelingStretchPose : BaseHipFlexorPose() {
 
         return finalizeHipFlexorPose()
     }
+
+    /**
+     * R2/R4 — reach-band authoring (third reach-band cleanup batch).
+     *
+     * `BaseHipFlexorPose.solveArmsOnKnee` composes both hands at the front knee's planning apex +
+     * `(−10, +15, ±0.8 · shoulderWidth)`. Measured through the production entry point
+     * (`SkeletonPipeline.produceFrame(pose, ctx)`) at `origin/main` @ `cf8a14f`, that target sits
+     * `155.160` (p = 0) … `166.868` (p = 1) u from its own shoulder — LONGER than the arm's
+     * `80 + 66 = 146` u, so no chain geometry can honour it (the annulus cap is `143.080`). The
+     * solver answered by relocating both hands `12.080 … 23.788` u along the authored ray and
+     * published them exactly ON the `0.98` extension cap with the elbow reading `156.94°` interior —
+     * a straight arm, not the "arms rest on the front knee" the family's choreography authors.
+     *
+     * Unintended authoring error, not a deliberate ROM limit: the pose's own intent (hands on the
+     * knee) is a reachable pose in principle, and the request here is past the limb itself, so no
+     * author could have meant the published number. The reachable-by-construction convention (R2/R4)
+     * is applied to the target: the authored RAY toward the knee is preserved and only the radius
+     * moves onto the annulus, which is exactly what the solver already published — the pose's root,
+     * stance, front-leg target and choreography are untouched.
+     *
+     * Family scope: `CouchStretchPose` composes its hands through the SAME base helper and carries a
+     * `13.600` u site of the same class; it is not part of this batch, so the projection is opted in
+     * here (variant-level) rather than in the shared base — see
+     * `ReachBandBatch3AuthoringTest.theSharedFamilyChoreographyIsNotReScopedByThisBatch`.
+     */
+    override fun projectArmTargetToReach(
+        def: SkeletonDefinition,
+        shoulderWorld: Vector3,
+        target: Vector3
+    ) {
+        SkeletonMath.clampTargetToReach(
+            shoulderWorld, target, def.upperArmLength, def.forearmLength, def.armIKConstraint,
+            target, REACH_MARGIN
+        )
+    }
 }

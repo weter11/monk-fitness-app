@@ -109,6 +109,18 @@ class HamstringStretchPose : BasePose() {
 
         // Leg B (Tucked Leg): Ankle pulled close to groin, knee falls outwards (Side Z)
         val targetAnkleB = Vector3(pelvisX + 35f, 15f, def.hipWidth * 0.5f)
+        // R2/R4 reach-band authoring (third reach-band cleanup batch) — the tucked leg's authored
+        // resting place is projected onto its own chain's annulus along its own ray. Measured through
+        // the production entry point at `origin/main` @ `cf8a14f`, this target sits `36.688` u from
+        // the hip at EVERY frame — an interior knee angle of `18.89°` against the `IKConstraint`'s own
+        // `30°` stop (`161°` of knee flexion, past the BPS's "knee flexed, foot tucked in" model), so
+        // the solver relocated the realized ankle `19.321` u outward along the authored ray and pinned
+        // it on the stop (`30.00°` exactly). Same class as the second batch's `DeepSquatHoldPose`
+        // site (`24.80°` against the same stop): an unrealizable request the authoring cannot mean.
+        // The pose's own tuck DIRECTION is preserved and only the radius moves onto the model's
+        // flexion floor, which is exactly where the engine already publishes the foot — the fold, the
+        // seated root, the extended leg and the arm reach are untouched.
+        SkeletonMath.clampTargetToReach(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, def.legIKConstraint, targetAnkleB, REACH_MARGIN)
         // Pole vector heavily points to +Z to force the knee outwards in a seated butterfly fold
         bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, 0f, 2f), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
@@ -162,5 +174,24 @@ class HamstringStretchPose : BasePose() {
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
         jointsBuffer.getJoint(Joint.WRIST_P).set(jointsBuffer.getJoint(Joint.HAND_P))
         return jointsBuffer
+    }
+
+    companion object {
+        /**
+         * R2/R4 projection margin for the tucked leg's authored resting place — a hundredth of a
+         * percent of the chain's span (`0.006` u on this pose's `210` u leg).
+         *
+         * The tucked ankle IS the effector's real resting place, and the solver's own relocation was
+         * already the boundary projection, so the margin only has to keep the target strictly inside
+         * the annulus: at `3e-5` carrier resolution a boundary-exact target re-fires a float-noise
+         * relocation and a non-zero stamp. The helper's canonical `0.02` would instead pull the foot
+         * `1.12` u further out than the engine already publishes it — a geometry change the reach
+         * defect does not require.
+         *
+         * The M13 arm projection above keeps the helper's canonical `0.02`: that site's own record
+         * (`see HamstringForwardReachTest`) pins its `40.937` declaration, and the arms are inside
+         * the band — this batch does not touch them.
+         */
+        const val REACH_MARGIN = 1e-4f
     }
 }

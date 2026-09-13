@@ -2933,6 +2933,144 @@ both are preserved by design. (c) The `BaseLungePose` seam stance (`standingPelv
 is the family-wide site behind the `1.200 … 1.2263` u cap trim in all four lunge-family poses; a
 decision to project it belongs to a `BaseLungePose`-scoped batch, not this one.
 
+### DONE — third reach-band cleanup batch: `HalfKneelingStretchPose` + `HamstringStretchPose` + `ProneCobraStretchPose` (branch `fix/reach-band-batch3-halfkneel-hamstring-cobra`, off the #254 merge `cf8a14f`; production geometry); `CouchStretchPose` measured and deliberately NOT changed
+
+**The finding (measured on the published frame through the production entry point).** Every authored limb
+target of the three listed poses was measured through `SkeletonPipeline.produceFrame(pose, ctx)` — `15`
+phases (`0.00, 0.05, 0.10, 0.20, 0.25, 0.30, 0.40, 0.50, 0.60, 0.70, 0.75, 0.80, 0.90, 0.95, 1.00`) × each
+pose's declared chains × both frame conditions (a fresh pipeline's cold first frame and an advancing
+pipeline) — against each chain's own `[SkeletonMath.minReach, maxReach]` (`112/98` legs →
+`[56.0090, 205.8000]`; `80/66` arms → `[40.1344, 143.0800]`). The whole corpus was swept with the same
+instrument (`49` registry poses) to place the sites.
+
+| pose | chain | authored root→target | band | relocation | realized interior angle |
+|---|---|---|---|---|---|
+| `HalfKneelingStretchPose` | both hands | `155.160` (p=0) … `166.868` (p=1) | `≤ 143.0800` | **`12.080 … 23.788`** | `156.94°` (the `0.98` cap) |
+| `HalfKneelingStretchPose` | front ankle | `100.835 … 119.436` | in band | `0.000` | `56.92 … 68.95°` |
+| `HamstringStretchPose` | tucked (back) ankle | `36.688` (every frame) | `≥ 56.0090` | **`19.321`** | `30.00°` (the stop) |
+| `HamstringStretchPose` | extended (front) ankle | `205.000` (every frame) | in band | `0.000` | `154.89°` |
+| `HamstringStretchPose` | both hands | `40.937 … 115.179` (the M13 projection) | in band | `0.000` | `30.70 … 103.75°` |
+| `ProneCobraStretchPose` | both hands | `23.000` (p=0) … `154.027` (p=1) | `[40.1344, 143.0800]` | **`17.134` (p=0) … `10.947` (p=1)** | `30.00°` / `156.94°` |
+| `ProneCobraStretchPose` | both ankles | `195.000` (every frame) | in band | `0.000` | `136.32°` |
+| `CouchStretchPose` (sibling, NOT fixed) | both hands | `142.049 … 156.679` | `≤ 143.0800` | **`3.216 … 13.600`** | the `0.98` cap |
+
+**Classification per site — the discriminator is whether an IDEAL (`L1 + L2`) chain could honour the
+request at all, and whether the request contradicts the pose's own stated intent.**
+
+* **Unintended authoring error — FIXED (all three poses).** `HalfKneelingStretchPose`'s hands ask for
+  `155.160 … 166.868` from an `80 + 66 = 146` u limb — LONGER than the limb itself, so no chain geometry
+  can honour it — while the pose's own intent (`BaseHipFlexorPose.solveArmsOnKnee`: "Both arms rest on
+  the front knee") is a reachable one; the solver published the hands exactly ON the `0.98` cap with the
+  elbow reading `156.94°` interior — a straight arm, not a hand resting on a knee.
+  `HamstringStretchPose`'s tucked leg asks for a `36.688` chord from its `210` u leg — an interior knee
+  angle of `18.89°` against the `IKConstraint`'s own `30°` stop (`161°` of knee flexion, past the BPS's
+  "knee flexed, foot tucked in" model), the same class as the second batch's `DeepSquatHoldPose` site
+  (`24.80°` against the same stop, fixed there). `ProneCobraStretchPose`'s sweep leaves the band at BOTH
+  ends: its start asks for an interior elbow angle of `14.39°` (past the `30°` stop; the second batch's
+  `JumpSquatPose` hands asked `15.36°` against the same stop) and its end asks `154.027` from the same
+  `146` u limb (`105.5 %` of it, cf. `JumpSquatPose`'s `107 %` flight ankles).
+* **No intentional-ROM case exists in this batch.** The family's genuine "the chain must fold" control —
+  `DeepSquatHoldPose`'s clasped hands (`46.487`, in band) — is the in-band precedent that shows a real ROM
+  target needs no fix; the three sites here are all requests no author could have meant.
+* **Deliberate model limit / out-of-batch sibling — NOT changed, PINNED.** `CouchStretchPose` (the other
+  `BaseHipFlexorPose` variant) composes its hands through the SAME shared helper and carries a `13.600` u
+  site of the same class. It is not in this batch, so the projection is opted into in
+  `HalfKneelingStretchPose` alone and the shared base is not re-scoped;
+  `ReachBandBatch3AuthoringTest.theSharedFamilyChoreographyIsNotReScopedByThisBatch` pins the sibling's
+  measured `13.5995` and fails if the site is "cleaned" from the base or if the sibling's superseded
+  declaration stops reading as superseded. The corpus's other measured out-of-band sites are likewise
+  untouched and pinned: `QuadrupedThoracicRotationsPose` `32.518`, `DynamicWorldsGreatestStretchPose`
+  `21.641`, `GluteBridgePose`/`PelvicTiltPose` legs `10.998`, `ThoracicExtensionPose` `5.516`,
+  `SupermanPose` `4.200` (legs) / `2.999` (hands), `DeadBugPose` `2.920`, the lunge family `1.226`,
+  `CossackSquatPose` `1.200`, `MountainClimberPose` `0.564`.
+
+**Fix (pose-side only — no solver, engine, carrier or stamp semantics; no base-class behavior change).**
+The family convention the first two batches established: the authored target is projected onto its own
+chain's annulus ALONG ITS OWN RAY (`SkeletonMath.clampTargetToReach`), so the declared target IS the
+published position and the reachability stamp stays an honest signal. `BaseHipFlexorPose` gains the
+margin constant (`REACH_MARGIN = 1e-4` of the chain's span, the same reasoning as `BaseSquatPose`) and a
+`protected open fun projectArmTargetToReach(def, shoulderWorld, target)` hook called inside
+`solveArmsOnKnee` between composition and each arm's bake — the default is the family's pre-batch
+behaviour, and `HalfKneelingStretchPose` overrides it. `HamstringStretchPose` and
+`ProneCobraStretchPose` (both `BasePose`-direct) project their one site each with their own
+`REACH_MARGIN` companion constant. The margin is deliberately NOT `0.02`: these targets ARE effector
+resting places the engine already publishes, so `0.02` would pull the tucked foot `1.12` u further out,
+the cobra hands `0.81 … 2.87` u, and the half-kneeling hands `2.86` u — geometry the defect does not
+require (the same measurement that chose `1e-4` for the squat family).
+
+**Defect found and fixed inside the fix (this batch's own).** The shared `handTarget` scratch in
+`solveArmsOnKnee` was reused across the two arms with only `z` re-written; once the projection rewrote the
+scratch in place, arm P inherited arm A's projected `x`/`y` and the two sides published asymmetrically
+(measured `0.7158` u). The helper now re-establishes the composed `x`/`y` per arm via `handTarget.set(…)`;
+the asymmetric reading was caught by
+`ReachBandBatch3AuthoringTest.theFixedPosesPublishTheSameGeometryThePreBatchDeclarationDid` before it
+reached the suite.
+
+**RED → GREEN (fresh runs).** New `ReachBandBatch3AuthoringTest` (`10` tests; band membership, no
+relocation, no reachability stamp, per-pose intent guards for all three, the family-scope pin, a
+builder-delegation sensitivity control that ALSO measures published-geometry preservation, and a
+`13`-pose corpus-site census). With only the four production files stashed (`origin/main` @ `cf8a14f`,
+`--rerun-tasks`): **`4` of `10` FAILED** — the band gate lists **`62` of `176`** readings out of band
+(`authored root→target 155,1596 outside [40,1344, 143,0800] by 12,0796`; `36,6879 … by 19,3211`;
+`23,0002 … by 17,1342`; `154,0268 … by 10,9468`), the no-relocation gate the same, the stamp gate all
+`176` (`reachability stamp = 12,0796 … 23,7880`), and the sensitivity control (which reads the pre-batch
+authoring's relocation `23.7880 / 19.3211 / 17.1342` on the pristine tree while the production poses read
+`≤ 0.05`). On this branch: **`10/10` GREEN**, `0F / 0E / 0S`.
+
+**Measured post-fix, published frames.** `HalfKneelingStretchPose` declares `143.0657` at EVERY phase,
+`HamstringStretchPose`'s tucked ankle `56.0146`, `ProneCobraStretchPose`'s hands `40.1384` (p = 0) …
+`143.0657` (p = 1) — all in band, relocation `≤ 2.3e-5`, reachability stamp exactly `0.000000`
+(pre-batch `12.079605 … 23.788025 / 19.321140 / 17.134220`). In-band phases are unchanged declarations
+(the cobra sweep's interior `42.3562` at p = 0.2 and `89.0328` at p = 0.5 read identically on both trees,
+i.e. the projection is a no-op inside the band). The published exercise motion is preserved: the
+half-kneeling pelvis still lunges `0 → 25` in `x` and drops `7.64` in `y` with its front-leg target still
+the literal `(65, 25, −22)`, the hamstring fold still travels `155.4` u in `x` with its extended-leg
+target still `205.000`, and the cobra arms still sweep `170` u in `x` and rise `25` u in `y`.
+
+**Blast radius (direct, not inferred).** Whole-corpus A/B — `51` classes × `15` phases × every
+`Joint.entries` XYZ × both frame conditions (`60,660` rows, full float bits), plus every stamp, declared
+limb target, support set and environment prop, this branch vs a worktree of `origin/main` @ `cf8a14f`:
+**`828` rows differ — `450` in `HalfKneelingStretchPose`, `180` in `HamstringStretchPose`, `198` in
+`ProneCobraStretchPose`** (`414` cold / `414` playing), ALL of them limb-chain (`ELBOW_*` max `0.0356` u,
+the derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS` chain `0.0206` u, the tucked leg's
+`TOE_B`/`HEEL_B`/`ANKLE_B` `0.0059` u and `KNEE_B` `0.0002` u). The other `48` classes are
+byte-identical — `CouchStretchPose` included — every pelvis/spine/girdle/head joint of the three is
+byte-identical, every support/env row is identical, and the reachability stamp moves only in the three
+poses' own rows (`12.079605 … 23.788025 / 19.321140 / 17.134220 → 0.000000`). The **eight** scope digests
+were re-baselined with that measurement appended to each constant: `M1StepUpGeometryTest`
+`-7706271665562987902 → -2576201625353859114`, `M3M5ProneTrunkGeometryTest`
+`6655628533102093923 → 1787803362589852341`, `M6M7SwingBurpeeGeometryTest`
+`6762501542175071823 → -789510751128117341`, `M8M9M10SupportDeclarationTest`
+`789863381076342762 → 1604810780889823966`, `M11M12LimbRealizationMigrationTest`
+`7148088516904126963 → -403923776399062201`, `M15WallSlidesWallGeometryTest`
+`5471688281724201329 → 6604227265853342977`, `PlankForearmSupportGeometryTest`
+`4398860156904083017 → -5540195477306562659`, `HamstringForwardReachTest`
+`-1036273880702829004 → 3463098060376872084`.
+
+**T2 / audit records.** `PublishedBelowGroundInvariantTest` needed NO change: its pin table's six poses /
+`30` pinned pose-joint pairs are disjoint from this batch, its corpus-wide scan stayed GREEN on the final
+tree, and no joint of any of the three fixed poses approaches the declared plane (the front ankle's
+authored rest height is `25`, the tucked ankle publishes at `15`, the cobra legs at `15`). The
+`arch/RuntimeArchitectureBaselineTest` goldens needed no re-capture (none of the three is a golden
+fixture); the only goldens touched are the eight corpus digests above.
+
+**Full suite / build.** `--rerun-tasks`, results purged, XML-stamped fresh on the final source bytes:
+pristine `origin/main` @ `cf8a14f` **`131` classes / `648` tests / `0F / 0E / 0S`** → this branch
+**`132 / 658 / 0F / 0E / 0S`** — exactly `+1` class / `+10` tests, no other count moved.
+`:app:compileReleaseKotlin` + `:app:assembleDebug` successful.
+
+**Residuals recorded, NOT fixed (measured).** (a) `HalfKneelingStretchPose`'s hands now declare at the
+arm cap, so the pose still publishes a straight arm aiming at the front knee rather than a hand ON the
+knee — the knee sits `155.160 … 166.868` from the shoulder against a `146` u limb, so "hands rest on the
+front knee" needs either a forward trunk lean or a shallower pelvis; that is a root-side/product decision
+and is left OPEN. (b) `CouchStretchPose` carries the same class of site through the shared helper
+(`13.600`) and belongs to a base-scoped batch, not this one. (c) `ProneCobraStretchPose`'s authored arm
+choreography (a lift-and-sweep toward the hips/heels) is a different shape from its BPS's static "W" hold;
+the reach-band convention fixes the TARGET, not the exercise design, so this is flagged as an OPEN
+product question and deliberately not re-authored here. (d) The corpus's remaining min-side sites
+(`GluteBridgePose`/`PelvicTiltPose` `10.998`, `ThoracicExtensionPose` `5.516`) are unchanged and pinned in
+this batch's corpus census, awaiting their own pass.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement — **M15 is DONE — see the record above** (the wall's contact plane, the arm chain
@@ -2987,7 +3125,9 @@ A8/A6 leaks — resolved in the Push-Up Family pass above.)
 - Fix the pose, not the engine, when a pose authors motion incorrectly.
 - Keep pose-side migrations on the **existing** carrier surface (the H2 fix is the template).
 - After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
-  current baseline of record (**131 classes / 648 tests** on this branch — the second reach-band
+  current baseline of record (**132 classes / 658 tests** on this branch — the third reach-band
+  cleanup batch added `ReachBandBatch3AuthoringTest` (`+10` tests) at `132 / 658`, re-baselining the same
+  eight scope digests, against `131 / 648` on the `cf8a14f` tree; before it, the second reach-band
   cleanup batch added `ReachBandBatch2AuthoringTest` (`+6` tests) at `131 / 648` on the `ef9400f` tree,
   re-baselining the same eight scope digests; before it, the first reach-band cleanup batch added
   `SquatReachBandAuthoringTest` (`+7` tests) at `130 / 642` on the C2 tree, re-baselining
