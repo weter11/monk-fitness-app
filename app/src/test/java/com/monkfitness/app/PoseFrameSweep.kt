@@ -22,8 +22,21 @@ import kotlin.math.sqrt
  */
 object PoseFrameSweep {
 
-    /** One published frame, copied out of the engine's reused buffer. */
-    class Frame(val progress: Float, val joints: Map<Joint, Vector3>, val maxIkClampAmount: Float, val identity: Int) {
+    /**
+     * One published frame, copied out of the engine's reused buffer.
+     *
+     * [supportedPoints] is the Support Declaration the frame carries (R8/B-5 — the resolved Frame
+     * Context the renderer's own entry point publishes). It is read off the published pose, so a test
+     * can assert that a pose's declaration really reaches the frame the hero draws, instead of only
+     * comparing the metadata to a literal.
+     */
+    class Frame(
+        val progress: Float,
+        val joints: Map<Joint, Vector3>,
+        val maxIkClampAmount: Float,
+        val identity: Int,
+        val supportedPoints: Set<SupportPoint> = emptySet()
+    ) {
         operator fun get(joint: Joint): Vector3 = joints.getValue(joint)
         fun y(joint: Joint): Float = joints.getValue(joint).y
         fun pos(joint: Joint): Vector3 = joints.getValue(joint)
@@ -71,7 +84,12 @@ object PoseFrameSweep {
             ).pose
             val copy = HashMap<Joint, Vector3>(Joint.entries.size)
             for (j in Joint.entries) copy[j] = Vector3().set(published.getJoint(j))
-            out.add(Frame(p, copy, published.maxIkClampAmount, System.identityHashCode(published)))
+            out.add(
+                Frame(
+                    p, copy, published.maxIkClampAmount, System.identityHashCode(published),
+                    published.supportedPoints.toSet()
+                )
+            )
         }
         return out
     }

@@ -796,7 +796,16 @@ class M6M7SwingBurpeeGeometryTest {
          * (`139daf9`) and on this branch reported **all `59` pre-existing pose classes byte-identical** — `0`
          * differing digests, `4` added, `0` removed — so the observed RED was corpus membership, not geometry
          * drift. Pre-rebaseline measurement: `7344836241926932393`.
-         */
-        const val UNAFFECTED_CORPUS_DIGEST = -4262480383100994885L
+                  *
+         * **Re-baselined by the animation-coverage phase, batch 4** (`feat/animation-coverage-04`, based on the
+         * #260 merge `7fed307`): this corpus is "every production pose class except its own corrected pose", so
+         * the two pose classes the batch ADDED (`ChinTuckPose`, `NeckCirclesPose` — the cervical-mobility pair)
+         * entered it. Attribution measured, not inferred: the per-pose digest probe (this guard's own hashing
+         * recipe, a fresh pipeline per pose) run on the pristine `origin/main` worktree (`7fed307`) and on this
+         * branch reported **all `63` pre-existing pose classes byte-identical** — `0` differing digests, `2`
+         * added, `0` removed — so the observed RED was corpus membership, not geometry drift. Pre-rebaseline
+         * measurement: `-4262480383100994885`.
+*/
+        const val UNAFFECTED_CORPUS_DIGEST = 1780325228478718828L
     }
 }

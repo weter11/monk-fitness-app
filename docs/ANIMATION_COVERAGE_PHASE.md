@@ -1,6 +1,6 @@
 # Animation Coverage Phase — 49/66 → 66/66
 
-**Status:** ACTIVE — **`61/66`** after batch 3 (batch 1 landed `53/66`, batch 2 `57/66`). Brings every catalog
+**Status:** ACTIVE — **`63/66`** after batch 4 (batch 1 landed `53/66`, batch 2 `57/66`, batch 3 `61/66`). Brings every catalog
 exercise from an animated *illustration* to a real skeletal animation driven by the engine.
 
 **Metric (kept honest):** `animated` = **a real skeletal animation exists AND `ExerciseHero` uses it**
@@ -171,6 +171,45 @@ inventory (`ViewportFramingInvariantTest.CLIPPED_AT_HERO`, `33 → 35`), while t
 seated 90/90 and the supine stretch) fit the hero canvas as authored. The pin is re-measured and recorded;
 **no camera or framing behaviour is changed by this batch.**
 
+### Batch 4 — the cervical-mobility family (2 exercises)
+
+The two exercises this batch converts are the catalog's whole `neck_mobility` family, and they share the
+one property no earlier batch met: **the movement lives entirely in the neck/head chain while the rest of
+the body is a fixed, planted standing frame.** They are therefore authored on a new small family base,
+**`BaseCervicalPose`** (the shared standing chassis: an upright still trunk, both feet planted on the
+family's floor frame, the arms hanging relaxed at the sides, and the neutral cervical chain), which is
+what makes each member's own file read as its driver alone. The rig's cervical chain is two rigid bones
+(`CHEST → NECK_END → HEAD_POS`, `18 u` + `18 u`), so both members author it as **the chain's two bone
+directions** — the same arithmetic the engine's own gaze resolver writes — and neither declares a world
+`headTarget` (the resolver is the sole writer of those offsets and only runs for a pose that declared
+one). `Base*` files are excluded from every corpus in the repository, so the base adds no membership.
+
+| exercise | pose class | canonical family | tests | authored cycle | measured |
+|---|---|---|---|---|---|
+| `chin_tucks` | `ChinTuckPose` | `BaseCervicalPose` (canonical `SkeletonFactory` tree) | `ChinTuckPoseTest` (13) | entry → hold → release: the neck's bone turns posteriorly `24°` while the head rides it **level**, then releases | the head's base and the head both travel `7.3397 u` straight back at the hold with the head's own bone `0.0000°` off vertical at **every** phase (the neck carries `24.0642°`); the head never comes forward of neutral; `1.5644 u` of the `1.5644 u` geometric drop; the plateau flat to `0.0000 u` (`5` published frames of the `9`-sample sweep); every non-cervical joint travels `0.0000 u`; shoulders `0.0000 u` (no shrug); clamp `0.0000`; worst clearance `25.000 u` |
+| `neck_circles` | `NeckCirclesPose` | `BaseCervicalPose` | `NeckCirclesPoseTest` (13) | one full turn per cycle: both cervical bones lie on one cone of `15°` whose azimuth advances `45°/sample` | the head's locus is a **horizontal circle** of radius `9.3175 u` (measured per-sample against the authored `(18 + 18) · sin 15°`), the neck's tip rolling on the inner circle at exactly half that (`4.6587 u`), both bones on the same axis at `15.0000°` at every phase, the head's height constant (`0.0000 u` travel), the azimuth closing a full turn in one direction, both bones `18 u`, every non-cervical joint `0.0000 u`, clamp `0.0000`, worst clearance `25.000 u` |
+
+RED-before evidence (the same test files, same harness, with the ONE hunk that carries each exercise's own
+identity reverted — the shape its illustration grouping implies on this exercise's declarations): **9 of the
+26 tests RED, every message quoting the number it measured.** `ChinTuckPoseTest` `3/13` (the rhythm
+collapses to `1` published frame of `9`, the neck reads `0.0000°` off vertical against the authored
+`8.3411°`, the head travels `0.0000 u` — the retraction is simply not there); `NeckCirclesPoseTest` `6/13`
+(the head sits `0.0000 u` from the circle's centre instead of `9.317507`, the neck's tip rides `0.0000 u`
+instead of `4.6587534`, only `1` of `9` samples is distinct, the azimuth step is `0.0000°`). A second
+counterfactual isolates the cervical pair's specific discriminator: with the *head's* bone tilting with the
+neck instead of riding it level — the naive reading of "draw the chin back" on a two-bone chain, i.e. a
+**nod** — `theHeadIsRetractedWithoutTipping` reports `the head's own axis tips 8.3412 deg off vertical at
+p=0.1250 … that is a nod` and `theHeadNeverPokesForwardOrDropsTowardTheFloor` reports `the head drops
+2.9136 u toward the floor`. Every production file was fingerprinted and restored (`md5sum -c` OK) before the
+next run. The guard-style assertions (planted feet, flat feet, bone lengths, stillness of the rest of the
+body, the declared support reaching the published frame) stay GREEN in both counterfactuals — they pin
+behaviour that must not change.
+
+**Flagged for the user (not resolved here):** the two upright standing poses' authored cameras (the standing
+family's own `CameraDefinition`) are in the hero canvas's *authored-frame clip* inventory
+(`ViewportFramingInvariantTest.CLIPPED_AT_HERO`, `35 → 37`), exactly like the other 35 standing/overhead
+members. The pin is re-measured and recorded; **no camera or framing behaviour is changed by this batch.**
+
 ## 4. Gaps recorded per pose (no invented behaviour)
 
 * `horse_stance`: "Tuck your pelvis slightly to avoid overarching the lower back" is not authored —
@@ -251,6 +290,26 @@ seated 90/90 and the supine stretch) fit the hero canvas as authored. The pin is
   shank and the authored hint and composes the articulation after it — an engine-side residual, recorded and
   pinned rather than tuned away.
 
+
+### Batch 4 gaps (recorded, not invented)
+
+* `chin_tucks` — two records. (a) **The copy's supine option is not authored**: `steps` §1 says *"Stand tall
+  **or lie on your back**"*, i.e. two positions for one exercise; the standing one is authored (the drill's
+  catalog entry is a standing posture drill and the timer variant is performed standing) and the supine
+  option is recorded rather than duplicated into a second pose class. (b) **"Train the deep neck flexors"
+  and "Make the neck feel long at the top" have no representation**: the neck is a fixed-length rigid bone
+  whose length the validator pins, and the rig carries no muscular or jaw channel — neither cue is faked.
+  (c) The amplitude (`24°`), the hold fractions and the stance are **authored constants**; the copy states
+  no number (only *"gently"* / *"small but precise"*), and the amplitude is bounded in the test from both
+  ends (`≥ 5 u` of real retraction, `≤ 10 u` — a fraction of the `18 u` head bone).
+* `neck_circles` — **no copy exists at all** (`R.string.ex_neck_circles` is the whole catalog entry: the
+  title, in all three locales). The movement is the cervical circle those three titles name; the **cone's
+  amplitude** (`15°`, i.e. a `9.32 u` head circle) and the **direction** of the turn are authored constants,
+  and the direction is only asserted as *one* consistent direction rather than a claim about the viewer's
+  clock. The drill's tempo/repetition count is the catalog's timer, not a kinematic property.
+* Both members: **the "one arm at a time / arms relaxed" and the whole standing chassis** (stance width,
+  depth and height, the rest-arm radius) are authored conventions — stated at `BaseCervicalPose` — because
+  neither entry's copy says anything about the arms.
 
 ## 5. Verification (batch 1)
 
@@ -400,3 +459,67 @@ camera/framing behaviour is changed by this batch.**
 **No part of the engine, the solver, the reach band, the camera layer or the legacy illustration map was
 touched by this batch:** the diff is four new pose classes, their four test classes, the two registries, the
 coverage guard and the re-baselined guards (plus this record).
+
+## 8. Verification (batch 4)
+
+| run | tree | result |
+|---|---|---|
+| baseline | pristine `origin/main` @ `7fed307` (a fresh worktree, `/tmp/ac04-base`, `--rerun-tasks`) | `147` classes / `820` tests / `0F` / `0E` / `0S` |
+| focused, fresh | branch on `7fed307` | `ChinTuckPoseTest` 13, `NeckCirclesPoseTest` 13, `AnimationCoverageTest` 3 — all green |
+| full, fresh (`--rerun-tasks`, results purged, throwaway probes removed) | branch on `7fed307` | `149` / `846` / `0F` / `0E` / `0S` = **exactly +2 classes / +26 tests** (the two new pose test classes), no collateral |
+| release build | branch on `7fed307` | `:app:compileReleaseKotlin` + `:app:compileReleaseJavaWithJavac` + `:app:assembleDebug` **SUCCESS** (`app-debug.apk`, `11243385` bytes); `:app:assembleRelease` fails at `:app:lintVitalRelease` **only** — `app/src/main/res/values/themes.xml:2` `ResourceCycle` + `app/build.gradle.kts:25` `ExpiredTargetSdkVersion` — reproduced identically on the pristine `origin/main` worktree, and neither file is touched by this batch's diff (the failure is not this batch's) |
+| RED-before | branch, each pose's own identity hunk restored in turn (plus the nod counterfactual) | `9` of the `26` tests RED, messages quoting the measured numbers (see §3 batch 4); every production file restored from its fingerprint (`md5sum -c` OK) |
+
+**Coverage moved `61/66 → 63/66`**, asserted by `AnimationCoverageTest` (the two ids added to
+`REQUIRED_SKELETAL_ANIMATION_IDS`, plus `REQUIRED_COVERAGE_MILESTONE = 63` measured from the app's own
+`LibraryStats.animatedExercisesCount`). An **independent census** (a throwaway probe over the
+`WorkoutGenerator` catalog + `PoseRegistry`, run on the branch and removed before the counted suite)
+reports the same metric on the same tree:
+
+```
+CATALOG=66
+REAL-ANIMATED=63
+UNCOVERED=3
+LIBRARY-STATS animatedExercisesCount=63 totalExercises=66
+UNCOVERED-IDS=shoulder_cars(shoulder_cars_standard), jumping_jacks(jumping_jack_standard), child_pose(child_pose_hold)
+CHIN-TUCK-PATH  skeletonAnimation=true poseConfig=true
+NECK-CIRCLES-PATH skeletonAnimation=true poseConfig=true
+```
+
+— i.e. both batch-4 exercises satisfy `ExerciseHero`'s real condition (`Exercise.skeletonAnimation != null`
+**and** `PoseRegistry.getPoseConfig(animationId) != null`), and the three exercises still uncovered are
+exactly the ones batches 5+ owe.
+
+**Unrelated poses unchanged — measured, on both trees.** The batch's own per-pose digest probe (the guards'
+own hashing recipe: a fresh `SkeletonPipeline` per pose, the metadata-derived entry point, `progress ∈
+{0, ¼, ½, ¾, 1}`, every joint, `hash * 31 + floatToIntBits`) run in a pristine `origin/main` worktree
+(`7fed307`) and on this branch:
+
+| base | pre-existing pose classes compared | differing | added | removed |
+|---|---|---|---|---|
+| `7fed307` | 63 | **0** | 2 (`ChinTuckPose`, `NeckCirclesPose`) | 0 |
+
+So all nine guard REDs were **corpus membership, not geometry drift**: the eight `UNAFFECTED_CORPUS_DIGEST`
+guards' corpora are "every production pose class except their own corrected pose", and the two new classes
+join them. Each digest was re-baselined to its printed `measured=` value with the responsible change named at
+the constant, and `ViewportFramingInvariantTest.CLIPPED_AT_HERO` was re-measured (`35 → 37`) — **no
+camera/framing behaviour is changed by this batch.**
+
+**Two censuses that did NOT move (checked, not assumed):**
+
+* `ExtremityArticulationTest` — neither member authors `buildAnkleArticulation`/`buildWristArticulation`, so
+  the registry-derived carrier corpus is unchanged (`13`), and neither pose enters the carrier-vs-node
+  equivalence loop.
+* The `PublishedBelowGroundInvariantTest` (T2) pin table and `EnvironmentPenetrationTest` (B-6) needed **no**
+  new entries: every joint of every published frame of both poses clears the declared floor (worst clearance
+  `25.000 u` each, the planted ankles) and no declared contact (the planted feet) sits below its surface.
+
+**One shared test helper gained a field, additively:** `PoseFrameSweep.Frame` now also carries the
+`supportedPoints` the published frame holds (R8/B-5's resolved Support Declaration), so a pose test can
+assert that its declaration really reaches the frame the hero draws instead of comparing metadata to a
+literal. It is a default-valued constructor parameter, so no existing call site or assertion changes.
+
+**No part of the engine, the solver, the reach band, the camera layer or the legacy illustration map was
+touched by this batch:** the diff is the family base, two pose classes, their two test classes, the two
+registries, the coverage guard, the shared sweep helper's additive field and the re-baselined guards (plus
+this record).

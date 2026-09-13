@@ -73,7 +73,10 @@ object PoseRegistry {
         "hip_circles_hold" to false,
         "leg_swings_hold" to false,
         "ninety_ninety_hips" to false,
-        "piriformis_stretch_hold" to false
+        "piriformis_stretch_hold" to false,
+        // Animation-coverage phase (batch 4) — the cervical-mobility family.
+        "chin_tuck_standard" to false,
+        "neck_circles_hold" to false
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? {
