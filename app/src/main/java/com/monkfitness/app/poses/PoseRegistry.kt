@@ -68,7 +68,12 @@ object PoseRegistry {
         "row_standard" to false,
         "dip_parallel_bar" to false,
         "band_pull_aparts_standard" to false,
-        "yt_raises_standard" to false
+        "yt_raises_standard" to false,
+        // Animation-coverage phase (batch 3) — the hip-mobility / hip-rotation family.
+        "hip_circles_hold" to false,
+        "leg_swings_hold" to false,
+        "ninety_ninety_hips" to false,
+        "piriformis_stretch_hold" to false
     )
 
     fun getPoseConfig(animationId: String): PoseConfig? {

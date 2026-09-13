@@ -525,14 +525,20 @@ class ViewportFramingInvariantTest {
          * cameras are the standing/plank families' own) join the inventory; the fourth (`YTRaisesPose`, the
          * prone drill — the family's flat layout) fits the hero canvas as authored, so the inventory is
          * `30 → 33` frames. Again: NO camera or framing behaviour is changed by the phase.
+         *
+         * **Re-measured by the animation-coverage phase, batch 3** (`feat/animation-coverage-03`, off the #259
+         * merge `139daf9`): the standing `HipCirclesPose` and `LegSwingsPose` (both `33 -> 35`) join the
+         * inventory, while the batch's two floor poses — the seated `NinetyNinetyHipsPose` and the supine
+         * `PiriformisStretchPose` — fit the hero canvas as authored and stay out of it. The pin is the defect's
+         * own record; **no camera or framing behaviour is changed by this batch.**
          */
         val CLIPPED_AT_HERO = setOf(
             "AirSquatPose", "AlternatingForwardLungesPose", "AlternatingReverseLungesPose",
             "AlternatingSideLungesPose", "AnkleMobilityPose", "ArmCirclesPose", "BandPullApartPose",
             "BurpeePose", "CalfStretchPose", "CossackSquatPose", "CouchStretchPose", "DipsPose",
             "DynamicWorldsGreatestStretchPose", "FacePullPose", "HalfKneelingStretchPose", "HangPose",
-            "HipCarsPose", "HorseStancePose", "JumpSquatPose", "KettlebellSwingPose",
-            "NeutralGripPullUpPose", "RowsPose", "ScapularPullUpPose", "ScapularRetractionPose",
+            "HipCarsPose", "HipCirclesPose", "HorseStancePose", "JumpSquatPose",
+            "KettlebellSwingPose", "LegSwingsPose", "NeutralGripPullUpPose", "RowsPose", "ScapularPullUpPose", "ScapularRetractionPose",
             "SquatPose", "StandardPullUpPose", "StepUpPose", "SumoSquatPose", "ThoracicExtensionPose",
             "UnderhandChinUpPose", "WallSitPose", "WallSlidesPose", "WideGripPullUpPose"
         )

@@ -104,11 +104,19 @@ class ExtremityArticulationTest {
         // the registry-derived set gained exactly `dip_parallel_bar` (`11 → 12`); the batch's other three
         // poses author no articulation and stay outside the corpus. The membership below is therefore
         // re-measured against the derivation, not hand-extended.
+        //
+        // Animation-coverage phase, batch 3 (`feat/animation-coverage-03`, off the #259 merge `139daf9`):
+        // `PiriformisStretchPose` authors its crossed foot through `buildAnkleArticulation` (the copy's own
+        // "Flex the crossed foot to protect the knee"), so the registry-derived set gained exactly
+        // `piriformis_stretch_hold` (`12 -> 13`). The batch's other three poses author no articulation — the
+        // standing pelvic circle, the standing leg swing and the seated 90/90 have no foot articulation in
+        // their copy — and stay outside the corpus. Membership re-measured, not hand-extended.
         assertEquals(
             "the Branch-C equivalence guard must cover EVERY migrated production pose " +
                 "(carrier-authoring pose), derived from the production registry",
             listOf(
                 "chinup_standard", "dead_hang", "dip_parallel_bar", "hamstring_stretch_hold", "pike_pushup_standard",
+                "piriformis_stretch_hold",
                 "pullup_neutral", "pullup_standard", "pullup_wide", "scapular_pullup_deadhang",
                 "squat_jump", "thoracic_extension_reps", "world_greatest_stretch"
             ),
@@ -134,9 +142,9 @@ class ExtremityArticulationTest {
     @Test
     fun carrierReproducesTheLegacyNodePathForEveryMigratedPose() {
         val corpus = migratedCorpus()
-        // `11 → 12` in the animation-coverage phase's batch 2: `DipsPose` joins the corpus (see
-        // [migratedCorpusIsExactlyTheCarrierPopulatedProductionPoses]).
-        assertEquals("corpus must not shrink silently", 12, corpus.size)
+        // `11 → 12` in the animation-coverage phase's batch 2 (`DipsPose`) and `12 → 13` in batch 3
+        // (`PiriformisStretchPose`) — see [migratedCorpusIsExactlyTheCarrierPopulatedProductionPoses].
+        assertEquals("corpus must not shrink silently", 13, corpus.size)
         for ((name, factory) in corpus) {
             for (p in progresses) {
                 val ctx = PoseContext(p, Side.LEFT, def)

@@ -844,7 +844,16 @@ class PlankForearmSupportGeometryTest {
           * pose) run on the pristine `origin/main` worktree (`6887738`) and on this branch reported **all `55`
           * pre-existing pose classes byte-identical** — `0` differing digests, `4` added, `0` removed — so the
           * observed RED was corpus membership, not geometry drift. Pre-rebaseline measurement: `-7537440469474343391`.
+         *
+         * **Re-baselined by the animation-coverage phase, batch 3** (`feat/animation-coverage-03`, based on the
+         * #259 merge `139daf9`): this corpus is "every production pose class except its own corrected pose", so
+         * the four pose classes the batch ADDED (`HipCirclesPose`, `LegSwingsPose`, `NinetyNinetyHipsPose`,
+         * `PiriformisStretchPose`) entered it. Attribution measured, not inferred: the per-pose digest probe
+         * (this guard's own hashing recipe, a fresh pipeline per pose) run on the pristine `origin/main` worktree
+         * (`139daf9`) and on this branch reported **all `59` pre-existing pose classes byte-identical** — `0`
+         * differing digests, `4` added, `0` removed — so the observed RED was corpus membership, not geometry
+         * drift. Pre-rebaseline measurement: `2643404068997876227`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 2643404068997876227L
+        const val UNAFFECTED_CORPUS_DIGEST = 5400891816830693141L
     }
 }
