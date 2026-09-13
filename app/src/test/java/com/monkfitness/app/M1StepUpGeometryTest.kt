@@ -808,7 +808,24 @@ class M1StepUpGeometryTest {
           * ROTATION byte-identical everywhere, every pelvis/spine/girdle/head joint of the five unchanged, and every
           * support set, ground level, environment prop and state flag identical, i.e. the batch is target-side only.
           * The batch's own gate is `ReachBandBatch4AuthoringTest`.
+          * **Re-baselined by the canonical-`SkeletonFactory` pose batch**
+          * (`fix/canonical-skeletonfactory-pose-batch`, off the #256 merge `4a32d84`): the ten remaining
+          * hand-rolled pose trees (`ArmCirclesPose`, `BurpeePose`, `FacePullPose`, `GluteBridgePose`,
+          * `HipCarsPose`, `KettlebellSwingPose`, `MountainClimberPose`, `PelvicTiltPose`,
+          * `ScapularRetractionPose`, `WallSlidesPose`) adopt `SkeletonFactory.createStandardSkeleton()` (the
+          * M11 residue class — the last poses whose five canonical joints published at the world origin), and
+          * all ten of them are inside this corpus. Observed RED on the previous value `<7239245416308699703>` before
+          * this re-baseline (the live run measured `-853746479693335913`). Attribution is direct, not inferred: the
+          * whole-corpus A/B (`51` classes × `16` frames — a fresh pipeline's cold first frame plus `15` advancing
+          * phases of a long-lived pipeline — × every `Joint.entries` position AND rotation as FULL FLOAT BITS,
+          * plus the published state/stamps, the declared limb targets, the built authoring intents, the support
+          * declarations and the environment metadata — `32,403` rows) measured on the pristine base tree
+          * (`4a32d84`) and on this tree differs in exactly `800` rows — `80` in each of the ten poses, ALL of
+          * them the five canonical joints (`LUMBAR`, `CLAVICLE_A/P`, `SCAPULA_A/P`) × `16` frames, each moving
+          * from the world origin to its authored pass-through transform — with every other joint position and
+          * rotation, every declared limb target, every stamp, every support set and every environment row
+          * byte-identical. The batch's own gate is `CanonicalSkeletonFactoryPoseBatchTest`.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 7239245416308699703L
+        const val UNAFFECTED_CORPUS_DIGEST = -853746479693335913L
     }
 }
