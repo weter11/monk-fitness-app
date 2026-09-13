@@ -70,6 +70,9 @@ object AnimationRegistry {
         register("leg_swings_hold", LegSwingsPose())
         register("ninety_ninety_hips", NinetyNinetyHipsPose())
         register("piriformis_stretch_hold", PiriformisStretchPose())
+        // Animation-coverage phase (batch 4) — the cervical-mobility family.
+        register("chin_tuck_standard", ChinTuckPose())
+        register("neck_circles_hold", NeckCirclesPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {

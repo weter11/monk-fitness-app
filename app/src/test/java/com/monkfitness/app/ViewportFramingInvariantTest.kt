@@ -531,14 +531,20 @@ class ViewportFramingInvariantTest {
          * inventory, while the batch's two floor poses — the seated `NinetyNinetyHipsPose` and the supine
          * `PiriformisStretchPose` — fit the hero canvas as authored and stay out of it. The pin is the defect's
          * own record; **no camera or framing behaviour is changed by this batch.**
+         *
+         * **Re-measured by the animation-coverage phase, batch 4** (`feat/animation-coverage-04`, off the #260
+         * merge `7fed307`): the batch's two upright standing poses (`ChinTuckPose`, `NeckCirclesPose` — the
+         * standing family's own camera) join the inventory (`35 -> 37`); they clip on the authored frame exactly
+         * like the other 35 standing/overhead members, and again **no camera or framing behaviour is changed.**
          */
         val CLIPPED_AT_HERO = setOf(
             "AirSquatPose", "AlternatingForwardLungesPose", "AlternatingReverseLungesPose",
             "AlternatingSideLungesPose", "AnkleMobilityPose", "ArmCirclesPose", "BandPullApartPose",
-            "BurpeePose", "CalfStretchPose", "CossackSquatPose", "CouchStretchPose", "DipsPose",
+            "BurpeePose", "CalfStretchPose", "ChinTuckPose", "CossackSquatPose", "CouchStretchPose", "DipsPose",
             "DynamicWorldsGreatestStretchPose", "FacePullPose", "HalfKneelingStretchPose", "HangPose",
             "HipCarsPose", "HipCirclesPose", "HorseStancePose", "JumpSquatPose",
-            "KettlebellSwingPose", "LegSwingsPose", "NeutralGripPullUpPose", "RowsPose", "ScapularPullUpPose", "ScapularRetractionPose",
+            "KettlebellSwingPose", "LegSwingsPose", "NeckCirclesPose", "NeutralGripPullUpPose", "RowsPose",
+            "ScapularPullUpPose", "ScapularRetractionPose",
             "SquatPose", "StandardPullUpPose", "StepUpPose", "SumoSquatPose", "ThoracicExtensionPose",
             "UnderhandChinUpPose", "WallSitPose", "WallSlidesPose", "WideGripPullUpPose"
         )
