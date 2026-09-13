@@ -631,7 +631,22 @@ class M11M12LimbRealizationMigrationTest {
          * `origin/main` worktree (`b0e4edd`) and on this branch reported **all `65` pre-existing pose classes
          * byte-identical** — `0` differing digests, `3` added, `0` removed — so the observed RED was corpus
          * membership, not geometry drift. Pre-rebaseline measurement: `-5950323099995680912`.
+         * **Re-baselined by the animation-logic correction batch 1**
+         * (`fix/animation-logic-b1-spine-articulation`, off the #262 merge `9cf4c32`):
+         * this corpus contains `PelvicTiltPose` (the batch's tilt split between the pelvis and the low
+         * back) and EXCLUDES `CatCowPose` (it is one of this guard's own corrected poses), so only
+         * the `PelvicTiltPose` half of the batch's A/B applies: `28` rows — its LEG chain, moved by
+         * `≤ 1.526e-05` u (float re-association in the limb bake's parent frame, whose rotation the
+         * split changes; the realized world geometry is preserved to five decimals), with its trunk,
+         * arms and head byte-identical, so the intended geometry moves the constant. Attribution
+         * measured, not inferred: the batch's whole-corpus A/B (every production pose class × `5`
+         * progress samples × every joint XYZ = `11,220` rows, run in a pristine `origin/main`
+         * worktree (`9cf4c32`) and on this branch) differs in exactly `183` rows, ALL of them inside
+         * the two corrected poses (`155` in `CatCowPose` — the authored spinal wave, worst
+         * `14.3655` u at `CHEST`/`SHOULDER_*`/`CLAVICLE_*`/`SCAPULA_*` — and `28` in
+         * `PelvicTiltPose` — its leg chain, worst `1.526e-05` u), with the other `66` pose classes
+         * byte-identical. Pre-rebaseline measurement: `5316475324191770694`.
 */
-        const val UNAFFECTED_CORPUS_DIGEST = 5316475324191770694L
+        const val UNAFFECTED_CORPUS_DIGEST = -5902184305628532914L
     }
 }

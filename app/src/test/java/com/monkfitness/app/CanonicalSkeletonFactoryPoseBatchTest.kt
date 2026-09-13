@@ -73,6 +73,19 @@ class CanonicalSkeletonFactoryPoseBatchTest {
         "WallSlidesPose"
     )
 
+    /**
+     * The batch members that AUTHOR the lower-spine segment (so their `LUMBAR` deliberately does not
+     * publish the factory's pass-through identity).
+     *
+     * Issue E's whole purpose is that "authoring a lumbar rotation gives the lower spine independent
+     * DOF", and the animation-logic correction batch 1 (`PelvicTiltPose`'s tilt split between the
+     * pelvis and the low back — `PelvicTiltSpineArticulationTest`) is the first member of this batch
+     * to use it. The pass-through assertion below is therefore scoped to the members that leave the
+     * node to the factory, and the pose(s) listed here get their own anti-vacuity witness: their
+     * divergence from the pelvis's rotation must BE the authored articulation, not a drift.
+     */
+    private val authorsItsLumbar = setOf("PelvicTiltPose")
+
     private fun ctx(p: Float) = PoseContext(progress = p, side = Side.RIGHT, definition = def)
 
     /** A frame captured BY VALUE — the pipeline publishes a reused buffer (the T-7 trap). */
@@ -112,6 +125,8 @@ class CanonicalSkeletonFactoryPoseBatchTest {
     fun everyMigratedPosePublishesTheCanonicalHierarchy() {
         var worstLumbar = 0f
         var worstLumbarRot = 0f
+        var authoredLumbarWitness = ""
+        var worstAuthoredLumbar = 0f
         var worstGirdle = 0f
         var worstGirdleRot = 0f
         var worstOrigin = 0f
@@ -133,7 +148,13 @@ class CanonicalSkeletonFactoryPoseBatchTest {
                     val lr = f.getJointRotation(Joint.LUMBAR)
                     val pr = f.getJointRotation(Joint.PELVIS)
                     val lrD = dist(lr.axis, pr.axis) + kotlin.math.abs(lr.angle - pr.angle)
-                    if (lrD > worstLumbarRot) worstLumbarRot = lrD
+                    if (name in authorsItsLumbar) {
+                        // The pose owns this articulation: the divergence must BE it (and the
+                        // position must still be the pass-through — the node's offset is zero).
+                        if (lrD > worstAuthoredLumbar) { worstAuthoredLumbar = lrD; authoredLumbarWitness = tag }
+                    } else if (lrD > worstLumbarRot) {
+                        worstLumbarRot = lrD
+                    }
 
                     // (2) the girdle nodes are pass-throughs ON the CHEST -> SHOULDER segment, and
                     // (3) they carry the CHEST's own rotation (a coincident identity-rotation node).
@@ -172,8 +193,16 @@ class CanonicalSkeletonFactoryPoseBatchTest {
         )
         assertTrue(
             "LUMBAR must carry the PELVIS's own rotation (worst axis+angle delta $worstLumbarRot) — the " +
-                "pass-through is identity, so any divergence means the node is authored, not passed through",
+                "pass-through is identity, so any divergence means the node is authored, not passed " +
+                "through. Every batch member except $authorsItsLumbar leaves it to the factory; the " +
+                "members that author it are witnessed below.",
             worstLumbarRot < 1e-5f
+        )
+        assertTrue(
+            "anti-vacuity: the batch member(s) that AUTHOR the lower spine ($authorsItsLumbar) must " +
+                "publish their own articulation instead of the pass-through — measured worst " +
+                "divergence $worstAuthoredLumbar at $authoredLumbarWitness",
+            worstAuthoredLumbar > 0.01f
         )
         assertTrue(
             "CLAVICLE_*/SCAPULA_* must sit ON the CHEST -> SHOULDER_* segment (a pass-through node) for " +
@@ -314,7 +343,19 @@ class CanonicalSkeletonFactoryPoseBatchTest {
          * described in the class KDoc differs from the base tree in exactly the five canonical joints
          * of the ten poses and in nothing else, so this digest pins the pre-migration authored
          * geometry byte-for-byte alongside the newly owned canonical transforms.
-         */
-        const val BATCH_SCOPE_DIGEST = 5967077127684194150L
+         *
+         * **Re-baselined by the animation-logic correction batch 1**
+         * (`fix/animation-logic-b1-spine-articulation`, off the #262 merge `9cf4c32`):
+         * this guard pins the batch's own ten migrated poses AND their rotations, one of which
+         * (`PelvicTiltPose`) now authors its lower-spine segment, so the newly owned canonical
+         * transforms move with the pose's own declaration. Attribution measured, not inferred: the
+         * batch's whole-corpus A/B (every production pose class × `5` progress samples × every joint
+         * XYZ = `11,220` rows, a pristine `origin/main` worktree (`9cf4c32`) vs this branch) differs
+         * in exactly `183` rows, ALL of them inside the two corrected poses (`155` in `CatCowPose` —
+         * the authored spinal wave, worst `14.3655` u — and `28` in `PelvicTiltPose` — its leg chain,
+         * worst `1.526e-05` u), with the other `66` pose classes byte-identical.
+         * Pre-rebaseline measurement: `5967077127684194150`.
+*/
+        const val BATCH_SCOPE_DIGEST = -4873621514200274479L
     }
 }

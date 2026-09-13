@@ -3342,6 +3342,47 @@ above) are untouched — this batch changes no target, pole, length or constrain
 it. The gaze/`headTarget` item (M11-b) and `CatCowPose`'s leg geometry remain open as recorded.
 `WallSlidesPose`'s wall-face distance (the H1 residual) is untouched.
 
+### DONE — animation-logic correction batch 1: the spinal articulation of `CatCowPose` + `PelvicTiltPose` (branch `fix/animation-logic-b1-spine-articulation`, off the #262 merge `9cf4c32`; pose-side authoring only)
+
+The first batch of the **animation-logic** phase that follows the completed `66/66` animation-coverage
+phase (every catalog exercise is engine-driven; whether the engine-driven motion IS the exercise is a
+different dimension). Full measurement tables, the RED/GREEN evidence, the whole-corpus A/B census, the
+guard re-baselines and the recorded residuals: **`docs/ANIMATION_LOGIC_CORRECTIONS.md`**.
+
+Both rows this batch closes are the audit's own unassigned spine items:
+
+* **`CatCowPose`** — *"its spine articulation is authored as the pelvis tilt (`chest.localRotation ≡ 0`,
+  `spineIntent = (0,0)` while the pelvis tilt spans only `1.5708 → 1.6124` rad across the rep) — a
+  fidelity question, not a carrier one"* (the M11/M12 record's recorded-not-fixed clause (b), also
+  listed under §4 "TODO — P1" item 2). Re-measured on the pre-fix tree: the canonical two-segment spine
+  published **no articulation at all** (`LUMBAR`'s world rotation bit-identical to the `PELVIS`'s,
+  `CHEST.localRotation ≡ 0`) while the trunk chord swept `2.386°` in a rigid `5` u root bob / `10` u
+  chest drop, and `HEAD_POS`'s `33.0844` u of travel was almost entirely the authored gaze sweep. The
+  rep is now the exercise's own sagittal wave — the chord's flexion `lerp(0.12, −0.0417, p)`, the
+  pelvis's own tilt reversing with it (`+0.045 → −0.045`, BPS §3/§7/§9 "tail tuck"/"tail lift"), the
+  `LUMBAR` carrying the remainder and the `CHEST` the thoracic share — with the pelvis's placement, the
+  planted leg authoring, the four-point base, the gaze sweep and the cycle timing untouched (chord
+  swing `2.386° → 9.264°`; `CHEST`'s y travel `9.9957 → 24.3680` u; the T2 foot pin identical).
+* **`PelvicTiltPose`** — the same class, re-measured: the whole `0.12`-rad arc on the `PELVIS`,
+  `LUMBAR` bit-identical to it at every phase, against a BPS §9 that says the pelvis's own rotation is
+  *"a small arc (often only a few degrees … with the lumbar spine moving through its lordosis range)"*.
+  The arc is now split `0.35` pelvis / `0.65` low back with the total preserved by construction
+  (`pelvisRotation + lumbarRotation == torsoAngle`), so the published trunk, arms and head are
+  **byte-identical** and only the articulation moved (`PELVIS` `6.875° → 2.406°`, `LUMBAR` `0 → 4.469°`
+  at the top of the rep).
+
+Verification: focused `CatCowSpineWaveTest` (7) + `PelvicTiltSpineArticulationTest` (6) written first
+and **RED on the untouched tree (6 of 13, every message quoting its measurement)**, GREEN after; the
+whole-corpus A/B (`68` classes × `5` samples × every joint XYZ = `11,220` rows, pristine `9cf4c32`
+worktree vs the branch) differs in exactly `183` rows, **all inside the two corrected poses** (the other
+`66` classes byte-identical); nine scope digests re-baselined with this batch named at each constant
+and no tolerance loosened; `CanonicalSkeletonFactoryPoseBatchTest`'s pass-through assertion re-pointed
+to exclude the pose that now authors the lower spine, with its divergence witnessed instead. Full suite
+pristine `9cf4c32` `152` / `889` / `0F` / `0E` / `0S` → branch **`154` / `902` / `0F` / `0E` / `0S`**
+(exactly `+2` classes / `+13` tests); release compilation green. No engine, solver, RFC, golden, camera
+or legacy-engine file is touched; the poses' recorded residuals (CatCow's leg geometry and its T2 foot
+pin, the quadruped arm plane) and the B4 trunk record's *product reading* stay open exactly as recorded.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement — **M15 is DONE — see the record above** (the wall's contact plane, the arm chain
@@ -3368,8 +3409,11 @@ it. The gaze/`headTarget` item (M11-b) and `CatCowPose`'s leg geometry remain op
    closed by that assignment, and the batch is pose-side hierarchy only, so no other clause of this
    item moves).
    Also unassigned: `CatCowPose`'s leg GEOMETRY (the pole's lateral component splays the realized knee
-   `69.3` units out of the hip line, against BPS §7/§11) and its spine articulation authored as the pelvis
-   tilt — both recorded with measurements in this pass's record.
+   `69.3` units out of the hip line, against BPS §7/§11) — still open, recorded with measurements in this
+   pass's record and re-confirmed by the animation-logic batch 1 (which deliberately leaves it alone) —
+   while **its spine articulation is no longer unassigned: it is DONE — see the animation-logic batch 1
+   record above** (the wave is now distributed over `PELVIS`/`LUMBAR`/`CHEST` instead of being authored
+   as one root rotation).
 3. M2/M6/M7 — pose-specific biomechanical-fidelity bugs (side-plank contact
    side — **the declaration side resolved by B-4 and the pose's own planted-forearm floor debt
    resolved by B-7**). **M1 (the step contact), M3 (cobra) + M4 (superman) + M5
@@ -3408,7 +3452,12 @@ A8/A6 leaks — resolved in the Push-Up Family pass above.)
 - Fix the pose, not the engine, when a pose authors motion incorrectly.
 - Keep pose-side migrations on the **existing** carrier surface (the H2 fix is the template).
 - After any pose change, confirm `./gradlew :app:testDebugUnitTest` stays at 0 failures against the
-  current baseline of record (**133 classes / 670 tests** on this branch — the fourth (final) reach-band
+  current baseline of record (**154 classes / 902 tests** on this branch — the animation-logic correction
+  batch 1 added `CatCowSpineWaveTest` (`+7`) and `PelvicTiltSpineArticulationTest` (`+6`) at `154 / 902`,
+  re-baselining the nine scope digests listed in `docs/ANIMATION_LOGIC_CORRECTIONS.md` §5, against
+  `152 / 889` measured fresh in this batch's own pristine `9cf4c32` worktree; the animation-coverage
+  phase's tail had left this branch at `152 / 889`, superseding the older standing point of **133 classes
+  / 670 tests** — the fourth (final) reach-band
   cleanup batch added `ReachBandBatch4AuthoringTest` (`+12` tests) at `133 / 670`, re-baselining the same
   eight scope digests, against `132 / 658` on the `ca011ad` tree; before it, the third reach-band
   cleanup batch added `ReachBandBatch3AuthoringTest` (`+10` tests) at `132 / 658`, re-baselining the same
