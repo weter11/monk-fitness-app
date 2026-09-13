@@ -20,7 +20,7 @@ class PelvicTiltPose : PoseBuilder {
     )
 
     private var roots: List<SkeletonNode>? = null
-    private var pelvis: SkeletonNode? = null; private var chest: SkeletonNode? = null; private var neck: SkeletonNode? = null; private var head: SkeletonNode? = null
+    private var pelvis: SkeletonNode? = null; private var lumbar: SkeletonNode? = null; private var chest: SkeletonNode? = null; private var neck: SkeletonNode? = null; private var head: SkeletonNode? = null
     private var shoulderA: SkeletonNode? = null; private var elbowA: SkeletonNode? = null; private var handA: SkeletonNode? = null; private var palmA: SkeletonNode? = null; private var knucklesA: SkeletonNode? = null; private var fingertipsA: SkeletonNode? = null
     private var shoulderP: SkeletonNode? = null; private var elbowP: SkeletonNode? = null; private var handP: SkeletonNode? = null; private var palmP: SkeletonNode? = null; private var knucklesP: SkeletonNode? = null; private var fingertipsP: SkeletonNode? = null
     private var hipF: SkeletonNode? = null; private var kneeF: SkeletonNode? = null; private var ankleF: SkeletonNode? = null; private var heelF: SkeletonNode? = null; private var toeF: SkeletonNode? = null
@@ -42,7 +42,7 @@ class PelvicTiltPose : PoseBuilder {
         // authored transforms instead of publishing at the world origin.
         val nodes = SkeletonFactory.createStandardSkeleton()
         roots = nodes.roots
-        pelvis = nodes.pelvis; chest = nodes.chest; neck = nodes.neck; head = nodes.head
+        pelvis = nodes.pelvis; lumbar = nodes.lumbar; chest = nodes.chest; neck = nodes.neck; head = nodes.head
         shoulderA = nodes.shoulderA; elbowA = nodes.elbowA; handA = nodes.handA
         palmA = nodes.palmA; knucklesA = nodes.knucklesA; fingertipsA = nodes.fingertipsA
         shoulderP = nodes.shoulderP; elbowP = nodes.elbowP; handP = nodes.handP
@@ -88,11 +88,44 @@ class PelvicTiltPose : PoseBuilder {
         val angleOffset = lerp(0f, 0.12f, context.progress)
         val torsoAngle = 1.5708f - angleOffset
 
+        // ---- animation-logic correction: the tilt is carried by the pelvis AND the low back ----
+        //
+        // BPS §9 ("Pelvic rotation: posterior tilt to anterior tilt, a small arc — often only a few
+        // degrees of true pelvic rotation, with the lumbar spine moving through its lordosis range")
+        // and §5 ("the motion is concentrated at the lumbopelvic junction") are explicit that the
+        // drill's articulation is the LUMBAR's lordosis range with the pelvis's own rotation a small
+        // share of it. The pose published the whole `angleOffset` on the PELVIS and left the canonical
+        // lower-spine segment rigid (measured through `SkeletonPipeline.produceFrame`: `LUMBAR`'s
+        // world rotation was bit-identical to the `PELVIS`'s at every sampled phase — the articulation
+        // was authored on the root, the M3/M4 defect class the prone family was corrected for).
+        //
+        // The authored arc is therefore SPLIT between the two segments, in the same sense and with the
+        // SAME total: `pelvisRotation + lumbarRotation == torsoAngle` at every phase, so the published
+        // trunk chain, the rep's 0.12-rad world arc, the pelvis's static base, the legs' quietness and
+        // the pose's floor/contact behaviour are all untouched — only the joint that carries the
+        // motion changes. `PELVIS_TILT_SHARE` is the pelvis's own few degrees; the LUMBAR carries the
+        // remainder (BPS §9/§10: the low back flattens/arches as the pelvis tilts).
+        val pelvisRotation = 1.5708f - PELVIS_TILT_SHARE * angleOffset
+        val lumbarRotation = torsoAngle - pelvisRotation
+
         pelvis!!.localPosition = Vector3(0f, pelvisY, 0f)
-        declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), torsoAngle)
-        SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.PELVIS, JointRotation(Vector3(0f, 0f, 1f), torsoAngle))
+        declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), pelvisRotation)
+        SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.PELVIS, JointRotation(Vector3(0f, 0f, 1f), pelvisRotation))
 
         chest!!.localPosition = Vector3(0f, def.torsoLength, 0f)
+
+        // The lower-spine segment's share of the same arc: the LUMBAR articulation the drill is about
+        // (`PELVIS -> LUMBAR -> CHEST`, Issue E). Its node offsets the CHEST exactly as the rigid
+        // authoring did (a pass-through lumbar is coincident with the pelvis), so the trunk chain's
+        // published geometry is reproduced to the digit; what changes is that the low back now
+        // articulates instead of the root rotating the whole chain rigidly.
+        lumbar!!.localRotation.set(Vector3(0f, 0f, 1f), lumbarRotation)
+        // B4a — carrier-backed articulation (the pose-side equivalent of the base poses'
+        // `buildSpineCurve`, which this `PoseBuilder`-direct pose cannot call): the LUMBAR/CHEST
+        // intents are recorded on the ONE intent channel, so the Finalizer's consumer re-derives
+        // exactly the node written here (mixed mode, byte-identical to the bare write).
+        SkeletonPose.IntentBuilder(jointsBuffer).spine(lumbarRotation, 0f, Vector3(0f, 0f, 1f))
+        SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.LUMBAR, JointRotation(Vector3(0f, 0f, 1f), lumbarRotation))
 
         // Neck and Head stay horizontal, resting on the floor: the neck's articulation cancels the
         // trunk's tilt exactly (its signed value follows the trunk's), so the neck's world rotation is
@@ -181,6 +214,16 @@ class PelvicTiltPose : PoseBuilder {
     }
 
     private companion object {
+        /**
+         * The pelvis's own share of the authored tilt arc (BPS §9: "posterior tilt to anterior tilt,
+         * a small arc — often only a few degrees of true pelvic rotation, with the lumbar spine moving
+         * through its lordosis range"). The remaining `1 − 0.35` of the same arc is the LUMBAR's, i.e.
+         * the low back carries the lordosis range the drill is about (BPS §5/§10). The two segments
+         * always sum to the authored total, so the rep's range and the published trunk chain are
+         * unchanged by the split — only the joint that carries the motion is.
+         */
+        const val PELVIS_TILT_SHARE = 0.35f
+
         /**
          * The R2/R4 projection margin — a hundredth of a percent of the chain's span.
          *
