@@ -837,7 +837,19 @@ class M6M7SwingBurpeeGeometryTest {
          * `origin/main` @ `9cf4c32` vs the final tree) still differs in exactly `183` rows, ALL inside
          * the two corrected poses (`155` `CatCowPose`, `28` `PelvicTiltPose`), the other `66` classes
          * byte-identical. Pre-rebaseline measurement: `-2353350476525624577`.
+         * **Re-baselined by the animation-logic correction batch 2**
+         * (`fix/animation-logic-b2-scapular-articulation`, off the #263 merge `ae8c063`): this corpus
+         * is "every production pose class except the classes the correction owns", so it contains BOTH
+         * poses that batch corrects (`StaticForearmPlankPose`, `IsometricSidePlankPose`). Attribution
+         * is measured, not inferred: the batch's whole-corpus A/B (`68` classes × `5` progress samples
+         * × every `Joint.entries` XYZ = `11,220` rows, run in a pristine `origin/main` worktree
+         * (`ae8c063`) and on this branch) differs in exactly `63` rows — `42` in
+         * `StaticForearmPlankPose`, `21` in `IsometricSidePlankPose`, every one of them arm-chain
+         * geometry (`SHOULDER_*`/`ELBOW_*`/`HAND_*`/`WRIST_*`/`PALM_*`/`KNUCKLES_*`/`FINGERTIPS_*`,
+         * worst `0.9258` u) — with the other `66` pose classes byte-identical on every joint position,
+         * every joint rotation and every stamp, and no support set, ground level or clamp moving.
+         * Pre-rebaseline measurement: `-4957043258254442465`.
 */
-        const val UNAFFECTED_CORPUS_DIGEST = -4957043258254442465L
+        const val UNAFFECTED_CORPUS_DIGEST = -3839318995779211180L
     }
 }
