@@ -117,4 +117,47 @@ class ThoracicExtensionPose : BaseThoracicPose() {
         applyThoracicHands()
         return finalizeThoracicPose()
     }
+
+    /**
+     * R2/R4 — reach-band authoring (fourth reach-band cleanup batch).
+     *
+     * The pose's whole upper-body choreography is "hands behind the head with the elbows flared
+     * outward" (BPS §6: "Arms may rest at the sides, be extended overhead, or be clasped behind the
+     * head with elbows wide — the choice modulates intensity"). The composed target is the head
+     * base projected from the pose's own geometry (B-8b: authored `headDir × def.neckLength` rotated
+     * by the declared chest frame) offset `(−12, +6, ±0.55 · shoulderWidth)`. Measured through the
+     * production entry point (`SkeletonPipeline.produceFrame(pose, ctx)`) at `origin/main` @
+     * `ca011ad`, that point sits `34.6182` (p = 0.00) … `37.3581` (p = 1.00) u from its own shoulder
+     * — INSIDE the arm chain's minimum-flexion reach
+     * `SkeletonMath.minReach(80, 66, 30°) = 40.1344` at EVERY one of the `15` sampled phases, i.e.
+     * the authored clasp asks for an interior elbow angle of `25.17° … 27.60°` (`152.4° … 154.8°` of
+     * flexion) against the `IKConstraint`'s own `30°` stop (`150°`).
+     *
+     * Verdict: unintended authoring error, not an intentional ROM limit — the same class the
+     * second batch fixed on `DeepSquatHoldPose` (`24.80°`) and the third on `HamstringStretchPose`'s
+     * tuck (`18.89°`) and `ProneCobraStretchPose`'s start (`14.39°`), and the same one the M13 pass
+     * fixed on `HamstringStretchPose`'s own start hand (`37.2108`, relocation `2.9237`). The
+     * authored request is past the model's fold stop, so the solver relocated the hands
+     * `5.5162 … 2.7763` u along the ray and published them ON the stop (the realized elbow reads
+     * exactly `30.0000°` interior at every phase). The projection is a declaration correction: the
+     * authored RAY (from the shoulder to the hands-behind-the-head point) is preserved, only the
+     * radius lands on the annulus, and the published frame moves by the margin (`0.004` u).
+     *
+     * Residual, recorded and NOT resolved here: after the projection the hands still publish at the
+     * chain's fold stop — `5.5` u short of the authored clasp at p = 0 — because the model's `30°`
+     * interior stop is what a `80 + 66` chain can fold to. A clasp that lands exactly behind the
+     * head needs either a longer arm or a shallower head/neck placement; that is a pose-design
+     * (owner) decision, not a reach-band one, and the reach convention deliberately does not retune
+     * the exercise geometry.
+     */
+    override fun projectArmTargetToReach(
+        def: SkeletonDefinition,
+        shoulderWorld: Vector3,
+        target: Vector3
+    ) {
+        SkeletonMath.clampTargetToReach(
+            shoulderWorld, target, def.upperArmLength, def.forearmLength, def.armIKConstraint,
+            target, REACH_MARGIN
+        )
+    }
 }

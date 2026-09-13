@@ -63,12 +63,16 @@ import org.junit.Test
  * `gazeDir`) and is still 4 orders of magnitude below the pre-fix defect. [CHAIN_TOLERANCE] =
  * 0.25u is exactly `ColdFrameLimbRealizationTest`'s cold-frame limb tolerance — not a new one.
  *
- * Residual (deliberately NOT fixed here, unchanged in kind by this change): this pose authors its
- * hands INSIDE the arm's minimum-reach annulus (the `ArmConstraint` minimum flexion of 30° fixes the
- * closest reachable end-effector distance at 40.134u, while the authored target sits 34.618u from
- * the shoulder at p=0), so the solver honestly reports `maxIkClampAmount` 5.5162 and places the hand
- * on the target's own ray at 40.134u. That is a pre-existing reachability/authoring question about
- * the rep, not a target-source defect; it is pinned below so this change cannot hide a WORSENING.
+ * Residual (now RESOLVED by the fourth, final reach-band batch; the pin below keeps its guard): this
+ * pose authored its hands INSIDE the arm's minimum-reach annulus (the `ArmConstraint` minimum flexion
+ * of 30° fixes the closest reachable end-effector distance at 40.134u, while the authored target sits
+ * 34.618u from the shoulder at p=0), so the solver honestly reported `maxIkClampAmount` 5.5162 and
+ * placed the hand on the target's own ray at 40.134u. The fourth (final) reach-band batch projected
+ * that declaration onto the annulus along the authored ray
+ * (`ThoracicExtensionPose.projectArmTargetToReach`, `REACH_MARGIN = 1e-4`): the realized hand is
+ * unchanged (`≤ 0.0038` u), the declaration now IS the published position and the clamp reads `0`.
+ * The values below stay as an upper bound so a future change cannot hide a WORSE clamp behind this
+ * record; the batch's own gate is `ReachBandBatch4AuthoringTest`.
  */
 class ThoracicExtensionArmTargetTest {
 
@@ -206,6 +210,18 @@ class ThoracicExtensionArmTargetTest {
 
     // ---- 3. the base is the head base the ENGINE realizes -------------------------------------
 
+    /**
+     * The B-8b property: both arm targets are anchored to the head base the ENGINE resolves
+     * (`NECK_END`) — not to an arbitrary chest offset, and not to the stale node read.
+     *
+     * The fourth (final) reach-band batch then projected that declared target ALONG its own authored
+     * ray onto the arm chain's annulus: this pose authors a hands-behind-the-head clasp
+     * `34.6182 … 37.3581` u from its own shoulder (BPS §6's "clasped behind the head with elbows
+     * wide") against the chain's `40.1344` minimum-flexion reach, so the solver had been relocating
+     * the declaration `5.5162 … 2.7763` u. The anchor pinned here is therefore the RAY:
+     * `declared − shoulder` must stay parallel to `authored − shoulder`, where `authored` is the
+     * engine-resolved neck base + the pose's own `(−12, +6, ±0.55 · shoulderWidth)`.
+     */
     @Test
     fun authoredBaseSitsOnTheEngineResolvedHeadBase() {
         for (p in progresses) {
@@ -214,21 +230,35 @@ class ThoracicExtensionArmTargetTest {
             val settled = seq[160]
             for ((label, fr) in listOf("cold first frame" to cold, "settled rep" to settled)) {
                 val neck = fr.world.getValue(Joint.NECK_END)
-                for (j in listOf(Joint.HAND_A, Joint.HAND_P)) {
+                for ((j, shoulderJoint, sign) in listOf(
+                    Triple(Joint.HAND_A, Joint.SHOULDER_A, -1f),
+                    Triple(Joint.HAND_P, Joint.SHOULDER_P, 1f)
+                )) {
                     val t = fr.targets.getValue(j)
-                    assertEquals(
-                        "$name p=$p/$j ($label): the authored base (target + (12, -6)) must be the " +
-                            "neck base the engine resolved — target=${xyz(t)} neck=${xyz(neck)}",
-                        0f, abs(t.x + 12f - neck.x), TARGET_TOLERANCE
-                    )
-                    assertEquals(
-                        "$name p=$p/$j ($label): the authored base Y must be the engine's neck base Y " +
-                            "(pre-fix the cold frame anchored to the chest, 2.14u off at p=0)",
-                        0f, abs(t.y - 6f - neck.y), TARGET_TOLERANCE
+                    val authored = Vector3(neck.x - 12f, neck.y + 6f, sign * def.shoulderWidth * 0.55f)
+                    val root = fr.world.getValue(shoulderJoint)
+                    val cos = rayCos(root, t, authored)
+                    assertTrue(
+                        "$name p=$p/$j ($label): the authored base (the engine-resolved neck base + " +
+                            "(−12, +6, ±0.55·w)) must stay the declared target's own ray — cos=${f(cos)}, " +
+                            "declared=${xyz(t)} authored=${xyz(authored)} neck=${xyz(neck)}. Pre-fix the " +
+                            "cold frame anchored to the chest (2.14u off at p=0); the reach projection " +
+                            "moves the radius, never this ray.",
+                        cos >= 1f - 1e-5f
                     )
                 }
             }
         }
+    }
+
+    /** cos of the angle between `declared − root` and `authored − root`. */
+    private fun rayCos(root: Vector3, declared: Vector3, authored: Vector3): Float {
+        val a = Vector3(declared.x - root.x, declared.y - root.y, declared.z - root.z)
+        val b = Vector3(authored.x - root.x, authored.y - root.y, authored.z - root.z)
+        val am = kotlin.math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z)
+        val bm = kotlin.math.sqrt(b.x * b.x + b.y * b.y + b.z * b.z)
+        if (am < 1e-6f || bm < 1e-6f) return 0f
+        return ((a.x * b.x + a.y * b.y + a.z * b.z) / (am * bm)).coerceIn(-1f, 1f)
     }
 
     // ---- 4. non-vacuity: it is provably not the old expression --------------------------------

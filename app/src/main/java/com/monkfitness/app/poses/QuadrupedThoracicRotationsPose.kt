@@ -91,4 +91,44 @@ class QuadrupedThoracicRotationsPose : BaseThoracicPose() {
 
         return finalizeThoracicPose()
     }
+
+    /**
+     * R2/R4 — reach-band authoring (fourth reach-band cleanup batch).
+     *
+     * This pose's two arms are its whole rep, and BOTH of them were authored outside their own
+     * chain's annulus at the opposite ends of that rep. Measured through the production entry point
+     * (`SkeletonPipeline.produceFrame(pose, ctx)`) at `origin/main` @ `ca011ad`, `15` phases × both
+     * arms:
+     *
+     *  * the SUPPORT arm (P, the authored floor pillar) runs `111.2617` … `175.5976` u from its own
+     *    shoulder — the last request is `120.3 %` of the `80 + 66 = 146` u limb, i.e. impossible for
+     *    ANY chain geometry, because the chest twist carries the shoulder up and away while the
+     *    target stays pinned at the authored floor point. The solver answered by relocating the
+     *    stabilized hand up to `32.5176` u along the ray at `8` of the `15` phases;
+     *  * the REACHING arm (A) runs `22.9198` (p = 0.40) … `164.4045` (p = 1.00). Its composition
+     *    builds the reach in the chest's rotating frame at
+     *    `0.82 · (L1 + L2) = 119.7` u and then OVERWRITES its `y` with the world-space sweep value
+     *    (`lerp(20, chestY + reachLen·0.9)`), so the resulting chord is no longer the intended
+     *    radius: it collapses to a hand AT the shoulder at mid-sweep (the drill's own choreography
+     *    sends the hand UNDER the torso and then overhead — BPS §6/§9 "reaches under the body
+     *    (threading) then sweeps overhead/upward") and grows past the limb at the end.
+     *
+     * Verdict: unintended authoring error on BOTH sites, not an intentional ROM limit. Neither
+     * request can describe what the pose means: a "stable pillar" arm is an EXTENDED arm (BPS §6
+     * "Supporting (down) arm: extended, shoulder stable"), so its request belongs inside the band,
+     * and a hand that threads under the torso cannot be a hand at the shoulder. The projection
+     * preserves each arm's authored ray and only moves the radius onto the annulus — exactly the
+     * position the solver already published — so the pose's root, the tabletop stance, the leg
+     * targets (`148.8220`, in band at every phase) and the thorax-driven sweep are untouched.
+     */
+    override fun projectArmTargetToReach(
+        def: SkeletonDefinition,
+        shoulderWorld: Vector3,
+        target: Vector3
+    ) {
+        SkeletonMath.clampTargetToReach(
+            shoulderWorld, target, def.upperArmLength, def.forearmLength, def.armIKConstraint,
+            target, REACH_MARGIN
+        )
+    }
 }

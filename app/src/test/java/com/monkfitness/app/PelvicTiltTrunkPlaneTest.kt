@@ -98,6 +98,24 @@ class PelvicTiltTrunkPlaneTest {
     /** The T2 band: a joint the pose authors ON its layer reads its layer value exactly. */
     private val planeBand = 0.05f
 
+    /**
+     * Cosine tolerance for "the declared target still lies on the pose's authored ray" — the property
+     * the R2/R4 reach projection preserves (fourth reach-band batch). The projection is exact
+     * (the same float expression from the same root), so `1e-5` is float slack, five orders below the
+     * relocations being corrected.
+     */
+    private val rayTolerance = 1f - 1e-5f
+
+    /** cos of the angle between `declared − root` and `authored − root`. */
+    private fun rayCos(root: Vector3, declared: Vector3, authored: Vector3): Float {
+        val a = Vector3(declared.x - root.x, declared.y - root.y, declared.z - root.z)
+        val b = Vector3(authored.x - root.x, authored.y - root.y, authored.z - root.z)
+        val am = sqrt(a.x * a.x + a.y * a.y + a.z * a.z)
+        val bm = sqrt(b.x * b.x + b.y * b.y + b.z * b.z)
+        if (am < 1e-6f || bm < 1e-6f) return 0f
+        return ((a.x * b.x + a.y * b.y + a.z * b.z) / (am * bm)).coerceIn(-1f, 1f)
+    }
+
     /** The pose's authored supine orientation (its own literal `1.5708f`) — see the class comment. */
     private val supineTilt = 1.5708f
 
@@ -496,13 +514,23 @@ class PelvicTiltTrunkPlaneTest {
             }
         }
         // The legs' DECLARED stance — the pose's own authoring, not this fix's subject.
-        for ((joint, sign) in listOf(Joint.ANKLE_F to -1f, Joint.ANKLE_B to 1f)) {
+        //
+        // The fourth (final) reach-band batch moved this declaration ALONG the pose's own ray
+        // (`45, ankleHeight, ±hipWidth` seen from the hip) onto the leg chain's own annulus: the
+        // authored stance already folded the knee to an interior `23.52°` against the constraint's
+        // `30°` stop and the solver published the boundary point it could reach, so the projection
+        // re-declares exactly that published stance (`56.0008, 15.2445, ±22`) and leaves the realized
+        // legs byte-identical. What the pose MEANS is the ray, so that is what is pinned here.
+        for ((joint, hip, sign) in listOf(
+            Triple(Joint.ANKLE_F, Joint.HIP_F, -1f), Triple(Joint.ANKLE_B, Joint.HIP_B, 1f)
+        )) {
             val target = first.limbTargets.firstOrNull { it.joint == joint }
                 ?: error("the published frame must carry the leg's declared target")
-            if (abs(target.world.x - 45f) > planeBand || abs(target.world.y - def.foot.ankleHeight) > planeBand ||
-                abs(target.world.z - sign * def.hipWidth) > planeBand
-            ) {
-                relocated.add("$joint target=(${f(target.world.x)}, ${f(target.world.y)}, ${f(target.world.z)})")
+            val authored = Vector3(45f, def.foot.ankleHeight, sign * def.hipWidth)
+            if (rayCos(first.getJoint(hip), target.world, authored) < rayTolerance) {
+                relocated.add(
+                    "$joint target=(${f(target.world.x)}, ${f(target.world.y)}, ${f(target.world.z)})"
+                )
             }
         }
 
