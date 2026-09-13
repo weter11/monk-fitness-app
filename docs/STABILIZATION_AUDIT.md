@@ -3249,6 +3249,99 @@ no clamp). **No unintended out-of-band authored target remains in the corpus out
 verdicts** — the census is pinned in `ReachBandBatch3AuthoringTest.corpusSites` and
 `ReachBandBatch4AuthoringTest.theCompleteRemainingReachCensusIsPinned`.
 
+### DONE — the canonical `SkeletonFactory` migration of the ten remaining hand-rolled pose trees (branch `fix/canonical-skeletonfactory-pose-batch`, off the #256 merge `4a32d84`; pose-side hierarchy only)
+
+The last M11-class residue in the corpus: ten production poses still built their **own** 26-node
+tree (`PELVIS → CHEST → SHOULDER_*`, no lower-spine segment, no shoulder girdle), so five canonical
+joints were never authored. Measured on the PUBLISHED frame through `SkeletonPipeline.produceFrame`
+(16 frames per pose: a fresh pipeline's cold first frame + 15 advancing phases):
+
+| pose | pre-migration `\|LUMBAR − PELVIS\|` | pre `\|CLAVICLE_A\|=\|CLAVICLE_P\|=\|SCAPULA_A\|=\|SCAPULA_P\|` | post `\|LUMBAR − PELVIS\|` | post girdle off-segment | post `min \|CLAVICLE_A\|` |
+|---|---|---|---|---|---|
+| `ArmCirclesPose` | `235.0000` | `0.0000` | `0.000000` | `0.000000` | `355.0000` |
+| `BurpeePose` | `77.8565 … 228.0305` | `0.0000` | `0.000000` | `0.000000` | `161.7943` |
+| `FacePullPose` | `235.0000` | `0.0000` | `0.000000` | `0.000000` | `355.0000` |
+| `GluteBridgePose` | `14.0000 … 54.0000` | `0.0000` | `0.000000` | `0.000000` | `113.4548` |
+| `HipCarsPose` | `235.0000` | `0.0000` | `0.000000` | `0.000000` | `355.0000` |
+| `KettlebellSwingPose` | `210.1207 … 213.6208` | `0.0000` | `0.000000` | `0.000000` | `261.2366` |
+| `MountainClimberPose` | `76.4853` | `0.0000` | `0.000000` | `0.000000` | `158.4748` |
+| `PelvicTiltPose` | `14.0000` | `0.0000` | `0.000000` | `0.000000` | `120.8139` |
+| `ScapularRetractionPose` | `235.0000` | `0.0000` | `0.000000` | `0.000000` | `355.0000` |
+| `WallSlidesPose` | `235.0532` | `0.0000` | `0.000000` | `0.000000` | `355.0352` |
+
+**Root cause / what the row did NOT say.** The literal `solveIK` bypass the M11 row names was already
+gone (P12 WP-D); what remained was the *hierarchy* half — `LUMBAR`, `CLAVICLE_A/P`, `SCAPULA_A/P`
+carried no authored transform, so `SkeletonPose`'s carrier defaults published them at the world
+origin. The ten trees were structurally identical to each other (26 nodes; `CHEST` parented to
+`PELVIS`, `SHOULDER_*` to `CHEST`) and differed from `SkeletonFactory.createStandardSkeleton()`
+in exactly those five nodes and their two parent links — no extra node, no other parent mismatch
+(verified by parsing both trees).
+
+**Fix (pose-side only — no engine file, no solver path, no carrier, no API, no new state).** Each of
+the ten `ensureHierarchy` bodies adopts the canonical tree
+(`SkeletonFactory.createStandardSkeleton()`), exactly the shape the already-migrated families use
+(`SupermanPose`, `DeadBugPose`, `LatStretchPose`, `CatCowPose`, the `Base*Pose` families,
+`BaseValidationPose`). The factory's added nodes are **pass-throughs** (`LUMBAR` coincident with the
+`PELVIS` and identity-rotation; `CLAVICLE_*`/`SCAPULA_*` coincident with the `CHEST`), so every
+transform each pose already authored resolves exactly as before. `SkeletonPoseFinalizer`'s
+`reconstructChestFrame` is written for precisely this shape (it composes against the chest's actual
+parent and its own KDoc records that a pass-through lumbar is identical to the old PELVIS-relative
+reconstruction), and the publish tail's `assertFinalFlattenComplete` walk now covers the five new
+nodes — they are flattened into the published carrier, so the check stays green by construction.
+All ten diff hunks are confined to `ensureHierarchy` (`+150 / −290` across the ten files).
+
+**A/B evidence (direct, not inferred).** Whole-corpus A/B through the production pipeline: `51`
+production pose classes × `16` frames (cold first frame + 15 advancing phases) × every
+`Joint.entries` **position AND rotation** as FULL FLOAT BITS, plus the published state/stamps
+(`maxIkClampAmount`, `rootTranslationDelta`, `rootRotationDelta`, `isTransformsUpdated`,
+`boneLengthsVerified`, `straightIntentDropped`), every `supportedPoints` set, every declared limb
+target (`world`/`pole`/`straight`/`length1`/`length2`), every built carrier count
+(`jointIntents`, `spineIntent`), every `EnvironmentDefinition` row and every `PoseMetadata` row —
+`32,403` rows, dump `md5`
+`5c26b85380cbd3ed19d4fa61048ff722` (base) / `c36853482490342ca00d138ad6153c09` (branch). The two dumps
+differ in **exactly `800` rows**: `80` in each of the ten poses — the five canonical joints × `16`
+frames — and **nothing else**. In particular: every other joint position and rotation byte-identical,
+every declared limb target byte-identical (the migration is authoring-neutral), every stamp byte-identical
+(no reach-band interaction), every support set, environment row and metadata row byte-identical.
+
+**New gate + counterfactual RED.** `CanonicalSkeletonFactoryPoseBatchTest` (3 tests, published frame,
+both frame conditions): the canonical-hierarchy witness (`LUMBAR` is the `PELVIS` pass-through in
+position AND rotation; `CLAVICLE_*`/`SCAPULA_*` lie on the `CHEST → SHOULDER_*` segment carrying the
+`CHEST`'s own rotation; anti-origin guard), the static adoption scan (no `addChild(SkeletonNode(`
+remains; `fromJointPositions` absent), and the batch's own scope digest (the ten poses × 16 frames ×
+33 joints × position+rotation, full float bits, pinned `5967077127684194150`). **Counterfactual: the
+whole class is RED on the base tree `4a32d84` (detached worktree, the new test copied in alone) —
+3 of 3 — with the witness quoting `|LUMBAR-PELVIS| = 235.05319` (expected `0.0`) and the pre-migration
+digest `-1840763203698391440` (vs the migrated `5967077127684194150`), and the adoption scan failing
+on `ArmCirclesPose`.**
+
+**Guards from the earlier passes that the migration moved (re-baselined, each with attribution — the
+corpus A/B above is the direct attribution).** Seven `unaffectedPosesPublishByteIdenticalGeometry`
+digests pin "every production pose except the ones that pass owns", so they contain this batch's
+poses: `HamstringForwardReachTest` `8362792623341605109 → -5841693900045600427`,
+`M11M12LimbRealizationMigrationTest` `4495770786565670824 → -4989351702075985912`,
+`M15WallSlidesWallGeometryTest` `851867046944843566 → 6564548536685897903` (9 of the 10 — it excludes
+`WallSlidesPose`, its own pose), `M1StepUpGeometryTest` `7239245416308699703 → -853746479693335913`,
+`M3M5ProneTrunkGeometryTest` `3584683981286548246 → 5910892914285978486`,
+`M6M7SwingBurpeeGeometryTest` `4110183811836615684 → -5412918005998993404` (8 of the 10 — it excludes
+`KettlebellSwingPose`/`BurpeePose`), `PlankForearmSupportGeometryTest` `3349035099494455806 →
+5608889789699359326`. No pose-behaviour assertion of any pass moved; the ten poses' own gates
+(`M6M7SwingBurpeeGeometryTest`'s swing/burpee clauses, `M15WallSlidesWallGeometryTest`'s wall plane,
+`GluteBridge`/`PelvicTilt`'s supine-plane gates, `MobilityMotionTest`, the reach-band gates) stayed
+GREEN untouched.
+
+**Full suite / build.** `--rerun-tasks`, results purged, XML-stamped fresh on the final source bytes,
+run twice with identical totals: pristine base `4a32d84` **`133` classes / `670` tests / `0F / 0E /
+0S`** → this branch **`134 / 673 / 0F / 0E / 0S`** — exactly `+1` class / `+3` tests.
+`:app:compileReleaseKotlin --rerun-tasks` and `:app:assembleRelease -x lintVitalRelease` both
+successful.
+
+**Deliberately NOT changed.** The five pre-solve-frame poses' `0.0470` u boundary-exact leg authoring
+and `MountainClimberPose`'s `0.5640` REALIZABLE/`0.98`-cap reading (the reach-band residuals (d)/(e)
+above) are untouched — this batch changes no target, pole, length or constraint, and the A/B proves
+it. The gaze/`headTarget` item (M11-b) and `CatCowPose`'s leg geometry remain open as recorded.
+`WallSlidesPose`'s wall-face distance (the H1 residual) is untouched.
+
 ### TODO — P1 (next pass, in priority order)
 
 1. H1 complement — **M15 is DONE — see the record above** (the wall's contact plane, the arm chain
@@ -3270,12 +3363,10 @@ verdicts** — the census is pinned in `ReachBandBatch3AuthoringTest.corpusSites
    `HamstringStretchPose`'s declaration
    (blocked on the foot-vocabulary gap), `BurpeePose`'s feet (now unblocked — the M7 plant landed
    as PR #240 / `eea705c` and that foot chain measures clean there), and the 7 undeclared classes with no owning M-number (flagged for assignment).
-   **Newly measured and unassigned:** the `10` OTHER poses that still publish `LUMBAR`, `CLAVICLE_A/P` and
-   `SCAPULA_A/P` at the world origin because they build their own node tree — `ArmCirclesPose`,
-   `BurpeePose`, `FacePullPose`, `GluteBridgePose`, `HipCarsPose`, `KettlebellSwingPose`,
-   `MountainClimberPose`, `PelvicTiltPose`, `ScapularRetractionPose`, `WallSlidesPose` — the same class
-   this pass corrected for `LatStretchPose` (each measures `|LUMBAR| = 0.0000` with the girdle joints at
-   the origin); flagged for the user to assign rather than silently expanded into M11.
+   **The `10` other poses the audit flagged here are DONE — see the record above** (they now adopt the
+   canonical `SkeletonFactory` tree; the flag's own "assign, do not silently expand M11" deferral is
+   closed by that assignment, and the batch is pose-side hierarchy only, so no other clause of this
+   item moves).
    Also unassigned: `CatCowPose`'s leg GEOMETRY (the pole's lateral component splays the realized knee
    `69.3` units out of the hip line, against BPS §7/§11) and its spine articulation authored as the pelvis
    tilt — both recorded with measurements in this pass's record.
