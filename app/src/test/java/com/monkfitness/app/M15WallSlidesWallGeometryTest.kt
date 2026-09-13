@@ -653,7 +653,29 @@ class M15WallSlidesWallGeometryTest {
          * `origin/main` worktree (`b0e4edd`) and on this branch reported **all `65` pre-existing pose classes
          * byte-identical** — `0` differing digests, `3` added, `0` removed — so the observed RED was corpus
          * membership, not geometry drift. Pre-rebaseline measurement: `691826339046170470`.
+         * **Re-baselined by the animation-logic correction batch 1**
+         * (`fix/animation-logic-b1-spine-articulation`, off the #262 merge `9cf4c32`):
+         * this corpus contains BOTH poses the batch corrects (`CatCowPose` — the spinal wave the correction
+         * authors — and `PelvicTiltPose` — the same arc split between the pelvis and the low back), so the intended geometry moves the constant. Attribution
+         * measured, not inferred: the batch's whole-corpus A/B (every production pose class × `5`
+         * progress samples × every joint XYZ = `11,220` rows, run in a pristine `origin/main`
+         * worktree (`9cf4c32`) and on this branch) differs in exactly `183` rows, ALL of them inside
+         * the two corrected poses (`155` in `CatCowPose` — the authored spinal wave, worst
+         * `14.3655` u at `CHEST`/`SHOULDER_*`/`CLAVICLE_*`/`SCAPULA_*` — and `28` in
+         * `PelvicTiltPose` — its leg chain, worst `1.526e-05` u), with the other `66` pose classes
+         * byte-identical. Pre-rebaseline measurement: `2625259318375822676`.
+         *
+         * **Re-baselined again by the same batch's strict-envelope landing** (owner decision: the
+         * pose's Cat-side amplitude `0.12` rad → `asin(5/120) ≈ 0.0417` rad, so the correction
+         * re-attributes the pre-fix motion instead of increasing the exercise's range). `CatCowPose`'s
+         * published geometry moved again with it — its chest's worst deviation from the pre-fix tree is
+         * now `5.0000` u (the rep's own end-to-end `5` u envelope, mirrored at both ends) against
+         * `14.3655` u under the first amplitude — so this digest moves with the pose. The same
+         * whole-corpus A/B (`68` classes × `5` samples × `33` joints = `11,220` rows, pristine
+         * `origin/main` @ `9cf4c32` vs the final tree) still differs in exactly `183` rows, ALL inside
+         * the two corrected poses (`155` `CatCowPose`, `28` `PelvicTiltPose`), the other `66` classes
+         * byte-identical. Pre-rebaseline measurement: `4433733618875705328`.
 */
-        const val UNAFFECTED_CORPUS_DIGEST = 2625259318375822676L
+        const val UNAFFECTED_CORPUS_DIGEST = -5018246371389958240L
     }
 }
