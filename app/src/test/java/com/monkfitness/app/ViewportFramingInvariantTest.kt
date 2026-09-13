@@ -536,15 +536,24 @@ class ViewportFramingInvariantTest {
          * merge `7fed307`): the batch's two upright standing poses (`ChinTuckPose`, `NeckCirclesPose` — the
          * standing family's own camera) join the inventory (`35 -> 37`); they clip on the authored frame exactly
          * like the other 35 standing/overhead members, and again **no camera or framing behaviour is changed.**
+         *
+         * **Re-measured by the animation-coverage phase, batch 5** (`feat/animation-coverage-05`, off the #261
+         * merge `b0e4edd` — the phase's tail): all three of the batch's pose classes join the inventory
+         * (`37 -> 40`) — the standing `ShoulderCarsPose` (whose arm tours a whole revolution about its shoulder,
+         * so its authored frame is taller than the hero canvas), the ballistic `JumpingJacksPose` (whose wide
+         * stance and overhead hands both exceed it) and the kneeling `ChildPose` (whose body lies the full
+         * width of the mat from the toes to the reaching hands). Each carries the family's own `CameraDefinition`
+         * and **no camera or framing behaviour is changed by this batch.**
          */
         val CLIPPED_AT_HERO = setOf(
             "AirSquatPose", "AlternatingForwardLungesPose", "AlternatingReverseLungesPose",
             "AlternatingSideLungesPose", "AnkleMobilityPose", "ArmCirclesPose", "BandPullApartPose",
-            "BurpeePose", "CalfStretchPose", "ChinTuckPose", "CossackSquatPose", "CouchStretchPose", "DipsPose",
+            "BurpeePose", "CalfStretchPose", "ChildPose", "ChinTuckPose", "CossackSquatPose", "CouchStretchPose",
+            "DipsPose",
             "DynamicWorldsGreatestStretchPose", "FacePullPose", "HalfKneelingStretchPose", "HangPose",
-            "HipCarsPose", "HipCirclesPose", "HorseStancePose", "JumpSquatPose",
+            "HipCarsPose", "HipCirclesPose", "HorseStancePose", "JumpSquatPose", "JumpingJacksPose",
             "KettlebellSwingPose", "LegSwingsPose", "NeckCirclesPose", "NeutralGripPullUpPose", "RowsPose",
-            "ScapularPullUpPose", "ScapularRetractionPose",
+            "ScapularPullUpPose", "ScapularRetractionPose", "ShoulderCarsPose",
             "SquatPose", "StandardPullUpPose", "StepUpPose", "SumoSquatPose", "ThoracicExtensionPose",
             "UnderhandChinUpPose", "WallSitPose", "WallSlidesPose", "WideGripPullUpPose"
         )
