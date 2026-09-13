@@ -65,6 +65,11 @@ object AnimationRegistry {
         register("dip_parallel_bar", DipsPose())
         register("band_pull_aparts_standard", BandPullApartPose())
         register("yt_raises_standard", YTRaisesPose())
+        // Animation-coverage phase (batch 3) — the hip-mobility / hip-rotation family.
+        register("hip_circles_hold", HipCirclesPose())
+        register("leg_swings_hold", LegSwingsPose())
+        register("ninety_ninety_hips", NinetyNinetyHipsPose())
+        register("piriformis_stretch_hold", PiriformisStretchPose())
     }
 
     fun register(animationId: String, builder: PoseBuilder) {

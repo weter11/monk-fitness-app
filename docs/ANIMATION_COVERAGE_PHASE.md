@@ -1,7 +1,7 @@
 # Animation Coverage Phase — 49/66 → 66/66
 
-**Status:** ACTIVE — **`57/66`** after batch 2 (batch 1 landed `53/66`). Brings every catalog exercise from
-an animated *illustration* to a real skeletal animation driven by the engine.
+**Status:** ACTIVE — **`61/66`** after batch 3 (batch 1 landed `53/66`, batch 2 `57/66`). Brings every catalog
+exercise from an animated *illustration* to a real skeletal animation driven by the engine.
 
 **Metric (kept honest):** `animated` = **a real skeletal animation exists AND `ExerciseHero` uses it**
 — i.e. `Exercise.skeletonAnimation != null` (the hero takes the animated branch) **and**
@@ -126,6 +126,51 @@ head 170.52)`, `CHEST left the mat's plane at p=0.000 expected:<10.0> but was:<1
 hero canvas as authored. The pin is re-measured and recorded; **no camera or framing behaviour is changed
 by this batch**.
 
+
+### Batch 3 — the hip-mobility / hip-rotation family (4 exercises)
+
+The four exercises this batch converts are the catalog's hip work, and **three of them share a property no
+earlier batch met: there is no exercise copy at all.** `hip_circles` and `leg_swings` pass
+`R.string.ex_<id>` as *every* field, so their catalog entry is the title and nothing else; the two that do
+carry copy (`ninety_ninety_hips`, `piriformis_stretch`) carry a full `steps`/`tech`/`mistakes` set that each
+pose quotes line by line. For the two title-only exercises the identity is therefore **derived from two
+in-repo channels and recorded as an authored decision** (§2's rule, applied twice):
+
+* `hip_circles` — `values-ru` `ex_hip_circles` = *"Круговые движения тазом"* ("circular movements of the
+  **pelvis**") and `values-uk` = *"Обертання тазом"* — two independent localizations agree that the subject of
+  the circling is the pelvis, and the catalog's *other* hip-circle drill (`hip_cars_standard`, whose copy says
+  *"A slow hip circle … **not a swing**"*) already owns the leg-circle. So `HipCirclesPose` authors the
+  **standing pelvic circle**, not a second leg circle.
+* `leg_swings` — `values-ru` *"Динамические махи ногами"*, `values-uk` *"Махи ногами"* = **dynamic leg
+  swings**; with the circle owned by the two siblings above, this pose authors the **pendulum**.
+
+| exercise | pose class | canonical family | tests | authored cycle | measured |
+|---|---|---|---|---|---|
+| `hip_circles` | `HipCirclesPose` | standing (`BasePose` + `SkeletonFactory`; the pelvis needs both horizontal axes, which `BaseSquatPose`'s root surface does not author) | `HipCirclesPoseTest` (12) | one full turn: the pelvis's world `(x, z)` traces a circle, both feet planted, the trunk upright | circle radius `24.000` at every sample with the phase advancing `45.0°`/sample and closing at the seam; pelvis height constant (`226`); **both feet travel `0.000`** with heel/toe flat at `25.000000`; trunk `0.0°` off vertical; the knees absorb `148.10–150.25°` (knees travel `22.70 u`); clamp `0.0000`; worst clearance `25.000 u` |
+| `leg_swings` | `LegSwingsPose` | `BaseSquatPose` (the standing family, like batch 1) | `LegSwingsPoseTest` (10) | a pendulum of constant radius about its own hip, from `+40°` (hip flexion) through the vertical to `−25°` (hip extension) | ankle X travel `218.142 u` with **Z travel `0.000 u`** (one sagittal plane); extremes measured `40.00°` / `−25.00°` (the authored amplitudes); knee `154.265°` **constant** (range `0.00°`) at radius `204.750 u`; stance foot travel `0.000`, flat; pelvis travel `0.000`; trunk `1.719°`; the swinging foot never below `23.002 u`; `8` distinct frames for `9` samples (the pendulum's own seam); clamp `0.0000` |
+| `ninety_ninety_hips` | `NinetyNinetyHipsPose` | seated (`BasePose` + `SkeletonFactory`) | `NinetyNinetyHipsPoseTest` (15) | the 90/90 configuration rotates about the vertical as a rigid pair (thigh azimuths −20°/+70° → −90°/0°), the lower legs lifting over and setting down | **both knees exactly `90.000°` at every phase**; the two thighs exactly `90°` apart throughout; the hips flexed `87.2°/97.4°` at the entry and `100.4°/83.2°` at the switch end; both shins in the floor plane (`14.000`) at the named configurations; pelvis still (`0.000`) with the hips' level line at `44.000`; trunk `6.876°` (the authored lean); mid-switch lift knee `37.3 u` / ankle `133.1 u`; the two legs never closer than `44.0 u`; the published knee is the authored knee within `0.5 u`; clamp `0.0000` |
+| `piriformis_stretch` | `PiriformisStretchPose` | supine (`BasePose` + `SkeletonFactory`) | `PiriformisStretchPoseTest` (13) | the figure-4: the crossed ankle rests on the opposite thigh while the hands pull that thigh through a `78° → 100°` hip flexion, held on a plateau, then released | ventral basis `(0, 1, 0)` ⇒ SUPINE; the crossed ankle rides `15.9–16.1 u` from the pulled thigh's axis and has crossed the midline (`z = +27.7` against its own hip's `−22`); the limbs never closer than `15.1 u`; the pull measured `78° → 100°` exactly; the hold plateau flat to `0.0000 u` (`5` distinct published frames); the hands hold the thigh (`10.9–11.1 u`) and travel `8.46 u` with it; the crossed foot's realized flexion `87.00°` at the entry (`90.04°` at the hold) against `90.00°` everywhere with the articulation removed; clamp `0.0000`; worst clearance `12.000 u` |
+
+RED-before evidence (the same test files and harness, with the ONE hunk that removes the exercise's own
+identity restored — the shape its illustration grouping implies on this exercise's declarations): **13 of the
+50 tests RED, every message quoting the number it measured.** `HipCirclesPoseTest` `3/12` (the pelvis is
+`16.97 u` from its circle's centre instead of `24.0`, the phase step is `0.0°`, the sweep collapses);
+`LegSwingsPoseTest` `5/10` (the swing travels `0.000 u`, the forward extreme measures `0.000°` instead of
+`40.0`, `1` distinct frame for `9` samples, the arc's radius is `202.73` instead of `204.75`);
+`NinetyNinetyHipsPoseTest` `2/15` (the F hip does not change role: `87.2 → 87.2°`; `KNEE_F` travels only
+`23.29 u` — the knees lift in place instead of switching sides); `PiriformisStretchPoseTest` `3/13` (the
+crossed ankle lands at `z = −70.00` — it never crosses its own hip at `−22.00`; the crossed shin's Z travel
+is `36.32 u` instead of crossing inboard; the crossed foot's own angle is `97.63°` — not flexed). The
+counterfactual hunks are the identity itself (`circleZ → 0`, the swing target → the planted foot, the switch
+sweep → `0`, the crossed leg's target → a generic lifted point), and each file was fingerprinted and restored
+with `md5sum -c` before the next run.
+
+**Flagged for the user (not resolved here):** the two standing members' authored cameras (`HipCirclesPose`,
+`LegSwingsPose` — the standing family's own `CameraDefinition`) are in the hero canvas's *authored-frame clip*
+inventory (`ViewportFramingInvariantTest.CLIPPED_AT_HERO`, `33 → 35`), while the batch's two floor poses (the
+seated 90/90 and the supine stretch) fit the hero canvas as authored. The pin is re-measured and recorded;
+**no camera or framing behaviour is changed by this batch.**
+
 ## 4. Gaps recorded per pose (no invented behaviour)
 
 * `horse_stance`: "Tuck your pelvis slightly to avoid overarching the lower back" is not authored —
@@ -167,6 +212,45 @@ by this batch**.
   is a vertical shoulder displacement that the unauthored-chest fallback carries twice (measured: `4`
   activation units publish `±12.7 u` of asymmetric shoulder travel, with the passive shoulder below the
   mat), recorded as a residual.
+
+### Batch 3 gaps (recorded, not invented)
+
+* `hip_circles` — **no copy exists** (`R.string.ex_hip_circles` is the whole entry). The movement is the
+  pelvic circle the two localizations name (see §3 batch 3); the *stance depth*, the *stance width* and the
+  circle's *radius* are therefore authored constants, chosen so the circle is realizable without clamping
+  (measured worst hip→ankle chord `203.02 u` of the leg chain's `205.80 u` cap) and so the moving pelvis stays
+  inside the base of support on both axes. Applying the drill's own *"hands on the hips"* convention is a
+  convention too, and is stated as such at the declaration.
+* `leg_swings` — **no copy exists.** Two authored choices are recorded rather than presented as
+  specification: (a) the drill is authored **freestanding with the hands on the hips** — the common braced
+  variant holds a wall, and the copy says nothing, so a wall relationship would be invented geometry (with a
+  measured standoff, `WallSlidesPose`/`LatStretchPose` precedent) for a prop the exercise does not name;
+  (b) **the single-leg stance's lateral weight shift is not expressible**: a real one-leg stance carries the
+  pelvis laterally over its supporting foot (≈ half a hip width here), and the standing family's root surface
+  is `(x, y)` only (`BaseSquatPose` authors `pelvis.z = 0` for every member), so the pelvis stays on the rig's
+  mid-line and the stance ankle is placed under its own hip exactly as `HipCarsPose` places it. The swing's
+  amplitudes and the stance depth are authored constants.
+* `ninety_ninety_hips` — the **feet are not declared** as support: the drill's whole point is that they are
+  picked up and set down again on the other side, and the declaration channel is per-pose, not per-frame (a
+  foot contact would be a false statement for the transition — the same reasoning `YTRaisesPose` records for
+  its lifted hands). The seat height, the lean and the knee lift are authored constants (the rig carries no
+  pelvis-thickness constant; the `14` layer is the corpus's own seated/supine height). The copy's *"forcing the
+  knees down"* mistake is honoured structurally (the knee angle is fixed at `90°` by construction and the
+  shins rest in the floor plane at the two named configurations) — the rig has no "knee pressure" channel to
+  drive.
+* `piriformis_stretch` — two records. (a) **The clasp is not expressed**: the hands hold the thigh by being
+  placed on its line, because the rig has no grip/hand-closure DOF (`HandDefinition` is a single long axis).
+  (b) **The arms bound the grip, and that bound is measured, not asserted**: the shoulders sit a full torso
+  length (`120 u`) from the pelvis plus a hip width laterally, against a `146 u` arm (`40.13 … 143.08`
+  reachable), so the near-side hand can clasp the pulled thigh only near the hip — at the authored grip
+  (`0.2` of the thigh) the chord measures `131 … 140 u` across the cycle, where a grip at the thigh's middle
+  would demand `~147 u` and be relocated by the solver. The pull is consequently the `22°` the copy's own
+  *"only until the hip stretches"* asks for. (c) **The crossed foot's flexion is only partly realized**: the
+  authored `20°` dorsiflexion reaches the published foot as `87.00°` (entry) / `90.04°` (hold) against
+  `90.00°` with the articulation removed, because the engine's extremity derivation builds the foot from the
+  shank and the authored hint and composes the articulation after it — an engine-side residual, recorded and
+  pinned rather than tuned away.
+
 
 ## 5. Verification (batch 1)
 
@@ -272,3 +356,47 @@ join them. The digest values were re-measured from the live run (each failure me
 4. **A batch-1 record repaired while here.** `M8M9M10SupportDeclarationTest`'s batch-1 KDoc paragraph
    recorded its pre-rebaseline measurement as a literal `%d` placeholder; the value
    (`7499664576150638435`) was recovered from the pre-batch-1 tree (`7df32c0`) and written in.
+
+## 7. Verification (batch 3)
+
+| run | tree | result |
+|---|---|---|
+| baseline | pristine `origin/main` @ `139daf9` (a fresh worktree, `/tmp/cov03-base`, `--rerun-tasks`) | `143` classes / `770` tests / `0F` / `0E` |
+| focused, fresh | branch on `139daf9` | `HipCirclesPoseTest` 12, `LegSwingsPoseTest` 10, `NinetyNinetyHipsPoseTest` 15, `PiriformisStretchPoseTest` 13, `AnimationCoverageTest` 3 — all green |
+| full, fresh (`--rerun-tasks`, results purged, throwaway probes removed) | branch on `139daf9` | `147` / `820` / `0F` / `0E` / `0S` = **exactly +4 classes / +50 tests** (the four new pose test classes), no collateral |
+| release build | branch on `139daf9` | `:app:compileReleaseKotlin` + `:app:compileReleaseJavaWithJavac` + `:app:assembleDebug` **SUCCESS** (`app-debug.apk` produced); like batch 2, `:app:assembleRelease` stops at the pre-existing `:app:lintVitalRelease` failure (`themes.xml` `ResourceCycle`, `ExpiredTargetSdkVersion`), which this batch does not touch |
+| RED-before | branch, each pose's own identity hunk restored in turn | `13` of the `50` tests RED, messages quoting the measured numbers (see §3 batch 3); every production file restored from its fingerprint (`md5sum -c` OK) |
+
+**Coverage moved `57/66 → 61/66`**, asserted by `AnimationCoverageTest` (the four ids added to
+`REQUIRED_SKELETAL_ANIMATION_IDS`, plus `REQUIRED_COVERAGE_MILESTONE = 61` measured from the app's own
+`LibraryStats.animatedExercisesCount`).
+
+**Unrelated poses unchanged — measured, on both trees.** The batch's own per-pose digest probe (the guards'
+own hashing recipe: a fresh `SkeletonPipeline` per pose, the metadata-derived entry point, `progress ∈
+{0, ¼, ½, ¾, 1}`, every joint, `hash * 31 + floatToIntBits`) run in a pristine `origin/main` worktree
+(`139daf9`) and on this branch:
+
+| base | pre-existing pose classes compared | differing | added | removed |
+|---|---|---|---|---|
+| `139daf9` | 59 | **0** | 4 (`HipCirclesPose`, `LegSwingsPose`, `NinetyNinetyHipsPose`, `PiriformisStretchPose`) | 0 |
+
+So all eleven guard REDs were **corpus membership, not geometry drift**: the eight `UNAFFECTED_CORPUS_DIGEST`
+guards' corpora are "every production pose class except their own corrected pose", and the four new classes
+join them. Each digest was re-baselined to its printed `measured=` value with the responsible change named at
+the constant, and `ViewportFramingInvariantTest.CLIPPED_AT_HERO` was re-measured (`33 → 35`) — **no
+camera/framing behaviour is changed by this batch.**
+
+**Two further production censuses moved with the batch, and both were re-measured rather than relaxed:**
+
+* `ExtremityArticulationTest` — `PiriformisStretchPose` authors its crossed foot through
+  `buildAnkleArticulation` (the copy's own *"Flex the crossed foot to protect the knee"*), so the
+  registry-derived migrated corpus gained exactly `piriformis_stretch_hold` (`12 → 13`), which also puts that
+  pose under the carrier-vs-node equivalence guard. The batch's other three poses author no articulation.
+* The `PublishedBelowGroundInvariantTest` (T2) pin table and `EnvironmentPenetrationTest` (B-6) needed **no**
+  new entries: every joint of every published frame of all four new poses clears the declared floor
+  (worst clearance `25.000` / `23.002` / `10.000` / `12.000 u` respectively), and no declared contact
+  (the planted feet, the sit bones, the seated hands) sits below the surface it declares.
+
+**No part of the engine, the solver, the reach band, the camera layer or the legacy illustration map was
+touched by this batch:** the diff is four new pose classes, their four test classes, the two registries, the
+coverage guard and the re-baselined guards (plus this record).

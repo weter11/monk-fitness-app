@@ -41,9 +41,9 @@ import org.junit.Test
  * ## Coverage (this phase)
  *
  * `49/66` at the phase's start (measured on `origin/main` @ `4a32d84` with `ZzCoverageProbeTest`'s
- * census: `REAL-ANIMATED=49 UNCOVERED=17`) → `53/66` after batch 1 → `57/66` after batch 2 (both
- * re-measured on the branch and recorded in `docs/ANIMATION_COVERAGE_PHASE.md`) → `66/66` at the
- * phase's end. [REQUIRED_SKELETAL_ANIMATION_IDS] grows with each batch of the phase and is asserted
+ * census: `REAL-ANIMATED=49 UNCOVERED=17`) → `53/66` after batch 1 → `57/66` after batch 2 → `61/66`
+ * after batch 3 (each re-measured on the branch and recorded in `docs/ANIMATION_COVERAGE_PHASE.md`)
+ * → `66/66` at the phase's end. [REQUIRED_SKELETAL_ANIMATION_IDS] grows with each batch of the phase and is asserted
  * as a **superset** so the batches stay independently mergeable, while
  * [REQUIRED_COVERAGE_MILESTONE] pins the count each batch actually reached; the phase's completion PR
  * additionally pins the total.
@@ -75,16 +75,21 @@ class AnimationCoverageTest {
             "row_standard",
             "dip_parallel_bar",
             "band_pull_aparts_standard",
-            "yt_raises_standard"
+            "yt_raises_standard",
+            // Batch 3 — the hip-mobility / hip-rotation family.
+            "hip_circles_hold",
+            "leg_swings_hold",
+            "ninety_ninety_hips",
+            "piriformis_stretch_hold"
         )
 
         /**
-         * The coverage the phase has reached so far (`57` of the catalog's `66` after batch 2). Pinned
+         * The coverage the phase has reached so far (`61` of the catalog's `66` after batch 3). Pinned
          * so a batch cannot quietly add an id to the set above without the phase doc's measured
          * before → after being updated with it: the count is the app's own metric
          * (`LibraryStats.animatedExercisesCount`), recomputed from the registry rather than trusted.
          */
-        const val REQUIRED_COVERAGE_MILESTONE = 57
+        const val REQUIRED_COVERAGE_MILESTONE = 61
     }
 
     /** The hero renders the engine skeleton for these exercises, not the keyframe illustration. */
