@@ -4,8 +4,8 @@ import com.monkfitness.app.data.model.ProgramDayState
 import com.monkfitness.app.data.model.WorkoutType
 import com.monkfitness.app.domain.usecase.TOTAL_PROGRAM_DAYS
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
-import com.monkfitness.app.domain.usecase.resolveActiveCycleAndDay
 import com.monkfitness.app.domain.usecase.resolveCycleAndDay
+import com.monkfitness.app.domain.usecase.shouldOfferCycleCompletion
 import com.monkfitness.app.domain.usecase.synchronizeProgramStates
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -15,21 +15,28 @@ import org.junit.Test
 import java.time.LocalDate
 
 /**
- * The cycle-boundary contract: **cycle N day 56 -> cycle N+1 day 1**, for every cycle (1->2,
- * 2->3, 3->4 ...), exercised along the path the app actually walks:
+ * The cycle-boundary contract, exercised along the path the app walks:
  *
- * 1. the user completes day 56 of cycle N -> `MainViewModel.showProgramSummary` fires,
- * 2. the "program completed" dialog is dismissed -> `MainViewModel.dismissProgramSummary`
- *    stamps `program_cycle_number = N+1` and seeds cycle N+1's grid,
- * 3. the Home screen offers `MainViewModel.currentProgramDay`,
- * 4. `Start Workout` generates the workout for that day
- *    (`MainViewModel.getWorkoutForDay` -> [WorkoutGenerator]),
- * 5. the sync tick rebuilds the active cycle's grid
+ * 1. Home reads `MainViewModel.currentProgramDay` -> `Start Workout` generates the workout for
+ *    that day (`MainViewModel.getWorkoutForDay` -> [WorkoutGenerator]),
+ * 2. completing day 56 of cycle N offers the "Program Completed" dialog
+ *    (`MainViewModel.showProgramSummary` -> [shouldOfferCycleCompletion]),
+ * 3. dismissing it runs the rollover (`MainViewModel.dismissProgramSummary`: seed cycle N+1's
+ *    grid, stamp `program_cycle_number = N+1`),
+ * 4. the sync tick rebuilds the active cycle's grid
  *    (`MainViewModel.syncProgramDayStates` -> [synchronizeProgramStates]).
  *
  * `MainViewModel` is an Android class and this project has no Robolectric harness, so the
- * boundary rule ([resolveActiveCycleAndDay]) and the grid rebuild ([synchronizeProgramStates])
- * are the production functions under test here; the ViewModel delegates to exactly these.
+ * boundary rules the ViewModel delegates to — [resolveCycleAndDay] for the position,
+ * [shouldOfferCycleCompletion] for the rollover gate, [synchronizeProgramStates] for the grid —
+ * are what is under test here.
+ *
+ * Boundary invariant under test: **one programme day lives on exactly one calendar date**.
+ * Cycle N day 56 is the last date of cycle N; cycle N+1 day 1 is the next date and no other; the
+ * stamped cycle number never moves the displayed day (it only gates the dialog and pre-seeds the
+ * grid). An earlier revision started cycle N+1 the moment the rollover ran, which put day 1 on
+ * two consecutive dates (the rollover date and its own) and demoted the real day 1 to a
+ * no-credit repeat — `dayOneLivesOnExactlyOneCalendarDatePerCycle` guards against that.
  */
 class ProgramCycleRolloverTest {
 
@@ -37,88 +44,72 @@ class ProgramCycleRolloverTest {
     private val startDate = LocalDate.of(2026, 1, 1)
     private val workoutTypeForDay: (Int) -> WorkoutType = { day -> generator.getWorkoutType(day) }
 
-    /** The last calendar day of [cycle] — the day its completion dialog appears on. */
-    private fun rolloverDay(cycle: Int): LocalDate =
-        startDate.plusDays(TOTAL_PROGRAM_DAYS.toLong() * cycle - 1)
-
-    /** The first calendar day of [cycle] as the calendar sees it. */
-    private fun firstCalendarDayOf(cycle: Int): LocalDate =
-        startDate.plusDays(TOTAL_PROGRAM_DAYS.toLong() * (cycle - 1))
-
     /** 1..3 covers the first rollover, cycle 2 -> 3 and cycle 3 -> 4. */
     private val cyclesUnderTest = listOf(1, 2, 3)
 
-    // ---- the boundary position -----------------------------------------------------------------
+    /** The last calendar date of [cycle] — the date its completion dialog appears on. */
+    private fun rolloverDate(cycle: Int): LocalDate =
+        startDate.plusDays(TOTAL_PROGRAM_DAYS.toLong() * cycle - 1)
+
+    /** The one and only calendar date of cycle [cycle] day 1. */
+    private fun firstDateOfCycle(cycle: Int): LocalDate =
+        startDate.plusDays(TOTAL_PROGRAM_DAYS.toLong() * (cycle - 1))
+
+    // ---- one calendar date == one programme day ------------------------------------------------
 
     @Test
-    fun rolloverLandsOnTheFirstDayOfTheNewCycle() {
+    fun theRolloverDateIsStillTheFinishedCyclesDay56() {
         cyclesUnderTest.forEach { finished ->
-            val day = rolloverDay(finished)
-
-            // before the stamp: the finished cycle's own last day
             assertEquals(
-                "cycle $finished on its own day 56 must stay on day 56",
+                "the date the rollover runs on is cycle $finished's own last day",
                 finished to TOTAL_PROGRAM_DAYS,
-                resolveActiveCycleAndDay(storedCycle = finished, startDate = startDate, today = day)
-            )
-
-            // after the stamp: day 1 of the next cycle — NOT the finished cycle's day 56
-            // re-offered against the new cycle's grid (the phantom that broke Start Workout)
-            assertEquals(
-                "the rollover must land on cycle ${finished + 1} day 1",
-                finished + 1 to 1,
-                resolveActiveCycleAndDay(storedCycle = finished + 1, startDate = startDate, today = day)
+                resolveCycleAndDay(startDate, rolloverDate(finished))
             )
         }
     }
 
     @Test
-    fun theCalendarDayAfterTheRolloverIsAlsoDayOneOfTheNewCycle() {
-        cyclesUnderTest.forEach { finished ->
-            val next = firstCalendarDayOf(finished + 1)
-
+    fun dayOneLivesOnExactlyOneCalendarDatePerCycle() {
+        cyclesUnderTest.forEach { cycle ->
             assertEquals(
-                "the calendar itself agrees the next day is cycle ${finished + 1} day 1",
-                finished + 1 to 1,
-                resolveCycleAndDay(startDate, next)
+                "cycle $cycle day 1 is the date its cycle starts",
+                cycle to 1,
+                resolveCycleAndDay(startDate, firstDateOfCycle(cycle))
             )
-            assertEquals(
-                "and the app is on the same day for the whole of it",
-                finished + 1 to 1,
-                resolveActiveCycleAndDay(storedCycle = finished + 1, startDate = startDate, today = next)
-            )
+            if (cycle > 1) {
+                assertEquals(
+                    "and the date before it is the previous cycle's last day",
+                    cycle - 1 to TOTAL_PROGRAM_DAYS,
+                    resolveCycleAndDay(startDate, firstDateOfCycle(cycle).minusDays(1))
+                )
+            }
         }
+
+        // bijection over three whole cycles: every date has one (cycle, day), every (cycle, day)
+        // has one date — nothing is offered twice, nothing is skipped
+        val dates = (0 until 3 * TOTAL_PROGRAM_DAYS).map { startDate.plusDays(it.toLong()) }
+        val positions = dates.map { resolveCycleAndDay(startDate, it) }
+        assertEquals(dates.size, positions.distinct().size)
+        assertEquals(
+            "the programme days run 1..$TOTAL_PROGRAM_DAYS within every cycle",
+            (1..3).flatMap { cycle -> (1..TOTAL_PROGRAM_DAYS).map { cycle to it } },
+            positions
+        )
     }
 
     @Test
-    fun completionGateIsClosedAfterTheRolloverSoTheRolloverCannotRatchet() {
-        cyclesUnderTest.forEach { finished ->
-            val (cycle, day) =
-                resolveActiveCycleAndDay(storedCycle = finished + 1, startDate = startDate, today = rolloverDay(finished))
+    fun startWorkoutOnTheNewCyclesFirstDateOffersARealWorkout() {
+        (2..4).forEach { cycle ->
+            val (resolvedCycle, day) = resolveCycleAndDay(startDate, firstDateOfCycle(cycle))
+            assertEquals(cycle to 1, resolvedCycle to day)
 
-            // showProgramSummary == (currentProgramDay == TOTAL_PROGRAM_DAYS && completed)
-            assertNotEquals(
-                "cycle $cycle must not sit on day $TOTAL_PROGRAM_DAYS right after the rollover: " +
-                    "completing that phantom day re-fires the rollover and pins the app",
-                TOTAL_PROGRAM_DAYS,
-                day
-            )
-        }
-    }
-
-    @Test
-    fun startWorkoutAfterTheRolloverOffersARealWorkout() {
-        cyclesUnderTest.forEach { finished ->
-            val (cycle, day) =
-                resolveActiveCycleAndDay(storedCycle = finished + 1, startDate = startDate, today = rolloverDay(finished))
             val workout = generator.generateWorkout(day)
-
             assertNotEquals(
-                "Start Workout in cycle $cycle must not open the recovery screen",
+                "Start Workout on cycle $cycle day 1 must not open the recovery screen",
                 WorkoutType.REST,
                 workout.type
             )
-            assertFalse("Start Workout in cycle $cycle must have exercises", workout.exercises.isEmpty())
+            assertFalse("Start Workout on cycle $cycle day 1 must have exercises", workout.exercises.isEmpty())
             assertEquals(
                 "exercise ids must stay unique (they are LazyColumn keys)",
                 workout.exercises.size,
@@ -127,29 +118,65 @@ class ProgramCycleRolloverTest {
         }
     }
 
-    // ---- the grid the rollover seeds ----------------------------------------------------------
+    // ---- the completion gate -------------------------------------------------------------------
+
+    @Test
+    fun theCompletionGateFiresOncePerCycle() {
+        cyclesUnderTest.forEach { cycle ->
+            assertTrue(
+                "cycle $cycle's completed last day offers the dialog",
+                shouldOfferCycleCompletion(TOTAL_PROGRAM_DAYS, true, cycle, storedCycle = cycle)
+            )
+            assertFalse(
+                "and the rollover's own stamp closes it — the dialog must not re-fire",
+                shouldOfferCycleCompletion(TOTAL_PROGRAM_DAYS, true, cycle, storedCycle = cycle + 1)
+            )
+        }
+    }
+
+    @Test
+    fun aStaleStampedCycleNeverSwallowsACompletedCycle() {
+        // a counter left behind by a boundary crossing (or an older build): the gate stays open,
+        // so the finished cycle is announced and the next stamp repairs the counter
+        assertTrue(shouldOfferCycleCompletion(TOTAL_PROGRAM_DAYS, true, activeCycle = 3, storedCycle = 1))
+        assertTrue(shouldOfferCycleCompletion(TOTAL_PROGRAM_DAYS, true, activeCycle = 3, storedCycle = 2))
+        // a legacy over-stamped counter behaves the same way
+        assertTrue(shouldOfferCycleCompletion(TOTAL_PROGRAM_DAYS, true, activeCycle = 3, storedCycle = 7))
+    }
+
+    @Test
+    fun theGateOnlyOpensOnACompletedLastDay() {
+        assertFalse(shouldOfferCycleCompletion(TOTAL_PROGRAM_DAYS, false, activeCycle = 1, storedCycle = 1))
+        assertFalse(shouldOfferCycleCompletion(1, true, activeCycle = 1, storedCycle = 1))
+        assertFalse(shouldOfferCycleCompletion(TOTAL_PROGRAM_DAYS - 1, true, activeCycle = 1, storedCycle = 1))
+        assertTrue(shouldOfferCycleCompletion(TOTAL_PROGRAM_DAYS, true, activeCycle = 2, storedCycle = 2))
+    }
+
+    // ---- the grid the rollover seeds -----------------------------------------------------------
 
     @Test
     fun theRolloverSeedsTheNewCycleGridCleanAndStampedForThatCycle() {
         cyclesUnderTest.forEach { finished ->
             val nextCycle = finished + 1
-            val (cycle, day) =
-                resolveActiveCycleAndDay(storedCycle = nextCycle, startDate = startDate, today = rolloverDay(finished))
+            // the rollover runs on the finished cycle's last date and seeds against the new
+            // cycle's own day 1 — the day that cycle actually starts on
+            val (activeCycle, _) = resolveCycleAndDay(startDate, rolloverDate(finished))
+            assertEquals(finished, activeCycle)
 
             val seeded = synchronizeProgramStates(
                 existing = emptyList(),
-                currentProgramDay = day,
-                cycleNumber = cycle,
+                currentProgramDay = 1,
+                cycleNumber = nextCycle,
                 workoutTypeForDay = workoutTypeForDay
             )
 
             assertEquals(TOTAL_PROGRAM_DAYS, seeded.size)
             assertTrue(
                 "every seeded row must belong to cycle $nextCycle, not to cycle 1",
-                seeded.all { it.cycleNumber == cycle }
+                seeded.all { it.cycleNumber == nextCycle }
             )
             assertEquals(
-                "a cycle that starts today must not open with missed days",
+                "a cycle that has not started yet must not open with missed days",
                 0,
                 seeded.count { it.isMissed }
             )
@@ -206,8 +233,8 @@ class ProgramCycleRolloverTest {
     @Test
     fun theBackfillSeedsTheCycleTheUserIsOnWithoutPhantomMisses() {
         // Legacy device: no grid for the cycle it is standing in (cycle 2, day 1).
-        val today = firstCalendarDayOf(2)
-        val (cycle, day) = resolveActiveCycleAndDay(storedCycle = 1, startDate = startDate, today = today)
+        val today = firstDateOfCycle(2)
+        val (cycle, day) = resolveCycleAndDay(startDate, today)
         assertEquals(2 to 1, cycle to day)
 
         val backfilled = synchronizeProgramStates(
@@ -221,31 +248,5 @@ class ProgramCycleRolloverTest {
         assertEquals("backfilling cycle 2 must not pre-mark its days missed", 0, backfilled.count { it.isMissed })
         assertEquals(40, backfilled.count { it.isWorkoutDay })
         assertEquals(16, backfilled.count { !it.isWorkoutDay })
-    }
-
-    // ---- legacy states ------------------------------------------------------------------------
-
-    @Test
-    fun aStoredCycleBeyondTheRolloverWindowFallsBackToTheCalendar() {
-        // Cycle 3, day 40 — mid-cycle, so there is no rollover window at all.
-        val today = startDate.plusDays(2L * TOTAL_PROGRAM_DAYS + 39)
-        assertEquals(3 to 40, resolveCycleAndDay(startDate, today))
-
-        // the one-cycle-ahead window the rollover creates: day 1 of the stamped cycle
-        assertEquals(
-            4 to 1,
-            resolveActiveCycleAndDay(storedCycle = 4, startDate = startDate, today = today)
-        )
-        // a legacy over-stamped counter (the pre-fix rollover ratchet): the calendar wins, so
-        // the app resumes on its real day instead of freezing on a phantom cycle
-        assertEquals(
-            3 to 40,
-            resolveActiveCycleAndDay(storedCycle = 7, startDate = startDate, today = today)
-        )
-        // and a counter left behind by a boundary crossing still tracks the calendar
-        assertEquals(
-            3 to 40,
-            resolveActiveCycleAndDay(storedCycle = 2, startDate = startDate, today = today)
-        )
     }
 }

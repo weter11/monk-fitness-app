@@ -29,27 +29,27 @@ fun calculateProgramDay(startDate: LocalDate, today: LocalDate = LocalDate.now()
 }
 
 /**
- * Resolves the (cycleNumber, day) the app is actually ON: the calendar position of [today]
- * reconciled with the cycle the C2 rollover has stamped ([storedCycle]).
+ * The "Program Completed" gate: the dialog (and the rollover it triggers) is offered at the end
+ * of a cycle until `dismissProgramSummary` has stamped the cycle it rolled into ([storedCycle]
+ * == [activeCycle] + 1).
  *
- * - [storedCycle] == calendar cycle: the calendar's own day within that cycle.
- * - [storedCycle] is exactly one ahead of the calendar: the rollover has already stamped the
- *   next cycle, so the app is on **day 1 of that cycle**. Reporting [TOTAL_PROGRAM_DAYS] here
- *   offers the finished cycle's last day against the *new* cycle's grid — a phantom,
- *   uncompleted "day 56" that Start Workout can only answer with a recovery session, and whose
- *   completion re-fires the "program completed" rollover (cycle counter ratchet).
- * - [storedCycle] is behind the calendar (the app was closed across a boundary) or more than
- *   one cycle ahead (legacy over-stamped state): the calendar wins.
+ * The stamp is what closes the gate, so the dialog fires exactly once per cycle. Any other
+ * stamped value leaves it open — a counter left behind by a boundary crossing, or one written by
+ * an older build — so a completed cycle is never silently skipped, and the next stamp repairs
+ * the counter.
+ *
+ * [activeCycle] is the cycle the calendar puts the app in ([resolveCycleAndDay]); the stamp never
+ * moves the displayed day. Holding the finished cycle's last day (instead of showing the next
+ * cycle's day 1) is what keeps one programme day on exactly one calendar date: day 56 of cycle N
+ * and day 1 of cycle N+1 stay on their own dates, and day 1 cannot be credited twice.
  */
-fun resolveActiveCycleAndDay(
-    storedCycle: Int,
-    startDate: LocalDate,
-    today: LocalDate = LocalDate.now()
-): Pair<Int, Int> {
-    val (calendarCycle, calendarDay) = resolveCycleAndDay(startDate, today)
-    val activeCycle = if (storedCycle > calendarCycle + 1) calendarCycle else max(calendarCycle, storedCycle)
-    val day = if (activeCycle > calendarCycle) 1 else calendarDay
-    return activeCycle to day
+fun shouldOfferCycleCompletion(
+    programDay: Int,
+    isDayCompleted: Boolean,
+    activeCycle: Int,
+    storedCycle: Int
+): Boolean {
+    return programDay == TOTAL_PROGRAM_DAYS && isDayCompleted && storedCycle != activeCycle + 1
 }
 
 /**

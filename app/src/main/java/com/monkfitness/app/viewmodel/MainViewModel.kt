@@ -43,7 +43,6 @@ import com.monkfitness.app.data.model.toMealEntities
 import com.monkfitness.app.data.model.toShoppingItemEntities
 import com.monkfitness.app.data.model.validateAvailableProductSelection
 import com.monkfitness.app.data.repository.WorkoutRepository
-import com.monkfitness.app.domain.usecase.TOTAL_PROGRAM_DAYS
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import com.monkfitness.app.validation.EngineeringValidationFilter
 import com.monkfitness.app.validation.ValidationCategory
@@ -52,7 +51,8 @@ import com.monkfitness.app.validation.ValidationSettings
 import com.monkfitness.app.validation.ValidationPoseRegistry
 import com.monkfitness.app.util.normalize
 import com.monkfitness.app.domain.usecase.calculateProgramDay
-import com.monkfitness.app.domain.usecase.resolveActiveCycleAndDay
+import com.monkfitness.app.domain.usecase.resolveCycleAndDay
+import com.monkfitness.app.domain.usecase.shouldOfferCycleCompletion
 import com.monkfitness.app.domain.usecase.synchronizeProgramStates
 import com.monkfitness.app.ui.screens.WorkoutStep
 import com.monkfitness.app.util.NotificationScheduler
@@ -71,6 +71,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -177,25 +178,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), null
     )
 
-    // Cycle-aware "today": the day WITHIN the active cycle, as resolved by the single boundary
-    // rule in resolveActiveCycleAndDay. Right after the C2 rollover the stamped cycle is one
-    // ahead of the calendar and the app is on that cycle's day 1 — never the finished cycle's
-    // day 56, which does not exist in the new cycle's grid and can only be answered with a
-    // phantom recovery session.
+    // Cycle-aware "today": the programme day is a pure function of the calendar — one calendar
+    // date is one programme day (resolveCycleAndDay), so cycle N day 56 is the last date of cycle
+    // N and cycle N+1 day 1 is the next date. The stamped cycle number deliberately does NOT
+    // change the day shown: it only gates the completion dialog below and pre-seeds the next
+    // cycle's grid. (Letting the stamp start the next cycle early would put cycle N+1 day 1 on
+    // two calendar dates — the rollover date and its own — and demote the real day 1 to a
+    // no-credit repeat.)
     val currentProgramDay = combine(
-        settingsManager.programCycleNumberFlow,
         programStartDate,
         currentDate
-    ) { storedCycle, startDate, today ->
-        resolveActiveCycleAndDay(storedCycle, parseDate(startDate, today), today).second
+    ) { startDate, today ->
+        resolveCycleAndDay(parseDate(startDate, today), today).second
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
 
     val programCycleNumber = combine(
-        settingsManager.programCycleNumberFlow,
         programStartDate,
         currentDate
-    ) { storedCycle, startDate, today ->
-        resolveActiveCycleAndDay(storedCycle, parseDate(startDate, today), today).first
+    ) { startDate, today ->
+        resolveCycleAndDay(parseDate(startDate, today), today).first
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
 
     val allProgress = repository.getAllProgress(programCycleNumber).stateIn(
@@ -1312,13 +1313,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val showProgramSummary = combine(
         currentProgramDay,
         todayProgramDayState,
-        programCycleNumber
-    ) { day, state, cycle ->
-        // C2: the "program completed" dialog is the automatic-rollover gate —
-        // it appears on the last day of a finished cycle and stays visible until
-        // the rollover below runs (or the user dismisses it manually). Fires at
-        // the end of EVERY cycle, not just the first.
-        day == TOTAL_PROGRAM_DAYS && state.isCompleted
+        programCycleNumber,
+        settingsManager.programCycleNumberFlow
+    ) { day, state, cycle, storedCycle ->
+        // C2: the "program completed" dialog is the automatic-rollover gate — it appears on the
+        // last day of a finished cycle and stays visible until the rollover runs (or the user
+        // dismisses it). The stamp closes it, so it fires once per cycle; see
+        // shouldOfferCycleCompletion.
+        shouldOfferCycleCompletion(
+            programDay = day,
+            isDayCompleted = state.isCompleted,
+            activeCycle = cycle,
+            storedCycle = storedCycle
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     fun setNutritionCycleLength(days: Int) {
@@ -1349,7 +1356,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // reappears on every relaunch until it runs, so the rollover is effectively
             // guaranteed even if this call is interrupted. Works for ANY cycle N -> N+1.
             val finishedCycle = programCycleNumber.value
-            if (currentProgramDay.value == TOTAL_PROGRAM_DAYS && todayProgramDayState.value.isCompleted) {
+            val storedCycle = settingsManager.programCycleNumberFlow.first()
+            if (shouldOfferCycleCompletion(
+                    programDay = currentProgramDay.value,
+                    isDayCompleted = todayProgramDayState.value.isCompleted,
+                    activeCycle = finishedCycle,
+                    storedCycle = storedCycle
+                )
+            ) {
                 val nextCycle = finishedCycle + 1
                 // 1) Seed the next cycle's grid as a fresh copy of the template (nothing
                 //    completed, nothing missed) stamped onto the new cycle. The grid is scored
