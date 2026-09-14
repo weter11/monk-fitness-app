@@ -1,5 +1,7 @@
 package com.monkfitness.app.data.repository
 
+import androidx.room.withTransaction
+import com.monkfitness.app.data.local.AppDatabase
 import com.monkfitness.app.data.local.ProgressDao
 import com.monkfitness.app.data.model.BodyWeightEntry
 import com.monkfitness.app.data.model.MealCycle
@@ -21,7 +23,10 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class WorkoutRepository(private val progressDao: ProgressDao) {
+class WorkoutRepository(
+    private val database: AppDatabase,
+    private val progressDao: ProgressDao = database.progressDao()
+) {
 
     fun getAllProgress(cycleNumber: Flow<Int>): Flow<List<UserProgress>> = cycleNumber.flatMapLatest { progressDao.getAllProgress(it) }
         .catch { emit(emptyList()) }
@@ -148,23 +153,25 @@ class WorkoutRepository(private val progressDao: ProgressDao) {
 
     // --- C3 Manual Controls (Settings): destructive maintenance actions ---
 
+    /**
+     * C3 "Restart Current Cycle": wipes the active cycle's progress rows in ONE Room transaction,
+     * so the cycle is either fully reset or not reset at all — never half cleared. Throws on
+     * failure; the caller reports it instead of leaving a partial wipe.
+     */
     suspend fun deleteProgressForCycle(cycleNumber: Int) {
-        try {
-            progressDao.deleteUserProgressForCycle(cycleNumber)
-            progressDao.deletePostureProgressForCycle(cycleNumber)
-            progressDao.deleteProgramDayStatesForCycle(cycleNumber)
-        } catch (_: Exception) {
+        ProgramMaintenance.deleteProgressForCycle(cycleNumber, progressDao) { block ->
+            database.withTransaction(block)
         }
     }
 
+    /**
+     * C3 "Full Reset": wipes every progress/history table in ONE Room transaction, so the database
+     * is either fully cleared or fully intact. Throws on failure; the caller reports it instead of
+     * leaving a partial destructive operation with no feedback.
+     */
     suspend fun clearAllProgressData() {
-        try {
-            progressDao.clearUserProgress()
-            progressDao.clearPostureProgress()
-            progressDao.clearProgramDayStates()
-            progressDao.clearSetLogs()
-            progressDao.clearBodyWeightEntries()
-        } catch (_: Exception) {
+        ProgramMaintenance.clearAllProgressData(progressDao) { block ->
+            database.withTransaction(block)
         }
     }
 

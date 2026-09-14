@@ -739,7 +739,18 @@
     <string name="start_revised_program_confirm">Start revised program?</string>
     <string name="start_revised_program_confirm_text">The program calendar restarts from today at day 1. Your previous program history remains in the archive. This cannot be undone.</string>
     <string name="full_reset">Full reset</string>
-    <string name="full_reset_desc">Erases all data: workouts, posture sessions, statistics, settings and onboarding state. The app returns to first launch.</string>
+    <string name="full_reset_desc">Erases your program data: workouts, posture sessions, statistics, settings and onboarding state. Nutrition plans are kept. The app returns to first launch.</string>
     <string name="full_reset_confirm">Perform full reset?</string>
-    <string name="full_reset_confirm_text">Everything will be erased: workout history, body weight log, nutrition data and all settings. The app returns to first-launch onboarding. This cannot be undone.</string>
+    <string name="full_reset_confirm_text">All your program data will be erased: workout history, body weight log, program statistics and all settings. Nutrition plans are kept. The app returns to first-launch onboarding. This cannot be undone.</string>
+
+    <!-- C3 Manual Controls: operation outcomes. A destructive action reports either what it
+         changed or the failure that stopped it — a partial wipe is never silent. -->
+    <string name="program_controls_restart_done">Current cycle restarted: completions cleared, day 1 unlocked again.</string>
+    <string name="program_controls_restart_failed">Could not restart the cycle. Nothing was changed — try again.</string>
+    <string name="program_controls_revised_done">Revised program started from today, day 1.</string>
+    <string name="program_controls_revised_failed">Could not start the revised program. Nothing was changed — try again.</string>
+    <string name="program_controls_reset_done">All program data erased. The app is back to first launch.</string>
+    <string name="program_controls_reset_failed">Could not perform the full reset. Your data is intact — try again.</string>
+
+    <string name="cancel">Cancel</string>
 </resources>

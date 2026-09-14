@@ -23,14 +23,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +51,7 @@ import com.monkfitness.app.data.model.LibraryStats
 import com.monkfitness.app.data.model.NutritionIngredient
 import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
 import com.monkfitness.app.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,6 +88,29 @@ fun SettingsScreen(
         )
     }
 
+    // C3: every maintenance action reports Success or Failure. A destructive operation must
+    // never end in a state the user cannot distinguish from success — the snackbar is the
+    // "obvious result" the spec asks for on both outcomes. A Failure stays visible until the
+    // user dismisses it, so a failed wipe is never mistaken for a completed one.
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        viewModel.maintenanceEvents.collect { result: MainViewModel.MaintenanceResult ->
+            val message = context.getString(result.messageRes)
+            scope.launch {
+                snackbarHostState.currentSnackbarData?.dismiss()
+                snackbarHostState.showSnackbar(
+                    message = message,
+                    duration = if (result is MainViewModel.MaintenanceResult.Failure) {
+                        SnackbarDuration.Indefinite
+                    } else {
+                        SnackbarDuration.Short
+                    }
+                )
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -95,7 +124,8 @@ fun SettingsScreen(
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -481,7 +511,7 @@ private fun ConfirmationDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(text = stringResource(R.string.cancel))
             }
         }
     )

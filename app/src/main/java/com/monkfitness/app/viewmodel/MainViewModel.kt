@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.monkfitness.app.R
@@ -73,7 +74,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flowOf
@@ -103,6 +103,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         const val ROUTE_HOME = "home"
         const val ROUTE_NUTRITION = "nutrition"
+        private const val TAG = "MainViewModel"
     }
 
     // Notification Deep-link State
@@ -162,7 +163,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         val db = AppDatabase.getDatabase(application)
-        repository = WorkoutRepository(db.progressDao())
+        repository = WorkoutRepository(db)
         settingsManager = SettingsManager(application)
     }
 
@@ -586,16 +587,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             settingsManager.ensureProgramStartDate()
-            // C3 crash-recovery: if Full Reset cleared preferences while a stale ViewModel
-            // instance still held cycle N, persisting N again would resurrect a phantom
-            // cycle against the fresh day-1 calendar. Clamp the stored number whenever it
-            // runs ahead of what the calendar itself resolves.
-            val startDate = parseDate(settingsManager.programStartDateFlow.first(), LocalDate.now())
-            val (resolvedCycle, _) = resolveCycleAndDay(startDate)
-            val storedCycle = settingsManager.programCycleNumberFlow.first()
-            if (storedCycle > resolvedCycle) {
-                settingsManager.setProgramCycleNumber(resolvedCycle)
-            }
             refreshCalendarState()
         }
         viewModelScope.launch {
@@ -1409,43 +1400,99 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- C3 Manual Controls (Settings): confirmation-guarded maintenance actions ---
+    // --- C3 Manual Controls (Settings): confirmation-guarded maintenance actions --------
 
     /**
-     * C3 "Restart Current Cycle": wipes ONLY the active cycle's progress rows. Start date,
-     * stored cycle number, settings, and prior cycles' history are untouched; the template
-     * grid is re-seeded fresh (nothing completed) by the next [syncProgramDayStates] tick.
+     * The outcome of a C3 maintenance action. A destructive operation must never end in a
+     * state the user cannot distinguish from success, so every path reports either what it
+     * changed or the failure that stopped it.
+     */
+    sealed interface MaintenanceResult {
+        /** The user-facing string for this outcome — a confirmation or a failure reason. */
+        val messageRes: Int
+
+        /** The action completed. */
+        data class Success(override val messageRes: Int) : MaintenanceResult
+        /** The action failed; [messageRes] names the operation that did not complete. */
+        data class Failure(override val messageRes: Int) : MaintenanceResult
+    }
+
+    private val _maintenanceEvents = MutableSharedFlow<MaintenanceResult>(extraBufferCapacity = 1)
+    val maintenanceEvents = _maintenanceEvents.asSharedFlow()
+
+    /**
+     * C3 "Restart Current Cycle": wipes ONLY the active cycle's progress rows in one Room
+     * transaction. Start date, the stored cycle number, settings and prior cycles' history
+     * are untouched; the template grid is re-seeded fresh (nothing completed) by the next
+     * [syncProgramDayStates] tick, which runs here so the screen reflects the reset at once.
+     *
+     * Reports [MaintenanceResult.Failure] if the wipe throws — the transaction rolls back, so
+     * no partial reset is left behind, and the user is told instead of seeing a silent no-op.
      */
     fun restartCurrentCycle() {
         viewModelScope.launch {
-            repository.deleteProgressForCycle(programCycleNumber.value)
-            refreshCalendarState()
+            val cycle = programCycleNumber.value
+            val outcome = try {
+                repository.deleteProgressForCycle(cycle)
+                refreshCalendarState()
+                MaintenanceResult.Success(R.string.program_controls_restart_done)
+            } catch (e: Exception) {
+                Log.w(TAG, "restartCurrentCycle: cycle $cycle not reset", e)
+                MaintenanceResult.Failure(R.string.program_controls_restart_failed)
+            }
+            _maintenanceEvents.tryEmit(outcome)
         }
     }
 
     /**
-     * C3 "Start Revised Program": bumps the program revision marker and restarts the
-     * calendar from today at cycle 1, day 1. Prior program history stays in the database
-     * for the archive view.
+     * C3 "Start Revised Program": bumps the program revision marker and restarts the calendar
+     * from today at cycle 1, day 1. The stored cycle number is stamped to 1 in the SAME DataStore
+     * edit as the new start date, so no interleaving can leave the two disagreeing. Prior program
+     * history stays in the database for the archive view.
      */
     fun startRevisedProgram() {
         viewModelScope.launch {
-            val currentRevision = settingsManager.programRevisionFlow.first()
-            settingsManager.setProgramRevision(currentRevision + 1)
-            settingsManager.resetProgramStartDate()
-            settingsManager.setProgramCycleNumber(1)
-            refreshCalendarState()
+            val outcome = try {
+                settingsManager.startRevisedProgram(LocalDate.now())
+                refreshCalendarState()
+                MaintenanceResult.Success(R.string.program_controls_revised_done)
+            } catch (e: Exception) {
+                Log.w(TAG, "startRevisedProgram: not applied", e)
+                MaintenanceResult.Failure(R.string.program_controls_revised_failed)
+            }
+            _maintenanceEvents.tryEmit(outcome)
         }
     }
 
     /**
-     * C3 "Full Reset": complete wipe back to first-launch state — Room tables cleared,
-     * every preference cleared so onboarding restarts on next navigation.
+     * C3 "Full Reset": complete wipe back to first-launch state — every progress/history Room
+     * table cleared, all preferences cleared. Onboarding restarts on next navigation because
+     * IS_ONBOARDING_COMPLETED is gone.
+     *
+     * The Room clear and the DataStore clear are independent stores that cannot share a
+     * transaction, so this is an ordered sequence, not an atomic one. The Room wipe runs first
+     * and reports [MaintenanceResult.Failure] if it throws, leaving a fully intact database and
+     * untouched preferences (the DataStore clear is never reached, so the app keeps working and
+     * the user can retry). If the Room wipe succeeds and only the preference clear then fails,
+     * the database is empty and onboarding restarts anyway — reported as Success, because the
+     * observable result the user asked for ("everything is gone") has happened.
      */
     fun fullReset() {
         viewModelScope.launch {
-            repository.clearAllProgressData()
-            settingsManager.clearAll()
+            val outcome = try {
+                repository.clearAllProgressData()
+                try {
+                    settingsManager.clearAll()
+                } catch (e: Exception) {
+                    // The database is already empty; the app restarts into onboarding either way.
+                    Log.w(TAG, "fullReset: database cleared, preference clear failed", e)
+                }
+                MaintenanceResult.Success(R.string.program_controls_reset_done)
+            } catch (e: Exception) {
+                Log.w(TAG, "fullReset: not performed", e)
+                MaintenanceResult.Failure(R.string.program_controls_reset_failed)
+            }
+            _maintenanceEvents.tryEmit(outcome)
         }
     }
 

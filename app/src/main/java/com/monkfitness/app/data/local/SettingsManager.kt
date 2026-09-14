@@ -314,6 +314,24 @@ class SettingsManager(private val context: Context) {
     }
 
     /**
+     * C3 "Start Revised Program": starts a new program from [startDate] at cycle 1 in ONE
+     * DataStore edit — revision bumped, start date stamped, stored cycle number set to 1 and
+     * the summary flag un-dismissed together, so no interleaving with the rollover or the
+     * calendar tick can leave the start date and the cycle number disagreeing.
+     *
+     * Prior-cycle history lives in the database and is deliberately not touched here.
+     */
+    suspend fun startRevisedProgram(startDate: LocalDate = LocalDate.now()) {
+        context.dataStore.edit { preferences ->
+            val currentRevision = preferences[PROGRAM_REVISION] ?: 0
+            preferences[PROGRAM_REVISION] = currentRevision + 1
+            preferences[PROGRAM_START_DATE] = startDate.toString()
+            preferences[PROGRAM_CYCLE_NUMBER] = 1
+            preferences[PROGRAM_SUMMARY_DISMISSED] = false
+        }
+    }
+
+    /**
      * C3 Full Reset: atomically clears every preference this app owns, returning DataStore
      * to first-launch state. The next [ensureProgramStartDate] call stamps a fresh start
      * date and onboarding restarts because IS_ONBOARDING_COMPLETED is gone.
