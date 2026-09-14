@@ -744,6 +744,7 @@
     <string name="program_controls_revised_failed">Не удалось начать пересмотренную программу. Ничего не изменено — попробуйте снова.</string>
     <string name="program_controls_reset_done">Все данные программы удалены. Приложение вернулось к первому запуску.</string>
     <string name="program_controls_reset_failed">Не удалось выполнить полный сброс. Данные не изменены — попробуйте снова.</string>
+    <string name="program_controls_reset_db_cleared_prefs_failed">Тренировочные данные удалены, но настройки очистить не удалось. Завершите сброс, очистив данные приложения в настройках Android.</string>
 
     <string name="cancel">Отмена</string>
 </resources>

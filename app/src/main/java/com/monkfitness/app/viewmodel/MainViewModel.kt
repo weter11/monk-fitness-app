@@ -1405,18 +1405,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * The outcome of a C3 maintenance action. A destructive operation must never end in a
      * state the user cannot distinguish from success, so every path reports either what it
-     * changed or the failure that stopped it.
+     * changed or the failure that stopped it. See [MaintenanceResult] and [runFullReset].
      */
-    sealed interface MaintenanceResult {
-        /** The user-facing string for this outcome — a confirmation or a failure reason. */
-        val messageRes: Int
-
-        /** The action completed. */
-        data class Success(override val messageRes: Int) : MaintenanceResult
-        /** The action failed; [messageRes] names the operation that did not complete. */
-        data class Failure(override val messageRes: Int) : MaintenanceResult
-    }
-
     private val _maintenanceEvents = MutableSharedFlow<MaintenanceResult>(extraBufferCapacity = 1)
     val maintenanceEvents = _maintenanceEvents.asSharedFlow()
 
@@ -1473,26 +1463,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * transaction, so this is an ordered sequence, not an atomic one. The Room wipe runs first
      * and reports [MaintenanceResult.Failure] if it throws, leaving a fully intact database and
      * untouched preferences (the DataStore clear is never reached, so the app keeps working and
-     * the user can retry). If the Room wipe succeeds and only the preference clear then fails,
-     * the database is empty and onboarding restarts anyway — reported as Success, because the
-     * observable result the user asked for ("everything is gone") has happened.
+     * the user can retry). If the Room wipe succeeds and the preference clear then throws, the
+     * outcome is also [MaintenanceResult.Failure] — with a message that names the exact partial
+     * state: the database is empty, the preferences are not. A destructive operation must never
+     * report success while part of what it promised is still half done.
      */
     fun fullReset() {
         viewModelScope.launch {
-            val outcome = try {
-                repository.clearAllProgressData()
-                try {
-                    settingsManager.clearAll()
-                } catch (e: Exception) {
-                    // The database is already empty; the app restarts into onboarding either way.
-                    Log.w(TAG, "fullReset: database cleared, preference clear failed", e)
-                }
-                MaintenanceResult.Success(R.string.program_controls_reset_done)
-            } catch (e: Exception) {
-                Log.w(TAG, "fullReset: not performed", e)
-                MaintenanceResult.Failure(R.string.program_controls_reset_failed)
-            }
-            _maintenanceEvents.tryEmit(outcome)
+            _maintenanceEvents.tryEmit(
+                runFullReset(
+                    clearRoomData = { repository.clearAllProgressData() },
+                    clearPreferences = { settingsManager.clearAll() }
+                )
+            )
         }
     }
 

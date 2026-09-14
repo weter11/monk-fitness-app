@@ -50,6 +50,7 @@ import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.model.LibraryStats
 import com.monkfitness.app.data.model.NutritionIngredient
 import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
+import com.monkfitness.app.viewmodel.MaintenanceResult
 import com.monkfitness.app.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -95,13 +96,13 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
-        viewModel.maintenanceEvents.collect { result: MainViewModel.MaintenanceResult ->
+        viewModel.maintenanceEvents.collect { result: MaintenanceResult ->
             val message = context.getString(result.messageRes)
             scope.launch {
                 snackbarHostState.currentSnackbarData?.dismiss()
                 snackbarHostState.showSnackbar(
                     message = message,
-                    duration = if (result is MainViewModel.MaintenanceResult.Failure) {
+                    duration = if (result is MaintenanceResult.Failure) {
                         SnackbarDuration.Indefinite
                     } else {
                         SnackbarDuration.Short

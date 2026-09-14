@@ -744,6 +744,7 @@
     <string name="program_controls_revised_failed">Не вдалося розпочати переглянуту програму. Нічого не змінено — спробуйте ще раз.</string>
     <string name="program_controls_reset_done">Усі дані програми видалено. Застосунок повернувся до першого запуску.</string>
     <string name="program_controls_reset_failed">Не вдалося виконати повне скидання. Дані не змінено — спробуйте ще раз.</string>
+    <string name="program_controls_reset_db_cleared_prefs_failed">Тренувальні дані видалено, але налаштування очистити не вдалося. Завершіть скидання, очистивши дані застосунку в налаштуваннях Android.</string>
 
     <string name="cancel">Скасувати</string>
 </resources>

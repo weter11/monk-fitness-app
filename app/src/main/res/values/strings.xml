@@ -751,6 +751,7 @@
     <string name="program_controls_revised_failed">Could not start the revised program. Nothing was changed — try again.</string>
     <string name="program_controls_reset_done">All program data erased. The app is back to first launch.</string>
     <string name="program_controls_reset_failed">Could not perform the full reset. Your data is intact — try again.</string>
+    <string name="program_controls_reset_db_cleared_prefs_failed">Workout data was erased, but the settings could not be cleared. Clear app data in Android settings to finish the reset.</string>
 
     <string name="cancel">Cancel</string>
 </resources>
