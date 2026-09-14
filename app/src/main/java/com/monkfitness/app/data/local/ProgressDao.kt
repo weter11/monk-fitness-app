@@ -137,6 +137,34 @@ interface ProgressDao {
     @Query("SELECT MAX(cycleNumber) FROM program_day_state")
     suspend fun getMaxProgramDayStateCycle(): Int?
 
+    // --- C3 Manual Controls (Settings): destructive maintenance actions ---
+
+    /** C3 "Restart Current Cycle": wipe only the active cycle's progress rows; prior cycles stay as history. */
+    @Query("DELETE FROM user_progress WHERE cycleNumber = :cycleNumber")
+    suspend fun deleteUserProgressForCycle(cycleNumber: Int)
+
+    @Query("DELETE FROM posture_session_progress WHERE cycleNumber = :cycleNumber")
+    suspend fun deletePostureProgressForCycle(cycleNumber: Int)
+
+    @Query("DELETE FROM program_day_state WHERE cycleNumber = :cycleNumber")
+    suspend fun deleteProgramDayStatesForCycle(cycleNumber: Int)
+
+    /** C3 "Full Reset": wipe every table — the database is empty before onboarding re-runs. */
+    @Query("DELETE FROM user_progress")
+    suspend fun clearUserProgress()
+
+    @Query("DELETE FROM posture_session_progress")
+    suspend fun clearPostureProgress()
+
+    @Query("DELETE FROM program_day_state")
+    suspend fun clearProgramDayStates()
+
+    @Query("DELETE FROM set_log")
+    suspend fun clearSetLogs()
+
+    @Query("DELETE FROM body_weight_log")
+    suspend fun clearBodyWeightEntries()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertProgramDayStates(states: List<ProgramDayState>)
 
