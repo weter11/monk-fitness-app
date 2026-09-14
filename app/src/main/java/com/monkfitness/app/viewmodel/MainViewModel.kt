@@ -52,7 +52,7 @@ import com.monkfitness.app.validation.ValidationSettings
 import com.monkfitness.app.validation.ValidationPoseRegistry
 import com.monkfitness.app.util.normalize
 import com.monkfitness.app.domain.usecase.calculateProgramDay
-import com.monkfitness.app.domain.usecase.resolveCycleAndDay
+import com.monkfitness.app.domain.usecase.resolveActiveCycleAndDay
 import com.monkfitness.app.domain.usecase.synchronizeProgramStates
 import com.monkfitness.app.ui.screens.WorkoutStep
 import com.monkfitness.app.util.NotificationScheduler
@@ -177,16 +177,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), null
     )
 
-    // Cycle-aware "today": past the first cycle this resolves to the day WITHIN the active
-    // cycle. Before the C2 rollover runs (stored cycle still 1), days 57+ stay clamped at
-    // 56 so the completion dialog remains visible until it fires.
+    // Cycle-aware "today": the day WITHIN the active cycle, as resolved by the single boundary
+    // rule in resolveActiveCycleAndDay. Right after the C2 rollover the stamped cycle is one
+    // ahead of the calendar and the app is on that cycle's day 1 — never the finished cycle's
+    // day 56, which does not exist in the new cycle's grid and can only be answered with a
+    // phantom recovery session.
     val currentProgramDay = combine(
         settingsManager.programCycleNumberFlow,
         programStartDate,
         currentDate
     ) { storedCycle, startDate, today ->
-        val (resolvedCycle, resolvedDay) = resolveCycleAndDay(parseDate(startDate, today), today)
-        if (resolvedCycle >= storedCycle) resolvedDay else TOTAL_PROGRAM_DAYS
+        resolveActiveCycleAndDay(storedCycle, parseDate(startDate, today), today).second
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
 
     val programCycleNumber = combine(
@@ -194,8 +195,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         programStartDate,
         currentDate
     ) { storedCycle, startDate, today ->
-        val (resolvedCycle, _) = resolveCycleAndDay(parseDate(startDate, today), today)
-        maxOf(storedCycle, resolvedCycle)
+        resolveActiveCycleAndDay(storedCycle, parseDate(startDate, today), today).first
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
 
     val allProgress = repository.getAllProgress(programCycleNumber).stateIn(
@@ -1352,14 +1352,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (currentProgramDay.value == TOTAL_PROGRAM_DAYS && todayProgramDayState.value.isCompleted) {
                 val nextCycle = finishedCycle + 1
                 // 1) Seed the next cycle's grid as a fresh copy of the template (nothing
-                //    completed). The finished cycle's rows — completions AND missed days —
-                //    stay untouched as history.
+                //    completed, nothing missed) stamped onto the new cycle. The grid is scored
+                //    against the new cycle's OWN day 1: scoring it against the finished cycle's
+                //    day 56 would mark every earlier day of the new cycle as missed. The
+                //    finished cycle's rows — completions AND missed days — stay untouched as
+                //    history.
                 val freshGrid = synchronizeProgramStates(
                     existing = emptyList(),
-                    currentProgramDay = TOTAL_PROGRAM_DAYS,
+                    currentProgramDay = 1,
+                    cycleNumber = nextCycle,
                     workoutTypeForDay = ::getWorkoutTypeForDay
                 )
-                repository.upsertProgramDayStates(freshGrid.map { it.copy(cycleNumber = nextCycle) })
+                repository.upsertProgramDayStates(freshGrid)
 
                 // 2) Stamp the stored cycle number; programCycleNumber flips to nextCycle
                 //    and every cycle-scoped flow re-resolves against it automatically.
@@ -1493,21 +1497,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun syncProgramDayStates() {
         val cycle = programCycleNumber.value
+        val currentDay = currentProgramDay.value
         // Legacy backfill: rows migrated from before the rollover existed carry no
         // template grid for future cycles. If the active cycle has no grid yet, seed it
-        // fresh (nothing completed) without touching earlier cycles' history.
+        // fresh (nothing completed) without touching earlier cycles' history. The grid is
+        // scored against the day the active cycle is actually on, not against the last day of
+        // the program — a fresh cycle must not open with days it has not reached yet marked
+        // missed.
         if (cycle > 1 && repository.getProgramDayStatesSnapshot(cycle).isEmpty()) {
             val freshGrid = synchronizeProgramStates(
                 existing = emptyList(),
-                currentProgramDay = TOTAL_PROGRAM_DAYS,
+                currentProgramDay = currentDay,
+                cycleNumber = cycle,
                 workoutTypeForDay = ::getWorkoutTypeForDay
             )
-            repository.upsertProgramDayStates(freshGrid.map { it.copy(cycleNumber = cycle) })
+            repository.upsertProgramDayStates(freshGrid)
         }
         val legacyProgress = allProgress.value.filter { it.cycleNumber == cycle }.associateBy { it.day }
         val synchronizedStates = synchronizeProgramStates(
             existing = repository.getProgramDayStatesSnapshot(cycle),
-            currentProgramDay = currentProgramDay.value,
+            currentProgramDay = currentDay,
+            cycleNumber = cycle,
             workoutTypeForDay = ::getWorkoutTypeForDay
         ).map { state ->
             val legacy = legacyProgress[state.programDay]
