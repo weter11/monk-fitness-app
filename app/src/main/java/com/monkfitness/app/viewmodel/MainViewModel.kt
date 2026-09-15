@@ -31,7 +31,6 @@ import com.monkfitness.app.data.model.NutritionPlan
 import com.monkfitness.app.data.model.PostureSessionProgress
 import com.monkfitness.app.data.model.ProgramDayState
 import com.monkfitness.app.data.model.ProgramStatistics
-import com.monkfitness.app.data.model.SetLog
 import com.monkfitness.app.data.model.UserPreferences
 import com.monkfitness.app.data.model.UserProgress
 import com.monkfitness.app.data.model.VolumeHistoryPoint
@@ -1737,12 +1736,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun persistCompletedSet(exercise: Exercise) {
-        val now = System.currentTimeMillis()
-        val setLog = SetLog(
-            exerciseId = exercise.id,
-            repsCompleted = if (exercise.isTimerBased) 0 else exercise.maxReps.coerceAtLeast(exercise.reps).coerceAtLeast(0),
-            durationSeconds = if (exercise.isTimerBased) exercise.durationSeconds.coerceAtLeast(0) else 0,
-            timestamp = now,
+        val setLog = observedSetLog(
+            exercise = exercise,
+            remainingSeconds = _timeLeft.value,
+            timestamp = System.currentTimeMillis(),
             sessionDate = currentSessionDate()
         )
 
