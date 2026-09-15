@@ -17,7 +17,6 @@ import com.monkfitness.app.data.model.ShoppingItemEntity
 import com.monkfitness.app.data.model.UserProgress
 import com.monkfitness.app.data.model.VolumeHistoryPoint
 import com.monkfitness.app.data.model.WorkoutFrequencyPoint
-import com.monkfitness.app.domain.adaptive.SessionSetLog
 import kotlinx.coroutines.flow.Flow
 
 @Dao

@@ -1,8 +1,10 @@
 package com.monkfitness.app.data.repository
 
 import com.monkfitness.app.data.local.ProgressDao
+import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.ProgramDayState
 import com.monkfitness.app.data.model.UserProgress
+import com.monkfitness.app.domain.adaptive.PlannedExercise
 import com.monkfitness.app.domain.adaptive.SessionObservation
 import com.monkfitness.app.domain.adaptive.SessionObservationMapper
 import com.monkfitness.app.domain.adaptive.SessionSetLog
@@ -185,7 +187,8 @@ class SessionHistoryAdapter(
     }
 
     /**
-     * The exercises the presented workout prescribed for a historical program day, in workout order.
+     * The exercises the presented workout prescribed for a historical program day, in workout order,
+     * as the pure domain representation the mapper consumes.
      *
      * The plan comes from the generator's **deterministic output for that day** — the same input
      * always reproduces the same plan — and not from anything regenerated against today's
@@ -196,8 +199,24 @@ class SessionHistoryAdapter(
      * history after a configuration change. The generator's per-day plan is the only plan source the
      * app has; persistence stores no workout snapshot (see the class limitations).
      */
-    private fun plannedExercises(programDay: Int) =
-        workoutGenerator.generateWorkout(programDay).exercises
+    private fun plannedExercises(programDay: Int): List<PlannedExercise> =
+        workoutGenerator.generateWorkout(programDay).exercises.map { it.toPlanned() }
+
+    /**
+     * The data-layer -> domain boundary conversion: this is where the exercise library ends and the
+     * adaptive domain begins. Everything the mapper needs is carried across; everything it must not
+     * see (library identity, muscle groups, descriptions, default intensity) stays on this side.
+     *
+     * A timer exercise carries a placeholder repetition count in the library that is not prescribed
+     * repetition work, so its `repsPerSet` is normalized to `0` and the two unit channels stay clean.
+     */
+    private fun Exercise.toPlanned(): PlannedExercise = PlannedExercise(
+        exerciseId = id,
+        sets = sets,
+        repsPerSet = if (isTimerBased) 0 else reps,
+        durationSecondsPerSet = if (isTimerBased) durationSeconds else 0,
+        isTimerBased = isTimerBased
+    )
 
     /** The calendar date a day-level row's completion timestamp falls on, if it has one. */
     private fun UserProgress.sessionDate(): String? =
