@@ -8,6 +8,7 @@ import com.monkfitness.app.data.model.PostureSessionProgress
 import com.monkfitness.app.data.model.ProgramDayState
 import com.monkfitness.app.data.model.ProgramStatisticsSnapshot
 import com.monkfitness.app.data.model.SetLog
+import com.monkfitness.app.data.model.SetLogRow
 import com.monkfitness.app.data.model.ShoppingItemEntity
 import com.monkfitness.app.data.model.UserProgress
 import com.monkfitness.app.data.model.VolumeHistoryPoint
@@ -100,6 +101,10 @@ class ProgramMaintenanceTest {
         override fun getAllProgress(cycleNumber: Int): Flow<List<UserProgress>> = flowOf(userProgress)
         override fun getCompletedDaysCount(cycleNumber: Int): Flow<Int> = flowOf(0)
         override suspend fun getCompletedDays(): List<UserProgress> = userProgress
+        override suspend fun getDayProgressSnapshot(): List<UserProgress> = userProgress
+        override suspend fun getSessionDates(): List<String> = emptyList()
+        override suspend fun getProgramCycles(): List<Int> = emptyList()
+        override suspend fun getSetLogsForSessionDate(sessionDate: String): List<SetLogRow> = emptyList()
         override suspend fun getProgressByDay(cycleNumber: Int, day: Int): UserProgress? = null
         override suspend fun updateProgress(progress: UserProgress) {}
         override suspend fun insertSetLog(setLog: SetLog) {}

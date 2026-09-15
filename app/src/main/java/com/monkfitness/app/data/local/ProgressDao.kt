@@ -12,10 +12,12 @@ import com.monkfitness.app.data.model.PostureSessionProgress
 import com.monkfitness.app.data.model.ProgramDayState
 import com.monkfitness.app.data.model.ProgramStatisticsSnapshot
 import com.monkfitness.app.data.model.SetLog
+import com.monkfitness.app.data.model.SetLogRow
 import com.monkfitness.app.data.model.ShoppingItemEntity
 import com.monkfitness.app.data.model.UserProgress
 import com.monkfitness.app.data.model.VolumeHistoryPoint
 import com.monkfitness.app.data.model.WorkoutFrequencyPoint
+import com.monkfitness.app.domain.adaptive.SessionSetLog
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -32,6 +34,45 @@ interface ProgressDao {
      */
     @Query("SELECT * FROM user_progress WHERE isCompleted = 1 ORDER BY completionDate DESC")
     suspend fun getCompletedDays(): List<UserProgress>
+
+    /**
+     * Every persisted day-level progress row, oldest first — the day-level source for the session
+     * history adapter. `completionDate` is the finished stamp a [SessionObservation] reports, so
+     * the order this query returns is the order observations are built in.
+     *
+     * Named for what it reads (every row of the day-level source, not only completed ones) — the
+     * adapter derives both the session calendar and the completion flag from these rows.
+     */
+    @Query("SELECT * FROM user_progress ORDER BY cycleNumber ASC, day ASC")
+    suspend fun getDayProgressSnapshot(): List<UserProgress>
+
+    /**
+     * The persisted per-set rows for one session date, ordered by the moment each set was confirmed.
+     *
+     * Only the columns the adapter reads are projected, so the query cannot depend on a column a
+     * future schema change drops. Deliberately **not** joined to [UserProgress]: a set row is
+     * matched to a session by the calendar date it was recorded on, which is the only session
+     * identifier a set row carries. A session that was started and abandoned writes no day-level
+     * progress row at all, so a join here would silently drop exactly the partial sessions the
+     * adapter exists to surface — the attribution is resolved in the adapter instead.
+     */
+    @Query(
+        """
+        SELECT exerciseId, sessionDate, timestamp, repsCompleted, durationSeconds
+        FROM set_log
+        WHERE sessionDate = :sessionDate
+        ORDER BY timestamp ASC
+        """
+    )
+    suspend fun getSetLogsForSessionDate(sessionDate: String): List<SetLogRow>
+
+    /** Every calendar date that carries at least one confirmed set, oldest first. */
+    @Query("SELECT DISTINCT sessionDate FROM set_log ORDER BY sessionDate ASC")
+    suspend fun getSessionDates(): List<String>
+
+    /** Every cycle the calendar sync has a program-day grid for, lowest first. */
+    @Query("SELECT DISTINCT cycleNumber FROM program_day_state ORDER BY cycleNumber ASC")
+    suspend fun getProgramCycles(): List<Int>
 
     @Query(
         "SELECT * FROM user_progress WHERE cycleNumber = :cycleNumber AND day = :day LIMIT 1"
