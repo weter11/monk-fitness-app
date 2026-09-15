@@ -63,8 +63,12 @@ data class AdaptiveEvidence(
     /** Qualifying sessions completed while in RECOVERY: the count its exit gate is measured in. */
     val recoveryQualifyingSessions: Int = 0,
 
-    /** Eligible sessions since the last progression-level change for this family. */
-    val eligibleSessionsSinceLastProgressionChange: Int
+    /**
+     * Eligible sessions since the last progression-level change for this family, or `null` when the
+     * family has never had one. `null` is deliberately not the same as `0`: the cooldown applies
+     * only *after* an actual change, so the first confirmed change is never blocked by it.
+     */
+    val eligibleSessionsSinceLastProgressionChange: Int?
 ) {
 
     init {
@@ -83,8 +87,11 @@ data class AdaptiveEvidence(
         require(recoveryQualifyingSessions >= 0) {
             "recoveryQualifyingSessions must be >= 0, was $recoveryQualifyingSessions"
         }
-        require(eligibleSessionsSinceLastProgressionChange >= 0) {
-            "eligibleSessionsSinceLastProgressionChange must be >= 0, was $eligibleSessionsSinceLastProgressionChange"
+        require(
+            eligibleSessionsSinceLastProgressionChange == null ||
+                eligibleSessionsSinceLastProgressionChange >= 0
+        ) {
+            "eligibleSessionsSinceLastProgressionChange must be null or >= 0, was $eligibleSessionsSinceLastProgressionChange"
         }
     }
 }
@@ -97,8 +104,9 @@ data class AdaptiveEvidence(
  *
  * Transition order in [evaluate], highest priority first:
  *
- *  1. **high risk** → RECOVERY. High recent load with a negative trend or strongly reduced exposure,
- *     or the prolonged high-risk pattern, after [recoveryEntryConfirmingWindows] qualifying window
+ *  1. **high risk** → RECOVERY. High recent load with a negative trend or strongly reduced exposure
+ *     ([AdaptiveReasonCode.HIGH_LOAD_DETERIORATION]), or the prolonged low-exposure pattern
+ *     ([AdaptiveReasonCode.RECOVERY]), after [recoveryEntryConfirmingWindows] qualifying window
  *     (one by default). This is the safety path: it is never blocked by the progression cooldown.
  *  2. **RECOVERY gating** — while the state reported by the caller is RECOVERY, the family stays
  *     there until [recoveryExitQualifyingSessions] qualifying sessions have accumulated, then leaves
@@ -111,9 +119,11 @@ data class AdaptiveEvidence(
  *     silently as insufficient evidence.
  *  6. **everything else** → HOLD with [AdaptiveReasonCode.INSUFFICIENT_EVIDENCE].
  *
- * The cooldown is read symmetrically: [eligibleSessionsSinceLastProgressionChange] counts eligible
- * sessions since the family's last progression-*level* change, in either direction, because
- * [progressionCooldownEligibleSessions] exists to stop oscillation, not to stop corrections.
+ * The cooldown is read symmetrically: [AdaptiveEvidence.eligibleSessionsSinceLastProgressionChange]
+ * counts eligible sessions since the family's last progression-*level* change, in either direction,
+ * because [progressionCooldownEligibleSessions] exists to stop oscillation, not to stop corrections.
+ * It applies only *after* a change: a family with no recorded change (`null`) has nothing to cool
+ * down from, so its first confirmed change goes through.
  *
  * PROGRESS and REGRESS are orders for the current window, not stored memory: a caller that holds
  * PROGRESS in `currentState` gains nothing from it, and must supply the qualifying-window evidence
@@ -176,21 +186,22 @@ data class AdaptivePolicy(
 
     /** The deterministic policy decision for one decision window. */
     fun evaluate(evidence: AdaptiveEvidence): AdaptiveDecision {
-        val highRisk = isHighRisk(evidence)
+        val recoveryReason = recoveryEntryReason(evidence)
         val progressConfirmed = progressConditionsMet(evidence) &&
             evidence.precedingProgressQualifyingWindows + 1 >= progressConfirmingWindows
         val regressConfirmed = regressConditionsMet(evidence) &&
             evidence.precedingRegressQualifyingWindows + 1 >= regressConfirmingWindows
-        val cooldownElapsed =
+        // A family that never had a progression-level change has nothing to cool down from.
+        val cooldownElapsed = evidence.eligibleSessionsSinceLastProgressionChange == null ||
             evidence.eligibleSessionsSinceLastProgressionChange >= progressionCooldownEligibleSessions
 
         val state: AdaptiveState
         val reason: AdaptiveReasonCode
 
         when {
-            highRisk -> {
+            recoveryReason != null -> {
                 state = AdaptiveState.RECOVERY
-                reason = AdaptiveReasonCode.HIGH_LOAD_DETERIORATION
+                reason = recoveryReason
             }
 
             evidence.currentState == AdaptiveState.RECOVERY -> when {
@@ -247,7 +258,15 @@ data class AdaptivePolicy(
             evidence.exposureScore < regressMaximumExposureScore &&
             evidence.performanceTrend == PerformanceTrend.NEGATIVE
 
-    private fun isHighRisk(evidence: AdaptiveEvidence): Boolean {
+    /**
+     * The reason RECOVERY is entered for this window, or `null` when the window is not high risk.
+     *
+     * The high-load path keeps [AdaptiveReasonCode.HIGH_LOAD_DETERIORATION]; the prolonged
+     * low-exposure pattern (strong low exposure plus a negative trend, with no HIGH load
+     * involved) reports [AdaptiveReasonCode.RECOVERY], so the audit trail does not claim a load
+     * spike that the evidence never showed.
+     */
+    private fun recoveryEntryReason(evidence: AdaptiveEvidence): AdaptiveReasonCode? {
         val loadAndDeterioration = evidence.recentLoadBucket == RecentLoadBucket.HIGH &&
             (
                 evidence.performanceTrend == PerformanceTrend.NEGATIVE ||
@@ -258,7 +277,15 @@ data class AdaptivePolicy(
             evidence.precedingHighRiskWindows + 1 >= recoveryProlongedHighRiskWindows
 
         val qualifyingWindow = loadAndDeterioration || prolongedPattern
-        return qualifyingWindow && evidence.precedingHighRiskWindows + 1 >= recoveryEntryConfirmingWindows
+        if (!qualifyingWindow || evidence.precedingHighRiskWindows + 1 < recoveryEntryConfirmingWindows) {
+            return null
+        }
+
+        return if (loadAndDeterioration) {
+            AdaptiveReasonCode.HIGH_LOAD_DETERIORATION
+        } else {
+            AdaptiveReasonCode.RECOVERY
+        }
     }
 
     init {

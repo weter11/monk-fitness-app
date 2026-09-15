@@ -193,10 +193,11 @@ class AdaptivePolicyTest {
     @Test
     fun prolongedHighRiskPatternEntersRecovery() {
         // The documented second entry path: strong low exposure plus declining performance,
-        // sustained across two high-risk windows. No load spike is required.
+        // sustained across two high-risk windows. No load spike is required, so this is not
+        // reported as load deterioration.
         assertDecision(
             AdaptiveState.RECOVERY,
-            AdaptiveReasonCode.HIGH_LOAD_DETERIORATION,
+            AdaptiveReasonCode.RECOVERY,
             progressReady(
                 exposureScore = 0.55,
                 performanceTrend = PerformanceTrend.NEGATIVE,
@@ -212,6 +213,41 @@ class AdaptivePolicyTest {
                 performanceTrend = PerformanceTrend.NEGATIVE,
                 precedingHighRiskWindows = 0,
                 precedingProgressQualifyingWindows = 0
+            )
+        )
+    }
+
+    @Test
+    fun prolongedLowExposureWithNegativeTrendReportsTheRecoveryReasonCode() {
+        // Same state, honest reason: no HIGH load is involved, so HIGH_LOAD_DETERIORATION would lie.
+        assertDecision(
+            AdaptiveState.RECOVERY,
+            AdaptiveReasonCode.RECOVERY,
+            progressReady(
+                exposureScore = 0.59,
+                performanceTrend = PerformanceTrend.NEGATIVE,
+                recentLoadBucket = RecentLoadBucket.NORMAL,
+                precedingHighRiskWindows = 1
+            )
+        )
+        assertDecision(
+            AdaptiveState.RECOVERY,
+            AdaptiveReasonCode.RECOVERY,
+            progressReady(
+                exposureScore = 0.30,
+                performanceTrend = PerformanceTrend.NEGATIVE,
+                recentLoadBucket = RecentLoadBucket.ELEVATED,
+                precedingHighRiskWindows = 3
+            )
+        )
+        // ...while an actual HIGH-load deterioration keeps its own code, even with low exposure.
+        assertDecision(
+            AdaptiveState.RECOVERY,
+            AdaptiveReasonCode.HIGH_LOAD_DETERIORATION,
+            highRisk(
+                performanceTrend = PerformanceTrend.NEGATIVE,
+                exposureScore = 0.40,
+                precedingHighRiskWindows = 1
             )
         )
     }
@@ -293,7 +329,24 @@ class AdaptivePolicyTest {
     // ---------------------------------------------------------- gating, thresholds and determinism
 
     @Test
+    fun noPreviousProgressionChangeDoesNotActivateTheCooldown() {
+        // The first confirmed change for a family has nothing to cool down from: the absent history
+        // is expressed as null, not as "0 eligible sessions since a change".
+        assertDecision(
+            AdaptiveState.PROGRESS,
+            AdaptiveReasonCode.SUSTAINED_POSITIVE_PERFORMANCE,
+            progressReady(eligibleSessionsSinceLastProgressionChange = null)
+        )
+        assertDecision(
+            AdaptiveState.REGRESS,
+            AdaptiveReasonCode.SUSTAINED_DECLINE,
+            regressReady(eligibleSessionsSinceLastProgressionChange = null)
+        )
+    }
+
+    @Test
     fun progressionCooldownBlocksAnotherProgressionChange() {
+        // After an actual progression-level change: 0 and 1 eligible sessions block, 2 elapse.
         assertDecision(
             AdaptiveState.HOLD,
             AdaptiveReasonCode.PROGRESSION_COOLDOWN,
@@ -561,7 +614,7 @@ class AdaptivePolicyTest {
     // ------------------------------------------------------------------------------------ helpers
 
     private fun defaults() = AdaptiveEvidence(
-        eligibleSessionsSinceLastProgressionChange = 2
+        eligibleSessionsSinceLastProgressionChange = null
     )
 
     private fun progressReady(
@@ -575,7 +628,7 @@ class AdaptivePolicyTest {
         precedingRegressQualifyingWindows: Int = 0,
         precedingHighRiskWindows: Int = 0,
         recoveryQualifyingSessions: Int = 0,
-        eligibleSessionsSinceLastProgressionChange: Int = 2
+        eligibleSessionsSinceLastProgressionChange: Int? = null
     ) = AdaptiveEvidence(
         currentState = currentState,
         eligibleSessionCount = eligibleSessionCount,
@@ -601,7 +654,7 @@ class AdaptivePolicyTest {
         precedingRegressQualifyingWindows: Int = 1,
         precedingHighRiskWindows: Int = 0,
         recoveryQualifyingSessions: Int = 0,
-        eligibleSessionsSinceLastProgressionChange: Int = 2
+        eligibleSessionsSinceLastProgressionChange: Int? = null
     ) = progressReady(
         currentState = currentState,
         eligibleSessionCount = eligibleSessionCount,
@@ -622,7 +675,7 @@ class AdaptivePolicyTest {
         exposureScore: Double = 0.85,
         precedingHighRiskWindows: Int = 0,
         recoveryQualifyingSessions: Int = 0,
-        eligibleSessionsSinceLastProgressionChange: Int = 2
+        eligibleSessionsSinceLastProgressionChange: Int? = null
     ) = progressReady(
         currentState = currentState,
         exposureScore = exposureScore,

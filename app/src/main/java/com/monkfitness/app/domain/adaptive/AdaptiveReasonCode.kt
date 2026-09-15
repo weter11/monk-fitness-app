@@ -21,10 +21,13 @@ enum class AdaptiveReasonCode {
     /** REGRESS: low exposure and a negative trend held in two consecutive decision windows. */
     SUSTAINED_DECLINE,
 
-    /** RECOVERY: high recent load with deterioration, or a prolonged high-risk pattern. */
+    /** RECOVERY: high recent load with deterioration or strongly reduced exposure. */
     HIGH_LOAD_DETERIORATION,
 
-    /** RECOVERY: recovery gating — either still inside recovery, or released out of it to HOLD. */
+    /**
+     * RECOVERY: entered for the prolonged low-exposure pattern (strong low exposure plus a negative
+     * trend, with no HIGH load involved), still inside recovery, or released out of it to HOLD.
+     */
     RECOVERY,
 
     /** HOLD: progression qualified, but the last level change for this family is too recent. */
