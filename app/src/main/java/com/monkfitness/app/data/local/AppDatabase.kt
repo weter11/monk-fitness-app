@@ -4,9 +4,12 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.monkfitness.app.data.model.AdaptiveDecisionRecord
 import com.monkfitness.app.data.model.BodyWeightEntry
+import com.monkfitness.app.data.model.FamilyProgressionState
 import com.monkfitness.app.data.model.MealCycle
 import com.monkfitness.app.data.model.MealEntity
 import com.monkfitness.app.data.model.PostureSessionProgress
@@ -24,13 +27,20 @@ import com.monkfitness.app.data.model.UserProgress
         ProgramDayState::class,
         MealCycle::class,
         MealEntity::class,
-        ShoppingItemEntity::class
+        ShoppingItemEntity::class,
+        FamilyProgressionState::class,
+        AdaptiveDecisionRecord::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
+@TypeConverters(AdaptiveTypeConverters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun progressDao(): ProgressDao
+
+    abstract fun familyProgressionStateDao(): FamilyProgressionStateDao
+
+    abstract fun adaptiveDecisionHistoryDao(): AdaptiveDecisionHistoryDao
 
     companion object {
         @Volatile
@@ -238,6 +248,64 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Adaptive program Stage 1: adds the two adaptive tables and touches nothing else.
+         *
+         * Purely additive — two new tables, no row of any existing table read, rewritten or dropped,
+         * so a device upgrading from version 6 keeps every progress, posture, set-log, body-weight,
+         * calendar and nutrition row exactly as it was. Both tables are created empty: adaptive state
+         * starts at the domain's own baseline (a family with no stored state is evaluated as
+         * `notYetTracked`), so there is nothing to backfill and nothing to invent.
+         *
+         * The DDL is byte-equivalent to what Room generates for the two entities — column order,
+         * types, nullability and keys included — because Room validates the migrated schema against
+         * its own expectations on open: a hand-written table that differs only in a NOT NULL flag
+         * would crash the upgrade rather than fail silently.
+         *
+         * Visible to the unit tests on purpose: the migration's DDL is the deployable proof that the
+         * tables coexist with the existing ones, and `AdaptivePersistenceSchemaTest` executes it.
+         */
+        internal val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `family_progression_state` (
+                        `familyId` TEXT NOT NULL,
+                        `progressionLevel` INTEGER NOT NULL,
+                        `currentExerciseId` TEXT,
+                        `adaptationState` TEXT NOT NULL,
+                        `precedingProgressQualifyingWindows` INTEGER NOT NULL,
+                        `precedingRegressQualifyingWindows` INTEGER NOT NULL,
+                        `precedingHighRiskWindows` INTEGER NOT NULL,
+                        `recoveryQualifyingSessions` INTEGER NOT NULL,
+                        `eligibleSessionsSinceLastProgressionChange` INTEGER,
+                        `programRevision` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        `policyVersion` INTEGER NOT NULL,
+                        PRIMARY KEY(`programRevision`, `familyId`)
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `adaptive_decision_record` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `familyId` TEXT NOT NULL,
+                        `programRevision` INTEGER NOT NULL,
+                        `cycleNumber` INTEGER NOT NULL,
+                        `programDay` INTEGER NOT NULL,
+                        `timestamp` INTEGER NOT NULL,
+                        `previousState` TEXT NOT NULL,
+                        `newState` TEXT NOT NULL,
+                        `actions` TEXT NOT NULL,
+                        `reasonCode` TEXT NOT NULL,
+                        `policyVersion` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -245,7 +313,14 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "monk_fitness_db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(
+                        MIGRATION_1_2,
+                        MIGRATION_2_3,
+                        MIGRATION_3_4,
+                        MIGRATION_4_5,
+                        MIGRATION_5_6,
+                        MIGRATION_6_7
+                    )
                     .build()
                 INSTANCE = instance
                 instance
