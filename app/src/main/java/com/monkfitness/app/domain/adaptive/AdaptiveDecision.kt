@@ -40,13 +40,20 @@ enum class AdaptiveAction {
  * [previousState] is the state the caller reported in `AdaptiveEvidence.currentState`, so the
  * transition itself is part of the record. Note that PROGRESS and REGRESS are *orders* for this
  * window, not a memory: a window that does not re-qualify reports HOLD again.
+ *
+ * [familyId] is the scope of the decision. [AdaptivePolicy] is family-agnostic — it decides from the
+ * evidence it is handed, whichever family that evidence describes — so the family id is attached by
+ * the layer that evaluates the families of a decision window, and every decision that layer produces
+ * carries the family it applies to. It stays nullable because the policy's own output is a decision
+ * about evidence, not about an identity it was never told.
  */
 data class AdaptiveDecision(
     val state: AdaptiveState,
     val previousState: AdaptiveState,
     val actions: List<AdaptiveAction>,
     val reasonCode: AdaptiveReasonCode,
-    val policyVersion: Int
+    val policyVersion: Int,
+    val familyId: String? = null
 ) {
 
     init {
