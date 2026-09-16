@@ -42,4 +42,17 @@ interface FamilyProgressionStateDao {
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertFamilyState(state: FamilyProgressionState)
+
+    /**
+     * Clears every family's current state, for the one operation that erases the program's own record:
+     * the C3 "Full Reset", after which the next session of every family is evaluated from the domain's
+     * documented `notYetTracked` baseline exactly as it was on first launch.
+     *
+     * It is table-wide on purpose and there is deliberately no revision-scoped delete. "Start Revised
+     * Program" must NOT come through here: that action starts a new revision from baseline by writing
+     * its own revision's rows, while the earlier revision's rows stay readable as history — clearing
+     * them would destroy the results the design says are retained.
+     */
+    @Query("DELETE FROM family_progression_state")
+    suspend fun clearFamilyStates()
 }

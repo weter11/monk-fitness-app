@@ -33,8 +33,11 @@ package com.monkfitness.app.domain.adaptive
  *    only from the set rows;
  *  * reduce repetitions and seconds to one scalar — the two channels are aggregated side by side
  *    into [Workload], never added;
- *  * fabricate a timestamp — `startedAt` is the earliest confirmed set and `finishedAt` is the
- *    day-level completion stamp, and when persistence has neither, the stamp is `null`;
+ *  * fabricate a timestamp — `startedAt` is the earliest confirmed set, or the day-level completion
+ *    stamp when a completed day has no set rows left to date it, and `finishedAt` is the day-level
+ *    completion stamp; when persistence has neither, the stamp is `null`;
+ *  * invent an end for a session that has not ended — `finishedAt` is set only by the day-level
+ *    completion, so an abandoned session carries `null` rather than an imagined abandonment time;
  *  * discard a persisted row — a row is kept unless a higher-level caller filters it. The write
  *    path does not prove timestamp uniqueness, so two confirmed sets sharing a millisecond are two
  *    performed sets, not a duplicated one. A cap keeps their aggregate inside the plan.
@@ -67,7 +70,14 @@ internal object SessionObservationMapper {
         val actualWork = exerciseResults.map { it.actualWorkload() }.foldWorkloads()
         val completedExercises = exerciseResults.count { it.completedSets > 0 }
 
-        val startedAt = setLogs.minOfOrNull { it.timestamp }
+        val observedStart = setLogs.minOfOrNull { it.timestamp }
+        // A completed day whose confirmed-set rows are gone — every set rolled back, or history written
+        // by a build that did not log sets — is still a session the user finished, and the day-level
+        // completion stamp is the only instant persistence establishes for it. Reporting no start at all
+        // would make that finished session vanish from the history, and because the whole history is read
+        // as one list it would take every other session's observation down with it. The completion
+        // instant is the extent persistence can prove — not an invented session length.
+        val startedAt = observedStart ?: completedAt?.takeIf { isCompleted }
         val finishedAt = if (isCompleted) completedAt else null
 
         return SessionObservation(

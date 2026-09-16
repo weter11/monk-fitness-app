@@ -1,7 +1,9 @@
 package com.monkfitness.app.data.repository
 
 import androidx.room.withTransaction
+import com.monkfitness.app.data.local.AdaptiveDecisionHistoryDao
 import com.monkfitness.app.data.local.AppDatabase
+import com.monkfitness.app.data.local.FamilyProgressionStateDao
 import com.monkfitness.app.data.local.ProgressDao
 
 /**
@@ -42,14 +44,23 @@ object ProgramMaintenance {
     }
 
     /**
-     * C3 "Full Reset": wipes every progress/history table the program owns.
+     * C3 "Full Reset": wipes every progress/history table the program owns — the calendar and logging
+     * tables plus the two adaptive ones this stage added.
      *
-     * @param inTransaction as above; rolls the five deletes back together.
+     * The adaptive tables belong to this operation for the same reason the workout history does: the
+     * reset returns the app to its true first-launch state, and adaptive progression and its audit trail
+     * are part of what the program recorded. They are cleared in the SAME transaction as the rest, so a
+     * half-applied reset cannot leave a user with no workout history and a progression level, and a
+     * reset that kept them would leave the next session adapting from results it can no longer explain.
+     *
+     * @param inTransaction as above; rolls all seven deletes back together.
      * @throws Exception whatever the DAO throws, so the caller reports the failure instead of
      * leaving a mixture of cleared and uncleared tables.
      */
     suspend fun clearAllProgressData(
         progressDao: ProgressDao,
+        familyStateDao: FamilyProgressionStateDao,
+        decisionHistoryDao: AdaptiveDecisionHistoryDao,
         inTransaction: suspend (suspend () -> Unit) -> Unit
     ) {
         inTransaction {
@@ -58,6 +69,8 @@ object ProgramMaintenance {
             progressDao.clearProgramDayStates()
             progressDao.clearSetLogs()
             progressDao.clearBodyWeightEntries()
+            familyStateDao.clearFamilyStates()
+            decisionHistoryDao.clearDecisionHistory()
         }
     }
 
@@ -71,7 +84,9 @@ object ProgramMaintenance {
         "posture_session_progress",
         "program_day_state",
         "set_log",
-        "body_weight_log"
+        "body_weight_log",
+        "family_progression_state",
+        "adaptive_decision_record"
     )
 
     /**

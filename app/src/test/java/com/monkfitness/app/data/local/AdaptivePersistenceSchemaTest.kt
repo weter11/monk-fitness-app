@@ -219,15 +219,32 @@ class AdaptivePersistenceSchemaTest {
         val stateDao = File(mainSources, "data/local/FamilyProgressionStateDao.kt").readText()
         val historyDao = File(mainSources, "data/local/AdaptiveDecisionHistoryDao.kt").readText()
 
-        assertFalse("a current-state row is written, never deleted", stateDao.contains("@Delete"))
-        assertFalse(stateDao.contains("DELETE FROM"))
+        assertFalse("a current-state row is written, never deleted one at a time", stateDao.contains("@Delete"))
 
-        for (mutator in listOf("@Update", "@Delete", "@Upsert", "OnConflictStrategy", "UPDATE ", "DELETE FROM")) {
+        for (mutator in listOf("@Update", "@Delete", "@Upsert", "OnConflictStrategy", "UPDATE ")) {
             assertFalse(
                 "a decision record is append-only: the history DAO must not contain $mutator",
                 historyDao.contains(mutator)
             )
         }
+
+        // The only delete either DAO may expose is the C3 "Full Reset" clear, which takes the whole
+        // program record at once — Task 8 deliberately left the reset semantics to the lifecycle task,
+        // and a reset that kept adaptive progression while erasing the workout history it was derived
+        // from is not a reset. What still must be impossible is the delete that REWRITES history: one
+        // that names a row, a window, a family or a revision. Pinning the exact literals, and asserting
+        // that none of them carries a WHERE clause, is that rule — a narrowed delete cannot hide here.
+        assertEquals(
+            "the state DAO clears the whole table and nothing narrower",
+            listOf("DELETE FROM family_progression_state"),
+            deleteStatementsIn(stateDao)
+        )
+        assertEquals(
+            "the history DAO clears the whole trail and nothing narrower",
+            listOf("DELETE FROM adaptive_decision_record"),
+            deleteStatementsIn(historyDao)
+        )
+
         assertTrue("history is appended", historyDao.contains("suspend fun appendDecision"))
         assertTrue(
             "and both history queries name a total order",
@@ -235,6 +252,17 @@ class AdaptivePersistenceSchemaTest {
                 Regex("ORDER BY[^\\\"]*id ASC").findAll(historyDao).count() == 2
         )
     }
+
+    /**
+     * Every `DELETE FROM …` literal a DAO source declares, verbatim: the count and the text of each are
+     * the assertion, so a narrowed (row-scoped) delete shows up as a different literal rather than passing
+     * as "a delete exists".
+     */
+    private fun deleteStatementsIn(daoSource: String): List<String> =
+        Regex("""DELETE FROM [a-zA-Z_]+(?: WHERE [^"\n]*)?""")
+            .findAll(daoSource)
+            .map { it.value.trim() }
+            .toList()
 
     // ---- the stored vocabulary ----------------------------------------------------------------------
 

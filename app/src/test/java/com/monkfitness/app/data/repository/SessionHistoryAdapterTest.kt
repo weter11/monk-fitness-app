@@ -241,6 +241,38 @@ class SessionHistoryAdapterTest {
         assertEquals("every planned exercise was performed", planned.size, observation.completedExercises)
     }
 
+    /**
+     * A completed day whose confirmed-set rows are gone — every set rolled back, or history written by a
+     * build that did not log sets — is still a session the user finished. Persistence keeps two
+     * independent facts (the day-level completion and the set rows), and the completion stamp is the only
+     * instant it establishes for such a session. The reading must not be "not started": that would make a
+     * finished session vanish from the history, and because the whole history is read as one list it
+     * would take every other session's observation down with it (`COMPLETED requires the moment the
+     * session started`).
+     */
+    @Test
+    fun aCompletedDayWithoutConfirmedSetRowsIsStillItsCompletedObservation() = runBlocking {
+        val day = 1 // STRENGTH_A
+        val dao = FakeProgressDao(userProgress = listOf(completedDay(1, day)))
+
+        val observation = adapter(dao).observations().single()
+
+        assertEquals(SessionOutcome.COMPLETED, observation.outcome)
+        assertEquals(
+            "the completion stamp is the whole extent persistence proves for it",
+            finishedAt,
+            observation.startedAt
+        )
+        assertEquals(finishedAt, observation.finishedAt)
+        assertTrue("no set row means no observed work", observation.actualWork.isZero)
+        assertEquals(0, observation.completedExercises)
+        assertEquals(
+            "the plan still describes what the session prescribed",
+            plannedExercises(day).size,
+            observation.plannedExercises
+        )
+    }
+
     @Test
     fun completedDayCarriesTheCompletionStampAsFinishedAt() = runBlocking {
         val day = 1

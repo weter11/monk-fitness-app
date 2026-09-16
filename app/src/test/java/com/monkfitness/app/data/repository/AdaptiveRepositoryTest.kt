@@ -104,6 +104,11 @@ class AdaptiveRepositoryTest {
             }
             rows += state
         }
+
+        override suspend fun clearFamilyStates() {
+            failure?.let { throw IllegalStateException(it) }
+            rows.clear()
+        }
     }
 
     /** In-memory [AdaptiveDecisionHistoryDao]: append-only, `id` assigned on insert, ordered reads. */
@@ -130,6 +135,23 @@ class AdaptiveRepositoryTest {
                         { it.programRevision }, { it.cycleNumber }, { it.programDay }, { it.id }
                     )
                 )
+
+        override suspend fun countDecisionsFor(
+            programRevision: Int,
+            cycleNumber: Int,
+            programDay: Int,
+            familyId: String
+        ): Int = rows.count {
+            it.programRevision == programRevision &&
+                it.cycleNumber == cycleNumber &&
+                it.programDay == programDay &&
+                it.familyId == familyId
+        }
+
+        override suspend fun clearDecisionHistory() {
+            failure?.let { throw IllegalStateException(it) }
+            rows.clear()
+        }
     }
 
     private class Fixture {
