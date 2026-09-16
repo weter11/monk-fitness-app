@@ -42,9 +42,15 @@ import com.monkfitness.app.data.model.nutritionExclusionIngredients
 import com.monkfitness.app.data.model.toMealEntities
 import com.monkfitness.app.data.model.toShoppingItemEntities
 import com.monkfitness.app.data.model.validateAvailableProductSelection
+import com.monkfitness.app.data.repository.SessionAdaptiveInputs
+import com.monkfitness.app.data.repository.SessionAdaptivePlanReader
 import com.monkfitness.app.data.repository.WorkoutRepository
 import com.monkfitness.app.data.repository.programConfigurationRepository
+import com.monkfitness.app.domain.adaptive.ProgramType
 import com.monkfitness.app.domain.adaptive.WorkoutConfigurationSnapshot
+import com.monkfitness.app.domain.usecase.AdaptiveSessionPlan
+import com.monkfitness.app.domain.usecase.AdaptiveWorkoutGenerationRequest
+import com.monkfitness.app.domain.usecase.AdaptiveWorkoutIntegration
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import com.monkfitness.app.ui.customprogram.CustomProgramEditor
 import com.monkfitness.app.validation.EngineeringValidationFilter
@@ -108,6 +114,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         /** The Custom Program editor's destination in the app's single navigation graph. */
         const val ROUTE_CUSTOM_PROGRAM = "custom-program"
+
+        /** The first program day, used only before a session's own day is established. */
+        private const val FIRST_PROGRAM_DAY = 1
+
+        /**
+         * The program revision of the program as first started, matching the persisted family
+         * progression's revision column and `SettingsManager.PROGRAM_REVISION`: a revision above it is
+         * a C3 "Start Revised Program".
+         */
+        private const val STANDARD_PROGRAM_REVISION = 0
+
         private const val TAG = "MainViewModel"
     }
 
@@ -166,9 +183,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val settingsManager: SettingsManager
 
+    /** Reads this session's persisted adaptive inputs; writes nothing. See `SessionAdaptivePlanReader`. */
+    private val sessionAdaptivePlanReader: SessionAdaptivePlanReader
+
     init {
         val db = AppDatabase.getDatabase(application)
         repository = WorkoutRepository(db)
+        sessionAdaptivePlanReader = SessionAdaptivePlanReader.of(db, workoutGenerator)
         settingsManager = SettingsManager(application)
     }
 
@@ -522,6 +543,61 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The configuration the running workout session runs on, as the session state presents it. */
     val sessionConfiguration: Flow<WorkoutConfigurationSnapshot?> = activeWorkoutConfiguration.effectiveConfiguration
 
+    // ---- Task 13: the session's adaptive plan ------------------------------------------------------
+    // Three things stay apart on purpose, and nothing here blurs them:
+    //   * the session's *configuration* is Task 12's frozen snapshot — never the live store;
+    //   * the session's *adaptive plan* comes from the session's own reader, derived from that
+    //     snapshot plus the persisted adaptive state, and is read once per session (see below);
+    //   * the *workout* is built by the existing `WorkoutGenerator`, constrained by that plan.
+    // No threshold, state transition or progression step is decided in this class: the adaptive
+    // domain decides those through `AdaptiveWorkoutIntegration`, and this view model only supplies
+    // its inputs and applies the values it returns — through the existing difficulty mechanism, and
+    // through the existing generator.
+    private val adaptiveWorkoutIntegration = AdaptiveWorkoutIntegration(workoutGenerator)
+
+    /**
+     * The adaptive plan of the running session, or `null` before its configuration is captured.
+     *
+     * It is derived from `sessionConfiguration`, so it is computed from the session's own frozen
+     * snapshot and never from the live configuration store: an edit during the session changes the
+     * next session's plan, not this one's. It is held eagerly — one read per session start, the value
+     * the session generates from — rather than recomputed per subscriber, so navigating away and back
+     * into a running session cannot re-derive (and therefore re-shape) the workout it is presenting.
+     */
+    private val sessionAdaptivePlan: StateFlow<AdaptiveSessionPlan?> = sessionConfiguration
+        .map { snapshot -> snapshot?.let { captured -> readSessionAdaptivePlan(captured) } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * The adaptive inputs of one session, read once, from the session's captured configuration.
+     *
+     * Which stored value is the source of which number — the normalized history, the current family
+     * progression of the session's program revision — is the reader's business, not this class's. The
+     * reader writes nothing, so no generation can move a stored level, and a failed read degrades to
+     * no evidence (HOLD for every family) rather than to an invented progression step.
+     */
+    private suspend fun readSessionAdaptivePlan(
+        configuration: WorkoutConfigurationSnapshot
+    ): AdaptiveSessionPlan {
+        val revision = programRevision.value
+
+        return sessionAdaptivePlanReader.read(
+            SessionAdaptiveInputs(
+                programDay = _currentWorkoutDay.value ?: FIRST_PROGRAM_DAY,
+                programCycle = programCycleNumber.value,
+                programType = if (revision == STANDARD_PROGRAM_REVISION) {
+                    ProgramType.STANDARD
+                } else {
+                    ProgramType.REVISED
+                },
+                programRevision = revision,
+                configuration = configuration,
+                availableEquipment = availableEquipment.value,
+                programStartDate = parseDate(programStartDate.value, LocalDate.now())
+            )
+        )
+    }
+
     val workoutSessionUiState = combine(
         currentWorkoutDay,
         currentSessionMode,
@@ -530,7 +606,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         flexibilityFocusAreas,
         availableEquipment,
         disabledExerciseFamilies,
-        sessionConfiguration
+        sessionConfiguration,
+        sessionAdaptivePlan
     ) { values ->
         val day = values[0] as Int?
         val sessionMode = values[1] as SessionMode
@@ -547,9 +624,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // from then on, so nothing observed here can be re-pointed by a later edit. It is presented
         // as session state because the session's own behaviour is the only thing allowed to consume it.
         val effectiveConfiguration = values[7] as WorkoutConfigurationSnapshot?
-        if (day == null) {
+        // The adaptive plan of this session, derived from that same captured configuration. A session
+        // has no workout until both exist: before the configuration is captured there is no
+        // configuration to generate from, and generating one anyway would present a workout this
+        // session was never configured for — which is exactly how a disabled exercise reaches a
+        // session that never enabled it.
+        val adaptivePlan = values[8] as AdaptiveSessionPlan?
+        if (day == null || effectiveConfiguration == null || adaptivePlan == null) {
             WorkoutSessionUiState(
-                day = null,
+                day = day,
                 workout = emptyWorkout,
                 warmupExercises = emptyList(),
                 isPostureMobilitySession = sessionMode == SessionMode.POSTURE_MOBILITY,
@@ -559,9 +642,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             WorkoutSessionUiState(
                 day = day,
                 workout = if (sessionMode == SessionMode.POSTURE_MOBILITY) {
-                    getPostureMobilityWorkout(day, difficultyAdjustments, trainingType, focusAreas, availableEquipment, disabledFamilies)
+                    getPostureMobilityWorkout(day, difficultyAdjustments, trainingType, focusAreas, availableEquipment, disabledFamilies, adaptivePlan)
                 } else {
-                    getWorkoutForDay(day, difficultyAdjustments, trainingType, focusAreas, availableEquipment, disabledFamilies)
+                    getWorkoutForDay(day, difficultyAdjustments, trainingType, focusAreas, availableEquipment, disabledFamilies, adaptivePlan)
                 },
                 warmupExercises = if (sessionMode == SessionMode.POSTURE_MOBILITY) {
                     emptyList()
@@ -701,28 +784,70 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * The calendar day's workout as the session presents it.
+     *
+     * With a [sessionPlan] — the running session's own adaptive plan — generation runs inside that
+     * plan's constraints: the exercises the session's captured configuration and equipment permit are
+     * the only candidates, the families' resolved variations are preferred among the choices the
+     * routine's rules already offer, and the resolved low-level steps are composed with the user's own
+     * through the existing difficulty mechanism. Without one — the home preview, the library screens —
+     * generation is exactly what it always was.
+     */
     fun getWorkoutForDay(
         day: Int,
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
         trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
         focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value,
         availableEquipment: Set<Equipment> = this.availableEquipment.value,
-        disabledFamilies: Set<String> = disabledExerciseFamilies.value
+        disabledFamilies: Set<String> = disabledExerciseFamilies.value,
+        sessionPlan: AdaptiveSessionPlan? = null
     ): Workout {
-        val workout = workoutGenerator.generateWorkout(day, trainingType, focusAreas, availableEquipment, disabledFamilies)
-        return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments)) })
+        val adjustments = sessionPlan?.effectiveAdjustments(difficultyAdjustments) ?: difficultyAdjustments
+        val workout = if (sessionPlan == null) {
+            workoutGenerator.generateWorkout(day, trainingType, focusAreas, availableEquipment, disabledFamilies)
+        } else {
+            adaptiveWorkoutIntegration.generateWorkout(
+                AdaptiveWorkoutGenerationRequest(
+                    programDay = day,
+                    trainingType = trainingType,
+                    focusAreas = focusAreas,
+                    availableEquipment = availableEquipment,
+                    disabledFamilies = disabledFamilies
+                ),
+                sessionPlan
+            )
+        }
+        return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, adjustments)) })
     }
 
+    /** The optional posture/mobility routine, constrained exactly as [getWorkoutForDay] is. */
     fun getPostureMobilityWorkout(
         day: Int,
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
         trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
         focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value,
         availableEquipment: Set<Equipment> = this.availableEquipment.value,
-        disabledFamilies: Set<String> = disabledExerciseFamilies.value
+        disabledFamilies: Set<String> = disabledExerciseFamilies.value,
+        sessionPlan: AdaptiveSessionPlan? = null
     ): Workout {
-        val workout = workoutGenerator.generatePostureMobilityWorkout(day, trainingType, focusAreas, availableEquipment, disabledFamilies)
-        return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments)) })
+        val adjustments = sessionPlan?.effectiveAdjustments(difficultyAdjustments) ?: difficultyAdjustments
+        val workout = if (sessionPlan == null) {
+            workoutGenerator.generatePostureMobilityWorkout(day, trainingType, focusAreas, availableEquipment, disabledFamilies)
+        } else {
+            adaptiveWorkoutIntegration.generateWorkout(
+                AdaptiveWorkoutGenerationRequest(
+                    programDay = day,
+                    trainingType = trainingType,
+                    focusAreas = focusAreas,
+                    availableEquipment = availableEquipment,
+                    disabledFamilies = disabledFamilies,
+                    isPostureMobilitySession = true
+                ),
+                sessionPlan
+            )
+        }
+        return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, adjustments)) })
     }
 
     fun getExerciseLibrary(
