@@ -43,7 +43,9 @@ import com.monkfitness.app.data.model.toMealEntities
 import com.monkfitness.app.data.model.toShoppingItemEntities
 import com.monkfitness.app.data.model.validateAvailableProductSelection
 import com.monkfitness.app.data.repository.WorkoutRepository
+import com.monkfitness.app.data.repository.programConfigurationRepository
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
+import com.monkfitness.app.ui.customprogram.CustomProgramEditor
 import com.monkfitness.app.validation.EngineeringValidationFilter
 import com.monkfitness.app.validation.ValidationCategory
 import com.monkfitness.app.validation.ValidationPose
@@ -102,6 +104,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         const val ROUTE_HOME = "home"
         const val ROUTE_NUTRITION = "nutrition"
+
+        /** The Custom Program editor's destination in the app's single navigation graph. */
+        const val ROUTE_CUSTOM_PROGRAM = "custom-program"
         private const val TAG = "MainViewModel"
     }
 
@@ -346,6 +351,69 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val showEngineeringValidation = settingsManager.showEngineeringValidationFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), ValidationSettings.DEFAULT_ENABLED
     )
+
+    // ---- Custom Program editor -----------------------------------------------------------------
+    // The editor is a state holder of its own rather than another pile of flows on this view model:
+    // it owns the draft, the deterministic family grouping and the apply/reset flow, and this bridge
+    // only hands it the app's own library, families and equipment and forwards the user's taps. The
+    // configuration repository is the persistence authority; nothing here decides a source, a version,
+    // a validation outcome or what a family toggle means.
+    private val programConfigurationRepository = application.programConfigurationRepository()
+
+    val customProgramEditor = CustomProgramEditor(
+        repository = programConfigurationRepository,
+        exerciseLibrary = { workoutGenerator.getExerciseLibrary().map { exercise -> enrichExercise(exercise) } },
+        families = workoutGenerator.families,
+        availableEquipment = { availableEquipment.value }
+    )
+
+    val customProgramState = customProgramEditor.state
+
+    /** Loads the persisted configuration into a fresh draft and opens the editor. */
+    fun openCustomProgramEditor() {
+        viewModelScope.launch {
+            customProgramEditor.open()
+        }
+    }
+
+    fun setCustomProgramSearchQuery(query: String) {
+        customProgramEditor.setSearchQuery(query)
+    }
+
+    fun toggleCustomProgramExercise(exerciseId: String) {
+        customProgramEditor.toggleExercise(exerciseId)
+    }
+
+    fun toggleCustomProgramFamily(familyId: String) {
+        customProgramEditor.toggleFamily(familyId)
+    }
+
+    /** Cancel: the draft is discarded and nothing that was persisted is touched. */
+    fun cancelCustomProgramEditor() {
+        customProgramEditor.discardDraft()
+    }
+
+    /** Apply: the editor validates the draft and stores it only if the validator accepts it. */
+    fun applyCustomProgram() {
+        viewModelScope.launch {
+            customProgramEditor.apply()
+        }
+    }
+
+    fun requestCustomProgramReset() {
+        customProgramEditor.requestResetToDefault()
+    }
+
+    fun dismissCustomProgramReset() {
+        customProgramEditor.dismissResetConfirmation()
+    }
+
+    /** Reset to default: a separate, confirmed action that restores the selection and nothing else. */
+    fun confirmCustomProgramReset() {
+        viewModelScope.launch {
+            customProgramEditor.confirmResetToDefault()
+        }
+    }
 
     fun setShowEngineeringValidation(enabled: Boolean) {
         viewModelScope.launch {

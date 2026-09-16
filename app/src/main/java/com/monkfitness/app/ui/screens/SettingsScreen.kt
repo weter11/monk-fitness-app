@@ -59,7 +59,8 @@ import java.util.Calendar
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenCustomProgram: () -> Unit
 ) {
     val context = LocalContext.current
     val timerTicksEnabled by viewModel.timerTicksEnabled.collectAsState()
@@ -260,6 +261,22 @@ fun SettingsScreen(
                 onToggle = viewModel::toggleNutritionExcludedFood,
                 options = viewModel.nutritionExclusionOptions
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // The Custom Program editor: its own screen, reached from here.
+            Text(text = stringResource(R.string.custom_program), style = MaterialTheme.typography.titleLarge)
+            Text(
+                text = stringResource(R.string.custom_program_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            androidx.compose.material3.Button(
+                onClick = onOpenCustomProgram,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(text = stringResource(R.string.custom_program))
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 

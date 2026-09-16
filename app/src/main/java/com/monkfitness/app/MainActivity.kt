@@ -218,7 +218,20 @@ fun MainApp(viewModel: MainViewModel) {
                 )
             }
             composable(Screen.Settings.route) {
-                SettingsScreen(viewModel, onBack = { navController.popBackStack() })
+                SettingsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    onOpenCustomProgram = {
+                        viewModel.openCustomProgramEditor()
+                        navController.navigate(MainViewModel.ROUTE_CUSTOM_PROGRAM)
+                    }
+                )
+            }
+            composable(MainViewModel.ROUTE_CUSTOM_PROGRAM) {
+                CustomProgramScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
             }
             composable("nutrition-shopping-list") {
                 NutritionShoppingListScreen(
