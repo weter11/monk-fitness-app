@@ -7,12 +7,14 @@ import java.io.File
 
 /**
  * Pins the architecture fence mechanically, not by convention: no compiled source in
- * `domain/adaptive` may import the data layer (`com.monkfitness.app.data.*`, Room, or Android), and
- * every `domain.adaptive` type the adapter hands the mapper is defined in this package.
+ * `domain/adaptive` may import the data layer (`com.monkfitness.app.data.*`, Room, or Android), the
+ * UI/ViewModel layers, or any `androidx`/`android` platform type at all, and every `domain.adaptive`
+ * type the adapter hands the mapper is defined in this package.
  *
  * This runs on the JVM against the sources themselves, so it fails the build the moment a future
  * edit reintroduces a `data.model.Exercise` import into the mapper or anywhere else in this package
- * — the exact regression the PR #268 review caught.
+ * — the exact regression the PR #268 review caught — or lets the configuration validator reach for
+ * Android, Room, DataStore or a ViewModel instead of the metadata its caller supplies.
  */
 class AdaptiveDomainPurityTest {
 
@@ -23,8 +25,24 @@ class AdaptiveDomainPurityTest {
         if (dir.isDirectory) dir else File("app/$dir")
     }
 
+    /**
+     * The import prefixes that may never appear in this package. `domain.usecase` is deliberately
+     * absent: it is a domain-layer package over the app's own model, and the one import this package
+     * legitimately takes from it is the canonical program-calendar constant.
+     */
+    private val forbiddenImportPrefixes = listOf(
+        "import com.monkfitness.app.data.",
+        "import com.monkfitness.app.ui.",
+        "import com.monkfitness.app.viewmodel.",
+        "import com.monkfitness.app.animation.",
+        "import com.monkfitness.app.poses.",
+        "import androidx.",
+        "import android.",
+        "import kotlinx."
+    )
+
     @Test
-    fun noAdaptiveDomainSourceImportsTheDataLayer() {
+    fun noAdaptiveDomainSourceImportsTheDataLayerPlatformOrUi() {
         assertTrue(
             "expected the domain/adaptive package to exist at ${packageDir.absolutePath}",
             packageDir.isDirectory
@@ -39,20 +57,16 @@ class AdaptiveDomainPurityTest {
             source.readLines().mapNotNull { line ->
                 val trimmed = line.trim()
                 if (!trimmed.startsWith("import ")) return@mapNotNull null
-                // Only a data-layer or platform import into this package breaks the boundary.
-                if (trimmed.startsWith("import com.monkfitness.app.data.")) {
-                    "${source.name}: $trimmed"
-                } else if (
-                    trimmed.startsWith("import androidx.room.") ||
-                    trimmed.startsWith("import android.")
-                ) {
+                // Only a platform/UI/data-layer import into this package breaks the boundary.
+                if (forbiddenImportPrefixes.any { trimmed.startsWith(it) }) {
                     "${source.name}: $trimmed"
                 } else null
             }
         }
 
         assertTrue(
-            "domain/adaptive must not depend on the data layer or Android/Room. Found: $forbidden",
+            "domain/adaptive must not depend on the data layer, Android/Room/DataStore or the UI. " +
+                "Found: $forbidden",
             forbidden.isEmpty()
         )
     }

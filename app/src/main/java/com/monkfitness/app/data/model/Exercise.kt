@@ -4,6 +4,9 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import com.monkfitness.app.R
+import com.monkfitness.app.domain.adaptive.BodyRegion
+import com.monkfitness.app.domain.adaptive.ExerciseMetadata
+import com.monkfitness.app.domain.adaptive.TrainingDomain
 
 enum class ExerciseCategory(@StringRes val labelRes: Int) {
     STRENGTH(R.string.category_strength),
@@ -103,6 +106,50 @@ data class Exercise(
     val descriptionRu: String = "",
     val descriptionEn: String = "",
     val descriptionUk: String = ""
+)
+
+/**
+ * The training domain this exercise belongs to, in the configuration validator's vocabulary.
+ *
+ * This is the one bridge between the app's category vocabulary and the domain's: loaded work is the
+ * strength domain, and the flexibility channel the mobility days and the posture/mobility sessions
+ * are generated from — stretching, mobility and posture — is the flexibility domain. The mapping is
+ * exhaustive over [ExerciseCategory] on purpose, so a category added later has to be placed
+ * deliberately rather than falling through a default.
+ */
+val Exercise.trainingDomain: TrainingDomain
+    get() = when (category) {
+        ExerciseCategory.STRENGTH -> TrainingDomain.STRENGTH
+        ExerciseCategory.MOBILITY,
+        ExerciseCategory.STRETCHING,
+        ExerciseCategory.POSTURE -> TrainingDomain.FLEXIBILITY
+    }
+
+/** The body region this exercise trains, in the configuration validator's vocabulary. */
+val Exercise.bodyRegion: BodyRegion
+    get() = when (subCategory) {
+        ExerciseSubCategory.SHOULDERS -> BodyRegion.SHOULDERS
+        ExerciseSubCategory.SPINE -> BodyRegion.SPINE
+        ExerciseSubCategory.HIPS -> BodyRegion.HIPS
+        ExerciseSubCategory.LEGS -> BodyRegion.LEGS
+        ExerciseSubCategory.CORE -> BodyRegion.CORE
+        ExerciseSubCategory.FULL_BODY -> BodyRegion.FULL_BODY
+        ExerciseSubCategory.HYPERLORDOSIS -> BodyRegion.HYPERLORDOSIS
+    }
+
+/**
+ * This exercise as the configuration validator sees it: its own id and family, the domain and region
+ * above, and the equipment it is defined with.
+ *
+ * The metadata is derived, never restated: there is no second catalogue, and no field here is
+ * anything the exercise definition does not already say.
+ */
+fun Exercise.toConfigurationMetadata(): ExerciseMetadata<Equipment> = ExerciseMetadata(
+    id = id,
+    familyId = familyId,
+    trainingDomain = trainingDomain,
+    bodyRegion = bodyRegion,
+    requiredEquipment = requiredEquipment
 )
 
 fun Exercise.applyDifficultyAdjustment(adjustment: Int): Exercise {
