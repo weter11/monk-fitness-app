@@ -28,6 +28,13 @@ exercise.
 
 - **8-Week Program**: Dynamic workout generation across 4 phases (intensity
   increases every 2 weeks).
+- **Custom Program**: Choose which exercises the program may use, grouped by
+  family. Invalid selections are rejected with hard errors and unbalanced ones
+  warn without blocking; a change applies only to the next workout that has not
+  started yet, and the default selection can be restored without losing history.
+- **Adaptive Progression**: A deterministic, on-device engine reads the training
+  history the app already records and adapts each exercise family's progression
+  (PROGRESS, HOLD, REGRESS, RECOVERY). No ML, no LLM, no network.
 - **Daily Workouts**: Strength A, Strength B, Mobility, and Functional training.
 - **Animated Exercise Demos**: A skeletal MonkEngine renders each
   movement from a biomechanical description of the pose.
@@ -58,6 +65,48 @@ engine. the MonkEngine runtime is organized around four separated responsibiliti
 - **Exercise** describes metadata (naming, camera, environment).
 - **Validation** verifies correctness (read-only checks).
 
+## Adaptive Program (Stage 1)
+
+The 56-day program adapts to what the user actually did. The engine is local and
+deterministic — same history and same policy, same decision:
+
+```text
+Session history
+    ↓
+SessionObservation
+    ↓
+Signal calculation
+    ↓
+AdaptivePolicy / state machine
+    ↓
+Adaptive decision
+    ↓
+Family progression resolver
+    ↓
+Custom Program + equipment constraints
+    ↓
+WorkoutGenerator
+    ↓
+Biomechanical validation
+```
+
+Boundaries that hold across the pipeline:
+
+- `WorkoutGenerator` remains the concrete workout builder; the adaptive engine only
+  constrains which exercises and adjustments it may use.
+- Biomechanical validation remains authoritative.
+- Adaptive decisions are deterministic and local: no ML, no LLM, no network.
+- Configuration changes apply only to future workouts; a started session keeps the
+  configuration it captured.
+- Progression lives in `family_progression_state`, separately from the immutable
+  audit trail in `adaptive_decision_record`.
+
+Not part of Stage 1: camera-based movement assessment, movement-quality scoring, ML,
+LLM integration, and exercises generated outside the existing library.
+
+See [`docs/ADAPTIVE_PROGRAM_STAGE1.md`](docs/ADAPTIVE_PROGRAM_STAGE1.md) for the
+boundaries, lifecycle semantics and current limitations.
+
 ## Engineering Documentation
 
 the MonkEngine's design, principles, and rules are the project's source of truth.
@@ -69,6 +118,8 @@ See `docs/`:
   Engineering Validation subsystem.
 - [`docs/CODING_RULES.md`](docs/CODING_RULES.md) — permanent engineering rules
   for contributors.
+- [`docs/ADAPTIVE_PROGRAM_STAGE1.md`](docs/ADAPTIVE_PROGRAM_STAGE1.md) — adaptive
+  program Stage 1 architecture and boundaries.
 
 Contributors should read these before working on the MonkEngine runtime or poses.
 
@@ -100,6 +151,8 @@ available in the repository's "Actions" tab.
 - `validation/`: Engineering Validation subsystem (developer tool).
 - `data/`: Room entities, DAOs, and DataStore management.
 - `domain/`: Business logic including the Workout Generator.
+- `domain/adaptive/`: The adaptive engine — signals, policy, state machine,
+  progression resolver — with no Android, Room, DataStore or UI dependency.
 - `ui/`: Compose screens, themes, and reusable components.
 - `viewmodel/`: State management for the UI.
 - `util/`: Helper classes for notifications, timers, and sounds.
