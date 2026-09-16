@@ -2,6 +2,7 @@ package com.monkfitness.app.data.repository
 
 import com.monkfitness.app.data.local.ProgressDao
 import com.monkfitness.app.data.model.BodyWeightEntry
+import com.monkfitness.app.data.model.FamilyProgressionState
 import com.monkfitness.app.data.model.MealCycle
 import com.monkfitness.app.data.model.MealEntity
 import com.monkfitness.app.data.model.PostureSessionProgress
@@ -312,9 +313,20 @@ class ProgramMaintenanceTest {
             setLogs = listOf(SetLog(exerciseId = "squat", repsCompleted = 10, durationSeconds = 0, timestamp = 1L, sessionDate = "2026-09-01")),
             bodyWeight = listOf(BodyWeightEntry(weightKg = 80.0f, date = "2026-09-01"))
         )
+        val adaptiveStates = FakeAdaptiveStateDao(
+            listOf(
+                FamilyProgressionState(
+                    familyId = "pushups",
+                    progressionLevel = 1,
+                    eligibleSessionsSinceLastProgressionChange = null,
+                    updatedAt = 1L
+                )
+            )
+        )
+        val decisionHistory = FakeAdaptiveHistoryDao()
 
         runBlocking {
-            ProgramMaintenance.clearAllProgressData(dao, ::committingTransaction)
+            ProgramMaintenance.clearAllProgressData(dao, adaptiveStates, decisionHistory, ::committingTransaction)
         }
 
         assertEquals("user_progress cleared", emptyList<UserProgress>(), dao.userProgress)
@@ -322,8 +334,9 @@ class ProgramMaintenanceTest {
         assertEquals("program_day_state cleared", emptyList<ProgramDayState>(), dao.programDayStates)
         assertEquals("set_log cleared", emptyList<SetLog>(), dao.setLogs)
         assertEquals("body_weight_log cleared", emptyList<BodyWeightEntry>(), dao.bodyWeight)
+        assertEquals("family_progression_state cleared", emptyList<FamilyProgressionState>(), adaptiveStates.rows)
         assertEquals(
-            "all five clears run in one block",
+            "all seven clears run in one block, so a reset cannot leave adaptive state behind",
             listOf(
                 "clearUserProgress",
                 "clearPostureProgress",
@@ -333,6 +346,8 @@ class ProgramMaintenanceTest {
             ),
             dao.callLog
         )
+        assertEquals(listOf("clearFamilyStates"), adaptiveStates.callLog)
+        assertEquals(listOf("clearDecisionHistory"), decisionHistory.callLog)
     }
 
     @Test
@@ -351,7 +366,12 @@ class ProgramMaintenanceTest {
 
         val thrown = assertThrows(IllegalStateException::class.java) {
             runBlocking {
-                ProgramMaintenance.clearAllProgressData(dao, rollingBackTransaction(dao))
+                ProgramMaintenance.clearAllProgressData(
+                    dao,
+                    FakeAdaptiveStateDao(),
+                    FakeAdaptiveHistoryDao(),
+                    rollingBackTransaction(dao)
+                )
             }
         }
 
@@ -381,13 +401,23 @@ class ProgramMaintenanceTest {
 
     @Test
     fun fullResetClearsEveryProgramTableAndDeliberatelyPreservesNutritionTables() {
-        // The database has 8 entities; the reset clears the 5 program-scoped ones and keeps the 3
-        // nutrition ones, whose plans are keyed by their own meal-cycle calendar. A future table
-        // that joins the @Database entities list must join clearedTables too, or this test fails —
-        // the reset's own spec is "everything the program records, except nutrition plans".
+        // The database has 10 entities; the reset clears the 7 program-scoped ones — the 5 calendar and
+        // logging tables plus the 2 adaptive ones — and keeps the 3 nutrition ones, whose plans are keyed
+        // by their own meal-cycle calendar. A future table that joins the @Database entities list must
+        // join clearedTables too, or this test fails — the reset's own spec is "everything the program
+        // records, except nutrition plans" (the census is cross-checked against the entity declarations
+        // by `AdaptiveLifecycleTest.fullResetClassifiesEveryTableTheDatabaseDeclares`).
         assertEquals(
-            "5 program-scoped tables cleared",
-            listOf("user_progress", "posture_session_progress", "program_day_state", "set_log", "body_weight_log"),
+            "7 program-scoped tables cleared",
+            listOf(
+                "user_progress",
+                "posture_session_progress",
+                "program_day_state",
+                "set_log",
+                "body_weight_log",
+                "family_progression_state",
+                "adaptive_decision_record"
+            ),
             ProgramMaintenance.clearedTables
         )
         assertEquals(

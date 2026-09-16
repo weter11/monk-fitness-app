@@ -46,4 +46,40 @@ interface AdaptiveDecisionHistoryDao {
             "ORDER BY programRevision ASC, cycleNumber ASC, programDay ASC, id ASC"
     )
     suspend fun getDecisionHistoryForFamily(familyId: String): List<AdaptiveDecisionRecord>
+
+    /**
+     * How many records one decision window already carries for one family.
+     *
+     * This is the idempotency question the finalized-session path asks: a window is
+     * `(programRevision, cycleNumber, programDay)` — the app's own session identity, and the identity
+     * every record already carries — so a count above zero means this session's decision has been
+     * recorded before and a repeated finalization (a recomposition, a second callback, a re-entry, a
+     * restored view model) must add nothing.
+     *
+     * It is a read, not a constraint: the tables hold no unique index on the window, because the
+     * decision path decides whether a session is new inside the same transaction it writes in, and a
+     * schema constraint would have to encode a rule this layer does not own. `countDecisionsFor` is
+     * only meaningful inside that transaction — two callers that each read and then write outside one
+     * would race, which is exactly why the repository performs the check in its own transaction block.
+     */
+    @Query(
+        "SELECT COUNT(*) FROM adaptive_decision_record WHERE programRevision = :programRevision " +
+            "AND cycleNumber = :cycleNumber AND programDay = :programDay AND familyId = :familyId"
+    )
+    suspend fun countDecisionsFor(
+        programRevision: Int,
+        cycleNumber: Int,
+        programDay: Int,
+        familyId: String
+    ): Int
+
+    /**
+     * Clears the whole trail, for the one operation that erases the program's own record: the C3 "Full
+     * Reset", which returns the app to its true first-launch state and clears the workout history these
+     * entries audit. It is the only delete this DAO exposes, and deliberately not a per-window one: a
+     * single decision is never removed, because an audit trail with a hole cannot prove what was
+     * ordered, while a whole-program reset that forgets its audit trail is not a reset.
+     */
+    @Query("DELETE FROM adaptive_decision_record")
+    suspend fun clearDecisionHistory()
 }

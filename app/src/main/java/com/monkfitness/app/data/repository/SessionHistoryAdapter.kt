@@ -51,9 +51,11 @@ import java.time.format.DateTimeFormatter
  *
  * ## Limitations persistence cannot repair (documented, not fabricated around)
  *
- *  * **`startedAt` is the earliest confirmed-set timestamp.** The session has no explicit start
- *    event in persistence, so a session whose every set was rolled back has no start stamp and is
- *    `NOT_STARTED`. This is an approximation — it cannot be improved without new instrumentation.
+ *  * **`startedAt` is the earliest confirmed-set timestamp**, or the day-level completion stamp when a
+ *    completed day has no set rows left to date it (every set rolled back, or history written before
+ *    this app logged sets). The session has no explicit start event in persistence, so a session that
+ *    never started has no stamp at all and is `NOT_STARTED`; a session that cannot be dated would
+ *    otherwise be unconstructable, which would take the whole history's read down with it.
  *  * **`finishedAt` is the day-level completion stamp, and only for a completed day.** An abandoned
  *    session leaves no end event in persistence: no `UserProgress` row is written, so there is no
  *    timestamp to report and the observation carries `null` rather than an invented abandonment

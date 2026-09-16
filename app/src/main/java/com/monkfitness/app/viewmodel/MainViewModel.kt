@@ -42,6 +42,7 @@ import com.monkfitness.app.data.model.nutritionExclusionIngredients
 import com.monkfitness.app.data.model.toMealEntities
 import com.monkfitness.app.data.model.toShoppingItemEntities
 import com.monkfitness.app.data.model.validateAvailableProductSelection
+import com.monkfitness.app.data.repository.AdaptiveSessionDecisionRecorder
 import com.monkfitness.app.data.repository.SessionAdaptiveInputs
 import com.monkfitness.app.data.repository.SessionAdaptivePlanReader
 import com.monkfitness.app.data.repository.WorkoutRepository
@@ -186,10 +187,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Reads this session's persisted adaptive inputs; writes nothing. See `SessionAdaptivePlanReader`. */
     private val sessionAdaptivePlanReader: SessionAdaptivePlanReader
 
+    /**
+     * Records the adaptive decisions of a finalized session; the app's only adaptive writer.
+     *
+     * It is the mirror of [sessionAdaptivePlanReader]: that one derives what a session is *presented*
+     * with and writes nothing, this one records what a finished session *decided* and reads nothing but
+     * the history and the current progression rows. Both keep their joins in the data layer, so this
+     * class orchestrates the lifecycle without implementing any adaptive rule.
+     */
+    private val adaptiveDecisionRecorder: AdaptiveSessionDecisionRecorder
+
     init {
         val db = AppDatabase.getDatabase(application)
         repository = WorkoutRepository(db)
         sessionAdaptivePlanReader = SessionAdaptivePlanReader.of(db, workoutGenerator)
+        adaptiveDecisionRecorder = AdaptiveSessionDecisionRecorder.of(db, workoutGenerator)
         settingsManager = SettingsManager(application)
     }
 
@@ -1079,10 +1091,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 identity = WorkoutSessionIdentity(
                     day = day,
                     isPostureMobilitySession = mode == SessionMode.POSTURE_MOBILITY
-                )
+                ),
+                readContext = { currentProgramContext() }
             ) { programConfigurationRepository.load() }
         }
     }
+
+    /**
+     * The program context the session starting right now runs under: the revision, the calendar and the
+     * cycle that are live at this instant, read ONCE, at the start transition, and frozen with the session
+     * by `ActiveWorkoutConfiguration`.
+     *
+     * This is the only place those three values are read for a session, and it exists so that no later part
+     * of the session path has to: a session that started before a `Start Revised Program`, a cycle
+     * rollover or a configuration edit keeps the context it began under, and finalizing it uses exactly
+     * that. Reading them again at completion time is what would let a revised program re-file a finished
+     * workout under the new revision and calendar.
+     */
+    private fun currentProgramContext() = WorkoutSessionContext(
+        programCycle = programCycleNumber.value,
+        programRevision = programRevision.value,
+        programStartDate = parseDate(programStartDate.value, LocalDate.now())
+    )
 
     fun setWorkoutStep(step: WorkoutStep) {
         _currentStep.value = step
@@ -1271,6 +1301,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             )
             settingsManager.setRewardGranted(rewardKey)
+
+            // The workout is now finalized: the observation of it is the one the stored rows establish,
+            // so this is the only place a decision may be recorded from it.
+            recordAdaptiveDecision()
+        }
+    }
+
+    /**
+     * Records the adaptive decisions of the session that has just been finalized.
+     *
+     * Called only from the daily completion path, after the day-level completion has been persisted, and
+     * it hands the recorder the session's own frozen facts — the program day, cycle and revision it ran
+     * as, the calendar its history is interpreted against, and the configuration it was STARTED with —
+     * never the live revision, the live calendar or the live configuration store. A session that began
+     * under one revision and is completed after a `Start Revised Program` is therefore finalized as the
+     * session it was, not as the one the app is running now.
+     *
+     * Nothing is recomputed here: which stored value is the source of which number is the recorder's
+     * business, and whether a transition is warranted is the adaptive domain's. A session that is not
+     * finalized, a rest day, and a session whose context or configuration was never captured all end in no
+     * decision rather than in an invented one.
+     *
+     * A failure is logged and swallowed on purpose: the workout is already persisted and the user has
+     * already been credited for it, so a recording problem must not make a finished session look failed.
+     */
+    private suspend fun recordAdaptiveDecision() {
+        val request = sessionFinalizationRequest(
+            session = activeWorkoutConfiguration.activeSession.value,
+            availableEquipment = availableEquipment.value
+        ) ?: return
+
+        try {
+            adaptiveDecisionRecorder.recordFinalizedSession(request)
+        } catch (e: Exception) {
+            Log.w(TAG, "adaptive decisions not recorded for cycle ${request.programCycle} day ${request.programDay}", e)
         }
     }
 
@@ -1714,7 +1779,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _maintenanceEvents.tryEmit(
                 runFullReset(
                     clearRoomData = { repository.clearAllProgressData() },
-                    clearPreferences = { settingsManager.clearAll() }
+                    // The program configuration lives in a store of its own (deliberately not the
+                    // settings store, which a reset of this kind clears wholesale), so returning the
+                    // exercise selection to the authoritative default is this path's own step — through
+                    // the configuration repository's own API, which advances nothing else and leaves the
+                    // workout history alone.
+                    clearPreferences = {
+                        settingsManager.clearAll()
+                        programConfigurationRepository.resetToDefault()
+                    }
                 )
             )
         }

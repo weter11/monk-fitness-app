@@ -166,13 +166,17 @@ class WorkoutRepository(
 
     /**
      * C3 "Full Reset": wipes every progress/history table in ONE Room transaction, so the database
-     * is either fully cleared or fully intact. Throws on failure; the caller reports it instead of
+     * is either fully cleared or fully intact. The wipe includes the two adaptive tables — adaptive
+     * progression and its decision history are part of what the program recorded, and the reset returns
+     * the app to its true first-launch state. Throws on failure; the caller reports it instead of
      * leaving a partial destructive operation with no feedback.
      */
     suspend fun clearAllProgressData() {
-        ProgramMaintenance.clearAllProgressData(progressDao) { block ->
-            database.withTransaction(block)
-        }
+        ProgramMaintenance.clearAllProgressData(
+            progressDao = progressDao,
+            familyStateDao = database.familyProgressionStateDao(),
+            decisionHistoryDao = database.adaptiveDecisionHistoryDao()
+        ) { block -> database.withTransaction(block) }
     }
 
     suspend fun getMealCyclesSnapshot(): List<MealCycle> = try {

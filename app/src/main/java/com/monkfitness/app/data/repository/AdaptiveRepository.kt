@@ -104,11 +104,8 @@ class AdaptiveRepository(
      * Persists a family's updated current state and appends the decision it came from, in one
      * transaction: either both land or neither does.
      *
-     * This is the only method that writes both tables, and it exists because the two writes are one
-     * fact about one decision — a stored state whose audit record is missing cannot be explained
-     * afterwards, and an audit record whose state write was lost describes a transition that did not
-     * happen. It decides nothing: the caller has already decided that this transition is the one to
-     * record.
+     * This is the single-write form of the adapter's transactional operation. It decides nothing: the
+     * caller has already decided that this transition is the one to record.
      *
      * @throws IllegalArgumentException when the state and the record do not describe the same family
      *   in the same program revision, which would silently file one family's decision under another.
@@ -116,17 +113,102 @@ class AdaptiveRepository(
      *   rather than half-applied.
      */
     suspend fun persistDecision(state: FamilyProgressionState, record: AdaptiveDecisionRecord) {
-        require(state.familyId == record.familyId) {
-            "a persisted decision must belong to the family whose state it updates, was " +
-                "${state.familyId} and ${record.familyId}"
-        }
-        require(state.programRevision == record.programRevision) {
-            "a persisted decision must belong to the revision whose state it updates, was " +
-                "${state.programRevision} and ${record.programRevision}"
-        }
+        val write = FamilyDecisionWrite(state, record)
+        requireSameFamilyAndRevision(write)
+        inTransaction { writeDecision(write) }
+    }
+
+    /**
+     * Persists one finalized session's decisions as one unit: the whole batch in a single transaction,
+     * and no family recorded twice for the window it was decided in.
+     *
+     * This is the form the session-lifecycle path uses, and it exists for two reasons the single-write
+     * form cannot give:
+     *
+     *  * **The window is the session.** A session's decision window is
+     *    `(programRevision, cycleNumber, programDay)` — the app's own session identity, the one its
+     *    `UserProgress` and `ProgramDayState` rows are keyed by — so a family that already carries a
+     *    record for that window has already been decided for this session. A repeated finalization
+     *    (a recomposition, a completion callback firing twice, navigation back into the session, a
+     *    restored view model) therefore finds its write present and does nothing: the check runs inside
+     *    the same transaction as the writes, which is what makes it a boundary rather than a race.
+     *  * **The session is one fact.** Either every family of the window is recorded or none is, so a
+     *    failure cannot leave half a decision window persisted — the audit trail then describes one
+     *    session's outcome completely, or its absence is still explained by the retry.
+     *
+     * @return which families this call recorded, and which were already recorded for their window.
+     *   Both lists are in the batch's own order.
+     * @throws IllegalArgumentException when a pair does not describe the same family and revision.
+     * @throws Exception whatever the DAOs throw; the transaction rolls back and nothing is recorded.
+     */
+    suspend fun persistDecisionsOnce(writes: List<FamilyDecisionWrite>): PersistedDecisions {
+        if (writes.isEmpty()) return PersistedDecisions(recorded = emptyList(), alreadyRecorded = emptyList())
+
+        val recorded = mutableListOf<String>()
+        val alreadyRecorded = mutableListOf<String>()
+
         inTransaction {
-            stateDao.upsertFamilyState(state)
-            historyDao.appendDecision(record)
+            writes.forEach { write ->
+                requireSameFamilyAndRevision(write)
+
+                val alreadyDecided = historyDao.countDecisionsFor(
+                    programRevision = write.record.programRevision,
+                    cycleNumber = write.record.cycleNumber,
+                    programDay = write.record.programDay,
+                    familyId = write.record.familyId
+                ) > 0
+
+                if (alreadyDecided) {
+                    alreadyRecorded += write.record.familyId
+                } else {
+                    writeDecision(write)
+                    recorded += write.record.familyId
+                }
+            }
+        }
+
+        return PersistedDecisions(recorded = recorded.toList(), alreadyRecorded = alreadyRecorded.toList())
+    }
+
+    /** The two writes that are one fact about one decision, in the order the transaction runs them. */
+    private suspend fun writeDecision(write: FamilyDecisionWrite) {
+        stateDao.upsertFamilyState(write.state)
+        historyDao.appendDecision(write.record)
+    }
+
+    /**
+     * The pair invariant every write path enforces before it opens a transaction: a state and a record
+     * that name different families or different revisions are not one decision, and storing them
+     * together would misfile one family's outcome under another's identity.
+     */
+    private fun requireSameFamilyAndRevision(write: FamilyDecisionWrite) {
+        require(write.state.familyId == write.record.familyId) {
+            "a persisted decision must belong to the family whose state it updates, was " +
+                "${write.state.familyId} and ${write.record.familyId}"
+        }
+        require(write.state.programRevision == write.record.programRevision) {
+            "a persisted decision must belong to the revision whose state it updates, was " +
+                "${write.state.programRevision} and ${write.record.programRevision}"
         }
     }
 }
+
+/**
+ * One family's new current state and the immutable record that audits it — the unit the adapter's
+ * transactional write stores. The two are one decision, which is why they are passed together rather
+ * than as two independent arguments.
+ */
+data class FamilyDecisionWrite(
+    val state: FamilyProgressionState,
+    val record: AdaptiveDecisionRecord
+)
+
+/**
+ * What one batch of a session's decisions did: the families it recorded, and the families that already
+ * carried a record for their window — a repeated finalization of a session that has been recorded
+ * before. Both lists are in the batch's own order.
+ */
+data class PersistedDecisions(
+    val recorded: List<String>,
+    val alreadyRecorded: List<String>
+)
