@@ -747,4 +747,34 @@
     <string name="program_controls_reset_db_cleared_prefs_failed">Тренировочные данные удалены, но настройки очистить не удалось. Завершите сброс, очистив данные приложения в настройках Android.</string>
 
     <string name="cancel">Отмена</string>
+
+    <!-- Custom Program editor -->
+    <string name="custom_program">Своя программа</string>
+    <string name="custom_program_desc">Выберите, какие упражнения могут использоваться в тренировке.</string>
+    <string name="custom_program_future_only_hint">Изменения применятся к следующей ещё не начатой тренировке.</string>
+    <string name="custom_program_default_selection">Стандартный выбор</string>
+    <string name="custom_program_custom_selection">Свой выбор</string>
+    <string name="custom_program_enabled_count">Включено упражнений: %1$d</string>
+    <string name="custom_program_search_label">Поиск упражнений</string>
+    <string name="custom_program_search_clear">Очистить поиск</string>
+    <string name="custom_program_no_results">По этому запросу упражнений нет.</string>
+    <string name="custom_program_apply">Применить</string>
+    <string name="custom_program_reset">Сбросить к стандартным</string>
+    <string name="custom_program_reset_confirm_title">Сбросить выбор к стандартному?</string>
+    <string name="custom_program_reset_confirm_text">Вернётся стандартный набор упражнений. История тренировок, прогресс и календарь программы сохранятся.</string>
+    <string name="custom_program_error_header">Этот выбор нельзя применить</string>
+    <string name="custom_program_error_missing_domain">Ни одно включённое упражнение не покрывает %1$s.</string>
+    <string name="custom_program_error_unavailable_equipment">Для %1$s нужно оборудование, которое вы не выбрали. Изменить оборудование можно в настройках.</string>
+    <string name="custom_program_requires_equipment">Требуется</string>
+    <string name="custom_program_warning_header">Предупреждения о балансе</string>
+    <string name="custom_program_warning_region_not_covered">Ни одно включённое упражнение не прорабатывает %1$s. Дни программы всё равно можно заполнить из других зон.</string>
+    <string name="custom_program_warning_region_concentration">На %1$s приходится %2$d включённых упражнений — больше, чем на все остальные зоны вместе.</string>
+    <string name="custom_program_family_all_enabled">Включена полностью</string>
+    <string name="custom_program_family_partial">Включена частично</string>
+    <string name="custom_program_family_none_enabled">Ничего не включено</string>
+    <string name="custom_program_family_count">Включено %1$d из %2$d упражнений</string>
+    <string name="custom_program_family_toggle_description">%1$s, %2$s. Переключает всю группу.</string>
+    <string name="custom_program_domain_strength">силовое направление</string>
+    <string name="custom_program_domain_flexibility">направление гибкости</string>
+    <string name="custom_program_unknown_family">Другие упражнения</string>
 </resources>

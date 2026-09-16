@@ -754,4 +754,34 @@
     <string name="program_controls_reset_db_cleared_prefs_failed">Workout data was erased, but the settings could not be cleared. Clear app data in Android settings to finish the reset.</string>
 
     <string name="cancel">Cancel</string>
+
+    <!-- Custom Program editor -->
+    <string name="custom_program">Custom Program</string>
+    <string name="custom_program_desc">Choose which exercises a generated workout may use.</string>
+    <string name="custom_program_future_only_hint">Changes apply to your next workout that has not started yet.</string>
+    <string name="custom_program_default_selection">Default selection</string>
+    <string name="custom_program_custom_selection">Custom selection</string>
+    <string name="custom_program_enabled_count">%1$d exercises enabled</string>
+    <string name="custom_program_search_label">Search exercises</string>
+    <string name="custom_program_search_clear">Clear search</string>
+    <string name="custom_program_no_results">No exercise matches this search.</string>
+    <string name="custom_program_apply">Apply</string>
+    <string name="custom_program_reset">Reset to default</string>
+    <string name="custom_program_reset_confirm_title">Reset to the default selection?</string>
+    <string name="custom_program_reset_confirm_text">The standard set of exercises is restored. Training history, progress and the program calendar are kept.</string>
+    <string name="custom_program_error_header">This selection cannot be applied</string>
+    <string name="custom_program_error_missing_domain">No enabled exercise covers %1$s.</string>
+    <string name="custom_program_error_unavailable_equipment">%1$s needs equipment you have not selected. You can change your equipment in Settings.</string>
+    <string name="custom_program_requires_equipment">Requires</string>
+    <string name="custom_program_warning_header">Balance warnings</string>
+    <string name="custom_program_warning_region_not_covered">No enabled exercise trains %1$s. The program days can still be filled from the other regions.</string>
+    <string name="custom_program_warning_region_concentration">%1$s holds %2$d enabled exercises, more than all other regions together.</string>
+    <string name="custom_program_family_all_enabled">All enabled</string>
+    <string name="custom_program_family_partial">Partially enabled</string>
+    <string name="custom_program_family_none_enabled">None enabled</string>
+    <string name="custom_program_family_count">%1$d of %2$d exercises enabled</string>
+    <string name="custom_program_family_toggle_description">%1$s, %2$s. Toggles the whole family.</string>
+    <string name="custom_program_domain_strength">the strength domain</string>
+    <string name="custom_program_domain_flexibility">the flexibility domain</string>
+    <string name="custom_program_unknown_family">Other exercises</string>
 </resources>
