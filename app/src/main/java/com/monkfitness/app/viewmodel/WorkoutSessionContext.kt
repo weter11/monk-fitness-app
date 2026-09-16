@@ -49,18 +49,49 @@ data class WorkoutSessionContext(
     }
 }
 
-/** Generation settings captured alongside the program context, never live session inputs. */
-class WorkoutSessionGeneration(
-    availableEquipment: Set<Equipment> = emptySet(),
-    difficultyAdjustments: Map<String, Int> = emptyMap(),
-    val trainingType: FlexibilityTrainingType = FlexibilityTrainingType.BOTH,
-    focusAreas: Set<ExerciseSubCategory> = setOf(ExerciseSubCategory.FULL_BODY),
-    disabledFamilies: Set<String> = emptySet()
+/**
+ * Generation settings captured alongside the program context, never live session inputs.
+ *
+ * A value object: two instances carrying the same settings are equal, which is what lets the session's
+ * frozen context be compared as a whole — the type it belongs to ([WorkoutSessionContext]) and the
+ * session that holds it ([ActiveWorkoutSession]) are value types, and a settings holder without value
+ * equality would make two identical sessions compare unequal purely by identity.
+ *
+ * The construction factory is still the one call shape there ever was, `WorkoutSessionGeneration(...)`
+ * with the same named arguments and the same defaults; what it adds is the defensive copy. Each
+ * collection is copied into the instance, so the session's capture cannot be reached — or compared
+ * differently over time — through the caller's own collection instance after the start transition.
+ *
+ * @property availableEquipment the equipment the session's generation may rely on.
+ * @property difficultyAdjustments the user's per-exercise difficulty adjustments.
+ * @property trainingType the flexibility training-style filter.
+ * @property focusAreas the flexibility focus areas.
+ * @property disabledFamilies the app's training-style family filter.
+ */
+data class WorkoutSessionGeneration private constructor(
+    val availableEquipment: Set<Equipment>,
+    val difficultyAdjustments: Map<String, Int>,
+    val trainingType: FlexibilityTrainingType,
+    val focusAreas: Set<ExerciseSubCategory>,
+    val disabledFamilies: Set<String>
 ) {
-    val availableEquipment = availableEquipment.toSet()
-    val difficultyAdjustments = difficultyAdjustments.toMap()
-    val focusAreas = focusAreas.toSet()
-    val disabledFamilies = disabledFamilies.toSet()
+    companion object {
+
+        /** The one way an instance is built: the settings, copied into the value that is captured. */
+        operator fun invoke(
+            availableEquipment: Set<Equipment> = emptySet(),
+            difficultyAdjustments: Map<String, Int> = emptyMap(),
+            trainingType: FlexibilityTrainingType = FlexibilityTrainingType.BOTH,
+            focusAreas: Set<ExerciseSubCategory> = setOf(ExerciseSubCategory.FULL_BODY),
+            disabledFamilies: Set<String> = emptySet()
+        ): WorkoutSessionGeneration = WorkoutSessionGeneration(
+            availableEquipment = availableEquipment.toSet(),
+            difficultyAdjustments = difficultyAdjustments.toMap(),
+            trainingType = trainingType,
+            focusAreas = focusAreas.toSet(),
+            disabledFamilies = disabledFamilies.toSet()
+        )
+    }
 }
 
 /**
