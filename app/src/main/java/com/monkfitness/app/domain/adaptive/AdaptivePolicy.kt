@@ -22,6 +22,18 @@ enum class RecentLoadBucket {
 }
 
 /**
+ * Bucketed attendance over the latest planned workout opportunities. The buckets are deliberately
+ * coarse — the signal says "attended consistently", "attended about half the time" or "attended
+ * inconsistently", never a statistical claim about the user. Produced through
+ * [AdaptivePolicy.consistencyOf] so the two ratios live with the rest of the policy.
+ */
+enum class ConsistencyBucket {
+    HIGH,
+    MEDIUM,
+    LOW
+}
+
+/**
  * Everything the policy is allowed to look at: already-normalized signal values plus the window,
  * cooldown and recovery evidence the caller maintains.
  *
@@ -100,7 +112,8 @@ data class AdaptiveEvidence(
  * The single home of every v1 threshold, window and confirmation count, plus the state machine that
  * applies them. Nothing in this file decides adaptation from a literal: the numbers live here and
  * are read only by [evaluate] and by the two bucket helpers, which the signal layer (a later stage)
- * calls instead of re-deriving its own thresholds.
+ * calls instead of re-deriving its own thresholds — now three: [trendOf], [loadBucketOf] and
+ * [consistencyOf].
  *
  * Transition order in [evaluate], highest priority first:
  *
@@ -167,7 +180,28 @@ data class AdaptivePolicy(
     val recoveryEntryConfirmingWindows: Int = 1,
     val recoveryProlongedHighRiskWindows: Int = 2,
     val recoveryExitQualifyingSessions: Int = 2,
-    val progressionCooldownEligibleSessions: Int = 2
+    val progressionCooldownEligibleSessions: Int = 2,
+
+    /** Planned-work fraction that makes a session a meaningful start when no exercise was completed. */
+    val adherenceMeaningfulStartMinWorkRatio: Double = 0.10,
+
+    /** Attendance at or above this fraction of the consistency opportunities is [ConsistencyBucket.HIGH]. */
+    val consistencyHighMinRatio: Double = 0.75,
+
+    /** ... and at or above this fraction is [ConsistencyBucket.MEDIUM]; below it is LOW. */
+    val consistencyMediumMinRatio: Double = 0.50,
+
+    /** Meaningful exposures of one exercise/family the performance trend is measured over. */
+    val performanceTrendExposures: Int = 5,
+
+    /** Fewer exposures than this claim no trend at all: the bucket stays STABLE. */
+    val performanceTrendMinimumExposures: Int = 3,
+
+    /** Consecutive newest eligible sessions without completion that make a poor completion streak. */
+    val poorCompletionStreakSessions: Int = 2,
+
+    /** Program days per load window: the recent one, and the preceding one it is compared against. */
+    val recentLoadWindowDays: Int = 7
 ) {
 
     /** Buckets a raw trend value through [performancePositiveThreshold]/[performanceNegativeThreshold]. */
@@ -182,6 +216,13 @@ data class AdaptivePolicy(
         loadRatio <= recentLoadNormalMaxRatio -> RecentLoadBucket.NORMAL
         loadRatio <= recentLoadElevatedMaxRatio -> RecentLoadBucket.ELEVATED
         else -> RecentLoadBucket.HIGH
+    }
+
+    /** Buckets an attendance ratio through [consistencyHighMinRatio]/[consistencyMediumMinRatio]. */
+    fun consistencyOf(attendanceRatio: Double): ConsistencyBucket = when {
+        attendanceRatio >= consistencyHighMinRatio -> ConsistencyBucket.HIGH
+        attendanceRatio >= consistencyMediumMinRatio -> ConsistencyBucket.MEDIUM
+        else -> ConsistencyBucket.LOW
     }
 
     /** The deterministic policy decision for one decision window. */
@@ -325,6 +366,25 @@ data class AdaptivePolicy(
         }
         require(recentLoadNormalMaxRatio <= recentLoadElevatedMaxRatio) {
             "recentLoadNormalMaxRatio must not exceed recentLoadElevatedMaxRatio"
+        }
+        require(consistencyMediumMinRatio <= consistencyHighMinRatio) {
+            "consistencyMediumMinRatio must not exceed consistencyHighMinRatio"
+        }
+        require(adherenceMeaningfulStartMinWorkRatio in 0.0..1.0) {
+            "adherenceMeaningfulStartMinWorkRatio must be normalized to 0..1, was $adherenceMeaningfulStartMinWorkRatio"
+        }
+        require(performanceTrendMinimumExposures >= 1) {
+            "performanceTrendMinimumExposures must be >= 1, was $performanceTrendMinimumExposures"
+        }
+        require(performanceTrendExposures >= performanceTrendMinimumExposures) {
+            "performanceTrendExposures must be >= performanceTrendMinimumExposures, were " +
+                "exposures=$performanceTrendExposures minimum=$performanceTrendMinimumExposures"
+        }
+        require(poorCompletionStreakSessions >= 1) {
+            "poorCompletionStreakSessions must be >= 1, was $poorCompletionStreakSessions"
+        }
+        require(recentLoadWindowDays >= 1) {
+            "recentLoadWindowDays must be >= 1, was $recentLoadWindowDays"
         }
     }
 
