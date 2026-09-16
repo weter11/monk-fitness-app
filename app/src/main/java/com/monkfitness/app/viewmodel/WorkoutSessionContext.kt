@@ -1,6 +1,8 @@
 package com.monkfitness.app.viewmodel
 
 import com.monkfitness.app.data.model.Equipment
+import com.monkfitness.app.data.model.ExerciseSubCategory
+import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.repository.SessionFinalizationRequest
 import java.time.LocalDate
 
@@ -37,12 +39,58 @@ import java.time.LocalDate
 data class WorkoutSessionContext(
     val programCycle: Int,
     val programRevision: Int,
-    val programStartDate: LocalDate
+    val programStartDate: LocalDate,
+    val generation: WorkoutSessionGeneration = WorkoutSessionGeneration()
 ) {
 
     init {
         require(programCycle >= 1) { "programCycle must be >= 1, was $programCycle" }
         require(programRevision >= 0) { "programRevision must be >= 0, was $programRevision" }
+    }
+}
+
+/**
+ * Generation settings captured alongside the program context, never live session inputs.
+ *
+ * A value object: two instances carrying the same settings are equal, which is what lets the session's
+ * frozen context be compared as a whole — the type it belongs to ([WorkoutSessionContext]) and the
+ * session that holds it ([ActiveWorkoutSession]) are value types, and a settings holder without value
+ * equality would make two identical sessions compare unequal purely by identity.
+ *
+ * The construction factory is still the one call shape there ever was, `WorkoutSessionGeneration(...)`
+ * with the same named arguments and the same defaults; what it adds is the defensive copy. Each
+ * collection is copied into the instance, so the session's capture cannot be reached — or compared
+ * differently over time — through the caller's own collection instance after the start transition.
+ *
+ * @property availableEquipment the equipment the session's generation may rely on.
+ * @property difficultyAdjustments the user's per-exercise difficulty adjustments.
+ * @property trainingType the flexibility training-style filter.
+ * @property focusAreas the flexibility focus areas.
+ * @property disabledFamilies the app's training-style family filter.
+ */
+data class WorkoutSessionGeneration private constructor(
+    val availableEquipment: Set<Equipment>,
+    val difficultyAdjustments: Map<String, Int>,
+    val trainingType: FlexibilityTrainingType,
+    val focusAreas: Set<ExerciseSubCategory>,
+    val disabledFamilies: Set<String>
+) {
+    companion object {
+
+        /** The one way an instance is built: the settings, copied into the value that is captured. */
+        operator fun invoke(
+            availableEquipment: Set<Equipment> = emptySet(),
+            difficultyAdjustments: Map<String, Int> = emptyMap(),
+            trainingType: FlexibilityTrainingType = FlexibilityTrainingType.BOTH,
+            focusAreas: Set<ExerciseSubCategory> = setOf(ExerciseSubCategory.FULL_BODY),
+            disabledFamilies: Set<String> = emptySet()
+        ): WorkoutSessionGeneration = WorkoutSessionGeneration(
+            availableEquipment = availableEquipment.toSet(),
+            difficultyAdjustments = difficultyAdjustments.toMap(),
+            trainingType = trainingType,
+            focusAreas = focusAreas.toSet(),
+            disabledFamilies = disabledFamilies.toSet()
+        )
     }
 }
 
@@ -62,9 +110,8 @@ data class WorkoutSessionContext(
  *
  * @param session the app's active session, exactly as its holder exposes it.
  * @param availableEquipment the equipment the session's generation could rely on, in the app's own
- *   semantics. It is the user's equipment, not part of the program context a session freezes: the session
- *   path reads it live for generation too, so a mid-session equipment change is one consistent input
- *   rather than a lifecycle reinterpretation.
+ *   semantics. The completion caller supplies the equipment captured in the session's generation
+ *   settings, never the live settings flow.
  */
 internal fun sessionFinalizationRequest(
     session: ActiveWorkoutSession?,
