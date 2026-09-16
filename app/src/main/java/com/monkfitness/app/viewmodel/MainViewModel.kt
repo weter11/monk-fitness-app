@@ -44,6 +44,7 @@ import com.monkfitness.app.data.model.toShoppingItemEntities
 import com.monkfitness.app.data.model.validateAvailableProductSelection
 import com.monkfitness.app.data.repository.WorkoutRepository
 import com.monkfitness.app.data.repository.programConfigurationRepository
+import com.monkfitness.app.domain.adaptive.WorkoutConfigurationSnapshot
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import com.monkfitness.app.ui.customprogram.CustomProgramEditor
 import com.monkfitness.app.validation.EngineeringValidationFilter
@@ -508,6 +509,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     )
 
+    // ---- The session configuration boundary --------------------------------------------------------
+    // The configuration a running workout session is allowed to generate from. It is captured once,
+    // at the session start transition below, and never read again: `programConfigurationRepository`
+    // is the user's *future* configuration (an edit there belongs to the next workout), while this is
+    // what the session already started with. The Custom Program editor's bridge is the only other
+    // consumer of the configuration, and it deliberately touches no session state. The holder itself
+    // is pure Kotlin and holds no store, so a later edit, state emission, recomposition or navigation
+    // has nothing to rebuild the running session's configuration from.
+    private val activeWorkoutConfiguration = ActiveWorkoutConfiguration()
+
+    /** The configuration the running workout session runs on, as the session state presents it. */
+    val sessionConfiguration: Flow<WorkoutConfigurationSnapshot?> = activeWorkoutConfiguration.effectiveConfiguration
+
     val workoutSessionUiState = combine(
         currentWorkoutDay,
         currentSessionMode,
@@ -515,7 +529,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         flexibilityTrainingType,
         flexibilityFocusAreas,
         availableEquipment,
-        disabledExerciseFamilies
+        disabledExerciseFamilies,
+        sessionConfiguration
     ) { values ->
         val day = values[0] as Int?
         val sessionMode = values[1] as SessionMode
@@ -528,12 +543,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val availableEquipment = values[5] as Set<Equipment>
         @Suppress("UNCHECKED_CAST")
         val disabledFamilies = values[6] as Set<String>
+        // The configuration this session runs on: captured at the start transition and immutable
+        // from then on, so nothing observed here can be re-pointed by a later edit. It is presented
+        // as session state because the session's own behaviour is the only thing allowed to consume it.
+        val effectiveConfiguration = values[7] as WorkoutConfigurationSnapshot?
         if (day == null) {
             WorkoutSessionUiState(
                 day = null,
                 workout = emptyWorkout,
                 warmupExercises = emptyList(),
-                isPostureMobilitySession = sessionMode == SessionMode.POSTURE_MOBILITY
+                isPostureMobilitySession = sessionMode == SessionMode.POSTURE_MOBILITY,
+                effectiveConfiguration = effectiveConfiguration
             )
         } else {
             WorkoutSessionUiState(
@@ -548,7 +568,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     getWarmupExercises(difficultyAdjustments)
                 },
-                isPostureMobilitySession = sessionMode == SessionMode.POSTURE_MOBILITY
+                isPostureMobilitySession = sessionMode == SessionMode.POSTURE_MOBILITY,
+                effectiveConfiguration = effectiveConfiguration
             )
         }
     }.stateIn(
@@ -558,7 +579,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             day = null,
             workout = emptyWorkout,
             warmupExercises = emptyList(),
-            isPostureMobilitySession = false
+            isPostureMobilitySession = false,
+            effectiveConfiguration = null
         )
     )
 
@@ -907,6 +929,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _restTargetIndex.value = null
             _completedExercises.value = emptyMap()
             stopTimer()
+        }
+        beginWorkoutSessionConfiguration(day, mode)
+    }
+
+    /**
+     * The session start transition's configuration step — the one moment a workout's effective
+     * configuration is decided.
+     *
+     * This is the app's authoritative "a workout has started" boundary: it is where the session's day
+     * and mode become the state the workout session is generated from. The persisted configuration is
+     * read here, once, and frozen for that session; `ActiveWorkoutConfiguration` ignores every later
+     * entry for the same (day, mode) without reading anything, so a recomposition or a navigation back
+     * into the running session cannot create a second capture, and a later edit to the configuration
+     * cannot reach this session. Entering a *different* session captures afresh — that is what makes
+     * an edit apply to the next workout rather than to none.
+     *
+     * The screen performs this on entry (`WorkoutScreen`'s start effect) and the app has no second
+     * way to start a session, so this is also the only place any session's configuration can be born.
+     */
+    private fun beginWorkoutSessionConfiguration(day: Int, mode: SessionMode) {
+        viewModelScope.launch {
+            activeWorkoutConfiguration.beginSession(
+                identity = WorkoutSessionIdentity(
+                    day = day,
+                    isPostureMobilitySession = mode == SessionMode.POSTURE_MOBILITY
+                )
+            ) { programConfigurationRepository.load() }
         }
     }
 

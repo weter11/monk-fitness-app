@@ -8,6 +8,7 @@ import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.model.ProgramDayState
 import com.monkfitness.app.data.model.Workout
+import com.monkfitness.app.domain.adaptive.WorkoutConfigurationSnapshot
 import com.monkfitness.app.validation.ValidationCategory
 import com.monkfitness.app.validation.ValidationPose
 
@@ -29,7 +30,15 @@ data class WorkoutSessionUiState(
     val day: Int?,
     val workout: Workout,
     val warmupExercises: List<Exercise>,
-    val isPostureMobilitySession: Boolean
+    val isPostureMobilitySession: Boolean,
+    /**
+     * The configuration this session runs on: captured once at the session start transition and
+     * immutable afterwards, so a configuration edit made while the session is running cannot change
+     * what this session presents. `null` before a session starts (and for the moment between the
+     * start transition and its one configuration read completing), never a value read live from the
+     * configuration store.
+     */
+    val effectiveConfiguration: WorkoutConfigurationSnapshot? = null
 )
 
 @Immutable
