@@ -238,12 +238,40 @@ class WorkoutGenerator {
 
     private val exercisesById = allExercises.associateBy { it.id }
 
-    private fun getEligibleExercises(disabledFamilies: Set<String>): List<Exercise> {
-        val eligible = allExercises.filter { exercise ->
+    /**
+     * Everything one generation's selection is constrained and steered by, in one value so no path
+     * can accidentally apply only part of it.
+     *
+     *  * [disabledFamilies] — the app's existing training-style filter, unchanged: an exercise is
+     *    dropped when every training style it belongs to is disabled. It keeps its own documented
+     *    `allExercises` fallback, which predates this value and is not this task's to change.
+     *  * [allowedExerciseIds] — the exercises the session's effective configuration permits, or
+     *    `null` when nothing constrains generation. This one is a **hard constraint and has no
+     *    fallback**: a disabled exercise is never re-enabled, not by a replacement, not by a
+     *    bodyweight substitution and not by an empty candidate set.
+     *  * [preferredExerciseIds] — the exercises adaptive progression resolved for this session. A
+     *    preference, not a constraint: where the rules of the routine being built already offer one
+     *    of them it is chosen over an equally valid alternative, and where they do not, generation is
+     *    exactly what it was.
+     */
+    private data class SelectionConstraints(
+        val disabledFamilies: Set<String> = emptySet(),
+        val allowedExerciseIds: Set<String>? = null,
+        val preferredExerciseIds: Set<String> = emptySet()
+    )
+
+    private fun getEligibleExercises(constraints: SelectionConstraints): List<Exercise> {
+        val allowed = constraints.allowedExerciseIds
+            ?.let { ids -> allExercises.filter { it.id in ids } }
+            ?: allExercises
+        val eligible = allowed.filter { exercise ->
             val families = com.monkfitness.app.data.model.exerciseToFamiliesMap[exercise.id].orEmpty()
-            families.isEmpty() || families.none { it.key in disabledFamilies }
+            families.isEmpty() || families.none { it.key in constraints.disabledFamilies }
         }
-        return eligible.ifEmpty { allExercises }
+        // The style filter's non-empty fallback is legacy behaviour and stays bound to the callers
+        // that supply no configuration. With a configuration in play an empty candidate set stays
+        // empty: re-populating it would re-enable exactly what the user disabled.
+        return if (constraints.allowedExerciseIds != null) eligible else eligible.ifEmpty { allExercises }
     }
 
     fun getWorkoutType(day: Int): WorkoutType {
@@ -259,35 +287,53 @@ class WorkoutGenerator {
         }
     }
 
+    /**
+     * The calendar day's workout.
+     *
+     * @param allowedExerciseIds the exercises this generation may use, or `null` for an
+     *   unconstrained generation — the behaviour every pre-existing caller keeps. When it is
+     *   supplied it is a hard constraint: nothing outside it reaches the workout, including through
+     *   an equipment substitution or a bodyweight fallback.
+     * @param preferredExerciseIds exercises to prefer among the choices the routine's own rules
+     *   already offer. A preference only: it never widens the candidate set and never changes the
+     *   routine's structure.
+     */
     fun generateWorkout(
         day: Int,
         flexibilityTrainingType: FlexibilityTrainingType = FlexibilityTrainingType.BOTH,
         focusAreas: Set<ExerciseSubCategory> = setOf(ExerciseSubCategory.FULL_BODY),
         availableEquipment: Set<Equipment> = emptySet(),
-        disabledFamilies: Set<String> = emptySet()
+        disabledFamilies: Set<String> = emptySet(),
+        allowedExerciseIds: Set<String>? = null,
+        preferredExerciseIds: Set<String> = emptySet()
     ): Workout {
         val safeDay = if (day in 1..56) day else 1
         val week = ((safeDay - 1) / 7) + 1
         val phase = (((week - 1) / 2) + 1).coerceIn(1, 4)
         val type = getWorkoutType(safeDay)
+        val constraints = SelectionConstraints(disabledFamilies, allowedExerciseIds, preferredExerciseIds)
 
         return Workout(
             id = safeDay,
             type = type,
-            exercises = getExercisesForType(type, phase, safeDay, flexibilityTrainingType, focusAreas, availableEquipment, disabledFamilies)
+            exercises = getExercisesForType(type, phase, safeDay, flexibilityTrainingType, focusAreas, availableEquipment, constraints)
         )
     }
 
+    /** The optional posture/mobility routine, constrained exactly as [generateWorkout] is. */
     fun generatePostureMobilityWorkout(
         day: Int,
         flexibilityTrainingType: FlexibilityTrainingType = FlexibilityTrainingType.BOTH,
         focusAreas: Set<ExerciseSubCategory> = setOf(ExerciseSubCategory.FULL_BODY),
         availableEquipment: Set<Equipment> = emptySet(),
-        disabledFamilies: Set<String> = emptySet()
+        disabledFamilies: Set<String> = emptySet(),
+        allowedExerciseIds: Set<String>? = null,
+        preferredExerciseIds: Set<String> = emptySet()
     ): Workout {
         val safeDay = if (day in 1..56) day else 1
         val week = ((safeDay - 1) / 7) + 1
         val phase = (((week - 1) / 2) + 1).coerceIn(1, 4)
+        val constraints = SelectionConstraints(disabledFamilies, allowedExerciseIds, preferredExerciseIds)
 
         return Workout(
             id = safeDay,
@@ -299,12 +345,12 @@ class WorkoutGenerator {
                     daySeed = safeDay,
                     trainingType = flexibilityTrainingType,
                     focusAreas = focusAreas,
-                    disabledFamilies = disabledFamilies
+                    constraints = constraints
                 ),
                 availableEquipment = availableEquipment,
                 phase = phase,
                 random = Random(safeDay * 10_000 + WorkoutType.POSTURE_MOBILITY.ordinal),
-                disabledFamilies = disabledFamilies
+                constraints = constraints
             )
         )
     }
@@ -316,7 +362,7 @@ class WorkoutGenerator {
         flexibilityTrainingType: FlexibilityTrainingType,
         focusAreas: Set<ExerciseSubCategory>,
         availableEquipment: Set<Equipment>,
-        disabledFamilies: Set<String> = emptySet()
+        constraints: SelectionConstraints = SelectionConstraints()
     ): List<Exercise> {
         val isHyperlordosisActive = ExerciseSubCategory.HYPERLORDOSIS in focusAreas
         return try {
@@ -339,12 +385,12 @@ class WorkoutGenerator {
                         daySeed = daySeed,
                         trainingType = flexibilityTrainingType,
                         focusAreas = focusAreas,
-                        disabledFamilies = disabledFamilies
+                        constraints = constraints
                     ),
                     availableEquipment = availableEquipment,
                     phase = phase,
                     random = Random(daySeed * 10_000 + type.ordinal),
-                    disabledFamilies = disabledFamilies
+                    constraints = constraints
                 )
                 WorkoutType.FUNCTIONAL -> listOf(
                     subCategoryRule(
@@ -360,17 +406,17 @@ class WorkoutGenerator {
                         daySeed = daySeed,
                         trainingType = flexibilityTrainingType,
                         focusAreas = focusAreas,
-                        disabledFamilies = disabledFamilies
+                        constraints = constraints
                     ),
                     availableEquipment = availableEquipment,
                     phase = phase,
                     random = Random(daySeed * 10_000 + type.ordinal),
-                    disabledFamilies = disabledFamilies
+                    constraints = constraints
                 )
                 WorkoutType.REST -> return emptyList()
             }
 
-            val rawExercises = selectExercises(selectionRules, phase, Random(daySeed * 1_000 + type.ordinal), disabledFamilies)
+            val rawExercises = selectExercises(selectionRules, phase, Random(daySeed * 1_000 + type.ordinal), constraints)
             val adaptedExercises = if (isHyperlordosisActive) {
                 rawExercises.map { exercise ->
                     if (exercise.id == "superman") {
@@ -389,7 +435,7 @@ class WorkoutGenerator {
                 availableEquipment = availableEquipment,
                 phase = phase,
                 random = Random(daySeed * 10_000 + type.ordinal),
-                disabledFamilies = disabledFamilies
+                constraints = constraints
             )
         } catch (_: Exception) {
             emptyList()
@@ -402,7 +448,7 @@ class WorkoutGenerator {
         daySeed: Int,
         trainingType: FlexibilityTrainingType,
         focusAreas: Set<ExerciseSubCategory>,
-        disabledFamilies: Set<String> = emptySet()
+        constraints: SelectionConstraints = SelectionConstraints()
     ): List<Exercise> {
         val normalizedFocusAreas = normalizeFlexibilityFocusAreas(focusAreas)
         val prioritizedAreas = buildFlexibilityAreaSequence(count, normalizedFocusAreas, daySeed)
@@ -416,7 +462,7 @@ class WorkoutGenerator {
                 prioritizedFocusAreas = normalizedFocusAreas,
                 selectedIds = selectedIds,
                 random = Random(daySeed * 1_000 + index),
-                disabledFamilies = disabledFamilies
+                constraints = constraints
             )
             selectedIds += exercise.id
             phasedExercise(exercise, phase)
@@ -472,9 +518,9 @@ class WorkoutGenerator {
         prioritizedFocusAreas: List<ExerciseSubCategory>,
         selectedIds: Set<String>,
         random: Random,
-        disabledFamilies: Set<String> = emptySet()
+        constraints: SelectionConstraints = SelectionConstraints()
     ): Exercise {
-        val eligible = getEligibleExercises(disabledFamilies)
+        val eligible = getEligibleExercises(constraints)
         val candidates = eligible.filter { exercise ->
             exercise.id !in selectedIds && exercise.matchesTrainingType(trainingType)
         }
@@ -494,6 +540,10 @@ class WorkoutGenerator {
             ?: select { it.subCategory in prioritizedFocusAreas && it.matchesPreferredGroup(trainingType, preferPosture) }
             ?: select { it.subCategory in prioritizedFocusAreas }
             ?: select { it.matchesPreferredGroup(trainingType, preferPosture) }
+            // Adaptive progression's own preference, applied last on purpose: it may choose among the
+            // candidates no rule of this routine preferred, and it may never override the routine's
+            // own focus-area ordering.
+            ?: select { it.id in constraints.preferredExerciseIds }
             ?: checkNotNull(candidates.randomOrNull(random)) { "No flexibility exercise matches selection rule" }
     }
 
@@ -576,14 +626,14 @@ class WorkoutGenerator {
         selectionRules: List<WorkoutSelectionRule>,
         phase: Int,
         random: Random,
-        disabledFamilies: Set<String> = emptySet()
+        constraints: SelectionConstraints = SelectionConstraints()
     ): List<Exercise> {
         val selectedIds = mutableSetOf<String>()
 
         return buildList {
             selectionRules.forEach { rule ->
                 repeat(rule.count) {
-                    val exercise = pickExercise(rule, selectedIds, random, disabledFamilies)
+                    val exercise = pickExercise(rule, selectedIds, random, constraints)
                     selectedIds += exercise.id
                     add(phasedExercise(exercise, phase))
                 }
@@ -595,14 +645,18 @@ class WorkoutGenerator {
         rule: WorkoutSelectionRule,
         selectedIds: Set<String>,
         random: Random,
-        disabledFamilies: Set<String> = emptySet()
+        constraints: SelectionConstraints = SelectionConstraints()
     ): Exercise {
-        val eligible = getEligibleExercises(disabledFamilies)
+        val eligible = getEligibleExercises(constraints)
         val preferredMatches = eligible.filter { it.id !in selectedIds && rule.preferredMatch(it) }
         val fallbackMatches = eligible.filter { it.id !in selectedIds && rule.fallbackMatch(it) }
 
         val candidates = preferredMatches.ifEmpty { fallbackMatches }
-        return checkNotNull(candidates.randomOrNull(random)) { "No exercise matches selection rule" }
+        // Adaptive progression's own preference: where the rule already offers a resolved exercise, it
+        // is taken instead of an equally valid alternative. It cannot add a candidate the rule did not
+        // offer, so the routine's structure and rule order are untouched.
+        val resolved = candidates.filter { it.id in constraints.preferredExerciseIds }
+        return checkNotNull((resolved.ifEmpty { candidates }).randomOrNull(random)) { "No exercise matches selection rule" }
     }
 
     private fun phasedExercise(exercise: Exercise, phase: Int): Exercise {
@@ -745,7 +799,7 @@ class WorkoutGenerator {
         availableEquipment: Set<Equipment>,
         phase: Int,
         random: Random,
-        disabledFamilies: Set<String> = emptySet()
+        constraints: SelectionConstraints = SelectionConstraints()
     ): List<Exercise> {
         if (exercises.isEmpty()) return emptyList()
 
@@ -757,7 +811,7 @@ class WorkoutGenerator {
         exercises.forEach { exercise ->
             val resolved = when {
                 exercise.id !in selectedIds && exercise.isAccessibleWith(normalizedEquipment) -> exercise
-                else -> findReplacementExercise(exercise, selectedIds, normalizedEquipment, phase, random, disabledFamilies)
+                else -> findReplacementExercise(exercise, selectedIds, normalizedEquipment, phase, random, constraints)
             }
 
             if (resolved != null) {
@@ -769,7 +823,7 @@ class WorkoutGenerator {
         }
 
         unresolvedProfiles.forEach { exercise ->
-            val fallback = findBodyweightReplacement(exercise, selectedIds, phase, random, disabledFamilies) ?: return@forEach
+            val fallback = findBodyweightReplacement(exercise, selectedIds, phase, random, constraints) ?: return@forEach
             selectedIds += fallback.id
             resolvedExercises += fallback
         }
@@ -777,7 +831,7 @@ class WorkoutGenerator {
         return if (resolvedExercises.isNotEmpty()) {
             resolvedExercises
         } else {
-            buildBodyweightFallback(exercises, selectedIds, phase, random, disabledFamilies)
+            buildBodyweightFallback(exercises, selectedIds, phase, random, constraints)
         }
     }
 
@@ -787,9 +841,9 @@ class WorkoutGenerator {
         availableEquipment: Set<Equipment>,
         phase: Int,
         random: Random,
-        disabledFamilies: Set<String> = emptySet()
+        constraints: SelectionConstraints = SelectionConstraints()
     ): Exercise? {
-        val eligible = getEligibleExercises(disabledFamilies)
+        val eligible = getEligibleExercises(constraints)
         val accessibleCandidates = eligible.filter { candidate ->
             candidate.id !in selectedIds && candidate.isAccessibleWith(availableEquipment)
         }
@@ -813,9 +867,9 @@ class WorkoutGenerator {
         selectedIds: Set<String>,
         phase: Int,
         random: Random,
-        disabledFamilies: Set<String> = emptySet()
+        constraints: SelectionConstraints = SelectionConstraints()
     ): Exercise? {
-        val eligible = getEligibleExercises(disabledFamilies)
+        val eligible = getEligibleExercises(constraints)
         val bodyweightCandidates = eligible.filter { candidate ->
             candidate.id !in selectedIds && candidate.requiresNoEquipment()
         }
@@ -836,13 +890,13 @@ class WorkoutGenerator {
         selectedIds: Set<String>,
         phase: Int,
         random: Random,
-        disabledFamilies: Set<String> = emptySet()
+        constraints: SelectionConstraints = SelectionConstraints()
     ): List<Exercise> {
         val mutableSelectedIds = selectedIds.toMutableSet()
         val fallback = mutableListOf<Exercise>()
 
         exercises.forEach { exercise ->
-            val replacement = findBodyweightReplacement(exercise, mutableSelectedIds, phase, random, disabledFamilies) ?: return@forEach
+            val replacement = findBodyweightReplacement(exercise, mutableSelectedIds, phase, random, constraints) ?: return@forEach
             mutableSelectedIds += replacement.id
             fallback += replacement
         }
@@ -851,7 +905,7 @@ class WorkoutGenerator {
             return fallback
         }
 
-        val eligible = getEligibleExercises(disabledFamilies)
+        val eligible = getEligibleExercises(constraints)
         return eligible
             .asSequence()
             .filter { it.requiresNoEquipment() }

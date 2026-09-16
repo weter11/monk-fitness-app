@@ -28,6 +28,15 @@ data class HomeUiState(
 @Immutable
 data class WorkoutSessionUiState(
     val day: Int?,
+    /**
+     * The workout this session presents.
+     *
+     * Empty until the session's configuration has been captured and its adaptive plan has been read:
+     * a session that has no configuration yet has nothing to generate from, and generating one anyway
+     * would present a routine this session was never configured for — including exercises the user has
+     * disabled. Both values arrive from the session's own start transition, so this is the moment a
+     * session begins, not a loading state.
+     */
     val workout: Workout,
     val warmupExercises: List<Exercise>,
     val isPostureMobilitySession: Boolean,
