@@ -45,7 +45,6 @@ import com.monkfitness.app.data.model.validateAvailableProductSelection
 import com.monkfitness.app.data.repository.AdaptiveSessionDecisionRecorder
 import com.monkfitness.app.data.repository.SessionAdaptiveInputs
 import com.monkfitness.app.data.repository.SessionAdaptivePlanReader
-import com.monkfitness.app.data.repository.SessionFinalizationRequest
 import com.monkfitness.app.data.repository.WorkoutRepository
 import com.monkfitness.app.data.repository.programConfigurationRepository
 import com.monkfitness.app.domain.adaptive.ProgramType
@@ -1092,10 +1091,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 identity = WorkoutSessionIdentity(
                     day = day,
                     isPostureMobilitySession = mode == SessionMode.POSTURE_MOBILITY
-                )
+                ),
+                readContext = { currentProgramContext() }
             ) { programConfigurationRepository.load() }
         }
     }
+
+    /**
+     * The program context the session starting right now runs under: the revision, the calendar and the
+     * cycle that are live at this instant, read ONCE, at the start transition, and frozen with the session
+     * by `ActiveWorkoutConfiguration`.
+     *
+     * This is the only place those three values are read for a session, and it exists so that no later part
+     * of the session path has to: a session that started before a `Start Revised Program`, a cycle
+     * rollover or a configuration edit keeps the context it began under, and finalizing it uses exactly
+     * that. Reading them again at completion time is what would let a revised program re-file a finished
+     * workout under the new revision and calendar.
+     */
+    private fun currentProgramContext() = WorkoutSessionContext(
+        programCycle = programCycleNumber.value,
+        programRevision = programRevision.value,
+        programStartDate = parseDate(programStartDate.value, LocalDate.now())
+    )
 
     fun setWorkoutStep(step: WorkoutStep) {
         _currentStep.value = step
@@ -1287,49 +1304,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             // The workout is now finalized: the observation of it is the one the stored rows establish,
             // so this is the only place a decision may be recorded from it.
-            recordAdaptiveDecision(cycle, day)
+            recordAdaptiveDecision()
         }
     }
 
     /**
-     * Records the adaptive decisions of a session that has just been finalized.
+     * Records the adaptive decisions of the session that has just been finalized.
      *
      * Called only from the daily completion path, after the day-level completion has been persisted, and
-     * it hands the recorder exactly what the session already knew: the calendar position it ran on, the
-     * program revision it belongs to, the equipment it could rely on, and the configuration it was
-     * STARTED with — never the live configuration store, which describes the next workout rather than
-     * this one.
+     * it hands the recorder the session's own frozen facts — the program day, cycle and revision it ran
+     * as, the calendar its history is interpreted against, and the configuration it was STARTED with —
+     * never the live revision, the live calendar or the live configuration store. A session that began
+     * under one revision and is completed after a `Start Revised Program` is therefore finalized as the
+     * session it was, not as the one the app is running now.
      *
      * Nothing is recomputed here: which stored value is the source of which number is the recorder's
      * business, and whether a transition is warranted is the adaptive domain's. A session that is not
-     * finalized, a rest day and a session whose configuration was never captured all end in no decision
-     * rather than in an invented one.
+     * finalized, a rest day, and a session whose context or configuration was never captured all end in no
+     * decision rather than in an invented one.
      *
      * A failure is logged and swallowed on purpose: the workout is already persisted and the user has
      * already been credited for it, so a recording problem must not make a finished session look failed.
      */
-    private suspend fun recordAdaptiveDecision(cycle: Int, day: Int) {
-        val configuration = workoutSessionUiState.value.effectiveConfiguration ?: return
-        val revision = programRevision.value
+    private suspend fun recordAdaptiveDecision() {
+        val request = sessionFinalizationRequest(
+            session = activeWorkoutConfiguration.activeSession.value,
+            availableEquipment = availableEquipment.value
+        ) ?: return
 
         try {
-            adaptiveDecisionRecorder.recordFinalizedSession(
-                SessionFinalizationRequest(
-                    programCycle = cycle,
-                    programDay = day,
-                    programRevision = revision,
-                    programType = if (revision == STANDARD_PROGRAM_REVISION) {
-                        ProgramType.STANDARD
-                    } else {
-                        ProgramType.REVISED
-                    },
-                    configuration = configuration,
-                    programStartDate = parseDate(programStartDate.value, LocalDate.now()),
-                    availableEquipment = availableEquipment.value
-                )
-            )
+            adaptiveDecisionRecorder.recordFinalizedSession(request)
         } catch (e: Exception) {
-            Log.w(TAG, "adaptive decisions not recorded for cycle $cycle day $day", e)
+            Log.w(TAG, "adaptive decisions not recorded for cycle ${request.programCycle} day ${request.programDay}", e)
         }
     }
 

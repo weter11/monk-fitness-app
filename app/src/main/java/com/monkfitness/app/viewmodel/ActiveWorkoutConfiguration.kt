@@ -16,7 +16,8 @@ import kotlinx.coroutines.sync.withLock
  * The two values are the app's own session identity: the pair the workout route carries and the pair
  * `MainViewModel.startWorkoutSession` already uses to decide whether it is entering a session or
  * re-entering the one that is running. Nothing else identifies a session — no timestamp, no counter —
- * so "the same session" means exactly what the rest of the app means by it.
+ * so "the same session" means exactly what the rest of the app means by it, and a later program
+ * revision does not make the running session a different one.
  */
 data class WorkoutSessionIdentity(
     val day: Int,
@@ -24,55 +25,70 @@ data class WorkoutSessionIdentity(
 )
 
 /**
- * The session that is running, and the configuration it was started with.
+ * The session that is running, with everything it froze at its start.
  *
- * @property identity the session these values belong to.
+ * @property identity the session these values belong to. It is the key: a re-entry into the same
+ *   `(day, mode)` returns this session, whatever the live program state has become since.
+ * @property context the program context (revision, calendar, cycle) captured at the session's start, or
+ *   `null` while that capture is still in flight — or before it was introduced, which is why the
+ *   finalization treats it as absent rather than inventing one.
  * @property configuration the captured configuration, or `null` while the session's one configuration
  *   read is still in flight — the only moment at which a started session has no configuration yet.
  */
 data class ActiveWorkoutSession(
     val identity: WorkoutSessionIdentity,
+    val context: WorkoutSessionContext?,
     val configuration: WorkoutConfigurationSnapshot?
 )
 
 /**
- * The configuration one workout session runs on.
+ * The facts one workout session runs on: the program context and the configuration it froze at its start.
  *
  * ## The boundary this type owns
  *
  * The app has exactly one authoritative moment at which a workout becomes started: the session start
  * transition, `MainViewModel.startWorkoutSession(day, mode)` — the pair of state flows the workout
  * session's generation is built from. Before it, the persisted configuration may change as often as
- * the user likes and the session that starts next simply reads the latest value. At it, the
- * configuration is captured **once**, into an immutable snapshot, and that snapshot is what the
- * session runs on from then until another session starts. After it, an edit changes the persisted
- * configuration and therefore the next session, and cannot reach this one: this holder holds no
- * configuration source, so there is nothing for a later state emission, a recomposition or a
- * navigation event to rebuild from.
+ * the user likes and the session that starts next simply reads the latest value. At it, two things are
+ * captured **once**, into immutable values, and they are what the session runs on from then until another
+ * session starts:
+ *
+ *  * the **configuration snapshot** — which exercises the session may use;
+ *  * the **program context** ([WorkoutSessionContext]) — the revision, the calendar and the cycle the
+ *    session belongs to.
+ *
+ * After it, an edit changes the persisted configuration and therefore the next session, and a
+ * `Start Revised Program` changes the revision and the calendar for every session that starts later.
+ * Neither can reach this one: this holder holds no configuration source and no program store, so there is
+ * nothing for a later state emission, a recomposition, a navigation event or a lifecycle action to
+ * rebuild from — and the completion path finalizes the session under exactly these values.
  *
  * What that means concretely:
  *
  *  * a configuration edited before the start transition is the configuration the started session
  *    reports ([beginSession] reads it as part of the transition);
  *  * a configuration edited after it is not observed by that session, however many edits are made;
- *  * the repository is read exactly once per session, so a re-entry — the workout screen's start
- *    effect firing again, a recomposition, navigating back into the session — cannot create a second
- *    capture, and a started session never silently rebuilds itself;
- *  * a session that has reached its completed step keeps the snapshot it started with, because
- *    nothing outside this holder's start transition writes it;
- *  * the next session captures the configuration persisted at *its* start, which is what makes the
- *    behaviour future-only rather than "frozen forever".
+ *  * a program revised while the session is running does not re-file it: the session keeps the revision
+ *    and the calendar it started under, so a finished workout is never interpreted as a later program's
+ *    session;
+ *  * both reads happen exactly once per session, so a re-entry — the workout screen's start effect firing
+ *    again, a recomposition, navigating back into the session — cannot create a second capture, and a
+ *    started session never silently rebuilds itself;
+ *  * a session that has reached its completed step keeps what it started with, because nothing outside
+ *    this holder's start transition writes it;
+ *  * the next session captures what is persisted at *its* start, which is what makes the behaviour
+ *    future-only rather than "frozen forever".
  *
  * ## Concurrency
  *
  * The start transition can be entered twice for the same session (the screen's effect and a
- * recomposition, or two rapid navigations), and the read it performs suspends. The read-and-capture
+ * recomposition, or two rapid navigations), and the reads it performs suspend. The read-and-capture
  * step is therefore serialised: a second entry waits for the first, then finds the session already
  * captured and returns it without reading anything. A session's effective configuration is thus the
  * value observed when *its* start transition began, never a later edit that landed while a duplicate
  * entry was in flight.
  *
- * It holds no persistence and no Android: the caller supplies the read, so this type can be driven —
+ * It holds no persistence and no Android: the caller supplies the reads, so this type can be driven —
  * and its boundary proven — on the JVM.
  */
 class ActiveWorkoutConfiguration {
@@ -98,32 +114,47 @@ class ActiveWorkoutConfiguration {
      * Enters [identity]'s session at the app's start transition and returns the configuration that
      * session runs on.
      *
-     * The first call for a session reads [readConfiguration] once and freezes the result. Every later
-     * call for the same session — a recomposition, a navigation back into it, the workout screen's
-     * start effect firing again — returns the frozen snapshot and does not read anything. A call for a
-     * *different* session belongs to that session: it starts a new capture, and the previous session's
-     * snapshot is left untouched (the session that completed keeps what it ran on).
+     * The first call for a session reads [readContext] and [readConfiguration] once each and freezes both
+     * results. Every later call for the same session — a recomposition, a navigation back into it, the
+     * workout screen's start effect firing again — returns the frozen snapshot and reads nothing, which is
+     * what makes a program revision, a calendar restart or a configuration edit that lands while the
+     * session is running unable to reach it. A call for a *different* session belongs to that session: it
+     * starts its own capture, and the previous session's snapshot and context are left untouched (the
+     * session that completed keeps what it ran on).
      *
+     * @param readContext reads the program context that is live at this instant. It is invoked at most
+     *   once per session, inside the same critical section as the configuration read, so the two frozen
+     *   values always describe the one moment the session started at.
      * @param readConfiguration reads the persisted configuration, exactly as the caller's repository
      *   exposes it. It is invoked at most once per session.
      */
     suspend fun beginSession(
         identity: WorkoutSessionIdentity,
+        readContext: () -> WorkoutSessionContext,
         readConfiguration: suspend () -> ProgramConfiguration
     ): WorkoutConfigurationSnapshot = capture.withLock {
         val running = state.value
         if (running != null && running.identity == identity) {
-            running.configuration?.let { captured -> return@withLock captured }
-        } else {
-            // A different session is starting: it runs on its own capture, whatever the previous
-            // session ran on.
-            state.value = ActiveWorkoutSession(identity, null)
+            val context = running.context
+            val configuration = running.configuration
+            if (context != null && configuration != null) return@withLock configuration
         }
 
-        val session = requireNotNull(state.value) { "the session start was not recorded" }
-        val captured = WorkoutConfigurationSnapshot.capture(readConfiguration())
-        state.value = session.copy(configuration = captured)
+        // A different session is starting: it runs on its own capture, whatever the previous session ran
+        // on. A re-entry whose capture is still incomplete keeps the half it already has.
+        val session = if (running != null && running.identity == identity) {
+            running
+        } else {
+            ActiveWorkoutSession(identity, context = null, configuration = null)
+        }
 
-        captured
+        val started = session.copy(
+            context = session.context ?: readContext(),
+            configuration = session.configuration
+                ?: WorkoutConfigurationSnapshot.capture(readConfiguration())
+        )
+        state.value = started
+
+        requireNotNull(started.configuration) { "the session start captured no configuration" }
     }
 }

@@ -18,22 +18,29 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 /**
- * The session the app has just finalized, described by what the session's own start already knew.
+ * The session the app has just finalized, described by the context that session froze when it started.
  *
- * Every field is a frozen fact rather than a live reading: the calendar position the session ran on, the
- * program revision whose adaptive state applies to it, the [ProgramType] that revision belongs to, the
- * configuration the session was STARTED with (never the live store, which belongs to the next workout),
- * and the equipment the session could rely on.
+ * Every field is a frozen fact rather than a live reading: the program day, cycle and revision the
+ * session ran as, the program calendar its stored history is interpreted against, the configuration the
+ * session was STARTED with (never the live store, which belongs to the next workout), and the equipment
+ * the session could rely on.
  *
- * `programRevision` is carried separately from `programType` for the same reason Task 13 carries both:
- * persistence keys adaptive state by revision — which is the row set that is current — while the type is
- * the decision's own context.
+ * That is the whole point of the type. A session that started under one revision must be finalized under
+ * that revision even if a `Start Revised Program` ran while it was alive, and the same `(cycle, day)`
+ * means different dates in two program calendars — so "which session is this" is answered by the values
+ * the session kept, never by whatever the app's live state reads at completion time.
  *
- * @property programCycle the program cycle the finalized session belongs to (1-based).
+ * `programRevision` is carried separately from `programType` because persistence keys adaptive state by
+ * revision — the row set that is current — while the type is the decision's own context; the type is
+ * derived from the revision (see [programType]) rather than supplied beside it, so the two cannot
+ * disagree.
+ *
  * @property programDay the program day within that cycle (1-based).
+ * @property programCycle the program cycle the finalized session belongs to (1-based).
  * @property programRevision the revision whose family progression this session continues.
  * @property configuration the configuration captured when this session started.
- * @property programStartDate the calendar the stored sessions are interpreted against.
+ * @property programStartDate the calendar the stored sessions are interpreted against — the program
+ *   calendar of the revision this session belongs to, frozen with the session.
  * @property availableEquipment the equipment the session's generation could rely on, in the app's own
  *   semantics (empty means "not established", which permits everything).
  */
@@ -41,16 +48,32 @@ data class SessionFinalizationRequest(
     val programCycle: Int,
     val programDay: Int,
     val programRevision: Int,
-    val programType: ProgramType,
     val configuration: WorkoutConfigurationSnapshot,
     val programStartDate: LocalDate,
     val availableEquipment: Set<Equipment> = emptySet()
 ) {
 
+    /**
+     * Which of the app's two program identities this session belongs to, derived from its own frozen
+     * revision: [ProgramType.STANDARD] is the program as first started and [ProgramType.REVISED] one
+     * restarted through the C3 "Start Revised Program" action.
+     */
+    val programType: ProgramType
+        get() = if (programRevision == STANDARD_PROGRAM_REVISION) ProgramType.STANDARD else ProgramType.REVISED
+
     init {
         require(programCycle >= 1) { "programCycle must be >= 1, was $programCycle" }
         require(programDay >= 1) { "programDay must be >= 1, was $programDay" }
         require(programRevision >= 0) { "programRevision must be >= 0, was $programRevision" }
+    }
+
+    companion object {
+        /**
+         * The revision of the program as first started, matching the persisted
+         * `SettingsManager.PROGRAM_REVISION` and the revision column both adaptive tables carry: a
+         * revision above it is a C3 "Start Revised Program".
+         */
+        const val STANDARD_PROGRAM_REVISION: Int = 0
     }
 }
 
@@ -110,6 +133,17 @@ data class SessionFinalizationOutcome(
  *    completion — never over a generated preview, the live session state or an exercise's configured
  *    targets;
  *  * a rest day prescribes no planned work, so it is not a session and records nothing.
+ *
+ * ## Which session the window belongs to
+ *
+ * The request carries `(programRevision, programCycle, programDay)` **and** the program calendar those
+ * belong to, and the recorder reads its history with that calendar ([readHistory] is asked for the
+ * request's `programStartDate`). That is what makes a `(cycle, day)` mean the session it means: in one
+ * program calendar the position is one range of dates, in another it is a different range, so a session
+ * started under one revision can never be resolved onto another revision's workouts. Persistence carries
+ * no revision column in the workout history — `user_progress` is keyed by `(cycleNumber, day)` and a set
+ * row carries a date — so the calendar the session froze is the only thing that can answer the question,
+ * and this layer refuses to answer it from whatever the app's live state reads at completion time.
  *
  * ## What it writes
  *

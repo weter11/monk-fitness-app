@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -271,6 +272,95 @@ class SessionHistoryAdapterTest {
             plannedExercises(day).size,
             observation.plannedExercises
         )
+    }
+
+    /**
+     * A position whose rows the position's own plan does not account for has no observed start.
+     *
+     * This is the calendar-shift shape a revised program produces: after `Start Revised Program` the
+     * calendar restarts, older sessions' dates all resolve to the new calendar's first position, and the
+     * set rows lying there belong to *another* day's plan. Those rows are dropped from the amounts (the
+     * class contract), so they may not date the session either — an observation that reported a start
+     * stamp but no work would be one the model refuses to construct at all, which would take the whole
+     * history's read down with it.
+     */
+    @Test
+    fun aPositionWhoseRowsBelongToAnotherDaysPlanIsNotStarted() = runBlocking {
+        val day = 1
+        val foreign = plannedExercises(10).first()
+        assertTrue(
+            "the fixture needs an exercise day $day does not prescribe, but day 10's first is ${foreign.id}",
+            plannedExercises(day).none { it.id == foreign.id }
+        )
+        val dao = FakeProgressDao(
+            setLogs = listOf(repSet(foreign.id, reps = 5, sessionDate = dateFor(day), timestamp = startedAt))
+        )
+
+        val observation = adapter(dao).observations().single()
+
+        assertEquals(SessionOutcome.NOT_STARTED, observation.outcome)
+        assertNull(
+            "work the observation did not account for cannot date the session",
+            observation.startedAt
+        )
+        assertNull(observation.finishedAt)
+        assertTrue("and it is not credited as work", observation.actualWork.isZero)
+    }
+
+    /**
+     * The same `(cycle, day)` is interpreted through the calendar the history is read with — which is why a
+     * session's finalization must be given its own frozen calendar.
+     *
+     * One program day is one calendar day, so the position `(1, 10)` names a different date in each program
+     * calendar. The rows here hold both revisions' side-10 sessions: revision 0's on `programStart + 9` and
+     * revision 1's on `laterStart + 9`. Read with each revision's own calendar, `(1, 10)` carries *that*
+     * revision's work — the other side's rows land on a different position entirely (revision 0's side-10
+     * date is the later calendar's first day; revision 1's side-10 date is the earlier calendar's cycle 2).
+     */
+    @Test
+    fun theSameProgramPositionIsInterpretedThroughTheCalendarItIsReadWith() = runBlocking {
+        val day = 10
+        val earlierStart = programStartDate
+        val laterStart = earlierStart.plusDays(60)
+
+        val earlierPlanned = plannedExercises(day)
+        val laterDate = laterStart.plusDays((day - 1).toLong()).toString()
+        val laterExercise = earlierPlanned.first()
+
+        // Revision 0's side-10 session: every set performed. Revision 1's: one set.
+        val dao = FakeProgressDao(
+            setLogs = earlierPlanned.map { repSet(it.id, it.reps, dateFor(day), startedAt) } +
+                listOf(repSet(laterExercise.id, laterExercise.reps, laterDate, finishedAt))
+        )
+
+        val earlierObservation = SessionHistoryAdapter(dao, generator, earlierStart)
+            .observations()
+            .single { it.cycleNumber == 1 && it.programDay == day }
+        val laterObservation = SessionHistoryAdapter(dao, generator, laterStart)
+            .observations()
+            .single { it.cycleNumber == 1 && it.programDay == day }
+
+        assertEquals(
+            "revision 0's calendar reads revision 0's own session at that position",
+            earlierPlanned.size,
+            earlierObservation.completedExercises
+        )
+        assertEquals(
+            "and revision 1's calendar reads revision 1's own session at the very same (cycle, day)",
+            1,
+            laterObservation.completedExercises
+        )
+        assertTrue(
+            "the two calendars must not attribute the same work to the same position",
+            earlierObservation.actualWork.sets > laterObservation.actualWork.sets
+        )
+        assertEquals(
+            "each one is dated by its own rows",
+            startedAt,
+            earlierObservation.startedAt
+        )
+        assertEquals(finishedAt, laterObservation.startedAt)
+        assertNotEquals(earlierObservation.startedAt, laterObservation.startedAt)
     }
 
     @Test

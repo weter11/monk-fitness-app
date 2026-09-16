@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import com.monkfitness.app.data.repository.ProgramConfigurationRepository
 import com.monkfitness.app.viewmodel.ActiveWorkoutConfiguration
+import com.monkfitness.app.viewmodel.WorkoutSessionContext
 import com.monkfitness.app.viewmodel.WorkoutSessionIdentity
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +26,7 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.time.LocalDate
 
 /**
  * The lifecycle boundary Task 12 owns: the configuration a workout runs on is the one that was
@@ -78,6 +80,23 @@ class WorkoutConfigurationSnapshotTest {
     /** The app's session identity: the pair its navigation route and its start guard both use. */
     private val identity = WorkoutSessionIdentity(day = 3, isPostureMobilitySession = false)
     private val otherIdentity = WorkoutSessionIdentity(day = 4, isPostureMobilitySession = false)
+
+    /**
+     * The program context the sessions in this suite start under — the calendar and revision that are
+     * live *at the start transition*, the half of the session freeze a revised program must not reach.
+     */
+    private val contextA = WorkoutSessionContext(
+        programCycle = 1,
+        programRevision = 0,
+        programStartDate = LocalDate.of(2026, 8, 31)
+    )
+
+    /** What the same live flows report after a `Start Revised Program`: a different revision, a new calendar. */
+    private val contextB = WorkoutSessionContext(
+        programCycle = 1,
+        programRevision = 1,
+        programStartDate = LocalDate.of(2026, 10, 30)
+    )
 
     // ---- a real DataStore over a real file --------------------------------------------------------
 
@@ -217,7 +236,7 @@ class WorkoutConfigurationSnapshotTest {
         assertNotEquals(earlier.configurationVersion, atStart.configurationVersion)
 
         val session = ActiveWorkoutConfiguration()
-        val effective = session.beginSession(identity) { repository.load() }
+        val effective = session.beginSession(identity, readContext = { contextA }) { repository.load() }
 
         // The assertion is on what the session runs on and reports — not on the store.
         assertEquals(atStart.enabledExerciseIds, effective.enabledExerciseIds)
@@ -231,7 +250,7 @@ class WorkoutConfigurationSnapshotTest {
     fun aConfigurationChangedAfterTheStartIsNotObservedByTheRunningSession() = sessionTest { repository ->
         val atStart = repository.apply(sessionSelection)
         val session = ActiveWorkoutConfiguration()
-        session.beginSession(identity) { repository.load() }
+        session.beginSession(identity, readContext = { contextA }) { repository.load() }
 
         val later = repository.apply(nextSelection)
         assertNotEquals(atStart.configurationVersion, later.configurationVersion)
@@ -252,7 +271,7 @@ class WorkoutConfigurationSnapshotTest {
     fun repeatedEditsCannotMutateTheRunningSession() = sessionTest { repository ->
         repository.apply(sessionSelection)
         val session = ActiveWorkoutConfiguration()
-        val captured = session.beginSession(identity) { repository.load() }
+        val captured = session.beginSession(identity, readContext = { contextA }) { repository.load() }
 
         val second = repository.apply(nextSelection)
         val third = repository.apply(thirdSelection)
@@ -275,11 +294,11 @@ class WorkoutConfigurationSnapshotTest {
         repository.apply(sessionSelection)
         val reads = Reads(repository)
         val session = ActiveWorkoutConfiguration()
-        val captured = session.beginSession(identity) { reads.read() }
+        val captured = session.beginSession(identity, readContext = { contextA }) { reads.read() }
 
         repository.apply(nextSelection)
 
-        val presentedAfterCompletion = session.beginSession(identity) { reads.read() }
+        val presentedAfterCompletion = session.beginSession(identity, readContext = { contextA }) { reads.read() }
 
         assertSame(captured, presentedAfterCompletion)
         assertSame(captured, session.effectiveConfiguration.first())
@@ -292,7 +311,7 @@ class WorkoutConfigurationSnapshotTest {
     fun theSnapshotKeepsTheVersionItWasCapturedAt() = sessionTest { repository ->
         val atStart = repository.apply(sessionSelection)
         val session = ActiveWorkoutConfiguration()
-        val captured = session.beginSession(identity) { repository.load() }
+        val captured = session.beginSession(identity, readContext = { contextA }) { repository.load() }
 
         val edited = repository.apply(nextSelection)
 
@@ -313,7 +332,7 @@ class WorkoutConfigurationSnapshotTest {
         val reads = Reads(repository)
         val session = ActiveWorkoutConfiguration()
 
-        val captured = session.beginSession(identity) { reads.read() }
+        val captured = session.beginSession(identity, readContext = { contextA }) { reads.read() }
         assertEquals("the start transition reads the persisted configuration once", 1, reads.count)
 
         repository.apply(nextSelection)
@@ -322,7 +341,7 @@ class WorkoutConfigurationSnapshotTest {
         // Every re-entry the app can perform: recomposition, navigation back into the session, the
         // workout screen's own start effect firing a second time.
         repeat(3) {
-            assertSame(captured, session.beginSession(identity) { reads.read() })
+            assertSame(captured, session.beginSession(identity, readContext = { contextA }) { reads.read() })
             assertSame(captured, session.effectiveConfiguration.first())
         }
 
@@ -340,14 +359,14 @@ class WorkoutConfigurationSnapshotTest {
 
         val captures = coroutineScope {
             val first = async(start = CoroutineStart.UNDISPATCHED) {
-                session.beginSession(identity) {
+                session.beginSession(identity, readContext = { contextA }) {
                     reads.count++
                     insideTheRead.await()
                     repository.load()
                 }
             }
             val second = async(start = CoroutineStart.UNDISPATCHED) {
-                session.beginSession(identity) { reads.read() }
+                session.beginSession(identity, readContext = { contextA }) { reads.read() }
             }
             // Only now is the first entry's read allowed to finish: the second entry was attempted
             // while the session's single capture was already in flight.
@@ -367,17 +386,17 @@ class WorkoutConfigurationSnapshotTest {
     fun theNextSessionStartsFromTheConfigurationPersistedAtItsOwnStart() = sessionTest { repository ->
         repository.apply(sessionSelection)
         val session = ActiveWorkoutConfiguration()
-        val running = session.beginSession(identity) { repository.load() }
+        val running = session.beginSession(identity, readContext = { contextA }) { repository.load() }
         assertEquals(sessionSelection, running.enabledExerciseIds)
 
         repository.apply(nextSelection)
         assertSame(
             "the running session is still frozen while the next configuration is edited",
             running,
-            session.beginSession(identity) { repository.load() }
+            session.beginSession(identity, readContext = { contextA }) { repository.load() }
         )
 
-        val next = session.beginSession(otherIdentity) { repository.load() }
+        val next = session.beginSession(otherIdentity, readContext = { contextB }) { repository.load() }
 
         assertEquals(nextSelection, next.enabledExerciseIds)
         assertNotEquals(running.configurationVersion, next.configurationVersion)
@@ -385,6 +404,64 @@ class WorkoutConfigurationSnapshotTest {
         // Starting the next session does not rewrite the previous session's snapshot.
         assertEquals(sessionSelection, running.enabledExerciseIds)
         assertEquals(otherIdentity, session.activeSession.value?.identity)
+        assertEquals(
+            "a different session captures the context that is live at ITS start",
+            contextB,
+            session.activeSession.value?.context
+        )
+    }
+
+    // ---- the program context is frozen with the session -------------------------------------------
+
+    /**
+     * The blocker this section exists for: a session that started under revision 0 on calendar A, and the
+     * live flows moving on (a revised program bumps the revision and restarts the calendar) *while that
+     * session is still alive*. Every later entry into the running session reports the new live context —
+     * and the running session must ignore it, exactly as it ignores a later configuration edit.
+     */
+    @Test
+    fun aProgramRevisedWhileTheSessionRunsDoesNotReachItsFrozenContext() = sessionTest { repository ->
+        repository.apply(sessionSelection)
+        val session = ActiveWorkoutConfiguration()
+        var contextReads = 0
+
+        session.beginSession(
+            identity = identity,
+            readContext = { contextReads++; contextA }
+        ) { repository.load() }
+
+        assertEquals("the start transition reads the program context once", 1, contextReads)
+        assertEquals(contextA, session.activeSession.value?.context)
+
+        // Start Revised Program: a new revision, a new calendar, a new live configuration.
+        repository.apply(nextSelection)
+
+        val reentered = session.beginSession(
+            // What the live flows report now — the re-entry must not adopt it.
+            identity = identity,
+            readContext = { contextReads++; contextB }
+        ) { repository.load() }
+
+        assertEquals("nothing is read again for a session that already started", 1, contextReads)
+        assertEquals(
+            "the frozen revision and calendar survive the revised program",
+            contextA,
+            session.activeSession.value?.context
+        )
+        assertEquals(
+            "and the configuration captured at start still wins",
+            sessionSelection,
+            reentered.enabledExerciseIds
+        )
+        assertSame(reentered, session.effectiveConfiguration.first())
+    }
+
+    /** A session that never captured its context at start has none — it is never invented later. */
+    @Test
+    fun aSessionThatHasNotStartedHasNoFrozenContext() = runBlocking {
+        val session = ActiveWorkoutConfiguration()
+
+        assertNull("nothing is frozen before a workout starts", session.activeSession.value?.context)
     }
 
     @Test

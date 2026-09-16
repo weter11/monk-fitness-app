@@ -20,7 +20,6 @@ import com.monkfitness.app.data.model.VolumeHistoryPoint
 import com.monkfitness.app.data.model.WorkoutFrequencyPoint
 import com.monkfitness.app.domain.adaptive.AdaptiveState
 import com.monkfitness.app.domain.adaptive.ExerciseResult
-import com.monkfitness.app.domain.adaptive.ProgramType
 import com.monkfitness.app.domain.adaptive.SessionObservation
 import com.monkfitness.app.domain.adaptive.SessionOutcome
 import com.monkfitness.app.domain.adaptive.Workload
@@ -144,11 +143,6 @@ internal class AdaptiveLifecycleRig(
         programCycle = programCycle,
         programDay = programDay,
         programRevision = programRevision,
-        programType = if (programRevision == STANDARD_REVISION) {
-            ProgramType.STANDARD
-        } else {
-            ProgramType.REVISED
-        },
         configuration = WorkoutConfigurationSnapshot(
             configurationVersion = 1,
             enabledExerciseIds = enabledExerciseIds
@@ -261,7 +255,6 @@ internal class AdaptiveLifecycleRig(
         const val DEFAULT_NOW: Long = 1_800_000_000_000L
         const val MILLIS_PER_DAY: Long = 86_400_000L
         const val TOTAL_PROGRAM_DAYS: Int = 56
-        const val STANDARD_REVISION: Int = 0
         /** A second family's exercise, for the cases that need more than one family in a window. */
         const val PLANK_EXERCISE_ID: String = "plank"
 

@@ -41,6 +41,7 @@ class AdaptiveLifecycleWiringTest {
 
     private val viewModelText: String by lazy { source("viewmodel/MainViewModel.kt") }
     private val recorderText: String by lazy { source("data/repository/AdaptiveSessionDecisionRecorder.kt") }
+    private val builderText: String by lazy { source("viewmodel/WorkoutSessionContext.kt") }
     private val settingsText: String by lazy { source("data/local/SettingsManager.kt") }
 
     /** The text of one class-level member: from its signature to the next class-level member. */
@@ -87,14 +88,45 @@ class AdaptiveLifecycleWiringTest {
         val recorderCall = memberBody(viewModelText, "private suspend fun recordAdaptiveDecision(")
         assertTrue("the one call lives in the recording member", "recordFinalizedSession(" in recorderCall)
         assertTrue(
-            "the request carries the session's own frozen configuration",
-            "effectiveConfiguration" in recorderCall &&
-                "programConfigurationRepository" !in recorderCall &&
-                "load()" !in recorderCall
+            "the request is built from the ACTIVE SESSION's frozen facts, not from live flows",
+            "sessionFinalizationRequest(" in recorderCall &&
+                "activeWorkoutConfiguration.activeSession" in recorderCall
+        )
+        listOf(
+            "programRevision", "programStartDate", "programCycleNumber",
+            "programConfigurationRepository", "workoutSessionUiState"
+        ).forEach { liveState ->
+            assertTrue(
+                "$liveState is live state: a started session's finalization must use the context it " +
+                    "froze at its start, so a revised program or a new calendar cannot reinterpret it",
+                liveState !in recorderCall
+            )
+        }
+    }
+
+    @Test
+    fun theSessionsProgramContextIsReadOnlyAtTheStartTransition() {
+        val start = memberBody(viewModelText, "fun startWorkoutSession(")
+        val capture = memberBody(viewModelText, "fun beginWorkoutSessionConfiguration(")
+        assertTrue(
+            "the start transition is what freezes the program context, beside the configuration",
+            "readContext" in capture && "currentProgramContext(" in capture
         )
         assertTrue(
-            "the request carries the program revision the session ran under",
-            "programRevision = revision" in recorderCall && "programRevision.value" in recorderCall
+            "and no other session path captures one",
+            1 == occurrences(viewModelText, "readContext")
+        )
+        val provider = memberBody(viewModelText, "private fun currentProgramContext(")
+        listOf("programCycleNumber.value", "programRevision.value", "programStartDate.value")
+            .forEach { liveState ->
+                assertTrue(
+                    "the context is the live program state read once, at start: $liveState",
+                    liveState in provider
+                )
+            }
+        assertTrue(
+            "the completion path does not reach the context provider",
+            "currentProgramContext" !in memberBody(viewModelText, "fun completeWorkout(")
         )
     }
 
@@ -174,11 +206,16 @@ class AdaptiveLifecycleWiringTest {
             "PROGRAM_REVISION" in memberBody(settingsText, "suspend fun startRevisedProgram(")
         )
         assertTrue(
-            "and the adaptive request is scoped by that same marker",
-            "programRevision = revision" in memberBody(
-                viewModelText,
-                "private suspend fun recordAdaptiveDecision("
-            )
+            "the start transition reads that marker as the session's frozen revision",
+            "programRevision.value" in memberBody(viewModelText, "private fun currentProgramContext(")
+        )
+        assertTrue(
+            "and the finalization request is scoped by the session's FROZEN revision, never a live one",
+            "programRevision = context.programRevision" in builderText
+        )
+        assertTrue(
+            "the request's program identity is derived from that same revision",
+            "programRevision == STANDARD_PROGRAM_REVISION" in recorderText
         )
     }
 

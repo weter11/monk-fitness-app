@@ -33,9 +33,11 @@ package com.monkfitness.app.domain.adaptive
  *    only from the set rows;
  *  * reduce repetitions and seconds to one scalar — the two channels are aggregated side by side
  *    into [Workload], never added;
- *  * fabricate a timestamp — `startedAt` is the earliest confirmed set, or the day-level completion
- *    stamp when a completed day has no set rows left to date it, and `finishedAt` is the day-level
- *    completion stamp; when persistence has neither, the stamp is `null`;
+ *  * fabricate a timestamp — `startedAt` is the earliest confirmed set the observation accounted for, or
+ *    the day-level completion stamp when a completed day has no accounted rows; `finishedAt` is the
+ *    day-level completion stamp; when persistence has neither, the stamp is `null`;
+ *  * date a session by work it did not account for — a row the position's plan does not contain is
+ *    dropped from the amounts, so it cannot supply the start stamp either;
  *  * invent an end for a session that has not ended — `finishedAt` is set only by the day-level
  *    completion, so an abandoned session carries `null` rather than an imagined abandonment time;
  *  * discard a persisted row — a row is kept unless a higher-level caller filters it. The write
@@ -62,15 +64,22 @@ internal object SessionObservationMapper {
         isCompleted: Boolean,
         completedAt: Long?
     ): SessionObservation {
-        val exerciseResults = plannedExercises.map { exercise ->
-            exerciseResult(exercise, setLogs.forExercise(exercise, sessionDate))
+        val accountedRows = plannedExercises.map { exercise -> setLogs.forExercise(exercise, sessionDate) }
+        val exerciseResults = plannedExercises.mapIndexed { index, exercise ->
+            exerciseResult(exercise, accountedRows[index])
         }
 
         val plannedWork = exerciseResults.map { it.plannedWorkload() }.foldWorkloads()
         val actualWork = exerciseResults.map { it.actualWorkload() }.foldWorkloads()
         val completedExercises = exerciseResults.count { it.completedSets > 0 }
 
-        val observedStart = setLogs.minOfOrNull { it.timestamp }
+        // The start stamp comes from the work this observation ACCOUNTED FOR: a set row the position's
+        // plan does not contain is dropped from the amounts (see the class contract), so it may not date
+        // the session either. Keeping the two consistent is what makes an observation constructable at
+        // all — a position whose only rows belong to another plan's exercises has no observed start, which
+        // is exactly what `NOT_STARTED` requires, and reading those rows as its start produced an
+        // observation the model refuses (`NOT_STARTED` has no stamps).
+        val observedStart = accountedRows.flatten().minOfOrNull { it.timestamp }
         // A completed day whose confirmed-set rows are gone — every set rolled back, or history written
         // by a build that did not log sets — is still a session the user finished, and the day-level
         // completion stamp is the only instant persistence establishes for it. Reporting no start at all

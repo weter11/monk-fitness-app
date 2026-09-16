@@ -7,8 +7,14 @@ import com.monkfitness.app.data.model.UserProgress
 import com.monkfitness.app.domain.adaptive.AdaptiveAction
 import com.monkfitness.app.domain.adaptive.AdaptiveReasonCode
 import com.monkfitness.app.domain.adaptive.AdaptiveState
+import com.monkfitness.app.domain.adaptive.ProgramConfiguration
+import com.monkfitness.app.domain.adaptive.ProgramConfigurationSource
 import com.monkfitness.app.domain.adaptive.SessionOutcome
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
+import com.monkfitness.app.viewmodel.ActiveWorkoutConfiguration
+import com.monkfitness.app.viewmodel.WorkoutSessionContext
+import com.monkfitness.app.viewmodel.WorkoutSessionIdentity
+import com.monkfitness.app.viewmodel.sessionFinalizationRequest
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -334,6 +340,204 @@ class AdaptiveSessionDecisionRecorderTest {
         assertEquals(2, rig.stateDao.rows.size)
     }
 
+    // ---- the frozen session context ---------------------------------------------------------------
+
+    /**
+     * The blocker this section exists for.
+     *
+     * A session starts under revision 0, cycle 1, day 10, calendar A and configuration A. While it is
+     * still running, a `Start Revised Program` bumps the revision, restarts the calendar on B and the live
+     * configuration changes. The completion path must finalize the session under the context it started
+     * with: reading the live revision, the live calendar or the live configuration at completion time
+     * would interpret a finished workout as a different program's session.
+     *
+     * The whole chain is real here — the app's own session holder (driven exactly as `MainViewModel` drives
+     * it), the pure request builder the completion path uses, and the recorder over the persisted history —
+     * and the history read is deliberately interpreted against the request's calendar, which under B
+     * establishes no session at (1, 10) at all.
+     */
+    @Test
+    fun aSessionRevisedWhileItIsRunningIsFinalizedUnderTheContextItStartedWith() = runBlocking {
+        val rig = AdaptiveLifecycleRig(
+            userProgress = listOf(
+                UserProgress(
+                    cycleNumber = 1,
+                    day = 10,
+                    isCompleted = true,
+                    completionDate = rigCompletionMillis(10)
+                )
+            ),
+            setLogs = completedSetLogsForDay(10),
+            familyStates = listOf(persistedFamilyState(progressionLevel = 1))
+        )
+
+        val frozenCalendar = AdaptiveLifecycleRig.PROGRAM_START
+        val laterCalendar = frozenCalendar.plusDays(60)
+
+        // The start transition, exactly as the view model drives it.
+        val activeSession = ActiveWorkoutConfiguration()
+        activeSession.beginSession(
+            identity = WorkoutSessionIdentity(day = 10, isPostureMobilitySession = false),
+            readContext = {
+                WorkoutSessionContext(
+                    programCycle = 1,
+                    programRevision = 0,
+                    programStartDate = frozenCalendar
+                )
+            }
+        ) { configuration(selection = setOf("pushups")) }
+
+        // Start Revised Program, and an edit to the selection, while the session is still alive. Every
+        // re-entry now reports the new live context — the running session keeps its own.
+        activeSession.beginSession(
+            identity = WorkoutSessionIdentity(day = 10, isPostureMobilitySession = false),
+            readContext = {
+                WorkoutSessionContext(
+                    programCycle = 1,
+                    programRevision = 1,
+                    programStartDate = laterCalendar
+                )
+            }
+        ) { configuration(selection = setOf("squats"), version = 2) }
+
+        val request = requireNotNull(
+            sessionFinalizationRequest(activeSession.activeSession.value, availableEquipment = emptySet())
+        )
+        assertEquals("the frozen revision", 0, request.programRevision)
+        assertEquals("the frozen calendar", frozenCalendar, request.programStartDate)
+        assertEquals("the frozen configuration", setOf("pushups"), request.configuration.enabledExerciseIds)
+
+        val outcome = rig.recorderOverPersistedHistory().recordFinalizedSession(request)
+
+        assertTrue("the session it started as is the session that is finalized", outcome.isFinalized)
+        assertEquals(listOf("pushups"), outcome.recordedFamilies)
+
+        val record = rig.historyDao.rows.single()
+        assertEquals("the decision belongs to the revision the session started under", 0, record.programRevision)
+        assertEquals(1, record.cycleNumber)
+        assertEquals(10, record.programDay)
+        assertEquals(
+            "and the state it moves is that revision's own family state",
+            listOf(0),
+            rig.stateDao.rows.map { it.programRevision }
+        )
+        assertNull(
+            "the revision that started later inherits nothing",
+            rig.repository().familyState(1, "pushups")
+        )
+    }
+
+    /**
+     * The same `(cycle, day)` must be resolved through the calendar the session being finalized belongs to.
+     *
+     * A session's position in the history is only meaningful inside its own program calendar: one program
+     * day is one calendar day, so revision 0's `(1, 10)` and revision 1's `(1, 10)` are different dates.
+     * The rows here are revision 0's day-10 session (confirmed sets, never completed). Read with revision
+     * 0's calendar it establishes a partial session at `(1, 10)`; read with revision 1's calendar the very
+     * same rows fall on the new calendar's first day, and `(1, 10)` holds nothing at all.
+     *
+     * That difference is the whole point: a finalization that interpreted the history with the wrong
+     * calendar — the live one, or the other revision's — would select a session that is not the one being
+     * finalized. Neither call records a decision here, because a session that was never completed is not
+     * finalized; what the recorder must not do is resolve the position onto the other program's history.
+     */
+    @Test
+    fun theSameCycleAndDayInTwoProgramRevisionsResolvesThroughEachSessionsOwnCalendar() = runBlocking {
+        val earlierCalendar = AdaptiveLifecycleRig.PROGRAM_START
+        val laterCalendar = earlierCalendar.plusDays(60)
+
+        val rig = AdaptiveLifecycleRig(setLogs = completedSetLogsForDay(10))
+
+        // Revision 0's own calendar: (1, 10) is the partial session above.
+        val earlier = rig.recorderOverPersistedHistory().recordFinalizedSession(
+            rig.request(programDay = 10, programRevision = 0, programStartDate = earlierCalendar)
+        )
+
+        assertEquals(
+            "revision 0's calendar establishes the session the rows belong to",
+            SessionOutcome.PARTIAL,
+            earlier.observationOutcome
+        )
+        assertTrue("a session that was never completed finalizes nothing", !earlier.isFinalized)
+        assertEquals(emptyList<String>(), earlier.recordedFamilies)
+
+        // Revision 1's own calendar: the same rows are the new calendar's first day, so there is no
+        // session at (1, 10) — and certainly not revision 0's.
+        val later = rig.recorderOverPersistedHistory().recordFinalizedSession(
+            rig.request(programDay = 10, programRevision = 1, programStartDate = laterCalendar)
+        )
+
+        assertNull("the other calendar establishes no session at that position", later.observationOutcome)
+        assertEquals(emptyList<String>(), later.recordedFamilies)
+        assertEquals(
+            "and nothing was recorded for either window",
+            emptyList<AdaptiveDecisionRecord>(),
+            rig.historyDao.rows
+        )
+    }
+
+    /**
+     * And when both revisions really do hold a session at the same `(cycle, day)`, each finalization still
+     * belongs to its own revision: the two records coexist, the two revisions' current states are separate
+     * rows, and neither revision's history query returns the other's decision.
+     */
+    @Test
+    fun twoProgramRevisionsMayBothHoldTheSameProgramWindowWithoutColliding() = runBlocking {
+        val earlierCalendar = AdaptiveLifecycleRig.PROGRAM_START
+        val laterCalendar = earlierCalendar.plusDays(60)
+
+        val laterDate = laterCalendar.plusDays(9).toString()
+        val laterDayPlan = WorkoutGenerator().generateWorkout(10).exercises.first()
+
+        val rig = AdaptiveLifecycleRig(
+            userProgress = listOf(
+                UserProgress(
+                    cycleNumber = 1,
+                    day = 10,
+                    isCompleted = true,
+                    completionDate = rigCompletionMillis(10)
+                )
+            ),
+            setLogs = completedSetLogsForDay(10) + listOf(
+                SetLog(
+                    exerciseId = laterDayPlan.id,
+                    repsCompleted = if (laterDayPlan.isTimerBased) 0 else laterDayPlan.reps,
+                    durationSeconds = if (laterDayPlan.isTimerBased) laterDayPlan.durationSeconds else 0,
+                    timestamp = 1_800_000_100_000L,
+                    sessionDate = laterDate
+                )
+            )
+        )
+
+        rig.recorderOverPersistedHistory().recordFinalizedSession(
+            rig.request(programDay = 10, programRevision = 0, programStartDate = earlierCalendar)
+        )
+        rig.recorderOverPersistedHistory().recordFinalizedSession(
+            rig.request(programDay = 10, programRevision = 1, programStartDate = laterCalendar)
+        )
+
+        assertEquals(
+            "the same window is decided once per revision, not once in total",
+            listOf(0, 1),
+            rig.historyDao.rows.map { it.programRevision }.sorted()
+        )
+        assertEquals(
+            "both records name the same programme window",
+            listOf(1 to 10, 1 to 10),
+            rig.historyDao.rows.map { it.cycleNumber to it.programDay }
+        )
+        assertEquals(
+            "each revision's history query returns only its own decision",
+            listOf(1 to 10),
+            rig.repository().decisionHistory(0).map { it.cycleNumber to it.programDay }
+        )
+        assertEquals(
+            "and both revisions' current states exist side by side",
+            listOf(0, 1),
+            rig.stateDao.rows.map { it.programRevision }.sorted()
+        )
+    }
+
     // ---- the domain decides; the levels it resolves are what lands -------------------------------
 
     @Test
@@ -572,6 +776,13 @@ class AdaptiveSessionDecisionRecorderTest {
     }
 
     // ---- helpers --------------------------------------------------------------------------------
+
+    /** A persisted configuration, as a session's capture read it at its own start. */
+    private fun configuration(selection: Set<String>, version: Int = 1) = ProgramConfiguration(
+        source = ProgramConfigurationSource.CUSTOM,
+        enabledExerciseIds = selection,
+        configurationVersion = version
+    )
 
     /**
      * The confirmed sets a real session of that program day leaves behind: one row per prescribed set of
