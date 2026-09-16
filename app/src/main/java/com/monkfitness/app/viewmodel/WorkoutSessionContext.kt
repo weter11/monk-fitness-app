@@ -1,6 +1,8 @@
 package com.monkfitness.app.viewmodel
 
 import com.monkfitness.app.data.model.Equipment
+import com.monkfitness.app.data.model.ExerciseSubCategory
+import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.repository.SessionFinalizationRequest
 import java.time.LocalDate
 
@@ -37,13 +39,28 @@ import java.time.LocalDate
 data class WorkoutSessionContext(
     val programCycle: Int,
     val programRevision: Int,
-    val programStartDate: LocalDate
+    val programStartDate: LocalDate,
+    val generation: WorkoutSessionGeneration = WorkoutSessionGeneration()
 ) {
 
     init {
         require(programCycle >= 1) { "programCycle must be >= 1, was $programCycle" }
         require(programRevision >= 0) { "programRevision must be >= 0, was $programRevision" }
     }
+}
+
+/** Generation settings captured alongside the program context, never live session inputs. */
+class WorkoutSessionGeneration(
+    availableEquipment: Set<Equipment> = emptySet(),
+    difficultyAdjustments: Map<String, Int> = emptyMap(),
+    val trainingType: FlexibilityTrainingType = FlexibilityTrainingType.BOTH,
+    focusAreas: Set<ExerciseSubCategory> = setOf(ExerciseSubCategory.FULL_BODY),
+    disabledFamilies: Set<String> = emptySet()
+) {
+    val availableEquipment = availableEquipment.toSet()
+    val difficultyAdjustments = difficultyAdjustments.toMap()
+    val focusAreas = focusAreas.toSet()
+    val disabledFamilies = disabledFamilies.toSet()
 }
 
 /**
@@ -62,9 +79,8 @@ data class WorkoutSessionContext(
  *
  * @param session the app's active session, exactly as its holder exposes it.
  * @param availableEquipment the equipment the session's generation could rely on, in the app's own
- *   semantics. It is the user's equipment, not part of the program context a session freezes: the session
- *   path reads it live for generation too, so a mid-session equipment change is one consistent input
- *   rather than a lifecycle reinterpretation.
+ *   semantics. The completion caller supplies the equipment captured in the session's generation
+ *   settings, never the live settings flow.
  */
 internal fun sessionFinalizationRequest(
     session: ActiveWorkoutSession?,

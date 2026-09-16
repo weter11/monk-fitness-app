@@ -591,12 +591,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun readSessionAdaptivePlan(
         configuration: WorkoutConfigurationSnapshot
     ): AdaptiveSessionPlan {
-        val revision = programRevision.value
+        val session = requireNotNull(activeWorkoutConfiguration.activeSession.value)
+        val context = requireNotNull(session.context)
+        val revision = context.programRevision
 
         return sessionAdaptivePlanReader.read(
             SessionAdaptiveInputs(
-                programDay = _currentWorkoutDay.value ?: FIRST_PROGRAM_DAY,
-                programCycle = programCycleNumber.value,
+                programDay = session.identity.day,
+                programCycle = context.programCycle,
                 programType = if (revision == STANDARD_PROGRAM_REVISION) {
                     ProgramType.STANDARD
                 } else {
@@ -604,8 +606,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 },
                 programRevision = revision,
                 configuration = configuration,
-                availableEquipment = availableEquipment.value,
-                programStartDate = parseDate(programStartDate.value, LocalDate.now())
+                availableEquipment = context.generation.availableEquipment,
+                programStartDate = context.programStartDate
             )
         )
     }
@@ -613,35 +615,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val workoutSessionUiState = combine(
         currentWorkoutDay,
         currentSessionMode,
-        exerciseDifficultyAdjustments,
-        flexibilityTrainingType,
-        flexibilityFocusAreas,
-        availableEquipment,
-        disabledExerciseFamilies,
+        activeWorkoutConfiguration.activeSession,
         sessionConfiguration,
         sessionAdaptivePlan
-    ) { values ->
-        val day = values[0] as Int?
-        val sessionMode = values[1] as SessionMode
-        @Suppress("UNCHECKED_CAST")
-        val difficultyAdjustments = values[2] as Map<String, Int>
-        val trainingType = values[3] as FlexibilityTrainingType
-        @Suppress("UNCHECKED_CAST")
-        val focusAreas = values[4] as Set<ExerciseSubCategory>
-        @Suppress("UNCHECKED_CAST")
-        val availableEquipment = values[5] as Set<Equipment>
-        @Suppress("UNCHECKED_CAST")
-        val disabledFamilies = values[6] as Set<String>
+    ) { day, sessionMode, session, effectiveConfiguration, adaptivePlan ->
+        val generation = session?.context?.generation ?: WorkoutSessionGeneration()
+        val difficultyAdjustments = generation.difficultyAdjustments
+        val trainingType = generation.trainingType
+        val focusAreas = generation.focusAreas
+        val availableEquipment = generation.availableEquipment
+        val disabledFamilies = generation.disabledFamilies
         // The configuration this session runs on: captured at the start transition and immutable
         // from then on, so nothing observed here can be re-pointed by a later edit. It is presented
         // as session state because the session's own behaviour is the only thing allowed to consume it.
-        val effectiveConfiguration = values[7] as WorkoutConfigurationSnapshot?
         // The adaptive plan of this session, derived from that same captured configuration. A session
         // has no workout until both exist: before the configuration is captured there is no
         // configuration to generate from, and generating one anyway would present a workout this
         // session was never configured for — which is exactly how a disabled exercise reaches a
         // session that never enabled it.
-        val adaptivePlan = values[8] as AdaptiveSessionPlan?
         if (day == null || effectiveConfiguration == null || adaptivePlan == null) {
             WorkoutSessionUiState(
                 day = day,
@@ -1111,7 +1102,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun currentProgramContext() = WorkoutSessionContext(
         programCycle = programCycleNumber.value,
         programRevision = programRevision.value,
-        programStartDate = parseDate(programStartDate.value, LocalDate.now())
+        programStartDate = parseDate(programStartDate.value, LocalDate.now()),
+        generation = WorkoutSessionGeneration(
+            availableEquipment = availableEquipment.value,
+            difficultyAdjustments = exerciseDifficultyAdjustments.value,
+            trainingType = flexibilityTrainingType.value,
+            focusAreas = flexibilityFocusAreas.value,
+            disabledFamilies = disabledExerciseFamilies.value
+        )
     )
 
     fun setWorkoutStep(step: WorkoutStep) {
@@ -1327,9 +1325,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * already been credited for it, so a recording problem must not make a finished session look failed.
      */
     private suspend fun recordAdaptiveDecision() {
+        val session = activeWorkoutConfiguration.activeSession.value ?: return
         val request = sessionFinalizationRequest(
-            session = activeWorkoutConfiguration.activeSession.value,
-            availableEquipment = availableEquipment.value
+            session = session,
+            availableEquipment = session.context?.generation?.availableEquipment ?: return
         ) ?: return
 
         try {
