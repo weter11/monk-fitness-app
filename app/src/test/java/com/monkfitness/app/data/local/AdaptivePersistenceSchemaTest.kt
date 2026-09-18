@@ -170,10 +170,13 @@ class AdaptivePersistenceSchemaTest {
     // ---- the database declaration ------------------------------------------------------------------
 
     @Test
-    fun theDatabaseRegistersBothAdaptiveEntitiesAtVersion7() {
+    fun theDatabaseKeepsEveryShippedEntityAndAddsTheTargetSchema() {
         val source = File(mainSources, "data/local/AppDatabase.kt").readText()
 
-        assertTrue("the database version is bumped for the new tables", source.contains("version = 7"))
+        assertTrue(
+            "the database version moves with the schema (7 → 8 for the Program System target schema)",
+            source.contains("version = 8")
+        )
 
         val registered = Regex("entities = \\[(.*?)]", RegexOption.DOT_MATCHES_ALL)
             .find(source)!!
@@ -181,7 +184,8 @@ class AdaptivePersistenceSchemaTest {
             .let { Regex("(\\w+)::class").findAll(it).map { match -> match.groupValues[1] }.toList() }
 
         assertEquals(
-            "the eight existing entities are untouched and the two adaptive ones are added",
+            "the ten shipped entities are untouched, and the Program System target tables are added " +
+                "beside them",
             listOf(
                 "UserProgress",
                 "PostureSessionProgress",
@@ -192,7 +196,22 @@ class AdaptivePersistenceSchemaTest {
                 "MealEntity",
                 "ShoppingItemEntity",
                 "FamilyProgressionState",
-                "AdaptiveDecisionRecord"
+                "AdaptiveDecisionRecord",
+                "ProgramEntity",
+                "AppStateEntity",
+                "ProgramRevisionEntity",
+                "ProgramDayEntity",
+                "ProgramExerciseEntity",
+                "ProgramWorkoutSlotEntity",
+                "WorkoutSessionEntity",
+                "SessionSnapshotEntity",
+                "SessionSnapshotExerciseEntity",
+                "SessionExerciseEntity",
+                "SetLogEntity",
+                "ProgramPauseEntity",
+                "FamilyProgressionStateEntity",
+                "AdaptiveDecisionRecordEntity",
+                "AdaptiveAdjustmentEntity"
             ),
             registered
         )
@@ -200,9 +219,16 @@ class AdaptivePersistenceSchemaTest {
         val migrations = Regex("addMigrations\\((.*?)\\)", RegexOption.DOT_MATCHES_ALL)
             .find(source)!!
             .groupValues[1]
-        assertTrue("the new migration is actually registered", migrations.contains("MIGRATION_6_7"))
-        for (existing in listOf("MIGRATION_1_2", "MIGRATION_2_3", "MIGRATION_3_4", "MIGRATION_4_5", "MIGRATION_5_6")) {
-            assertTrue("$existing is still registered", migrations.contains(existing))
+        for (migration in listOf(
+            "MIGRATION_1_2",
+            "MIGRATION_2_3",
+            "MIGRATION_3_4",
+            "MIGRATION_4_5",
+            "MIGRATION_5_6",
+            "MIGRATION_6_7",
+            "MIGRATION_7_8"
+        )) {
+            assertTrue("$migration is registered", migrations.contains(migration))
         }
         assertTrue(
             "the state DAO is reachable from the database",
