@@ -33,6 +33,42 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
         connection.createStatement().use { statement -> statement.execute(sql) }
     }
 
+    /**
+     * Executes one statement with bound arguments, failing the test if SQLite rejects it.
+     *
+     * The parameterized form exists for the repository suites, which drive the production DAO SQL —
+     * queries with named parameters — on this engine. Binding rather than interpolating keeps the
+     * executed statement byte-identical to the one the DAO carries.
+     */
+    fun exec(sql: String, vararg args: Any?) {
+        connection.prepareStatement(sql).use { statement ->
+            args.forEachIndexed { index, arg -> statement.setObject(index + 1, arg) }
+            statement.execute()
+        }
+    }
+
+    /**
+     * Runs [block] inside one SQLite transaction: committed when it returns, rolled back when it
+     * throws — the same all-or-nothing unit Room's `withTransaction` provides on a device.
+     *
+     * This is what makes a repository's atomicity provable on the JVM: the test supplies a runner that
+     * performs a real `COMMIT`/`ROLLBACK`, so a failing insert in the middle of a creation leaves no
+     * half-written graph behind, and the rollback is the engine's rather than the test's bookkeeping.
+     */
+    suspend fun <T> transaction(block: suspend () -> T): T {
+        connection.autoCommit = false
+        return try {
+            val value = block()
+            connection.commit()
+            value
+        } catch (failure: Throwable) {
+            connection.rollback()
+            throw failure
+        } finally {
+            connection.autoCommit = true
+        }
+    }
+
     /** Executes a batch of statements in order. */
     fun execAll(statements: List<String>) {
         statements.forEach { exec(it) }

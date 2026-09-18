@@ -74,6 +74,40 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun adaptiveDecisionHistoryDao(): AdaptiveDecisionHistoryDao
 
+    // Program System target DAOs (§30 step 3). One per target table, added beside the shipped
+    // accessors above — which are unchanged and still serve the tables they always served. No target
+    // DAO reads a Stage-1 table, and no Stage-1 DAO reads a target one: the two persistence
+    // generations coexist until §30 step 15 (docs/PROGRAM_ROOM_SCHEMA.md §3).
+    abstract fun programDao(): ProgramDao
+
+    abstract fun appStateDao(): AppStateDao
+
+    abstract fun programRevisionDao(): ProgramRevisionDao
+
+    abstract fun programDayDao(): ProgramDayDao
+
+    abstract fun programExerciseDao(): ProgramExerciseDao
+
+    abstract fun programWorkoutSlotDao(): ProgramWorkoutSlotDao
+
+    abstract fun workoutSessionDao(): WorkoutSessionDao
+
+    abstract fun sessionSnapshotDao(): SessionSnapshotDao
+
+    abstract fun sessionSnapshotExerciseDao(): SessionSnapshotExerciseDao
+
+    abstract fun sessionExerciseDao(): SessionExerciseDao
+
+    abstract fun programSetLogDao(): ProgramSetLogDao
+
+    abstract fun programPauseDao(): ProgramPauseDao
+
+    abstract fun programFamilyProgressionStateDao(): ProgramFamilyProgressionStateDao
+
+    abstract fun programAdaptiveDecisionDao(): ProgramAdaptiveDecisionDao
+
+    abstract fun adaptiveAdjustmentDao(): AdaptiveAdjustmentDao
+
     companion object {
         @Volatile
         private var INSTANCE: AppDatabase? = null
