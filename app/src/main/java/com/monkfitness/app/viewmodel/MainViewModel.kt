@@ -13,7 +13,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.monkfitness.app.R
-import com.monkfitness.app.data.local.AppDatabase
+import com.monkfitness.app.MonkFitnessApplication
 import com.monkfitness.app.data.local.SettingsManager
 import com.monkfitness.app.data.model.BodyWeightEntry
 import com.monkfitness.app.data.model.Equipment
@@ -198,7 +198,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val adaptiveDecisionRecorder: AdaptiveSessionDecisionRecorder
 
     init {
-        val db = AppDatabase.getDatabase(application)
+        // The app's one database, from the composition root (§26): a view model does not acquire a
+        // database, a DAO or a repository. It is the *same* instance this class used to open —
+        // `AppContainer` holds `AppDatabase.getDatabase(application)`'s result — so nothing about
+        // session behaviour changes. Everything below is the shipped Stage-1 wiring and is
+        // deliberately untouched: §30 step 15 retires it, and no Program System repository is
+        // constructed on this path.
+        val db = (application as MonkFitnessApplication).container.database
         repository = WorkoutRepository(db)
         sessionAdaptivePlanReader = SessionAdaptivePlanReader.of(db, workoutGenerator)
         adaptiveDecisionRecorder = AdaptiveSessionDecisionRecorder.of(db, workoutGenerator)
