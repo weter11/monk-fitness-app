@@ -18,8 +18,15 @@ that, and nothing here is reachable from the app's existing code paths.
 ## 1. Database version and migration
 
 ```text
-version 7  →  version 8          MIGRATION_7_8, purely additive
+version 7  →  version 8          MIGRATION_7_8, purely additive   (the target schema, this document)
+version 8  →  version 9          MIGRATION_8_9, purely additive   (the schedule-frequency correction)
 ```
+
+The version-8 → version-9 step is one statement: it appends a nullable
+`program_revision.scheduleSessionsPerWeek` column, so that a `FLEXIBLE_PER_WEEK` revision can store the
+deterministic sessions-per-week frequency §20 defines it by. It is documented on its own in
+`docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md`; the paragraphs below describe the version-7 → version-8
+step that created the target schema.
 
 The migration executes exactly 37 statements: one `CREATE TABLE` for each of the fifteen target tables
 and one `CREATE INDEX` for each of the twenty-two declared indices. It contains **no** `DROP`, `DELETE`,

@@ -445,6 +445,36 @@ internal object ProgramSchemaFixture {
         "adaptive_adjustment" to listOf("beforePerSetTargets", "afterPerSetTargets")
     )
 
+    /**
+     * The columns a **later additive migration** added to a table the version-8 migration created.
+     *
+     * They are kept apart from [COLUMNS] on purpose: an `ALTER TABLE ... ADD COLUMN` is not part of the
+     * `CREATE TABLE` the version-8 migration executes, and folding these columns into [COLUMNS] would
+     * make that contract describe a table the migration does not create — the schema-equality test would
+     * then fail for the right reason but with the wrong fix available.
+     *
+     * `program_revision.scheduleSessionsPerWeek` is the schedule-frequency correction: a
+     * `FLEXIBLE_PER_WEEK` revision states a deterministic sessions-per-week frequency (§20), which the
+     * version-8 table had nowhere to store. See
+     * `docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md`.
+     */
+    val ADDED_COLUMNS: Map<String, List<Column>> = mapOf(
+        "program_revision" to listOf(Column("scheduleSessionsPerWeek", INTEGER, nullable = true))
+    )
+
+    /**
+     * Every statement the additive migration must execute, in the order SQLite receives them: one
+     * `ADD COLUMN` per declared addition. No default appears, because the frequency is required for one
+     * schedule form and must stay absent for the other.
+     */
+    val EXPECTED_ADDITIVE_STATEMENTS: List<String> = ADDED_COLUMNS.flatMap { (table, columns) ->
+        columns.map { column -> "ALTER TABLE `$table` ADD COLUMN `${column.name}` ${column.type}" }
+    }
+
+    /** What a table holds at the **current** version: the version-8 columns plus the added ones. */
+    fun columnsNow(table: String): List<Column> =
+        COLUMNS.getValue(table) + ADDED_COLUMNS[table].orEmpty()
+
     /** The tables of the target schema that are owned by a Program and cascade with it. */
     val PROGRAM_OWNED_TABLES: List<String> =
         TABLES.filter { FOREIGN_KEYS.getValue(it).any { key -> key.onDelete == "CASCADE" } }
@@ -452,11 +482,20 @@ internal object ProgramSchemaFixture {
     // ---- the DDL Room generates for the schema above -----------------------------------------------
 
     /**
-     * The `CREATE TABLE` statement Room emits for one target table: columns in declaration order,
-     * then the primary key, then the foreign keys.
+     * The `CREATE TABLE` statement Room emits for one target table as the **version-8 migration**
+     * creates it: columns in declaration order, then the primary key, then the foreign keys.
      */
-    fun expectedTableDdl(table: String): String {
-        val columns = COLUMNS.getValue(table).joinToString(", ") { column ->
+    fun expectedTableDdl(table: String): String = tableDdl(table, COLUMNS.getValue(table))
+
+    /**
+     * The `CREATE TABLE` statement the same table has at the **current** version: the version-8 columns
+     * plus the added ones. A freshly created database and an upgraded one hold the same definition,
+     * because an appended column keeps the declaration order of the entity.
+     */
+    fun expectedCurrentTableDdl(table: String): String = tableDdl(table, columnsNow(table))
+
+    private fun tableDdl(table: String, tableColumns: List<Column>): String {
+        val columns = tableColumns.joinToString(", ") { column ->
             "`${column.name}` ${column.type}${if (column.nullable) "" else " NOT NULL"}"
         }
         val primaryKey =

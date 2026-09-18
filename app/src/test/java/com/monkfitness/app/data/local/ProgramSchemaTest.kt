@@ -69,8 +69,11 @@ class ProgramSchemaTest {
 
     private val databaseSource: String by lazy { sourceFile("data/local/AppDatabase.kt") }
 
-    /** Every statement the version-7 → version-8 migration executes, in order. */
-    private fun migrationStatements(): List<String> {
+    /**
+     * Every statement one migration executes, in order — the production migration object, driven through
+     * a proxy that records what a device's SQLite would be handed.
+     */
+    private fun recordStatements(migration: androidx.room.migration.Migration): List<String> {
         val statements = mutableListOf<String>()
         val database = Proxy.newProxyInstance(
             SupportSQLiteDatabase::class.java.classLoader,
@@ -80,9 +83,36 @@ class ProgramSchemaTest {
             null
         } as SupportSQLiteDatabase
 
-        AppDatabase.MIGRATION_7_8.migrate(database)
+        migration.migrate(database)
         return statements
     }
+
+    /** Every statement the version-7 → version-8 migration executes, in order. */
+    private fun migrationStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_7_8)
+
+    /** Every statement the version-8 → version-9 additive migration executes, in order. */
+    private fun additiveStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_8_9)
+
+    /** The version the database declares, read from the source that declares it. */
+    private fun currentVersion(): Int =
+        Regex("version = (\\d+)").find(databaseSource)!!.groupValues[1].toInt()
+
+    /** Every migration the database declares, as name → (from, to), read from its own source. */
+    private fun declaredMigrations(): List<Pair<String, Pair<Int, Int>>> =
+        Regex("MIGRATION_(\\d+)_(\\d+) = object : Migration\\((\\d+), (\\d+)\\)")
+            .findAll(databaseSource)
+            .map { match ->
+                "MIGRATION_${match.groupValues[1]}_${match.groupValues[2]}" to
+                    (match.groupValues[3].toInt() to match.groupValues[4].toInt())
+            }
+            .toList()
+
+    /** The migration variables the `addMigrations(...)` call names, in the order it names them. */
+    private fun registeredMigrationNames(): List<String> =
+        Regex("addMigrations\\((.*?)\\)", RegexOption.DOT_MATCHES_ALL)
+            .find(databaseSource)!!
+            .groupValues[1]
+            .let { list -> Regex("(MIGRATION_\\d+_\\d+)").findAll(list).map { it.groupValues[1] }.toList() }
 
     private fun normalized(statements: List<String>): List<String> =
         statements.map { ProgramSchemaFixture.normalized(it) }
@@ -192,25 +222,43 @@ class ProgramSchemaTest {
     }
 
     @Test
-    fun theDatabaseMovesFromVersionSevenToVersionEightAndRegistersTheMigration() {
-        assertTrue("the schema version moves with the schema", databaseSource.contains("version = 8"))
+    fun theDatabaseMovesToTheCurrentVersionThroughOneUnbrokenRegisteredChain() {
+        val declared = declaredMigrations()
+
+        assertEquals(
+            "every migration the database declares is registered, and nothing else is",
+            declared.map { it.first },
+            registeredMigrationNames().distinct()
+        )
+        assertEquals(
+            "the registered chain starts at the first version and runs one step at a time to the " +
+                "declared version, so no device can be left with no path to the current schema",
+            (1 until currentVersion()).toList(),
+            declared.map { it.second.first }.sorted()
+        )
+        assertEquals(
+            "and every step ends where the next one begins",
+            (2..currentVersion()).toList(),
+            declared.map { it.second.second }.sorted()
+        )
+        assertEquals(
+            "each migration's own name is the step it performs",
+            declared.map { (name, pair) -> name == "MIGRATION_${pair.first}_${pair.second}" },
+            List(declared.size) { true }
+        )
         assertEquals(7, AppDatabase.MIGRATION_7_8.startVersion)
         assertEquals(8, AppDatabase.MIGRATION_7_8.endVersion)
-
-        val migrations = Regex("addMigrations\\((.*?)\\)", RegexOption.DOT_MATCHES_ALL)
-            .find(databaseSource)!!
-            .groupValues[1]
-        for (migration in listOf(
-            "MIGRATION_1_2",
-            "MIGRATION_2_3",
-            "MIGRATION_3_4",
-            "MIGRATION_4_5",
-            "MIGRATION_5_6",
-            "MIGRATION_6_7",
-            "MIGRATION_7_8"
-        )) {
-            assertTrue("$migration is registered", migrations.contains(migration))
-        }
+        assertEquals(
+            "the schedule-frequency correction is the step after the target schema",
+            8,
+            AppDatabase.MIGRATION_8_9.startVersion
+        )
+        assertEquals(9, AppDatabase.MIGRATION_8_9.endVersion)
+        assertEquals(
+            "and the declared version is where the chain ends",
+            AppDatabase.MIGRATION_8_9.endVersion,
+            currentVersion()
+        )
     }
 
     // ---- the migration -------------------------------------------------------------------------------
@@ -286,6 +334,208 @@ class ProgramSchemaTest {
     }
 
     // ---- what the schema must not be able to represent -------------------------------------------------
+
+    // ---- the additive correction ------------------------------------------------------------------
+
+    @Test
+    fun theAdditiveMigrationAddsExactlyTheDeclaredColumnsAndNothingElse() {
+        val statements = additiveStatements()
+
+        assertEquals(
+            "the correction is the statements the contract derives, in order",
+            normalized(ProgramSchemaFixture.EXPECTED_ADDITIVE_STATEMENTS),
+            normalized(statements)
+        )
+        assertEquals(
+            "one statement per declared addition",
+            ProgramSchemaFixture.ADDED_COLUMNS.values.sumOf { it.size },
+            statements.size
+        )
+        for (statement in statements) {
+            assertTrue(
+                "the correction only ever adds a column: $statement",
+                statement.startsWith("ALTER TABLE `program_revision` ADD COLUMN ")
+            )
+        }
+        assertTrue(
+            "every statement names the table it corrects and no other: $statements",
+            statements.all { statement ->
+                statement.contains("`program_revision`") &&
+                    ProgramSchemaFixture.TABLES.filterNot { it == "program_revision" }
+                        .none { other -> statement.contains("`$other`") }
+            }
+        )
+        assertTrue(
+            "no statement creates, drops, rewrites, reinterprets or renames anything: $statements",
+            statements.none {
+                Regex("\\b(CREATE|DROP|DELETE|INSERT|UPDATE|RENAME)\\b").containsMatchIn(it)
+            }
+        )
+        assertTrue(
+            "no legacy table is named: $statements",
+            statements.none { statement ->
+                listOf("`set_log`", "`family_progression_state`", "`adaptive_decision_record`")
+                    .any { statement.contains(it) }
+            }
+        )
+    }
+
+    @Test
+    fun theAddedFrequencyColumnIsNullableAndInventsNoDefault() {
+        val statements = additiveStatements()
+        val column = ProgramSchemaFixture.ADDED_COLUMNS.getValue("program_revision").single()
+
+        assertEquals("scheduleSessionsPerWeek", column.name)
+        assertEquals("INTEGER", column.type)
+        assertTrue(
+            "the column is nullable, because only one of the two schedule forms has a frequency (§20)",
+            column.nullable
+        )
+        assertTrue(
+            "and it carries no default: a default would state a weekly frequency the user never " +
+                "chose, for rows whose schedule has none at all — $statements",
+            statements.none { it.contains("DEFAULT", ignoreCase = true) }
+        )
+        assertTrue(
+            "nor may it be NOT NULL: the fixed-weekday form has nothing to put there",
+            statements.none { it.contains("NOT NULL", ignoreCase = true) }
+        )
+    }
+
+    @Test
+    fun theFrequencySurvivesTheDeployedMigrationChainAndReconstructsTheDomainSchedule() {
+        val database = SqliteTestDatabase.inMemory()
+        database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
+        database.migrate(AppDatabase.MIGRATION_7_8)
+        database.migrate(AppDatabase.MIGRATION_8_9)
+
+        assertEquals(
+            "the column is on the table a device holds after the chain",
+            listOf("scheduleSessionsPerWeek"),
+            database.columnNames("program_revision").filter { it == "scheduleSessionsPerWeek" }
+        )
+        assertEquals(
+            "with the affinity the entity stores an Int in",
+            "INTEGER",
+            database.columnType("program_revision", "scheduleSessionsPerWeek")
+        )
+        assertEquals(
+            "and nullable, so the fixed-weekday form stores nothing",
+            "0",
+            database.rows("SELECT * FROM pragma_table_info('program_revision')")
+                .single { it["name"] == "scheduleSessionsPerWeek" }["notnull"]
+        )
+
+        database.exec(
+            "INSERT INTO `program` (`programId`, `name`, `description`, `source`, " +
+                "`lifecycleStatus`, `currentRevisionId`, `createdAt`, `updatedAt`, " +
+                "`plannedStartDate`, `actualStartDate`, `archivedAt`) VALUES ('program-1', 'Program', " +
+                "'', 'USER', 'NOT_STARTED', 'revision-1', 1700000000000, 1700000000000, NULL, NULL, NULL)"
+        )
+
+        ProgramRevisionEntity.SESSIONS_PER_WEEK_RANGE.forEach { sessionsPerWeek ->
+            val domain = ProgramSchedule.FlexiblePerWeek(sessionsPerWeek)
+            val revisionId = "revision-$sessionsPerWeek"
+            database.exec(
+                "INSERT INTO `program_revision` (`revisionId`, `programId`, `revisionNumber`, " +
+                    "`mode`, `durationType`, `durationDays`, `scheduleType`, `scheduleWeekdays`, " +
+                    "`scheduleSessionsPerWeek`, `createdAt`) VALUES ('$revisionId', 'program-1', " +
+                    "$sessionsPerWeek, 'MANUAL', 'FIXED_DAYS', 30, 'FLEXIBLE_PER_WEEK', NULL, " +
+                    "$sessionsPerWeek, 1700000000000)"
+            )
+
+            val stored = database.scalar(
+                "SELECT `scheduleSessionsPerWeek` FROM `program_revision` WHERE `revisionId` = '$revisionId'"
+            )
+
+            assertEquals(
+                "the frequency the domain carries is the number the row holds",
+                domain.sessionsPerWeek.toString(),
+                stored
+            )
+            assertEquals(
+                "and the row reconstructs the very same schedule — nothing lost, nothing invented",
+                domain,
+                ProgramSchedule.FlexiblePerWeek(stored!!.toInt())
+            )
+        }
+
+        database.exec(
+            "INSERT INTO `program_revision` (`revisionId`, `programId`, `revisionNumber`, `mode`, " +
+                "`durationType`, `durationDays`, `scheduleType`, `scheduleWeekdays`, " +
+                "`scheduleSessionsPerWeek`, `createdAt`) VALUES ('revision-fixed', 'program-1', " +
+                "99, 'MANUAL', 'FIXED_DAYS', 30, 'FIXED_WEEKDAYS', 'MONDAY,WEDNESDAY', NULL, " +
+                "1700000000000)"
+        )
+        assertEquals(
+            "a fixed-weekday schedule stores no frequency at all: the column stays empty rather than " +
+                "being filled with a plausible number",
+            listOf<String?>(null),
+            database.strings(
+                "SELECT `scheduleSessionsPerWeek` FROM `program_revision` " +
+                    "WHERE `revisionId` = 'revision-fixed'"
+            )
+        )
+        assertEquals(
+            "and its weekdays are the schedule it does store",
+            listOf("MONDAY,WEDNESDAY"),
+            database.strings(
+                "SELECT `scheduleWeekdays` FROM `program_revision` WHERE `revisionId` = 'revision-fixed'"
+            )
+        )
+    }
+
+    @Test
+    fun theEntityStoresExactlyTheFrequenciesTheDomainScheduleAccepts() {
+        assertEquals(
+            "the stored range is exactly the range the domain schedule accepts, not a second decision",
+            (0..10).filter { runCatching { ProgramSchedule.FlexiblePerWeek(it) }.isSuccess },
+            ProgramRevisionEntity.SESSIONS_PER_WEEK_RANGE.toList()
+        )
+
+        for (frequency in 0..8) {
+            val domainAccepts = runCatching { ProgramSchedule.FlexiblePerWeek(frequency) }.isSuccess
+            val entityAccepts = runCatching { flexibleRevision(frequency) }.isSuccess
+
+            assertEquals(
+                "frequency $frequency: the entity accepts exactly what the domain accepts",
+                domainAccepts,
+                entityAccepts
+            )
+        }
+
+        val withoutAFrequency = assertThrows(IllegalArgumentException::class.java) {
+            flexibleRevision(null)
+        }
+        assertTrue(
+            "a flexible-frequency revision that cannot say how many sessions a week it holds is not a " +
+                "revision of that schedule — §20's frequency is required for this form, and the domain " +
+                "type cannot even express its absence: ${withoutAFrequency.message}",
+            withoutAFrequency.message!!.contains("sessions-per-week frequency")
+        )
+
+        val frequencyOnAFixedSchedule = assertThrows(IllegalArgumentException::class.java) {
+            flexibleRevision(3).copy(scheduleType = "FIXED_WEEKDAYS", scheduleWeekdays = setOf(DayOfWeek.MONDAY))
+        }
+        assertTrue(
+            "and the fixed-weekday form has no frequency to store: ${frequencyOnAFixedSchedule.message}",
+            frequencyOnAFixedSchedule.message!!.contains("no frequency to store")
+        )
+    }
+
+    /** One `FLEXIBLE_PER_WEEK` revision row with [sessionsPerWeek] — the guard's own subject. */
+    private fun flexibleRevision(sessionsPerWeek: Int?) = ProgramRevisionEntity(
+        revisionId = "revision-flex",
+        programId = "program-1",
+        revisionNumber = 1,
+        mode = "MANUAL",
+        durationType = "FIXED_DAYS",
+        durationDays = 30,
+        scheduleType = ProgramRevisionEntity.FLEXIBLE_PER_WEEK,
+        scheduleWeekdays = null,
+        scheduleSessionsPerWeek = sessionsPerWeek,
+        createdAt = 1_700_000_000_000L
+    )
 
     @Test
     fun theSlotCarriesNoAmountOfWork() {
@@ -657,13 +907,47 @@ class ProgramSchemaTest {
     }
 
     @Test
-    fun everyDeclaredColumnIsStoredAsTheContractSays() {
+    fun everyTargetEntityDeclaresItsColumnsInTheStoredOrder() {
+        for ((entity, table) in ProgramSchemaFixture.ENTITIES) {
+            val declared = Class.forName("com.monkfitness.app.data.model.$entity")
+                .declaredFields
+                .filterNot { field ->
+                    java.lang.reflect.Modifier.isStatic(field.modifiers) || field.name.startsWith("$")
+                }
+                .map { it.name }
+
+            assertEquals(
+                "$entity declares its columns in the order `$table` stores them — which is what " +
+                    "makes a freshly created database and an upgraded one hold the same table definition " +
+                    "(an added column is appended, so the entity declares it last)",
+                ProgramSchemaFixture.columnsNow(table).map { it.name },
+                declared
+            )
+        }
+    }
+
+    @Test
+    fun everyDeclaredColumnIsStoredInTheStatementThatIntroducesIt() {
+        val added = ProgramSchemaFixture.normalized(additiveStatements().joinToString(" "))
+
         for (table in ProgramSchemaFixture.TABLES) {
-            val statement = ProgramSchemaFixture.normalized(statementFor(table))
+            val created = ProgramSchemaFixture.normalized(statementFor(table))
             for (column in ProgramSchemaFixture.COLUMNS.getValue(table)) {
                 val expected =
                     "`${column.name}` ${column.type}${if (column.nullable) "" else " NOT NULL"}"
-                assertTrue("`$table`.`${column.name}` is declared as `$expected`", statement.contains(expected))
+                assertTrue(
+                    "`$table`.`${column.name}` is declared as `$expected` in the statement that " +
+                        "creates the table",
+                    created.contains(expected)
+                )
+            }
+            for (column in ProgramSchemaFixture.ADDED_COLUMNS[table].orEmpty()) {
+                val expected = "`${column.name}` ${column.type}"
+                assertTrue(
+                    "`$table`.`${column.name}` is declared as `$expected` in the statement that " +
+                        "adds it",
+                    added.contains(expected)
+                )
             }
         }
     }
@@ -885,9 +1169,11 @@ class ProgramSchemaTest {
             durationDays = 30,
             scheduleType = "FLEXIBLE_PER_WEEK",
             scheduleWeekdays = null,
+            scheduleSessionsPerWeek = 3,
             createdAt = 1_700_000_000_000L
         )
         assertEquals(30, revision.durationDays)
+        assertEquals("a flexible schedule stores the frequency it runs at", 3, revision.scheduleSessionsPerWeek)
 
         val indefiniteWithATotal = assertThrows(IllegalArgumentException::class.java) {
             revision.copy(durationType = "INDEFINITE")
@@ -919,6 +1205,32 @@ class ProgramSchemaTest {
         assertTrue(
             "a deterministic frequency does not name weekdays: ${weekdaysOnAFrequencySchedule.message}",
             weekdaysOnAFrequencySchedule.message!!.contains("scheduleWeekdays")
+        )
+
+        val frequencyWithoutAValue = assertThrows(IllegalArgumentException::class.java) {
+            revision.copy(scheduleSessionsPerWeek = null)
+        }
+        assertTrue(
+            "FLEXIBLE_PER_WEEK stores the frequency the Scheduler decided on: " +
+                "${frequencyWithoutAValue.message}",
+            frequencyWithoutAValue.message!!.contains("Scheduler")
+        )
+
+        val frequencyOutOfRange = assertThrows(IllegalArgumentException::class.java) {
+            revision.copy(scheduleSessionsPerWeek = 8)
+        }
+        assertTrue(
+            "the stored frequency is a weekly count, within the range the domain accepts: " +
+                "${frequencyOutOfRange.message}",
+            frequencyOutOfRange.message!!.contains("1..7")
+        )
+
+        val frequencyOnAWeekdaySchedule = assertThrows(IllegalArgumentException::class.java) {
+            revision.copy(scheduleType = "FIXED_WEEKDAYS", scheduleWeekdays = setOf(DayOfWeek.MONDAY))
+        }
+        assertTrue(
+            "and the fixed-weekday form carries no frequency: ${frequencyOnAWeekdaySchedule.message}",
+            frequencyOnAWeekdaySchedule.message!!.contains("no frequency to store")
         )
     }
 

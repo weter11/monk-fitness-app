@@ -63,7 +63,7 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         AdaptiveDecisionRecordEntity::class,
         AdaptiveAdjustmentEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
@@ -684,6 +684,37 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * The schedule-frequency correction (Program System, PR 2.1): one additive column.
+         *
+         * A `FLEXIBLE_PER_WEEK` revision states a deterministic sessions-per-week frequency (§20) and the
+         * domain value it stands for (`ProgramSchedule.FlexiblePerWeek`) requires that number, but the
+         * version-8 table stored only the schedule *form*. A revision therefore could not be written or
+         * read without losing the frequency or inventing one.
+         *
+         * The correction is one `ALTER TABLE ... ADD COLUMN`, purely additive: it adds nothing but a
+         * nullable column, reads, rewrites, reinterprets and drops no row, touches no other table and no
+         * index, and invents no default — the frequency is required for one schedule form and must stay
+         * absent for the other, which the entity's own discriminator guard enforces. A device at version
+         * 8 keeps every progress, posture, set-log, body-weight, nutrition, Stage-1 adaptive and Program
+         * System row exactly as it was, and gains the ability to say how many sessions a week a flexible
+         * schedule holds.
+         *
+         * Version 7 devices are not affected differently: they run the version-7 → version-8 migration
+         * first and then this one, which is the chain `ProgramMigrationPreservationTest` executes.
+         *
+         * Visible to the unit tests on purpose: the statements are the deployable proof of the correction,
+         * and the schema suites execute them on a real SQLite engine as well as compare them token for
+         * token.
+         */
+        internal val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE `program_revision` ADD COLUMN `scheduleSessionsPerWeek` INTEGER"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -698,7 +729,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_4_5,
                         MIGRATION_5_6,
                         MIGRATION_6_7,
-                        MIGRATION_7_8
+                        MIGRATION_7_8,
+                        MIGRATION_8_9
                     )
                     .build()
                 INSTANCE = instance
