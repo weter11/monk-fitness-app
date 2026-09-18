@@ -1,5 +1,6 @@
 package com.monkfitness.app.data.repository
 
+import com.monkfitness.app.data.local.ProgramSchemaFixture
 import com.monkfitness.app.data.model.AdaptiveDecisionRecord
 import com.monkfitness.app.data.model.FamilyProgressionState
 import com.monkfitness.app.data.model.UserProgress
@@ -310,15 +311,32 @@ class AdaptiveLifecycleTest {
         // The reset's own specification: "everything the program records, except nutrition plans". A
         // table added to the database without being classified here is a table a full reset silently
         // forgets, which is exactly the failure mode the C3 suite exists to catch.
+        //
+        // The Program System's target tables (added by the schema step) are a third class, not a
+        // fourth kind of program record: they are owned by a Program and are destroyed with it by the
+        // ownership cascade (§29), so the Program-level delete — not the legacy full reset — is what
+        // empties them. They are named here explicitly so that adding one without deciding which of the
+        // three classes it belongs to still fails this census.
         assertEquals(
-            "every entity the database declares is either cleared by a full reset or deliberately preserved",
+            "every entity the database declares is either cleared by a full reset, deliberately " +
+                "preserved, or owned and destroyed by the Program System",
             declaredTableNames().orEmpty().sorted(),
-            (ProgramMaintenance.clearedTables + ProgramMaintenance.preservedTables).sorted()
+            (
+                ProgramMaintenance.clearedTables +
+                    ProgramMaintenance.preservedTables +
+                    ProgramSchemaFixture.TABLES
+                ).sorted()
         )
         assertEquals(
-            "7 program-scoped tables are cleared, 3 nutrition tables are preserved",
+            "7 program-scoped legacy tables are cleared, 3 nutrition tables are preserved, and the " +
+                "Program System owns its own tables through the cascade",
             7 to 3,
             ProgramMaintenance.clearedTables.size to ProgramMaintenance.preservedTables.size
+        )
+        assertEquals(
+            "the Program System tables are not part of the legacy reset's clear list",
+            emptyList<String>(),
+            ProgramMaintenance.clearedTables.filter { it in ProgramSchemaFixture.TABLES }
         )
     }
 

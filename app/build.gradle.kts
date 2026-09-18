@@ -88,5 +88,10 @@ dependencies {
     implementation(libs.mp.android.chart)
 
     testImplementation("junit:junit:4.13.2")
+    // Test-scope only: the Program System schema tests drive migrations and ownership behaviour on a
+    // real SQLite engine, because this repository has no Robolectric and no instrumentation source
+    // set (there is nowhere else for `androidx.room.testing`'s MigrationTestHelper to run). The app
+    // itself never loads this driver.
+    testImplementation("org.xerial:sqlite-jdbc:3.53.4.0")
     debugImplementation(libs.androidx.ui.tooling)
 }
