@@ -21,6 +21,11 @@ import java.time.LocalDate
  * adds the target schema and touches nothing else. No legacy row is reinterpreted as a Program, no
  * placeholder Program/Revision/Session is backfilled, and the legacy `set_log` is not repurposed as
  * the target set log.
+ *
+ * The chain a device runs is `7 → 8 → 9`: the target schema, then the schedule-frequency correction
+ * (`docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md`), which adds one nullable column to
+ * `program_revision` and nothing else. Everything below executes the production migration objects in
+ * that order, so the database under test is the one the app opens.
  */
 class ProgramMigrationPreservationTest {
 
@@ -77,7 +82,14 @@ class ProgramMigrationPreservationTest {
         return database
     }
 
-    private fun migratedDatabase(): SqliteTestDatabase =
+    private fun migratedDatabase(): SqliteTestDatabase = versionSevenDatabase().also { database ->
+        // The deployed chain, in the order a device runs it.
+        database.migrate(AppDatabase.MIGRATION_7_8)
+        database.migrate(AppDatabase.MIGRATION_8_9)
+    }
+
+    /** A populated **version-8** database: what a device that ran the target-schema release holds. */
+    private fun versionEightDatabase(): SqliteTestDatabase =
         versionSevenDatabase().also { it.migrate(AppDatabase.MIGRATION_7_8) }
 
     /** SQLite stores the DDL without `IF NOT EXISTS`, so both sides are put in that form. */
@@ -213,8 +225,8 @@ class ProgramMigrationPreservationTest {
 
         for (table in ProgramSchemaFixture.TABLES) {
             assertEquals(
-                "`$table` is created exactly as Room's generated DDL declares it",
-                storedForm(ProgramSchemaFixture.expectedTableDdl(table)),
+                "`$table` is created exactly as Room's generated DDL declares it at the current version",
+                storedForm(ProgramSchemaFixture.expectedCurrentTableDdl(table)),
                 storedForm(schema.getValue(table))
             )
         }
@@ -275,11 +287,11 @@ class ProgramMigrationPreservationTest {
 
         for (table in ProgramSchemaFixture.TABLES) {
             assertEquals(
-                "`$table`'s columns are exactly the declared ones",
-                ProgramSchemaFixture.COLUMNS.getValue(table).map { it.name },
+                "`$table`'s columns are exactly the declared ones, at the current version",
+                ProgramSchemaFixture.columnsNow(table).map { it.name },
                 database.columnNames(table)
             )
-            for (column in ProgramSchemaFixture.COLUMNS.getValue(table)) {
+            for (column in ProgramSchemaFixture.columnsNow(table)) {
                 assertEquals(
                     "`$table`.`${column.name}`'s declared type",
                     column.type,
@@ -448,22 +460,84 @@ class ProgramMigrationPreservationTest {
 
     @Test
     fun theUpgradeIsTheSameStatementsAVersionSevenDeviceExecutes() {
-        // The rewrite-proof behind the tests above: they ran the production migration object, not a
-        // copy of its SQL. This asserts the object is the one AppDatabase registers and that a real
-        // engine accepts every statement it contains.
+        // The rewrite-proof behind the tests above: they ran the production migration objects, not a
+        // copy of their SQL. This asserts the objects are the ones AppDatabase registers — as one
+        // unbroken chain — and that a real engine accepts every statement they contain.
         assertEquals(7, AppDatabase.MIGRATION_7_8.startVersion)
         assertEquals(8, AppDatabase.MIGRATION_7_8.endVersion)
+        assertEquals(8, AppDatabase.MIGRATION_8_9.startVersion)
+        assertEquals(9, AppDatabase.MIGRATION_8_9.endVersion)
+
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
         try {
             database.migrate(AppDatabase.MIGRATION_7_8)
+            database.migrate(AppDatabase.MIGRATION_8_9)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }
         assertEquals(
-            "every target table exists after the migration executed",
+            "every target table exists after the chain executed",
             ProgramSchemaFixture.TABLES.size,
             database.tableNames().count { it in ProgramSchemaFixture.TABLES }
+        )
+        assertEquals(
+            "and the last step put the corrected column on the table it corrects",
+            ProgramSchemaFixture.columnsNow("program_revision").map { it.name },
+            database.columnNames("program_revision")
+        )
+    }
+
+    @Test
+    fun theCorrectionUpgradesAPopulatedVersionEightDatabaseWithoutInventingAFrequency() {
+        val database = versionEightDatabase()
+
+        // The version-8 row set: a Program and its revision with the schedule form and no frequency,
+        // because at version 8 there was nowhere to store one.
+        database.exec(
+            "INSERT INTO `program` (`programId`, `name`, `description`, `source`, `lifecycleStatus`, " +
+                "`currentRevisionId`, `createdAt`, `updatedAt`, `plannedStartDate`, `actualStartDate`, " +
+                "`archivedAt`) VALUES ('program-1', 'Program', '', 'USER', 'NOT_STARTED', " +
+                "'revision-1', 1700000000000, 1700000000000, NULL, NULL, NULL)"
+        )
+        database.exec(
+            "INSERT INTO `program_revision` (`revisionId`, `programId`, `revisionNumber`, `mode`, " +
+                "`durationType`, `durationDays`, `scheduleType`, `scheduleWeekdays`, `createdAt`) " +
+                "VALUES ('revision-1', 'program-1', 1, 'MANUAL', 'FIXED_DAYS', 30, " +
+                "'FLEXIBLE_PER_WEEK', NULL, 1700000000000)"
+        )
+        val revisionBefore = database.rows("SELECT * FROM `program_revision`").single()
+        val schemaBefore = database.masterSql()
+
+        database.migrate(AppDatabase.MIGRATION_8_9)
+
+        val revisionAfter = database.rows("SELECT * FROM `program_revision`").single()
+        assertEquals(
+            "the row the version-8 database held keeps every value it held",
+            revisionBefore,
+            revisionAfter.filterKeys { it in revisionBefore.keys }
+        )
+        assertEquals(
+            "and the correction leaves its frequency empty rather than filling in a plausible number: " +
+                "the schema cannot know what the user trained at, and a default would state a schedule " +
+                "nobody chose",
+            listOf(null),
+            listOf(revisionAfter["scheduleSessionsPerWeek"])
+        )
+        assertEquals(
+            "no table, index or bookkeeping entry other than the corrected table is rewritten",
+            schemaBefore.filterKeys { it != "program_revision" },
+            database.masterSql().filterKeys { it != "program_revision" }
+        )
+        assertEquals(
+            "the corrected table gains exactly the one column, appended",
+            ProgramSchemaFixture.columnsNow("program_revision").map { it.name },
+            database.columnNames("program_revision")
+        )
+        assertEquals(
+            "the legacy rows the database held before the correction are untouched too",
+            "pushup",
+            database.scalar("SELECT currentExerciseId FROM `family_progression_state`")
         )
     }
 }

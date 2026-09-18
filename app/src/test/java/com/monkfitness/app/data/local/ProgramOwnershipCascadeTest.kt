@@ -20,7 +20,10 @@ class ProgramOwnershipCascadeTest {
     private fun migratedDatabase(): SqliteTestDatabase {
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
+        // The deployed chain: the target schema, then the schedule-frequency correction. A suite that
+        // stopped at version 8 would be exercising a database no device runs.
         database.migrate(AppDatabase.MIGRATION_7_8)
+        database.migrate(AppDatabase.MIGRATION_8_9)
         ProgramGraphInserts.insertCompleteProgram(database, "1")
         ProgramGraphInserts.insertCompleteProgram(database, "2")
         ProgramGraphInserts.insertAppState(database, selected = "program-1", next = "program-2")

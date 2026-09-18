@@ -12,6 +12,10 @@ package com.monkfitness.app.data.local
  * element, a slot for that day, a session started for the slot with its frozen snapshot, the exercise
  * occurrence as it ran, one confirmed set, the pause interval, the revision's family progression
  * state, one applied decision and the adjustment it produced.
+ *
+ * The revision's schedule is a deterministic frequency, so the graph states its frequency
+ * (`scheduleSessionsPerWeek`): the two facts are one schedule, and a flexible-frequency revision without
+ * one is not a legal row of the current schema (§20).
  */
 internal object ProgramGraphInserts {
 
@@ -34,9 +38,9 @@ internal object ProgramGraphInserts {
         )
         database.exec(
             "INSERT INTO `program_revision` (`revisionId`, `programId`, `revisionNumber`, `mode`, " +
-                "`durationType`, `durationDays`, `scheduleType`, `scheduleWeekdays`, `createdAt`) " +
-                "VALUES ('$revision', '$program', 1, 'MANUAL', 'FIXED_DAYS', 30, " +
-                "'FLEXIBLE_PER_WEEK', NULL, 1700000000000)"
+                "`durationType`, `durationDays`, `scheduleType`, `scheduleWeekdays`, " +
+                "`scheduleSessionsPerWeek`, `createdAt`) VALUES ('$revision', '$program', 1, " +
+                "'MANUAL', 'FIXED_DAYS', 30, 'FLEXIBLE_PER_WEEK', NULL, 3, 1700000000000)"
         )
         database.exec(
             "INSERT INTO `program_day` (`programDayId`, `revisionId`, `position`, `type`, `name`) " +

@@ -25,7 +25,15 @@ import java.time.DayOfWeek
  *    The distinction is load-bearing: an indefinite program has no length, and reporting a fake
  *    `N / 30` for it is exactly what §21 forbids, so the two forms may not be pooled into one number.
  *  * `scheduleType` — `FIXED_WEEKDAYS` naming its weekdays, or `FLEXIBLE_PER_WEEK` with a deterministic
- *    frequency. The frequency itself is chosen by the Scheduler and is not stored here.
+ *    frequency in `scheduleSessionsPerWeek`. Which frequency a user should train at is the Scheduler's
+ *    decision (§20) — but the number it decided on is revision content, exactly as pattern, duration and
+ *    the plan are (§6): a revision that knew it was a flexible-frequency plan without knowing *how
+ *    many* sessions a week it holds would not describe the plan it is the record of, and the domain
+ *    value it stands for (`ProgramSchedule.FlexiblePerWeek`) carries the number as a required field.
+ *    The column is nullable because only one of the two forms has a frequency, and it carries no
+ *    default: inventing one would state a weekly frequency the user never chose, for a row whose
+ *    schedule is a fixed weekday set and therefore has none at all. The pair is held consistent by the
+ *    guard below, the way `durationType` and `durationDays` are.
  *
  * The discriminator tokens are the domain subtypes' own names in enum convention (`FixedDays` →
  * `FIXED_DAYS`); `ProgramSchemaTest` asserts that correspondence rather than trusting it.
@@ -46,6 +54,11 @@ import java.time.DayOfWeek
  * @property scheduleWeekdays the named weekdays of a `FIXED_WEEKDAYS` revision, canonical ascending
  *   order, or `null` when the schedule is a frequency instead.
  * @property createdAt when this revision was saved, in epoch milliseconds.
+ * @property scheduleSessionsPerWeek the deterministic sessions-per-week frequency of a
+ *   `FLEXIBLE_PER_WEEK` revision, `1..7`, or `null` when the schedule names its weekdays instead.
+ *   Declared last on purpose: the column is appended to an existing table by `MIGRATION_8_9`, and
+ *   keeping the declaration order equal to the physical order means a freshly created database and an
+ *   upgraded one hold byte-identical table definitions.
  */
 @Entity(
     tableName = "program_revision",
@@ -68,7 +81,8 @@ data class ProgramRevisionEntity(
     val durationDays: Int? = null,
     val scheduleType: String,
     val scheduleWeekdays: Set<DayOfWeek>? = null,
-    val createdAt: Long
+    val createdAt: Long,
+    val scheduleSessionsPerWeek: Int? = null
 ) {
 
     init {
@@ -87,12 +101,29 @@ data class ProgramRevisionEntity(
             }
         }
         when (scheduleType) {
-            FIXED_WEEKDAYS -> require(!scheduleWeekdays.isNullOrEmpty()) {
-                "a $FIXED_WEEKDAYS schedule names its weekdays: scheduleWeekdays was $scheduleWeekdays"
+            FIXED_WEEKDAYS -> {
+                require(!scheduleWeekdays.isNullOrEmpty()) {
+                    "a $FIXED_WEEKDAYS schedule names its weekdays: scheduleWeekdays was " +
+                        "$scheduleWeekdays"
+                }
+                require(scheduleSessionsPerWeek == null) {
+                    "a $FIXED_WEEKDAYS schedule has no frequency to store — the frequency belongs to " +
+                        "$FLEXIBLE_PER_WEEK — but scheduleSessionsPerWeek was $scheduleSessionsPerWeek"
+                }
             }
-            FLEXIBLE_PER_WEEK -> require(scheduleWeekdays == null) {
-                "a $FLEXIBLE_PER_WEEK schedule is a deterministic frequency, not named weekdays, " +
-                    "but scheduleWeekdays was $scheduleWeekdays"
+            FLEXIBLE_PER_WEEK -> {
+                require(scheduleWeekdays == null) {
+                    "a $FLEXIBLE_PER_WEEK schedule is a deterministic frequency, not named weekdays, " +
+                        "but scheduleWeekdays was $scheduleWeekdays"
+                }
+                val frequency = requireNotNull(scheduleSessionsPerWeek) {
+                    "a $FLEXIBLE_PER_WEEK schedule stores the sessions-per-week frequency the " +
+                        "Scheduler decided on; scheduleSessionsPerWeek was null (§20)"
+                }
+                require(frequency in SESSIONS_PER_WEEK_RANGE) {
+                    "sessionsPerWeek must be within $SESSIONS_PER_WEEK_RANGE, was $frequency " +
+                        "(the range the domain's flexible-weekly-frequency schedule accepts)"
+                }
             }
         }
     }
@@ -112,5 +143,12 @@ data class ProgramRevisionEntity(
 
         /** The discriminator of a deterministic sessions-per-week schedule. */
         const val FLEXIBLE_PER_WEEK: String = "FLEXIBLE_PER_WEEK"
+
+        /**
+         * The frequencies a `FLEXIBLE_PER_WEEK` revision may store — the range the domain's
+         * `ProgramSchedule.FlexiblePerWeek` accepts, kept identical to it rather than re-decided here.
+         * `ProgramSchemaTest` asserts the two agree value for value.
+         */
+        val SESSIONS_PER_WEEK_RANGE: IntRange = 1..7
     }
 }
