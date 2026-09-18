@@ -28,6 +28,8 @@ import com.monkfitness.app.data.repository.ProgramProgressRepository
 import com.monkfitness.app.data.repository.ProgramRepository
 import com.monkfitness.app.data.repository.ProgramScheduleRepository
 import com.monkfitness.app.data.repository.WorkoutSessionRepository
+import com.monkfitness.app.domain.usecase.ProgramLifecycleService
+import com.monkfitness.app.domain.program.StandardProgram
 
 /**
  * The Program System's composition root — §26: "*Use explicit `AppContainer`*", with the app's own
@@ -176,6 +178,37 @@ class AppContainer(
      */
     val programAdaptiveRepository: ProgramAdaptiveRepository = ProgramAdaptiveRepository(
         daos.familyState, daos.decision, daos.adjustment, now = { clock.now() }, inTransaction = inTransaction
+    )
+
+    /**
+     * The Program System's lifecycle and selection decisions — §30 step 5, over the repositories this
+     * container constructs.
+     *
+     * It is the layer that owns the rules the persistence layer must not (§3, §4, §29): which lifecycle
+     * transitions are legal, that selection is one global fact, that deleting the selected Program falls
+     * back to the Standard Program *after* moving the selection, that the Standard Program is protected
+     * from a direct edit and from deletion, and that an `IN_PROGRESS` session blocks a delete. It makes
+     * those decisions from domain values and asks the repositories below only for persistence.
+     *
+     * The collaborators are the ones above; the clock and the id generator are the container's two
+     * injected ports (§26), because `actualStartDate` is a fact and a new Program's identity is minted,
+     * not derived. The Standard Program's id is [StandardProgram.programId] — one constant, read by the
+     * fallback, by the guard and by the stage that will seed the plan.
+     *
+     * This is **wiring, not behaviour**: the container decides which objects the service receives and
+     * nothing about what it does with them. The transaction runner is the same one every repository
+     * uses, so §27's `Delete Program → selection move + cascade` is one unit of the database's own.
+     */
+    val programLifecycleService: ProgramLifecycleService = ProgramLifecycleService(
+        programRepository = programRepository,
+        scheduleRepository = programScheduleRepository,
+        sessionRepository = workoutSessionRepository,
+        appStateRepository = appStateRepository,
+        planRepository = programPlanRepository,
+        clock = clock,
+        idGenerator = idGenerator,
+        standardProgramId = StandardProgram.programId,
+        inTransaction = inTransaction
     )
 
     // --- the shipped Stage-1 generation (§30 step 15 retires it) ----------------------------------
