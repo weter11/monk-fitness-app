@@ -8,6 +8,8 @@ import com.monkfitness.app.di.IdGenerator
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.RevisionId
 import com.monkfitness.app.domain.common.SlotId
+import com.monkfitness.app.domain.program.PausedInterval
+import com.monkfitness.app.domain.program.Program
 import com.monkfitness.app.domain.program.ProgramRevision
 import com.monkfitness.app.domain.program.ProgramSchedulingRefusal
 import com.monkfitness.app.domain.program.ProgramSchedulingResult
@@ -152,6 +154,63 @@ class ProgramScheduler(
     suspend fun preview(programId: ProgramId): ProgramSchedulingResult<ScheduleOutcome> =
         pass(programId, persist = false)
 
+    /**
+     * The opportunities a Program **being created** receives — §27's creation unit, decided by this same
+     * pass.
+     *
+     * This is the Scheduler's third entry point and it exists for exactly one caller, the import (§30 step
+     * 13): §8 requires an accepted import to create
+     * `Program + Revision + ProgramDays + ProgramExercises + initial slots` as **one atomic operation**, and
+     * §27 names the same unit for `Create / Copy / Import`. A creation cannot go through [schedule],
+     * because [schedule] plans a *stored* Program — it reads the Program row, its slots and its pauses —
+     * and the whole point of the creation unit is that nothing is stored until everything can be.
+     *
+     * So the inputs arrive as values instead of being read, and everything else is unchanged:
+     *
+     * ```text
+     * the decision          SlotPlanner.plan over the same request assembly — one implementation, not two
+     * the anchor            read from the Program's own facts, exactly as a pass reads it
+     *                       (actualStartDate ?: plannedStartDate), and a Program with neither is refused
+     *                       with the same NoSchedulingAnchor: this method cannot be used to make the
+     *                       Scheduler invent a date either (§3)
+     * the slots and pauses  empty — and that is a fact about a Program being created, not an assumption:
+     *                       a Program that does not exist yet has no opportunities and no pause intervals
+     * the identities        minted from the injected generator, as in a pass, so the caller stores rows it
+     *                       did not name
+     * ```
+     *
+     * The second half of the ownership question is what this method **does not have**: no transaction
+     * runner is used, no slot is written, and no repository appears beyond the two §26 ports and the
+     * calendar. Deciding and persisting are separated here on purpose — the caller that owns the creation
+     * unit (`ProgramRepository.createProgram`) is the caller that writes, and the Scheduler's answer is
+     * what it writes. That is what keeps *"Scheduler owns timing/opportunities"* true while the importer
+     * owns *"what Program is being created"* (§8).
+     *
+     * @return the opportunities the new revision receives, in date order. The existing-opportunity
+     *   reconciliations of a pass are necessarily empty here: there are none to reconcile.
+     */
+    suspend fun initialSlotsFor(
+        program: Program,
+        revision: ProgramRevision
+    ): ProgramSchedulingResult<List<WorkoutSlot>> = schedulingResult {
+        require(revision.programId == program.programId) {
+            "the revision must belong to the Program being created: program=" +
+                "'${program.programId.value}' revision='${revision.revisionId.value}'"
+        }
+        val asOf = clock.now().atZone(zone).toLocalDate()
+        val anchor = program.actualStartDate?.atZone(zone)?.toLocalDate()
+            ?: program.plannedStartDate
+            ?: throw SchedulingNoAnchor(program.programId)
+
+        decide(
+            revision = revision,
+            anchor = anchor,
+            asOf = asOf,
+            slots = emptyList(),
+            pauses = emptyList()
+        ).create
+    }.refusing(program.programId)
+
     // ---------------------------------------------------------------- the pass
 
     /**
@@ -187,21 +246,45 @@ class ProgramScheduler(
         val slots = scheduleRepository.slotsOfProgram(programId)
         val pauses = scheduleRepository.pausesOfProgram(programId).map { pause -> pause.pausedInterval(zone) }
 
-        val decision = SlotPlanner.plan(
-            ScheduleRequest(
-                revision = revision,
-                anchor = anchor,
-                asOf = asOf,
-                slots = slots,
-                pauses = pauses,
-                slotIds = slotIds
-            )
+        val decision = decide(
+            revision = revision,
+            anchor = anchor,
+            asOf = asOf,
+            slots = slots,
+            pauses = pauses
         )
 
         if (persist) store(decision)
 
         outcomeOf(programId, revision, anchor, asOf, decision)
     }.refusing(programId)
+
+    /**
+     * One decision, from one request — the Scheduler's single implementation of *"what does this revision
+     * need, from these dates, that it does not have?"*.
+     *
+     * Both entry points that decide anything go through here: a pass over a stored Program (with its slots
+     * and its pauses) and the initial opportunities of a Program being created (with none, because it has
+     * none yet). The two differ only in their inputs, which is the point — a second copy of the request
+     * assembly would be a second place the window, the anchor and the identity source are decided, and
+     * those are exactly the values §20 gives the Scheduler alone.
+     */
+    private fun decide(
+        revision: ProgramRevision,
+        anchor: LocalDate,
+        asOf: LocalDate,
+        slots: List<WorkoutSlot>,
+        pauses: List<PausedInterval>
+    ): SlotPlan = SlotPlanner.plan(
+        ScheduleRequest(
+            revision = revision,
+            anchor = anchor,
+            asOf = asOf,
+            slots = slots,
+            pauses = pauses,
+            slotIds = slotIds
+        )
+    )
 
     /**
      * Stores one decision — the created opportunities and the two reconciliations — as **one** unit.

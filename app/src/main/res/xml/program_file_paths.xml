@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The one directory the Share Sheet may hand to another app (§11).
+
+  `ProgramShareSheet` stages the exported document in `cacheDir/shared-programs/` and asks `FileProvider`
+  for a `content://` URI that speaks for it. This file is what makes that URI legal: a provider serves only
+  the paths its own declaration names, so the grant covers one directory in the app's **cache** — which the
+  system may reclaim, and which holds nothing the app cannot regenerate — and never the app's files,
+  databases or preferences.
+-->
+<paths>
+    <cache-path
+        name="shared-programs"
+        path="shared-programs/" />
+</paths>
