@@ -221,14 +221,17 @@ class ProgramDataAccessArchitectureTest {
             assertEquals("$key is exercised from its own DAO's literal", sql, ProgramDaoSql.ALL[key])
         }
         assertEquals(
-            "and the only hand-written write is the method Room generates from an entity rather than a query",
-            listOf("ProgramDao.updateProgram"),
+            "the hand-written writes are the two statements no entity generates: the Program row's " +
+                "update, and the conditional insert §19's occupancy rule is carried by. §30 step 8 " +
+                "revised this rule rather than relaxing it — the list stays exact, and the shape of both " +
+                "statements is asserted below",
+            listOf("ProgramDao.updateProgram", "WorkoutSessionDao.insertSessionIfSlotIsNotOccupied"),
             ProgramDaoSql.WRITES.keys.sorted()
         )
     }
 
     @Test
-    fun aHandWrittenWriteNamesItsTableAndIsScopedToARow() {
+    fun everyHandWrittenWriteNamesItsTableAndIsScopedToARow() {
         val write = ProgramDaoSql.WRITES.getValue("ProgramDao.updateProgram")
 
         assertTrue("a hand-written write updates a target table: $write", write.startsWith("UPDATE `program`"))
@@ -242,6 +245,56 @@ class ProgramDataAccessArchitectureTest {
                 "`name`", "`description`", "`source`", "`lifecycleStatus`", "`currentRevisionId`",
                 "`createdAt`", "`updatedAt`", "`plannedStartDate`", "`actualStartDate`", "`archivedAt`"
             ).all { write.contains("$it = ?") }
+        )
+
+        // The second hand-written write, added by §30 step 8, is asserted for what makes it the mechanism
+        // §19's occupancy rule needed: it is an insert into the session table, it stores exactly that
+        // table's columns, and the row it stores is the one the predicate admits.
+        val conditionalInsert =
+            ProgramDaoSql.WRITES.getValue("WorkoutSessionDao.insertSessionIfSlotIsNotOccupied")
+
+        assertTrue(
+            "the write that starts a session inserts into `workout_session`: $conditionalInsert",
+            conditionalInsert.startsWith("INSERT INTO `workout_session`")
+        )
+        assertTrue(
+            "and it writes the table's columns, in the table's own order, so a column the entity gains " +
+                "cannot be silently missed: $conditionalInsert",
+            conditionalInsert.contains(
+                "(`sessionId`, `slotId`, `programId`, `revisionId`, `status`, `startedAt`, `finishedAt`)"
+            )
+        )
+        assertTrue(
+            "the row is decided by the statement's own predicate, not by a caller's check: $conditionalInsert",
+            conditionalInsert.contains(" WHERE NOT EXISTS (")
+        )
+        assertTrue(
+            "and the predicate is the occupancy rule — the slot, in the status this session starts in. " +
+                "The two are parameters of their own rather than a repeated name, so the statement says " +
+                "what each occurrence means: " + conditionalInsert,
+            conditionalInsert.contains(
+                "SELECT 1 FROM `workout_session` WHERE `slotId` = :occupiedSlotId AND `status` = :occupiedStatus"
+            )
+        )
+        assertTrue(
+            "the row's own slot and status are selected before that predicate, so the write and the " +
+                "guard name the same pair: $conditionalInsert",
+            conditionalInsert.startsWith(
+                "INSERT INTO `workout_session` (`sessionId`, `slotId`, `programId`, `revisionId`, " +
+                    "`status`, `startedAt`, `finishedAt`) SELECT :sessionId, :slotId, :programId, " +
+                    ":revisionId, :status, :startedAt, :finishedAt WHERE NOT EXISTS ("
+            )
+        )
+        assertTrue(
+            "it is scoped to the slot the new row attempts and changes no existing row (an insert that " +
+                "is refused stores nothing, and no update or delete is involved): $conditionalInsert",
+            !conditionalInsert.contains("UPDATE ") && !conditionalInsert.contains("DELETE ")
+        )
+        assertEquals(
+            "and the statement that reports its effect is SQLite's own count for the statement just " +
+                "executed — read on the same connection, inside the same transaction",
+            "SELECT changes()",
+            ProgramDaoSql.ALL.getValue("WorkoutSessionDao.changedRowCount")
         )
     }
 

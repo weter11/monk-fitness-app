@@ -433,7 +433,32 @@ internal class SqliteProgramWorkoutSlotDao(private val database: SqliteTestDatab
 
 internal class SqliteWorkoutSessionDao(private val database: SqliteTestDatabase) : WorkoutSessionDao {
 
-    override suspend fun insertSession(session: WorkoutSessionEntity) = database.insertRow(session)
+    /**
+     * Executes the DAO's conditional insert verbatim, binding the values it selects and the pair the
+     * predicate guards on.
+     *
+     * The harness adds nothing to the rule: the *statement* carries it, and this method is only how the
+     * engine reaches it — which is the point of driving the DAOs' own SQL, since the occupancy rule is
+     * then exercised as SQLite evaluates it rather than as a test believes it does.
+     */
+    override suspend fun insertSessionIfSlotIsNotOccupied(
+        sessionId: String,
+        slotId: String,
+        programId: String,
+        revisionId: String,
+        status: String,
+        startedAt: Long,
+        finishedAt: Long?,
+        occupiedSlotId: String,
+        occupiedStatus: String
+    ) = database.exec(
+        ProgramDaoSql.WORKOUT_SESSION_DAO_INSERT_IF_SLOT_NOT_OCCUPIED,
+        sessionId, slotId, programId, revisionId, status, startedAt, finishedAt,
+        occupiedSlotId, occupiedStatus
+    )
+
+    override suspend fun changedRowCount(): Int =
+        database.scalar(ProgramDaoSql.WORKOUT_SESSION_DAO_CHANGED_ROW_COUNT)!!.toInt()
 
     override suspend fun sessionById(sessionId: String): WorkoutSessionEntity? =
         database.rows(ProgramDaoSql.WORKOUT_SESSION_DAO_SESSION_BY_ID, sessionId)

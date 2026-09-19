@@ -318,5 +318,27 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
             }
             return SqliteTestDatabase(connection)
         }
+
+        /**
+         * A database backed by a **file**, so more than one connection can be opened over it.
+         *
+         * An in-memory database is private to its connection, so a second view of the same rows — the
+         * second process of a restart test, or the second racer of a concurrency test — needs a file.
+         * Everything else is identical to [inMemory]: the same SQLite engine, the same
+         * `PRAGMA foreign_keys = ON`, and no schema of its own — a caller opens one connection, runs the
+         * deployed migration chain on it, and every further connection sees what that one wrote.
+         *
+         * Sessions are **not** shared and no locking mode is set: two connections over one file is
+         * exactly how two writers contend, which is what makes "the second write cannot both succeed"
+         * measurable rather than argued.
+         */
+        fun at(path: String): SqliteTestDatabase {
+            Class.forName("org.sqlite.JDBC")
+            val connection = DriverManager.getConnection("jdbc:sqlite:$path")
+            connection.createStatement().use { statement: Statement ->
+                statement.execute("PRAGMA foreign_keys = ON")
+            }
+            return SqliteTestDatabase(connection)
+        }
     }
 }

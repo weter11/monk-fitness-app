@@ -45,8 +45,10 @@ import com.monkfitness.app.domain.program.WorkoutSlot
  * §27's `Complete Workout → Session + Slot + Adaptive state + Decisions + Adjustments` is deliberately
  * **not** implemented as one method here: the adaptive half belongs to
  * [ProgramAdaptiveRepository.persistDecision], and the composition of the two in one unit of work is
- * the session-runtime stage's transaction (§30 steps 8, 12), which this layer must not pre-empt by
- * deciding that a completion always produces an adaptive write.
+ * the session-runtime stage's transaction (§30 step 8), which this layer must not pre-empt by
+ * deciding that a completion always produces an adaptive write. `SessionRuntime.finishSession` is that
+ * composition: it opens one unit, writes the session and its slot through [finishSession] and persists
+ * the adaptive decision the caller handed it — or nothing, when the adaptive stage decided nothing.
  *
  * ### What is not decided here
  *
@@ -77,15 +79,46 @@ class WorkoutSessionRepository(
      * snapshot the caller captured *is* the presentation, and the live plan is not consulted to
      * complete it.
      *
+     * The row is written by the DAO's **conditional** insert, so §19's *"no more than one session per
+     * slot is `IN_PROGRESS`"* is decided by the write and not by a read before it: the statement stores
+     * the session only when the slot holds no other attempt in `IN_PROGRESS`, and reports `0` when it
+     * does not. A refused start writes **nothing at all** — the session row, the snapshot rows and the
+     * occurrences all disappear with the transaction — which is what makes a second start atomic rather
+     * than half-taken.
+     *
+     * The status the guard counts is `IN_PROGRESS`, the rule's own status, and **not** the status of the
+     * row being written: §19's rule is about *unfinished* attempts, so storing a finished attempt (a
+     * restored or imported one, a fixture's) neither obeys nor disturbs it. What the write refuses is a
+     * second attempt while one is running.
+     *
      * @throws IllegalArgumentException when the session violates a domain invariant (a snapshot of
      *   another session, occurrences the snapshot did not present, a status that disagrees with its
      *   finish stamp).
+     * @throws SessionAlreadyInProgress when the slot already holds an `IN_PROGRESS` attempt (§19). The
+     *   refusal is atomic: nothing of this session is left behind.
      * @throws Exception whatever the DAOs throw — a duplicate identity, a constraint failure — with the
      *   transaction rolled back, so no half-started session survives.
      */
     suspend fun startSession(session: WorkoutSession) {
+        val row = session.toEntity()
         inTransaction {
-            sessionDao.insertSession(session.toEntity())
+            sessionDao.insertSessionIfSlotIsNotOccupied(
+                sessionId = row.sessionId,
+                slotId = row.slotId,
+                programId = row.programId,
+                revisionId = row.revisionId,
+                status = row.status,
+                startedAt = row.startedAt,
+                finishedAt = row.finishedAt,
+                // The status that occupies a slot is the one the rule names, read from the entity's own
+                // token so the statement and the rule cannot drift apart.
+                occupiedSlotId = row.slotId,
+                occupiedStatus = WorkoutSessionEntity.IN_PROGRESS
+            )
+            // The occupancy rule is the statement's own predicate, so whether this attempt was stored
+            // is the count the engine reports for that statement — read here, before anything else is
+            // written on this connection, and inside the same unit.
+            if (sessionDao.changedRowCount() == 0) throw SessionAlreadyInProgress(session.slotId)
             snapshotDao.insertSnapshot(session.toSnapshotEntity())
             val elements = session.toSnapshotExerciseEntities()
             if (elements.isNotEmpty()) snapshotExerciseDao.insertSnapshotExercises(elements)
@@ -144,6 +177,25 @@ class WorkoutSessionRepository(
     // --- finishing --------------------------------------------------------------------------------
 
     /**
+     * Records how one session ended, and nothing else.
+     *
+     * The session row's outcome is §19's own fact — `IN_PROGRESS → COMPLETED | CANCELLED` — and it is
+     * written on its own here because a cancellation ends the attempt **without** taking the
+     * opportunity: `Back` does not cancel either, and a cancelled attempt must not complete a slot. A
+     * completion on the other hand is two facts (the workout ended, the opportunity was taken), and
+     * [finishSession] is what writes both.
+     *
+     * @throws Exception whatever the DAO throws, uncaught.
+     */
+    suspend fun recordSessionOutcome(session: WorkoutSession) {
+        sessionDao.updateOutcome(
+            sessionId = session.sessionId.value,
+            status = session.status.name,
+            finishedAt = session.finishedAt?.toEpochMilli()
+        )
+    }
+
+    /**
      * Records a finished session and the slot it attempted, in one transaction.
      *
      * Both rows are written because this is one fact: the workout ended and the opportunity was taken.
@@ -158,11 +210,7 @@ class WorkoutSessionRepository(
                 "'${session.slotId.value}' but slot '${slot.slotId.value}' was handed in"
         }
         inTransaction {
-            sessionDao.updateOutcome(
-                sessionId = session.sessionId.value,
-                status = session.status.name,
-                finishedAt = session.finishedAt?.toEpochMilli()
-            )
+            recordSessionOutcome(session)
             slotDao.updateOutcome(
                 slotId = slot.slotId.value,
                 status = slot.status.name,
@@ -197,3 +245,19 @@ class WorkoutSessionRepository(
         }
     }
 }
+
+/**
+ * A start was refused because the slot was already being worked out (§19).
+ *
+ * Thrown by [WorkoutSessionRepository.startSession] when the conditional insert stored no row, and
+ * thrown *inside* the transaction, so the refusal leaves nothing behind: not the session, not its
+ * snapshot, not an occurrence. It is a distinct type rather than an `IllegalArgumentException`
+ * because it is not a defect in the caller's value — it is the rule, and the layer above turns it into
+ * the typed refusal a caller branches on (§28: an expected state, not a failure).
+ *
+ * @property slotId the opportunity that already holds an `IN_PROGRESS` attempt.
+ */
+class SessionAlreadyInProgress(val slotId: SlotId) : RuntimeException(
+    "the slot '${slotId.value}' is already being worked out: no more than one session per slot is " +
+        "IN_PROGRESS (§19)"
+)
