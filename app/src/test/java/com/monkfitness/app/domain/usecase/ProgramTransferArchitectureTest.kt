@@ -39,7 +39,8 @@ import org.junit.Test
  *                         (no session, adaptive, progress or library *metadata* anywhere near them) are
  *                         what makes the prohibitions structural
  * the platform            the only place an `Intent`, a `Uri` or a `ContentResolver` appears in the app
- * the wiring              two nodes, constructed once, in the composition root, and reached by no screen
+ * the wiring              two nodes, constructed once, in the composition root, and reached by the Program
+ *                         UI only as arguments the container hands it (§30 step 14)
  * ```
  */
 class ProgramTransferArchitectureTest {
@@ -402,29 +403,62 @@ class ProgramTransferArchitectureTest {
         )
     }
 
+    // ------------------------------------------------------------------ the UI's reach into the stage
+
+    /**
+     * Revised, not relaxed, by §30 step 14.
+     *
+     * §30 step 13 landed the transfer mechanism without an affordance, and this suite pinned that by
+     * asserting that **no** UI or view-model source named the stage at all. §30 step 14 is the stage that
+     * wires it: `ProgramImportScreen` hands the picked document's bytes to the import service,
+     * `MyProgramsScreen` and `ProgramDetailScreen` ask for a share, and `MainViewModel` hands both services
+     * to the state holder from the composition root.
+     *
+     * The claim the rule always meant is therefore stated instead: the UI **uses** those two nodes (so the
+     * rule is not vacuous) and **constructs neither them nor anything below them** — no import service, no
+     * export service, no second exercise library, no codec. A screen that built its own would be a second
+     * owner of §5's pipeline, which is exactly what the original assertion was protecting.
+     */
     @Test
-    fun noUiOrViewModelSourceReachesTheTransferStageYet() {
-        val names = listOf(
-            "ProgramExportService", "ProgramImportService", "ProgramExerciseLibrary", "ProgramShareSheet",
-            "ProgramDocumentImport", "ProgramImportDraft"
-        )
-        val offenders = listOf(File(mainDir, "ui"), File(mainDir, "viewmodel"))
+    fun theUiReachesTheTransferStageOnlyThroughTheServicesItIsHanded() {
+        val uiSources = listOf(File(mainDir, "ui"), File(mainDir, "viewmodel"))
             .filter { it.isDirectory }
             .flatMap { root -> root.walkTopDown().filter { it.isFile && it.extension == "kt" } }
-            .flatMap { source ->
-                val text = code(source.readText())
-                names.filter { name -> text.contains(name) }.map { name -> "${source.name}: $name" }
-            }
             .toList()
 
+        val mustNotBuild = listOf(
+            "ProgramImportService(",
+            "ProgramExportService(",
+            "ProgramExerciseLibrary(",
+            "ProgramTransferJson.",
+            "ProgramTransferReader.",
+            "ProgramTransferMapper."
+        )
+        val offenders = uiSources.flatMap { source ->
+            val text = code(source.readText())
+            mustNotBuild.filter { token -> token in text }.map { token -> "${source.name}: $token" }
+        }.toList()
+
         assertTrue(
-            "§20: this stage lands the transfer mechanism and the platform boundary, not the affordance. " +
-                "(The legacy catalogue accessor `getExerciseLibrary` is deliberately not in this list: it " +
-                "predates the target architecture and is the vocabulary of the shipped generator.) " +
-                "The screen that offers Share and Import — and the ViewModel behind it — is §30 step 14, " +
-                "so no UI source names this stage, and §26's 'a ViewModel receives what it needs' is not " +
-                "yet being exercised here. Found: $offenders",
+            "§26's 'a ViewModel receives what it needs': the import service, the export service, the " +
+                "exerciseId port and the codec are the composition root's to build. A screen or a view " +
+                "model that constructed one would own a second copy of §5's pipeline — and a screen that " +
+                "reached the codec would be parsing JSON in a Composable. (The pipeline's *draft* is a " +
+                "value the UI legitimately carries between the review step and the confirmation, and " +
+                "`ProgramDocumentImport`/`ProgramShareSheet` are the platform boundary it is allowed to " +
+                "call.) Found: $offenders",
             offenders.isEmpty()
+        )
+
+        val named = uiSources.filter { source ->
+            val text = code(source.readText())
+            text.contains("programImportService") || text.contains("programExportService")
+        }.map { source -> relative(source) }
+
+        assertTrue(
+            "and the UI does use them, so the rule above is not vacuous: §30 step 14 is the affordance " +
+                "these two nodes were waiting for. Found: $named",
+            named.isNotEmpty()
         )
     }
 

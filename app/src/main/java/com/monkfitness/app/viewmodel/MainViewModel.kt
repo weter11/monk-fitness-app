@@ -54,6 +54,9 @@ import com.monkfitness.app.domain.usecase.AdaptiveWorkoutGenerationRequest
 import com.monkfitness.app.domain.usecase.AdaptiveWorkoutIntegration
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import com.monkfitness.app.ui.customprogram.CustomProgramEditor
+import com.monkfitness.app.platform.ProgramShareSheet
+import com.monkfitness.app.ui.programs.ExerciseOptionUi
+import com.monkfitness.app.ui.programs.ProgramsController
 import com.monkfitness.app.validation.EngineeringValidationFilter
 import com.monkfitness.app.validation.ValidationCategory
 import com.monkfitness.app.validation.ValidationPose
@@ -115,6 +118,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         /** The Custom Program editor's destination in the app's single navigation graph. */
         const val ROUTE_CUSTOM_PROGRAM = "custom-program"
+
+        /**
+         * The Program System's destinations, in the app's **one** navigation graph (§30 step 14).
+         *
+         * They live here with the app's other routes rather than in the Program UI's own package, for two
+         * reasons: `MainActivity` already declares every destination in one place, and a route is a
+         * *stable identifier* rather than user-visible copy — a screen never builds one from text.
+         */
+        const val ROUTE_PROGRAMS = "programs"
+
+        /** My Programs (§21). */
+        const val ROUTE_MY_PROGRAMS = "programs/my-programs"
+
+        /** §22's Program Detail, addressed by the Program's own stable id (§1). */
+        const val ROUTE_PROGRAM_DETAIL = "programs/detail/{programId}"
+
+        /** §7's *Build it myself* / *Build for me*: the destination that offers the two entry paths. */
+        const val ROUTE_PROGRAM_CREATE = "programs/create"
+
+        /** An editor session, addressed by which of §7's entry points opened it. */
+        const val ROUTE_PROGRAM_EDITOR_CREATE = "programs/editor/create/{mode}"
+        const val ROUTE_PROGRAM_EDITOR_EDIT = "programs/editor/edit/{programId}"
+        const val ROUTE_PROGRAM_EDITOR_COPY = "programs/editor/copy/{programId}"
+
+        /** §5's import flow. */
+        const val ROUTE_PROGRAM_IMPORT = "programs/import"
+
+        /** The detail destination for one Program. */
+        fun programDetailRoute(programId: String): String = "programs/detail/$programId"
+
+        /** The create-editor destination for one of §2's two modes. */
+        fun programEditorCreateRoute(mode: String): String = "programs/editor/create/$mode"
+
+        /** The edit-editor destination for one Program. */
+        fun programEditorEditRoute(programId: String): String = "programs/editor/edit/$programId"
+
+        /** The copy-editor destination for one Program. */
+        fun programEditorCopyRoute(programId: String): String = "programs/editor/copy/$programId"
 
         /** The first program day, used only before a session's own day is established. */
         private const val FIRST_PROGRAM_DAY = 1
@@ -408,6 +449,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     val customProgramState = customProgramEditor.state
+
+    // ---- the Program System's UI (§30 step 14) ---------------------------------------------------
+    // The Program screens' state holder. It is not another pile of flows on this view model: it owns the
+    // Program UI's state and calls the application services, and this view model only *hands it* what the
+    // composition root built (§13, §26). Nothing here decides anything about a Program — no selection is
+    // written, no revision is minted, no date is chosen and no JSON is produced — because the objects below
+    // are the layers that own those decisions, and the Program controller never reaches around them.
+    //
+    // The five things it is given are the composition root's own nodes:
+    //   · lifecycle, editor, importer, exporter, progress, scheduler  — the application services (§24)
+    //   · clock, zone                                                — the two §26 ports "today" is read from
+    //   · the catalogue, read through the shipped generator          — the plan editor's exercise choices
+    //   · the share target                                           — §11's platform boundary, and the only
+    //                                                                  `Intent` in the graph
+    private val programGraph = (application as MonkFitnessApplication).container
+
+    /** The Program screens' state holder, rendered by the Program destinations of the one navigation graph. */
+    val programs = ProgramsController(
+        lifecycle = programGraph.programLifecycleService,
+        editor = programGraph.programEditorService,
+        importer = programGraph.programImportService,
+        exporter = programGraph.programExportService,
+        progress = programGraph.programProgressService,
+        scheduler = programGraph.programScheduler,
+        catalogue = {
+            workoutGenerator.getExerciseLibrary().map { exercise ->
+                ExerciseOptionUi(
+                    exerciseId = exercise.id,
+                    nameRes = exercise.nameRes,
+                    familyId = exercise.familyId,
+                    isTimerBased = exercise.isTimerBased
+                )
+            }
+        },
+        shareTarget = { file -> ProgramShareSheet.share(application, file) },
+        clock = programGraph.clock,
+        zone = programGraph.zone
+    )
 
     /** Loads the persisted configuration into a fresh draft and opens the editor. */
     fun openCustomProgramEditor() {

@@ -60,6 +60,7 @@ import java.util.Calendar
 fun SettingsScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit,
+    onOpenPrograms: () -> Unit,
     onOpenCustomProgram: () -> Unit
 ) {
     val context = LocalContext.current
@@ -264,7 +265,28 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // The Custom Program editor: its own screen, reached from here.
+            // The Program System's entry point (§30 step 14). Settings owns global application settings;
+            // Programs are managed by the Program System's own screens, and this section is the way in —
+            // it is not a second program manager and it decides nothing.
+            Text(text = stringResource(R.string.programs_title), style = MaterialTheme.typography.titleLarge)
+            Text(
+                text = stringResource(R.string.programs_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            androidx.compose.material3.Button(
+                onClick = onOpenPrograms,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(text = stringResource(R.string.programs_title))
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // The Custom Program editor: its own screen, reached from here. It configures which exercises
+            // the *shipped* workout generator may use (`ProgramConfiguration`), which is a different
+            // question from what the Program System owns; the audit that keeps it here, and what §30
+            // step 15 removes with it, is recorded in `docs/PROGRAM_UI_NAVIGATION.md`.
             Text(text = stringResource(R.string.custom_program), style = MaterialTheme.typography.titleLarge)
             Text(
                 text = stringResource(R.string.custom_program_desc),
@@ -425,6 +447,17 @@ private fun ProgramControlsSection(
     var showFullResetDialog by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Audited for §30 step 14 and kept deliberately: these three controls act on the app's *shipped*
+        // 56-day program (`ProgramDayState`, the stored cycle number, `ProgramConfiguration`), which the
+        // Home screen still runs. The target Program System owns Programs, revisions and their lifecycle,
+        // and none of these is a target operation; §30 step 15 removes them together with the shipped
+        // generation they belong to. The sentence below says so to the user, so the screen never looks
+        // like two mechanisms managing one program.
+        Text(
+            text = stringResource(R.string.programs_legacy_controls_note),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary
+        )
         Text(text = stringResource(R.string.program_controls_title), style = MaterialTheme.typography.titleLarge)
 
         Text(

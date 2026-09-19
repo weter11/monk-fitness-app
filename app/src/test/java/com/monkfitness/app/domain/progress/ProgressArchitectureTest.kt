@@ -379,24 +379,51 @@ class ProgressArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ nothing reaches it yet
+    // ------------------------------------------------------------------ nothing builds it above the root
 
+    /**
+     * Revised, not relaxed, by §30 step 14.
+     *
+     * §30 step 9 completed the domain/use-case/data contracts and pinned that by asserting that no UI source
+     * named the layer or its vocabulary at all. §30 step 14's Program Detail shows §21's two measures and the
+     * recent attempts, which is exactly what the Progress layer computes — so the UI reads it, through the
+     * state holder, and computes nothing itself.
+     *
+     * The claim the rule always meant: nothing above the composition root **constructs** the layer or reaches
+     * for its calculator, and the UI **does** read through the one node it is handed.
+     */
     @Test
-    fun nothingAboveTheCompositionRootReachesTheProgressLayerYet() {
+    fun nothingAboveTheCompositionRootConstructsTheProgressLayerAndTheUiOnlyReadsIt() {
         val roots = listOf(File(appRoot, "ui"), File(appRoot, "viewmodel")).filter { it.isDirectory }
         val offenders = roots.flatMap { root ->
             root.walkTopDown().filter { it.isFile && it.extension == "kt" }.flatMap { source ->
                 val text = text(source.relativeTo(appRoot).path.replace('\\', '/'))
-                listOf("ProgramProgressService", "domain.progress", "ProgressCalculator", "ProgressScope")
+                listOf("ProgramProgressService(", "ProgressCalculator", "ProgressFacts(")
                     .filter { text.contains(it) }
                     .map { "${source.name}: $it" }
             }.toList()
         }
 
         assertTrue(
-            "§30 step 9 completes the domain/use-case/data contracts; the screens are a later step, and " +
-                "wiring one is a decision about presentation rather than about a measure. Found: $offenders",
+            "§30 step 9's measures are the layer's to compute: a screen that built the layer, or reached " +
+                "for its calculator, would be a second place a frequency, a volume or a streak is decided. " +
+                "Found: $offenders",
             offenders.isEmpty()
+        )
+
+        val readers = roots
+            .flatMap { root -> root.walkTopDown().filter { it.isFile && it.extension == "kt" } }
+            .filter { source ->
+                val text = text(source.relativeTo(appRoot).path.replace('\\', '/'))
+                text.contains("ProgramProgressService")
+            }
+            .map { source -> source.name }
+            .toList()
+
+        assertTrue(
+            "and the UI does read through it, so the rule above is not vacuous: §22's Detail shows the " +
+                "layer's own counts rather than recomputing them. Found: $readers",
+            readers.isNotEmpty()
         )
     }
 
