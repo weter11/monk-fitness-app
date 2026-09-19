@@ -111,6 +111,7 @@ nothing** (§3), which the suite measures on the stored Program row.
 | It does not rewrite immutable Revisions | `ProgramPlanRepository` is used for `currentRevision` only; `saveNewRevision` is never called, so no revision row, day, element or pointer is written by scheduling |
 | It does not perform UI decisions | The outcome is a value; no screen or ViewModel is wired (asserted by the architecture suite) |
 | No `RevisionConflict` mechanism | There is none, by design: a pass works from the Program's stored current revision. A draft/save-time staleness check is a UI/editor policy, and this stage neither introduces one nor depends on one |
+| **Three settled semantics are locked as invariants** | a superseded date is never re-planned, a pause preserves the opportunities inside it and renumbers nothing, and `FixedDays` is calendar duration — each with a test named after the rule and a RED mutation that breaks it (§5) |
 | Slot supersession is explicit and auditable | `SupersededSlot` carries the rule that did it (`THE_REVISION_NO_LONGER_PRESENTS_THE_DATE`, `THE_OPPORTUNITY_PASSED_WHILE_PAUSED`); nothing is deleted, and the superseded row keeps its identity, date and plan day |
 | Multiple sessions may later attempt one Slot | A slot's `attempts` stay untouched by a pass; nothing in the decision is unique on a session or a slot-per-session |
 
@@ -165,9 +166,108 @@ A superseded date is **not** re-planned. The date already holds a row — the re
 was cancelled — and writing a second row for that date would be the silent overwrite §33 forbids. The
 consequence is visible when a user switches a schedule away and back: the Mondays that were superseded
 stay superseded, because the record of *what happened to that opportunity* is the durable fact. The
-alternative (re-planning a superseded date) is discussed under *Decisions to review*.
+alternative (re-planning a superseded date) is the rejected reading recorded as settled semantics in
+§5.
 
-## 5. The horizon
+## 5. Settled semantics (locked)
+
+Three rules this stage implements were recorded, in earlier revisions of this document, as open decisions.
+They are **settled semantics** now: each is an invariant of the Scheduler, each has a test *named after the
+rule*, and each has a RED mutation that fails the suite when the rule is broken. Nothing about the
+mechanics changed to lock them — they were already implemented; what changed is that they are stated as
+invariants rather than as choices.
+
+### 5.1 A superseded date is never re-planned
+
+**The rule.** One date holds one opportunity, ever. When a pass supersedes a future opportunity — because
+the revision in front of it no longer presents that date — the date keeps its superseded row and no later
+pass plans it again, however many passes run, however the revision changes afterwards, and even if the
+schedule that vacated it comes back.
+
+**Why.** The row that records *what happened to an opportunity* is a durable fact about the plan, not a
+cache to be refilled. Re-planning the date would make one date hold two rows — one cancelled and one open
+— which would break the "no duplicate slots" and "no silent overwrite" guarantees, and would leave every
+consumer that resolves *the* slot of a date with a choice to make (the session runtime of §30 step 8 is
+the first such consumer). The cost is stated plainly: switching a schedule away and back leaves the
+vacated dates superseded.
+
+**Where it lives.** `SlotPlanner.plan`'s creation condition skips any date the Program already has a slot
+on, whatever that slot's status.
+
+**Pinned by.** `SlotPlannerTest.aSupersededDateIsNeverReplanned`,
+`SlotPlannerTest.aDateThatAlreadyHoldsAnOpportunityIsNeverPlannedAgain`,
+`ProgramSchedulerTest.aDateThatAlreadyHoldsAnOpportunityIsNeverPlannedAgainEvenAfterItWasSuperseded`
+(which switches a schedule away, back, and measures that nothing opens).
+
+**Regression caught by.** `an-occupied-date-is-planned-again` — dropping the occupancy guard makes the
+suite plan a second opportunity for a date that already holds one.
+
+### 5.2 A pause preserves the opportunities inside it, and renumbers nothing
+
+**The rule.** A pause interval does exactly two things to the plan: no opportunity is *created* on a date
+it covers, and no opportunity that *passed* inside it is counted as missed. It does **not** supersede or
+move the opportunities inside it, and it does **not** renumber anything: a paused date keeps its place in
+the plan's sequence, so the plan day a date presents is the calendar's and never depends on the pause.
+
+**Why.** §3 says a pause freezes *"active program time and missed-opportunity logic"* — measurement and
+missing — while §20 forbids sliding a schedule. §20's slot-state prose does name *a pause* among the causes
+of `SUPERSEDED`, and this stage deliberately reads that sentence narrowly, because the wide reading is
+unimplementable within the constraints the blueprint itself sets: superseding the opportunities inside a
+pause would destroy opportunities a one-day pause could leave intact, and the plan never re-plans a date
+(§5.1), so they could never come back; and renumbering the dates after a pause would split the plan into
+two cycles, contradicting the slots that are already persisted on either side of the interval and making a
+date's plan day depend on *when* the pass was made. The narrow reading is the one that keeps every
+constraint: an opportunity inside a still-open or already-closed pause interval is left exactly as it is,
+while a date it covers is not a date the Scheduler *plans* on.
+
+**Where it lives.** `SlotPlanner.planDates` never consults the pauses (that is the calendar lock), while
+`SlotPlanner.plan`'s creation filter and reported `scheduledDates` exclude the dates a pause covers, and
+`program_workout_slot` rows are only ever re-statused, never deleted.
+
+**Pinned by.** `SlotPlannerTest.aPausePreservesFutureOpportunitiesAndRenumbersNothing` (both halves in one
+place: preserved opportunities and cycle continuity across the interval),
+`SlotPlannerTest.aPauseDoesNotRenumberThePlanForTheDatesThatFollowIt`,
+`SlotPlannerTest.aSinglePausedDateDoesNotCollideTwoConsecutiveDatesOntoTheSamePlanDay`,
+`SlotPlannerTest.thePlanDayOfADateDoesNotDependOnWhetherTheProgramWasPaused`,
+`SlotPlannerTest.anOpportunityAheadOfTheUserInsideAPauseIsLeftOpen`,
+`ProgramSchedulerTest.aPauseDoesNotDestroyAnOpportunityThatIsStillAhead`,
+`ProgramSchedulerTest.aPauseAddedAfterTheScheduleWasPlannedDoesNotRenumberTheRemainingDates`,
+`ProgramSchedulerTest.theSameDatesPresentTheSamePlanDaysWhetherOrNotTheProgramWasPaused`.
+
+**Regression caught by.** `the-plan-is-counted-along-a-pause-aware-walk` (the defect the audit found:
+counting the plan's days along a walk that skips paused dates) and
+`a-pause-supersedes-the-opportunities-it-covers` (superseding what a pause covers instead of preserving
+it).
+
+### 5.3 `FixedDays` is calendar duration, not active duration
+
+**The rule.** `FixedDays(d)` runs `[anchor, anchor + d - 1]` — `d` **calendar** days from the plan's
+anchor — whether or not the program was paused inside that window. A pause does not extend the run, does
+not move its end and does not add dates to it.
+
+**Why**, in the order the evidence is strongest:
+
+* `ProgramDuration.FixedDays` is documented in the frozen domain foundation as *"a program that runs for a
+  known number of **calendar days**"* — the type's own contract;
+* `ProgramDuration`'s KDoc reads the two duration forms as progress vocabularies (a fixed program has a
+  total, `Active 12 of 30 days`; an indefinite one has none), which is a statement about elapsed calendar
+  days;
+* §20 forbids sliding a schedule, and an active-days run is a run whose dates move whenever a pause
+  happens; §27's atomicity list has no "pause extends the plan" operation either;
+* and an active-days run cannot be reconciled with immutable slots: the dates after a pause would have to
+  be re-planned onto other plan days, which is whole-schedule sliding.
+
+**Where it lives.** `SlotPlanner.plan`'s `windowEnd` for `FixedDays`, which reads the anchor and the
+duration and nothing else.
+
+**Pinned by.** `SlotPlannerTest.aFixedRunEndsOnItsCalendarEndHoweverLongTheProgramWasPaused` (the window)
+and `ProgramSchedulerTest.aFixedRunEndsOnItsCalendarEndAndNotOnTheDateAPauseWouldPushItTo` (end to end
+through persistence: a fourteen-day run from 2026-09-14 ends on 2026-09-27, where counting active days
+would end it on 2026-10-26 and plan four more opportunities).
+
+**Regression caught by.** `a-fixed-run-is-extended-by-the-paused-days`.
+
+## 6. The horizon
 
 | revision duration | what a pass covers |
 | --- | --- |
@@ -239,7 +339,7 @@ restore the defect and the active-days reading. Two earlier tests were *correcte
 pinned the wrong reading (`…ResumesWhereItFroze` asserted the shifted `day-2`; it now asserts the calendar's
 `day-1`) — a test asserting the defect is worse than no test.
 
-## 6. Verification
+## 7. Verification
 
 All measured on the final bytes, with a fresh `--rerun-tasks` run whose JUnit XML `timestamp` was checked
 against `date -u`:
@@ -247,10 +347,10 @@ against `date -u`:
 | gate | result |
 | --- | --- |
 | pristine `origin/main` baseline (`9231bfc`, detached worktree, `:app:cleanTest :app:testDebugUnitTest --rerun-tasks`) | **231 classes / 1924 tests / 0 failures / 0 errors / 0 skipped** |
-| branch, same command (after the audit fix) | **234 classes / 1995 tests / 0 failures / 0 errors / 0 skipped** — **+3 classes / +71 tests** |
-| freshness | newest XML `timestamp` `2026-09-19T08:04:17Z` vs `date -u` `08:04:57Z`; `BUILD SUCCESSFUL in 46s` (re-run **after** the RED mutation pass, to prove its restores) |
-| structural cross-check | `grep -rl '@Test' app/src/test/java \| wc -l` = 234; `grep -rho '@Test' … \| wc -l` = 1995 |
-| focused PR-7 suites (after the audit fix) | `ProgramSchedulerTest` 34, `SlotPlannerTest` 28, `ProgramSchedulerArchitectureTest` 9 — 71 tests, 0 failures |
+| branch, same command (after the semantics lock) | **234 classes / 1998 tests / 0 failures / 0 errors / 0 skipped** — **+3 classes / +74 tests** |
+| freshness | newest XML `timestamp` `2026-09-19T09:04:31Z` vs `date -u` `09:05:22Z`; `BUILD SUCCESSFUL in 45s` (re-run **after** the RED mutation pass, to prove its restores) |
+| structural cross-check | `grep -rl '@Test' app/src/test/java \| wc -l` = 234; `grep -rho '@Test' … \| wc -l` = 1998 |
+| focused PR-7 suites (after the semantics lock) | `ProgramSchedulerTest` 35, `SlotPlannerTest` 30, `ProgramSchedulerArchitectureTest` 9 — 74 tests, 0 failures |
 | `:app:compileDebugKotlin` | BUILD SUCCESSFUL |
 | `:app:compileReleaseKotlin` | BUILD SUCCESSFUL |
 | `:app:assembleDebug` | BUILD SUCCESSFUL |
@@ -297,11 +397,13 @@ it about the stage that made the distinction load-bearing.
 | no sliding of all future dates after a miss | `aMissedOpportunityDoesNotSlideTheRestOfTheSchedule`, `SlotPlannerTest.aMissedOpportunityMovesNoOtherDateAndNoOtherPlanDay` |
 | transaction / error propagation | `onePassIsOneUnitSoAFailureLeavesTheScheduleExactlyAsItWas` (a planted DAO fault: the whole pass rolls back and the failure is propagated, not absorbed) |
 
-## 7. RED evidence
+## 8. RED evidence
 
 `scripts/program-scheduler-red-mutations.sh` applies one mutation at a time to the *production* sources,
-reruns the focused scheduler suites, restores the file and proves the restoration by `md5sum -c`. Seventeen
-rules plus a control, **18 caught / 0 missed** on the final bytes.
+reruns the focused scheduler suites, restores the file and proves the restoration by `md5sum -c`. Eighteen
+rules plus a control, **19 caught / 0 missed** on the final bytes. Three of them are the RED mutations of
+the settled semantics above: a superseded date planned again (§5.1), the plan counted along a pause-aware
+walk and a pause superseding what it covers (§5.2), and a fixed run extended by the paused days (§5.3).
 
 | mutation | rule it breaks |
 | --- | --- |
@@ -322,16 +424,21 @@ rules plus a control, **18 caught / 0 missed** on the final bytes.
 | planning starts the Program | a planned start date does not start a Program |
 | count the plan's days along a pause-aware walk | a pause renumbers nothing (the audit defect) |
 | extend a fixed run by the paused days | `FixedDays` is a number of calendar days |
+| make a pause supersede the opportunities it covers | a pause preserves what is inside it |
 
-The highest-risk mutations, with the assertion text they produced (a mutation is only evidence if the
-failure names what it measured):
+The highest-risk mutations, with the assertion text they produced on the final bytes (a mutation is only
+evidence if the failure names what it measured). Every row was read back from the JUnit XML of its own run:
 
 | mutation | failing tests | measured |
 | --- | --- | --- |
+| an occupied date is planned a second time (§5.1) | 25 | `aDateThatAlreadyHoldsAnOpportunityIsNeverPlannedAgainEvenAfterItWasSuperseded` and 24 others — a date that holds a slot gains a second one |
+| the plan is counted along a pause-aware walk (§5.2) | 8 | `SlotPlannerTest.aPauseDoesNotRenumberThePlanForTheDatesThatFollowIt`: *"…a pause stops planning inside itself and renumbers nothing…"*; `ProgramSchedulerTest.theSameDatesPresentTheSamePlanDaysWhetherOrNotTheProgramWasPaused`: *"…a pause removes dates from the plan, it never renumbers it"* |
+| a pause supersedes the opportunities it covers (§5.2) | 5 | `aPauseDoesNotDestroyAnOpportunityThatIsStillAhead`: *"nothing is superseded by a pause that is still ahead of the user expected:\<0\> but was:\<5\>"* |
+| a fixed run is extended by the paused days (§5.3) | 4 | `aFixedRunEndsOnItsCalendarEndAndNotOnTheDateAPauseWouldPushItTo`: *"fourteen calendar days from the anchor, pause or no pause expected:\<2026-09-27\> but was:\<2026-09-28\>"* |
+| paused dates are planned as if the program were running | 4 | `SlotPlannerTest.anOpenPauseFreezesPlanningEntirely`: *"an open pause covers every date from its start onward…"* |
+| every future opportunity is superseded | 22 | `anOpportunityThatPassedIsMissedAndNoWorkIsInventedForIt`: *"the status is recorded on that slot and nowhere else: the other eight opportunities are still open… expected:\<8\> but was:\<0\>"* |
+| the flexible frequency is derived from the slots that exist | 2 | `aFlexibleFrequencyIsPlannedFromTheStatedCountAndNotFromTheSlotsItAlreadyHas`: *"…expected:\<0\> but was:\<17\>"* |
 | dates shifted by the number of misses | 1 | `aMissedOpportunityMovesNoOtherDateAndNoOtherPlanDay`: *"a miss does not slide the schedule: the dates a pass would add are the same dates, in the same order…"* |
-| frequency derived from the slots that exist | 2 | `aFlexibleFrequencyIsPlannedFromTheStatedCountAndNotFromTheSlotsItAlreadyHas`: *"…the count comes from the revision and never from the rows the last pass wrote expected:\<0\> but was:\<17\>"*, and the pure suite's two-per-week date list |
-| paused dates planned anyway | 3 | `aPausedDateIsNotAPlanningDateAndThePlanResumesWhereItFroze`: *"…pausing freezes active program time, so the days that would have fallen inside the pause fall after it instead (§3)"* |
-| every future opportunity superseded | 20 | `anOpportunityThatPassedIsMissedAndNoWorkIsInventedForIt`: *"the status is recorded on that slot and nowhere else: the other eight opportunities are still open… expected:\<8\> but was:\<0\>"*; `anIndefiniteHorizonIsExactlyThirtyDaysAndExtendsWhenThePassIsMadeLater`: *"the opportunities it already had are untouched: same identity, same date, same plan day"* |
 
 One claim is expressed structurally rather than behaviourally, and the script says so out loud: **the
 Scheduler creates no Session**. The mutation gives the Scheduler the session repository it would need, and
@@ -340,65 +447,56 @@ one, which is exactly why the guarantee is the absence of the dependency (plus a
 census after real passes) rather than a mutated session write.
 
 
-## 8. Decisions to review
+## 9. Remaining decisions to review
 
-1. **A superseded date is not re-planned.** The strict reading chosen here — one date holds one
-   opportunity, ever — makes "no duplicate slots", "no overwrite" and "supersession is history" all
-   structural, at the cost that a schedule switched away and back leaves the dates it vacated
-   superseded. The alternative is to allow a second (new) slot for a date whose only slot is
-   `SUPERSEDED`, which restores the opportunities but makes one date able to hold two rows and gives
-   every consumer of "the slot of a date" a choice to make. Both readings are one condition in
-   `SlotPlanner`; the owner should pick one before §30 step 8 (session runtime) resolves a date to a
-   slot.
-2. **A pause does not supersede an opportunity that is still ahead.** §20's slot-state prose names *a
-   pause* among the reasons a slot is superseded, while §3 says a pause *freezes* active program time
-   and missed-opportunity logic. This stage implements the freeze reading for the future (an
-   opportunity inside a still-open or already-closed pause interval is left open, and the pause only
-   excludes the date from *planning*) and the supersession reading for the past (an opportunity that
-   passed inside a pause is superseded rather than missed, because the user was not expected to train
-   it and it cannot be taken any more). Superseding the future ones instead would destroy opportunities
-   a one-day pause could otherwise leave intact, with no way back — the plan never re-plans a date.
-3. **A pause covers whole days.** A pause stored as instants is read as covering the date it starts on
+Three items that were listed here as unresolved decisions are now **settled semantics** — a superseded
+date is never re-planned (§5.1), a pause preserves the opportunities inside it and renumbers nothing
+(§5.2), and `FixedDays` is calendar duration (5.3). Each has a test named after the rule and a RED
+mutation, and each was implemented before it was settled: locking them changed no behaviour.
+
+What remains open:
+
+1. **A pause covers whole days.** A pause stored as instants is read as covering the date it starts on
    and the date it ends on, even a 21:00 pause or a 09:00 resume. A half-covered day would have to
    answer "was 14:00 still an opportunity?", which is a question about the user's intention rather than
    about the plan.
-4. **A slot that survives a revision change is not re-pointed at the new revision.** It keeps the
+2. **A slot that survives a revision change is not re-pointed at the new revision.** It keeps the
    `revisionId` and the plan day it was scheduled from — the domain says a slot names *the revision it
    was scheduled from*, and re-pointing is a rewrite of an existing row. The effective presentation of a
    slot is the current revision plus adjustments (§16), which a session snapshots when it starts.
-5. **A completed/archived Program is refused entirely rather than reconciled.** §29 gives archiving the
+3. **A completed/archived Program is refused entirely rather than reconciled.** §29 gives archiving the
    effect of stopping future planning; it says nothing about the unfilled opportunities already in the
    past. This stage writes nothing at all for such a Program, so declaring an opportunity missed *after*
    the program was archived is a separate decision the owner may want (§29's "retains all history" reads
    either way).
-6. **Missing is date-based and attempt-agnostic.** An opportunity whose date passed while the program was
+4. **Missing is date-based and attempt-agnostic.** An opportunity whose date passed while the program was
    not paused becomes `MISSED` whether or not a session was ever started for it; the slot's `attempts`
    and the session's own record are untouched, and a session that is still `IN_PROGRESS` may later
    complete the slot (§19's complete-workout transaction writes the outcome). Exempting slots with
    attempts would let an abandoned attempt keep an opportunity open forever.
-7. **Planning is refused, not deferred, without an anchor.** A Program with neither an actual nor a
+5. **Planning is refused, not deferred, without an anchor.** A Program with neither an actual nor a
    planned start is refused (`NoSchedulingAnchor`) rather than planned from today. The alternative —
    seeding an anchor — is the Scheduler deciding when a user's program begins.
-8. **`preview` mints the identities it reports.** A decided-but-unstored slot has to name itself to be
+6. **`preview` mints the identities it reports.** A decided-but-unstored slot has to name itself to be
    reportable, so a preview consumes ids from the injected generator while writing nothing. If a caller
    needs previews that do not consume identity, that is a small change to the outcome shape.
-9. **The 30-day horizon is planned for finite programs too, but its window is its own run.** A
+7. **The 30-day horizon is planned for finite programs too, but its window is its own run.** A
    `FixedDays(3650)` revision is planned in one pass of ~1500 slots. The alternative (a horizon for
    every duration, extending forever) contradicts §20's sentence, which scopes the 30 days to indefinite
    programs; a cap for very long fixed programs is a product decision.
-10. **The split between `ScheduleCalendar` (arithmetic) and `SlotPlanner` (decision)** is deployment
-    convenience, not architecture: both are pure domain. If a later stage wants a different spread rule
-    or a different week anchor, it is one function in `ScheduleCalendar`.
+8. **The split between `ScheduleCalendar` (arithmetic) and `SlotPlanner` (decision)** is deployment
+   convenience, not architecture: both are pure domain. If a later stage wants a different spread rule
+   or a different week anchor, it is one function in `ScheduleCalendar`.
 
-11. **`FixedDays` is calendar duration, not active duration** (see *the audit follow-up*). This is the one
-    place where §3's "freezes active program time" was read *against* a prose sentence and *for* the
-    domain's own `ProgramDuration.FixedDays` contract ("a program that runs for a known number of calendar
-    days"). The active-days reading is a different stage's change: it would move a run's end as pauses
-    happen and would require the plan's own sequence to skip paused dates, which contradicts immutable
-    existing slots and §20's no-sliding rule. Flagged because it is a semantics choice, not a
-    measurement.
+### What is deliberately *not* open
 
-## 9. Base
+There is **no `RevisionConflict` mechanism**, and the stale-draft rule is unchanged: a scheduling pass
+works from the Program's stored current revision, there is no draft, no optimistic-concurrency token and
+no staleness check to fail, and `ProgramSchedulingRefusal` carries no conflict case. The editor's recorded
+behaviour stands — a stale draft saves relative to what is stored (§30 step 6, decision 2 there), and
+nothing in this stage introduces or depends on a conflict path.
+
+## 10. Base
 
 This branch is based on `origin/main` at `9231bfc`, the merge commit of PR 6
 (`feat/program-manual-editor`), so the editor, the lifecycle, the composition root, the repositories and

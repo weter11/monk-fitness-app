@@ -222,7 +222,18 @@ apply "a-fixed-run-is-extended-by-the-paused-days" "$PLANNER" \
 run_one "a FixedDays run is measured in active days rather than calendar days (§3, §20)" yes
 restore "a-fixed-run-is-extended-by-the-paused-days" "$PLANNER"
 
-# 18. Control: the un-mutated tree must stay GREEN (the suites are not failing for nothing).
+# 18. A PAUSE PRESERVES THE OPPORTUNITIES INSIDE IT: it is a fact about now, not a cancellation of what is
+# coming. (Supersession is driven by what the revision presents, never by a pause interval.)
+apply "a-pause-supersedes-the-opportunities-it-covers" "$PLANNER" \
+  "                !slot.plannedFor.isBefore(request.asOf) &&
+                    !presents(revision, slot.plannedFor, anchor, weekdays) ->" \
+  "                !slot.plannedFor.isBefore(request.asOf) &&
+                    (!presents(revision, slot.plannedFor, anchor, weekdays) ||
+                        coveredBy(request.pauses, slot.plannedFor)) ->"
+run_one "a pause supersedes the future opportunities inside it (§3, §20)" yes
+restore "a-pause-supersedes-the-opportunities-it-covers" "$PLANNER"
+
+# 19. Control: the un-mutated tree must stay GREEN (the suites are not failing for nothing).
 run_one "unmutated tree stays GREEN (control)" no
 
 echo

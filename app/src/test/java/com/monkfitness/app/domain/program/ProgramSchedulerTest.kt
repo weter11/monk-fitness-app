@@ -609,6 +609,42 @@ class ProgramSchedulerTest {
         )
     }
 
+    // ================================================================ settled semantics (locked)
+
+    /**
+     * **Settled semantics #3 — `FixedDays` is calendar duration, not active duration.**
+     *
+     * End to end through the persistence path: a fourteen-calendar-day run from 2026-09-14 ends on
+     * 2026-09-27 whether or not the program was paused inside it, so a pause neither extends the run nor
+     * gives it dates it does not have. (Counting *active* days instead would end this run on 2026-10-26
+     * and plan four more opportunities — the reading `docs/PROGRAM_SCHEDULER.md` §5 records as rejected.)
+     */
+    @Test
+    fun aFixedRunEndsOnItsCalendarEndAndNotOnTheDateAPauseWouldPushItTo() = runBlocking {
+        val graph = rig.create(duration = ProgramDuration.FixedDays(14))
+        rig.pause(graph.programId, from = LocalDate.parse("2026-09-16"), until = LocalDate.parse("2026-09-25"))
+
+        val outcome = rig.plan(graph.programId, ON_ANCHOR).valueOrFail()
+
+        assertEquals(
+            "fourteen calendar days from the anchor, pause or no pause",
+            LocalDate.parse("2026-09-27"),
+            outcome.window?.lastDate
+        )
+        assertEquals(
+            "so the only opportunity the run still has is its own first date: every other Monday, " +
+                "Wednesday and Friday of it falls inside the pause",
+            listOf("2026-09-14"),
+            outcome.created.map { it.plannedFor.toString() }
+        )
+        assertEquals(
+            "and nothing is planned after the calendar end of the run",
+            listOf(LocalDate.parse("2026-09-14")),
+            rig.slots(graph.programId).map { it.plannedFor }
+        )
+        assertEquals(1, rig.slots(graph.programId).size)
+    }
+
     // ================================================================ revision changes (§20, §27)
 
     @Test

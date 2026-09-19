@@ -803,6 +803,95 @@ class SlotPlannerTest {
         )
     }
 
+    // ------------------------------------------------------------------ settled semantics (locked)
+
+    /**
+     * **Settled semantics #1 — a superseded date is never re-planned.**
+     *
+     * One date holds one opportunity, ever: the row that records *what happened* to an opportunity is
+     * the durable fact, so a date the revision stopped presenting keeps its superseded slot and the
+     * Scheduler adds nothing for it, however many passes run afterwards. The alternative (re-planning a
+     * superseded date) is the rejected reading recorded in `docs/PROGRAM_SCHEDULER.md` §5.
+     */
+    @Test
+    fun aSupersededDateIsNeverReplanned() {
+        val plan = SlotPlanner.plan(
+            request(
+                revision(duration = ProgramDuration.Indefinite),
+                asOf = anchor,
+                slots = listOf(slot("superseded", "2026-09-16", status = SlotStatus.SUPERSEDED))
+            )
+        ).asScheduled()
+
+        assertTrue(
+            "the pass adds nothing for the date whose opportunity was superseded",
+            plan.createdDates.none { it.toString() == "2026-09-16" }
+        )
+        assertEquals(
+            "and it plans every other date of the revision, so the rule is not hiding a gap",
+            listOf(
+                "2026-09-14", "2026-09-18", "2026-09-21", "2026-09-23", "2026-09-25", "2026-09-28",
+                "2026-09-30", "2026-10-02", "2026-10-05", "2026-10-07", "2026-10-09", "2026-10-12"
+            ),
+            plan.createdDates.map { it.toString() }
+        )
+        assertTrue(
+            "and the superseded opportunity is not deleted, re-statused or superseded again",
+            plan.supersede.isEmpty() && plan.miss.isEmpty()
+        )
+    }
+
+    /**
+     * **Settled semantics #2 — a pause preserves the opportunities inside it and renumbers nothing.**
+     *
+     * Both halves in one place, on a pause that has not started yet: the opportunities planned inside
+     * the interval before it was added are left exactly as they are (a pause is a fact about now, not a
+     * cancellation of what is coming), and everything a pass does plan for a date outside the interval
+     * continues the same cycle those preserved opportunities are on — so a pause can never split the
+     * plan into two phases.
+     */
+    @Test
+    fun aPausePreservesFutureOpportunitiesAndRenumbersNothing() {
+        val pause = PausedInterval(LocalDate.parse("2026-09-16"), LocalDate.parse("2026-09-25"))
+        val insideThePause = listOf(
+            slot("16", "2026-09-16", dayPosition = 2),
+            slot("18", "2026-09-18", dayPosition = 3),
+            slot("21", "2026-09-21", dayPosition = 1),
+            slot("23", "2026-09-23", dayPosition = 2),
+            slot("25", "2026-09-25", dayPosition = 3)
+        )
+
+        val plan = SlotPlanner.plan(
+            request(revision(), asOf = anchor, slots = insideThePause, pauses = listOf(pause))
+        ).asScheduled()
+
+        assertTrue(
+            "a pause preserves the opportunities inside it: nothing is superseded and nothing is missed",
+            plan.supersede.isEmpty() && plan.miss.isEmpty()
+        )
+        assertEquals(
+            "and it renumbers nothing: the dates outside the interval that have no opportunity yet are " +
+                "planned in cycle order",
+            listOf(
+                "2026-09-14", "2026-09-28", "2026-09-30", "2026-10-02", "2026-10-05", "2026-10-07",
+                "2026-10-09", "2026-10-12"
+            ),
+            plan.createdDates.map { it.toString() }
+        )
+        assertEquals(
+            "with the cycle continuing across the pause: 2026-09-25 (preserved) presents day-3, so " +
+                "2026-09-28 presents day-1 and the days either side of the interval belong to one plan",
+            listOf("day-1", "day-1", "day-2", "day-3", "day-1", "day-2", "day-3", "day-1"),
+            plan.create.map { it.programDayId.value }
+        )
+        assertEquals(
+            "and the walk the days are counted along is the calendar's: 2026-09-14 is the plan's first " +
+                "date and the paused dates keep their own places in it",
+            "day-1",
+            plan.create.first().programDayId.value
+        )
+    }
+
     // ------------------------------------------------------------------ helpers
 
     /** The plan of a request that produced one, failing loudly when the pass had no window. */
