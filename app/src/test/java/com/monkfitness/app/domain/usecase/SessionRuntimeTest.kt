@@ -146,6 +146,9 @@ class SessionRuntimeTest {
     @Test
     fun theRestoredPresentationIsDomainEquivalentToTheCapturedSnapshotAfterANewRevision() = runBlocking {
         val started = started()
+        val slotBefore = rig.database.rows(
+            "SELECT * FROM `program_workout_slot` WHERE `slotId` = 'slot-r-1'"
+        )
 
         rig.rewriteRevisionOneElements()
         val revised = rig.saveRevisedPlan()
@@ -192,6 +195,25 @@ class SessionRuntimeTest {
             rig.database.scalar("SELECT `currentRevisionId` FROM `program` WHERE `programId` = 'program-r'")
         )
         assertEquals(rig.graph.revision.revisionId, restored.revisionId)
+        assertEquals(
+            "the opportunity is never re-pointed at the new revision: its own row is byte-identical, " +
+                "revisionId and plan day included, and it is still open",
+            slotBefore,
+            rig.database.rows("SELECT * FROM `program_workout_slot` WHERE `slotId` = 'slot-r-1'")
+        )
+        assertEquals(
+            "so the revision the opportunity stores is the authority for what it presents",
+            rig.graph.revision.revisionId.value,
+            rig.database.scalar("SELECT `revisionId` FROM `program_workout_slot` WHERE `slotId` = 'slot-r-1'")
+        )
+        assertEquals(
+            "and the plan day it names is still its own revision's day, not the revised revision's",
+            listOf("day-r-1", "revision-r"),
+            listOf(
+                rig.database.scalar("SELECT `programDayId` FROM `program_workout_slot` WHERE `slotId` = 'slot-r-1'"),
+                rig.database.scalar("SELECT `revisionId` FROM `program_day` WHERE `programDayId` = 'day-r-1'")
+            )
+        )
         assertTrue(
             "the revised revision exists beside the first one and nothing about the plan was overwritten",
             rig.database.count("program_revision") == 2
@@ -221,6 +243,50 @@ class SessionRuntimeTest {
                 "between an opportunity and a presentation",
             listOf("plan-ex-r-1", "plan-ex-r-2"),
             restored.snapshot.workout.exercises.map { it.programExerciseId.value }
+        )
+    }
+
+    /**
+     * The stronger half of the same claim: a *new* attempt started **after** the §6 Save must present the
+     * plan day the opportunity names, not what the Program's current revision now says.
+     *
+     * This is where "the current Program revision is not consulted" is measured directly — the revision
+     * pointer has already moved, the revised day reorders the exercises and replaces one, and the start
+     * still presents the day of the revision its own `revisionId` names.
+     */
+    @Test
+    fun aNewAttemptAfterASavePresentsThePlanDayTheOpportunityNames() = runBlocking {
+        rig.createProgram()
+        val revised = rig.saveRevisedPlan()
+
+        val session = SessionFixture.valueOf(rig.runtime.startSession(slot))
+
+        assertEquals(
+            "the Program has moved on",
+            revised.revisionId.value,
+            rig.database.scalar("SELECT `currentRevisionId` FROM `program` WHERE `programId` = 'program-r'")
+        )
+        assertEquals(
+            "while the attempt is bound to the revision its opportunity stores",
+            rig.graph.revision.revisionId,
+            session.revisionId
+        )
+        assertEquals(
+            "and presents that revision's plan day, in its own order and with its own prescriptions",
+            listOf("pushup" to listOf(12, 10, 8, 6), "pike_pushup" to listOf(8, 8)),
+            session.snapshot.workout.exercises.map { it.exerciseId to it.prescription.perSetTargets }
+        )
+        assertEquals(
+            "rather than the revised plan's, which reorders the day and replaces an exercise",
+            listOf("pike_pushup", "diamond_pushup"),
+            rig.database.strings(
+                "SELECT `exerciseId` FROM `program_exercise` WHERE `programDayId` = 'day-r-v2-1' ORDER BY `position`"
+            )
+        )
+        assertEquals(
+            "and the captured elements name the revision-1 plan elements, not the revision-2 ones",
+            listOf("plan-ex-r-1", "plan-ex-r-2"),
+            session.snapshot.workout.exercises.map { it.programExerciseId.value }
         )
     }
 

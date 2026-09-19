@@ -126,6 +126,16 @@ adjustment all leave an existing session's presentation exactly as captured: the
 changes the live plan under it in all three ways, and compares the restored value to the snapshot the
 start produced, element for element.
 
+**What each half of that claim is measured by:**
+
+| the claim | where it is measured |
+| --- | --- |
+| the current Program revision is not consulted | `theRestoredPresentationIsDomainEquivalentToTheCapturedSnapshotAfterANewRevision` asserts the Program's `currentRevisionId` **is** the new revision while the session still names its own; `aNewAttemptAfterASavePresentsThePlanDayTheOpportunityNames` starts an attempt *after* the save and shows the presentation is the revision-1 day, not the revised one |
+| the Slot's stored `revisionId` is authoritative | the same two tests read the slot row back: it still says `revision-r`, and the plan day it names still belongs to `revision-r` |
+| the Slot is never re-pointed | the whole slot row is compared before and after the save — byte-identical, status included |
+| `programExerciseId`, exercise, prescription and order are unchanged | the captured elements are asserted one by one against both the value and the stored `session_snapshot_exercise` rows, and the plan's own rows are asserted to have changed underneath them |
+| the captured adjustment ids are unchanged | a superseding adjustment is planted and the older session still presents the adjustment that was in effect — and still names it — while a new attempt at the same opportunity presents the new one |
+
 ## 4. One `IN_PROGRESS` attempt per slot — the mechanism
 
 §19: *"One Slot may have multiple attempts, but no more than one `IN_PROGRESS` Session."* The rule spans
@@ -248,12 +258,12 @@ Measured on the final bytes, with a forced-fresh run whose JUnit XML `timestamp`
 | --- | --- |
 | pristine `origin/main` baseline (`6d9d6bd`, detached worktree, `:app:cleanTest :app:testDebugUnitTest --rerun-tasks`) | **234 classes / 1998 tests / 0 failures / 0 errors / 0 skipped** |
 | branch, same command | **238 classes / 2080 tests / 0 failures / 0 errors / 0 skipped** — **+4 classes / +82 tests** |
-| freshness | newest XML `timestamp` `2026-09-19T10:36:51Z` vs `date -u` `10:36:57Z`; `BUILD SUCCESSFUL in 43s` (re-run **after** the RED mutation pass, to prove its restores) |
-| structural cross-check | `grep -rl '@Test' app/src/test/java \| wc -l` = 238; `grep -rho '@Test' … \| wc -l` = 2080 |
-| focused PR-8 suites | `SessionRuntimeTest` 46, `SessionRuntimeArchitectureTest` 15, `SessionRuntimeResultTest` 7, `SlotPresentationTest` 11 — 79 tests, 0 failures; plus the two suites that own the occupancy boundary: `WorkoutSessionRepositoryTest` 16 and `ProgramDataAccessArchitectureTest` 11 |
+| branch after the two snapshot assertions and the post-save start case (§9 decision 1) | **238 classes / 2081 tests / 0 failures / 0 errors / 0 skipped** — **+4 classes / +83 tests**; newest XML `timestamp` `2026-09-19T11:13:16Z` vs `date -u` `11:13:16Z`, `BUILD SUCCESSFUL in 1m 19s` |
+| structural cross-check | `grep -rl '@Test' app/src/test/java \| wc -l` = 238; `grep -rho '@Test' … \| wc -l` = 2081 |
+| focused PR-8 suites | `SessionRuntimeTest` 47, `SessionRuntimeArchitectureTest` 15, `SessionRuntimeResultTest` 7, `SlotPresentationTest` 11 — 80 tests, 0 failures; plus the two suites that own the occupancy boundary: `WorkoutSessionRepositoryTest` 16 and `ProgramDataAccessArchitectureTest` 11 |
 | `:app:compileDebugKotlin` / `:app:compileReleaseKotlin` / `:app:assembleDebug` | BUILD SUCCESSFUL in 18s |
 
-The **+82 tests are exactly the four new classes (79) plus three tests added to the pre-existing
+The **+83 tests are exactly the four new classes (80) plus three tests added to the pre-existing
 `WorkoutSessionRepositoryTest`** (the two occupancy tests and the finished-attempt one). No pre-existing
 test was deleted, disabled or loosened, and no golden, RFC or plan document was touched.
 
