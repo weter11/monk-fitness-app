@@ -14,6 +14,7 @@ import com.monkfitness.app.domain.adaptive.decision.AdaptiveAdjustment
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveDecision
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveTarget
 import com.monkfitness.app.domain.adaptive.decision.DecisionOutcome
+import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveReason
 import com.monkfitness.app.domain.common.AdjustmentId
 import com.monkfitness.app.domain.common.DecisionId
 import com.monkfitness.app.domain.common.ProgramExerciseId
@@ -74,7 +75,12 @@ internal fun AdaptiveDecisionRecordEntity.toDomain(adjustmentId: AdjustmentId?):
         confidence = storedToken(confidence, ConfidenceLevel.entries, "program_adaptive_decision_record.confidence"),
         recovery = storedToken(recovery, RecoveryContext.entries, "program_adaptive_decision_record.recovery"),
         decidedAt = storedInstant("program_adaptive_decision_record.decidedAt", decidedAt),
-        adjustmentId = adjustmentId
+        adjustmentId = adjustmentId,
+        // An absent column is an absent reason: a row written before §30 step 12 stored one keeps the
+        // answer it was written with — nothing — rather than being guessed at on read.
+        reason = reason?.let { stored ->
+            storedToken(stored, ProgramAdaptiveReason.entries, "program_adaptive_decision_record.reason")
+        }
     )
 
 /**
@@ -93,7 +99,8 @@ internal fun AdaptiveDecision.toEntity(): AdaptiveDecisionRecordEntity = Adaptiv
     evidence = evidence.name,
     confidence = confidence.name,
     recovery = recovery.name,
-    decidedAt = storedMilliseconds(decidedAt)
+    decidedAt = storedMilliseconds(decidedAt),
+    reason = reason?.name
 )
 
 /** What one stored decision is about, at the granularity its scope states. */
@@ -208,7 +215,15 @@ internal fun FamilyProgressionStateEntity.toDomain(): FamilyProgressionState = F
         "program_family_progression_state.adaptationState"
     ),
     currentExerciseId = currentExerciseId,
-    updatedAt = storedInstant("program_family_progression_state.updatedAt", updatedAt)
+    updatedAt = storedInstant("program_family_progression_state.updatedAt", updatedAt),
+    // The four counts read an absent column as the count a family with no preceding window has, and
+    // the cooldown position stays absent: "never had a change" is not "0 windows ago" (the entity
+    // states the same distinction). A row written by §30 step 12's integration always states them.
+    precedingProgressQualifyingWindows = precedingProgressQualifyingWindows ?: 0,
+    precedingRegressQualifyingWindows = precedingRegressQualifyingWindows ?: 0,
+    precedingRecoveryQualifyingWindows = precedingRecoveryQualifyingWindows ?: 0,
+    qualifyingWindowsSinceLastChange = qualifyingWindowsSinceLastChange,
+    recoveryQualifyingWindows = recoveryQualifyingWindows ?: 0
 )
 
 /** The stored row of one family progression state. */
@@ -218,5 +233,10 @@ internal fun FamilyProgressionState.toEntity(): FamilyProgressionStateEntity = F
     progressionLevel = progressionLevel,
     adaptationState = adaptationState.name,
     currentExerciseId = currentExerciseId,
-    updatedAt = storedMilliseconds(updatedAt)
+    updatedAt = storedMilliseconds(updatedAt),
+    precedingProgressQualifyingWindows = precedingProgressQualifyingWindows,
+    precedingRegressQualifyingWindows = precedingRegressQualifyingWindows,
+    precedingRecoveryQualifyingWindows = precedingRecoveryQualifyingWindows,
+    qualifyingWindowsSinceLastChange = qualifyingWindowsSinceLastChange,
+    recoveryQualifyingWindows = recoveryQualifyingWindows
 )

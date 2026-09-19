@@ -198,7 +198,9 @@ Complete Workout → Session + Slot + Adaptive state + Decisions + Adjustments
 1. the session row, `COMPLETED` with its finish stamp (`WorkoutSessionRepository.finishSession`);
 2. the opportunity, `COMPLETED` with the same stamp (same method, same unit);
 3. the adaptive decision the caller handed over, with the adjustment it produced
-   (`ProgramAdaptiveRepository.persistDecision`, which enforces the `APPLIED ⇔ adjustment` pairing).
+   (`ProgramAdaptiveRepository.persistDecision`, which enforces the `APPLIED ⇔ adjustment` pairing);
+4. the family's state after the window the adaptive stage evaluated
+   (`ProgramAdaptiveRepository.saveFamilyState`) — §27's *adaptive state* leg, added by §30 step 12.
 
 The transaction is opened by the runtime rather than by either repository because each of them owns its
 own rows and it is this layer that owns the composition; a failure anywhere inside the unit leaves the
@@ -219,9 +221,23 @@ census after each.
 
 So *"no decision applies"* has an explicit, stored-or-reported answer in both of its meanings: a decision
 that applied nothing is stored with its own outcome, and a completion with no decision stores nothing and
-says so. A decision must be about **this** opportunity — the same Program, revision and slot as the
-session — because it is stored as part of that opportunity's history (§16), and any pair the adaptive
-contract rejects fails loudly rather than being repaired.
+says so. Any pair the adaptive contract rejects fails loudly rather than being repaired.
+
+**§30 step 12 corrected two things here, and this document records them** (the full argument is in
+`docs/PROGRAM_ADAPTIVE_INTEGRATION.md` §2 and §14):
+
+* the decision must be about a **future** opportunity of the same Program and revision — never about the
+  opportunity the completion just took, and never about one that is no longer ahead of the user — because
+  that is where an adjustment is *consumed* (§4, §16). The same-slot equality this stage landed was right
+  only while nothing produced a decision; `AdaptiveDecisionIsOfAnotherOpportunity` became
+  `AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion` and carries an `AdaptiveTargetRefusal`
+  naming the clause that was broken;
+* `AdaptiveCompletion` gained §27's **adaptive state** leg: `Decided(decision, adjustment, familyState)`
+  for the two shapes that carry an audit record, and `WindowEvaluated(familyState)` for a window the
+  engine held on — the family's own bookkeeping advances through the windows that changed nothing, or its
+  confirmation count could never reach the confirmation its policy requires. The completion transaction
+  writes that leg inside the same unit of work, which is why a failure on it rolls the whole completion
+  back.
 
 ## 6. The rules, and where each is enforced
 

@@ -28,6 +28,9 @@ import com.monkfitness.app.data.repository.ProgramProgressRepository
 import com.monkfitness.app.data.repository.ProgramRepository
 import com.monkfitness.app.data.repository.ProgramScheduleRepository
 import com.monkfitness.app.data.repository.WorkoutSessionRepository
+import com.monkfitness.app.domain.adaptive.integration.NoDeclaredProgression
+import com.monkfitness.app.domain.adaptive.integration.NoExerciseFamilyClassification
+import com.monkfitness.app.domain.usecase.ProgramAdaptiveIntegration
 import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
@@ -339,6 +342,58 @@ class AppContainer(
         scheduleRepository = programScheduleRepository,
         sessionRepository = workoutSessionRepository,
         clock = clock
+    )
+
+    // --- §30 step 12: the adaptive integration ----------------------------------------------------
+
+    /**
+     * The adaptive integration — §30 step 12, over the repositories and the engine above.
+     *
+     * It owns one thing: turning a **completed Session** into the adaptive half of §27's completion unit.
+     * It reads the session's revision, the next not-yet-started opportunity of that revision, that
+     * opportunity's presentation and the family's own history, assembles the engine's request from those
+     * facts, and returns one of §20's four outcomes. It writes nothing: the outcome carries an
+     * `AdaptiveCompletion`, and `sessionRuntime.finishSession` is what persists it inside §27's
+     * transaction — which is why the same [inTransaction] runner and the same
+     * [programAdaptiveRepository] are on both sides of it.
+     *
+     * ### The two collaborators that are deliberately empty
+     *
+     * [relations] and [classification] are wired to their explicit *"nothing is declared"* values, and
+     * that is the honest state of the target tree rather than a placeholder to be filled in later:
+     *
+     * ```text
+     * no persisted family ladder      → NoDeclaredProgression          (§15's progression relations)
+     * no persisted exercise→family map → NoExerciseFamilyClassification (§9's family membership)
+     * ```
+     *
+     * Neither fact exists anywhere in §23's schema; the only ladders the repository holds are the Stage-1
+     * pilot's, which §30 step 11 forbids this generation to reach for and which are scoped to the legacy
+     * program's own axis. With no ladder declared, every adaptive pass in production ends in the engine's
+     * bounded `PROGRESSION_UNAVAILABLE` hold ([com.monkfitness.app.domain.adaptive.integration
+     * .AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION] when the day presents no exposed family either)
+     * — **no family is adapted, and nothing is fabricated to make one look adaptable**. §30 step 12's
+     * document names both artefacts and what supplying them means; a caller that has them (a test, or a
+     * later stage that persists them) constructs this class with its own provider.
+     *
+     * ### What the container decides, and what it does not
+     *
+     * This is **wiring, not behaviour**: the container decides which objects the integration receives and
+     * nothing about what it does with them. The `zone` is deliberately *not* supplied here — it is a
+     * constructor default, so a caller that owns the calendar it reasons in supplies it, and no
+     * production default of this file decides what day a slot was planned for. The window rule and the
+     * policy are the integration's own documented v1 values, for the same reason: a threshold with a
+     * second home is a threshold that can disagree with itself.
+     */
+    val programAdaptiveIntegration: ProgramAdaptiveIntegration = ProgramAdaptiveIntegration(
+        planRepository = programPlanRepository,
+        scheduleRepository = programScheduleRepository,
+        sessionRepository = workoutSessionRepository,
+        adaptiveRepository = programAdaptiveRepository,
+        relations = NoDeclaredProgression,
+        classification = NoExerciseFamilyClassification,
+        clock = clock,
+        idGenerator = idGenerator
     )
 
     // --- the shipped Stage-1 generation (§30 step 15 retires it) ----------------------------------

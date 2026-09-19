@@ -17,13 +17,17 @@ import com.monkfitness.app.data.model.SessionSnapshotExerciseEntity
 import com.monkfitness.app.data.model.SetLogEntity
 import com.monkfitness.app.data.model.WorkoutSessionEntity
 import com.monkfitness.app.domain.adaptive.AdaptiveScope
+import com.monkfitness.app.domain.adaptive.AdaptiveState
+import com.monkfitness.app.domain.adaptive.FamilyProgressionState
 import com.monkfitness.app.domain.adaptive.ConfidenceLevel
 import com.monkfitness.app.domain.adaptive.EvidenceLevel
 import com.monkfitness.app.domain.adaptive.RecoveryContext
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
 import com.monkfitness.app.domain.adaptive.decision.DecisionOutcome
 import com.monkfitness.app.data.mapper.revisionDomain
+import com.monkfitness.app.data.mapper.toDomain
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
+import com.monkfitness.app.domain.common.RevisionId
 import com.monkfitness.app.domain.program.Focus
 import com.monkfitness.app.domain.program.FocusAllocation
 import com.monkfitness.app.domain.program.FocusPlan
@@ -47,6 +51,7 @@ import org.junit.Test
 import java.io.File
 import java.lang.reflect.Proxy
 import java.time.DayOfWeek
+import java.time.Instant
 
 /**
  * The target Program System schema, read from the three places that can disagree with each other:
@@ -103,7 +108,11 @@ class ProgramSchemaTest {
     private fun focusStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_9_10)
 
     /** Every additive statement the deployed chain executes, in chain order. */
-    private fun allAdditiveStatements(): List<String> = additiveStatements() + focusStatements()
+    /** Every statement the version-10 → version-11 step executes: §30 step 12's window bookkeeping. */
+    private fun windowStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_10_11)
+
+    private fun allAdditiveStatements(): List<String> =
+        additiveStatements() + focusStatements() + windowStatements()
 
     /** The version the database declares, read from the source that declares it. */
     private fun currentVersion(): Int =
@@ -273,8 +282,14 @@ class ProgramSchemaTest {
         )
         assertEquals(10, AppDatabase.MIGRATION_9_10.endVersion)
         assertEquals(
+            "the adaptive window bookkeeping is the step after that one (§15, §30 step 12)",
+            10,
+            AppDatabase.MIGRATION_10_11.startVersion
+        )
+        assertEquals(11, AppDatabase.MIGRATION_10_11.endVersion)
+        assertEquals(
             "and the declared version is where the chain ends",
-            AppDatabase.MIGRATION_9_10.endVersion,
+            AppDatabase.MIGRATION_10_11.endVersion,
             currentVersion()
         )
     }
@@ -557,6 +572,186 @@ class ProgramSchemaTest {
             GenerationPolicy.MAX_SECONDARY_FOCUSES
         )
     }
+
+    @Test
+    fun theAdaptiveWindowBookkeepingIsAppendedToTheFamilyStateTableAndInventsNoCount() {
+        val statements = windowStatements()
+
+        assertEquals(
+            "the step is the statements the contract derives, in order",
+            normalized(ProgramSchemaFixture.expectedAdditiveStatements("MIGRATION_10_11")),
+            normalized(statements)
+        )
+        assertEquals("one statement per declared column", 6, statements.size)
+        assertEquals(
+            "the window bookkeeping is appended to the family-state table and the reason token to the " +
+                "decision record, in that order",
+            listOf(5, 1),
+            listOf(
+                statements.count {
+                    it.startsWith("ALTER TABLE `program_family_progression_state` ADD COLUMN ")
+                },
+                statements.count {
+                    it.startsWith("ALTER TABLE `program_adaptive_decision_record` ADD COLUMN ")
+                }
+            )
+        )
+        assertTrue(
+            "every statement is an additive column and touches nothing else: $statements",
+            statements.all { it.contains(" ADD COLUMN ") && !it.contains("DROP") }
+        )
+        assertTrue(
+            "none carries a default: a default would state a count for rows written before the " +
+                "adaptive stage stored any, and it is the *absence* the mapper reads — $statements",
+            statements.none { it.contains("DEFAULT", ignoreCase = true) }
+        )
+        assertTrue(
+            "and none may be NOT NULL: SQLite cannot append one without a default, and " +
+                "`qualifyingWindowsSinceLastChange` has to stay absent for a family that has never " +
+                "changed level — $statements",
+            statements.none { it.contains("NOT NULL", ignoreCase = true) }
+        )
+
+        val columns = ProgramSchemaFixture
+            .columnsAddedBy("MIGRATION_10_11", "program_family_progression_state")
+        assertEquals(
+            "the five columns are the engine's own window facts, in the entity's declaration order",
+            ProgramSchemaFixture.WINDOW_BOOKKEEPING_COLUMNS,
+            columns.map { it.name }
+        )
+        assertTrue(
+            "every one of them is an INTEGER count and every one is nullable",
+            columns.all { it.type == "INTEGER" && it.nullable }
+        )
+    }
+
+    @Test
+    fun theAdaptiveWindowBookkeepingSurvivesTheChainAndReconstructsTheDomainState() {
+        val database = SqliteTestDatabase.inMemory()
+        database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
+        database.migrate(AppDatabase.MIGRATION_7_8)
+        database.migrate(AppDatabase.MIGRATION_8_9)
+        database.migrate(AppDatabase.MIGRATION_9_10)
+
+        // The version-10 row set a device holds: a Program, its revision, and the family state the
+        // adaptive stage had written before it could count anything.
+        database.exec(
+            "INSERT INTO `program` (`programId`, `name`, `description`, `source`, `lifecycleStatus`, " +
+                "`currentRevisionId`, `createdAt`, `updatedAt`, `plannedStartDate`, `actualStartDate`, " +
+                "`archivedAt`) VALUES ('program-10', 'Program', '', 'USER', 'NOT_STARTED', " +
+                "'revision-10', 1700000000000, 1700000000000, NULL, NULL, NULL)"
+        )
+        database.exec(
+            "INSERT INTO `program_revision` (`revisionId`, `programId`, `revisionNumber`, `mode`, " +
+                "`durationType`, `durationDays`, `scheduleType`, `scheduleWeekdays`, " +
+                "`scheduleSessionsPerWeek`, `createdAt`) VALUES ('revision-10', 'program-10', 1, " +
+                "'GENERATED', 'INDEFINITE', NULL, 'FLEXIBLE_PER_WEEK', NULL, 3, 1700000000000)"
+        )
+        database.exec(
+            "INSERT INTO `program_family_progression_state` (`revisionId`, `familyId`, " +
+                "`progressionLevel`, `adaptationState`, `currentExerciseId`, `updatedAt`) VALUES " +
+                "('revision-10', 'push-family', 3, 'PROGRESS', 'pushup', 1700000000000)"
+        )
+        val before = database.rows(
+            "SELECT `revisionId`, `familyId`, `progressionLevel`, `adaptationState`, " +
+                "`currentExerciseId`, `updatedAt` FROM `program_family_progression_state`"
+        ).single()
+
+        database.migrate(AppDatabase.MIGRATION_10_11)
+
+        val names = ProgramSchemaFixture.WINDOW_BOOKKEEPING_COLUMNS
+        assertEquals(
+            "the columns are on the table a device holds after the chain",
+            names.sorted(),
+            database.columnNames("program_family_progression_state").filter { it in names.toSet() }.sorted()
+        )
+        assertTrue(
+            "with the affinity the entity stores a count in",
+            names.all { database.columnType("program_family_progression_state", it) == "INTEGER" }
+        )
+        assertTrue(
+            "and nullable, so a row written before this step stores no count at all",
+            names.all { name ->
+                database.rows("SELECT * FROM pragma_table_info('program_family_progression_state')")
+                    .single { it["name"] == name }["notnull"] == "0"
+            }
+        )
+
+        val stored = database.rows(
+            "SELECT * FROM `program_family_progression_state` WHERE `familyId` = 'push-family'"
+        ).single()
+
+        assertEquals(
+            "every value the row already held survives the step unchanged",
+            listOf(
+                before["revisionId"], before["familyId"], before["progressionLevel"],
+                before["adaptationState"], before["currentExerciseId"], before["updatedAt"]
+            ),
+            listOf(
+                stored["revisionId"], stored["familyId"], stored["progressionLevel"],
+                stored["adaptationState"], stored["currentExerciseId"], stored["updatedAt"]
+            )
+        )
+        assertEquals(
+            "and its counts are absent rather than zero",
+            names.map { null },
+            names.map { stored[it] }
+        )
+        assertEquals(
+            "which the mapper reads as the count a family with no preceding window has — while the " +
+                "cooldown position stays absent, because \"never changed level\" is not \"0 windows ago\"",
+            listOf(3, AdaptiveState.PROGRESS, "pushup", 0, 0, 0, null, 0),
+            storedRow(stored).let { state ->
+                listOf(
+                    state.progressionLevel,
+                    state.adaptationState,
+                    state.currentExerciseId,
+                    state.precedingProgressQualifyingWindows,
+                    state.precedingRegressQualifyingWindows,
+                    state.precedingRecoveryQualifyingWindows,
+                    state.qualifyingWindowsSinceLastChange,
+                    state.recoveryQualifyingWindows
+                )
+            }
+        )
+
+        // A window the adaptive stage evaluated writes the counts it advanced; they survive the read.
+        database.exec(
+            "UPDATE `program_family_progression_state` SET " +
+                "`precedingProgressQualifyingWindows` = 2, `precedingRegressQualifyingWindows` = 0, " +
+                "`precedingRecoveryQualifyingWindows` = 0, `qualifyingWindowsSinceLastChange` = 1, " +
+                "`recoveryQualifyingWindows` = 0 WHERE `familyId` = 'push-family'"
+        )
+        val written = storedRow(
+            database.rows("SELECT * FROM `program_family_progression_state`").single()
+        )
+        assertEquals(
+            "the counts a window advanced come back exactly as they were written",
+            listOf(2, 0, 0, 1, 0),
+            listOf(
+                written.precedingProgressQualifyingWindows,
+                written.precedingRegressQualifyingWindows,
+                written.precedingRecoveryQualifyingWindows,
+                written.qualifyingWindowsSinceLastChange,
+                written.recoveryQualifyingWindows
+            )
+        )
+    }
+
+    /** One stored family-state row as the production mapper reads it. */
+    private fun storedRow(row: Map<String, String?>) = FamilyProgressionStateEntity(
+        revisionId = row["revisionId"]!!,
+        familyId = row["familyId"]!!,
+        progressionLevel = row["progressionLevel"]!!.toInt(),
+        adaptationState = row["adaptationState"]!!,
+        currentExerciseId = row["currentExerciseId"],
+        updatedAt = row["updatedAt"]!!.toLong(),
+        precedingProgressQualifyingWindows = row["precedingProgressQualifyingWindows"]?.toInt(),
+        precedingRegressQualifyingWindows = row["precedingRegressQualifyingWindows"]?.toInt(),
+        precedingRecoveryQualifyingWindows = row["precedingRecoveryQualifyingWindows"]?.toInt(),
+        qualifyingWindowsSinceLastChange = row["qualifyingWindowsSinceLastChange"]?.toInt(),
+        recoveryQualifyingWindows = row["recoveryQualifyingWindows"]?.toInt()
+    ).toDomain()
 
     @Test
     fun theGoalFocusConfigurationSurvivesTheDeployedChainAndReconstructsTheDomainValue() {

@@ -284,7 +284,14 @@ private fun Map<String, String?>.familyStateEntity() = FamilyProgressionStateEnt
     progressionLevel = number("progressionLevel"),
     adaptationState = text("adaptationState"),
     currentExerciseId = this["currentExerciseId"],
-    updatedAt = millis("updatedAt")
+    updatedAt = millis("updatedAt"),
+    // §30 step 12's window bookkeeping: read here exactly as the entity declares it, so a read that
+    // dropped a counter would fail a round trip rather than quietly zeroing one.
+    precedingProgressQualifyingWindows = this["precedingProgressQualifyingWindows"]?.toInt(),
+    precedingRegressQualifyingWindows = this["precedingRegressQualifyingWindows"]?.toInt(),
+    precedingRecoveryQualifyingWindows = this["precedingRecoveryQualifyingWindows"]?.toInt(),
+    qualifyingWindowsSinceLastChange = this["qualifyingWindowsSinceLastChange"]?.toInt(),
+    recoveryQualifyingWindows = this["recoveryQualifyingWindows"]?.toInt()
 )
 
 private fun Map<String, String?>.decisionEntity() = AdaptiveDecisionRecordEntity(
@@ -299,7 +306,10 @@ private fun Map<String, String?>.decisionEntity() = AdaptiveDecisionRecordEntity
     evidence = text("evidence"),
     confidence = text("confidence"),
     recovery = text("recovery"),
-    decidedAt = millis("decidedAt")
+    decidedAt = millis("decidedAt"),
+    // §13's stored reason token: read as it was written, and `null` for a row written before the
+    // column existed — the absence is not guessed at here either.
+    reason = this["reason"]
 )
 
 private fun Map<String, String?>.adjustmentEntity() = AdaptiveAdjustmentEntity(

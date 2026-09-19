@@ -86,6 +86,7 @@ class ProgramMigrationPreservationTest {
     private fun migratedDatabase(): SqliteTestDatabase = versionNineDatabase().also { database ->
         // The deployed chain, in the order a device runs it.
         database.migrate(AppDatabase.MIGRATION_9_10)
+        database.migrate(AppDatabase.MIGRATION_10_11)
     }
 
     /** A populated **version-8** database: what a device that ran the target-schema release holds. */
@@ -477,6 +478,8 @@ class ProgramMigrationPreservationTest {
         assertEquals(9, AppDatabase.MIGRATION_8_9.endVersion)
         assertEquals(9, AppDatabase.MIGRATION_9_10.startVersion)
         assertEquals(10, AppDatabase.MIGRATION_9_10.endVersion)
+        assertEquals(10, AppDatabase.MIGRATION_10_11.startVersion)
+        assertEquals(11, AppDatabase.MIGRATION_10_11.endVersion)
 
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
@@ -484,6 +487,7 @@ class ProgramMigrationPreservationTest {
             database.migrate(AppDatabase.MIGRATION_7_8)
             database.migrate(AppDatabase.MIGRATION_8_9)
             database.migrate(AppDatabase.MIGRATION_9_10)
+            database.migrate(AppDatabase.MIGRATION_10_11)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }
@@ -496,6 +500,11 @@ class ProgramMigrationPreservationTest {
             "and the last step put the columns it adds on the table it adds them to",
             ProgramSchemaFixture.columnsNow("program_revision").map { it.name },
             database.columnNames("program_revision")
+        )
+        assertEquals(
+            "including the adaptive window bookkeeping the final step appended to the family-state table",
+            ProgramSchemaFixture.columnsNow("program_family_progression_state").map { it.name },
+            database.columnNames("program_family_progression_state")
         )
     }
 

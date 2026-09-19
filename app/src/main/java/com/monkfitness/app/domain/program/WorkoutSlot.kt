@@ -66,6 +66,19 @@ data class WorkoutSlot(
     val isOpen: Boolean
         get() = status == SlotStatus.PLANNED
 
+    /**
+     * Whether a session may still be started for this opportunity (§19).
+     *
+     * `PLANNED` and `MISSED` are startable — a missed opportunity is one whose *date* passed, and the
+     * blueprint neither slides it nor forbids training it late — while a `COMPLETED` one was taken by a
+     * finished workout and a `SUPERSEDED` one was withdrawn by a later plan, so neither is ahead of the
+     * user. It is the same rule `SessionRuntime.startRefusal` states as a refusal, given here as the
+     * fact it is: adaptive targeting (§30 step 12) asks *"can this opportunity still be presented?"* and
+     * must not answer it with a second copy of the list.
+     */
+    val isStartable: Boolean
+        get() = status == SlotStatus.PLANNED || status == SlotStatus.MISSED
+
     /** Whether any session was started for this slot, whatever became of it. */
     val hasBeenAttempted: Boolean
         get() = attempts.isNotEmpty()

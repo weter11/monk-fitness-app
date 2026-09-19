@@ -243,12 +243,22 @@ class SessionRuntimeArchitectureTest {
 
     @Test
     fun theRuntimeContainsNoAdaptiveEnginePolicyOrGenerator() {
+        // §30 step 12 revised one entry: the runtime now composes §27's *adaptive state* leg, so
+        // `FamilyProgressionState` — §23's own stored state value — crosses it as a *value* it writes
+        // inside the completion's transaction. Nothing else about the fence moved, and it is tightened
+        // where the new stage could leak into this layer: no integration, no window, no ladder, no
+        // classification and no reason vocabulary may be named here at all. The positive half of the
+        // rule is asserted beside this test.
         val forbidden = listOf(
             "AdaptivePolicy", "AdaptiveProgramEngine", "AdaptiveSignalCalculator", "ProgressionResolver",
-            "AdaptiveState", "FamilyProgressionState", "ExposureObservation", "AdaptiveInputSnapshot",
+            "AdaptiveState", "ExposureObservation", "AdaptiveInputSnapshot",
             "AdaptiveSignal", "WorkoutGenerator", "getExerciseLibrary", "FocusPlanner",
             "ProgramProgressRepository", "ProgramConfiguration", "ProgramEditorService", "SettingsManager",
-            "ProgramMaintenance", "ProgramCalendar", "Random", "shuffled", "Math.random"
+            "ProgramMaintenance", "ProgramCalendar", "Random", "shuffled", "Math.random",
+            "AdaptiveJudgement", "ProgramAdaptiveIntegration", "ProgramAdaptiveWindow",
+            "ProgramProgressionRelation", "ProgressionRelationProvider", "ExerciseFamilyClassification",
+            "ProgramAdaptiveReason", "AdaptiveInputGap", "AdaptiveIntegrationOutcome",
+            "ProgramProgressionVariant", "AdaptivePolicyV"
         )
         val offenders = codeLines(allSources).mapNotNull { (source, line) ->
             forbidden.firstOrNull { line.contains(it) }?.let { "$source: $line" }
@@ -260,6 +270,34 @@ class SessionRuntimeArchitectureTest {
                 "that cross it are the stored adjustments of one opportunity — read, applied and " +
                 "captured — and the decision a completion is handed, which is stored and never produced. " +
                 "Found: $offenders",
+            offenders.isEmpty()
+        )
+    }
+
+    @Test
+    fun theRuntimeOnlyEverCarriesTheAdaptiveStateLegAndNeverProducesOne() {
+        // The positive half of the fence above: the one adaptive value that crosses this layer is
+        // §23's stored family state, and the runtime may only *carry* it into the transaction. Nothing
+        // here reads a family state, computes one, advances a counter, resolves a ladder or builds an
+        // integration request — §30 step 12's own use case does that, and the composition root hands
+        // its outcome over.
+        val offenders = codeLines(allSources).mapNotNull { (source, line) ->
+            when {
+                line.contains("familyState.copy(") -> "$source: $line"
+                line.contains("precedingProgressQualifyingWindows =") -> "$source: $line"
+                line.contains("programAdaptiveIntegration") -> "$source: $line"
+                line.contains("ProgressionRelation") -> "$source: $line"
+                line.contains("relationOf(") -> "$source: $line"
+                line.contains("familyOf(") -> "$source: $line"
+
+                else -> null
+            }
+        }
+
+        assertTrue(
+            "the runtime composes an already-produced adaptive completion: it never advances a " +
+                "family's counters, never resolves a ladder, never classifies an exercise and never " +
+                "asks the integration for anything. Found: $offenders",
             offenders.isEmpty()
         )
     }

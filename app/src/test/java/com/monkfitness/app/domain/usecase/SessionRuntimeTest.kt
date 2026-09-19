@@ -1,5 +1,8 @@
 package com.monkfitness.app.domain.usecase
 
+import com.monkfitness.app.domain.adaptive.AdaptiveState
+import com.monkfitness.app.domain.adaptive.FamilyProgressionState
+import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.data.local.SqliteTestDatabase
 import com.monkfitness.app.data.repository.ProgramDataAccessRig
 import com.monkfitness.app.data.repository.ProgramGraphFixture
@@ -11,6 +14,7 @@ import com.monkfitness.app.domain.adaptive.decision.AdaptiveAdjustment
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveTarget
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveDecision
 import com.monkfitness.app.domain.adaptive.decision.DecisionOutcome
+import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveReason
 import com.monkfitness.app.domain.common.AdjustmentId
 import com.monkfitness.app.domain.common.DecisionId
 import com.monkfitness.app.domain.common.ProgramDayId
@@ -1016,7 +1020,9 @@ class SessionRuntimeTest {
             decisionId = DecisionId("decision-hold"),
             programId = session.programId,
             revisionId = session.revisionId,
-            slotId = session.slotId,
+            // The decision is about the opportunity the change will be consumed by — a future one, which
+            // is what §4 requires and what §30 step 12 produces (see the targeting suite below).
+            slotId = rig.slotId(2),
             target = AdaptiveTarget.Family("push-family"),
             action = AdaptiveAction.HOLD,
             outcome = DecisionOutcome.NOT_APPLIED,
@@ -1052,11 +1058,12 @@ class SessionRuntimeTest {
     @Test
     fun anAppliedDecisionIsStoredWithItsAdjustmentInTheSameUnit() = runBlocking {
         val session = started()
+        val target = rig.slotId(2)
         val decision = AdaptiveDecision(
             decisionId = DecisionId("decision-progress"),
             programId = session.programId,
             revisionId = session.revisionId,
-            slotId = session.slotId,
+            slotId = target,
             target = AdaptiveTarget.Exercise("plan-ex-r-1"),
             action = AdaptiveAction.PROGRESS,
             outcome = DecisionOutcome.APPLIED,
@@ -1069,14 +1076,28 @@ class SessionRuntimeTest {
         val adjustment = AdaptiveAdjustment(
             adjustmentId = AdjustmentId("adjustment-progress"),
             decisionId = decision.decisionId,
-            slotId = session.slotId,
+            slotId = target,
             before = FixtureElements.PUSHUP,
             after = FixtureElements.PUSHUP.copy(prescription = RepPrescription(listOf(14, 12, 10, 8))),
             createdAt = SessionFixture.FINISHED
         )
+        // §27's *adaptive state* leg: an applied change travels with the family's state after the window
+        // it was decided in, and the runtime writes it inside the same unit of work.
+        val familyState = FamilyProgressionState(
+            revisionId = session.revisionId,
+            familyId = "push-family",
+            progressionLevel = 2,
+            adaptationState = AdaptiveState.PROGRESS,
+            currentExerciseId = "pushup",
+            updatedAt = SessionFixture.FINISHED,
+            qualifyingWindowsSinceLastChange = 0
+        )
 
         val completion = SessionFixture.valueOf(
-            rig.runtime.finishSession(session.sessionId, AdaptiveCompletion.Decided(decision, adjustment))
+            rig.runtime.finishSession(
+                session.sessionId,
+                AdaptiveCompletion.Decided(decision, adjustment, familyState)
+            )
         )
 
         assertEquals(
@@ -1109,21 +1130,75 @@ class SessionRuntimeTest {
         )
     }
 
+    // ================================================================ §4: the target is a FUTURE slot
+
+    /**
+     * One decision about [target], with the shape §30 step 12 produces: the completion's Program and
+     * revision, and a slot that is still ahead of the user.
+     */
+    private fun decisionAbout(
+        session: WorkoutSession,
+        target: SlotId,
+        id: String = "decision-target",
+        programId: ProgramId = session.programId,
+        revisionId: RevisionId = session.revisionId
+    ): AdaptiveDecision = AdaptiveDecision(
+        decisionId = DecisionId(id),
+        programId = programId,
+        revisionId = revisionId,
+        slotId = target,
+        target = AdaptiveTarget.Family("push-family"),
+        action = AdaptiveAction.HOLD,
+        outcome = DecisionOutcome.NOT_APPLIED,
+        evidence = EvidenceLevel.INSUFFICIENT,
+        confidence = ConfidenceLevel.LOW,
+        recovery = RecoveryContext.UNKNOWN,
+        decidedAt = SessionFixture.FINISHED
+    )
+
+    /**
+     * §4's corrected contract: an adaptive decision is about the opportunity the change will be
+     * *consumed by*, so it must name a future one.
+     *
+     * The P8-era check required the decision's slot to **equal** the session's, which was right only while
+     * nothing produced a real decision. This suite is its replacement and asserts both directions: the
+     * completed opportunity is now the case that cannot receive a decision, and a future opportunity of
+     * the same revision is accepted.
+     */
     @Test
-    fun aDecisionAboutAnotherOpportunityIsRefusedAndNothingIsCompleted() = runBlocking {
+    fun theCompletedOpportunityItselfCanNeverReceiveTheAdaptiveDecision() = runBlocking {
         val session = started()
-        val elsewhere = AdaptiveDecision(
-            decisionId = DecisionId("decision-elsewhere"),
-            programId = session.programId,
-            revisionId = session.revisionId,
-            slotId = rig.slotId(3),
-            target = AdaptiveTarget.Session,
-            action = AdaptiveAction.HOLD,
-            outcome = DecisionOutcome.NOT_APPLIED,
-            evidence = EvidenceLevel.INSUFFICIENT,
-            confidence = ConfidenceLevel.LOW,
-            recovery = RecoveryContext.UNKNOWN,
-            decidedAt = SessionFixture.FINISHED
+        val before = rig.tableCounts()
+
+        val refusal = SessionFixture.refusalOf(
+            rig.runtime.finishSession(
+                session.sessionId,
+                AdaptiveCompletion.Decided(decisionAbout(session, session.slotId, "decision-here"))
+            )
+        )
+
+        assertTrue(
+            "the opportunity this completion took has already had its snapshot taken, so no adjustment " +
+                "can ever be consumed by it: $refusal",
+            refusal is SessionRefusal.AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion
+        )
+        assertEquals(
+            SessionRefusal.AdaptiveTargetRefusal.THE_COMPLETED_SLOT_ITSELF,
+            (refusal as SessionRefusal.AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion).reason
+        )
+        assertEquals("the completion wrote nothing at all", before, rig.tableCounts())
+        assertEquals(SessionStatus.IN_PROGRESS, rig.requireStored(session.sessionId).status)
+        assertEquals(SlotStatus.PLANNED, rig.storedSlot(session.slotId).status)
+    }
+
+    @Test
+    fun aDecisionAboutAnotherProgramIsRefused() = runBlocking {
+        val session = started()
+        val elsewhere = decisionAbout(
+            session = session,
+            target = rig.slotId(2),
+            id = "decision-other-program",
+            programId = ProgramId("program-elsewhere")
         )
         val before = rig.tableCounts()
 
@@ -1131,17 +1206,139 @@ class SessionRuntimeTest {
             rig.runtime.finishSession(session.sessionId, AdaptiveCompletion.Decided(elsewhere))
         )
 
-        assertTrue(
-            "a decision is about one slot of one revision, and it is stored as part of that " +
-                "opportunity's history: $refusal",
-            refusal is SessionRefusal.AdaptiveDecisionIsOfAnotherOpportunity
-        )
         assertEquals(
-            "slot-r-3",
-            (refusal as SessionRefusal.AdaptiveDecisionIsOfAnotherOpportunity).decisionSlotId.value
+            "a decision belongs to the Program whose Session produced it, and nothing was written",
+            listOf(
+                SessionRefusal.AdaptiveTargetRefusal.ANOTHER_PROGRAM,
+                before
+            ),
+            listOf(
+                (refusal as SessionRefusal.AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion).reason,
+                rig.tableCounts()
+            )
         )
-        assertEquals("the completion wrote nothing at all", before, rig.tableCounts())
-        assertEquals(SessionStatus.IN_PROGRESS, rig.requireStored(session.sessionId).status)
+    }
+
+    @Test
+    fun aDecisionAboutAnotherProgramOrRevisionIsRefused() = runBlocking {
+        val session = started()
+        val elsewhere = decisionAbout(
+            session = session,
+            target = rig.slotId(2),
+            id = "decision-other-revision",
+            revisionId = RevisionId("revision-elsewhere")
+        )
+        val before = rig.tableCounts()
+
+        val refusal = SessionFixture.refusalOf(
+            rig.runtime.finishSession(session.sessionId, AdaptiveCompletion.Decided(elsewhere))
+        )
+
+        assertEquals(
+            SessionRefusal.AdaptiveTargetRefusal.ANOTHER_REVISION,
+            (refusal as SessionRefusal.AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion).reason
+        )
+        assertEquals("adaptive state is revision-scoped, and nothing was written", before, rig.tableCounts())
+    }
+
+    @Test
+    fun aDecisionAboutAFutureOpportunityOfTheSameRevisionIsStored() = runBlocking {
+        val session = started()
+        val target = rig.slotId(2)
+        val decision = decisionAbout(session, target, "decision-future")
+
+        val completion = SessionFixture.valueOf(
+            rig.runtime.finishSession(session.sessionId, AdaptiveCompletion.Decided(decision))
+        )
+
+        assertEquals(
+            "the decision is recorded, and the slot it names is the one the change is for",
+            listOf(
+                AdaptiveOutcome.Stored(decision.decisionId, null),
+                target.value
+            ),
+            listOf(
+                completion.adaptive,
+                rig.database.scalar(
+                    "SELECT `slotId` FROM `program_adaptive_decision_record` " +
+                        "WHERE `decisionId` = 'decision-future'"
+                )
+            )
+        )
+        assertEquals(SlotStatus.COMPLETED, completion.slot.status)
+        assertEquals(
+            "and the opportunity the change is for is untouched: targeting it is not taking it",
+            SlotStatus.PLANNED,
+            rig.storedSlot(target).status
+        )
+    }
+
+    @Test
+    fun aDecisionAboutAnOpportunityThatIsNoLongerAheadOfTheUserIsRefused() = runBlocking {
+        val session = started()
+        val target = rig.slotId(2)
+        rig.database.exec(
+            "UPDATE `program_workout_slot` SET `status` = 'SUPERSEDED' WHERE `slotId` = '${target.value}'"
+        )
+        val before = rig.tableCounts()
+
+        val refusal = SessionFixture.refusalOf(
+            rig.runtime.finishSession(
+                session.sessionId,
+                AdaptiveCompletion.Decided(decisionAbout(session, target, "decision-stale"))
+            )
+        )
+
+        assertEquals(
+            SessionRefusal.AdaptiveTargetRefusal.SLOT_IS_NOT_AHEAD_OF_THE_USER,
+            (refusal as SessionRefusal.AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion).reason
+        )
+        assertEquals("nothing was written, and the opportunity keeps its status", before, rig.tableCounts())
+    }
+
+    @Test
+    fun aDecisionAboutAnOpportunityWhoseSnapshotIsAlreadyTakenIsRefused() = runBlocking {
+        val session = started()
+        // Slot 3 presents a training day; slot 2 is the fixture's rest day, which cannot be started at
+        // all (a second refusal, not the one under test here).
+        val target = rig.slotId(3)
+        // A second attempt on the *target* opportunity: its presentation is frozen from here on.
+        SessionFixture.valueOf(rig.runtime.startSession(target))
+        val before = rig.tableCounts()
+
+        val refusal = SessionFixture.refusalOf(
+            rig.runtime.finishSession(
+                session.sessionId,
+                AdaptiveCompletion.Decided(decisionAbout(session, target, "decision-taken"))
+            )
+        )
+
+        assertEquals(
+            SessionRefusal.AdaptiveTargetRefusal.SLOT_IS_ALREADY_STARTED,
+            (refusal as SessionRefusal.AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion).reason
+        )
+        assertEquals("nothing was written", before, rig.tableCounts())
+    }
+
+    @Test
+    fun aDecisionAboutAnOpportunityThatIsNotStoredIsRefused() = runBlocking {
+        val session = started()
+        val before = rig.tableCounts()
+
+        val refusal = SessionFixture.refusalOf(
+            rig.runtime.finishSession(
+                session.sessionId,
+                AdaptiveCompletion.Decided(
+                    decisionAbout(session, SlotId("slot-nowhere"), "decision-missing")
+                )
+            )
+        )
+
+        assertEquals(
+            SessionRefusal.AdaptiveTargetRefusal.NO_SUCH_SLOT,
+            (refusal as SessionRefusal.AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion).reason
+        )
+        assertEquals("nothing was written", before, rig.tableCounts())
     }
 
     // ================================================================ transactions (§27)
@@ -1233,11 +1430,15 @@ class SessionRuntimeTest {
     private suspend fun assertCompletionIsAtomic(failSlot: Boolean = false, failAdaptive: Boolean = false) {
         val (session, occurrence) = startedWithOneSet()
         val adjustmentId = AdjustmentId("adjustment-atomic")
+        // The decision is about the opportunity the change would be consumed by — a **future** one, per
+        // §4 — and the adaptive half carries all three legs §27 lists, so a rollback has to take the
+        // family's state with it and not only the decision and the adjustment.
+        val target = rig.slotId(2)
         val decision = AdaptiveDecision(
             decisionId = DecisionId("decision-atomic"),
             programId = session.programId,
             revisionId = session.revisionId,
-            slotId = session.slotId,
+            slotId = target,
             target = AdaptiveTarget.Exercise("plan-ex-r-1"),
             action = if (failAdaptive) AdaptiveAction.PROGRESS else AdaptiveAction.HOLD,
             outcome = if (failAdaptive) DecisionOutcome.APPLIED else DecisionOutcome.NOT_APPLIED,
@@ -1245,15 +1446,30 @@ class SessionRuntimeTest {
             confidence = ConfidenceLevel.LOW,
             recovery = RecoveryContext.UNKNOWN,
             decidedAt = SessionFixture.FINISHED,
-            adjustmentId = adjustmentId.takeIf { failAdaptive }
+            adjustmentId = adjustmentId.takeIf { failAdaptive },
+            reason = if (failAdaptive) {
+                ProgramAdaptiveReason.SUSTAINED_POSITIVE
+            } else {
+                ProgramAdaptiveReason.AGGREGATE_LOAD_GUARD
+            }
         )
         val adjustment = if (!failAdaptive) null else AdaptiveAdjustment(
             adjustmentId = adjustmentId,
             decisionId = decision.decisionId,
-            slotId = session.slotId,
+            slotId = target,
             before = FixtureElements.PUSHUP,
             after = FixtureElements.PUSHUP.copy(prescription = RepPrescription(listOf(14, 12, 10, 8))),
             createdAt = SessionFixture.FINISHED
+        )
+        val familyState = FamilyProgressionState(
+            revisionId = session.revisionId,
+            familyId = "push-family",
+            progressionLevel = 2,
+            adaptationState = if (failAdaptive) AdaptiveState.PROGRESS else AdaptiveState.HOLD,
+            currentExerciseId = "pushup",
+            updatedAt = SessionFixture.FINISHED,
+            precedingProgressQualifyingWindows = 1,
+            qualifyingWindowsSinceLastChange = if (failAdaptive) 0 else null
         )
         val before = rig.tableCounts()
         rig.faults.failSlotOutcomeUpdate = failSlot
@@ -1262,7 +1478,7 @@ class SessionRuntimeTest {
             val failure = SessionFixture.failureValueOf(
                 rig.runtime.finishSession(
                     session.sessionId,
-                    AdaptiveCompletion.Decided(decision, adjustment)
+                    AdaptiveCompletion.Decided(decision, adjustment, familyState)
                 )
             )
             assertTrue(failure.message!!.contains("planted fault"))

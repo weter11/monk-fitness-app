@@ -1,6 +1,8 @@
 package com.monkfitness.app.data.repository
 
 import com.monkfitness.app.data.local.AdaptiveAdjustmentDao
+import com.monkfitness.app.data.local.ProgramAdaptiveDecisionDao
+import com.monkfitness.app.data.local.ProgramFamilyProgressionStateDao
 import com.monkfitness.app.data.local.AppDatabase
 import com.monkfitness.app.data.local.LegacyV7Schema
 import com.monkfitness.app.data.local.ProgramDayDao
@@ -11,6 +13,8 @@ import com.monkfitness.app.data.local.SessionExerciseDao
 import com.monkfitness.app.data.local.SessionSnapshotDao
 import com.monkfitness.app.data.local.SqliteTestDatabase
 import com.monkfitness.app.data.model.AdaptiveAdjustmentEntity
+import com.monkfitness.app.data.model.AdaptiveDecisionRecordEntity
+import com.monkfitness.app.data.model.FamilyProgressionStateEntity
 import com.monkfitness.app.data.model.ProgramDayEntity
 import com.monkfitness.app.data.model.ProgramExerciseEntity
 import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
@@ -104,8 +108,10 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
         FailingSessionExerciseDao(SqliteSessionExerciseDao(database), faults)
     val setLogDao: ProgramSetLogDao = FailingProgramSetLogDao(SqliteProgramSetLogDao(database), faults)
     val pauseDao = SqliteProgramPauseDao(database)
-    val familyStateDao = SqliteProgramFamilyProgressionStateDao(database)
-    val decisionDao = SqliteProgramAdaptiveDecisionDao(database)
+    val familyStateDao: ProgramFamilyProgressionStateDao =
+        FailingFamilyProgressionStateDao(SqliteProgramFamilyProgressionStateDao(database), faults)
+    val decisionDao: ProgramAdaptiveDecisionDao =
+        FailingAdaptiveDecisionDao(SqliteProgramAdaptiveDecisionDao(database), faults)
     val adjustmentDao: AdaptiveAdjustmentDao =
         FailingAdaptiveAdjustmentDao(SqliteAdaptiveAdjustmentDao(database), faults)
 
@@ -168,7 +174,7 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
 
         /**
          * Runs the **deployed** migration chain on an open database: the shipped version-7 schema, then
-         * the production migrations to version 10.
+         * the production migrations to version 11.
          *
          * It is the rig's own setup, exposed because a file-backed database has to be migrated by the
          * first connection that opens it and *not* by the second: a device at version 7 upgrades once, and
@@ -176,11 +182,13 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
          */
         fun migrate(database: SqliteTestDatabase) {
             database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
-            // The deployed chain: the target schema, the schedule-frequency correction, then the
-            // Goal/Focus columns. Stopping short would exercise a database no device opens.
+            // The deployed chain: the target schema, the schedule-frequency correction, the Goal/Focus
+            // columns, then §30 step 12's window bookkeeping. Stopping short would exercise a database no
+            // device opens.
             database.migrate(AppDatabase.MIGRATION_7_8)
             database.migrate(AppDatabase.MIGRATION_8_9)
             database.migrate(AppDatabase.MIGRATION_9_10)
+            database.migrate(AppDatabase.MIGRATION_10_11)
         }
     }
 }
@@ -208,6 +216,50 @@ internal class ProgramDaoFaults {
 
     /** When set, appending the adjustment of an applied decision fails. */
     var failAdjustmentInsert: Boolean = false
+
+    /** When set, appending the decision itself fails — the first leg of the adaptive half. */
+    var failDecisionInsert: Boolean = false
+
+    /** When set, writing the family's state after a window fails — the last leg of §27's unit. */
+    var failFamilyStateInsert: Boolean = false
+}
+
+private class FailingAdaptiveDecisionDao(
+    private val delegate: ProgramAdaptiveDecisionDao,
+    private val faults: ProgramDaoFaults
+) : ProgramAdaptiveDecisionDao {
+    override suspend fun insertDecision(decision: AdaptiveDecisionRecordEntity) {
+        if (faults.failDecisionInsert) throw IllegalStateException("planted fault: decision insert")
+        delegate.insertDecision(decision)
+    }
+
+    override suspend fun decisionById(decisionId: String): AdaptiveDecisionRecordEntity? =
+        delegate.decisionById(decisionId)
+
+    override suspend fun decisionsOfProgram(programId: String): List<AdaptiveDecisionRecordEntity> =
+        delegate.decisionsOfProgram(programId)
+
+    override suspend fun decisionsOfRevision(revisionId: String): List<AdaptiveDecisionRecordEntity> =
+        delegate.decisionsOfRevision(revisionId)
+
+    override suspend fun decisionsOfSlot(slotId: String): List<AdaptiveDecisionRecordEntity> =
+        delegate.decisionsOfSlot(slotId)
+}
+
+private class FailingFamilyProgressionStateDao(
+    private val delegate: ProgramFamilyProgressionStateDao,
+    private val faults: ProgramDaoFaults
+) : ProgramFamilyProgressionStateDao {
+    override suspend fun upsertState(state: FamilyProgressionStateEntity) {
+        if (faults.failFamilyStateInsert) throw IllegalStateException("planted fault: family state")
+        delegate.upsertState(state)
+    }
+
+    override suspend fun statesOfRevision(revisionId: String): List<FamilyProgressionStateEntity> =
+        delegate.statesOfRevision(revisionId)
+
+    override suspend fun stateOf(revisionId: String, familyId: String): FamilyProgressionStateEntity? =
+        delegate.stateOf(revisionId, familyId)
 }
 
 private class FailingProgramExerciseDao(

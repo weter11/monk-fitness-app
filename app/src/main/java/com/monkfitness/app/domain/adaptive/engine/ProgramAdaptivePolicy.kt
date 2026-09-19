@@ -96,21 +96,75 @@ data class ProgramAdaptiveEvidence(
 }
 
 /**
+ * What the policy found in one window, as three separate answers (§15).
+ *
+ * These are the three questions the policy answers on its own — *did §7's progression conditions hold
+ * in this window? did the regression conditions? did §14's reduced-absorption pattern?* — stated as
+ * facts rather than left implicit in the decision's `reason`.
+ *
+ * They exist because a **window cannot count itself.** The confirmation counts, the cooldown position
+ * and the recovery exit count are the caller's maintained facts ([ProgramAdaptiveWindow]), and the
+ * only component that knows whether this window qualified is the policy. A caller that had to infer
+ * `progressQualifying` from the decision's reason would be re-deriving §15 — the reason is one token
+ * for one rule, and `PROGRESSION_COOLDOWN` deliberately does not say *which* direction it is holding.
+ * §30 step 12's integration reads exactly this value to advance a family's counters, so the
+ * alternative (inferring it) would be a second copy of the policy's conditions living outside the
+ * policy.
+ *
+ * The three are independent: a window can qualify for neither, for recovery alone, or (mechanically
+ * never) for both directions at once — the trend a progression needs is positive and the one a
+ * regression needs is negative.
+ *
+ * @property progressQualifying §7's progression conditions held here.
+ * @property regressQualifying §7's regression conditions held here.
+ * @property recoveryQualifying §14's reduced-absorption pattern held here, **before** its own
+ *   confirming gate — the fact a caller's recovery-entry count is advanced by.
+ */
+data class ProgramWindowVerdict(
+    val progressQualifying: Boolean = false,
+    val regressQualifying: Boolean = false,
+    val recoveryQualifying: Boolean = false
+) {
+
+    init {
+        require(!(progressQualifying && regressQualifying)) {
+            "a window's trend is either positive or negative: the two directions are mutually exclusive"
+        }
+    }
+
+    /** Whether no direction was earned in this window. */
+    val isIdle: Boolean
+        get() = !progressQualifying && !regressQualifying && !recoveryQualifying
+}
+
+/**
  * What the policy decided for one window: the state the family ends in, the action asked for, and the
  * single reason that says why (§15, §22).
  *
  * The action and the reason cannot disagree — the reason names the rule, and each rule belongs to one
- * action — so this value is constructible only in the shapes the vocabulary allows.
+ * action — so this value is constructible only in the shapes the vocabulary allows. [verdict] is the
+ * window's own reading, and it is held consistent with the reason: a reason that says a direction was
+ * earned says so because the conditions for it held.
  */
 data class ProgramPolicyDecision(
     val state: AdaptiveState,
     val action: AdaptiveAction,
-    val reason: ProgramAdaptiveReason
+    val reason: ProgramAdaptiveReason,
+    val verdict: ProgramWindowVerdict = ProgramWindowVerdict()
 ) {
 
     init {
         require(action == reason.action) {
             "a decision's action is the action its reason accompanies: action=$action reason=$reason"
+        }
+        require(reason != ProgramAdaptiveReason.SUSTAINED_POSITIVE || verdict.progressQualifying) {
+            "a sustained positive change was reached from a window that qualified for progression"
+        }
+        require(reason != ProgramAdaptiveReason.SUSTAINED_NEGATIVE || verdict.regressQualifying) {
+            "a sustained negative change was reached from a window that qualified for regression"
+        }
+        require(reason != ProgramAdaptiveReason.RECOVERY_ENTERED || verdict.recoveryQualifying) {
+            "entering recovery was reached from a window whose reduced-absorption pattern held"
         }
     }
 
@@ -237,54 +291,59 @@ data class ProgramAdaptivePolicy(
      */
     fun evaluate(evidence: ProgramAdaptiveEvidence): ProgramPolicyDecision {
         val window = evidence.window
+        val verdict = ProgramWindowVerdict(
+            progressQualifying = progressConditionsMet(evidence),
+            regressQualifying = regressConditionsMet(evidence),
+            recoveryQualifying = reducedAbsorptionHolds(evidence)
+        )
 
         if (recoveryEntryQualifies(evidence)) {
-            return holding(AdaptiveState.RECOVERY, ProgramAdaptiveReason.RECOVERY_ENTERED)
+            return holding(verdict, AdaptiveState.RECOVERY, ProgramAdaptiveReason.RECOVERY_ENTERED)
         }
 
         if (window.state == AdaptiveState.RECOVERY) {
             val exitMet = window.recoveryQualifyingWindows >= recoveryExitQualifyingWindows
             return if (exitMet) {
-                holding(AdaptiveState.HOLD, ProgramAdaptiveReason.RECOVERY_EXITED)
+                holding(verdict, AdaptiveState.HOLD, ProgramAdaptiveReason.RECOVERY_EXITED)
             } else {
-                holding(AdaptiveState.RECOVERY, ProgramAdaptiveReason.RECOVERY_HELD)
+                holding(verdict, AdaptiveState.RECOVERY, ProgramAdaptiveReason.RECOVERY_HELD)
             }
         }
 
         if (window.restChangeRequested) {
-            return holding(AdaptiveState.HOLD, ProgramAdaptiveReason.REST_CHANGE_UNSUPPORTED)
+            return holding(verdict, AdaptiveState.HOLD, ProgramAdaptiveReason.REST_CHANGE_UNSUPPORTED)
         }
 
         val cooldownElapsed = window.qualifyingWindowsSinceLastChange == null ||
             window.qualifyingWindowsSinceLastChange >= progressionCooldownWindows
-        val progressHolds = progressConditionsMet(evidence)
-        val regressHolds = regressConditionsMet(evidence)
+        val progressHolds = verdict.progressQualifying
+        val regressHolds = verdict.regressQualifying
         val progressConfirmed =
             progressHolds && window.precedingProgressQualifyingWindows + 1 >= progressConfirmingWindows
         val regressConfirmed =
             regressHolds && window.precedingRegressQualifyingWindows + 1 >= regressConfirmingWindows
 
         if (progressConfirmed && cooldownElapsed) {
-            return changing(AdaptiveState.PROGRESS, ProgramAdaptiveReason.SUSTAINED_POSITIVE)
+            return changing(verdict, AdaptiveState.PROGRESS, ProgramAdaptiveReason.SUSTAINED_POSITIVE)
         }
         if (regressConfirmed && cooldownElapsed) {
-            return changing(AdaptiveState.REGRESS, ProgramAdaptiveReason.SUSTAINED_NEGATIVE)
+            return changing(verdict, AdaptiveState.REGRESS, ProgramAdaptiveReason.SUSTAINED_NEGATIVE)
         }
         if (progressConfirmed || regressConfirmed) {
             // The direction was earned; only the cooldown stands in its way, and saying so is the
             // difference between "the program is holding you back" and "we do not know".
-            return holding(AdaptiveState.HOLD, ProgramAdaptiveReason.PROGRESSION_COOLDOWN)
+            return holding(verdict, AdaptiveState.HOLD, ProgramAdaptiveReason.PROGRESSION_COOLDOWN)
         }
         if (progressHolds || regressHolds) {
-            return holding(AdaptiveState.HOLD, ProgramAdaptiveReason.AWAITING_CONFIRMATION)
+            return holding(verdict, AdaptiveState.HOLD, ProgramAdaptiveReason.AWAITING_CONFIRMATION)
         }
         if (positiveDirection(evidence)) {
-            return holding(AdaptiveState.HOLD, progressionGateReason(evidence))
+            return holding(verdict, AdaptiveState.HOLD, progressionGateReason(evidence))
         }
         if (negativeDirection(evidence)) {
-            return holding(AdaptiveState.HOLD, regressionGateReason(evidence))
+            return holding(verdict, AdaptiveState.HOLD, regressionGateReason(evidence))
         }
-        return holding(AdaptiveState.HOLD, defaultHoldReason(evidence))
+        return holding(verdict, AdaptiveState.HOLD, defaultHoldReason(evidence))
     }
 
     /** The window's own direction, §7's progression conditions, all of them (§15). */
@@ -345,6 +404,23 @@ data class ProgramAdaptivePolicy(
     }
 
     /**
+     * §14's reduced-absorption reading of one window, **before** any of its own confirming gates.
+     *
+     * This is the fact a caller's recovery-entry count is advanced by: whether the window shows load
+     * that was not absorbed (a recent context above the plan, together with deterioration or reduced
+     * exposure) or the reduced-exposure pattern on its own. [recoveryEntryQualifies] is this reading
+     * plus the gates the policy applies to it, so the counter and the entry decision cannot drift
+     * apart — they read the same predicate.
+     */
+    private fun reducedAbsorptionHolds(evidence: ProgramAdaptiveEvidence): Boolean {
+        val newer = evidence.signals.newerHalf
+        val reducedExposure = newer != null && (newer.hasShortfall || !newer.everyExposureFull)
+        val deteriorating = evidence.signals.trend == ProgramPerformanceTrend.NEGATIVE
+        val unabsorbedLoad = evidence.signals.recentIsAboveBaseline && (deteriorating || reducedExposure)
+        return unabsorbedLoad || (deteriorating && reducedExposure)
+    }
+
+    /**
      * Which gate stopped a window whose direction reads positively — the specific reason, in the order
      * the conditions are stated in [progressConditionsMet].
      */
@@ -391,11 +467,24 @@ data class ProgramAdaptivePolicy(
         else -> ProgramAdaptiveReason.MIXED_EVIDENCE
     }
 
-    private fun holding(state: AdaptiveState, reason: ProgramAdaptiveReason): ProgramPolicyDecision =
-        ProgramPolicyDecision(state = state, action = AdaptiveAction.HOLD, reason = reason)
+    private fun holding(
+        verdict: ProgramWindowVerdict,
+        state: AdaptiveState,
+        reason: ProgramAdaptiveReason
+    ): ProgramPolicyDecision =
+        ProgramPolicyDecision(state = state, action = AdaptiveAction.HOLD, reason = reason, verdict = verdict)
 
-    private fun changing(state: AdaptiveState, reason: ProgramAdaptiveReason): ProgramPolicyDecision =
-        ProgramPolicyDecision(state = state, action = reason.action, reason = reason)
+    private fun changing(
+        verdict: ProgramWindowVerdict,
+        state: AdaptiveState,
+        reason: ProgramAdaptiveReason
+    ): ProgramPolicyDecision =
+        ProgramPolicyDecision(
+            state = state,
+            action = reason.action,
+            reason = reason,
+            verdict = verdict
+        )
 
     init {
         require(version >= 1) { "version must be >= 1, was $version" }

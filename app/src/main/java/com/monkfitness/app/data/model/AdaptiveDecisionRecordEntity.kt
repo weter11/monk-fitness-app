@@ -41,6 +41,13 @@ import androidx.room.PrimaryKey
  * @property confidence how far that history could be trusted (token column).
  * @property recovery the recovery context it was made in (token column).
  * @property decidedAt when it was decided, in epoch milliseconds.
+ * @property reason the single rule that answered (`ProgramAdaptiveReason`, token column), or `null`
+ *   for a row written before §30 step 12 stored it. It is the one piece of the engine's reasoning the
+ *   schema keeps, and it is kept because *"the change was earned and the load guard refused it"* and
+ *   *"there was not enough history to say"* are otherwise the same row: one slot, one target, one
+ *   action, one outcome. The requested action, the signals and the guard's own verdict stay out —
+ *   they are recomputable from the window the decision was taken on, and a second copy of a
+ *   recomputable fact is a copy that can disagree with the first.
  */
 @Entity(
     tableName = "program_adaptive_decision_record",
@@ -78,5 +85,6 @@ data class AdaptiveDecisionRecordEntity(
     val evidence: String,
     val confidence: String,
     val recovery: String,
-    val decidedAt: Long
+    val decidedAt: Long,
+    val reason: String? = null
 )

@@ -463,11 +463,27 @@ class ProgramAdaptiveArchitectureTest {
 
         assertEquals(
             "a result carries the decision, the adjustment, the family's next state, the reason, what " +
-                "was asked for, the signals and the guard's verdict — and nothing to persist through",
+                "was asked for, the signals, the guard's verdict and the window's own verdict — and " +
+                "nothing to persist through. The last of those was added by §30 step 12: the caller " +
+                "maintains the family's confirmation counts, cooldown position and recovery exit count " +
+                "from the policy's per-window answers, and a window cannot count itself",
             listOf(
-                "decision", "adjustment", "state", "reason", "requestedAction", "signals", "guard"
+                "decision", "adjustment", "state", "reason", "requestedAction", "signals", "guard",
+                "verdict"
             ),
             resultFields
+        )
+        assertEquals(
+            "a decision carries the reason that answered it, which is the one piece of the engine's " +
+                "reasoning §30 step 12 persists (§13, §22) — signals, thresholds and the requested " +
+                "action stay out",
+            listOf(
+                "decisionId", "programId", "revisionId", "slotId", "target", "action", "outcome",
+                "evidence", "confidence", "recovery", "decidedAt", "adjustmentId", "reason"
+            ),
+            AdaptiveDecision::class.java.declaredFields
+                .filterNot { Modifier.isStatic(it.modifiers) || it.isSynthetic || it.name.startsWith("$") }
+                .map { it.name }
         )
         assertEquals(
             "an adjustment is one slot-scoped before/after of one element, superseded by reference (§16)",

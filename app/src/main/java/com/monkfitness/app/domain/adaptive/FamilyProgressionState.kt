@@ -27,6 +27,30 @@ import java.time.Instant
  *  * **the write stamp is persistence, not progression.** [updatedAt] records when the row was last
  *    written and is stamped by the repository that writes it, never by a policy or an engine.
  *
+ * ### The window bookkeeping (§15, §18 step 12)
+ *
+ * The last five fields are the facts a **single** window cannot state about itself and that the
+ * engine takes as inputs ([ProgramAdaptiveWindow]): the confirmation counts, the cooldown position
+ * and the recovery exit count. They are stored because they are *state* — each window's verdict
+ * advances them, and a window cannot count itself.
+ *
+ * They are deliberately **not** the Stage-1 `FamilyAdaptationState`'s five counters copied over. The
+ * pilot's counters are scoped by the legacy revision integer and describe the pilot's own state
+ * machine, which the target tree does not share (see the note above on the two generations); these
+ * five are the target engine's own window facts, read by the target policy, and they arrive here
+ * because §30 step 12's integration proved they cannot be reconstructed from the decision trail (the
+ * argument is in `docs/PROGRAM_ADAPTIVE_INTEGRATION.md`). What each one means is the window type's
+ * vocabulary, not this entity's:
+ *
+ *  * [precedingProgressQualifyingWindows] / [precedingRegressQualifyingWindows] — consecutive windows
+ *    *before* this one in which §7's progression (or regression) conditions held;
+ *  * [precedingRecoveryQualifyingWindows] — the same, for §14's reduced-absorption pattern;
+ *  * [qualifyingWindowsSinceLastChange] — the cooldown position: eligible windows since the family's
+ *    last progression-level change, or `null` when it has never had one. `null` is not `0`: the
+ *    cooldown exists to stop oscillation *after* a change, so the first earned change has none to
+ *    serve ([ProgramAdaptiveWindow] states the same distinction on the engine's side);
+ *  * [recoveryQualifyingWindows] — windows completed while the family is in recovery: §14's exit gate.
+ *
  * @property revisionId the revision this state belongs to. A decision never creates a revision, and
  *   neither does a state change: the state follows the revision it was made under (§16).
  * @property familyId the exercise family this state belongs to, by id. The domain owns no family
@@ -36,6 +60,13 @@ import java.time.Instant
  * @property currentExerciseId the exercise id the family is currently on, or `null` when it carries
  *   none.
  * @property updatedAt when this row was last written.
+ * @property precedingProgressQualifyingWindows consecutive preceding windows in which the progression
+ *   conditions held, `>= 0`.
+ * @property precedingRegressQualifyingWindows the same, for the regression conditions.
+ * @property precedingRecoveryQualifyingWindows the same, for §14's recovery-entry pattern.
+ * @property qualifyingWindowsSinceLastChange eligible windows since the family's last level change, or
+ *   `null` when it has never had one.
+ * @property recoveryQualifyingWindows windows completed while the family is in recovery.
  */
 data class FamilyProgressionState(
     val revisionId: RevisionId,
@@ -43,11 +74,32 @@ data class FamilyProgressionState(
     val progressionLevel: Int,
     val adaptationState: AdaptiveState,
     val currentExerciseId: String? = null,
-    val updatedAt: Instant
+    val updatedAt: Instant,
+    val precedingProgressQualifyingWindows: Int = 0,
+    val precedingRegressQualifyingWindows: Int = 0,
+    val precedingRecoveryQualifyingWindows: Int = 0,
+    val qualifyingWindowsSinceLastChange: Int? = null,
+    val recoveryQualifyingWindows: Int = 0
 ) {
 
     init {
         require(familyId.isNotBlank()) { "a family progression state must name its family" }
+        require(precedingProgressQualifyingWindows >= 0) {
+            "precedingProgressQualifyingWindows must be >= 0, was $precedingProgressQualifyingWindows"
+        }
+        require(precedingRegressQualifyingWindows >= 0) {
+            "precedingRegressQualifyingWindows must be >= 0, was $precedingRegressQualifyingWindows"
+        }
+        require(precedingRecoveryQualifyingWindows >= 0) {
+            "precedingRecoveryQualifyingWindows must be >= 0, was $precedingRecoveryQualifyingWindows"
+        }
+        require(qualifyingWindowsSinceLastChange == null || qualifyingWindowsSinceLastChange >= 0) {
+            "qualifyingWindowsSinceLastChange must be null or >= 0, was " +
+                "$qualifyingWindowsSinceLastChange"
+        }
+        require(recoveryQualifyingWindows >= 0) {
+            "recoveryQualifyingWindows must be >= 0, was $recoveryQualifyingWindows"
+        }
     }
 
     /** Whether the family currently carries a concrete exercise. */
