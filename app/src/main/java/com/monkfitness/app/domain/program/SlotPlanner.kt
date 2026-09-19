@@ -115,19 +115,34 @@ object SlotPlanner {
 
         val window = if (windowEnd.isBefore(windowStart)) null else ScheduleWindow(windowStart, windowEnd)
 
-        // Every date from the plan's anchor to the end of the window that the revision trains on and
-        // that no pause covers. The *whole* walk from the anchor matters even though only its tail is
-        // planned: the index of a date in this sequence is the ordinal of the plan day it presents, and
-        // the ordinal must not restart when the window start moves forward a day.
+        // Every date from the plan's anchor to the end of the window that the revision trains on. The
+        // *whole* walk from the anchor matters even though only its tail is planned: the index of a date
+        // in this sequence is the ordinal of the plan day it presents, and the ordinal must not restart
+        // when the window start moves forward a day.
+        //
+        // The walk is deliberately **pause-free**, and that is the invariant rather than an omission: a
+        // pause stops *planning* (no opportunity is created inside its interval) and freezes
+        // missed-opportunity logic (§3), but it does not renumber the plan. The plan day a date presents
+        // is a property of the calendar — its ordinal among the revision's dates from the anchor — so a
+        // pass made before a pause and a pass made after it agree about the same date, and a date that
+        // already holds an opportunity keeps presenting the plan day it was scheduled with. Excluding
+        // paused dates here would shift the cycle for every date after the pause, which would make the
+        // plan's days disagree with the slots already persisted on either side of the interval.
         val datesFromAnchor = if (window == null) {
             emptyList()
         } else {
-            planDates(anchor, window.lastDate, weekdays, request.pauses)
+            planDates(anchor, window.lastDate, weekdays)
         }
+
+        // The dates a pass may create an opportunity on: the revision's dates inside the window that no
+        // pause covers. A paused date is not a date the user is expected to train on, so nothing is
+        // planned there — the walk above still *counts* it, so the plan keeps its place on the calendar.
         val scheduledDates = if (window == null) {
             emptyList()
         } else {
-            datesFromAnchor.filter { window.contains(it) }
+            datesFromAnchor.filter { date ->
+                window.contains(date) && !coveredBy(request.pauses, date)
+            }
         }
 
         val occupied = request.slots.map { slot -> slot.plannedFor }.toSet()
@@ -136,13 +151,15 @@ object SlotPlanner {
         } else {
             // The ordinal is the date's place in the walk **from the anchor**, so a window that starts
             // later than the plan's first day does not restart the cycle: the plan day a date presents
-            // is a property of the calendar and of the pauses before it, never of when the pass was made.
+            // is a property of the calendar, never of when the pass was made and never of the pauses
+            // between the anchor and it.
             datesFromAnchor.mapIndexedNotNull { ordinal, date ->
-                if (!window.contains(date) || date in occupied) {
+                if (!window.contains(date) || coveredBy(request.pauses, date) || date in occupied) {
                     // Either the date is behind the user (the walk starts at the anchor, which may be
-                    // before the window), or it already holds an opportunity — trained, missed,
-                    // superseded or still open. One date holds one slot, so the Scheduler adds nothing
-                    // and overwrites nothing (§20).
+                    // before the window), or it falls inside a pause (planned by nobody — the phase is
+                    // the calendar's, the opportunity is not created), or it already holds an
+                    // opportunity — trained, missed, superseded or still open. One date holds one slot,
+                    // so the Scheduler adds nothing and overwrites nothing (§20).
                     null
                 } else {
                     WorkoutSlot(
@@ -197,28 +214,29 @@ object SlotPlanner {
     }
 
     /**
-     * The dates [from] to [to] that [weekdays] trains on and that no pause covers, in order.
+     * The dates [from] to [to] that [weekdays] trains on, in order.
      *
-     * Paused dates are **excluded rather than skipped over**, which is the mechanism behind "a pause
-     * freezes active program time": because the sequence is what the plan days are counted along, the
-     * plan does not advance while the program is paused — the days that would have fallen inside the
-     * pause fall after it, and the user's pause costs them no plan day.
+     * **No pause is consulted here, and that is the rule.** This walk is what the plan's days are
+     * counted along, so excluding a paused date from it would renumber every date after the pause: the
+     * plan day a date presents would depend on *when* the pass was made rather than on the calendar, the
+     * slots already persisted on either side of the interval would disagree about the cycle, and two
+     * consecutive planned dates could end up presenting the same plan day. §3 freezes active program
+     * *time* and missed-opportunity logic — it does not move the plan's dates, and §20 forbids sliding a
+     * schedule. Which dates a pass may actually *create* an opportunity on is decided by
+     * [SlotPlanner.plan]'s own filter, where a pause does belong.
      *
      * @param from the plan's anchor, inclusive.
      * @param to the last date of the pass's window, inclusive.
      * @param weekdays the days the revision trains on.
-     * @param pauses the intervals to exclude; an open one excludes every date from its start onward.
      */
     private fun planDates(
         from: LocalDate,
         to: LocalDate,
-        weekdays: Set<DayOfWeek>,
-        pauses: List<PausedInterval>
+        weekdays: Set<DayOfWeek>
     ): List<LocalDate> =
         generateSequence(from) { date -> date.plusDays(1) }
             .takeWhile { date -> !date.isAfter(to) }
             .filter { date -> date.dayOfWeek in weekdays }
-            .filter { date -> !coveredBy(pauses, date) }
             .toList()
 
     /** Whether any pause interval in [pauses] covers [date]. */

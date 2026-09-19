@@ -392,7 +392,7 @@ class ProgramSchedulerTest {
     // ================================================================ pauses (§3, §20)
 
     @Test
-    fun aPausedDateIsNotAPlanningDateAndThePlanResumesWhereItFroze() = runBlocking {
+    fun aPausedDateIsNotAPlanningDateAndThePlanKeepsItsPlaceOnTheCalendar() = runBlocking {
         val graph = rig.create(duration = ProgramDuration.Indefinite)
         rig.pause(graph.programId, from = LocalDate.parse("2026-09-16"), until = LocalDate.parse("2026-09-25"))
 
@@ -408,10 +408,11 @@ class ProgramSchedulerTest {
             outcome.created.map { it.plannedFor.toString() }
         )
         assertEquals(
-            "and the first opportunity after the pause presents the plan day that came after the " +
-                "previous one: pausing freezes active program time, so the days that would have fallen " +
-                "inside the pause fall after it instead (§3)",
-            "day-s-d1-2",
+            "and the pause renumbers nothing: the first opportunity after it presents the plan day the " +
+                "calendar gives that date, because the paused dates keep their place in the cycle — a " +
+                "date's plan day never depends on when the pass was made (§3 freezes active program " +
+                "*time* and missed-opportunity logic, not the plan's dates)",
+            "day-s-d1-1",
             outcome.created.first().programDayId.value
         )
         assertEquals(0, outcome.missedCount)
@@ -524,6 +525,87 @@ class ProgramSchedulerTest {
             "nothing was deleted by the pause",
             13,
             rig.slots(graph.programId).size
+        )
+    }
+
+    // ================================================================ a pause renumbers nothing (audit)
+
+    @Test
+    fun aPauseAddedAfterTheScheduleWasPlannedDoesNotRenumberTheRemainingDates() = runBlocking {
+        val graph = rig.create(duration = ProgramDuration.Indefinite)
+        rig.plan(graph.programId, ON_ANCHOR)
+        val scheduled = rig.slots(graph.programId)
+        val lastBeforeThePause = scheduled.last()
+        rig.pause(graph.programId, from = LocalDate.parse("2026-09-16"), until = LocalDate.parse("2026-09-25"))
+
+        val outcome = rig.plan(graph.programId, LocalDate.parse("2026-09-16")).valueOrFail()
+
+        assertEquals(
+            "the pass extends the horizon past the pause by one opportunity, because the pause removed " +
+                "the dates inside it from planning",
+            listOf("2026-10-14"),
+            outcome.created.map { it.plannedFor.toString() }
+        )
+        assertEquals("2026-10-12", lastBeforeThePause.plannedFor.toString())
+        assertEquals("day-s-d1-1", lastBeforeThePause.programDayId.value)
+        assertEquals(
+            "and the new opportunity continues the cycle the already-persisted slots are on: a pause " +
+                "added after the schedule was planned must not shift the plan's days, or the slots on " +
+                "either side of the interval would belong to two different cycles",
+            "day-s-d1-2",
+            outcome.created.single().programDayId.value
+        )
+        assertEquals(
+            "the opportunities that already existed are untouched — same identity, same date, same plan " +
+                "day",
+            scheduled.map { slot -> Triple(slot.slotId, slot.plannedFor, slot.programDayId) },
+            rig.slots(graph.programId)
+                .filter { slot -> slot.slotId in scheduled.map { existing -> existing.slotId } }
+                .map { slot -> Triple(slot.slotId, slot.plannedFor, slot.programDayId) }
+        )
+        assertEquals(
+            "and the only status that moved is the one whose date had passed before the pause",
+            listOf("2026-09-14" to SlotStatus.MISSED),
+            rig.slots(graph.programId)
+                .filter { slot ->
+                    slot.slotId in scheduled.map { existing -> existing.slotId } &&
+                        slot.status != SlotStatus.PLANNED
+                }
+                .map { slot -> slot.plannedFor.toString() to slot.status }
+        )
+        assertEquals(
+            "and no new opportunity was created inside the pause",
+            0,
+            rig.slots(graph.programId).count {
+                it.plannedFor >= LocalDate.parse("2026-09-16") &&
+                    it.plannedFor <= LocalDate.parse("2026-09-25") &&
+                    it.slotId !in scheduled.map { slot -> slot.slotId }
+            }
+        )
+    }
+
+    @Test
+    fun theSameDatesPresentTheSamePlanDaysWhetherOrNotTheProgramWasPaused() = runBlocking {
+        val plain = rig.create(key = "plain", duration = ProgramDuration.Indefinite)
+        val paused = rig.create(key = "paused", duration = ProgramDuration.Indefinite)
+        rig.pause(paused.programId, from = LocalDate.parse("2026-09-16"), until = LocalDate.parse("2026-09-25"))
+
+        rig.plan(plain.programId, ON_ANCHOR)
+        rig.plan(paused.programId, ON_ANCHOR)
+
+        val plainDays = planDaysByDate(plain, rig.slots(plain.programId))
+        val pausedDays = planDaysByDate(paused, rig.slots(paused.programId))
+
+        assertTrue(
+            "the paused Program plans fewer dates, because a paused date is not a date a pass plans on",
+            pausedDays.size < plainDays.size
+        )
+        assertEquals(
+            "but every date it does plan presents the same plan day the same date presents in a " +
+                "Program that was never paused: a pause removes dates from the plan, it never " +
+                "renumbers it",
+            plainDays.filterKeys { date -> date in pausedDays.keys },
+            pausedDays
         )
     }
 
@@ -1020,6 +1102,21 @@ class ProgramSchedulerTest {
     }
 
     // ================================================================ helpers
+
+    /**
+     * One Program's opportunities as a date-to-plan-day map, with each day named by its *position*.
+     *
+     * The position rather than the identity, because two fixture Programs have two sets of day ids:
+     * what "the same plan day" means across them is the day's place in the revision's plan.
+     */
+    private fun planDaysByDate(graph: SchedulerGraph, slots: List<WorkoutSlot>): Map<LocalDate, Int> {
+        val positions = graph.revision.days.associate { day -> day.programDayId to day.position }
+        return slots.associate { slot ->
+            slot.plannedFor to requireNotNull(positions[slot.programDayId]) {
+                "slot '${slot.slotId.value}' presents a day of another revision"
+            }
+        }
+    }
 
     /** The stored `workout_session` row of [slotId], read through SQL so nothing is a mapper's view. */
     private fun sessionRow(slotId: SlotId): Map<String, String?> =

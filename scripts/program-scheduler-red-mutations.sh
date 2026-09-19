@@ -111,17 +111,15 @@ restore "scheduler-acquires-the-session-repository" "$SCHEDULER"
 
 # 5. AN EXISTING OPPORTUNITY IS NEVER OVERWRITTEN: a date holds one slot, once.
 apply "an-occupied-date-is-planned-again" "$PLANNER" \
-  "                if (!window.contains(date) || date in occupied) {" \
-  "                if (!window.contains(date)) {"
+  "                if (!window.contains(date) || coveredBy(request.pauses, date) || date in occupied) {" \
+  "                if (!window.contains(date) || coveredBy(request.pauses, date)) {"
 run_one "a date that already holds an opportunity is planned a second time (§20)" yes
 restore "an-occupied-date-is-planned-again" "$PLANNER"
 
-# 6. PAUSE STATE IS HONOURED: a paused date is not a planning date (freeze of active program time).
+# 6. PAUSE STATE IS HONOURED: a paused date is not a date an opportunity is created on.
 apply "paused-dates-are-planned-anyway" "$PLANNER" \
-  "            .filter { date -> !coveredBy(pauses, date) }
-            .toList()" \
-  "            .filter { date -> true }
-            .toList()"
+  "                if (!window.contains(date) || coveredBy(request.pauses, date) || date in occupied) {" \
+  "                if (!window.contains(date) || date in occupied) {"
 run_one "a paused date is planned as if the program were running (§3, §20)" yes
 restore "paused-dates-are-planned-anyway" "$PLANNER"
 
@@ -208,7 +206,23 @@ apply "planning-starts-the-program" "$SCHEDULER" \
 run_one "planning from a planned start date starts the Program (§3)" yes
 restore "planning-starts-the-program" "$SCHEDULER"
 
-# 16. Control: the un-mutated tree must stay GREEN (the suites are not failing for nothing).
+# 16. A PAUSE RENUMBERS NOTHING: the plan's days are counted along the calendar, not along a walk that
+# skips the paused dates. (This mutation restores exactly the defect the §30 step 7 audit found: with it,
+# the dates after a pause belong to a different cycle than the slots already persisted before it.)
+apply "the-plan-is-counted-along-a-pause-aware-walk" "$PLANNER" \
+  "            planDates(anchor, window.lastDate, weekdays)" \
+  "            planDates(anchor, window.lastDate, weekdays).filterNot { date -> coveredBy(request.pauses, date) }"
+run_one "paused dates are excluded from the plan's own sequence (§3, §20: a pause renumbers nothing)" yes
+restore "the-plan-is-counted-along-a-pause-aware-walk" "$PLANNER"
+
+# 17. A FIXED RUN IS A NUMBER OF CALENDAR DAYS: a pause does not move its end.
+apply "a-fixed-run-is-extended-by-the-paused-days" "$PLANNER" \
+  "            is ProgramDuration.FixedDays -> anchor.plusDays((duration.days - 1).toLong())" \
+  "            is ProgramDuration.FixedDays -> anchor.plusDays((duration.days - 1).toLong() + request.pauses.size.toLong())"
+run_one "a FixedDays run is measured in active days rather than calendar days (§3, §20)" yes
+restore "a-fixed-run-is-extended-by-the-paused-days" "$PLANNER"
+
+# 18. Control: the un-mutated tree must stay GREEN (the suites are not failing for nothing).
 run_one "unmutated tree stays GREEN (control)" no
 
 echo

@@ -413,7 +413,7 @@ class SlotPlannerTest {
     }
 
     @Test
-    fun aPausedDateIsNotAPlanningDateAndThePlanResumesWhereItFroze() {
+    fun aPausedDateIsNotAPlanningDateAndThePlanKeepsItsPlaceOnTheCalendar() {
         val plan = SlotPlanner.plan(
             request(
                 revision(duration = ProgramDuration.Indefinite),
@@ -432,10 +432,11 @@ class SlotPlannerTest {
             plan.createdDates.map { it.toString() }
         )
         assertEquals(
-            "the first opportunity after the pause presents the plan day that came *after* the day " +
-                "before it: a pause freezes active program time, so the days that would have fallen " +
-                "inside it fall after it instead (§3)",
-            "day-2",
+            "and the paused interval renumbers nothing: the first opportunity after it presents the " +
+                "plan day the calendar gives that date — the paused dates keep their place in the " +
+                "cycle, so a date's plan day never depends on when the pass was made (§3 freezes " +
+                "active program *time* and missed-opportunity logic, not the plan's dates)",
+            "day-1",
             plan.create.first().programDayId.value
         )
     }
@@ -679,6 +680,126 @@ class SlotPlannerTest {
                     name.contains(token, ignoreCase = true)
                 }
             }
+        )
+    }
+
+    // ------------------------------------------------------------------ a pause renumbers nothing (audit)
+
+    @Test
+    fun aPauseDoesNotRenumberThePlanForTheDatesThatFollowIt() {
+        val planned = SlotPlanner.plan(
+            request(revision(duration = ProgramDuration.Indefinite), asOf = anchor)
+        ).asScheduled()
+        val lastBeforeThePause = planned.create.last()
+
+        val afterThePause = SlotPlanner.plan(
+            request(
+                revision(duration = ProgramDuration.Indefinite),
+                asOf = LocalDate.parse("2026-09-16"),
+                slots = planned.create,
+                pauses = listOf(
+                    PausedInterval(LocalDate.parse("2026-09-16"), LocalDate.parse("2026-09-25"))
+                )
+            )
+        ).asScheduled()
+
+        assertEquals(
+            "the opportunity that follows the paused interval is the next date the revision trains on",
+            listOf("2026-10-14"),
+            afterThePause.createdDates.map { it.toString() }
+        )
+        assertEquals("2026-10-12", lastBeforeThePause.plannedFor.toString())
+        assertEquals("day-1", lastBeforeThePause.programDayId.value)
+        assertEquals(
+            "and it presents the plan day that follows the last opportunity before it: a pause stops " +
+                "planning inside itself and renumbers nothing, because the plan day a date presents is " +
+                "a property of the calendar (§3 freezes active program *time*, not the plan's dates)",
+            "day-2",
+            afterThePause.create.single().programDayId.value
+        )
+    }
+
+    @Test
+    fun aSinglePausedDateDoesNotCollideTwoConsecutiveDatesOntoTheSamePlanDay() {
+        val planned = SlotPlanner.plan(
+            request(revision(duration = ProgramDuration.Indefinite), asOf = anchor)
+        ).asScheduled()
+
+        val afterThePause = SlotPlanner.plan(
+            request(
+                revision(duration = ProgramDuration.Indefinite),
+                asOf = LocalDate.parse("2026-09-21"),
+                slots = planned.create,
+                pauses = listOf(
+                    PausedInterval(LocalDate.parse("2026-09-16"), LocalDate.parse("2026-09-16"))
+                )
+            )
+        ).asScheduled()
+
+        assertEquals(
+            listOf("2026-10-14", "2026-10-16", "2026-10-19"),
+            afterThePause.createdDates.map { it.toString() }
+        )
+        assertEquals(
+            "the plan advances one day per planned date across the pause too: the persisted " +
+                "2026-10-12 presents day-1, so the dates after it present day-2, day-3, day-1 — a " +
+                "shifted walk would put day-1 on 2026-10-14 as well and lose two days of the cycle",
+            listOf("day-2", "day-3", "day-1"),
+            afterThePause.create.map { it.programDayId.value }
+        )
+    }
+
+    @Test
+    fun thePlanDayOfADateDoesNotDependOnWhetherTheProgramWasPaused() {
+        val pause = PausedInterval(LocalDate.parse("2026-09-16"), LocalDate.parse("2026-09-25"))
+
+        val neverPaused = SlotPlanner.plan(
+            request(revision(duration = ProgramDuration.Indefinite), asOf = anchor)
+        ).asScheduled()
+        val paused = SlotPlanner.plan(
+            request(revision(duration = ProgramDuration.Indefinite), asOf = anchor, pauses = listOf(pause))
+        ).asScheduled()
+
+        val daysNeverPaused = neverPaused.create.associate { slot -> slot.plannedFor to slot.programDayId }
+        val daysPaused = paused.create.associate { slot -> slot.plannedFor to slot.programDayId }
+
+        assertTrue(
+            "the paused program plans fewer dates — a paused date is not a date a pass plans on",
+            daysPaused.size < daysNeverPaused.size
+        )
+        assertEquals(
+            "but every date it does plan presents the plan day the same date presents in a program that " +
+                "was never paused: a pause removes dates from the plan, it does not renumber it",
+            daysNeverPaused.filterKeys { date -> date in daysPaused.keys },
+            daysPaused
+        )
+    }
+
+    @Test
+    fun aFixedRunEndsOnItsCalendarEndHoweverLongTheProgramWasPaused() {
+        val plan = SlotPlanner.plan(
+            request(
+                revision(duration = ProgramDuration.FixedDays(30)),
+                asOf = anchor,
+                pauses = listOf(
+                    PausedInterval(LocalDate.parse("2026-09-16"), LocalDate.parse("2026-09-25"))
+                )
+            )
+        ).asScheduled()
+
+        assertEquals(
+            "a FixedDays run is a number of **calendar** days from its anchor — " +
+                "ProgramDuration.FixedDays is documented as 'a program that runs for a known number of " +
+                "calendar days' — so a pause does not move its end: §3's freeze is about active program " +
+                "time and missed-opportunity logic, not about the plan's dates (§20)",
+            LocalDate.parse("2026-10-13"),
+            plan.onlyWindow.lastDate
+        )
+        assertEquals(
+            "and the run still ends on the date the thirty-day calendar says, not on one extended by " +
+                "the paused days",
+            LocalDate.parse("2026-10-13"),
+            anchor.plusDays(29)
         )
     }
 
