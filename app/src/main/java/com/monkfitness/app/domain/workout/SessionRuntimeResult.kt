@@ -1,5 +1,6 @@
 package com.monkfitness.app.domain.workout
 
+import com.monkfitness.app.domain.common.DecisionId
 import com.monkfitness.app.domain.common.AdjustmentId
 import com.monkfitness.app.domain.common.ProgramDayId
 import com.monkfitness.app.domain.common.ProgramExerciseId
@@ -248,25 +249,91 @@ sealed interface SessionRefusal {
     }
 
     /**
-     * The adaptive decision handed to a completion is about another opportunity.
+     * Why an adaptive decision may not be recorded by one completion (§4, §16, §18).
      *
-     * A decision is *"about one slot of one revision, never about a program in the abstract"* (§16), and
-     * the completion writes the decision and the session as one fact — so the decision must be the one
-     * this completion produced: the same Program, the same revision and the same slot as the session.
-     * The alternative would file a change about one opportunity under another one's history.
+     * The rule is one sentence — *an adaptive decision belongs to a **future** opportunity of the same
+     * Program and revision as the completion it was taken on* — and each member names one way a decision
+     * can fail it. They are separate facts because they mean different things to whoever reads the
+     * refusal: a decision about another Program is a wiring defect, a decision about the opportunity just
+     * completed is the P8-era assumption that §30 step 12 corrects, a decision about an opportunity whose
+     * day has passed is one that can no longer be consumed, and a decision about an opportunity that is
+     * no longer ahead of the user by status is a stale decision that has to be re-taken.
      */
-    data class AdaptiveDecisionIsOfAnotherOpportunity(
+    enum class AdaptiveTargetRefusal {
+
+        /** The decision names another Program. */
+        ANOTHER_PROGRAM,
+
+        /** The decision names another revision. Adaptive state is revision-scoped (§4). */
+        ANOTHER_REVISION,
+
+        /**
+         * The decision names the opportunity **this completion just took**.
+         *
+         * The adjustment of an adaptive decision applies to a concrete future opportunity and is consumed
+         * when that opportunity's session snapshot is taken (§16) — so the completed one can never present
+         * it, and recording it there would file a change against a history that is over.
+         */
+        THE_COMPLETED_SLOT_ITSELF,
+
+        /** The decision names a slot that is not stored. */
+        NO_SUCH_SLOT,
+
+        /** The named slot belongs to another Program or another revision. */
+        SLOT_IS_OF_ANOTHER_PLAN,
+
+        /** The named slot is already taken or withdrawn, so it is not ahead of the user. */
+        SLOT_IS_NOT_AHEAD_OF_THE_USER,
+
+        /**
+         * The named slot's **day is not strictly after the day the decision was taken on**.
+         *
+         * Being planned, unstarted and startable is not the same as being *ahead*: a `MISSED`
+         * opportunity is startable too, and its day has passed. The producer chooses the target with the
+         * same comparison (`docs/PROGRAM_ADAPTIVE_INTEGRATION.md` §3), and this clause is the consumer
+         * checking it — against the **decision's own moment**, so no clock is read here and the two
+         * sides cannot disagree about which day the decision belongs to when they are handed the same
+         * zone.
+         */
+        SLOT_IS_NOT_STRICTLY_AHEAD_OF_THE_DECISION,
+
+        /** The named slot already holds an attempt: its presentation is frozen and cannot consume one. */
+        SLOT_IS_ALREADY_STARTED
+    }
+
+    /**
+     * The adaptive decision handed to a completion is not about a future opportunity of this completion.
+     *
+     * §16 states the relationship the completion has to write: an adjustment *applies to a concrete future
+     * Slot* and *is consumed by Session Snapshot creation*. The completion is the other end of that
+     * relationship — the completed Session produced a decision about what comes **next** — so the decision
+     * must name the same Program, the same revision and a slot that is still ahead of the user, and it must
+     * not name the slot the completion just took.
+     *
+     * This refusal replaces the P8-era `AdaptiveDecisionIsOfAnotherOpportunity`, which required the
+     * decision's slot to **equal** the session's. That equality was correct only while nothing produced a
+     * real adaptive decision (§30 step 8's placeholder seam); with the adaptive stage wired it is the
+     * opposite of the rule, and leaving it would refuse every genuine adaptation. The invariant it was
+     * standing in for — *a decision is filed under the opportunity it is about* — is preserved and made
+     * exact: [reason] says which clause of §4's rule the decision broke.
+     *
+     * @property sessionId the completion the decision was handed to.
+     * @property completedSlotId the opportunity that completion took.
+     * @property decisionId the decision that was refused.
+     * @property decisionSlotId the opportunity the decision names.
+     * @property reason which clause of the future-opportunity rule it broke.
+     */
+    data class AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion(
         val sessionId: SessionId,
-        val programId: ProgramId,
-        val revisionId: RevisionId,
-        val slotId: SlotId,
-        val decisionProgramId: ProgramId,
-        val decisionRevisionId: RevisionId,
-        val decisionSlotId: SlotId
+        val completedSlotId: SlotId,
+        val decisionId: DecisionId,
+        val decisionSlotId: SlotId,
+        val reason: AdaptiveTargetRefusal
     ) : SessionRefusal {
         override val message: String =
-            "the completion of session '${sessionId.value}' can only record a decision about its own " +
-                "opportunity (${programId.value}/${revisionId.value}/${slotId.value}), but the decision " +
-                "named (${decisionProgramId.value}/${decisionRevisionId.value}/${decisionSlotId.value})"
+            "the completion of session '${sessionId.value}' (opportunity " +
+                "'${completedSlotId.value}') can only record an adaptive decision about a future " +
+                "opportunity of the same Program and revision, but decision '${decisionId.value}' " +
+                "names opportunity '${decisionSlotId.value}': $reason"
     }
 }

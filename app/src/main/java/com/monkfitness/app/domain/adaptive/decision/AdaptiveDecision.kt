@@ -3,6 +3,7 @@ package com.monkfitness.app.domain.adaptive.decision
 import com.monkfitness.app.domain.adaptive.ConfidenceLevel
 import com.monkfitness.app.domain.adaptive.EvidenceLevel
 import com.monkfitness.app.domain.adaptive.RecoveryContext
+import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveReason
 import com.monkfitness.app.domain.common.AdjustmentId
 import com.monkfitness.app.domain.common.DecisionId
 import com.monkfitness.app.domain.common.ProgramId
@@ -21,6 +22,13 @@ import java.time.Instant
  * reasoning that produced it, however, is not here: no signals, no thresholds and no policy version,
  * because the policy is a pure component whose rules are tested on their own and whose output is this
  * value.
+ *
+ * The reason *is* stored, and it is the one piece of the engine's reasoning that is: §22's decision
+ * trail has to be able to tell *"the change was earned and the load guard refused it"* from *"there was
+ * not enough history to say"*, and the two are the same row shape — one slot, one target, one action,
+ * one outcome — without it. Signals, thresholds and the policy version stay out, because they are the
+ * component's own business and are recomputable from the window; the reason is the decision's answer and
+ * is not. `ProgramAdaptiveReason` is a stable domain token and not user-facing text (§25).
  *
  * The two ends of a decision are held consistent, so an incoherent record is not constructible:
  *
@@ -42,6 +50,9 @@ import java.time.Instant
  * @property recovery the recovery context it was made in.
  * @property decidedAt when it was decided.
  * @property adjustmentId the adjustment it produced, present exactly when it was applied.
+ * @property reason the single rule that answered for this decision, when one is known. It is `null`
+ *   only for a decision that no engine produced (a value a caller assembled itself) and for a row
+ *   written before §30 step 12 stored the reason; it is never guessed at on read.
  */
 data class AdaptiveDecision(
     val decisionId: DecisionId,
@@ -55,7 +66,8 @@ data class AdaptiveDecision(
     val confidence: ConfidenceLevel,
     val recovery: RecoveryContext,
     val decidedAt: Instant,
-    val adjustmentId: AdjustmentId? = null
+    val adjustmentId: AdjustmentId? = null,
+    val reason: ProgramAdaptiveReason? = null
 ) {
 
     init {

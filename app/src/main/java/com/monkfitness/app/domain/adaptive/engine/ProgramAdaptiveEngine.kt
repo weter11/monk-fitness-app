@@ -103,6 +103,11 @@ data class ProgramAdaptiveRequest(
  * state that is not a change is §14's recovery: entering, staying in and leaving recovery are states,
  * and they are reported here for the caller to store (§23's `FamilyProgressionState`).
  *
+ * [verdict] is the window's own three-answer reading, and it travels with the decision for one reason:
+ * the caller maintains the family's confirmation counts, cooldown position and recovery exit count from
+ * it (§15's `ProgramAdaptiveWindow`), and no window can count itself. It is the policy's own finding,
+ * reported rather than recomputed — see `ProgramWindowVerdict`.
+ *
  * @property decision the auditable decision.
  * @property adjustment the change it produced, present exactly when it was applied.
  * @property state the family's adaptation state after this window.
@@ -111,6 +116,8 @@ data class ProgramAdaptiveRequest(
  *   were consulted.
  * @property signals the derived signals the decision was made on, for the audit (§13).
  * @property guard what the aggregate load guard said.
+ * @property verdict what the policy found in this window — the facts the caller's own bookkeeping
+ *   advances between windows (§15, §30 step 12).
  */
 data class ProgramAdaptiveResult(
     val decision: AdaptiveDecision,
@@ -119,7 +126,8 @@ data class ProgramAdaptiveResult(
     val reason: ProgramAdaptiveReason,
     val requestedAction: AdaptiveAction,
     val signals: ProgramAdaptiveSignals,
-    val guard: ProgramGuardVerdict
+    val guard: ProgramGuardVerdict,
+    val verdict: ProgramWindowVerdict = ProgramWindowVerdict()
 ) {
 
     init {
@@ -272,7 +280,8 @@ object ProgramAdaptiveEngine {
             confidence = request.snapshot.confidence,
             recovery = request.snapshot.recovery,
             decidedAt = request.decidedAt,
-            adjustmentId = adjustment?.adjustmentId
+            adjustmentId = adjustment?.adjustmentId,
+            reason = reason
         )
 
         return ProgramAdaptiveResult(
@@ -282,7 +291,8 @@ object ProgramAdaptiveEngine {
             reason = reason,
             requestedAction = policyDecision.action,
             signals = signals,
-            guard = guardVerdict
+            guard = guardVerdict,
+            verdict = policyDecision.verdict
         )
     }
 

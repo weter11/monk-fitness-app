@@ -28,12 +28,16 @@ import com.monkfitness.app.data.repository.ProgramProgressRepository
 import com.monkfitness.app.data.repository.ProgramRepository
 import com.monkfitness.app.data.repository.ProgramScheduleRepository
 import com.monkfitness.app.data.repository.WorkoutSessionRepository
+import com.monkfitness.app.domain.adaptive.integration.NoDeclaredProgression
+import com.monkfitness.app.domain.adaptive.integration.NoExerciseFamilyClassification
+import com.monkfitness.app.domain.usecase.ProgramAdaptiveIntegration
 import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
 import com.monkfitness.app.domain.usecase.SessionRuntime
 import com.monkfitness.app.domain.program.StandardProgram
+import java.time.ZoneId
 
 /**
  * The Program System's composition root — §26: "*Use explicit `AppContainer`*", with the app's own
@@ -101,6 +105,11 @@ import com.monkfitness.app.domain.program.StandardProgram
  * @param idGenerator the generator new identity is minted through. Injected, never read inside a
  *   repository or a mapper (§26). Nothing in this stage mints an id yet: §30 step 5's creation path
  *   is the first consumer.
+ * @param zone the calendar the adaptive path reads a *day* in — handed to **both** the integration
+ *   (which chooses the target opportunity against the decision's own day) and the session runtime (which
+ *   checks that choice against the decision's own moment). One value for the two sides of §4's contract
+ *   is what keeps them from disagreeing about which day a decision belongs to; a caller that owns its own
+ *   calendar supplies it, and the production default is the device's.
  * @param inTransaction the runner every atomic operation of the graph executes in. It defaults to
  *   the database's **own** `withTransaction`, which is the wired production behaviour; the parameter
  *   exists because a `RoomDatabase` transaction needs a database Room has actually opened, and this
@@ -111,6 +120,7 @@ class AppContainer(
     val database: AppDatabase,
     val clock: Clock = Clock.system(),
     val idGenerator: IdGenerator = IdGenerator.random(),
+    val zone: ZoneId = ZoneId.systemDefault(),
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { block ->
         database.withTransaction { block() }
     }
@@ -307,6 +317,7 @@ class AppContainer(
         adaptiveRepository = programAdaptiveRepository,
         clock = clock,
         idGenerator = idGenerator,
+        zone = zone,
         inTransaction = inTransaction
     )
 
@@ -339,6 +350,60 @@ class AppContainer(
         scheduleRepository = programScheduleRepository,
         sessionRepository = workoutSessionRepository,
         clock = clock
+    )
+
+    // --- §30 step 12: the adaptive integration ----------------------------------------------------
+
+    /**
+     * The adaptive integration — §30 step 12, over the repositories and the engine above.
+     *
+     * It owns one thing: turning a **completed Session** into the adaptive half of §27's completion unit.
+     * It reads the session's revision, the next not-yet-started opportunity of that revision, that
+     * opportunity's presentation and the family's own history, assembles the engine's request from those
+     * facts, and returns one of §20's four outcomes. It writes nothing: the outcome carries an
+     * `AdaptiveCompletion`, and `sessionRuntime.finishSession` is what persists it inside §27's
+     * transaction — which is why the same [inTransaction] runner and the same
+     * [programAdaptiveRepository] are on both sides of it.
+     *
+     * ### The two collaborators that are deliberately empty
+     *
+     * [relations] and [classification] are wired to their explicit *"nothing is declared"* values, and
+     * that is the honest state of the target tree rather than a placeholder to be filled in later:
+     *
+     * ```text
+     * no persisted family ladder      → NoDeclaredProgression          (§15's progression relations)
+     * no persisted exercise→family map → NoExerciseFamilyClassification (§9's family membership)
+     * ```
+     *
+     * Neither fact exists anywhere in §23's schema; the only ladders the repository holds are the Stage-1
+     * pilot's, which §30 step 11 forbids this generation to reach for and which are scoped to the legacy
+     * program's own axis. With no ladder declared, every adaptive pass in production ends in the engine's
+     * bounded `PROGRESSION_UNAVAILABLE` hold ([com.monkfitness.app.domain.adaptive.integration
+     * .AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION] when the day presents no exposed family either)
+     * — **no family is adapted, and nothing is fabricated to make one look adaptable**. §30 step 12's
+     * document names both artefacts and what supplying them means; a caller that has them (a test, or a
+     * later stage that persists them) constructs this class with its own provider.
+     *
+     * ### What the container decides, and what it does not
+     *
+     * This is **wiring, not behaviour**: the container decides which objects the integration receives and
+     * nothing about what it does with them. The `zone` handed over is the container's own [zone] — the
+     * **same** value the session runtime receives, because the integration chooses the target opportunity
+     * against the decision's own day while the runtime checks that choice against the decision's own
+     * moment: two calendars there would be a producer and a consumer disagreeing about which day a
+     * decision belongs to. The window rule and the policy are the integration's own documented v1 values,
+     * for the same reason: a threshold with a second home is a threshold that can disagree with itself.
+     */
+    val programAdaptiveIntegration: ProgramAdaptiveIntegration = ProgramAdaptiveIntegration(
+        planRepository = programPlanRepository,
+        scheduleRepository = programScheduleRepository,
+        sessionRepository = workoutSessionRepository,
+        adaptiveRepository = programAdaptiveRepository,
+        relations = NoDeclaredProgression,
+        classification = NoExerciseFamilyClassification,
+        clock = clock,
+        idGenerator = idGenerator,
+        zone = zone
     )
 
     // --- the shipped Stage-1 generation (§30 step 15 retires it) ----------------------------------

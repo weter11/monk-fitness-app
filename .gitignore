@@ -31,6 +31,7 @@ project.properties
 # In-workspace toolchain & env scaffolding (never commit)
 .gradle-home/
 .gradle-dist/
+.kotlin/
 android-sdk/
 proxy-ca.pem
 custom-cacerts

@@ -460,10 +460,18 @@ internal object ProgramSchemaFixture {
      * MIGRATION_8_9    program_revision.scheduleSessionsPerWeek   the schedule-frequency correction (§20)
      * MIGRATION_9_10   program_revision.focusGoal                 the Goals & Focus configuration (§6, §8)
      *                  program_revision.focusTargets
+     * MIGRATION_10_11  program_family_progression_state            the adaptive window bookkeeping
+     *                  .precedingProgressQualifyingWindows          (§15, §30 step 12)
+     *                  .precedingRegressQualifyingWindows
+     *                  .precedingRecoveryQualifyingWindows
+     *                  .qualifyingWindowsSinceLastChange
+     *                  .recoveryQualifyingWindows
+     *                  program_adaptive_decision_record.reason      the rule that answered (§13, §22)
      * ```
      *
-     * See `docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md` for the first and
-     * `docs/PROGRAM_GENERATED_PLANNER.md` for the second.
+     * See `docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md` for the first,
+     * `docs/PROGRAM_GENERATED_PLANNER.md` for the second and `docs/PROGRAM_ADAPTIVE_INTEGRATION.md`
+     * for the third.
      */
     val ADDITIVE_STEPS: List<Pair<String, Map<String, List<Column>>>> = listOf(
         "MIGRATION_8_9" to mapOf(
@@ -473,6 +481,18 @@ internal object ProgramSchemaFixture {
             "program_revision" to listOf(
                 Column("focusGoal", TEXT, nullable = true),
                 Column("focusTargets", TEXT, nullable = true)
+            )
+        ),
+        "MIGRATION_10_11" to mapOf(
+            "program_family_progression_state" to listOf(
+                Column("precedingProgressQualifyingWindows", INTEGER, nullable = true),
+                Column("precedingRegressQualifyingWindows", INTEGER, nullable = true),
+                Column("precedingRecoveryQualifyingWindows", INTEGER, nullable = true),
+                Column("qualifyingWindowsSinceLastChange", INTEGER, nullable = true),
+                Column("recoveryQualifyingWindows", INTEGER, nullable = true)
+            ),
+            "program_adaptive_decision_record" to listOf(
+                Column("reason", TEXT, nullable = true)
             )
         )
     )
@@ -485,6 +505,21 @@ internal object ProgramSchemaFixture {
     val ADDED_COLUMNS: Map<String, List<Column>> = ADDITIVE_STEPS
         .flatMap { (_, step) -> step.flatMap { (table, columns) -> columns.map { table to it } } }
         .groupBy({ it.first }, { it.second })
+
+    /**
+     * §30 step 12's five window-bookkeeping columns, in the order the entity declares them.
+     *
+     * They are named once here because three claims are made about exactly this list: the entity
+     * declares them in this order, the migration appends them in this order (so a fresh database and an
+     * upgraded one hold the same table definition), and each is a nullable `INTEGER` count.
+     */
+    val WINDOW_BOOKKEEPING_COLUMNS: List<String> = listOf(
+        "precedingProgressQualifyingWindows",
+        "precedingRegressQualifyingWindows",
+        "precedingRecoveryQualifyingWindows",
+        "qualifyingWindowsSinceLastChange",
+        "recoveryQualifyingWindows"
+    )
 
     /**
      * Every statement one additive step must execute, in the order SQLite receives them: one

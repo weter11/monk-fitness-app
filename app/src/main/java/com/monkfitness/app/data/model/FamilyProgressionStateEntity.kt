@@ -28,6 +28,19 @@ import androidx.room.ForeignKey
  * (§30 step 11), and freezing the pilot's shape into the target schema would make its first revision a
  * migration instead of a design.
  *
+ * ### The five window-bookkeeping columns (§30 step 12)
+ *
+ * The columns after `updatedAt` were appended by the version-10 → version-11 migration, and they hold
+ * the **target** engine's own window facts: the confirmation counts, the cooldown position and the
+ * recovery exit count the caller maintains between windows ([FamilyProgressionState] states what each
+ * one means and why "never had a change" is `null` rather than `0`).
+ *
+ * All five are **nullable and carry no default**, for the reason the earlier additive steps state: a
+ * row written before this step records no window bookkeeping at all, and the mapper reads that
+ * absence as the count a family with no preceding window has. A `DEFAULT 0` would instead let the
+ * schema claim that every upgraded row had counted zero windows — the same value, arrived at by
+ * asserting a fact the row does not hold.
+ *
  * @property revisionId the revision this state belongs to.
  * @property familyId the exercise family this state belongs to, by id; no family catalogue is owned here.
  * @property progressionLevel the family's abstract position on its own progression axis.
@@ -35,6 +48,12 @@ import androidx.room.ForeignKey
  * @property currentExerciseId the exercise id the family is currently on, or `null` when it carries
  *   none.
  * @property updatedAt when this row was last written, in epoch milliseconds.
+ * @property precedingProgressQualifyingWindows consecutive preceding progression-qualifying windows.
+ * @property precedingRegressQualifyingWindows the same, for the regression conditions.
+ * @property precedingRecoveryQualifyingWindows the same, for §14's recovery-entry pattern.
+ * @property qualifyingWindowsSinceLastChange the cooldown position, or `null` when there has never
+ *   been a change.
+ * @property recoveryQualifyingWindows windows completed while the family is in recovery.
  */
 @Entity(
     tableName = "program_family_progression_state",
@@ -54,5 +73,10 @@ data class FamilyProgressionStateEntity(
     val progressionLevel: Int,
     val adaptationState: String,
     val currentExerciseId: String? = null,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val precedingProgressQualifyingWindows: Int? = null,
+    val precedingRegressQualifyingWindows: Int? = null,
+    val precedingRecoveryQualifyingWindows: Int? = null,
+    val qualifyingWindowsSinceLastChange: Int? = null,
+    val recoveryQualifyingWindows: Int? = null
 )

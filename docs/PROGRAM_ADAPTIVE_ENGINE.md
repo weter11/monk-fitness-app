@@ -101,7 +101,15 @@ ProgramAdaptiveResult
     requestedAction: AdaptiveAction          what the policy asked for, before the rest was consulted
     signals: ProgramAdaptiveSignals          what was measured
     guard: ProgramGuardVerdict               what §18 said
+    verdict: ProgramWindowVerdict            what the policy found in this window (§15)
 ```
+
+`verdict` was **added by §30 step 12**, and it is recorded here because this document's field list is a
+contract: the caller maintains the family's confirmation counts, its cooldown position and its recovery
+exit count (`ProgramAdaptiveWindow`) from the policy's per-window answers, and a window cannot count
+itself. The policy computes it inside `evaluate`, so the engine reports the finding rather than the caller
+re-deriving it from the reason — `PROGRESSION_COOLDOWN` deliberately does not say *which* direction it is
+holding. `docs/PROGRAM_ADAPTIVE_INTEGRATION.md` §14 records the change.
 
 `requestedAction` is separate from `decision.action` for one reason: when the guard refuses a change the
 decision is a `HOLD` — the change did not happen — and the record still shows that a `PROGRESS` was asked
@@ -332,11 +340,15 @@ Nothing in this stage is wired, persisted or shown. The list is deliberate and c
    every element's resolved change — i.e. the whole session, assembled by the caller.
 4. **Persisting a decision and its adjustment.** `ProgramAdaptiveRepository.persistDecision` exists (PR 3)
    and takes both halves in one transaction; nothing calls it from here.
-5. **The reason has no column.** §23's `program_adaptive_decision_record` stores the target scope and id, the
-   action, the outcome, the evidence, the confidence, the recovery and the stamp — and **no reason**. The
-   reason vocabulary is this stage's, and persisting it needs either a schema addition or a mapping decision
-   (a derived token, a decision to drop it). It is recorded here rather than settled silently: an owner
-   decision, small to take, and the audit trail is thinner without it.
+5. **The reason has no column — resolved by §30 step 12, deliberately.** §23's
+   `program_adaptive_decision_record` stores the target scope and id, the action, the outcome, the
+   evidence, the confidence, the recovery and the stamp. Step 12 audited the two options and took the
+   schema addition: a *filtered* decision (`NOT_APPLIED` + `HOLD`) has exactly the shape of the
+   eighteen holds, so reading its reason back as `AGGREGATE_LOAD_GUARD` would rest on the *write rule*
+   rather than on a stored fact, and the mapping from an action to a token is a property of today's
+   vocabulary rather than of the row. The version-10 → version-11 migration therefore adds
+   `reason TEXT`, `AdaptiveDecision` carries the token (this stage already computes it), and the full
+   argument is in `docs/PROGRAM_ADAPTIVE_INTEGRATION.md` §5.
 6. **`AdaptiveState`'s stored vocabulary.** The family's state after a window is reported for the caller to
    store in `program_family_progression_state`. It is the vocabulary PR 3 already stores, so nothing has to
    change — but the *naming* of the two generations is §30 step 15's to collapse, not this stage's.

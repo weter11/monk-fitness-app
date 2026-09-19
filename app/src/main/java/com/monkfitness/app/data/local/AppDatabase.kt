@@ -63,7 +63,7 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         AdaptiveDecisionRecordEntity::class,
         AdaptiveAdjustmentEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
@@ -792,6 +792,93 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Version 10 → version 11: the adaptive stage's **window bookkeeping** becomes a stored fact of
+         * a family's progression state (§15, §18, §30 step 12).
+         *
+         * Five columns are appended to `program_family_progression_state`, all nullable and none with a
+         * default:
+         *
+         * ```text
+         * precedingProgressQualifyingWindows  INTEGER   consecutive progression-qualifying windows
+         * precedingRegressQualifyingWindows   INTEGER   the same, for the regression conditions
+         * precedingRecoveryQualifyingWindows  INTEGER   the same, for §14's reduced-absorption pattern
+         * qualifyingWindowsSinceLastChange    INTEGER   the cooldown position, absent when never changed
+         * recoveryQualifyingWindows           INTEGER   windows completed in recovery: the exit gate
+         * ```
+         *
+         * and one column is appended to `program_adaptive_decision_record`:
+         *
+         * ```text
+         * reason                              TEXT      the rule that answered (ProgramAdaptiveReason)
+         * ```
+         *
+         * The reason is stored rather than reconstructed, and that is a deliberate decision (§13): an
+         * `APPLIED` row's reason is the one change token its action names, but a *filtered* one —
+         * `NOT_APPLIED`, `HOLD` — has exactly the shape of any of the eighteen holds, so reading it back
+         * as `AGGREGATE_LOAD_GUARD` would rest on the write rule rather than on a stored fact, and the
+         * mapping from an action to a token is a property of the current vocabulary rather than of the
+         * row. The full argument, and what deliberately stays unpersisted (the requested action, the
+         * signals, the guard's own verdict), is in `docs/PROGRAM_ADAPTIVE_INTEGRATION.md`.
+         *
+         * They exist because the engine takes them as **inputs** ([ProgramAdaptiveWindow]) and no
+         * window can count itself: §30 step 11 decided that a decision is a pure function of one
+         * frozen window plus the caller's maintained facts, so the caller has to carry those facts
+         * between windows — and a caller that carried them only in memory would lose a user's
+         * confirmation count on every process restart, which is the one thing §30 step 12's brief
+         * forbids ("*account for confirmation windows, recovery exit count, cooldown position without
+         * silently losing them across process restart*").
+         *
+         * Why columns here and not a table, and why not a reconstruction from the decision trail, is
+         * argued in `docs/PROGRAM_ADAPTIVE_INTEGRATION.md` (§11): the trail records only the decisions
+         * the integration *keeps* (an applied change and a guard-filtered one), the per-window verdict
+         * that advances a confirmation count is not a fact of any decision row, and a family's state is
+         * one current row per family per revision by its own primary key — which is exactly the shape
+         * of the fact being stored.
+         *
+         * Why nullable and defaultless: SQLite cannot append a `NOT NULL` column without a default, and
+         * a default is what must not be stated here. A row written before this step records no window
+         * bookkeeping, and the mapper reads that absence as the count a family with no preceding window
+         * has — the same value a `DEFAULT 0` would produce, without the schema asserting that every
+         * upgraded row had counted zero windows. `qualifyingWindowsSinceLastChange` in particular must
+         * stay absent rather than become `0`: `null` means *"this family has never had a progression
+         * change"* and the cooldown is therefore already served, while `0` would claim a change happened
+         * this window.
+         *
+         * Version 7, 8 and 9 devices are not affected differently: they run the earlier steps of the
+         * chain first, which is what `ProgramMigrationPreservationTest` executes on a real engine.
+         *
+         * Visible to the unit tests on purpose, like the three steps before it: the statements are the
+         * deployable proof of the change and the schema suites compare them token for token.
+         */
+        internal val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE `program_family_progression_state` ADD COLUMN " +
+                        "`precedingProgressQualifyingWindows` INTEGER"
+                )
+                database.execSQL(
+                    "ALTER TABLE `program_family_progression_state` ADD COLUMN " +
+                        "`precedingRegressQualifyingWindows` INTEGER"
+                )
+                database.execSQL(
+                    "ALTER TABLE `program_family_progression_state` ADD COLUMN " +
+                        "`precedingRecoveryQualifyingWindows` INTEGER"
+                )
+                database.execSQL(
+                    "ALTER TABLE `program_family_progression_state` ADD COLUMN " +
+                        "`qualifyingWindowsSinceLastChange` INTEGER"
+                )
+                database.execSQL(
+                    "ALTER TABLE `program_family_progression_state` ADD COLUMN " +
+                        "`recoveryQualifyingWindows` INTEGER"
+                )
+                database.execSQL(
+                    "ALTER TABLE `program_adaptive_decision_record` ADD COLUMN `reason` TEXT"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -808,7 +895,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_6_7,
                         MIGRATION_7_8,
                         MIGRATION_8_9,
-                        MIGRATION_9_10
+                        MIGRATION_9_10,
+                        MIGRATION_10_11
                     )
                     .build()
                 INSTANCE = instance

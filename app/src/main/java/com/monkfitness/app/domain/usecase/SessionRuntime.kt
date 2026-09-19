@@ -1,5 +1,6 @@
 package com.monkfitness.app.domain.usecase
 
+import com.monkfitness.app.domain.adaptive.decision.AdaptiveDecision
 import com.monkfitness.app.data.repository.ProgramAdaptiveRepository
 import com.monkfitness.app.data.repository.ProgramPlanRepository
 import com.monkfitness.app.data.repository.ProgramScheduleRepository
@@ -26,6 +27,8 @@ import com.monkfitness.app.domain.workout.SessionStatus
 import com.monkfitness.app.domain.workout.SetResult
 import com.monkfitness.app.domain.workout.WorkoutSession
 import com.monkfitness.app.domain.workout.WorkoutSessionSnapshot
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * The Session runtime — §30 step 8: starting a workout, confirming its sets, going back from it,
@@ -83,8 +86,16 @@ import com.monkfitness.app.domain.workout.WorkoutSessionSnapshot
  * The absences are the guarantees, and each is asserted mechanically by `SessionRuntimeArchitectureTest`:
  *
  *  * **no scheduling.** No date is computed, no opportunity is created, no status is derived from a
- *    date and no horizon is extended: `ProgramScheduler` owns §20 and this class has no calendar and no
- *    zone, so *"let the Scheduler create Session"* (§33) is a sentence it could not carry out.
+ *    date, no horizon is extended and no date is ever *chosen*: `ProgramScheduler` owns §20, and
+ *    *"let the Scheduler create Session"* (§33) is a sentence this class could not carry out. It does
+ *    hold a `zone`, and that is a deliberate line rather than a hole in that rule: the zone is used for
+ *    exactly **one** comparison — the day an adaptive decision was taken on against the day of the
+ *    opportunity it names ([adaptiveTargetRefusalOf]) — because a date and an instant are different
+ *    facts and §26 puts their conversion in the layer that owns the clock. The Producer's target rule is
+ *    stated in the same zone (`docs/PROGRAM_ADAPTIVE_INTEGRATION.md` §3), so the two sides of §4's
+ *    contract share one calendar semantics; the composition root hands both the same value.
+ *    `SchedulingDecisionsAreNotMadeHere`-style guards in `SessionRuntimeArchitectureTest` pin both
+ *    halves: the scheduling vocabulary is still absent, and the zone is never acquired here.
  *  * **no lifecycle policy.** The Program is not read here at all: whether it is paused, archived or
  *    completed is §3's and §29's, and taking an opportunity the user holds is not a lifecycle
  *    transition.
@@ -120,6 +131,10 @@ import com.monkfitness.app.domain.workout.WorkoutSessionSnapshot
  * @param clock the clock every actual moment comes from — `startedAt`, `capturedAt`, `performedAt`,
  *   `finishedAt` — read once per operation, because one operation is one moment (§26).
  * @param idGenerator the identity source every new session, occurrence and set is minted through (§26).
+ * @param zone the calendar the day of an instant is read in, and the only thing this class does with
+ *   dates: one comparison, against the moment an adaptive decision was taken. It is a value it is given
+ *   rather than one it acquires — no `systemDefault()` call exists in this file — so a caller that owns
+ *   its own time (and a test) decides it, and the same value reaches the producer of that decision.
  * @param inTransaction runs a block in one database transaction. It is a collaborator rather than an
  *   assumption because §27's completion is **one** unit that spans two repositories, and because a test
  *   must be able to make that unit fail and measure what is left behind.
@@ -131,6 +146,7 @@ class SessionRuntime(
     private val adaptiveRepository: ProgramAdaptiveRepository,
     private val clock: Clock,
     private val idGenerator: IdGenerator,
+    private val zone: ZoneId,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit
 ) {
 
@@ -339,24 +355,31 @@ class SessionRuntime(
 
     /**
      * Completes the attempt: the session becomes `COMPLETED`, the opportunity it holds becomes
-     * `COMPLETED`, and the adaptive decision the caller hands over is stored — **in one transaction**
+     * `COMPLETED`, and the adaptive half the caller hands over is stored — **in one transaction**
      * (§27's `Complete Workout → Session + Slot + Adaptive state + Decisions + Adjustments`).
      *
-     * The three legs are one fact and land together or not at all: a failure anywhere inside the unit
-     * leaves the pre-completion state exactly as it was — the session `IN_PROGRESS`, the opportunity
-     * untouched, no decision and no adjustment stored. That is why the transaction is opened *here* and
+     * The legs are one fact and land together or not at all: a failure anywhere inside the unit leaves the
+     * pre-completion state exactly as it was — the session `IN_PROGRESS`, the opportunity untouched, no
+     * family state, no decision and no adjustment stored. That is why the transaction is opened *here* and
      * not by either repository: each of them owns its own rows, and this layer owns the composition.
      *
-     * [adaptive] is the adaptive stage's half, as a value: [AdaptiveCompletion.Decided] stores the
-     * decision — with its adjustment when it applied one, and alone when the aggregate load guard
-     * filtered it out (§18 keeps a filtered-out decision as `NOT_APPLIED` rather than dropping it) — and
-     * [AdaptiveCompletion.NothingDecided] stores nothing at all and reports
-     * [AdaptiveOutcome.NothingDecided]. This method never invents a decision: a completion is not
-     * evidence for one, and a fabricated `NOT_APPLIED` row would claim a decision nobody made.
+     * [adaptive] is the adaptive stage's half, as a value (§30 step 12 produces it):
      *
-     * A decision must be about **this** opportunity — the same Program, the same revision and the same
-     * slot as the session — because it is stored as part of the session's own history (§16: a decision
-     * is about one slot of one revision, never about a program in the abstract).
+     * ```text
+     * NothingDecided          nothing adaptive is written — no window was evaluated
+     * WindowEvaluated(state)  the family's state after a window that decided nothing is written
+     * Decided(decision, …)    the family's state, the decision and, when it applied one, the adjustment
+     * ```
+     *
+     * A `NOT_APPLIED` decision is stored rather than dropped: §18 keeps a decision the aggregate load
+     * guard filtered out, and dropping it would erase the only evidence that the program wanted to change
+     * something and was refused. This method never invents a decision: a completion is not evidence for
+     * one, and a fabricated `NOT_APPLIED` row would claim a decision nobody made.
+     *
+     * A decision must be about a **future** opportunity of this completion's Program and revision — not
+     * about the opportunity the completion just took, and not about one that is no longer ahead of the
+     * user — because that is where an adjustment is consumed (§4, §16). [SessionRefusal
+     * .AdaptiveTargetRefusal] names which clause of the rule a refused decision broke.
      */
     suspend fun finishSession(
         sessionId: SessionId,
@@ -376,27 +399,25 @@ class SessionRuntime(
         }
 
         val decided: AdaptiveCompletion.Decided? = when (adaptive) {
-            AdaptiveCompletion.NothingDecided -> null
+            AdaptiveCompletion.NothingDecided, is AdaptiveCompletion.WindowEvaluated -> null
             is AdaptiveCompletion.Decided -> {
-                val decision = adaptive.decision
-                if (
-                    decision.programId != session.programId ||
-                    decision.revisionId != session.revisionId ||
-                    decision.slotId != session.slotId
-                ) {
-                    return@sessionOutcome refused(
-                        SessionRefusal.AdaptiveDecisionIsOfAnotherOpportunity(
-                            sessionId = sessionId,
-                            programId = session.programId,
-                            revisionId = session.revisionId,
-                            slotId = session.slotId,
-                            decisionProgramId = decision.programId,
-                            decisionRevisionId = decision.revisionId,
-                            decisionSlotId = decision.slotId
-                        )
-                    )
-                }
+                val refusedTarget = adaptiveTargetRefusalOf(session, adaptive.decision)
+                if (refusedTarget != null) return@sessionOutcome refused(refusedTarget)
                 adaptive
+            }
+        }
+        // §27's *adaptive state* leg: the family's current state after the window this completion
+        // evaluated. It travels with both shapes that evaluated one — a decision and a bare window — and
+        // the state of a decision is the state of the family the decision is about.
+        val familyState = when (adaptive) {
+            AdaptiveCompletion.NothingDecided -> null
+            is AdaptiveCompletion.WindowEvaluated -> adaptive.familyState
+            is AdaptiveCompletion.Decided -> adaptive.familyState
+        }
+        if (familyState != null) {
+            require(familyState.revisionId == session.revisionId) {
+                "the adaptive state a completion writes is state of the revision the workout ran under: " +
+                    "state=${familyState.revisionId.value} session=${session.revisionId.value}"
             }
         }
 
@@ -410,6 +431,7 @@ class SessionRuntime(
         inTransaction {
             sessionRepository.finishSession(completed, completedSlot)
             decided?.let { adaptiveRepository.persistDecision(it.decision, it.adjustment) }
+            familyState?.let { adaptiveRepository.saveFamilyState(it) }
         }
 
         success(
@@ -425,6 +447,72 @@ class SessionRuntime(
     }
 
     // ---------------------------------------------------------------- the rules it applies
+
+    /**
+     * Why an adaptive decision may not be recorded by this completion, or `null` when it may (§4, §16).
+     *
+     * The target of a decision is **the opportunity the change will be consumed by** — the next one the
+     * user will start — so the decision has to name an opportunity that is still ahead of them, of the
+     * same Program and the same revision as the workout that produced it, and on a day strictly after the
+     * one the decision was taken on. Every clause is checked against stored facts rather than assumed: the
+     * slot is read, and its ownership, its day, its status and its attempts decide the rest. The only
+     * instant involved is the decision's own, so this method reads no clock.
+     *
+     * The fourth clause is the one §30 step 12 corrects. Before it, this check required the decision's slot
+     * to *equal* the session's, because P8 had no real adaptive producer and the only decision a completion
+     * could be handed was about its own opportunity. With the adaptive stage wired, a decision about the
+     * completed opportunity is exactly the thing that cannot be consumed — its snapshot is already taken —
+     * so the same-slot case is now a refusal of its own
+     * ([SessionRefusal.AdaptiveTargetRefusal.THE_COMPLETED_SLOT_ITSELF]) instead of the rule.
+     */
+    private suspend fun adaptiveTargetRefusalOf(
+        session: WorkoutSession,
+        decision: AdaptiveDecision
+    ): SessionRefusal? {
+        fun refusal(reason: SessionRefusal.AdaptiveTargetRefusal): SessionRefusal =
+            SessionRefusal.AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion(
+                sessionId = session.sessionId,
+                completedSlotId = session.slotId,
+                decisionId = decision.decisionId,
+                decisionSlotId = decision.slotId,
+                reason = reason
+            )
+
+        if (decision.programId != session.programId) {
+            return refusal(SessionRefusal.AdaptiveTargetRefusal.ANOTHER_PROGRAM)
+        }
+        if (decision.revisionId != session.revisionId) {
+            return refusal(SessionRefusal.AdaptiveTargetRefusal.ANOTHER_REVISION)
+        }
+        if (decision.slotId == session.slotId) {
+            return refusal(SessionRefusal.AdaptiveTargetRefusal.THE_COMPLETED_SLOT_ITSELF)
+        }
+
+        val target = scheduleRepository.slotById(decision.slotId)
+            ?: return refusal(SessionRefusal.AdaptiveTargetRefusal.NO_SUCH_SLOT)
+        if (target.programId != session.programId || target.revisionId != session.revisionId) {
+            return refusal(SessionRefusal.AdaptiveTargetRefusal.SLOT_IS_OF_ANOTHER_PLAN)
+        }
+        // The temporal clause, checked against the **decision's own moment** rather than against a fresh
+        // reading of the clock: the decision says when it was taken, and the producer chose this
+        // opportunity with the same comparison. §26 keeps the conversion here — the instant is the
+        // decision's fact, the date is the opportunity's — and the zone is the one the composition root
+        // hands both sides, so producer and consumer cannot disagree about which day a decision belongs
+        // to.
+        val decisionDay = LocalDate.ofInstant(decision.decidedAt, zone)
+        if (!target.plannedFor.isAfter(decisionDay)) {
+            return refusal(
+                SessionRefusal.AdaptiveTargetRefusal.SLOT_IS_NOT_STRICTLY_AHEAD_OF_THE_DECISION
+            )
+        }
+        if (target.attempts.isNotEmpty()) {
+            return refusal(SessionRefusal.AdaptiveTargetRefusal.SLOT_IS_ALREADY_STARTED)
+        }
+        if (!target.isStartable) {
+            return refusal(SessionRefusal.AdaptiveTargetRefusal.SLOT_IS_NOT_AHEAD_OF_THE_USER)
+        }
+        return null
+    }
 
     /**
      * Why this opportunity cannot be started, or `null` when it can.

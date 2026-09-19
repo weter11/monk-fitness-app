@@ -1,5 +1,6 @@
 package com.monkfitness.app.domain.workout
 
+import com.monkfitness.app.domain.adaptive.decision.AdaptiveDecision
 import com.monkfitness.app.domain.common.AdjustmentId
 import com.monkfitness.app.domain.common.DecisionId
 import com.monkfitness.app.domain.common.ProgramId
@@ -89,13 +90,16 @@ class SessionRuntimeResultTest {
         val cases = SessionRefusal::class.java.declaredClasses.filterNot { it.isInterface }.map { it.simpleName }.sorted()
 
         assertEquals(
-            "one case per rule §19, §16 and §20 make about an attempt: an opportunity that is not " +
+            "one case per rule §19, §16, §4 and §20 make about an attempt: an opportunity that is not " +
                 "stored, is completed, is withdrawn, presents nothing, or names a revision or day that " +
                 "do not hold; a second attempt already in progress; a session that is not in progress; " +
                 "an occurrence that is another session's or was skipped; a set outside its prescription; " +
-                "and a decision about another opportunity",
+                "and an adaptive decision that is not about a future opportunity of this completion " +
+                "(§30 step 12 replaced the P8-era same-slot rule with the future-slot one, and the " +
+                "refusal carries the clause it broke in `AdaptiveTargetRefusal`)",
             listOf(
-                "AdaptiveDecisionIsOfAnotherOpportunity",
+                "AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion",
+                "AdaptiveTargetRefusal",
                 "OccurrenceIsNotOfThisSession",
                 "OccurrenceWasSkipped",
                 "PlanDayPresentsNothing",
@@ -155,12 +159,23 @@ class SessionRuntimeResultTest {
     }
 
     @Test
-    fun theAdaptiveHalfOfACompletionHasExactlyTwoShapesAndNeitherInventsADecision() {
+    fun theAdaptiveHalfOfACompletionHasExactlyThreeShapesAndNoneInventsADecision() {
         assertEquals(
-            "the adaptive stage either decided something or it did not: a completion is not evidence " +
-                "for a decision, so there is no third case that would let the runtime make one up",
-            listOf("Decided", "NothingDecided"),
+            "the adaptive stage evaluated no window, evaluated one and held, or decided something — " +
+                "three shapes and no fourth: a completion is not evidence for a decision, so nothing " +
+                "lets the runtime make one up, and \"a window that decided nothing\" is told apart " +
+                "from \"no window at all\" because only the first advances a family's bookkeeping " +
+                "(§11, §30 step 12)",
+            listOf("Decided", "NothingDecided", "WindowEvaluated"),
             AdaptiveCompletion::class.java.declaredClasses.filterNot { it.isInterface }.map { it.simpleName }.sorted()
+        )
+        assertEquals(
+            "every shape that evaluated a window carries the family's state leg §27 writes, so the " +
+                "unit of work cannot be opened without it",
+            listOf("familyState"),
+            AdaptiveCompletion.WindowEvaluated::class.java.declaredFields
+                .filterNot { Modifier.isStatic(it.modifiers) || it.name.startsWith("$") }
+                .map { it.name }
         )
         assertEquals(
             "and what the completion reports mirrors that: one decision was stored, with or without the " +

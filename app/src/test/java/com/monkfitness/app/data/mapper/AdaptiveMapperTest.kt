@@ -1,6 +1,7 @@
 package com.monkfitness.app.data.mapper
 
 import com.monkfitness.app.data.model.AdaptiveDecisionRecordEntity
+import com.monkfitness.app.data.model.FamilyProgressionStateEntity
 import com.monkfitness.app.data.repository.ProgramGraphFixture
 import com.monkfitness.app.domain.adaptive.AdaptiveScope
 import com.monkfitness.app.domain.adaptive.AdaptiveState
@@ -13,6 +14,7 @@ import com.monkfitness.app.domain.adaptive.decision.AdaptiveAdjustment
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveDecision
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveTarget
 import com.monkfitness.app.domain.adaptive.decision.DecisionOutcome
+import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveReason
 import com.monkfitness.app.domain.common.AdjustmentId
 import com.monkfitness.app.domain.common.DecisionId
 import com.monkfitness.app.domain.common.ProgramExerciseId
@@ -55,7 +57,8 @@ class AdaptiveMapperTest {
         confidence = ConfidenceLevel.HIGH,
         recovery = RecoveryContext.FAVORABLE,
         decidedAt = ProgramGraphFixture.CREATED,
-        adjustmentId = AdjustmentId("adjustment-m-1")
+        adjustmentId = AdjustmentId("adjustment-m-1"),
+        reason = ProgramAdaptiveReason.SUSTAINED_POSITIVE
     )
 
     private val adjustment = AdaptiveAdjustment(
@@ -271,7 +274,7 @@ class AdaptiveMapperTest {
     }
 
     @Test
-    fun aFamilyProgressionStateRoundTripsWithoutTheStageOneCounters() {
+    fun aFamilyProgressionStateRoundTripsWithTheWindowBookkeepingAndWithoutTheStageOneCounters() {
         val state = FamilyProgressionState(
             revisionId = RevisionId("revision-m"),
             familyId = "push-family",
@@ -283,15 +286,109 @@ class AdaptiveMapperTest {
 
         assertEquals(state, state.toEntity().toDomain())
         assertEquals(
-            "the target state is exactly the fields §23 names, in that order",
-            listOf("revisionId", "familyId", "progressionLevel", "adaptationState", "currentExerciseId", "updatedAt"),
+            "the target state is §23's own fields followed by the window bookkeeping §30 step 12 " +
+                "stores, in that order",
+            listOf(
+                "revisionId",
+                "familyId",
+                "progressionLevel",
+                "adaptationState",
+                "currentExerciseId",
+                "updatedAt",
+                "precedingProgressQualifyingWindows",
+                "precedingRegressQualifyingWindows",
+                "precedingRecoveryQualifyingWindows",
+                "qualifyingWindowsSinceLastChange",
+                "recoveryQualifyingWindows"
+            ),
             declaredFieldNames(FamilyProgressionState::class.java)
         )
         assertTrue(
-            "no hysteresis counter and no policy version is resurrected (§23)",
+            "no Stage-1 hysteresis counter and no policy version is resurrected: the pilot's state is " +
+                "scoped by the legacy revision integer and its counters belong to its own state machine " +
+                "(§23). The five that *are* here are the target engine's own window facts — a window " +
+                "cannot count itself, so the caller carries them — and each one is a field of " +
+                "`ProgramAdaptiveWindow`.",
             declaredFieldNames(FamilyProgressionState::class.java).none {
-                it.contains("Qualifying") || it.contains("policyVersion") || it.contains("programRevision")
+                it.contains("policyVersion") || it.contains("programRevision") ||
+                    it.contains("hysteresis") || it.contains("cycleNumber")
             }
+        )
+    }
+
+    @Test
+    fun theWindowBookkeepingRoundTripsThroughTheStoredCounts() {
+        val state = FamilyProgressionState(
+            revisionId = RevisionId("revision-m"),
+            familyId = "push-family",
+            progressionLevel = 3,
+            adaptationState = AdaptiveState.RECOVERY,
+            currentExerciseId = "pushup",
+            updatedAt = ProgramGraphFixture.CREATED,
+            precedingProgressQualifyingWindows = 2,
+            precedingRegressQualifyingWindows = 0,
+            precedingRecoveryQualifyingWindows = 1,
+            qualifyingWindowsSinceLastChange = 4,
+            recoveryQualifyingWindows = 1
+        )
+
+        assertEquals(
+            "every count the engine reads as an input is stored and read back as it was written",
+            state,
+            state.toEntity().toDomain()
+        )
+        assertEquals(
+            "and the column an upgraded row leaves absent reads back as the count a family with no " +
+                "preceding window has, while \"never changed level\" stays absent",
+            listOf(0, 0, 0, null, 0),
+            FamilyProgressionStateEntity(
+                revisionId = "revision-m",
+                familyId = "push-family",
+                progressionLevel = 3,
+                adaptationState = "HOLD",
+                currentExerciseId = null,
+                updatedAt = ProgramGraphFixture.CREATED.toEpochMilli()
+            ).toDomain().let {
+                listOf(
+                    it.precedingProgressQualifyingWindows,
+                    it.precedingRegressQualifyingWindows,
+                    it.precedingRecoveryQualifyingWindows,
+                    it.qualifyingWindowsSinceLastChange,
+                    it.recoveryQualifyingWindows
+                )
+            }
+        )
+    }
+
+    @Test
+    fun theDecisionReasonRoundsTripsAndAnUnknownTokenIsRefused() {
+        val stored = decision.toEntity()
+
+        assertEquals(
+            "the rule that answered is stored as its stable token, and it is the only piece of the " +
+                "engine's reasoning the row keeps (§13, §22)",
+            ProgramAdaptiveReason.SUSTAINED_POSITIVE.name,
+            stored.reason
+        )
+        assertEquals(
+            "and it comes back as the domain value it was written as",
+            decision.copy(reason = ProgramAdaptiveReason.SUSTAINED_POSITIVE),
+            stored.toDomain(adjustmentId = decision.adjustmentId)
+        )
+        assertEquals(
+            "a decision with no reason stores none, and a row with no reason loads as none — the " +
+                "absence is never guessed at",
+            null,
+            decision.copy(reason = null).toEntity().reason
+        )
+
+        val refusal = assertThrows(IllegalArgumentException::class.java) {
+            stored.copy(reason = "PROGRESS_FELT_GOOD").toDomain(adjustmentId = null)
+        }
+        assertTrue(
+            "a stored token outside the vocabulary fails loudly as invalid data (§28): " +
+                "${refusal.message}",
+            refusal.message!!.contains("program_adaptive_decision_record.reason")
         )
     }
 
