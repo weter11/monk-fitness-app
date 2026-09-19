@@ -31,8 +31,17 @@ class ProgramDomainPurityTest {
         if (dir.isDirectory) dir else File("app/$dir")
     }
 
-    /** The packages this change creates wholesale. */
-    private val newPackages = listOf("common", "program", "prescription", "workout", "adaptive/decision")
+    /**
+     * The packages this change creates wholesale.
+     *
+     * `adaptive/engine` was added by §30 step 11: the target adaptive engine is a pure domain component
+     * whose rules are exactly the ones this scan pins — no data layer, no platform, no mutable state, no
+     * floating point and no random source. Adding it here is what makes those rules apply to it without
+     * a second scan.
+     */
+    private val newPackages = listOf(
+        "common", "program", "prescription", "workout", "adaptive/decision", "adaptive/engine"
+    )
 
     /** The files this change adds to the pre-existing `domain/adaptive` package. */
     private val newAdaptiveFiles = listOf(

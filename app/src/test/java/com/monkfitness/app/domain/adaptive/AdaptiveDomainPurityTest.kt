@@ -6,15 +6,21 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Pins the architecture fence mechanically, not by convention: no compiled source in
- * `domain/adaptive` may import the data layer (`com.monkfitness.app.data.*`, Room, or Android), the
- * UI/ViewModel layers, or any `androidx`/`android` platform type at all, and every `domain.adaptive`
- * type the adapter hands the mapper is defined in this package.
+ * Pins the architecture fence mechanically, not by convention: no compiled source anywhere in
+ * `domain/adaptive` — the package itself **and every nested package of it** — may import the data layer
+ * (`com.monkfitness.app.data.*`, Room, or Android), the UI/ViewModel layers, or any `androidx`/`android`
+ * platform type at all, and every `domain.adaptive` type the adapter hands the mapper is defined in this
+ * package.
  *
  * This runs on the JVM against the sources themselves, so it fails the build the moment a future
  * edit reintroduces a `data.model.Exercise` import into the mapper or anywhere else in this package
  * — the exact regression the PR #268 review caught — or lets the configuration validator reach for
  * Android, Room, DataStore or a ViewModel instead of the metadata its caller supplies.
+ *
+ * §30 step 11 revised the scan: it used to read only the package's own top-level files, and the target
+ * adaptive engine is the first thing to live in a nested package (`domain/adaptive/engine`). Reading the
+ * whole subtree is strictly stronger than reading one level of it — a nested package is fenced exactly
+ * like a top-level one, and a *future* nested package cannot sit outside the fence by accident.
  */
 class AdaptiveDomainPurityTest {
 
@@ -48,9 +54,10 @@ class AdaptiveDomainPurityTest {
             packageDir.isDirectory
         )
 
-        val sources = packageDir.listFiles { file -> file.isFile && file.extension == "kt" }
-            ?.sortedBy { it.name }
-            ?: emptyList()
+        val sources = packageDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .sortedBy { it.path }
+            .toList()
         assertTrue("expected at least one .kt file in ${packageDir.absolutePath}", sources.isNotEmpty())
 
         val forbidden = sources.flatMap { source ->
