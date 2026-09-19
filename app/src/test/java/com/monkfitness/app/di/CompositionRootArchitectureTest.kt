@@ -30,8 +30,10 @@ import org.junit.Test
  *    another name, and a second owner of the object that must have exactly one;
  *  * a DAO taken from the database somewhere else, which is how a second reader of a table appears;
  *  * a view model or a screen reaching into the data layer or into the composition root at all;
- *  * a decision creeping into the wiring: a policy, a scheduler, a generator, a calendar or a clock
- *    read inside the container;
+ *  * a decision creeping into the wiring: a policy, a generator, a calendar decision, or the
+ *    vocabulary of the Scheduler's own decision — since §30 step 7 the container *wires* the Scheduler,
+ *    and this file pins that it wires it as one graph node with the documented collaborators and
+ *    nothing about scheduling beside it;
  *  * a production call that overrides the container's transaction runner, or a port implemented
  *    somewhere other than the two files that own the device's time and randomness.
  */
@@ -311,9 +313,18 @@ class CompositionRootArchitectureTest {
 
         val forbidden = listOf(
             "WorkoutGenerator", "AdaptivePolicy", "AdaptiveProgramEngine", "ProgressionResolver",
-            "FocusPlanner", "ProgramCalendar", "Scheduler", "SettingsManager", "NotificationScheduler",
+            "FocusPlanner", "ProgramCalendar", "SettingsManager", "NotificationScheduler",
             "System.currentTimeMillis", "Instant.now", "LocalDate", "Random", "UUID", "runBlocking",
-            "lifecycleStatus", "ProgramMaintenance", "ProgressDao", "Room."
+            "lifecycleStatus", "ProgramMaintenance", "ProgressDao", "Room.",
+            // §30 step 7 revised this rule rather than relaxing it. It used to forbid the token
+            // "Scheduler" outright, because no stage could wire one yet; the Scheduler now exists and
+            // *wiring it is not deciding with it*, so the token is replaced by the vocabulary of the
+            // decision it must not contain — the planner, its request, its plan, its window, its
+            // horizon, its pauses, the amount-free facts a slot is made of — which is stricter about
+            // what the container may say about scheduling than a name match ever was. What the
+            // container *may* do is pinned immediately below, exactly.
+            "SlotPlanner", "SlotPlan", "ScheduleRequest", "ScheduleWindow", "PausedInterval",
+            "SlotIdSource", "PLANNING_HORIZON_DAYS", "plannedFor", "asOf", "DayOfWeek", "superseded"
         )
         forbidden.forEach { token ->
             assertTrue(
@@ -327,6 +338,34 @@ class CompositionRootArchitectureTest {
             "and the repositories it wires are the ones §30 step 3 landed, constructed with the " +
                 "collaborators that stage documented — nothing is decorated, wrapped or substituted",
             targetRepositories.all { text.contains("$it(") }
+        )
+
+        assertEquals(
+            "the Scheduler is a graph node and nothing beside it: the container names it in exactly " +
+                "four places — the import, the property's name, its type and the construction — so a " +
+                "scheduling decision cannot ride along with the wiring unnoticed",
+            4,
+            occurrences(text, "Scheduler")
+        )
+        assertEquals(
+            "it is constructed once, like every other node",
+            1,
+            constructionSites(text, "ProgramScheduler")
+        )
+        assertTrue(
+            "and with exactly the collaborators §30 step 7 documented: the plan it reads, the schedule " +
+                "it writes, the two §26 ports and the transaction runner — no session repository, no " +
+                "adaptive port, no generator and no library is handed to it here",
+            text.contains(
+                "val programScheduler: ProgramScheduler = ProgramScheduler(\n" +
+                    "        programRepository = programRepository,\n" +
+                    "        planRepository = programPlanRepository,\n" +
+                    "        scheduleRepository = programScheduleRepository,\n" +
+                    "        clock = clock,\n" +
+                    "        idGenerator = idGenerator,\n" +
+                    "        inTransaction = inTransaction\n" +
+                    "    )"
+            )
         )
     }
 

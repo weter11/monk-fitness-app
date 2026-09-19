@@ -30,6 +30,7 @@ import com.monkfitness.app.data.repository.ProgramScheduleRepository
 import com.monkfitness.app.data.repository.WorkoutSessionRepository
 import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
+import com.monkfitness.app.domain.usecase.ProgramScheduler
 import com.monkfitness.app.domain.program.StandardProgram
 
 /**
@@ -236,6 +237,38 @@ class AppContainer(
     val programEditorService: ProgramEditorService = ProgramEditorService(
         programRepository = programRepository,
         planRepository = programPlanRepository,
+        clock = clock,
+        idGenerator = idGenerator,
+        inTransaction = inTransaction
+    )
+
+    /**
+     * The Scheduler — §30 step 7, over the repositories above and the plan the editor writes.
+     *
+     * It owns §20's timing decisions: which dates a saved revision trains on over a bounded window, which
+     * of them do not have an opportunity yet, which existing opportunities the revision no longer
+     * presents, and which passed. It turns a revision into **slots** and nothing else — no Session, no
+     * policy, no plan content, no lifecycle movement — and it is the layer §27's
+     * *"Save Editor → new Revision + future-slot reconciliation"* names for the second half of that
+     * sentence.
+     *
+     * The collaborators are chosen for what they exclude as much as for what they do. There is **no
+     * session repository**, so a Session cannot be created here (§33); no plan *write* is used, so an
+     * immutable revision cannot be rewritten (§6); no adaptive, generator, library or progress port is
+     * present, so the pass cannot consult performance, produce a plan or derive a statistic (§30 steps
+     * 9–12). The `zone` is the calendar the two dates in a pass are read in: the clock supplies an
+     * instant and a pause is stored as instants, while a slot is planned for a date, and the conversion
+     * belongs to the layer that owns the clock rather than to the decision (§26).
+     *
+     * This is **wiring, not behaviour**: the container decides which objects the service receives and
+     * nothing about what it does with them. The transaction runner is the same one every repository
+     * uses, so one pass is one unit of the database's own — every opportunity it creates and every status
+     * it records land together, or none of them does.
+     */
+    val programScheduler: ProgramScheduler = ProgramScheduler(
+        programRepository = programRepository,
+        planRepository = programPlanRepository,
+        scheduleRepository = programScheduleRepository,
         clock = clock,
         idGenerator = idGenerator,
         inTransaction = inTransaction
