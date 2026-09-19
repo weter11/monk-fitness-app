@@ -348,14 +348,19 @@ record the level an attempt was made at (or reconstruct it from a stored ladder 
 chain — which needs the ladder first). Until then, `PROGRAM_PR` stays deferred rather than being
 implemented as a heuristic.
 
-## 10. What remains for P13
+## 10. What §30 step 13 did with this, and what remains for P14
 
-* **Import / Export / Share** (§30 step 13): untouched here — no DTO, no mapper, no version, no file
-  format. The adaptive facts this stage stores (`reason`, the five counts, the decision and adjustment
-  rows) are target-program data and become P13's to carry;
-* **UI** (§30 step 14) and **legacy removal** (§30 step 15): untouched, and asserted as untouched by the
-  architecture suite (no ViewModel or screen names the stage; the Stage-1 files are still there and still
-  name nothing this stage adds).
+* **Import / Export / Share** (§30 step 13) is **implemented** (`docs/PROGRAM_IMPORT_EXPORT.md`), and it
+  deliberately does **not** carry the adaptive facts this stage stores (`reason`, the five counts, the
+  decision and adjustment rows): a transferred Program carries its *definition*, and an imported Program's
+  adaptive state, decision trail and adjustments start **empty**. The transfer model has no field for any of
+  them and the exporter holds no repository that could produce one — asserted by the document's field census
+  and by the round-trip suite's row-level census, which seeds a source with all three and finds none on the
+  import. Nothing in step 13 invokes this stage's engine, policy or integration, and nothing here changed;
+* **UI** (§30 step 14) and **legacy removal** (§30 step 15): still untouched, and asserted as untouched by
+  the architecture suite (no ViewModel or screen names the stage; the Stage-1 files are still there and still
+  name nothing this stage adds). Step 13 adds no screen either — its mechanism is callable and its platform
+  boundary is the Share Sheet and the document picker, and the affordance belongs to step 14.
 
 ## 11. Verification
 

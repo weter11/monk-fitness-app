@@ -73,6 +73,27 @@ The *operation* is what makes the decision about a **stored** Program: it loads 
 completed or archived one, reads the revision the Program points at, resolves the two dates the decision
 needs, and stores what was decided in one transaction.
 
+### The third entry point (§30 step 13)
+
+`initialSlotsFor(program, revision)` decides the opportunities a Program **being created** receives, and it
+exists for exactly one caller: the import. §27 requires `Import → Program + Revision + initial Slots` to be
+one atomic operation, and a creation cannot go through `schedule(programId)` — that entry point plans a
+*stored* Program (it reads the Program row, its slots and its pauses), and the whole point of the creation
+unit is that nothing is stored until everything can be. So the inputs arrive as values instead of being read
+and everything else is unchanged:
+
+```text
+same decision        SlotPlanner.plan, through one private `decide` both entry points call
+same anchor rule     actualStartDate ?: plannedStartDate, else NoSchedulingAnchor — this entry point
+                     cannot be used to make the Scheduler invent a date either
+no new semantics     a Program being created has no slots and no pause intervals: empty is a fact
+no transaction       it decides and writes nothing; §27's owner (ProgramRepository.createProgram) writes
+```
+
+Deciding and persisting are separated there on purpose: the caller that owns the creation unit is the caller
+that writes, which is what keeps *"the Scheduler owns timing/opportunities"* true while the importer owns
+*"what Program is being created"*. See `docs/PROGRAM_IMPORT_EXPORT.md` §13.
+
 ### The two dates
 
 * **anchor** — the date the plan's `day 1` falls on. It is a fact about the Program, taken from
@@ -475,7 +496,8 @@ What remains open:
    complete the slot (§19's complete-workout transaction writes the outcome). Exempting slots with
    attempts would let an abandoned attempt keep an opportunity open forever.
 5. **Planning is refused, not deferred, without an anchor.** A Program with neither an actual nor a
-   planned start is refused (`NoSchedulingAnchor`) rather than planned from today. The alternative —
+   planned start is refused (`NoSchedulingAnchor`) rather than planned from today — the same rule the
+   creation entry point applies (`initialSlotsFor`). The alternative —
    seeding an anchor — is the Scheduler deciding when a user's program begins.
 6. **`preview` mints the identities it reports.** A decided-but-unstored slot has to name itself to be
    reportable, so a preview consumes ids from the injected generator while writing nothing. If a caller

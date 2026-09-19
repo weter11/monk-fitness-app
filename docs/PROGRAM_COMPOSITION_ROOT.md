@@ -104,8 +104,9 @@ fun interface IdGenerator { fun newId(): String }   // IdGenerator.random() → 
   property of the composition root rather than of the first caller.
 
 Both are also arguments of `create(context, clock, idGenerator)`, so a caller that owns its own time or
-its own identity sequence — a test, or a future import that must preserve the ids it was handed —
-composes the same graph with its own values.
+its own identity sequence — a test, or the import of §30 step 13, which mints every identity of the new
+graph through the injected generator and stamps it from the injected clock — composes the same graph with
+its own values.
 
 ## 5. The two persistence generations
 
@@ -230,6 +231,9 @@ the app did not already carry — recorded because PR 1 raised the same point fo
 * Progress/History computations and any aggregation view (§30 step 9).
 * The generator's reconciliation, pin/override preservation and the Focus Planner (§30 step 10).
 * The adaptive engine, its integration, the policy and the load guard (§30 steps 11–12).
-* Import/export/Share and their DTOs (§30 step 13).
+* Import/export/Share and their DTOs (§30 step 13) — **landed by §30 step 13**: the container now
+  wires `programExportService` and `programImportService` over the repositories, the Scheduler and the
+  lifecycle layer above, plus `ProgramExerciseLibrary` as §5's exerciseId boundary. See
+  `docs/PROGRAM_IMPORT_EXPORT.md`.
 * Settings/navigation cleanup (§30 step 14) and the retirement of the Stage-1 tables, the collapse of the
   two adaptive repository names and the deletion of the view model's database reach (§30 step 15).

@@ -32,6 +32,9 @@ import com.monkfitness.app.domain.adaptive.integration.NoDeclaredProgression
 import com.monkfitness.app.domain.adaptive.integration.NoExerciseFamilyClassification
 import com.monkfitness.app.domain.usecase.ProgramAdaptiveIntegration
 import com.monkfitness.app.domain.usecase.ProgramEditorService
+import com.monkfitness.app.domain.usecase.ProgramExerciseLibrary
+import com.monkfitness.app.domain.usecase.ProgramExportService
+import com.monkfitness.app.domain.usecase.ProgramImportService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
@@ -285,6 +288,64 @@ class AppContainer(
         scheduleRepository = programScheduleRepository,
         clock = clock,
         idGenerator = idGenerator,
+        inTransaction = inTransaction
+    )
+
+    // --- §30 step 13: the transfer boundary (export / import / share) --------------------------------
+
+    /**
+     * The **export** half of §30 step 13 — §5's *"Program definition/configuration only"*.
+     *
+     * It owns one thing: turning a stored Program into the file a share carries. Its single collaborator
+     * is the repository that returns a Program together with the revision its pointer names, and the
+     * absences are the guarantees §15 and §16 ask for: there is **no** session repository, no progress
+     * repository, no adaptive repository, no clock and no id generator in this node, so an exported file
+     * cannot contain a session, a set, a statistic, a streak, a family state, a decision or an adjustment
+     * — not because this stage remembers not to write them, but because it holds nothing that could
+     * produce one. The document type it writes has no field for any of them either, so both halves of the
+     * prohibition are structural.
+     *
+     * This is **wiring, not behaviour**: the container decides which object the service receives and
+     * nothing about what it does with it.
+     */
+    val programExportService: ProgramExportService = ProgramExportService(
+        programRepository = programRepository
+    )
+
+    /**
+     * The **import** half of §30 step 13 — §5's pipeline and §27's creation unit.
+     *
+     * It owns the whole path from a shared file to a new Program: decoding, parsing, the format version,
+     * the schema, the exerciseId boundary, the semantic validation, the Import Draft, and then the save
+     * that writes `Program + Revision + ProgramDays + ProgramExercises + initial slots` as **one
+     * transaction** (§27). The collaborators are chosen for what each of them owns and for what this node
+     * therefore cannot do:
+     *
+     * ```text
+     * programRepository     the creation primitive: the Program-owned graph or nothing
+     * scheduler             §20's timing: the imported revision's initial opportunities are its decision
+     * lifecycleService      §3/§21's selection: the only path by which the import can become selected
+     * ProgramExerciseLibrary §5's exerciseId boundary: the app's own catalogue, asked per referenced id
+     * clock, idGenerator    the two §26 ports: every timestamp and every identity of the new graph
+     * zone                  the calendar the import's date is read in — the day it is planned to start on
+     * inTransaction         the unit: a failure at any leg leaves no Program, no revision and no slot
+     * ```
+     *
+     * There is **no** `ProgramPlanRepository` (an import creates its first revision rather than saving one
+     * onto an existing Program), no session repository, no adaptive repository and no progress reader, and
+     * no DAO: the import reaches storage through the two owners of it above and through nothing else.
+     *
+     * This is **wiring, not behaviour**: the container decides which objects the service receives and
+     * nothing about what it does with them.
+     */
+    val programImportService: ProgramImportService = ProgramImportService(
+        programRepository = programRepository,
+        scheduler = programScheduler,
+        lifecycleService = programLifecycleService,
+        exerciseLibrary = ProgramExerciseLibrary(),
+        clock = clock,
+        idGenerator = idGenerator,
+        zone = zone,
         inTransaction = inTransaction
     )
 

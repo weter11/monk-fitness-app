@@ -25,6 +25,25 @@
         </activity>
 
         <receiver android:name=".util.NotificationReceiver" />
+
+        <!--
+            The Share Sheet's transport (§30 step 13, §11): the provider that mints the `content://` URI a
+            shared program file is handed over through. It is `exported="false"` — no other app may ask this
+            app's provider for anything on its own — and `grantUriPermissions="true"`, which is what lets a
+            single share carry a single file's read permission to the app the user picked.
+
+            The authority is derived from the application id so it cannot drift from the authority
+            `ProgramShareSheet.authority` computes at runtime.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/program_file_paths" />
+        </provider>
     </application>
 
 </manifest>
