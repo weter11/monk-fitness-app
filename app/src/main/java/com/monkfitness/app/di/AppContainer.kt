@@ -28,6 +28,7 @@ import com.monkfitness.app.data.repository.ProgramProgressRepository
 import com.monkfitness.app.data.repository.ProgramRepository
 import com.monkfitness.app.data.repository.ProgramScheduleRepository
 import com.monkfitness.app.data.repository.WorkoutSessionRepository
+import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.program.StandardProgram
 
@@ -208,6 +209,35 @@ class AppContainer(
         clock = clock,
         idGenerator = idGenerator,
         standardProgramId = StandardProgram.programId,
+        inTransaction = inTransaction
+    )
+
+    /**
+     * The Program System's **Manual Editor** — §30 step 6, over the repositories and the lifecycle
+     * service above.
+     *
+     * It is the layer that owns draft-first editing and the revision rule (§6, §7, §27): it opens a
+     * draft from a Program (or from a Program being copied), validates it, reviews what saving would
+     * do, and saves — which is to say it decides whether a save warrants a new immutable revision,
+     * whether it creates a Program, or whether it writes nothing at all. The built-in Program is
+     * refused for an in-place edit here, through the same guard the lifecycle carries, so §4's
+     * copy-before-edit rule has one implementation.
+     *
+     * The collaborators are chosen for what they deliberately exclude: the two repositories that own
+     * persistence, the clock and the id generator, and the transaction runner. There is **no**
+     * schedule repository and no exercise-library port, and that absence is the guarantee — the
+     * editor cannot reconcile scheduler slots (§20 is §30 step 7's) or touch exercise metadata (§10)
+     * because it has nothing to do either with.
+     *
+     * This is **wiring, not behaviour**: the container decides which objects the service receives and
+     * nothing about what it does with them. The transaction runner is the same one every repository
+     * uses, so §27's `Save Editor → new Revision` is one unit of the database's own.
+     */
+    val programEditorService: ProgramEditorService = ProgramEditorService(
+        programRepository = programRepository,
+        planRepository = programPlanRepository,
+        clock = clock,
+        idGenerator = idGenerator,
         inTransaction = inTransaction
     )
 
