@@ -30,6 +30,7 @@ import com.monkfitness.app.data.repository.ProgramScheduleRepository
 import com.monkfitness.app.data.repository.WorkoutSessionRepository
 import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
+import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
 import com.monkfitness.app.domain.usecase.SessionRuntime
 import com.monkfitness.app.domain.program.StandardProgram
@@ -65,10 +66,12 @@ import com.monkfitness.app.domain.program.StandardProgram
  * it does not come here to fetch it.
  *
  * It decides **nothing** about the program. There is no lifecycle transition, no revision rule, no
- * scheduling, no generation, no adaptive policy, no load guard, no progress calculation and no
- * import/export anywhere in this class: wiring a dependency is not a decision about behaviour, and no
- * production path gains one merely because these objects now exist (§33). Each repository below is
- * still exactly the object §30 step 3 landed, with the collaborators that stage documented.
+ * scheduling, no generation, no adaptive policy, no load guard and no import/export anywhere in this
+ * class: wiring a dependency is not a decision about behaviour, and no production path gains one merely
+ * because these objects now exist (§33). §30 steps 7–9 added three nodes — the timing pass, the session
+ * runtime and the Progress layer — and this container only says which objects each of them receives; each
+ * of their own documents says what they do with them. Each repository below is still exactly the object
+ * §30 step 3 landed, with the collaborators that stage documented.
  *
  * ### The single database
  *
@@ -305,6 +308,37 @@ class AppContainer(
         clock = clock,
         idGenerator = idGenerator,
         inTransaction = inTransaction
+    )
+
+    /**
+     * The Progress/History layer — §30 step 9, over the facts the repositories above already expose.
+     *
+     * It owns §21's two aggregations and the history: which facts a scope *is*, and how they are read. The
+     * computation itself is pure and lives in the domain (`domain/progress`), so this node is thin on
+     * purpose — it reads opportunities from the schedule repository, attempts from the session repository
+     * (each assembled from its own captured presentation and its confirmed sets) and the Program list from
+     * the Program repository, then hands them to the calculator.
+     *
+     * The collaborators are chosen for what they exclude as much as for what they do. There is **no
+     * transaction runner and no id generator**, because this layer reads and never writes: Progress is a
+     * view of facts other layers own, and the aggregate §21 calls "All Programs" is a view rather than an
+     * entity, so there is nothing here to store. There is no DAO either, no policy, no generator and no
+     * planner: §30 steps 10–12 own those, and the measures that would need them are reported as deferred
+     * rather than guessed.
+     *
+     * The clock is passed for one purpose: the default span of the rate-like measures. "Today" is read
+     * through the injected port (§26) rather than inside the service, so a caller that owns its own time
+     * gets its own window, and the zone the calendar is read in stays explicit.
+     *
+     * This is **wiring, not behaviour**: the container decides which objects the layer receives and nothing
+     * about what it computes. Nothing above the container reaches it yet — §30 step 9 lands the contract,
+     * and the screens are a later step.
+     */
+    val programProgressService: ProgramProgressService = ProgramProgressService(
+        programRepository = programRepository,
+        scheduleRepository = programScheduleRepository,
+        sessionRepository = workoutSessionRepository,
+        clock = clock
     )
 
     // --- the shipped Stage-1 generation (§30 step 15 retires it) ----------------------------------
