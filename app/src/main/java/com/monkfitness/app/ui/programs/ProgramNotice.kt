@@ -48,6 +48,9 @@ sealed interface ProgramNotice {
         /** The one place the notices are declared, so a screen never has to build one ad hoc. */
         val SELECTED: ProgramNotice = Done(R.string.programs_notice_selected)
         val RENAMED: ProgramNotice = Done(R.string.programs_notice_renamed)
+
+        /** §3's planned start date: the date was saved, which is a different sentence from a rename. */
+        val PLANNED_START_DATE_SET: ProgramNotice = Done(R.string.programs_notice_planned_start_set)
         val ARCHIVED: ProgramNotice = Done(R.string.programs_notice_archived)
         val UNARCHIVED: ProgramNotice = Done(R.string.programs_notice_unarchived)
         val DELETED: ProgramNotice = Done(R.string.programs_notice_deleted)

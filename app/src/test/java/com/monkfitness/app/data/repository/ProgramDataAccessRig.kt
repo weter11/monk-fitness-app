@@ -222,6 +222,14 @@ internal class ProgramDaoFaults {
 
     /** When set, writing the family's state after a window fails — the last leg of §27's unit. */
     var failFamilyStateInsert: Boolean = false
+
+    /**
+     * When set, reading a Program's opportunities fails — the read a Scheduler pass makes of the stored
+     * slots (`ProgramScheduler.pass` reads them before it decides). It plants §28's `SYSTEM_FAILURE` in the
+     * path a *read* takes, which is what the Program UI has to tell apart from the ordinary absence of a
+     * next date.
+     */
+    var failSlotRead: Boolean = false
 }
 
 private class FailingAdaptiveDecisionDao(
@@ -324,8 +332,10 @@ private class FailingProgramWorkoutSlotDao(
 
     override suspend fun slotById(slotId: String): ProgramWorkoutSlotEntity? = delegate.slotById(slotId)
 
-    override suspend fun slotsOfProgram(programId: String): List<ProgramWorkoutSlotEntity> =
-        delegate.slotsOfProgram(programId)
+    override suspend fun slotsOfProgram(programId: String): List<ProgramWorkoutSlotEntity> {
+        if (faults.failSlotRead) throw IllegalStateException("planted fault: slot read")
+        return delegate.slotsOfProgram(programId)
+    }
 
     override suspend fun slotsOfRevision(revisionId: String): List<ProgramWorkoutSlotEntity> =
         delegate.slotsOfRevision(revisionId)

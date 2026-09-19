@@ -210,8 +210,9 @@ class ProgramsController(
                     dayCount = revision.days.size,
                     restDayCount = revision.days.count { day -> day.type == ProgramDayType.REST },
                     exerciseCount = revision.days.sumOf { day -> day.exercises.size },
-                    nextOpportunity = preview?.nextOpportunity,
-                    hasNoFutureDate = preview?.hasNoFutureDate ?: false,
+                    nextOpportunity = preview.nextOpportunity,
+                    hasNoFutureDate = preview.hasNoFutureDate,
+                    nextWorkoutUnreadable = preview.unreadable,
                     completed = calendar?.completed ?: 0,
                     missed = calendar?.missed ?: 0,
                     upcoming = calendar?.upcoming ?: 0,
@@ -256,8 +257,15 @@ class ProgramsController(
         lifecycle.unarchiveProgram(ProgramId(programId))
     }
 
-    /** §29's delete, with §3's Standard-Program fallback and the `IN_PROGRESS` guard left to the owner. */
-    suspend fun delete(programId: String) = action(ProgramNotice.DELETED) {
+    /**
+     * §29's delete, with §3's Standard-Program fallback and the `IN_PROGRESS` guard left to the owner.
+     *
+     * It **returns** the outcome it published, because the screen that offers Delete has to know whether
+     * the Program is gone before it leaves the Detail (§15): a refusal — an `IN_PROGRESS` session, the
+     * built-in Program — and a storage failure must both keep the user where they are, with the sentence
+     * that explains it. The rule stays in the lifecycle layer; the screen only branches on the answer.
+     */
+    suspend fun delete(programId: String): ProgramNotice = action(ProgramNotice.DELETED) {
         lifecycle.deleteProgram(ProgramId(programId))
     }
 
@@ -278,9 +286,13 @@ class ProgramsController(
         lifecycle.completeProgram(ProgramId(programId))
     }
 
-    /** §3's planned start date: a plan, never a start. Creates no revision. */
-    suspend fun setPlannedStartDate(programId: String, date: LocalDate?) =
-        action(ProgramNotice.RENAMED) {
+    /**
+     * §3's planned start date: a plan, never a start. Creates no revision.
+     *
+     * Its notice is its own — the date was saved, and that is not a rename.
+     */
+    suspend fun setPlannedStartDate(programId: String, date: LocalDate?): ProgramNotice =
+        action(ProgramNotice.PLANNED_START_DATE_SET) {
             lifecycle.setPlannedStartDate(ProgramId(programId), date)
         }
 
@@ -648,11 +660,17 @@ class ProgramsController(
 
     // ---------------------------------------------------------------- the mechanism
 
-    /** Runs one Program operation, publishes its outcome, then re-reads what the operation changed. */
+    /**
+     * Runs one Program operation, publishes its outcome, then re-reads what the operation changed.
+     *
+     * @return the notice it published — the same value the state now carries. A screen that has to decide
+     *   something *after* an action (leaving a screen when a Program is gone, staying when it is not) reads
+     *   §15's own classification off it instead of re-deriving one from the domain result.
+     */
     private suspend fun <T> action(
         success: ProgramNotice,
         operation: suspend () -> ProgramOperationResult<T>
-    ) {
+    ): ProgramNotice {
         val notice = when (val result = operation()) {
             is ProgramOperationResult.Success -> success
             is ProgramOperationResult.Refused -> noticeFor(result.reason)
@@ -660,6 +678,7 @@ class ProgramsController(
         }
         mutableState.update { it.copy(notice = notice) }
         if (notice is ProgramNotice.Done) refresh()
+        return notice
     }
 
     /** Re-reads the list, and the open Detail when one is open, from the services that own them. */
@@ -689,19 +708,39 @@ class ProgramsController(
         mutableState.update { it.copy(loading = false) }
     }
 
-    /** The Scheduler's own answer about the next opportunity, or `null` when it has none to give. */
-    private suspend fun previewOf(programId: ProgramId): PreviewFacts? =
+    /**
+     * The Scheduler's answer about the detail screen's next workout, and the three meanings it can have
+     * (§20, §28, §15):
+     *
+     * ```text
+     * Success   the pass decided. The answer is the Scheduler's, including "the revision has no date left"
+     * Refused   a rule stopped the pass — no scheduling anchor yet, an archived Program, a completed one.
+     *           That is the honest absence of a next workout, not an error: no date is shown, and none is
+     *           invented.
+     * Failure   storage failed, or the persisted data is invalid. That is **not** an absence, so it is
+     *           published as a SYSTEM_FAILURE and the detail says the schedule could not be read — it is
+     *           never rendered as the ordinary "nothing planned yet" line (§33).
+     * ```
+     */
+    private suspend fun previewOf(programId: ProgramId): PreviewFacts =
         when (val result = scheduler.preview(programId)) {
             is ProgramSchedulingResult.Success -> PreviewFacts(
                 nextOpportunity = result.value.scheduledDates.minOrNull()
                     ?: result.value.created.minByOrNull { slot -> slot.plannedFor }?.plannedFor,
-                hasNoFutureDate = result.value.hasNoFutureDate
+                hasNoFutureDate = result.value.hasNoFutureDate,
+                unreadable = false
             )
 
-            // A revision with no date left, or a Program with nothing to plan from yet, is not an error
-            // the detail screen should shout about: it is the honest absence of a next workout (§20).
-            is ProgramSchedulingResult.Refused -> null
-            is ProgramSchedulingResult.Failure -> null
+            is ProgramSchedulingResult.Refused -> PreviewFacts(
+                nextOpportunity = null,
+                hasNoFutureDate = false,
+                unreadable = false
+            )
+
+            is ProgramSchedulingResult.Failure -> {
+                mutableState.update { it.copy(notice = ProgramNotice.STORAGE_FAILED) }
+                PreviewFacts(nextOpportunity = null, hasNoFutureDate = false, unreadable = true)
+            }
         }
 
     private suspend fun calendarOf(programId: ProgramId) =
@@ -888,8 +927,16 @@ class ProgramsController(
         ProgramStructureAspect.PINNING -> R.string.programs_change_pinning
     }
 
-    /** What the Scheduler's preview told the detail screen: a date, or the fact that there is none. */
-    private data class PreviewFacts(val nextOpportunity: LocalDate?, val hasNoFutureDate: Boolean)
+    /**
+     * What the Scheduler's preview told the detail screen: a date, the fact that there is none, or the fact
+     * that the answer could not be read at all — three states, because §15 forbids collapsing the third into
+     * the first two.
+     */
+    private data class PreviewFacts(
+        val nextOpportunity: LocalDate?,
+        val hasNoFutureDate: Boolean,
+        val unreadable: Boolean
+    )
 
     companion object {
 

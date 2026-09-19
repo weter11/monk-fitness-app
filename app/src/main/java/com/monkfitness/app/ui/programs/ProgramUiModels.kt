@@ -77,10 +77,15 @@ data class ProgramDetailUi(
     val dayCount: Int,
     val restDayCount: Int,
     val exerciseCount: Int,
-    /** The next date the Scheduler would plan for, or `null` when the revision has no date left. */
+    /** The next date the Scheduler would plan for, or `null` when it has none to give. */
     val nextOpportunity: LocalDate?,
     /** Whether the revision is over: no date at or after today (§20). */
     val hasNoFutureDate: Boolean,
+    /**
+     * Whether the Scheduler's answer could not be read at all — a storage failure or invalid persisted data
+     * (§28's `SYSTEM_FAILURE`), which is **not** the same fact as "there is no next date" (§15, §33).
+     */
+    val nextWorkoutUnreadable: Boolean,
     val completed: Int,
     val missed: Int,
     val upcoming: Int,
@@ -96,6 +101,15 @@ data class ProgramDetailUi(
     /** Whether the §4 delete action is offered at all. The rule itself stays in the lifecycle layer. */
     val isDeletable: Boolean
         get() = !row.isBuiltIn
+
+    /**
+     * Whether the screen shows the ordinary *"nothing is planned yet"* line.
+     *
+     * It is false whenever the Scheduler's answer could not be read, because a failure is not an absence:
+     * the detail says the schedule could not be read instead, so the two are never rendered as one state.
+     */
+    val showsNoPlannedDate: Boolean
+        get() = !nextWorkoutUnreadable && nextOpportunity == null && !hasNoFutureDate
 }
 
 /** One plan day while a draft is being edited. */

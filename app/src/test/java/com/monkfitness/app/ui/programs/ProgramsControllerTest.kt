@@ -1,5 +1,6 @@
 package com.monkfitness.app.ui.programs
 
+import com.monkfitness.app.R
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.program.LifecycleStatus
 import com.monkfitness.app.domain.program.ProgramMode
@@ -7,12 +8,15 @@ import com.monkfitness.app.domain.program.ProgramSource
 import com.monkfitness.app.domain.program.StandardProgram
 import com.monkfitness.app.domain.program.transfer.ProgramTransferFormat
 import com.monkfitness.app.domain.progress.ProgressScope
+import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -164,10 +168,19 @@ class ProgramsControllerTest {
         val created = rig.createProgramThroughTheUi("Doomed")!!
         rig.controller.select(created)
 
-        rig.controller.delete(created)
+        val outcome = rig.controller.delete(created)
 
+        assertEquals(
+            "the screen is told the Program is gone, which is the only thing that lets it leave the Detail",
+            ProgramNotice.Done(R.string.programs_notice_deleted),
+            outcome
+        )
         assertEquals(ProgramNotice.DELETED, rig.state.notice)
         assertNull(rig.storedProgram(ProgramId(created)))
+        assertNull(
+            "and the controller's own detail is closed only because the delete completed",
+            rig.state.detail
+        )
         assertEquals(
             "§3's technical fallback: the selection moves to the built-in Program rather than being cleared",
             StandardProgram.programId,
@@ -179,14 +192,164 @@ class ProgramsControllerTest {
         )
     }
 
+    /**
+     * BLOCKER 1's contract: a refused Delete keeps the user where they are.
+     *
+     * The session is a **real** `IN_PROGRESS` session on the Program's own opportunity — the same rows the
+     * session runtime writes — so §29's guard is the lifecycle layer's own decision and not a mock boolean.
+     * The screen's half of the contract (leaving only on a completed delete) is asserted in
+     * [ProgramsArchitectureTest], because this project has no Compose test harness.
+     */
+    @Test
+    fun deletingAProgramWithAWorkoutInFlightIsRefusedAndClosesNothing() = runBlocking {
+        rig.storeSourceProgram()
+        rig.transfer.startSessionOnSource(1)
+        rig.controller.select(rig.sourceProgramId.value)
+        rig.controller.openDetail(rig.sourceProgramId.value)
+        val detailBefore = rig.state.detail
+        assertNotNull("the detail is open before the delete is attempted", detailBefore)
+
+        val outcome = rig.controller.delete(rig.sourceProgramId.value)
+
+        assertEquals(
+            "the rule that stopped it, as §15's own classification of the outcome",
+            ProgramNotice.ACTIVE_SESSION_BLOCKS_DELETE,
+            outcome
+        )
+        assertEquals(ProgramNotice.ACTIVE_SESSION_BLOCKS_DELETE, rig.state.notice)
+        assertTrue(
+            "an expected refusal is not a completed operation, so nothing may navigate",
+            outcome !is ProgramNotice.Done
+        )
+        assertNotNull("the Program is still stored", rig.storedProgram(rig.sourceProgramId))
+        assertEquals(
+            "and the selection was not moved to make the delete succeed (§29)",
+            rig.sourceProgramId,
+            rig.selectedProgramId()
+        )
+        assertSame(
+            "the open Detail is the same value it was: a refusal does not close, refresh or invalidate the " +
+                "screen the user is on",
+            detailBefore,
+            rig.state.detail
+        )
+    }
+
     @Test
     fun deletingTheStandardProgramIsRefused() = runBlocking {
         rig.seedStandardProgram()
 
-        rig.controller.delete(StandardProgram.programId.value)
+        val outcome = rig.controller.delete(StandardProgram.programId.value)
 
-        assertEquals(ProgramNotice.STANDARD_CANNOT_BE_DELETED, rig.state.notice)
+        assertEquals(ProgramNotice.STANDARD_CANNOT_BE_DELETED, outcome)
         assertNotNull(rig.storedProgram(StandardProgram.programId))
+    }
+
+    /**
+     * BLOCKER 2's contract: a Scheduler **failure** is a system failure, never the ordinary absence of a
+     * next date (§15, §28, §33).
+     *
+     * The failure is planted in the real engine: the Scheduler's pass reads the Program's stored
+     * opportunities through the production DAO, and the rig's fault makes that read throw, so
+     * `ProgramSchedulingResult.Failure` is produced by `ProgramScheduler` itself rather than handed in.
+     */
+    @Test
+    fun aSchedulerFailureIsReportedAndIsNotShownAsNoNextWorkout() = runBlocking {
+        rig.storeSourceProgram()
+
+        rig.controller.openDetail(rig.sourceProgramId.value)
+        val healthy = rig.state.detail!!
+        assertFalse("the healthy pass answers", healthy.nextWorkoutUnreadable)
+        assertNotNull("and it has a next opportunity to show", healthy.nextOpportunity)
+
+        rig.transfer.data.faults.failSlotRead = true
+        try {
+            rig.controller.openDetail(rig.sourceProgramId.value)
+        } finally {
+            rig.transfer.data.faults.failSlotRead = false
+        }
+
+        assertEquals(
+            "a failure to read is published as §28's SYSTEM_FAILURE",
+            ProgramNotice.STORAGE_FAILED,
+            rig.state.notice
+        )
+        val failed = rig.state.detail!!
+        assertTrue(
+            "and the detail knows the Scheduler's answer could not be read — only the Scheduler's own " +
+                "branch sets this, so the flag is the observable proof that the failure was recognised",
+            failed.nextWorkoutUnreadable
+        )
+        assertNull(failed.nextOpportunity)
+        assertFalse(
+            "the failure is never rendered as the ordinary *nothing is planned yet* state",
+            failed.showsNoPlannedDate
+        )
+        assertFalse(
+            "and it is not turned into *the plan has no dates left* either",
+            failed.hasNoFutureDate
+        )
+    }
+
+    /**
+     * The third state, so the two above cannot be satisfied by one collapsed branch: a Scheduler
+     * **refusal** is a normal absence. A Program that has never been given a date to plan from is refused
+     * with `NoSchedulingAnchor`, and that must render as the ordinary line — not as a failure.
+     */
+    @Test
+    fun aSchedulingRefusalIsAnOrdinaryAbsenceAndNotAFailure() = runBlocking {
+        val created = rig.createProgramThroughTheUi("No date yet")!!
+        // The create's own notice is shown and cleared, as the screen does when the user dismisses it, so
+        // what follows is only what opening the Detail publishes.
+        rig.controller.dismissNotice()
+
+        rig.controller.openDetail(created)
+
+        val detail = rig.state.detail!!
+        assertFalse(
+            "a Program with no anchor is refused, not failed: nothing here is a SYSTEM_FAILURE",
+            detail.nextWorkoutUnreadable
+        )
+        assertNull(detail.nextOpportunity)
+        assertTrue(
+            "so the screen shows its ordinary *nothing is planned yet* line",
+            detail.showsNoPlannedDate
+        )
+        assertNull(
+            "and a refusal publishes nothing at all: it is not an error the user has to be told about",
+            rig.state.notice
+        )
+    }
+
+    @Test
+    fun thePlannedStartDateHasItsOwnNoticeAndCreatesNoRevision() = runBlocking {
+        val created = rig.createProgramThroughTheUi("Dated")!!
+        val revisionsBefore = rig.revisionCount(ProgramId(created))
+        val date = LocalDate.parse("2026-10-07")
+
+        val outcome = rig.controller.setPlannedStartDate(created, date)
+
+        assertEquals(
+            "saving the date is not a rename: a successfully set planned start date says so",
+            ProgramNotice.PLANNED_START_DATE_SET,
+            outcome
+        )
+        assertEquals(ProgramNotice.PLANNED_START_DATE_SET, rig.state.notice)
+        assertNotEquals(
+            "and it specifically does not report a rename",
+            ProgramNotice.RENAMED,
+            rig.state.notice
+        )
+
+        val stored = rig.storedProgram(ProgramId(created))!!
+        assertEquals(date, stored.plannedStartDate)
+        assertNull("a planned date starts nothing (§3)", stored.actualStartDate)
+        assertEquals(LifecycleStatus.NOT_STARTED, stored.lifecycleStatus)
+        assertEquals(
+            "and it is not a structural change, so no revision is created (§6)",
+            revisionsBefore,
+            rig.revisionCount(ProgramId(created))
+        )
     }
 
     // ---------------------------------------------------------------- the lifecycle (§3)

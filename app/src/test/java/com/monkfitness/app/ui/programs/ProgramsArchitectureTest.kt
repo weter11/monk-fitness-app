@@ -8,6 +8,7 @@ import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -242,6 +243,25 @@ class ProgramsArchitectureTest {
     }
 
     // ---- Compose stays where Compose belongs -------------------------------------------------------
+
+    @Test
+    fun theDetailScreenLeavesTheScreenOnlyWhenTheDeleteCompleted() {
+        val screen = codeOf("ui/screens/ProgramDetailScreen.kt").replace(Regex("\\s+"), " ")
+
+        assertTrue(
+            "this project has no Compose test harness (§17), so the screen's half of §15's contract is " +
+                "asserted against the source: the delete's outcome decides whether anything navigates",
+            screen.contains(
+                "val outcome = controller.delete(current.row.programId) " +
+                    "if (outcome is ProgramNotice.Done) { controller.closeDetail() onBack() }"
+            )
+        )
+        assertFalse(
+            "an unguarded close would leave the Detail on a refused delete — which is exactly the defect " +
+                "this contract exists to prevent",
+            screen.contains("controller.delete(current.row.programId) controller.closeDetail()")
+        )
+    }
 
     @Test
     fun onlyTheScreensAreCompose() {

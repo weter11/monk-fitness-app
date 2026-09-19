@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.domain.program.LifecycleStatus
 import com.monkfitness.app.ui.programs.ProgramDetailUi
+import com.monkfitness.app.ui.programs.ProgramNotice
 import com.monkfitness.app.ui.programs.ProgramsController
 
 /**
@@ -150,6 +151,11 @@ fun ProgramDetailScreen(
             ProgramSection(stringResource(R.string.programs_detail_next_workout))
             Text(
                 text = when {
+                    // A failure is not an absence: the schedule could not be read, and that is said instead
+                    // of the ordinary "nothing is planned yet" line (§15, §33).
+                    current.nextWorkoutUnreadable ->
+                        stringResource(R.string.programs_detail_next_workout_unreadable)
+
                     current.nextOpportunity != null -> dateLabel(current.nextOpportunity)
                     current.hasNoFutureDate -> stringResource(R.string.programs_detail_no_future_date)
                     else -> stringResource(R.string.programs_detail_no_planned_date)
@@ -337,9 +343,15 @@ fun ProgramDetailScreen(
                         onClick = {
                             showDeleteDialog = false
                             runAction(scope) {
-                                controller.delete(current.row.programId)
-                                controller.closeDetail()
-                                onBack()
+                                // Only a completed delete leaves the screen: a refusal (§3's Standard
+                                // Program, §29's IN_PROGRESS session) and a storage failure both keep the
+                                // user here, with the notice the action published. The rule itself stays in
+                                // the lifecycle layer — this branches on §15's classification.
+                                val outcome = controller.delete(current.row.programId)
+                                if (outcome is ProgramNotice.Done) {
+                                    controller.closeDetail()
+                                    onBack()
+                                }
                             }
                         }
                     ) {

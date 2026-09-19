@@ -54,6 +54,27 @@ compiled constructor.
 The UI holds **no second source of truth**: after every operation that succeeded it re-reads the list (and
 the open Detail) from the services, and `selectedProgramId` is the service's answer, never a local flag.
 
+### The actions that carry their outcome back to the screen
+
+Two actions have to decide something *after* they ran, so the controller returns §15's own classification of
+what happened and the screen branches on it — no global state, no exception, no rule in the UI:
+
+```text
+delete(programId): ProgramNotice
+  Done     the Program is gone          → the Detail closes and the screen navigates back
+  Refused  §3's built-in Program, or    → the Detail stays open, the refusal's sentence is shown,
+           §29's IN_PROGRESS session      nothing navigates
+  Failed   a storage failure            → the Detail stays open, the failure is shown, nothing navigates
+```
+
+`suspend fun delete(...)` therefore returns the notice it published, and `ProgramDetailScreen` leaves the
+screen only when that notice is a `Done`. The rule that refused the delete stays in
+`ProgramLifecycleService`; the screen only reads the answer. The screen's half of this contract is asserted
+against its source by `ProgramsArchitectureTest`, because this project has no Compose test harness.
+
+The planned start date has its own notice (`Planned start date saved`), because saving a date is not a
+rename — and, like every other non-structural change, it creates no Revision.
+
 ---
 
 ## 3. The imported Program's planned start date
@@ -151,6 +172,21 @@ brief):
 Everything else §22 names is shown from the owner: `ProgramLifecycleService` (name, source, lifecycle,
 archive, dates, current revision), the Scheduler's own `preview` (next opportunity), the Progress layer's
 own counts and history (completed / missed / upcoming, recent attempts).
+
+### The next workout has three states, not two
+
+`nextOpportunity` alone cannot say what happened, so the detail's state carries the Scheduler's own three
+outcomes apart from each other (§15, §28, §33):
+
+```text
+Success  → the Scheduler's answer, shown as the date (or as "the plan has no dates left")
+Refused  → the honest absence of a next workout (no anchor yet, archived, completed): the ordinary
+           "no date is planned yet" line, and no notice at all
+Failure  → a SYSTEM_FAILURE: `ProgramNotice.STORAGE_FAILED` is published and the detail says the schedule
+           could not be read. It is never rendered as an absence — `showsNoPlannedDate` is false whenever
+           the answer was unreadable, which is what makes the two states distinguishable in the UI state
+           rather than in prose.
+```
 
 ---
 

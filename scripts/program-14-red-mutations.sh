@@ -32,6 +32,7 @@ IMPORT="app/src/main/java/com/monkfitness/app/domain/usecase/ProgramImportServic
 ACTIVITY="app/src/main/java/com/monkfitness/app/MainActivity.kt"
 VIEWMODEL="app/src/main/java/com/monkfitness/app/viewmodel/MainViewModel.kt"
 IMPORT_SCREEN="app/src/main/java/com/monkfitness/app/ui/screens/ProgramImportScreen.kt"
+DETAIL_SCREEN="app/src/main/java/com/monkfitness/app/ui/screens/ProgramDetailScreen.kt"
 
 # Only one runner may touch this tree at a time: two would restore each other's mutations.
 if [ -e /tmp/p14-red-mutations.lock ]; then
@@ -42,10 +43,10 @@ echo "$$" > /tmp/p14-red-mutations.lock
 trap 'rm -f /tmp/p14-red-mutations.lock' EXIT
 
 # The reviewed bytes, so the restore is provable rather than assumed. Taken BEFORE any mutation is applied.
-md5sum "$CONTROLLER" "$NOTICE" "$IMPORT" "$ACTIVITY" "$VIEWMODEL" "$IMPORT_SCREEN" \
+md5sum "$CONTROLLER" "$NOTICE" "$IMPORT" "$ACTIVITY" "$VIEWMODEL" "$IMPORT_SCREEN" "$DETAIL_SCREEN" \
   > "$TMP/before.md5"
 
-python3 - "$TMP" "$CONTROLLER" "$NOTICE" "$IMPORT" "$ACTIVITY" "$VIEWMODEL" "$IMPORT_SCREEN" <<'PYEOF'
+python3 - "$TMP" "$CONTROLLER" "$NOTICE" "$IMPORT" "$ACTIVITY" "$VIEWMODEL" "$IMPORT_SCREEN" "$DETAIL_SCREEN" <<'PYEOF'
 """
 The driver: one mutation at a time, with the focused §30-step-14 suites as the oracle.
 
@@ -58,7 +59,7 @@ import shutil
 import subprocess
 import sys
 
-TMP, controller, notice, importer, activity, viewmodel, import_screen = sys.argv[1:8]
+TMP, controller, notice, importer, activity, viewmodel, import_screen, detail_screen = sys.argv[1:9]
 
 FILES = {
     "CONTROLLER": controller,
@@ -67,6 +68,7 @@ FILES = {
     "ACTIVITY": activity,
     "VIEWMODEL": viewmodel,
     "IMPORT_SCREEN": import_screen,
+    "DETAIL_SCREEN": detail_screen,
 }
 
 # (label, file, anchor that must be present exactly once, replacement that must be absent, the rule it breaks)
@@ -189,6 +191,31 @@ MUTATIONS = [
      "                        navController.navigate(MainViewModel.ROUTE_PROGRAMS)\n"
      "                    }\n",
      "\u00a77: the legacy Settings callback is not the Program System's entry point"),
+
+    # ---------------------------------------------------------------- the remediation's rules
+    ("a-refused-delete-is-reported-as-a-completed-one", "CONTROLLER",
+     "            is ProgramOperationResult.Refused -> noticeFor(result.reason)\n",
+     "            is ProgramOperationResult.Refused -> success\n",
+     "a refusal is never classified as a completed operation (\u00a715, \u00a728)"),
+    ("the-detail-closes-even-when-the-delete-was-refused", "DETAIL_SCREEN",
+     "                                val outcome = controller.delete(current.row.programId)\n"
+     "                                if (outcome is ProgramNotice.Done) {\n"
+     "                                    controller.closeDetail()\n"
+     "                                    onBack()\n"
+     "                                }\n",
+     "                                controller.delete(current.row.programId)\n"
+     "                                controller.closeDetail()\n"
+     "                                onBack()\n",
+     "\u00a715: the screen leaves only when the delete completed"),
+    ("a-scheduler-failure-is-read-as-an-ordinary-absence", "CONTROLLER",
+     "                mutableState.update { it.copy(notice = ProgramNotice.STORAGE_FAILED) }\n"
+     "                PreviewFacts(nextOpportunity = null, hasNoFutureDate = false, unreadable = true)\n",
+     "                PreviewFacts(nextOpportunity = null, hasNoFutureDate = false, unreadable = false)\n",
+     "a SYSTEM_FAILURE is never rendered as the ordinary absence of a next workout (\u00a715, \u00a733)"),
+    ("the-planned-start-date-reports-a-rename", "CONTROLLER",
+     "        action(ProgramNotice.PLANNED_START_DATE_SET) {\n",
+     "        action(ProgramNotice.RENAMED) {\n",
+     "saving the planned start date says so, rather than reporting a rename (\u00a714)"),
 ]
 
 FOCUSED = [
@@ -282,6 +309,9 @@ print("    own transaction, and this stage's suite plants a failure at the oppor
 print("    table. A mutation of the UI cannot weaken it, which is the point.")
 print('  * "the Program System is no longer a hidden Settings path" — measured by the navigation suite against')
 print("    the composed calls, not by one line; the legacy-callback row above is the closest single-line form.")
+print('  * "a refused delete leaves nothing closed" — two rows carry it: the classification inside the')
+print("    controller (a refusal must not read as `Done`) and the screen's own guard, which the architecture")
+print("    suite asserts against the source because this project has no Compose test harness.")
 
 sys.exit(1 if missed else 0)
 PYEOF
