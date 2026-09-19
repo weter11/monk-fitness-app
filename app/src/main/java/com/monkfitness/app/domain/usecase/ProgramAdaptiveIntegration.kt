@@ -148,7 +148,7 @@ class ProgramAdaptiveIntegration(
     private val classification: ExerciseFamilyClassification,
     private val clock: Clock,
     private val idGenerator: IdGenerator,
-    private val zone: ZoneId = ZoneId.systemDefault(),
+    private val zone: ZoneId,
     private val window: AdaptiveWindowRule = AdaptiveWindowRule.V1,
     private val policy: ProgramAdaptivePolicy = ProgramAdaptivePolicy.V1
 ) {

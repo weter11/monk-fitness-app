@@ -166,6 +166,9 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
         adaptiveRepository = data.programAdaptiveRepository,
         clock = clock,
         idGenerator = ids,
+        // The same zone the integration gets, so the runtime's own temporal check of the decision it
+        // produced is a check of the very rule that chose the opportunity.
+        zone = ZoneOffset.UTC,
         inTransaction = data.transaction
     )
 

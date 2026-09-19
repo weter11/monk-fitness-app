@@ -246,6 +246,42 @@ class ProgramAdaptiveIntegrationArchitectureTest {
 
     // ------------------------------------------------------------------ no UI, and the shapes
 
+    /**
+     * §4's target rule has two halves — the producer *chooses* the opportunity against the decision's own
+     * day, and the runtime *checks* that choice against the decision's own moment — and they are the same
+     * rule only if they read the same calendar. The composition root owns that one value and hands it to
+     * both, which is the mechanical form of *"the producer and the consumer have the same semantics"*.
+     */
+    @Test
+    fun theCompositionRootHandsTheProducerAndTheConsumerOneCalendar() {
+        val container = File(mainDir, "di/AppContainer.kt").readText()
+        val integration = File(mainDir, "domain/usecase/ProgramAdaptiveIntegration.kt").readText()
+        val runtime = File(mainDir, "domain/usecase/SessionRuntime.kt").readText()
+
+        assertTrue(
+            "the container owns one calendar value",
+            container.contains("val zone: ZoneId = ZoneId.systemDefault()")
+        )
+        assertEquals(
+            "and hands that same value to both sides of the rule — once to the runtime, once to the " +
+                "integration (where it is the last argument, so it carries no trailing comma)",
+            2,
+            Regex(Regex.escape("zone = zone")).findAll(container).count()
+        )
+        assertTrue(
+            "the producer reads the instant it captured the window at",
+            integration.contains("notBefore = LocalDate.ofInstant(capturedAt, zone)")
+        )
+        assertTrue(
+            "the consumer reads the moment the decision was taken on — not a fresh clock reading",
+            runtime.contains("LocalDate.ofInstant(decision.decidedAt, zone)")
+        )
+        assertTrue(
+            "and neither side acquires a calendar of its own",
+            !integration.contains("ZoneId.systemDefault()") && !runtime.contains("ZoneId.systemDefault()")
+        )
+    }
+
     /** No ViewModel and no screen reaches the integration or the engine yet (§23 of the brief). */
     @Test
     fun noViewModelOrScreenReachesTheAdaptiveStage() {

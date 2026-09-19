@@ -68,6 +68,7 @@ checks = [
     (runtime, "if (decision.revisionId != session.revisionId) {", "if (false) {\n            return refusal(SessionRefusal.AdaptiveTargetRefusal.ANOTHER_REVISION)"),
     (runtime, "if (decision.slotId == session.slotId) {", "if (false) {\n            return refusal(SessionRefusal.AdaptiveTargetRefusal.THE_COMPLETED_SLOT_ITSELF)"),
     (runtime, "if (!target.isStartable) {", "if (false) {\n            return refusal(SessionRefusal.AdaptiveTargetRefusal.SLOT_IS_NOT_AHEAD_OF_THE_USER)"),
+    (runtime, "if (!target.plannedFor.isAfter(decisionDay)) {", "        if (false) {"),
     (integration, "result.wasFilteredByTheGuard && state != null -> AdaptiveIntegrationOutcome.AdaptiveFiltered(", "false && state != null -> AdaptiveIntegrationOutcome.AdaptiveFiltered("),
     (integration, "else -> AdaptiveIntegrationOutcome.NothingToAdapt(reason = result.reason, familyState = state)", "else -> AdaptiveIntegrationOutcome.AdaptiveFiltered("),
     (integration, "private fun advanced(stored: Int?, qualified: Boolean): Int = if (qualified) (stored ?: 0) + 1 else 0", "private fun advanced(stored: Int?, qualified: Boolean): Int = stored ?: 0"),
@@ -253,7 +254,15 @@ apply "the-completed-slot-may-receive-the-decision" "$RUNTIME" \
 run_one "the opportunity the completion took can never receive its own adaptation (§4, §16)" yes
 restore "the-completed-slot-may-receive-the-decision" "$RUNTIME"
 
-# 9. STARTABILITY, at the runtime's own boundary.
+# 9. THE TEMPORAL CLAUSE, at the runtime's own boundary: a decision about a day that has passed is
+#    accepted, and only the status of the opportunity is left to speak.
+apply "the-temporal-clause-is-dropped-at-the-runtime" "$RUNTIME" \
+  "        if (!target.plannedFor.isAfter(decisionDay)) {" \
+  "        if (false) {"
+run_one "a past opportunity cannot receive the decision, however startable it is (§4)" yes
+restore "the-temporal-clause-is-dropped-at-the-runtime" "$RUNTIME"
+
+# 9b. STARTABILITY, at the runtime's own boundary.
 apply "a-withdrawn-opportunity-may-receive-the-decision" "$RUNTIME" \
   "        if (!target.isStartable) {
             return refusal(SessionRefusal.AdaptiveTargetRefusal.SLOT_IS_NOT_AHEAD_OF_THE_USER)

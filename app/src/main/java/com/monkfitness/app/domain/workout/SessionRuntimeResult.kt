@@ -255,8 +255,9 @@ sealed interface SessionRefusal {
      * Program and revision as the completion it was taken on* — and each member names one way a decision
      * can fail it. They are separate facts because they mean different things to whoever reads the
      * refusal: a decision about another Program is a wiring defect, a decision about the opportunity just
-     * completed is the P8-era assumption that §30 step 12 corrects, and a decision about an opportunity
-     * that is no longer ahead of the user is a stale decision that has to be re-taken.
+     * completed is the P8-era assumption that §30 step 12 corrects, a decision about an opportunity whose
+     * day has passed is one that can no longer be consumed, and a decision about an opportunity that is
+     * no longer ahead of the user by status is a stale decision that has to be re-taken.
      */
     enum class AdaptiveTargetRefusal {
 
@@ -283,6 +284,18 @@ sealed interface SessionRefusal {
 
         /** The named slot is already taken or withdrawn, so it is not ahead of the user. */
         SLOT_IS_NOT_AHEAD_OF_THE_USER,
+
+        /**
+         * The named slot's **day is not strictly after the day the decision was taken on**.
+         *
+         * Being planned, unstarted and startable is not the same as being *ahead*: a `MISSED`
+         * opportunity is startable too, and its day has passed. The producer chooses the target with the
+         * same comparison (`docs/PROGRAM_ADAPTIVE_INTEGRATION.md` §3), and this clause is the consumer
+         * checking it — against the **decision's own moment**, so no clock is read here and the two
+         * sides cannot disagree about which day the decision belongs to when they are handed the same
+         * zone.
+         */
+        SLOT_IS_NOT_STRICTLY_AHEAD_OF_THE_DECISION,
 
         /** The named slot already holds an attempt: its presentation is frozen and cannot consume one. */
         SLOT_IS_ALREADY_STARTED

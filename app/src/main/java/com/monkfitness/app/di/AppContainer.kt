@@ -37,6 +37,7 @@ import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
 import com.monkfitness.app.domain.usecase.SessionRuntime
 import com.monkfitness.app.domain.program.StandardProgram
+import java.time.ZoneId
 
 /**
  * The Program System's composition root — §26: "*Use explicit `AppContainer`*", with the app's own
@@ -104,6 +105,11 @@ import com.monkfitness.app.domain.program.StandardProgram
  * @param idGenerator the generator new identity is minted through. Injected, never read inside a
  *   repository or a mapper (§26). Nothing in this stage mints an id yet: §30 step 5's creation path
  *   is the first consumer.
+ * @param zone the calendar the adaptive path reads a *day* in — handed to **both** the integration
+ *   (which chooses the target opportunity against the decision's own day) and the session runtime (which
+ *   checks that choice against the decision's own moment). One value for the two sides of §4's contract
+ *   is what keeps them from disagreeing about which day a decision belongs to; a caller that owns its own
+ *   calendar supplies it, and the production default is the device's.
  * @param inTransaction the runner every atomic operation of the graph executes in. It defaults to
  *   the database's **own** `withTransaction`, which is the wired production behaviour; the parameter
  *   exists because a `RoomDatabase` transaction needs a database Room has actually opened, and this
@@ -114,6 +120,7 @@ class AppContainer(
     val database: AppDatabase,
     val clock: Clock = Clock.system(),
     val idGenerator: IdGenerator = IdGenerator.random(),
+    val zone: ZoneId = ZoneId.systemDefault(),
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { block ->
         database.withTransaction { block() }
     }
@@ -310,6 +317,7 @@ class AppContainer(
         adaptiveRepository = programAdaptiveRepository,
         clock = clock,
         idGenerator = idGenerator,
+        zone = zone,
         inTransaction = inTransaction
     )
 
@@ -379,11 +387,12 @@ class AppContainer(
      * ### What the container decides, and what it does not
      *
      * This is **wiring, not behaviour**: the container decides which objects the integration receives and
-     * nothing about what it does with them. The `zone` is deliberately *not* supplied here — it is a
-     * constructor default, so a caller that owns the calendar it reasons in supplies it, and no
-     * production default of this file decides what day a slot was planned for. The window rule and the
-     * policy are the integration's own documented v1 values, for the same reason: a threshold with a
-     * second home is a threshold that can disagree with itself.
+     * nothing about what it does with them. The `zone` handed over is the container's own [zone] — the
+     * **same** value the session runtime receives, because the integration chooses the target opportunity
+     * against the decision's own day while the runtime checks that choice against the decision's own
+     * moment: two calendars there would be a producer and a consumer disagreeing about which day a
+     * decision belongs to. The window rule and the policy are the integration's own documented v1 values,
+     * for the same reason: a threshold with a second home is a threshold that can disagree with itself.
      */
     val programAdaptiveIntegration: ProgramAdaptiveIntegration = ProgramAdaptiveIntegration(
         planRepository = programPlanRepository,
@@ -393,7 +402,8 @@ class AppContainer(
         relations = NoDeclaredProgression,
         classification = NoExerciseFamilyClassification,
         clock = clock,
-        idGenerator = idGenerator
+        idGenerator = idGenerator,
+        zone = zone
     )
 
     // --- the shipped Stage-1 generation (§30 step 15 retires it) ----------------------------------

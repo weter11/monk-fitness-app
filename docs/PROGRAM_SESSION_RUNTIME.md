@@ -227,11 +227,16 @@ says so. Any pair the adaptive contract rejects fails loudly rather than being r
 `docs/PROGRAM_ADAPTIVE_INTEGRATION.md` §2 and §14):
 
 * the decision must be about a **future** opportunity of the same Program and revision — never about the
-  opportunity the completion just took, and never about one that is no longer ahead of the user — because
-  that is where an adjustment is *consumed* (§4, §16). The same-slot equality this stage landed was right
-  only while nothing produced a decision; `AdaptiveDecisionIsOfAnotherOpportunity` became
+  opportunity the completion just took, never about one that is no longer ahead of the user, and never
+  about one whose **day is not strictly after the day the decision was taken on** — because that is where
+  an adjustment is *consumed* (§4, §16). The temporal clause is checked against the decision's own
+  `decidedAt` (no clock is read here) in the zone the composition root hands both this runtime and the
+  integration, so the producer's choice and this check are one rule. The same-slot equality this stage
+  landed was right only while nothing produced a decision;
+  `AdaptiveDecisionIsOfAnotherOpportunity` became
   `AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion` and carries an `AdaptiveTargetRefusal`
-  naming the clause that was broken;
+  naming the clause that was broken (`THE_COMPLETED_SLOT_ITSELF`, `SLOT_IS_NOT_AHEAD_OF_THE_USER`,
+  `SLOT_IS_NOT_STRICTLY_AHEAD_OF_THE_DECISION`, …);
 * `AdaptiveCompletion` gained §27's **adaptive state** leg: `Decided(decision, adjustment, familyState)`
   for the two shapes that carry an audit record, and `WindowEvaluated(familyState)` for a window the
   engine held on — the family's own bookkeeping advances through the windows that changed nothing, or its
@@ -260,7 +265,7 @@ says so. Any pair the adaptive contract rejects fails loudly rather than being r
 | `Complete Workout` is one transaction | §5 |
 | Any failure in completion leaves the pre-completion state intact | The planted-failure suite, with a whole-database census |
 | Historical Session/Snapshot data is never rewritten by later adaptation | `finishSession` writes two outcome columns and no more; the snapshot tables have no update path at all |
-| The Scheduler never creates the Session | The runtime has no scheduler and no calendar; PR 7's own guard pins the reverse direction |
+| The Scheduler never creates the Session | The runtime has no scheduler, computes no date, chooses no date and opens no window; PR 7's own guard pins the reverse direction. It holds one `ZoneId` (§30 step 12) for exactly one comparison — the day an adaptive decision was taken on against the day of the opportunity it names — as a **required** argument, never one it looks up |
 | No lifecycle policy beyond the Session operation | The runtime has no `ProgramRepository`: whether a Program is paused, archived or completed is §3's and §29's |
 | No Revision mutation | One read (`revisionById`), no `saveNewRevision`, pinned by the architecture suite and by a RED mutation |
 | No `RevisionConflict` mechanism | No case of `SessionRefusal` is a conflict, and no draft or staleness token exists here |

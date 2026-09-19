@@ -149,12 +149,14 @@ class SessionRuntimeArchitectureTest {
         assertEquals(
             "the runtime's collaborators are exactly the revision it reads, the opportunities it reads " +
                 "and writes one outcome through, the session graph it persists, the adaptive rows a " +
-                "completion records, the two §26 ports and the transaction runner. The absence of a " +
-                "scheduler, a generator, a policy, a progress reader and a UI type is what makes §30 " +
-                "steps 9–12 impossible here rather than forbidden",
+                "completion records, the two §26 ports, the one calendar an adaptive decision's day is " +
+                "read in — the same value the integration receives, and a required argument so that no " +
+                "caller can leave the two sides of §4's rule disagreeing — and the transaction runner. " +
+                "The absence of a scheduler, a generator, a policy, a progress reader and a UI type is " +
+                "what makes §30 steps 9–12 impossible here rather than forbidden",
             listOf(
                 "ProgramPlanRepository", "ProgramScheduleRepository", "WorkoutSessionRepository",
-                "ProgramAdaptiveRepository", "Clock", "IdGenerator", "Function2"
+                "ProgramAdaptiveRepository", "Clock", "IdGenerator", "ZoneId", "Function2"
             ),
             collaborators
         )
@@ -167,7 +169,7 @@ class SessionRuntimeArchitectureTest {
         )
         assertEquals(
             "and there is no field that is not one of those collaborators",
-            7,
+            8,
             fields.size
         )
     }
@@ -221,12 +223,29 @@ class SessionRuntimeArchitectureTest {
         )
     }
 
+    /**
+     * §30 step 12 revised one entry of this fence, and this test states both halves of the new line:
+     *
+     * ```text
+     * still forbidden   the whole scheduling vocabulary, and any calendar this layer would *acquire*
+     *                   (`LocalDate.now`, `ZoneId.systemDefault`, a clock read for a date)
+     * allowed, once     the zone it is *given*, used for exactly one comparison: the day an adaptive
+     *                   decision was taken on against the day of the opportunity it names
+     * ```
+     *
+     * The zone is not a scheduling decision: a date and an instant are different facts, and §26 puts
+     * their conversion in the layer that owns the clock — which is also why the value is a constructor
+     * fact and the same one the producer of that decision receives (`AppContainer`). The positive half
+     * below is what keeps this from becoming a hole: the runtime may *read* a calendar it was handed,
+     * never acquire one.
+     */
     @Test
     fun theRuntimeMakesNoSchedulingDecision() {
         val forbidden = listOf(
             "ProgramScheduler", "SlotPlanner", "SlotPlan", "ScheduleRequest", "ScheduleWindow",
-            "PLANNING_HORIZON_DAYS", "SlotIdSource", "LocalDate", "DayOfWeek", "ZoneId", "asOf",
-            "plannedFor(", "plusDays", "minusDays"
+            "PLANNING_HORIZON_DAYS", "SlotIdSource", "DayOfWeek", "asOf",
+            "plannedFor(", "plusDays", "minusDays",
+            "LocalDate.now", "ZoneId.systemDefault", "ZoneOffset.systemDefault"
         )
         val offenders = codeLines(listOf(runtimeSource)).mapNotNull { (source, line) ->
             forbidden.firstOrNull { line.contains(it) }?.let { "$source: $line" }
@@ -234,10 +253,22 @@ class SessionRuntimeArchitectureTest {
 
         assertTrue(
             "the Scheduler owns when an opportunity exists, which dates it covers and whether it was " +
-                "missed (§20); this layer starts, continues and ends one attempt, computes no date, opens " +
-                "no window and reads no calendar — the only thing it takes from a slot is its status, " +
-                "and only to refuse it. Found: $offenders",
+                "missed (§20); this layer starts, continues and ends one attempt, computes no date, " +
+                "chooses no date, acquires no calendar and opens no window. Found: $offenders",
             offenders.isEmpty()
+        )
+
+        val lines = codeLines(listOf(runtimeSource))
+        assertEquals(
+            "and the one date this layer does read is the one comparison §4 needs: the day the adaptive " +
+                "decision was taken on against the day of the opportunity it names",
+            1,
+            lines.count { (_, line) -> line.contains("LocalDate.ofInstant(") }
+        )
+        assertEquals(
+            "with the zone it was given, never one it looked up",
+            1,
+            lines.count { (_, line) -> line.contains("decision.decidedAt") }
         )
     }
 
@@ -449,10 +480,11 @@ class SessionRuntimeArchitectureTest {
             occurrences(text, "val sessionRuntime: SessionRuntime = SessionRuntime(")
         )
         assertTrue(
-            "and with exactly the collaborators §30 step 8 documented: the plan it reads, the " +
-                "opportunities, the session graph, the adaptive rows, the two §26 ports and the " +
-                "transaction runner — no Program repository, no scheduler, no generator and no library " +
-                "is handed to it here",
+            "and with exactly the collaborators §30 steps 8 and 12 documented: the plan it reads, the " +
+                "opportunities, the session graph, the adaptive rows, the two §26 ports, the one calendar " +
+                "the adaptive decision's day is read in — the same value the integration receives — and " +
+                "the transaction runner. No Program repository, no scheduler, no generator and no " +
+                "library is handed to it here",
             text.contains(
                 "val sessionRuntime: SessionRuntime = SessionRuntime(\n" +
                     "        planRepository = programPlanRepository,\n" +
@@ -461,6 +493,7 @@ class SessionRuntimeArchitectureTest {
                     "        adaptiveRepository = programAdaptiveRepository,\n" +
                     "        clock = clock,\n" +
                     "        idGenerator = idGenerator,\n" +
+                    "        zone = zone,\n" +
                     "        inTransaction = inTransaction\n" +
                     "    )"
             )

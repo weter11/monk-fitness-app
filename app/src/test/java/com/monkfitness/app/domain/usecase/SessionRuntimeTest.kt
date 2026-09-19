@@ -1296,6 +1296,57 @@ class SessionRuntimeTest {
         assertEquals("nothing was written, and the opportunity keeps its status", before, rig.tableCounts())
     }
 
+    /**
+     * A past opportunity is not ahead of the user by **time**, however startable it is.
+     *
+     * This is the case status alone cannot decide: the opportunity is `MISSED` — its day has passed — it
+     * has no attempt on it, and the runtime would happily start a session for it. The refusal is the
+     * temporal clause of §4's rule, checked against the **decision's own moment** (no clock is read here),
+     * and both sides of the boundary are asserted: an opportunity planned for an earlier day and one
+     * planned for the decision's *own* day are both refused, because "strictly after" is the rule.
+     */
+    @Test
+    fun aDecisionAboutAPastOrSameDayOpportunityIsRefusedAndNothingIsCompleted() = runBlocking {
+        val session = started()
+        val target = rig.slotId(2)
+
+        listOf("2026-09-20", "2026-09-21").forEach { day ->
+            rig.database.exec(
+                "UPDATE `program_workout_slot` SET `status` = 'MISSED', `plannedFor` = '$day' " +
+                    "WHERE `slotId` = '${target.value}'"
+            )
+            val stored = rig.storedSlot(target)
+            assertTrue(
+                "the scenario is what it says: the opportunity is startable on $day",
+                stored.isStartable
+            )
+            assertEquals("and nothing has started it", emptyList<SessionId>(), stored.attempts)
+            val before = rig.tableCounts()
+
+            val refusal = SessionFixture.refusalOf(
+                rig.runtime.finishSession(
+                    session.sessionId,
+                    AdaptiveCompletion.Decided(
+                        decisionAbout(session, target, "decision-\$day")
+                    )
+                )
+            )
+
+            assertEquals(
+                "the decision names a day that is not strictly after the day it was taken on " +
+                    "(the decision's own moment is 2026-09-21T08:20Z, read in the runtime's own zone)",
+                SessionRefusal.AdaptiveTargetRefusal.SLOT_IS_NOT_STRICTLY_AHEAD_OF_THE_DECISION,
+                (refusal as SessionRefusal.AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion).reason
+            )
+            assertEquals("the completion wrote nothing at all", before, rig.tableCounts())
+            assertEquals(
+                "and the attempt it was asked to complete is untouched",
+                SessionStatus.IN_PROGRESS,
+                rig.requireStored(session.sessionId).status
+            )
+        }
+    }
+
     @Test
     fun aDecisionAboutAnOpportunityWhoseSnapshotIsAlreadyTakenIsRefused() = runBlocking {
         val session = started()

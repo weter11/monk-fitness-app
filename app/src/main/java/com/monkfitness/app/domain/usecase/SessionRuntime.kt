@@ -27,6 +27,8 @@ import com.monkfitness.app.domain.workout.SessionStatus
 import com.monkfitness.app.domain.workout.SetResult
 import com.monkfitness.app.domain.workout.WorkoutSession
 import com.monkfitness.app.domain.workout.WorkoutSessionSnapshot
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * The Session runtime — §30 step 8: starting a workout, confirming its sets, going back from it,
@@ -84,8 +86,16 @@ import com.monkfitness.app.domain.workout.WorkoutSessionSnapshot
  * The absences are the guarantees, and each is asserted mechanically by `SessionRuntimeArchitectureTest`:
  *
  *  * **no scheduling.** No date is computed, no opportunity is created, no status is derived from a
- *    date and no horizon is extended: `ProgramScheduler` owns §20 and this class has no calendar and no
- *    zone, so *"let the Scheduler create Session"* (§33) is a sentence it could not carry out.
+ *    date, no horizon is extended and no date is ever *chosen*: `ProgramScheduler` owns §20, and
+ *    *"let the Scheduler create Session"* (§33) is a sentence this class could not carry out. It does
+ *    hold a `zone`, and that is a deliberate line rather than a hole in that rule: the zone is used for
+ *    exactly **one** comparison — the day an adaptive decision was taken on against the day of the
+ *    opportunity it names ([adaptiveTargetRefusalOf]) — because a date and an instant are different
+ *    facts and §26 puts their conversion in the layer that owns the clock. The Producer's target rule is
+ *    stated in the same zone (`docs/PROGRAM_ADAPTIVE_INTEGRATION.md` §3), so the two sides of §4's
+ *    contract share one calendar semantics; the composition root hands both the same value.
+ *    `SchedulingDecisionsAreNotMadeHere`-style guards in `SessionRuntimeArchitectureTest` pin both
+ *    halves: the scheduling vocabulary is still absent, and the zone is never acquired here.
  *  * **no lifecycle policy.** The Program is not read here at all: whether it is paused, archived or
  *    completed is §3's and §29's, and taking an opportunity the user holds is not a lifecycle
  *    transition.
@@ -121,6 +131,10 @@ import com.monkfitness.app.domain.workout.WorkoutSessionSnapshot
  * @param clock the clock every actual moment comes from — `startedAt`, `capturedAt`, `performedAt`,
  *   `finishedAt` — read once per operation, because one operation is one moment (§26).
  * @param idGenerator the identity source every new session, occurrence and set is minted through (§26).
+ * @param zone the calendar the day of an instant is read in, and the only thing this class does with
+ *   dates: one comparison, against the moment an adaptive decision was taken. It is a value it is given
+ *   rather than one it acquires — no `systemDefault()` call exists in this file — so a caller that owns
+ *   its own time (and a test) decides it, and the same value reaches the producer of that decision.
  * @param inTransaction runs a block in one database transaction. It is a collaborator rather than an
  *   assumption because §27's completion is **one** unit that spans two repositories, and because a test
  *   must be able to make that unit fail and measure what is left behind.
@@ -132,6 +146,7 @@ class SessionRuntime(
     private val adaptiveRepository: ProgramAdaptiveRepository,
     private val clock: Clock,
     private val idGenerator: IdGenerator,
+    private val zone: ZoneId,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit
 ) {
 
@@ -438,9 +453,10 @@ class SessionRuntime(
      *
      * The target of a decision is **the opportunity the change will be consumed by** — the next one the
      * user will start — so the decision has to name an opportunity that is still ahead of them, of the
-     * same Program and the same revision as the workout that produced it. Every clause is checked against
-     * stored facts rather than assumed: the slot is read, and its ownership, its status and its attempts
-     * decide the rest.
+     * same Program and the same revision as the workout that produced it, and on a day strictly after the
+     * one the decision was taken on. Every clause is checked against stored facts rather than assumed: the
+     * slot is read, and its ownership, its day, its status and its attempts decide the rest. The only
+     * instant involved is the decision's own, so this method reads no clock.
      *
      * The fourth clause is the one §30 step 12 corrects. Before it, this check required the decision's slot
      * to *equal* the session's, because P8 had no real adaptive producer and the only decision a completion
@@ -476,6 +492,18 @@ class SessionRuntime(
             ?: return refusal(SessionRefusal.AdaptiveTargetRefusal.NO_SUCH_SLOT)
         if (target.programId != session.programId || target.revisionId != session.revisionId) {
             return refusal(SessionRefusal.AdaptiveTargetRefusal.SLOT_IS_OF_ANOTHER_PLAN)
+        }
+        // The temporal clause, checked against the **decision's own moment** rather than against a fresh
+        // reading of the clock: the decision says when it was taken, and the producer chose this
+        // opportunity with the same comparison. §26 keeps the conversion here — the instant is the
+        // decision's fact, the date is the opportunity's — and the zone is the one the composition root
+        // hands both sides, so producer and consumer cannot disagree about which day a decision belongs
+        // to.
+        val decisionDay = LocalDate.ofInstant(decision.decidedAt, zone)
+        if (!target.plannedFor.isAfter(decisionDay)) {
+            return refusal(
+                SessionRefusal.AdaptiveTargetRefusal.SLOT_IS_NOT_STRICTLY_AHEAD_OF_THE_DECISION
+            )
         }
         if (target.attempts.isNotEmpty()) {
             return refusal(SessionRefusal.AdaptiveTargetRefusal.SLOT_IS_ALREADY_STARTED)

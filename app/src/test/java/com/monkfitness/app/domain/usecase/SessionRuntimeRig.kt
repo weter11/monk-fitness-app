@@ -41,6 +41,7 @@ import com.monkfitness.app.domain.workout.SessionRuntimeResult
 import com.monkfitness.app.domain.workout.WorkoutSession
 import java.time.DayOfWeek
 import java.time.Instant
+import java.time.ZoneOffset
 
 /**
  * The session-runtime suite's rig: the data-access rig's real SQLite engine and production DAOs, plus
@@ -96,6 +97,7 @@ internal class SessionRuntimeRig(key: String = "r", database: SqliteTestDatabase
         adaptiveRepository = data.programAdaptiveRepository,
         clock = clock,
         idGenerator = ids,
+        zone = ZoneOffset.UTC,
         inTransaction = data.transaction
     )
 
@@ -110,6 +112,7 @@ internal class SessionRuntimeRig(key: String = "r", database: SqliteTestDatabase
         adaptiveRepository = data.freshAdaptiveRepository(),
         clock = clock,
         idGenerator = ids,
+        zone = ZoneOffset.UTC,
         inTransaction = data.transaction
     )
 

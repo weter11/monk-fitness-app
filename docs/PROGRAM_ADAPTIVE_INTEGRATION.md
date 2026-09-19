@@ -76,8 +76,20 @@ P8        decision.slotId == session.slotId     (nothing produced a decision, so
 step 12   decision.programId == session.programId
           decision.revisionId == session.revisionId
           decision.slotId != session.slotId        §4: the completed opportunity is never adapted
-          the target slot is stored, of this plan, not already started, still startable
+          the target slot is stored and of this plan
+          target.plannedFor is strictly after the decision's own day   ← the producer's rule
+          the target slot is not already started, and is still startable
 ```
+
+**The producer and the consumer check the same rule, and share one calendar.** The integration chooses
+the target with `LocalDate.ofInstant(capturedAt, zone)`, the runtime checks it with
+`LocalDate.ofInstant(decision.decidedAt, zone)` — and `capturedAt` *is* the decision's `decidedAt`, so the
+two comparisons are the same comparison. Both read the **one** `ZoneId` the composition root holds and
+hands to each of them, which is what the brief means by *"use the same `ZoneId` that defines the
+calendar-day semantics of P12, so that producer and consumer have the same semantics"*: the zone is a
+required argument on both sides, neither acquires one (`ZoneId.systemDefault()` appears in `AppContainer`
+and nowhere else on this path), and no side reads the clock a second time — the consumer validates the
+decision against the moment the decision itself carries.
 
 The refusal vocabulary was renamed with the rule: `AdaptiveDecisionIsOfAnotherOpportunity` became
 `AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion`, and it carries an
@@ -114,7 +126,10 @@ Every clause is load-bearing, and the last one is the one that keeps the rule *t
   adjustment would then sit unconsumed while the next real session is started. "Future" therefore has to
   mean a date, and the date is read in the injected zone. The boundary is exclusive on the decision's own
   day: an opportunity planned for *today* may already be under way, so the rule takes the first one
-  planned after it.
+  planned after it — **and the runtime refuses a decision that breaks it**
+  (`AdaptiveTargetRefusal.SLOT_IS_NOT_STRICTLY_AHEAD_OF_THE_DECISION`), checked against the decision's own
+  moment rather than against a fresh reading of the clock, so the two ends of §4's contract cannot read
+  different days when they are handed the same zone.
 
 It creates no slot, moves no date, renumbers no plan day and reschedules nothing (§25): a past-but-
 startable opportunity is *excluded*, never slid — sliding a missed workout is the Scheduler's business.
@@ -363,9 +378,15 @@ sources, reruns the focused §30-step-12 suites, restores the file and proves th
 `md5sum -c`. A rule is only proven if breaking it fails a suite.
 
 ```text
-21 caught, 0 missed — control: the un-mutated tree stays GREEN
+22 caught, 0 missed — control: the un-mutated tree stays GREEN
 every mutated production source restored byte-identically
 ```
+
+The script **pre-flights the tree before it takes its baseline** — every mutation's anchor must be
+present and no mutation's replacement may already be there — takes an exclusive lock so two runs cannot
+touch one tree, and aborts if a mutation cannot be applied. That is not decoration: two concurrent runs
+once restored each other's mutations, and a baseline taken on a mutated file makes `md5sum -c` "prove" a
+restoration of the mutated bytes while the control row is quietly RED.
 
 | mutation | rule it breaks |
 | --- | --- |
@@ -377,6 +398,7 @@ every mutated production source restored byte-identically
 | the program boundary is not checked | §4, §16 |
 | the revision boundary is not checked | §4, §18 |
 | the completed slot may receive the decision | §4's corrected contract |
+| the temporal clause is dropped at the runtime's own boundary | §4, and the producer/consumer agreement |
 | a withdrawn opportunity may receive the decision | §4 |
 | the guard refusal is treated as an ordinary hold | §18 |
 | a held window is recorded as a decision | §12, §16 |
@@ -425,6 +447,8 @@ can distinguish proves nothing, and pretending it does would be a row that lies.
 | a user-authored or pinned element is never adapted | `ProgramAdaptiveIntegrationTest.anElementTheUserAuthoredIsNeverAdapted`, `…aPinnedElementIsNeverAdapted` |
 | a `MANUAL` revision is refused before any element is considered | `ProgramAdaptiveIntegrationTest.aManualRevisionIsRefusedBeforeAnyElementIsConsidered` |
 | no ladder, and no classification, are typed gaps | `…noDeclaredProgressionIsATypedNoDecision`, `…noFamilyClassificationIsATypedNoDecision` |
+| a past or same-day opportunity cannot receive the decision, at the runtime's own boundary | `SessionRuntimeTest.aDecisionAboutAPastOrSameDayOpportunityIsRefusedAndNothingIsCompleted` |
+| the producer and the consumer of §4's rule share one calendar | `ProgramAdaptiveIntegrationArchitectureTest.theCompositionRootHandsTheProducerAndTheConsumerOneCalendar` |
 | an unconfirmed prescription exposes nothing | `…anUnconfirmedPrescriptionExposesNoFamilyAtAll` |
 | the changed element belongs to the target's own plan day | `…theChangedElementBelongsToTheTargetOpportunitysOwnPlanDay` |
 | a failure at any leg rolls all four back | `…aFailureAtAnyLegOfTheCompletionLeavesAllFourLegsUnchanged` |
@@ -455,4 +479,19 @@ Recorded rather than hidden, because each one is a contract another stage owns:
 5. **`SessionRuntimeArchitectureTest`'s fence was revised, not relaxed**: `FamilyProgressionState` now
    crosses the runtime as §27's state leg, and the fence was *tightened* where the new stage could leak
    into it (no integration, no window, no ladder, no classification, no reason vocabulary — with the
-   positive half of the rule asserted beside it).
+   positive half of the rule asserted beside it);
+6. **`SessionRuntime` holds a `ZoneId`**, and it is a required argument. *"a value it is given, never one
+   it acquires"* is the same line the `Clock` is on: the runtime still computes no date, chooses no date,
+   opens no window and does no scheduling (§20, §25) — it reads one calendar for **one** comparison, the
+   day an adaptive decision was taken on against the day of the opportunity that decision names, because
+   a date and an instant are different facts and §26 puts the conversion in the layer that owns the clock.
+   The composition root hands the *same value* to the integration, so the producer's choice and the
+   consumer's check are one rule; the architecture suite asserts both halves (the scheduling vocabulary is
+   still absent, `LocalDate.ofInstant(` appears once, `ZoneId.systemDefault()` appears nowhere in the
+   runtime, and the container passes `zone = zone` to each side).
+
+**One correction inside this change.** The first version of the consumer check used the *slot's* status
+alone; a `MISSED` opportunity is startable, so a decision about a past day was accepted by the runtime
+while the producer could no longer have chosen it. The temporal clause is now checked on both sides, and
+the boundary test asserts it on the consumer side for an opportunity with **no attempt** and
+`isStartable == true` — the exact case status alone cannot decide.
