@@ -54,9 +54,20 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
      * This is what makes a repository's atomicity provable on the JVM: the test supplies a runner that
      * performs a real `COMMIT`/`ROLLBACK`, so a failing insert in the middle of a creation leaves no
      * half-written graph behind, and the rollback is the engine's rather than the test's bookkeeping.
+     *
+     * **Nesting is supported**, because the production runner nests: `RoomDatabase.withTransaction`
+     * opens an inner unit inside an outer one (the editor's edit path writes a Program's facts in the
+     * same unit as the revision, and the revision's own write opens a unit of its own), and a rig that
+     * refused the second call — or committed the first one behind the outer's back — would decide the
+     * composition differently from the device. An inner unit is therefore a `SAVEPOINT`: it commits
+     * into the enclosing unit and rolls back to its own boundary when it throws, leaving the outer
+     * unit's outcome to the outer unit. That is exactly the semantics SQLite's own nested
+     * transactions give Room.
      */
     suspend fun <T> transaction(block: suspend () -> T): T {
+        if (depth > 0) return nestedTransaction(block)
         connection.autoCommit = false
+        depth = 1
         return try {
             val value = block()
             connection.commit()
@@ -66,6 +77,28 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
             throw failure
         } finally {
             connection.autoCommit = true
+            depth = 0
+        }
+    }
+
+    /** How many transaction units are currently open; `0` means the next one is the outermost. */
+    private var depth: Int = 0
+
+    /** An inner unit: a `SAVEPOINT` that releases into the enclosing unit, or rolls back to itself. */
+    private suspend fun <T> nestedTransaction(block: suspend () -> T): T {
+        val savepoint = "nested_unit_$depth"
+        depth += 1
+        try {
+            exec("SAVEPOINT $savepoint")
+            val value = block()
+            exec("RELEASE SAVEPOINT $savepoint")
+            return value
+        } catch (failure: Throwable) {
+            exec("ROLLBACK TO SAVEPOINT $savepoint")
+            exec("RELEASE SAVEPOINT $savepoint")
+            throw failure
+        } finally {
+            depth -= 1
         }
     }
 
