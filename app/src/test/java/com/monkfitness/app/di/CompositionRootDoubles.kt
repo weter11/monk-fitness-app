@@ -347,6 +347,7 @@ internal class CompositionRootRig(
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
         database.migrate(AppDatabase.MIGRATION_7_8)
         database.migrate(AppDatabase.MIGRATION_8_9)
+        database.migrate(AppDatabase.MIGRATION_9_10)
     }
 
     val database = SqliteAppDatabase(engine)

@@ -22,8 +22,9 @@ import java.time.LocalDate
  * placeholder Program/Revision/Session is backfilled, and the legacy `set_log` is not repurposed as
  * the target set log.
  *
- * The chain a device runs is `7 → 8 → 9`: the target schema, then the schedule-frequency correction
- * (`docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md`), which adds one nullable column to
+ * The chain a device runs is `7 → 8 → 9 → 10`: the target schema, then the schedule-frequency
+ * correction (`docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md`), then the Goal/Focus columns
+ * (`docs/PROGRAM_GENERATED_PLANNER.md`) — each of the last two adding nullable columns to
  * `program_revision` and nothing else. Everything below executes the production migration objects in
  * that order, so the database under test is the one the app opens.
  */
@@ -82,15 +83,22 @@ class ProgramMigrationPreservationTest {
         return database
     }
 
-    private fun migratedDatabase(): SqliteTestDatabase = versionSevenDatabase().also { database ->
+    private fun migratedDatabase(): SqliteTestDatabase = versionNineDatabase().also { database ->
         // The deployed chain, in the order a device runs it.
-        database.migrate(AppDatabase.MIGRATION_7_8)
-        database.migrate(AppDatabase.MIGRATION_8_9)
+        database.migrate(AppDatabase.MIGRATION_9_10)
     }
 
     /** A populated **version-8** database: what a device that ran the target-schema release holds. */
     private fun versionEightDatabase(): SqliteTestDatabase =
         versionSevenDatabase().also { it.migrate(AppDatabase.MIGRATION_7_8) }
+
+    /**
+     * A populated **version-9** database: what a device that ran the schedule-frequency correction
+     * holds, before the Goal/Focus columns exist.
+     */
+    private fun versionNineDatabase(): SqliteTestDatabase = versionEightDatabase().also { database ->
+        database.migrate(AppDatabase.MIGRATION_8_9)
+    }
 
     /** SQLite stores the DDL without `IF NOT EXISTS`, so both sides are put in that form. */
     private fun storedForm(sql: String): String =
@@ -467,12 +475,15 @@ class ProgramMigrationPreservationTest {
         assertEquals(8, AppDatabase.MIGRATION_7_8.endVersion)
         assertEquals(8, AppDatabase.MIGRATION_8_9.startVersion)
         assertEquals(9, AppDatabase.MIGRATION_8_9.endVersion)
+        assertEquals(9, AppDatabase.MIGRATION_9_10.startVersion)
+        assertEquals(10, AppDatabase.MIGRATION_9_10.endVersion)
 
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
         try {
             database.migrate(AppDatabase.MIGRATION_7_8)
             database.migrate(AppDatabase.MIGRATION_8_9)
+            database.migrate(AppDatabase.MIGRATION_9_10)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }
@@ -482,9 +493,62 @@ class ProgramMigrationPreservationTest {
             database.tableNames().count { it in ProgramSchemaFixture.TABLES }
         )
         assertEquals(
-            "and the last step put the corrected column on the table it corrects",
+            "and the last step put the columns it adds on the table it adds them to",
             ProgramSchemaFixture.columnsNow("program_revision").map { it.name },
             database.columnNames("program_revision")
+        )
+    }
+
+    @Test
+    fun theFocusCorrectionUpgradesAPopulatedVersionNineDatabaseWithoutInventingAGoal() {
+        val database = versionNineDatabase()
+
+        // The version-9 row set: a Program and its revision, written before Goals & Focus had
+        // anywhere to be stored.
+        database.exec(
+            "INSERT INTO `program` (`programId`, `name`, `description`, `source`, `lifecycleStatus`, " +
+                "`currentRevisionId`, `createdAt`, `updatedAt`, `plannedStartDate`, `actualStartDate`, " +
+                "`archivedAt`) VALUES ('program-9', 'Program', '', 'USER', 'NOT_STARTED', " +
+                "'revision-9', 1700000000000, 1700000000000, NULL, NULL, NULL)"
+        )
+        database.exec(
+            "INSERT INTO `program_revision` (`revisionId`, `programId`, `revisionNumber`, `mode`, " +
+                "`durationType`, `durationDays`, `scheduleType`, `scheduleWeekdays`, `createdAt`, " +
+                "`scheduleSessionsPerWeek`) VALUES ('revision-9', 'program-9', 1, 'GENERATED', " +
+                "'INDEFINITE', NULL, 'FLEXIBLE_PER_WEEK', NULL, 1700000000000, 3)"
+        )
+        val revisionBefore = database.rows("SELECT * FROM `program_revision`").single()
+        val schemaBefore = database.masterSql()
+
+        database.migrate(AppDatabase.MIGRATION_9_10)
+
+        val revisionAfter = database.rows("SELECT * FROM `program_revision`").single()
+        assertEquals(
+            "the row the version-9 database held keeps every value it held",
+            revisionBefore,
+            revisionAfter.filterKeys { it in revisionBefore.keys }
+        )
+        assertEquals(
+            "and the correction leaves the goal and its targets empty rather than filling in a " +
+                "plausible goal: the schema cannot know what the user was building for, and a default " +
+                "would state a configuration nobody chose",
+            listOf(null, null),
+            listOf(revisionAfter["focusGoal"], revisionAfter["focusTargets"])
+        )
+        assertEquals(
+            "no table, index or bookkeeping entry other than the corrected table is rewritten",
+            schemaBefore.filterKeys { it != "program_revision" },
+            database.masterSql().filterKeys { it != "program_revision" }
+        )
+        assertEquals(
+            "the corrected table gains exactly the columns this step adds, appended",
+            ProgramSchemaFixture.columnsNow("program_revision").map { it.name },
+            database.columnNames("program_revision")
+        )
+        assertEquals(
+            "and the shipped tables the device already had are still there, untouched",
+            "pushup",
+            database.scalar("SELECT currentExerciseId FROM `family_progression_state`")
         )
     }
 
@@ -530,8 +594,11 @@ class ProgramMigrationPreservationTest {
             database.masterSql().filterKeys { it != "program_revision" }
         )
         assertEquals(
-            "the corrected table gains exactly the one column, appended",
-            ProgramSchemaFixture.columnsNow("program_revision").map { it.name },
+            "the corrected table gains exactly the one column this step adds, appended",
+            (
+                ProgramSchemaFixture.COLUMNS.getValue("program_revision") +
+                    ProgramSchemaFixture.columnsAddedBy("MIGRATION_8_9", "program_revision")
+                ).map { it.name },
             database.columnNames("program_revision")
         )
         assertEquals(

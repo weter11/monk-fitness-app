@@ -47,8 +47,9 @@ class ProgramRevisionImmutabilityTest {
             .map { it.substringBefore('-') }
             .sorted()
         assertEquals(
-            "a data class exposes one component per property",
-            (1..8).map { "component$it" },
+            "a data class exposes one component per property — nine of them, the Goals & Focus " +
+                "configuration included (§6, §8)",
+            (1..9).map { "component$it" },
             components
         )
         assertTrue(

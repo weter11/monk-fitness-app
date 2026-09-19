@@ -63,7 +63,7 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         AdaptiveDecisionRecordEntity::class,
         AdaptiveAdjustmentEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
@@ -749,6 +749,49 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Version 9 → version 10: the **Goals & Focus** configuration becomes a stored structural fact
+         * of a revision (§6, §8).
+         *
+         * Two columns are appended to `program_revision`, both nullable and both without a default:
+         *
+         * ```text
+         * focusGoal      TEXT   the Goal, as the domain enum member's own name
+         * focusTargets   TEXT   the focuses it states, as one converted deterministic value
+         * ```
+         *
+         * Why they exist at all is §6: *goals/focus* is one of the structural changes that creates a
+         * revision, so a revision that could not state its goal would not be the record of the plan it
+         * describes — and §8's `CUSTOM` percentages would have nowhere to live. Why they are columns
+         * and not a table is §23: a focus configuration is a handful of tokens belonging to exactly
+         * one immutable revision, and a second row-shaped entity would model a relation that does not
+         * exist.
+         *
+         * Both are nullable because SQLite cannot append a `NOT NULL` column without a default, and a
+         * default is exactly what must not be stated here: a revision written before this step chose
+         * no goal, and the mapper reads that absence as §8's `BALANCED` — the configuration that
+         * states nothing — rather than the schema claiming the user picked something. This migration
+         * therefore executes two `ALTER TABLE ... ADD COLUMN` statements and nothing else: no
+         * `UPDATE`, no `INSERT`, no row is touched and no value is invented for the rows already in
+         * the table.
+         *
+         * Version 7 and version 8 devices are not affected differently: they run the earlier steps of
+         * the chain first, which is what `ProgramMigrationPreservationTest` executes on a real engine.
+         *
+         * Visible to the unit tests on purpose, like the two corrections above: the statements are the
+         * deployable proof of the change and the schema suites compare them token for token.
+         */
+        internal val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE `program_revision` ADD COLUMN `focusGoal` TEXT"
+                )
+                database.execSQL(
+                    "ALTER TABLE `program_revision` ADD COLUMN `focusTargets` TEXT"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -764,7 +807,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_5_6,
                         MIGRATION_6_7,
                         MIGRATION_7_8,
-                        MIGRATION_8_9
+                        MIGRATION_8_9,
+                        MIGRATION_9_10
                     )
                     .build()
                 INSTANCE = instance

@@ -59,6 +59,22 @@ import java.time.DayOfWeek
  *   Declared last on purpose: the column is appended to an existing table by `MIGRATION_8_9`, and
  *   keeping the declaration order equal to the physical order means a freshly created database and an
  *   upgraded one hold byte-identical table definitions.
+ * @property focusGoal the Goal of the revision's Goals & Focus configuration (§8), spelled as the
+ *   domain enum member's own name — or `null`, which means `BALANCED`. `null` is the honest reading
+ *   of a row written before Goals & Focus existed: the user stated no goal and no share, and that is
+ *   exactly what `BALANCED` says. The column carries no default for the same reason a default would
+ *   state a goal the user never chose; it is appended by `MIGRATION_9_10` and declared last, like the
+ *   frequency above.
+ * @property focusTargets the focuses the configuration states, as one deterministic `TEXT` value:
+ *   the focus names in canonical order for a `FOCUSED` revision, and `NAME:percent` entries for a
+ *   `CUSTOM` one — never for a `BALANCED` revision, which states nothing and stores `null`. It is a
+ *   `String` and not a converted `List<String>` because Room already declares a `List<String> ⇄
+ *   String` conversion for the snapshot's applied adjustments, and a second one would be ambiguous;
+ *   the token form therefore belongs to the mapper, which owns the discriminator that gives the
+ *   tokens their meaning — exactly as `prescriptionDimension` says what `perSetTargets`' numbers are.
+ *   One column and not a table, because a focus configuration is a handful of tokens belonging to
+ *   exactly one immutable revision: a second row-shaped entity would model a relation that does not
+ *   exist.
  */
 @Entity(
     tableName = "program_revision",
@@ -82,7 +98,9 @@ data class ProgramRevisionEntity(
     val scheduleType: String,
     val scheduleWeekdays: Set<DayOfWeek>? = null,
     val createdAt: Long,
-    val scheduleSessionsPerWeek: Int? = null
+    val scheduleSessionsPerWeek: Int? = null,
+    val focusGoal: String? = null,
+    val focusTargets: String? = null
 ) {
 
     init {
@@ -126,6 +144,17 @@ data class ProgramRevisionEntity(
                 }
             }
         }
+        when (focusGoal) {
+            null -> require(focusTargets == null) {
+                "a revision that states no goal — $focusGoal, which reads as the domain's " +
+                    "$BALANCED_GOAL — stores no focus targets, was $focusTargets (§8)"
+            }
+            FOCUSED, CUSTOM -> require(!focusTargets.isNullOrEmpty()) {
+                "a $focusGoal revision stores the focuses it is built around; focusTargets was " +
+                    "$focusTargets (§8)"
+            }
+            else -> Unit // an unknown token is refused by the mapper, which owns the vocabulary (§25)
+        }
     }
 
     companion object {
@@ -143,6 +172,24 @@ data class ProgramRevisionEntity(
 
         /** The discriminator of a deterministic sessions-per-week schedule. */
         const val FLEXIBLE_PER_WEEK: String = "FLEXIBLE_PER_WEEK"
+
+        /**
+         * The discriminator of a revision whose user named the focuses to train (§8's `FOCUSED`),
+         * spelled as the domain `Goal` member's own name — `ProgramSchemaTest` asserts that
+         * correspondence rather than trusting it, exactly as it does for the duration and schedule
+         * discriminators above.
+         */
+        const val FOCUSED: String = "FOCUSED"
+
+        /** The discriminator of a revision whose user stated every focus's share (§8's `CUSTOM`). */
+        const val CUSTOM: String = "CUSTOM"
+
+        /**
+         * What a `null` focus discriminator means: §8's `BALANCED`, the configuration that states
+         * nothing. Named here so the guard's message says it out loud, and kept as a token rather than
+         * as a stored value — nothing is written for a revision that states no goal.
+         */
+        const val BALANCED_GOAL: String = "BALANCED"
 
         /**
          * The frequencies a `FLEXIBLE_PER_WEEK` revision may store — the range the domain's

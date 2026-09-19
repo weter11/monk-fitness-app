@@ -32,9 +32,11 @@ class ProgramEditorDraftTest {
             .toSet()
 
         assertEquals(
+            "the working facts of a draft, with the Goals & Focus configuration among them (§6, §8) " +
+                "and no revision identity anywhere",
             setOf(
                 "programId", "baseRevisionId", "name", "description", "mode", "duration",
-                "schedule", "days"
+                "schedule", "days", "focus"
             ),
             draftFields
         )

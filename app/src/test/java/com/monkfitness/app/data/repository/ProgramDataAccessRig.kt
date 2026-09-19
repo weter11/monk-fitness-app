@@ -168,7 +168,7 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
 
         /**
          * Runs the **deployed** migration chain on an open database: the shipped version-7 schema, then
-         * the production migrations to version 9.
+         * the production migrations to version 10.
          *
          * It is the rig's own setup, exposed because a file-backed database has to be migrated by the
          * first connection that opens it and *not* by the second: a device at version 7 upgrades once, and
@@ -176,10 +176,11 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
          */
         fun migrate(database: SqliteTestDatabase) {
             database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
-            // The deployed chain: the target schema, then the schedule-frequency correction. Stopping at
-            // version 8 would exercise a database no device opens.
+            // The deployed chain: the target schema, the schedule-frequency correction, then the
+            // Goal/Focus columns. Stopping short would exercise a database no device opens.
             database.migrate(AppDatabase.MIGRATION_7_8)
             database.migrate(AppDatabase.MIGRATION_8_9)
+            database.migrate(AppDatabase.MIGRATION_9_10)
         }
     }
 }

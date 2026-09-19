@@ -23,9 +23,17 @@ import com.monkfitness.app.domain.prescription.Prescription
  *
  * ```text
  * mode, duration, schedule      the revision's own configuration
+ * focus                         the Goals & Focus configuration the plan is built for
  * days, in order                each day's type and name
  * plan elements, in order       each element's exercise, per-set prescription, authorship, pin
  * ```
+ *
+ * [focus] is part of the configuration rather than of the plan's content on purpose: §6 lists
+ * *"goals/focus"* beside *"mode"*, *"duration"* and *"schedule/distribution"* among the changes that
+ * create a revision, and §7 edits *Goals & Focus* in the same configuration part of the editor as the
+ * duration and the schedule. Changing what a plan is **for** is therefore structural even when not one
+ * exercise moved, which is the honest reading: the same days built for a different goal are a
+ * different plan.
  *
  * Positions are not stored: the lists *are* the order, so a re-ordered plan differs while a
  * renumbered-but-otherwise-identical one does not.
@@ -34,7 +42,8 @@ data class ProgramStructure(
     val mode: ProgramMode,
     val duration: ProgramDuration,
     val schedule: ProgramSchedule,
-    val days: List<StructuredDay>
+    val days: List<StructuredDay>,
+    val focus: FocusPlan = FocusPlan.DEFAULT
 ) {
 
     /** The names of this structure's days, in order. */
@@ -56,12 +65,14 @@ data class ProgramStructure(
             mode: ProgramMode,
             duration: ProgramDuration,
             schedule: ProgramSchedule,
-            days: List<ProgramDay>
+            days: List<ProgramDay>,
+            focus: FocusPlan = FocusPlan.DEFAULT
         ): ProgramStructure = ProgramStructure(
             mode = mode,
             duration = duration,
             schedule = schedule,
-            days = days.map { StructuredDay.of(it) }
+            days = days.map { StructuredDay.of(it) },
+            focus = focus
         )
     }
 }
@@ -117,11 +128,11 @@ data class StructuredExercise(
 
 /** The structure of the plan a saved revision describes. */
 val ProgramRevision.structure: ProgramStructure
-    get() = ProgramStructure.of(mode, duration, schedule, days)
+    get() = ProgramStructure.of(mode, duration, schedule, days, focus)
 
 /** The structure of the plan a draft is currently holding — what `Save` would persist (§7). */
 val ProgramEditorDraft.structure: ProgramStructure
-    get() = ProgramStructure.of(mode, duration, schedule, days)
+    get() = ProgramStructure.of(mode, duration, schedule, days, focus)
 
 /**
  * A dimension of the structure that can differ between two plans.
@@ -144,6 +155,16 @@ enum class ProgramStructureAspect {
 
     /** The weekly rhythm: fixed weekdays or a deterministic frequency (§20). */
     SCHEDULE,
+
+    /**
+     * The Goals & Focus configuration the plan is built for (§8, §7's *Goals & Focus* step).
+     *
+     * It belongs here, among the configuration facts, because §6 lists *"goals/focus"* with
+     * *"mode"*, *"duration"* and *"schedule/distribution"* — and because it is what makes the same
+     * days a different plan: changing what a Program is built for creates a revision even when not one
+     * exercise moved.
+     */
+    FOCUS,
 
     /** The days themselves — how many, in what order, of which type, under which names. */
     DAYS,
@@ -175,6 +196,7 @@ private fun ProgramStructure.differsFrom(
     ProgramStructureAspect.MODE -> mode != base.mode
     ProgramStructureAspect.DURATION -> duration != base.duration
     ProgramStructureAspect.SCHEDULE -> schedule != base.schedule
+    ProgramStructureAspect.FOCUS -> focus != base.focus
     ProgramStructureAspect.DAYS -> dayLabels != base.dayLabels
     ProgramStructureAspect.EXERCISES -> selection != base.selection
     ProgramStructureAspect.PRESCRIPTIONS -> prescriptions != base.prescriptions

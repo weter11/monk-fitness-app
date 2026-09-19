@@ -40,6 +40,9 @@ import com.monkfitness.app.domain.common.RevisionId
  * @property duration the working duration.
  * @property schedule the working schedule.
  * @property days the working plan, in the user's arrangement.
+ * @property focus the working Goals & Focus configuration (§8, §7's *Goals & Focus* step). It is
+ *   structural content (§6), it is what the Generated Planner is built from, and a save that changes
+ *   it and nothing else still creates a revision.
  */
 data class ProgramEditorDraft(
     val programId: ProgramId? = null,
@@ -49,7 +52,8 @@ data class ProgramEditorDraft(
     val mode: ProgramMode = ProgramMode.MANUAL,
     val duration: ProgramDuration = ProgramDuration.Indefinite,
     val schedule: ProgramSchedule = ProgramSchedule.FlexiblePerWeek(3),
-    val days: List<ProgramDay> = emptyList()
+    val days: List<ProgramDay> = emptyList(),
+    val focus: FocusPlan = FocusPlan.DEFAULT
 ) {
 
     /** Whether saving this draft would create a Program rather than update one. */

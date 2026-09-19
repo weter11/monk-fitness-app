@@ -180,7 +180,12 @@ private fun Map<String, String?>.revisionEntity() = ProgramRevisionEntity(
     scheduleType = text("scheduleType"),
     scheduleWeekdays = weekdays("scheduleWeekdays"),
     createdAt = millis("createdAt"),
-    scheduleSessionsPerWeek = this["scheduleSessionsPerWeek"]?.toInt()
+    scheduleSessionsPerWeek = this["scheduleSessionsPerWeek"]?.toInt(),
+    // The Goals & Focus columns (§6, §8), read as the raw stored bytes: the discriminator and the
+    // tokens beside it. The *meaning* of the tokens belongs to the mapper, so the harness carries
+    // them through unchanged rather than interpreting them.
+    focusGoal = this["focusGoal"],
+    focusTargets = this["focusTargets"]
 )
 
 private fun Map<String, String?>.dayEntity() = ProgramDayEntity(

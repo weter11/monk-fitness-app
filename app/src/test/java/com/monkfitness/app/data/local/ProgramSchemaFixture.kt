@@ -413,7 +413,7 @@ internal object ProgramSchemaFixture {
      */
     val VOCABULARY_COLUMNS: Map<String, List<String>> = mapOf(
         "program" to listOf("source", "lifecycleStatus"),
-        "program_revision" to listOf("mode", "durationType", "scheduleType"),
+        "program_revision" to listOf("mode", "durationType", "scheduleType", "focusGoal"),
         "program_day" to listOf("type"),
         "program_exercise" to listOf("prescriptionDimension", "origin"),
         "program_workout_slot" to listOf("status"),
@@ -446,30 +446,66 @@ internal object ProgramSchemaFixture {
     )
 
     /**
-     * The columns a **later additive migration** added to a table the version-8 migration created.
+     * Every **additive step** of the migration chain, in the order a device runs them, with the
+     * columns each one appends to a table the version-8 migration created.
      *
      * They are kept apart from [COLUMNS] on purpose: an `ALTER TABLE ... ADD COLUMN` is not part of the
      * `CREATE TABLE` the version-8 migration executes, and folding these columns into [COLUMNS] would
      * make that contract describe a table the migration does not create — the schema-equality test would
-     * then fail for the right reason but with the wrong fix available.
+     * then fail for the right reason but with the wrong fix available. Keeping them apart *per step* is
+     * the same discipline one level up: a step's statement list and the columns that step declares are
+     * each other's contract, so a column added by a later step may not be expected of an earlier one.
      *
-     * `program_revision.scheduleSessionsPerWeek` is the schedule-frequency correction: a
-     * `FLEXIBLE_PER_WEEK` revision states a deterministic sessions-per-week frequency (§20), which the
-     * version-8 table had nowhere to store. See
-     * `docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md`.
+     * ```text
+     * MIGRATION_8_9    program_revision.scheduleSessionsPerWeek   the schedule-frequency correction (§20)
+     * MIGRATION_9_10   program_revision.focusGoal                 the Goals & Focus configuration (§6, §8)
+     *                  program_revision.focusTargets
+     * ```
+     *
+     * See `docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md` for the first and
+     * `docs/PROGRAM_GENERATED_PLANNER.md` for the second.
      */
-    val ADDED_COLUMNS: Map<String, List<Column>> = mapOf(
-        "program_revision" to listOf(Column("scheduleSessionsPerWeek", INTEGER, nullable = true))
+    val ADDITIVE_STEPS: List<Pair<String, Map<String, List<Column>>>> = listOf(
+        "MIGRATION_8_9" to mapOf(
+            "program_revision" to listOf(Column("scheduleSessionsPerWeek", INTEGER, nullable = true))
+        ),
+        "MIGRATION_9_10" to mapOf(
+            "program_revision" to listOf(
+                Column("focusGoal", TEXT, nullable = true),
+                Column("focusTargets", TEXT, nullable = true)
+            )
+        )
     )
 
     /**
-     * Every statement the additive migration must execute, in the order SQLite receives them: one
-     * `ADD COLUMN` per declared addition. No default appears, because the frequency is required for one
-     * schedule form and must stay absent for the other.
+     * Every column a later additive step appended to a version-8 table, in the order the chain appends
+     * them — which is also the order the entity declares them, because that equality is what makes a
+     * freshly created database and an upgraded one hold byte-identical table definitions.
      */
-    val EXPECTED_ADDITIVE_STATEMENTS: List<String> = ADDED_COLUMNS.flatMap { (table, columns) ->
-        columns.map { column -> "ALTER TABLE `$table` ADD COLUMN `${column.name}` ${column.type}" }
-    }
+    val ADDED_COLUMNS: Map<String, List<Column>> = ADDITIVE_STEPS
+        .flatMap { (_, step) -> step.flatMap { (table, columns) -> columns.map { table to it } } }
+        .groupBy({ it.first }, { it.second })
+
+    /**
+     * Every statement one additive step must execute, in the order SQLite receives them: one
+     * `ADD COLUMN` per column that step declares. No default appears anywhere — a frequency the user
+     * never chose and a goal they never stated are exactly what a default would invent.
+     */
+    fun expectedAdditiveStatements(step: String): List<String> =
+        ADDITIVE_STEPS.first { it.first == step }.second.flatMap { (table, columns) ->
+            columns.map { column -> "ALTER TABLE `$table` ADD COLUMN `${column.name}` ${column.type}" }
+        }
+
+    /** Every additive statement the whole chain executes, in chain order. */
+    val EXPECTED_ADDITIVE_STATEMENTS: List<String> =
+        ADDITIVE_STEPS.flatMap { (step, _) -> expectedAdditiveStatements(step) }
+
+    /**
+     * The columns one additive step appends to [table], so a test can assert a step's own contract
+     * without reading the cumulative list.
+     */
+    fun columnsAddedBy(step: String, table: String): List<Column> =
+        ADDITIVE_STEPS.first { it.first == step }.second[table].orEmpty()
 
     /** What a table holds at the **current** version: the version-8 columns plus the added ones. */
     fun columnsNow(table: String): List<Column> =
