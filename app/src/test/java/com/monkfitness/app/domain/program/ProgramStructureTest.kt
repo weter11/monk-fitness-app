@@ -70,7 +70,8 @@ class ProgramStructureTest {
             mode = revision.mode,
             duration = revision.duration,
             schedule = revision.schedule,
-            days = revision.days
+            days = revision.days,
+            focus = revision.focus
         )
 
         assertEquals(revision.structure, draft.structure)
@@ -86,8 +87,11 @@ class ProgramStructureTest {
     @Test
     fun theVocabularyIsEveryStructuralDimensionOfSectionSix() {
         assertEquals(
-            "§6's list of what creates a revision, grouped as the editor presents it",
-            listOf("MODE", "DURATION", "SCHEDULE", "DAYS", "EXERCISES", "PRESCRIPTIONS", "PINNING"),
+            "§6's list of what creates a revision, grouped as the editor presents it — goals/focus " +
+                "included, because §6 lists them among the configuration facts that create one",
+            listOf(
+                "MODE", "DURATION", "SCHEDULE", "FOCUS", "DAYS", "EXERCISES", "PRESCRIPTIONS", "PINNING"
+            ),
             ProgramStructureAspect.entries.map { it.name }
         )
     }
@@ -108,6 +112,11 @@ class ProgramStructureTest {
             listOf(ProgramStructureAspect.SCHEDULE),
             structure(days(), schedule = ProgramSchedule.FixedWeekdays(setOf(DayOfWeek.TUESDAY)))
                 .differencesFrom(base)
+        )
+        assertEquals(
+            "the Goals & Focus configuration is a configuration fact like the duration (§6, §8)",
+            listOf(ProgramStructureAspect.FOCUS),
+            structure(days(), focus = FocusPlan.focused(setOf(Focus.PUSH))).differencesFrom(base)
         )
         assertEquals(
             "the day list — how many, in what order, of which type, under which names",
@@ -190,7 +199,8 @@ class ProgramStructureTest {
                 )
             },
             mode = ProgramMode.GENERATED,
-            schedule = ProgramSchedule.FlexiblePerWeek(5)
+            schedule = ProgramSchedule.FlexiblePerWeek(5),
+            focus = FocusPlan.focused(setOf(com.monkfitness.app.domain.program.Focus.PUSH))
         )
 
         assertEquals(
@@ -198,6 +208,7 @@ class ProgramStructureTest {
             listOf(
                 ProgramStructureAspect.MODE,
                 ProgramStructureAspect.SCHEDULE,
+                ProgramStructureAspect.FOCUS,
                 ProgramStructureAspect.PRESCRIPTIONS,
                 ProgramStructureAspect.PINNING
             ),
@@ -342,8 +353,9 @@ class ProgramStructureTest {
         days: List<ProgramDay>,
         mode: ProgramMode = ProgramMode.MANUAL,
         duration: ProgramDuration = ProgramDuration.FixedDays(28),
-        schedule: ProgramSchedule = ProgramSchedule.FlexiblePerWeek(3)
-    ): ProgramStructure = ProgramStructure.of(mode, duration, schedule, days)
+        schedule: ProgramSchedule = ProgramSchedule.FlexiblePerWeek(3),
+        focus: FocusPlan = FocusPlan.Balanced
+    ): ProgramStructure = ProgramStructure.of(mode, duration, schedule, days, focus)
 
     private fun revision(days: List<ProgramDay>): ProgramRevision = ProgramRevision(
         revisionId = RevisionId("revision-1"),

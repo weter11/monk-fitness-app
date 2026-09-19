@@ -35,6 +35,11 @@ import java.time.Instant
  * @property schedule when its slots fall.
  * @property days the revision's plan, ordered by position.
  * @property createdAt when this revision was saved.
+ * @property focus the Goals & Focus configuration the plan is built for (§8): the goal, and the
+ *   focuses it states — the whole vocabulary for `BALANCED`, the named focuses for `FOCUSED`, the
+ *   user's percentages for `CUSTOM`. It defaults to `BALANCED`, which is the configuration that
+ *   states nothing: a plan built before Goals & Focus existed was built for every focus with no share
+ *   stated, and reading it as anything else would put words in the user's mouth.
  */
 data class ProgramRevision(
     val revisionId: RevisionId,
@@ -44,7 +49,8 @@ data class ProgramRevision(
     val duration: ProgramDuration,
     val schedule: ProgramSchedule,
     val days: List<ProgramDay>,
-    val createdAt: Instant
+    val createdAt: Instant,
+    val focus: FocusPlan = FocusPlan.DEFAULT
 ) {
 
     init {

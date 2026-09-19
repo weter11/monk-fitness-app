@@ -62,6 +62,17 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
     /** The working schedule (§20). */
     fun withSchedule(schedule: ProgramSchedule): ProgramDraftEditor = next(draft.copy(schedule = schedule))
 
+    /**
+     * The working Goals & Focus configuration (§8, §7's *Goals & Focus* step).
+     *
+     * It is an ordinary working fact of the draft — structural content (§6), so a save that changes it
+     * and nothing else still creates a revision — and it is what the Generated Planner is built from.
+     * The editor neither validates nor interprets it here: a `FocusPlan` is already a value that
+     * cannot exist in an invalid state (a custom allocation that does not sum to 100% is refused by
+     * its own constructor), so there is nothing left for this operation to check.
+     */
+    fun withFocus(focus: FocusPlan): ProgramDraftEditor = next(draft.copy(focus = focus))
+
     // ---------------------------------------------------------------- days
 
     /**

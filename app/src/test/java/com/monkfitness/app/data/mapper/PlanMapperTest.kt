@@ -5,6 +5,9 @@ import com.monkfitness.app.data.repository.ProgramGraphFixture
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.domain.prescription.RepPrescription
 import com.monkfitness.app.domain.prescription.TimePrescription
+import com.monkfitness.app.domain.program.Focus
+import com.monkfitness.app.domain.program.FocusAllocation
+import com.monkfitness.app.domain.program.FocusPlan
 import com.monkfitness.app.domain.program.ProgramDuration
 import com.monkfitness.app.domain.program.ProgramRevision
 import com.monkfitness.app.domain.program.ProgramSchedule
@@ -347,6 +350,165 @@ class PlanMapperTest {
 
         assertTrue(noDays.message!!.contains("carries a plan"))
         assertTrue(withAGap.message!!.contains("numbered 1.."))
+    }
+
+    // ------------------------------------------------------------------ Goals & Focus (§6, §8)
+
+    @Test
+    fun theBalancedConfigurationIsStoredAsTheGoalItStates() {
+        val rows = revision.toRows()
+
+        assertEquals(
+            "the configuration that states nothing is stored as the goal that states nothing",
+            "BALANCED",
+            rows.revision.focusGoal
+        )
+        assertNull(
+            "and it stores no targets at all: there is no share and no named focus to store",
+            rows.revision.focusTargets
+        )
+        assertEquals(
+            "so the round trip is the value itself",
+            FocusPlan.Balanced,
+            revisionDomain(rows.revision, rows.days, rows.exercises).focus
+        )
+    }
+
+    @Test
+    fun aFocusedConfigurationStoresItsFocusesInTheDomainOrderAndComesBackEqual() {
+        val focused = revision.copy(
+            focus = FocusPlan.focused(setOf(Focus.PULL, Focus.PUSH, Focus.CORE))
+        )
+        val rows = focused.toRows()
+
+        assertEquals(
+            "the vocabulary's own order is PUSH / PULL / LEGS / CORE / MOBILITY / POSTURE / " +
+                "CONDITIONING, so that is the order a configuration is stored in",
+            listOf("PUSH", "PULL", "CORE"),
+            rows.revision.focusTargets?.split(",")
+        )
+        assertEquals("FOCUSED", rows.revision.focusGoal)
+        assertEquals(
+            "the loaded configuration is the one that was saved, order included",
+            focused.focus,
+            revisionDomain(rows.revision, rows.days, rows.exercises).focus
+        )
+        assertEquals(
+            "and that order is the vocabulary's own, so a second save writes the same row",
+            focused.focus,
+            FocusPlan.focused(listOf(Focus.CORE, Focus.PULL, Focus.PUSH))
+        )
+    }
+
+    @Test
+    fun aCustomConfigurationStoresEveryShareAndComesBackEqual() {
+        val custom = revision.copy(
+            focus = FocusPlan.custom(
+                listOf(
+                    FocusAllocation(Focus.PUSH, 50),
+                    FocusAllocation(Focus.LEGS, 30),
+                    FocusAllocation(Focus.CORE, 20)
+                )
+            )
+        )
+        val rows = custom.toRows()
+
+        assertEquals(
+            "the shares are stored as the tokens the discriminator gives meaning to, in the " +
+                "vocabulary's own order: PUSH, LEGS, CORE",
+            listOf("PUSH:50", "LEGS:30", "CORE:20"),
+            rows.revision.focusTargets?.split(",")
+        )
+        assertEquals("CUSTOM", rows.revision.focusGoal)
+        assertEquals(
+            custom.focus,
+            revisionDomain(rows.revision, rows.days, rows.exercises).focus
+        )
+    }
+
+    @Test
+    fun aRevisionWrittenBeforeGoalsAndFocusExistedReadsAsBalanced() {
+        val rows = rows().let { it.copy(revision = it.revision.copy(focusGoal = null, focusTargets = null)) }
+
+        assertEquals(
+            "a null goal is what a row written before the column existed holds, and it means the " +
+                "user stated nothing — which is exactly §8's BALANCED, read rather than invented",
+            FocusPlan.Balanced,
+            revisionDomain(rows.revision, rows.days, rows.exercises).focus
+        )
+    }
+
+    @Test
+    fun aStoredConfigurationTheDomainRefusesCannotBeLoaded() {
+        val sharesThatDoNotSum = rows().let {
+            it.copy(revision = it.revision.copy(focusGoal = "CUSTOM", focusTargets = "PUSH:50,LEGS:30"))
+        }
+        assertTrue(
+            "a stored 80% configuration is invalid persisted data, refused by the domain's own rule " +
+                "rather than silently loaded as something the user did not ask for",
+            assertThrows(IllegalArgumentException::class.java) {
+                revisionDomain(sharesThatDoNotSum.revision, sharesThatDoNotSum.days, sharesThatDoNotSum.exercises)
+            }.message!!.contains("must sum to 100%")
+        )
+
+        val unknownGoal = rows().let {
+            it.copy(revision = it.revision.copy(focusGoal = "BALANCEDPLUS"))
+        }
+        assertTrue(
+            "an unknown goal token is refused, and the failure names the column it came from",
+            assertThrows(IllegalArgumentException::class.java) {
+                revisionDomain(unknownGoal.revision, unknownGoal.days, unknownGoal.exercises)
+            }.message!!.contains("program_revision.focusGoal")
+        )
+
+        // A configuration that names focuses but stores none cannot even be *constructed* as a row:
+        // the entity refuses it, which is the strongest available statement — invalid persisted data
+        // of this shape is not producible through the data layer's own type.
+        assertTrue(
+            "a configuration that names focuses but stores none is not a configuration, and the " +
+                "entity refuses to represent it",
+            assertThrows(IllegalArgumentException::class.java) {
+                rows().revision.copy(focusGoal = "FOCUSED", focusTargets = null)
+            }.message!!.contains("stores the focuses it is built around")
+        )
+
+        val shareWithoutASeparator = rows().let {
+            it.copy(revision = it.revision.copy(focusGoal = "CUSTOM", focusTargets = "PUSH"))
+        }
+        assertTrue(
+            "and a share token that is not 'NAME:percent' is refused with the token it read",
+            assertThrows(IllegalArgumentException::class.java) {
+                revisionDomain(
+                    shareWithoutASeparator.revision,
+                    shareWithoutASeparator.days,
+                    shareWithoutASeparator.exercises
+                )
+            }.message!!.contains("NAME:")
+        )
+    }
+
+    @Test
+    fun aConfigurationOfEveryFormSurvivesAStoreAndLoadUnchanged() {
+        listOf(
+            FocusPlan.Balanced,
+            FocusPlan.focused(setOf(Focus.POSTURE, Focus.MOBILITY)),
+            FocusPlan.custom(
+                listOf(
+                    FocusAllocation(Focus.PUSH, 40),
+                    FocusAllocation(Focus.PULL, 35),
+                    FocusAllocation(Focus.LEGS, 25)
+                )
+            )
+        ).forEach { configuration ->
+            val withConfiguration = revision.copy(focus = configuration)
+            val rows = withConfiguration.toRows()
+
+            assertEquals(
+                "every form of the configuration crosses the boundary losslessly: $configuration",
+                withConfiguration,
+                revisionDomain(rows.revision, rows.days, rows.exercises)
+            )
+        }
     }
 
     @Test

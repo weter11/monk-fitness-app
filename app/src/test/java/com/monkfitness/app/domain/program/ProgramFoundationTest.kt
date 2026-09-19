@@ -102,9 +102,11 @@ class ProgramFoundationTest {
         val revisionFields = declaredFieldNames(ProgramRevision::class.java)
 
         assertEquals(
+            "the revision's own facts: identity, the Program it belongs to, its ordinal, the " +
+                "configuration (mode, duration, schedule and §6's goals/focus) and its plan",
             setOf(
                 "revisionId", "programId", "revisionNumber", "mode", "duration",
-                "schedule", "days", "createdAt"
+                "schedule", "days", "createdAt", "focus"
             ),
             revisionFields
         )
@@ -475,6 +477,7 @@ class ProgramFoundationTest {
         // Guards the reflection helper: if the filter stopped matching, the field-set assertions
         // above would pass vacuously against an empty set.
         assertEquals(11, declaredFieldNames(Program::class.java).size)
-        assertEquals(8, declaredFieldNames(ProgramRevision::class.java).size)
+        assertEquals(9, declaredFieldNames(ProgramRevision::class.java).size)
+        assertEquals(9, declaredFieldNames(ProgramEditorDraft::class.java).size)
     }
 }

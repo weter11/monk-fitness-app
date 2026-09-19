@@ -22,7 +22,12 @@ import com.monkfitness.app.domain.adaptive.EvidenceLevel
 import com.monkfitness.app.domain.adaptive.RecoveryContext
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
 import com.monkfitness.app.domain.adaptive.decision.DecisionOutcome
+import com.monkfitness.app.data.mapper.revisionDomain
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
+import com.monkfitness.app.domain.program.Focus
+import com.monkfitness.app.domain.program.FocusAllocation
+import com.monkfitness.app.domain.program.FocusPlan
+import com.monkfitness.app.domain.program.Goal
 import com.monkfitness.app.domain.program.LifecycleStatus
 import com.monkfitness.app.domain.program.ProgramDayType
 import com.monkfitness.app.domain.program.ProgramDuration
@@ -31,6 +36,7 @@ import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.domain.program.ProgramSchedule
 import com.monkfitness.app.domain.program.ProgramSource
 import com.monkfitness.app.domain.program.SlotStatus
+import com.monkfitness.app.domain.program.generated.GenerationPolicy
 import com.monkfitness.app.domain.workout.SessionStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -92,6 +98,12 @@ class ProgramSchemaTest {
 
     /** Every statement the version-8 → version-9 additive migration executes, in order. */
     private fun additiveStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_8_9)
+
+    /** The statements of the second additive step — the Goal/Focus columns of §8. */
+    private fun focusStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_9_10)
+
+    /** Every additive statement the deployed chain executes, in chain order. */
+    private fun allAdditiveStatements(): List<String> = additiveStatements() + focusStatements()
 
     /** The version the database declares, read from the source that declares it. */
     private fun currentVersion(): Int =
@@ -255,8 +267,14 @@ class ProgramSchemaTest {
         )
         assertEquals(9, AppDatabase.MIGRATION_8_9.endVersion)
         assertEquals(
+            "the Goal/Focus correction is the step after that one (§8)",
+            9,
+            AppDatabase.MIGRATION_9_10.startVersion
+        )
+        assertEquals(10, AppDatabase.MIGRATION_9_10.endVersion)
+        assertEquals(
             "and the declared version is where the chain ends",
-            AppDatabase.MIGRATION_8_9.endVersion,
+            AppDatabase.MIGRATION_9_10.endVersion,
             currentVersion()
         )
     }
@@ -343,12 +361,13 @@ class ProgramSchemaTest {
 
         assertEquals(
             "the correction is the statements the contract derives, in order",
-            normalized(ProgramSchemaFixture.EXPECTED_ADDITIVE_STATEMENTS),
+            normalized(ProgramSchemaFixture.expectedAdditiveStatements("MIGRATION_8_9")),
             normalized(statements)
         )
         assertEquals(
             "one statement per declared addition",
-            ProgramSchemaFixture.ADDED_COLUMNS.values.sumOf { it.size },
+            ProgramSchemaFixture.ADDITIVE_STEPS.first { it.first == "MIGRATION_8_9" }
+                .second.values.sumOf { it.size },
             statements.size
         )
         for (statement in statements) {
@@ -383,7 +402,9 @@ class ProgramSchemaTest {
     @Test
     fun theAddedFrequencyColumnIsNullableAndInventsNoDefault() {
         val statements = additiveStatements()
-        val column = ProgramSchemaFixture.ADDED_COLUMNS.getValue("program_revision").single()
+        val column = ProgramSchemaFixture
+            .columnsAddedBy("MIGRATION_8_9", "program_revision")
+            .single()
 
         assertEquals("scheduleSessionsPerWeek", column.name)
         assertEquals("INTEGER", column.type)
@@ -482,6 +503,336 @@ class ProgramSchemaTest {
             database.strings(
                 "SELECT `scheduleWeekdays` FROM `program_revision` WHERE `revisionId` = 'revision-fixed'"
             )
+        )
+    }
+
+    @Test
+    fun theGoalFocusColumnsAreNullableTokensThatInventNoGoal() {
+        val statements = focusStatements()
+
+        assertEquals(
+            "the correction is the statements the contract derives, in order",
+            normalized(ProgramSchemaFixture.expectedAdditiveStatements("MIGRATION_9_10")),
+            normalized(statements)
+        )
+        assertEquals("one statement per declared column", 2, statements.size)
+        assertTrue(
+            "each one appends a column to the revised table and touches nothing else: $statements",
+            statements.all { it.startsWith("ALTER TABLE `program_revision` ADD COLUMN ") }
+        )
+        assertTrue(
+            "neither carries a default: a default would state a goal the user never chose, for rows " +
+                "written before Goals & Focus existed — $statements",
+            statements.none { it.contains("DEFAULT", ignoreCase = true) }
+        )
+        assertTrue(
+            "and neither may be NOT NULL: SQLite cannot append a NOT NULL column without one, and " +
+                "the absence is what the mapper reads as BALANCED — $statements",
+            statements.none { it.contains("NOT NULL", ignoreCase = true) }
+        )
+
+        val columns = ProgramSchemaFixture.columnsAddedBy("MIGRATION_9_10", "program_revision")
+        assertEquals(
+            "the two columns are the goal and the focuses it states",
+            listOf("focusGoal", "focusTargets"),
+            columns.map { it.name }
+        )
+        assertTrue(
+            "both store TEXT — a vocabulary token and a converted token list — and both are nullable",
+            columns.all { it.type == "TEXT" && it.nullable }
+        )
+
+        // The stored vocabulary is the domain's own, asserted rather than eyeballed, exactly as the
+        // duration and schedule discriminators are.
+        assertEquals(
+            listOf("BALANCED", "FOCUSED", "CUSTOM"),
+            Goal.entries.map { it.name }
+        )
+        assertEquals(ProgramRevisionEntity.BALANCED_GOAL, Goal.BALANCED.name)
+        assertEquals(ProgramRevisionEntity.FOCUSED, Goal.FOCUSED.name)
+        assertEquals(ProgramRevisionEntity.CUSTOM, Goal.CUSTOM.name)
+        assertEquals(
+            "and the policy's ceiling on secondary focuses is §8's own 0–2",
+            2,
+            GenerationPolicy.MAX_SECONDARY_FOCUSES
+        )
+    }
+
+    @Test
+    fun theGoalFocusConfigurationSurvivesTheDeployedChainAndReconstructsTheDomainValue() {
+        val database = SqliteTestDatabase.inMemory()
+        database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
+        database.migrate(AppDatabase.MIGRATION_7_8)
+        database.migrate(AppDatabase.MIGRATION_8_9)
+        database.migrate(AppDatabase.MIGRATION_9_10)
+
+        assertEquals(
+            "the columns are on the table a device holds after the chain",
+            listOf("focusGoal", "focusTargets"),
+            database.columnNames("program_revision").filter { it in setOf("focusGoal", "focusTargets") }
+        )
+        assertEquals(
+            "with the affinity the entity stores text in",
+            listOf("TEXT", "TEXT"),
+            listOf(
+                database.columnType("program_revision", "focusGoal"),
+                database.columnType("program_revision", "focusTargets")
+            )
+        )
+        assertEquals(
+            "and nullable, so a revision that states no goal stores nothing",
+            listOf("0", "0"),
+            listOf("focusGoal", "focusTargets").map { column ->
+                database.rows("SELECT * FROM pragma_table_info('program_revision')")
+                    .single { it["name"] == column }["notnull"]
+            }
+        )
+
+        database.exec(
+            "INSERT INTO `program` (`programId`, `name`, `description`, `source`, " +
+                "`lifecycleStatus`, `currentRevisionId`, `createdAt`, `updatedAt`, " +
+                "`plannedStartDate`, `actualStartDate`, `archivedAt`) VALUES ('program-1', 'Program', " +
+                "'' , 'USER', 'NOT_STARTED', 'revision-1', 1700000000000, 1700000000000, NULL, NULL, NULL)"
+        )
+
+        // One row per configuration form, each written as raw SQL — what a device that upgraded
+        // holds, and what the mapper has to read.
+        val configurations = listOf(
+            StoredConfiguration("revision-1", goal = null, targets = null, FocusPlan.Balanced),
+            StoredConfiguration(
+                "revision-2",
+                goal = "FOCUSED",
+                targets = "PUSH,PULL",
+                FocusPlan.focused(listOf(Focus.PUSH, Focus.PULL))
+            ),
+            StoredConfiguration(
+                "revision-3",
+                goal = "CUSTOM",
+                targets = "PUSH:60,LEGS:40",
+                FocusPlan.custom(
+                    listOf(FocusAllocation(Focus.PUSH, 60), FocusAllocation(Focus.LEGS, 40))
+                )
+            ),
+            StoredConfiguration("revision-4", goal = "BALANCED", targets = null, FocusPlan.Balanced)
+        )
+        configurations.forEachIndexed { index, configuration ->
+            val goalValue = configuration.goal?.let { "'$it'" } ?: "NULL"
+            val targetValue = configuration.targets?.let { "'$it'" } ?: "NULL"
+            database.exec(
+                "INSERT INTO `program_revision` (`revisionId`, `programId`, `revisionNumber`, " +
+                    "`mode`, `durationType`, `durationDays`, `scheduleType`, `scheduleWeekdays`, " +
+                    "`createdAt`, `focusGoal`, `focusTargets`) VALUES ('${configuration.revisionId}', " +
+                    "'program-1', ${index + 1}, 'GENERATED', 'INDEFINITE', NULL, " +
+                    "'FLEXIBLE_PER_WEEK', NULL, 1700000000000, $goalValue, $targetValue)"
+            )
+        }
+
+        val expected = mapOf(
+            "revision-1" to FocusPlan.Balanced,
+            "revision-2" to FocusPlan.focused(listOf(Focus.PUSH, Focus.PULL)),
+            "revision-3" to FocusPlan.custom(
+                listOf(FocusAllocation(Focus.PUSH, 60), FocusAllocation(Focus.LEGS, 40))
+            ),
+            "revision-4" to FocusPlan.Balanced
+        )
+
+        for (configuration in configurations) {
+            // The stored values, read back out of the engine — the entity below is only the carrier
+            // the production mapper reads, so the column names and affinities are exercised too.
+            val stored = database.rows(
+                "SELECT `focusGoal`, `focusTargets` FROM `program_revision` " +
+                    "WHERE `revisionId` = '${configuration.revisionId}'"
+            ).single()
+
+            assertEquals(
+                "the row holds exactly the bytes the fixture wrote: a configuration that states " +
+                    "nothing stores nothing, and one that states a goal stores the goal",
+                listOf(configuration.goal, configuration.targets),
+                listOf(stored["focusGoal"], stored["focusTargets"])
+            )
+            assertEquals(
+                "and the loaded row reconstructs the very same configuration — nothing lost, " +
+                    "nothing invented",
+                configuration.focus,
+                revisionDomain(
+                    revision = revisionEntity(
+                        revisionId = configuration.revisionId,
+                        focusGoal = stored["focusGoal"],
+                        focusTargets = stored["focusTargets"]
+                    ),
+                    dayRows = listOf(dayRow(configuration.revisionId)),
+                    exerciseRows = listOf(exerciseRow(configuration.revisionId))
+                ).focus
+            )
+        }
+    }
+
+    /**
+     * A stored configuration the domain refuses: the bytes are written as raw SQL, so the refusal
+     * under test is the **load**'s, not a constructor's.
+     */
+    @Test
+    fun aStoredGoalFocusConfigurationTheDomainRefusesIsRefusedOnLoad() {
+        val database = SqliteTestDatabase.inMemory()
+        database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
+        database.migrate(AppDatabase.MIGRATION_7_8)
+        database.migrate(AppDatabase.MIGRATION_8_9)
+        database.migrate(AppDatabase.MIGRATION_9_10)
+        val tableColumns =
+            "`revisionId`, `programId`, `revisionNumber`, `mode`, `durationType`, `durationDays`, " +
+                "`scheduleType`, `scheduleWeekdays`, `createdAt`, `focusGoal`, `focusTargets`"
+        database.exec(
+            "INSERT INTO `program` (`programId`, `name`, `description`, `source`, " +
+                "`lifecycleStatus`, `currentRevisionId`, `createdAt`, `updatedAt`, " +
+                "`plannedStartDate`, `actualStartDate`, `archivedAt`) VALUES ('program-1', 'Program', " +
+                "'' , 'USER', 'NOT_STARTED', 'revision-sums', 1700000000000, 1700000000000, " +
+                "NULL, NULL, NULL)"
+        )
+
+        // Three rows the *columns* accept and the domain does not: shares that do not sum to 100%, a
+        // share token without its percentage, and a goal that is not a Goal.
+        val malformed = listOf(
+            MalformedConfiguration("revision-sums", "CUSTOM", "PUSH:50,LEGS:30", "must sum to 100%"),
+            MalformedConfiguration("revision-token", "CUSTOM", "PUSH", "NAME"),
+            MalformedConfiguration("revision-goal", "BALANCEDPLUS", null, "focusGoal")
+        )
+        malformed.forEachIndexed { index, (revisionId, goal, targets, _) ->
+            val targetValue = targets?.let { "'$it'" } ?: "NULL"
+            database.exec(
+                "INSERT INTO `program_revision` ($tableColumns) VALUES ('$revisionId', 'program-1', " +
+                    "${index + 1}, 'GENERATED', 'INDEFINITE', NULL, 'FLEXIBLE_PER_WEEK', NULL, " +
+                    "1700000000000, '$goal', $targetValue)"
+            )
+        }
+
+        malformed.forEach { (revisionId, storedGoal, storedTargets, expectedMessage) ->
+            val stored = database.rows(
+                "SELECT `focusGoal`, `focusTargets` FROM `program_revision` " +
+                    "WHERE `revisionId` = '$revisionId'"
+            ).single()
+            assertEquals(
+                "the engine really does hold the malformed bytes",
+                listOf(storedGoal, storedTargets),
+                listOf(stored["focusGoal"], stored["focusTargets"])
+            )
+
+            val refusal = assertThrows(IllegalArgumentException::class.java) {
+                revisionDomain(
+                    revision = revisionEntity(
+                        revisionId = revisionId,
+                        focusGoal = stored["focusGoal"],
+                        focusTargets = stored["focusTargets"]
+                    ),
+                    dayRows = listOf(dayRow(revisionId)),
+                    exerciseRows = listOf(exerciseRow(revisionId))
+                )
+            }
+            assertTrue(
+                "a stored configuration the domain cannot state is invalid persisted data and fails " +
+                    "loudly on load, naming what it read: ${refusal.message}",
+                refusal.message!!.contains(expectedMessage)
+            )
+        }
+    }
+
+    /** One malformed stored configuration: the bytes, and what the refusal must name. */
+    private data class MalformedConfiguration(
+        val revisionId: String,
+        val goal: String,
+        val targets: String?,
+        val expectedMessage: String
+    )
+
+    /** One stored configuration fixture row: the bytes, and the domain value they must mean. */
+    private data class StoredConfiguration(
+        val revisionId: String,
+        val goal: String?,
+        val targets: String?,
+        val focus: FocusPlan
+    )
+
+    /** The stored revision row a mapper reads, carrying the values the engine returned. */
+    private fun revisionEntity(
+        revisionId: String,
+        focusGoal: String?,
+        focusTargets: String?
+    ): ProgramRevisionEntity = ProgramRevisionEntity(
+        revisionId = revisionId,
+        programId = "program-1",
+        revisionNumber = 1,
+        mode = "GENERATED",
+        durationType = "INDEFINITE",
+        scheduleType = "FLEXIBLE_PER_WEEK",
+        scheduleSessionsPerWeek = 3,
+        createdAt = 1700000000000,
+        focusGoal = focusGoal,
+        focusTargets = focusTargets
+    )
+
+    /** One plan day row of [revisionId] — a revision carries a plan, so the mapper needs one. */
+    private fun dayRow(revisionId: String): ProgramDayEntity = ProgramDayEntity(
+        programDayId = "$revisionId-day-1",
+        revisionId = revisionId,
+        position = 1,
+        type = "TRAINING"
+    )
+
+    /** One plan element row of [revisionId]. */
+    private fun exerciseRow(revisionId: String): ProgramExerciseEntity = ProgramExerciseEntity(
+        programExerciseId = "$revisionId-element-1",
+        programDayId = "$revisionId-day-1",
+        position = 1,
+        exerciseId = "pushup",
+        prescriptionDimension = "REP_BASED",
+        perSetTargets = listOf(10),
+        origin = "GENERATED",
+        isPinned = false
+    )
+
+    @Test
+    fun theMigratedRevisionTableIsTheTableTheContractDescribes() {
+        // Room validates a migrated table against the DDL it generates for the entity on open, so the
+        // claim that matters is: the table a v9 device ends up with **is** the DDL the entity emits.
+        // `expectedCurrentTableDdl` is that DDL, derived from the same contract that
+        // `everyTargetEntityDeclaresItsColumnsInTheStoredOrder` compares the entity against — so
+        // "a fresh install and an upgrade agree" is pinned by the two sides being the same statement,
+        // not by executing the same chain twice.
+        val upgraded = SqliteTestDatabase.inMemory()
+        upgraded.execAll(LegacyV7Schema.TABLE_STATEMENTS)
+        upgraded.migrate(AppDatabase.MIGRATION_7_8)
+        upgraded.migrate(AppDatabase.MIGRATION_8_9)
+        upgraded.migrate(AppDatabase.MIGRATION_9_10)
+
+        assertEquals(
+            "the revision table the chain leaves behind is the one the contract describes: the " +
+                "version-8 columns in declaration order, then the appended ones",
+            ProgramSchemaFixture.normalized(
+                ProgramSchemaFixture.expectedCurrentTableDdl("program_revision")
+            ).replace("IF NOT EXISTS ", ""),
+            ProgramSchemaFixture.normalized(
+                upgraded.masterSql().getValue("program_revision")
+            ).replace("IF NOT EXISTS ", "")
+        )
+        assertEquals(
+            "its identity is the entity's own primary key",
+            listOf("revisionId"),
+            upgraded.primaryKey("program_revision")
+        )
+        assertEquals(
+            "the columns the chain appends are exactly the ones the contract adds, in that order",
+            ProgramSchemaFixture.ADDED_COLUMNS.getValue("program_revision").map { it.name },
+            upgraded.columnNames("program_revision")
+                .filterNot { name ->
+                    ProgramSchemaFixture.COLUMNS.getValue("program_revision").any { it.name == name }
+                }
+        )
+        assertEquals(
+            "and the foreign key still cascades with the Program, so an upgrade does not reshape " +
+                "ownership",
+            listOf("programId -> program.programId CASCADE"),
+            upgraded.foreignKeys("program_revision").map {
+                "${it.childColumn} -> ${it.parentTable}.${it.parentColumn} ${it.onDelete}"
+            }
         )
     }
 
@@ -928,7 +1279,7 @@ class ProgramSchemaTest {
 
     @Test
     fun everyDeclaredColumnIsStoredInTheStatementThatIntroducesIt() {
-        val added = ProgramSchemaFixture.normalized(additiveStatements().joinToString(" "))
+        val added = ProgramSchemaFixture.normalized(allAdditiveStatements().joinToString(" "))
 
         for (table in ProgramSchemaFixture.TABLES) {
             val created = ProgramSchemaFixture.normalized(statementFor(table))
@@ -945,7 +1296,8 @@ class ProgramSchemaTest {
                 val expected = "`${column.name}` ${column.type}"
                 assertTrue(
                     "`$table`.`${column.name}` is declared as `$expected` in the statement that " +
-                        "adds it",
+                        "adds it — each step's statements are its own contract, so a column a later " +
+                        "step adds is never expected of an earlier one",
                     added.contains(expected)
                 )
             }
@@ -989,7 +1341,7 @@ class ProgramSchemaTest {
         // Every vocabulary column is stored as a token, and every one of them is declared in the contract.
         for ((table, columns) in ProgramSchemaFixture.VOCABULARY_COLUMNS) {
             for (column in columns) {
-                val declared = ProgramSchemaFixture.COLUMNS.getValue(table).single { it.name == column }
+                val declared = ProgramSchemaFixture.columnsNow(table).single { it.name == column }
                 assertEquals("`$table`.`$column` stores a token, not a number", "TEXT", declared.type)
             }
         }
@@ -999,7 +1351,7 @@ class ProgramSchemaTest {
     fun everyCollectionColumnIsStoredAsASingleDeterministicTextValue() {
         for ((table, columns) in ProgramSchemaFixture.COLLECTION_COLUMNS) {
             for (column in columns) {
-                val declared = ProgramSchemaFixture.COLUMNS.getValue(table).single { it.name == column }
+                val declared = ProgramSchemaFixture.columnsNow(table).single { it.name == column }
                 assertEquals(
                     "`$table`.`$column` stores a converted collection, never a scalar column",
                     "TEXT",

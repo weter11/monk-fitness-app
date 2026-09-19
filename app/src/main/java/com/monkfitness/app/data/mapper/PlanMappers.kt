@@ -11,6 +11,10 @@ import com.monkfitness.app.domain.prescription.Prescription
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.domain.prescription.RepPrescription
 import com.monkfitness.app.domain.prescription.TimePrescription
+import com.monkfitness.app.domain.program.Focus
+import com.monkfitness.app.domain.program.FocusAllocation
+import com.monkfitness.app.domain.program.FocusPlan
+import com.monkfitness.app.domain.program.Goal
 import com.monkfitness.app.domain.program.ProgramDay
 import com.monkfitness.app.domain.program.ProgramDayType
 import com.monkfitness.app.domain.program.ProgramDuration
@@ -107,7 +111,8 @@ internal fun revisionDomain(
                     .map { it.toDomain() }
             )
         },
-        createdAt = storedInstant("program_revision.createdAt", revision.createdAt)
+        createdAt = storedInstant("program_revision.createdAt", revision.createdAt),
+        focus = focusOf(revision)
     )
 }
 
@@ -131,7 +136,9 @@ internal fun ProgramRevision.toEntity(): ProgramRevisionEntity = ProgramRevision
     scheduleType = scheduleTypeOf(schedule),
     scheduleWeekdays = (schedule as? ProgramSchedule.FixedWeekdays)?.weekdays,
     scheduleSessionsPerWeek = (schedule as? ProgramSchedule.FlexiblePerWeek)?.sessionsPerWeek,
-    createdAt = storedMilliseconds(createdAt)
+    createdAt = storedMilliseconds(createdAt),
+    focusGoal = focus.goal.name,
+    focusTargets = focus.storedFocusTargets()
 )
 
 /** The duration one revision row stores. */
@@ -185,6 +192,109 @@ private fun scheduleTypeOf(schedule: ProgramSchedule): String = when (schedule) 
     is ProgramSchedule.FixedWeekdays -> ProgramRevisionEntity.FIXED_WEEKDAYS
     is ProgramSchedule.FlexiblePerWeek -> ProgramRevisionEntity.FLEXIBLE_PER_WEEK
 }
+
+/**
+ * The **Goals & Focus** configuration one revision row stores (§8) — the third discriminator-plus-
+ * payload pair on `program_revision`, after the duration and the schedule.
+ *
+ * ```text
+ * focusGoal      ''      ''       BALANCED   FOCUSED          CUSTOM
+ * focusTargets   null    null     null        PUSH,PULL        PUSH:40,LEGS:60
+ * ```
+ *
+ * The `null` goal is read as [FocusPlan.Balanced], and that reading is faithful rather than a
+ * default: a revision written before Goals & Focus existed was built for the whole vocabulary with no
+ * share stated, which is exactly what `BALANCED` means. Nothing is invented for it, and the column
+ * carries no database default either — the mapper is the only place the decision is made, and it is
+ * made once.
+ *
+ * Reading is **strict in both directions**, like the two pairs above it:
+ *
+ *  * a stored goal token that is not a [Goal] member is invalid persisted data, not a configuration;
+ *  * a `FOCUSED` row whose targets are missing, blank or not focus names is invalid;
+ *  * a `CUSTOM` row whose share tokens are not `NAME:percent`, or whose percentages do not sum to
+ *    [FocusPlan.FULL_ALLOCATION], is invalid — §8's rule is the domain's own, so the domain's own
+ *    constructor states it, and a stored 90% share fails here rather than silently loading as
+ *    something the user did not ask for.
+ *
+ * The order of the stored targets is the domain's canonical order, so a loaded configuration is
+ * value-equal to the one that was saved and a re-saved revision is a byte-identical row.
+ */
+private fun focusOf(revision: ProgramRevisionEntity): FocusPlan {
+    val goalToken = revision.focusGoal ?: return FocusPlan.Balanced
+    return when (storedToken(goalToken, Goal.entries, "program_revision.focusGoal")) {
+        Goal.BALANCED -> FocusPlan.Balanced
+        Goal.FOCUSED -> FocusPlan.focused(focusesOf(revision))
+        Goal.CUSTOM -> FocusPlan.custom(sharesOf(revision))
+    }
+}
+
+/** The focuses a `FOCUSED` revision names, read as a configuration in canonical order. */
+private fun focusesOf(revision: ProgramRevisionEntity): List<Focus> =
+    storedFocusTargets(revision).map { token ->
+        storedToken(token, Focus.entries, "program_revision.focusTargets")
+    }
+
+/** The shares a `CUSTOM` revision states, read as a configuration that must sum to 100% (§8). */
+private fun sharesOf(revision: ProgramRevisionEntity): List<FocusAllocation> =
+    storedFocusTargets(revision).map { token ->
+        val parts = token.split(SHARE_SEPARATOR)
+        require(parts.size == 2) {
+            "a stored custom focus share is 'NAME$SHARE_SEPARATOR<percent>', was '$token' in " +
+                "revision '${revision.revisionId}' (§8)"
+        }
+        val percent = parts[1].trim().toIntOrNull() ?: throw IllegalArgumentException(
+            "a stored custom focus share states a whole percentage, was '${parts[1]}' in " +
+                "revision '${revision.revisionId}' (§8)"
+        )
+        FocusAllocation(
+            focus = storedToken(parts[0].trim(), Focus.entries, "program_revision.focusTargets"),
+            percent = percent
+        )
+    }
+
+/**
+ * The tokens a revision's configuration states, or a refusal naming the row.
+ *
+ * The stored form is a comma-separated list of opaque tokens — `PUSH` for a `FOCUSED` configuration
+ * and `PUSH:40` for a `CUSTOM` one — which is deterministic because the domain holds a configuration
+ * in canonical order and refuses one that is not. The format is deliberately owned here rather than
+ * by a `ProgramTypeConverters` method: Room already declares a `List<String> ⇄ String` conversion for
+ * the session snapshot's applied adjustments, and this column's tokens carry a discriminator-dependent
+ * meaning that only the mapper knows.
+ */
+private fun storedFocusTargets(revision: ProgramRevisionEntity): List<String> {
+    val stored = requireNotNull(revision.focusTargets) {
+        "revision '${revision.revisionId}' states '${revision.focusGoal}' but stores no focus " +
+            "targets: a configuration that names focuses states which ones (§8)"
+    }
+    val tokens = stored.split(TARGET_SEPARATOR).map { it.trim() }
+    require(tokens.isNotEmpty() && tokens.none { it.isEmpty() }) {
+        "revision '${revision.revisionId}' stores focus targets that are not a list of tokens: " +
+            "'$stored' (§8)"
+    }
+    return tokens
+}
+
+/**
+ * The stored targets of a configuration, or `null` for [FocusPlan.Balanced].
+ *
+ * A focus name for a `FOCUSED` configuration and `NAME:percent` for a `CUSTOM` one — two shapes in
+ * one converted column, told apart by the discriminator on the same row, exactly as `perSetTargets`
+ * holds repetitions for one dimension and seconds for another (§10).
+ */
+private fun FocusPlan.storedFocusTargets(): String? = when (this) {
+    FocusPlan.Balanced -> null
+    is FocusPlan.Focused -> focuses.joinToString(TARGET_SEPARATOR) { it.name }
+    is FocusPlan.Custom ->
+        allocations.joinToString(TARGET_SEPARATOR) { "${it.focus.name}$SHARE_SEPARATOR${it.percent}" }
+}
+
+/** The separator between two stored focus targets. */
+private const val TARGET_SEPARATOR: String = ","
+
+/** The separator between a focus's name and its share in a stored `CUSTOM` target. */
+private const val SHARE_SEPARATOR: String = ":"
 
 /** One stored plan day with its ordered elements. */
 internal fun ProgramDayEntity.toDomain(elements: List<ProgramExercise>): ProgramDay = ProgramDay(
