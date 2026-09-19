@@ -31,6 +31,7 @@ import com.monkfitness.app.data.repository.WorkoutSessionRepository
 import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
+import com.monkfitness.app.domain.usecase.SessionRuntime
 import com.monkfitness.app.domain.program.StandardProgram
 
 /**
@@ -269,6 +270,38 @@ class AppContainer(
         programRepository = programRepository,
         planRepository = programPlanRepository,
         scheduleRepository = programScheduleRepository,
+        clock = clock,
+        idGenerator = idGenerator,
+        inTransaction = inTransaction
+    )
+
+    /**
+     * The Session runtime — §30 step 8, over the repositories above.
+     *
+     * It owns the five operations of one attempt at one opportunity: starting a workout with the
+     * complete immutable presentation it was started under (§19), reading it back from that capture
+     * alone, appending a confirmed set, cancelling it, and completing it together with the adaptive
+     * decision the adaptive stage hands over (§27's `Complete Workout → Session + Slot + Adaptive
+     * state + Decisions + Adjustments`, which is one unit of work and is composed here).
+     *
+     * The collaborators are chosen for what they exclude as much as for what they do. There is **no
+     * `ProgramRepository`**: the Program is bound by the revision the opportunity names, and whether a
+     * Program is paused, archived or completed is §3's and §29's decision, not this operation's — so
+     * *"no lifecycle policy beyond the session operation itself"* is the absence of the dependency
+     * rather than a rule the code remembers. There is no generator, no policy, no signal calculator, no
+     * progress reader and no calendar: §30 steps 9–12 own those. And there is no second way to write a
+     * session row, so the occupancy rule of §19 cannot be bypassed from outside.
+     *
+     * This is **wiring, not behaviour**: the container decides which objects the runtime receives and
+     * nothing about what it does with them. The transaction runner is the same one every repository
+     * uses, which is what makes the completion one unit of the database's own rather than three writes
+     * that happen to be adjacent.
+     */
+    val sessionRuntime: SessionRuntime = SessionRuntime(
+        planRepository = programPlanRepository,
+        scheduleRepository = programScheduleRepository,
+        sessionRepository = workoutSessionRepository,
+        adaptiveRepository = programAdaptiveRepository,
         clock = clock,
         idGenerator = idGenerator,
         inTransaction = inTransaction

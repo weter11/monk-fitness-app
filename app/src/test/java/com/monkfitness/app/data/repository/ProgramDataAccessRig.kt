@@ -6,11 +6,15 @@ import com.monkfitness.app.data.local.LegacyV7Schema
 import com.monkfitness.app.data.local.ProgramDayDao
 import com.monkfitness.app.data.local.ProgramExerciseDao
 import com.monkfitness.app.data.local.ProgramSetLogDao
+import com.monkfitness.app.data.local.ProgramWorkoutSlotDao
+import com.monkfitness.app.data.local.SessionExerciseDao
 import com.monkfitness.app.data.local.SessionSnapshotDao
 import com.monkfitness.app.data.local.SqliteTestDatabase
 import com.monkfitness.app.data.model.AdaptiveAdjustmentEntity
 import com.monkfitness.app.data.model.ProgramDayEntity
 import com.monkfitness.app.data.model.ProgramExerciseEntity
+import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
+import com.monkfitness.app.data.model.SessionExerciseEntity
 import com.monkfitness.app.data.model.SessionSnapshotEntity
 import com.monkfitness.app.data.model.SetLogEntity
 import com.monkfitness.app.domain.common.AdjustmentId
@@ -61,16 +65,18 @@ import java.time.LocalDate
  * The clock is a value, not a hidden call: [now] can be set by a test, because the only timestamp this
  * layer stamps is a family state's write stamp and a test must be able to state when that was.
  */
-internal class ProgramDataAccessRig(key: String = "a") {
+internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatabase? = null) {
 
-    /** The migrated database: the version-7 schema, then the production migrations to version 9. */
-    val database: SqliteTestDatabase = SqliteTestDatabase.inMemory().also { database ->
-        database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
-        // The deployed chain: the target schema, then the schedule-frequency correction. Stopping at
-        // version 8 would exercise a database no device opens.
-        database.migrate(AppDatabase.MIGRATION_7_8)
-        database.migrate(AppDatabase.MIGRATION_8_9)
-    }
+    /**
+     * The migrated database: the version-7 schema, then the production migrations to version 9.
+     *
+     * A rig built over a **supplied** database does not migrate it: the caller already did, and the
+     * deployed chain is not idempotent (a second `ALTER TABLE ... ADD COLUMN` is an error, exactly as it
+     * would be on a device opening the same file twice). That is what lets two rigs — two *processes*, as
+     * far as SQLite is concerned — share one file: one opens it and runs the chain, the other opens the
+     * same file and reads what the first wrote.
+     */
+    val database: SqliteTestDatabase = supplied ?: SqliteTestDatabase.inMemory().also(::migrate)
 
     /**
      * The transaction runner the repositories receive. Production passes
@@ -90,11 +96,12 @@ internal class ProgramDataAccessRig(key: String = "a") {
     val revisionDao = SqliteProgramRevisionDao(database)
     val dayDao = SqliteProgramDayDao(database)
     val exerciseDao: ProgramExerciseDao = FailingProgramExerciseDao(SqliteProgramExerciseDao(database), faults)
-    val slotDao = SqliteProgramWorkoutSlotDao(database)
+    val slotDao: ProgramWorkoutSlotDao = FailingProgramWorkoutSlotDao(SqliteProgramWorkoutSlotDao(database), faults)
     val sessionDao = SqliteWorkoutSessionDao(database)
     val snapshotDao: SessionSnapshotDao = FailingSessionSnapshotDao(SqliteSessionSnapshotDao(database), faults)
     val snapshotExerciseDao = SqliteSessionSnapshotExerciseDao(database)
-    val sessionExerciseDao = SqliteSessionExerciseDao(database)
+    val sessionExerciseDao: SessionExerciseDao =
+        FailingSessionExerciseDao(SqliteSessionExerciseDao(database), faults)
     val setLogDao: ProgramSetLogDao = FailingProgramSetLogDao(SqliteProgramSetLogDao(database), faults)
     val pauseDao = SqliteProgramPauseDao(database)
     val familyStateDao = SqliteProgramFamilyProgressionStateDao(database)
@@ -156,6 +163,25 @@ internal class ProgramDataAccessRig(key: String = "a") {
     )
 
     fun close() = database.close()
+
+    companion object {
+
+        /**
+         * Runs the **deployed** migration chain on an open database: the shipped version-7 schema, then
+         * the production migrations to version 9.
+         *
+         * It is the rig's own setup, exposed because a file-backed database has to be migrated by the
+         * first connection that opens it and *not* by the second: a device at version 7 upgrades once, and
+         * every later open finds the chain already applied.
+         */
+        fun migrate(database: SqliteTestDatabase) {
+            database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
+            // The deployed chain: the target schema, then the schedule-frequency correction. Stopping at
+            // version 8 would exercise a database no device opens.
+            database.migrate(AppDatabase.MIGRATION_7_8)
+            database.migrate(AppDatabase.MIGRATION_8_9)
+        }
+    }
 }
 
 /**
@@ -169,6 +195,12 @@ internal class ProgramDaoFaults {
 
     /** When set, inserting the session's snapshot fails. */
     var failSnapshotInsert: Boolean = false
+
+    /** When set, inserting the occurrences a session runs fails — the failure *after* the snapshot. */
+    var failSessionExerciseInsert: Boolean = false
+
+    /** When set, recording a slot's outcome fails — the middle leg of a completion. */
+    var failSlotOutcomeUpdate: Boolean = false
 
     /** When set, appending a confirmed set fails. */
     var failSetLogInsert: Boolean = false
@@ -201,6 +233,63 @@ private class FailingSessionSnapshotDao(
 
     override suspend fun snapshotsOf(sessionIds: List<String>): List<SessionSnapshotEntity> =
         delegate.snapshotsOf(sessionIds)
+}
+
+/**
+ * The session's occurrences, with one switchable failure.
+ *
+ * It exists for the third deliberate-failure point of a start: a snapshot that landed and a session
+ * that did not keep its occurrences is as forbidden as a session with no snapshot at all, and only a
+ * real transaction can prove that.
+ */
+private class FailingSessionExerciseDao(
+    private val delegate: SessionExerciseDao,
+    private val faults: ProgramDaoFaults
+) : SessionExerciseDao {
+    override suspend fun insertSessionExercises(exercises: List<SessionExerciseEntity>) {
+        if (faults.failSessionExerciseInsert) throw IllegalStateException("planted fault: occurrence insert")
+        delegate.insertSessionExercises(exercises)
+    }
+
+    override suspend fun sessionExercisesOfSessions(sessionIds: List<String>): List<SessionExerciseEntity> =
+        delegate.sessionExercisesOfSessions(sessionIds)
+
+    override suspend fun sessionExerciseById(sessionExerciseId: String): SessionExerciseEntity? =
+        delegate.sessionExerciseById(sessionExerciseId)
+}
+
+/**
+ * The opportunities, with one switchable failure on the outcome write — the middle leg of a completion
+ * (the session is written first, the adaptive decision last), which is what makes "the whole completion
+ * or none of it" measurable at a point other than the last write.
+ */
+private class FailingProgramWorkoutSlotDao(
+    private val delegate: ProgramWorkoutSlotDao,
+    private val faults: ProgramDaoFaults
+) : ProgramWorkoutSlotDao {
+    override suspend fun insertSlots(slots: List<ProgramWorkoutSlotEntity>) = delegate.insertSlots(slots)
+
+    override suspend fun slotById(slotId: String): ProgramWorkoutSlotEntity? = delegate.slotById(slotId)
+
+    override suspend fun slotsOfProgram(programId: String): List<ProgramWorkoutSlotEntity> =
+        delegate.slotsOfProgram(programId)
+
+    override suspend fun slotsOfRevision(revisionId: String): List<ProgramWorkoutSlotEntity> =
+        delegate.slotsOfRevision(revisionId)
+
+    override suspend fun slotsFrom(
+        programId: String,
+        fromDate: String,
+        status: String
+    ): List<ProgramWorkoutSlotEntity> = delegate.slotsFrom(programId, fromDate, status)
+
+    override suspend fun updateOutcome(slotId: String, status: String, completedAt: Long?) {
+        if (faults.failSlotOutcomeUpdate) throw IllegalStateException("planted fault: slot outcome")
+        delegate.updateOutcome(slotId, status, completedAt)
+    }
+
+    override suspend fun countByStatus(programId: String, status: String): Int =
+        delegate.countByStatus(programId, status)
 }
 
 private class FailingAdaptiveAdjustmentDao(

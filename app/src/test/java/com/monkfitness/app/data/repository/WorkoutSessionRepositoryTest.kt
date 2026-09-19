@@ -210,9 +210,13 @@ class WorkoutSessionRepositoryTest {
     // ---- several attempts ------------------------------------------------------------------------
 
     @Test
-    fun twoAttemptsAtOneSlotBothLoadAndTheSlotReportsBoth() = runBlocking {
+    fun twoAttemptsAtOneSlotAreLegalAndBothLoadOnceTheFirstHasEnded() = runBlocking {
         rig.createGraph()
         rig.workoutSessionRepository.startSession(session)
+        rig.workoutSessionRepository.finishSession(
+            session.copy(status = SessionStatus.COMPLETED, finishedAt = ProgramGraphFixture.FINISHED),
+            ProgramGraphFixture.completedSlot("a", slot)
+        )
         rig.workoutSessionRepository.startSession(ProgramGraphFixture.session("b", slot))
 
 
@@ -230,11 +234,148 @@ class WorkoutSessionRepositoryTest {
             rig.programScheduleRepository.slotById(slot.slotId)!!.attempts.map { it.value }
         )
         assertEquals(
-            "no uniqueness rule was invented in the DAO or the repository",
+            "the second attempt is a row of its own, not a replacement: the first one is still stored, " +
+                "completed, and the slot was never made unique on `slotId`",
             "2",
             rig.database.scalar("SELECT COUNT(*) FROM `workout_session` WHERE `slotId` = 'slot-a-1'")
         )
     }
+
+    /**
+     * The rule counts *unfinished* attempts, not attempts in the same state as the row being written.
+     *
+     * Storing a finished attempt (a restored one, an imported one, a fixture's) is not what §19 forbids,
+     * and such a row does **not** hold the opportunity: what the write refuses is a second attempt while
+     * one is running. A finished attempt can therefore be stored, a new attempt can be started beside it,
+     * and only then is a third attempt refused.
+     */
+    @Test
+    fun aFinishedAttemptIsStoredAndDoesNotHoldTheOpportunity() = runBlocking {
+        rig.createGraph()
+        rig.workoutSessionRepository.startSession(finishedAttempt())
+        assertEquals(
+            "a finished attempt at the opportunity is a row like any other",
+            listOf("COMPLETED"),
+            rig.database.strings("SELECT `status` FROM `workout_session` WHERE `slotId` = 'slot-a-1'")
+        )
+
+        rig.workoutSessionRepository.startSession(session)
+        assertEquals(
+            "and a new attempt may be started beside it, because nothing was in progress",
+            listOf("IN_PROGRESS", "COMPLETED"),
+            rig.database.strings(
+                "SELECT `status` FROM `workout_session` WHERE `slotId` = 'slot-a-1' ORDER BY `sessionId` ASC"
+            )
+        )
+
+        val failure = failureOf {
+            rig.workoutSessionRepository.startSession(ProgramGraphFixture.session("c", slot))
+        }
+        assertTrue(
+            "while a second attempt in progress is refused: ${failure.message}",
+            failure is SessionAlreadyInProgress
+        )
+        assertEquals(
+            "and the finished attempt is untouched by any of it",
+            "COMPLETED",
+            rig.database.scalar("SELECT `status` FROM `workout_session` WHERE `sessionId` = 'session-done'")
+        )
+    }
+
+    /** A finished attempt at the fixture's slot: its own identity, its own occurrences, no sets. */
+    private fun finishedAttempt() = session.copy(
+        sessionId = SessionId("session-done"),
+        status = SessionStatus.COMPLETED,
+        finishedAt = ProgramGraphFixture.FINISHED,
+        snapshot = session.snapshot.copy(sessionId = SessionId("session-done")),
+        exercises = session.exercises.mapIndexed { index, occurrence ->
+            occurrence.copy(
+                sessionExerciseId = SessionExerciseId("session-ex-done-${index + 1}"),
+                results = emptyList()
+            )
+        }
+    )
+
+    // ---- the occupancy rule, decided by the write (§19) ------------------------------------------
+
+    /**
+     * §19's *"no more than one session per slot is `IN_PROGRESS`"*, proved where it is enforced.
+     *
+     * This test calls the repository **directly**, with no use case above it: it is the persistence
+     * boundary's own proof. The second start is refused because the statement that stores a session
+     * stores nothing when the slot already holds an attempt in the same status — not because something
+     * read the table first and decided otherwise.
+     */
+    @Test
+    fun aSecondInProgressAttemptAtOneSlotIsRefusedByTheWriteAndLeavesNothingBehind() = runBlocking {
+        rig.createGraph()
+        rig.workoutSessionRepository.startSession(session)
+        val before = sessionTableCounts()
+
+        val failure = failureOf {
+            rig.workoutSessionRepository.startSession(ProgramGraphFixture.session("b", slot))
+        }
+
+        assertTrue(
+            "the refused start reports the rule it broke and the slot it was attempted on: ${failure.message}",
+            failure is SessionAlreadyInProgress && failure.slotId == slot.slotId
+        )
+        assertEquals(
+            "and the refused attempt left no session, no snapshot, no captured element, no occurrence " +
+                "and no set behind — the refusal is inside the transaction that would have written them",
+            before,
+            sessionTableCounts()
+        )
+        assertEquals(
+            "the attempt that was already in progress is untouched",
+            listOf("session-a"),
+            rig.database.strings("SELECT `sessionId` FROM `workout_session` WHERE `slotId` = 'slot-a-1'")
+        )
+        assertEquals(
+            "and it is still in progress",
+            "IN_PROGRESS",
+            rig.database.scalar("SELECT `status` FROM `workout_session` WHERE `sessionId` = 'session-a'")
+        )
+    }
+
+    /**
+     * The rule is about a slot's *unfinished* attempt, so it refuses nothing else: a second slot is
+     * startable while the first is being worked out, and a cancelled attempt leaves the opportunity open
+     * for a new one.
+     */
+    @Test
+    fun theOccupancyRuleRefusesOnlyASecondUnfinishedAttemptAtTheSameSlot() = runBlocking {
+        rig.createGraph()
+        rig.workoutSessionRepository.startSession(session)
+
+        rig.workoutSessionRepository.startSession(
+            ProgramGraphFixture.session("other", rig.graph.slotFor(2))
+        )
+        assertEquals(
+            "another opportunity is being worked out at the same time — the rule is per slot, not global",
+            listOf("session-a", "session-other"),
+            rig.database.strings("SELECT `sessionId` FROM `workout_session` ORDER BY `startedAt` ASC, `sessionId` ASC")
+        )
+
+        rig.workoutSessionRepository.recordSessionOutcome(
+            session.copy(status = SessionStatus.CANCELLED, finishedAt = ProgramGraphFixture.FINISHED)
+        )
+        rig.workoutSessionRepository.startSession(ProgramGraphFixture.session("b", slot))
+
+        assertEquals(
+            "and a cancelled attempt leaves the opportunity open for the next one (§19)",
+            listOf("session-a", "session-b"),
+            rig.database.strings(
+                "SELECT `sessionId` FROM `workout_session` WHERE `slotId` = 'slot-a-1' " +
+                    "ORDER BY `startedAt` ASC, `sessionId` ASC"
+            )
+        )
+    }
+
+    /** The row count of every table a start writes: the census a refused start must not move. */
+    private fun sessionTableCounts(): List<Int> =
+        listOf("workout_session", "session_snapshot", "session_snapshot_exercise", "session_exercise", "program_set_log")
+            .map { rig.database.count(it) }
 
     // ---- transactions ----------------------------------------------------------------------------
 
