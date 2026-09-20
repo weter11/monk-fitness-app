@@ -71,6 +71,10 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    // Localization (§3): the application-locale API (the app's language picker) is only backward
+    // compatible through AppCompat, which is also what stores an app locale below Android 13 — see
+    // AppLanguageManager and the AppLocalesMetadataHolderService entry in the manifest.
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))

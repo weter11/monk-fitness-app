@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The language names the picker shows, each written in its own language: a Bulgarian speaker looking
+    for their language reads "Български", not the app's own word for Bulgarian. They are proper nouns, not
+    copy, so they are `translatable="false"` and live only in the default resource set — which is also why
+    the localization test excludes exactly these keys from its "exists in every locale" rule. That
+    exemption is read from this attribute, so a *new* untranslated key cannot hide here by being added to
+    some list: it has to say out loud that it is not translated.
+
+    The label of the "System language" entry is NOT here: it is ordinary copy that each language
+    translates, and it lives in `values/strings.xml` with every other user-visible string.
+-->
+<resources>
+    <string name="language_english" translatable="false">English</string>
+    <string name="language_russian" translatable="false">Русский</string>
+    <string name="language_ukrainian" translatable="false">Українська</string>
+    <string name="language_bulgarian" translatable="false">Български</string>
+    <string name="language_portuguese" translatable="false">Português</string>
+    <string name="language_spanish" translatable="false">Español</string>
+    <string name="language_italian" translatable="false">Italiano</string>
+</resources>

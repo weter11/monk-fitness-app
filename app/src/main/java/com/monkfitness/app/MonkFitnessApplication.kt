@@ -3,6 +3,8 @@ package com.monkfitness.app
 import android.app.Application
 import com.monkfitness.app.data.local.SettingsManager
 import com.monkfitness.app.di.AppContainer
+import com.monkfitness.app.language.AppLanguageManager
+import com.monkfitness.app.language.SettingsLegacyLanguageStore
 import com.monkfitness.app.util.NotificationScheduler
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.first
@@ -35,6 +37,23 @@ class MonkFitnessApplication : Application() {
      * shipped Stage-1 path that §30 step 15 retires.
      */
     val container: AppContainer by lazy { AppContainer.create(this) }
+
+    /**
+     * The app's **one owner of language selection** (localization stage §2).
+     *
+     * It is created here, next to the composition root, because language is an application-level fact:
+     * the manager is what the Settings screen asks to change the language and what the notification
+     * receiver asks for the language to write a notification in. There is no second language state —
+     * the selection itself lives in the platform's application locale, which
+     * [com.monkfitness.app.language.AppCompatAppLocaleStore] is the app's only door to.
+     *
+     * The one-time hand-off of a pre-localization language
+     * ([AppLanguageManager.migrateLegacySelection]) is deliberately *not* run here: the app-locale API
+     * cannot reach the platform before an Activity exists, so `MainActivity` triggers it.
+     */
+    val appLanguageManager: AppLanguageManager by lazy {
+        AppLanguageManager.create(SettingsLegacyLanguageStore(SettingsManager(this)))
+    }
 
     override fun onCreate() {
         super.onCreate()

@@ -1,6 +1,7 @@
 package com.monkfitness.app.ui.screens
 
 import android.app.TimePickerDialog
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -49,6 +50,8 @@ import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.model.LibraryStats
 import com.monkfitness.app.data.model.NutritionIngredient
+import com.monkfitness.app.language.AppLanguageSettings
+import com.monkfitness.app.ui.language.LanguagePickerDialog
 import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
 import com.monkfitness.app.viewmodel.MaintenanceResult
 import com.monkfitness.app.viewmodel.MainViewModel
@@ -85,8 +88,8 @@ fun SettingsScreen(
                     Text(stringResource(R.string.ok))
                 }
             },
-            title = { Text("At least one category must remain enabled") },
-            text = { Text("Please enable at least one exercise category to generate workouts.") }
+            title = { Text(stringResource(R.string.settings_category_required_title)) },
+            text = { Text(stringResource(R.string.settings_category_required_text)) }
         )
     }
 
@@ -159,16 +162,37 @@ fun SettingsScreen(
 
             Text(text = stringResource(R.string.language), style = MaterialTheme.typography.titleLarge)
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                androidx.compose.material3.Button(onClick = { viewModel.setLanguage("en") }) {
-                    Text(stringResource(R.string.lang_en))
+            // §6: one settings entry for the language, opening a single-choice list — the seven languages
+            // plus "System language". The three buttons this replaces were already one language short of a
+            // row that could hold them all.
+            val currentLanguage = viewModel.currentAppLanguage()
+            var showLanguagePicker by remember { mutableStateOf(false) }
+
+            SettingActionRow(
+                title = stringResource(R.string.language),
+                value = stringResource(currentLanguage.labelRes),
+                onClick = { showLanguagePicker = true }
+            )
+
+            // §7: Android's own per-app language screen, offered only where the platform has one. It edits
+            // the same application locale this screen edits — a second way to the one setting, not a second
+            // setting — and the app keeps no state that could disagree with it.
+            val systemLanguageIntent = remember(context) { AppLanguageSettings.intentFor(context) }
+            if (systemLanguageIntent != null) {
+                TextButton(onClick = { context.startActivity(systemLanguageIntent) }) {
+                    Text(stringResource(R.string.language_system_settings))
                 }
-                androidx.compose.material3.Button(onClick = { viewModel.setLanguage("ru") }) {
-                    Text(stringResource(R.string.lang_ru))
-                }
-                androidx.compose.material3.Button(onClick = { viewModel.setLanguage("uk") }) {
-                    Text(stringResource(R.string.lang_uk))
-                }
+            }
+
+            if (showLanguagePicker) {
+                LanguagePickerDialog(
+                    current = currentLanguage,
+                    onSelect = { language ->
+                        showLanguagePicker = false
+                        viewModel.selectAppLanguage(language)
+                    },
+                    onDismiss = { showLanguagePicker = false }
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -320,15 +344,15 @@ private fun ExerciseFamiliesSelector(
     showEngineeringValidation: Boolean
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(text = "Exercises", style = MaterialTheme.typography.titleLarge)
+        Text(text = stringResource(R.string.settings_exercises_title), style = MaterialTheme.typography.titleLarge)
 
         SettingSwitchRow(
-            title = "Show only exercises matching selected categories",
+            title = stringResource(R.string.settings_filter_library_title),
             checked = filterLibrary,
             onCheckedChange = onToggleFilterLibrary
         )
         Text(
-            text = "When enabled, the Exercise Library and Search only display exercises belonging to the selected categories.",
+            text = stringResource(R.string.settings_filter_library_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.secondary,
             modifier = Modifier.padding(bottom = 12.dp)
@@ -342,19 +366,19 @@ private fun ExerciseFamiliesSelector(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = group.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(text = stringResource(group.titleRes), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TextButton(
                             onClick = { onEnableAll(group.categories.map { it.key }) },
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
                         ) {
-                            Text("Enable All")
+                            Text(stringResource(R.string.settings_enable_all))
                         }
                         TextButton(
                             onClick = { onDisableAll(group.categories.map { it.key }) },
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
                         ) {
-                            Text("Disable All")
+                            Text(stringResource(R.string.settings_disable_all))
                         }
                     }
                 }
@@ -375,7 +399,7 @@ private fun ExerciseFamiliesSelector(
                                     onCheckedChange = { onToggle(family.key) }
                                 )
                                 Text(
-                                    text = family.displayName,
+                                    text = stringResource(family.labelRes),
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             }
@@ -561,6 +585,33 @@ private fun SettingSwitchRow(
     ) {
         Text(text = title)
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+/**
+ * A settings entry that opens something else, showing the value it currently holds — the shape a settings
+ * list needs once a choice no longer fits in the row itself (§6).
+ */
+@Composable
+private fun SettingActionRow(
+    title: String,
+    value: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = title)
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary
+        )
     }
 }
 

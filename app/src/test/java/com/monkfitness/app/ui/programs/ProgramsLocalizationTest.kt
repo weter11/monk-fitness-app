@@ -1,5 +1,7 @@
 package com.monkfitness.app.ui.programs
 
+import com.monkfitness.app.language.AppLanguage
+import com.monkfitness.app.ui.language.ResourceTables
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -60,11 +62,23 @@ class ProgramsLocalizationTest {
     private val usageSources: List<File> =
         featureSources + listOf(File(mainSourceRoot, "MainActivity.kt"), File(mainSourceRoot, "ui/screens/SettingsScreen.kt"))
 
-    private val locales = mapOf(
-        "en" to File(resourceRoot, "values/strings.xml"),
-        "ru" to File(resourceRoot, "values-ru/strings.xml"),
-        "uk" to File(resourceRoot, "values-uk/strings.xml")
-    )
+    /**
+     * The app's locales, taken from the one policy that declares them (§9): the default table plus every
+     * language the app ships. The stage that added the four new languages added them to that policy, so this
+     * suite grew from three locales to seven without a second list being written here.
+     */
+    private val locales: Map<String, File> = AppLanguage.supportedTags.associateWith { tag ->
+        val dir = if (tag == ResourceTables.DEFAULT_LOCALE) "values" else "values-$tag"
+        File(resourceRoot, "$dir/strings.xml")
+    }
+
+    /** The languages whose Program copy must differ from English word for word. */
+    private val strictlyTranslatedLocales = listOf("ru", "uk")
+
+    /** The languages added by the localization stage: checked for copied blocks, not for every word. */
+    private val addedLocales = AppLanguage.supportedTags.filter { tag ->
+        tag != ResourceTables.DEFAULT_LOCALE && tag !in strictlyTranslatedLocales
+    }
 
     private fun stringsOf(file: File): Map<String, String> {
         assertTrue("expected the string table at ${file.absolutePath}", file.isFile)
@@ -156,9 +170,9 @@ class ProgramsLocalizationTest {
         assertTrue("expected the feature's own strings", declared.isNotEmpty())
 
         val untranslated = declared.filter { key ->
-            val ru = stringsByLocale.getValue("ru")[key]
-            val uk = stringsByLocale.getValue("uk")[key]
-            ru == english[key] || uk == english[key]
+            strictlyTranslatedLocales.any { locale ->
+                stringsByLocale.getValue(locale)[key] == english[key]
+            }
         }
 
         assertTrue(
@@ -167,12 +181,46 @@ class ProgramsLocalizationTest {
         )
         assertTrue(
             "the feature's own strings are localized, so at least one must differ per locale",
-            declared.any { key ->
-                val ru = stringsByLocale.getValue("ru")[key]
-                val uk = stringsByLocale.getValue("uk")[key]
-                ru != uk
+            strictlyTranslatedLocales.all { locale ->
+                declared.any { key -> stringsByLocale.getValue(locale)[key] != english[key] }
             }
         )
+    }
+
+    @Test
+    fun theAddedLanguagesTranslateTheFeaturesCopy() {
+        // §15: the four languages this stage added are held to the same rule the rest of the app's copy is —
+        // not "every word must differ" (a program mode really is "Manual" in Portuguese, and "%1$d" is a
+        // format), but "no copied block", which is what an untranslated feature looks like.
+        val english = stringsByLocale.getValue("en")
+        val declared = english.keys.filter { key -> key.startsWith(PREFIX) }
+        val worded = declared.filter { key -> ResourceTables.hasWords(english.getValue(key)) }
+
+        val allowedFraction = 0.05
+        val allowedRun = 8
+
+        addedLocales.forEach { locale ->
+            val table = stringsByLocale.getValue(locale)
+            val identical = worded.filter { key -> table[key] == english[key] }
+
+            assertTrue(
+                "$locale: ${identical.size} of ${worded.size} Program strings are still English " +
+                    "(allowed: ${(worded.size * allowedFraction).toInt()}). Copied: ${identical.sorted()}",
+                identical.size <= (worded.size * allowedFraction).toInt()
+            )
+
+            var run = 0
+            var longest = 0
+            worded.forEach { key ->
+                run = if (table[key] == english[key]) run + 1 else 0
+                longest = maxOf(longest, run)
+            }
+            assertTrue(
+                "$locale: $longest consecutive Program strings are identical to English — the feature was " +
+                    "not translated for that locale",
+                longest <= allowedRun
+            )
+        }
     }
 
     @Test

@@ -1,3 +1,12 @@
 <resources>
-    <style name="Theme.Material3.DayNight.NoActionBar" parent="Theme.Material3.DayNight.NoActionBar" />
+    <!--
+        The app theme.
+
+        It descends from AppCompat's DayNight NoActionBar because the Activity hosting the Compose tree is
+        an `AppCompatActivity`: below Android 13 the app-locale API only reaches the platform through an
+        AppCompat-attached Activity, and an AppCompat Activity refuses to start on a theme that does not
+        descend from `Theme.AppCompat`. (The previous declaration extended *itself* — a resource cycle
+        that left the app with an empty theme and the release lint gate red.)
+    -->
+    <style name="Theme.MonkFitness" parent="@style/Theme.AppCompat.DayNight.NoActionBar" />
 </resources>

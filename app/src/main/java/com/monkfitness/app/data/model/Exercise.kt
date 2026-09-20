@@ -171,35 +171,35 @@ fun Exercise.applyDifficultyAdjustment(adjustment: Int): Exercise {
     }
 }
 
-enum class ExerciseCategoryFilter(val key: String, val displayName: String) {
+enum class ExerciseCategoryFilter(val key: String, @StringRes val labelRes: Int) {
     // Training Styles
-    SHAOLIN("shaolin", "Shaolin"),
-    CALISTHENICS("calisthenics", "Calisthenics"),
-    FUNCTIONAL_FITNESS("functional_fitness", "Functional Fitness"),
-    BODYWEIGHT_STRENGTH("bodyweight_strength", "Bodyweight Strength"),
-    MOBILITY("mobility", "Mobility"),
-    STRETCHING("stretching", "Stretching"),
+    SHAOLIN("shaolin", R.string.category_filter_shaolin),
+    CALISTHENICS("calisthenics", R.string.category_filter_calisthenics),
+    FUNCTIONAL_FITNESS("functional_fitness", R.string.category_filter_functional_fitness),
+    BODYWEIGHT_STRENGTH("bodyweight_strength", R.string.category_filter_bodyweight_strength),
+    MOBILITY("mobility", R.string.category_filter_mobility),
+    STRETCHING("stretching", R.string.category_filter_stretching),
 
     // Special Programs
-    HYPERLORDOSIS("hyperlordosis", "Hyperlordosis"),
-    POSTURE_CORRECTION("posture_correction", "Posture Correction"),
-    NECK("neck", "Neck"),
-    LOWER_BACK("lower_back", "Lower Back"),
-    SHOULDERS("shoulders", "Shoulders"),
-    KNEES("knees", "Knees"),
-    BALANCE("balance", "Balance"),
-    SENIOR("senior", "Senior"),
-    REHABILITATION("rehabilitation", "Rehabilitation")
+    HYPERLORDOSIS("hyperlordosis", R.string.category_filter_hyperlordosis),
+    POSTURE_CORRECTION("posture_correction", R.string.category_filter_posture_correction),
+    NECK("neck", R.string.category_filter_neck),
+    LOWER_BACK("lower_back", R.string.category_filter_lower_back),
+    SHOULDERS("shoulders", R.string.category_filter_shoulders),
+    KNEES("knees", R.string.category_filter_knees),
+    BALANCE("balance", R.string.category_filter_balance),
+    SENIOR("senior", R.string.category_filter_senior),
+    REHABILITATION("rehabilitation", R.string.category_filter_rehabilitation)
 }
 
 data class ExerciseCategoryGroup(
-    val title: String,
+    @StringRes val titleRes: Int,
     val categories: List<ExerciseCategoryFilter>
 )
 
 val exerciseCategoryGroups = listOf(
     ExerciseCategoryGroup(
-        title = "Training Styles",
+        titleRes = R.string.category_group_training_styles,
         categories = listOf(
             ExerciseCategoryFilter.SHAOLIN,
             ExerciseCategoryFilter.CALISTHENICS,
@@ -210,7 +210,7 @@ val exerciseCategoryGroups = listOf(
         )
     ),
     ExerciseCategoryGroup(
-        title = "Special Programs",
+        titleRes = R.string.category_group_special_programs,
         categories = listOf(
             ExerciseCategoryFilter.HYPERLORDOSIS,
             ExerciseCategoryFilter.POSTURE_CORRECTION,

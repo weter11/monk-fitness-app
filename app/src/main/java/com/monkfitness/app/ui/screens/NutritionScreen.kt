@@ -276,7 +276,7 @@ fun NutritionScreen(
                     onClick = { viewModel.previewNextCycle(cycleLength.coerceIn(1, 7)) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Preview Next Cycle")
+                    Text(stringResource(R.string.nutrition_preview_next_cycle))
                 }
             }
 
@@ -467,6 +467,18 @@ private fun AvailableProductsDialog(
     )
 }
 
+/**
+ * A preview range, in the phrasing the app already uses for a 1/3/7-day plan
+ * (`nutrition_plan_days_1/3/7`): the day count belongs to the sentence, so each language supplies its own
+ * form of it instead of the screen assembling a number and an English word.
+ */
+@Composable
+private fun previewRangeLabel(days: Int): String = when (days) {
+    1 -> stringResource(R.string.nutrition_plan_days_1)
+    3 -> stringResource(R.string.nutrition_plan_days_3)
+    else -> stringResource(R.string.nutrition_plan_days_7)
+}
+
 @Composable
 fun NutritionPreviewDialog(
     previewPlan: NutritionPlan,
@@ -480,12 +492,12 @@ fun NutritionPreviewDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             Button(onClick = onAccept) {
-                Text("Accept Cycle")
+                Text(stringResource(R.string.nutrition_preview_accept))
             }
         },
         dismissButton = {
             OutlinedButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         },
         title = {
@@ -495,7 +507,7 @@ fun NutritionPreviewDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Preview Next Cycle",
+                    text = stringResource(R.string.nutrition_preview_next_cycle),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -510,7 +522,7 @@ fun NutritionPreviewDialog(
             ) {
                 // Time Range Toggle
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Select Preview Duration:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.nutrition_preview_duration_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -520,7 +532,7 @@ fun NutritionPreviewDialog(
                             FilterChip(
                                 selected = isSelected,
                                 onClick = { onRangeSelect(days) },
-                                label = { Text("$days Day${if (days > 1) "s" else ""}") }
+                                label = { Text(previewRangeLabel(days)) }
                             )
                         }
                     }
@@ -537,9 +549,9 @@ fun NutritionPreviewDialog(
                 // Variety Score calculation
                 val uniqueRatio = if (totalRecipes.isNotEmpty()) uniqueRecipesCount.toFloat() / totalRecipes.size else 0f
                 val varietyIndicator = when {
-                    uniqueRatio >= 0.8f -> "Excellent Variety"
-                    uniqueRatio >= 0.5f -> "Good Variety"
-                    else -> "Low Variety"
+                    uniqueRatio >= 0.8f -> stringResource(R.string.nutrition_variety_excellent)
+                    uniqueRatio >= 0.5f -> stringResource(R.string.nutrition_variety_good)
+                    else -> stringResource(R.string.nutrition_variety_low)
                 }
                 val varietyColor = when {
                     uniqueRatio >= 0.8f -> MaterialTheme.colorScheme.primary
@@ -548,7 +560,7 @@ fun NutritionPreviewDialog(
                 }
 
                 // Shopping Indicator
-                val shoppingIndicator = if (missingCount == 0) "Ready to cook" else "Need shopping"
+                val shoppingIndicator = if (missingCount == 0) stringResource(R.string.nutrition_shopping_ready_to_cook) else stringResource(R.string.nutrition_shopping_needed)
                 val shoppingIndicatorColor = if (missingCount == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
 
                 Card(
@@ -556,44 +568,44 @@ fun NutritionPreviewDialog(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Cycle Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text(stringResource(R.string.nutrition_preview_summary_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
 
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Duration:", style = MaterialTheme.typography.bodyMedium)
-                            Text("${previewPlan.days.size} days", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.nutrition_preview_duration), style = MaterialTheme.typography.bodyMedium)
+                            Text(previewRangeLabel(previewPlan.days.size), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Recipes:", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.nutrition_preview_recipes), style = MaterialTheme.typography.bodyMedium)
                             Text("${totalRecipes.size}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Unique recipes:", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.nutrition_preview_unique_recipes), style = MaterialTheme.typography.bodyMedium)
                             Text("${uniqueRecipesCount}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Repeated recipes:", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.nutrition_preview_repeated_recipes), style = MaterialTheme.typography.bodyMedium)
                             Text("${repeatedRecipesCount}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Products required:", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.nutrition_preview_products_required), style = MaterialTheme.typography.bodyMedium)
                             Text("${shoppingItems.size}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Already available:", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.nutrition_preview_already_available), style = MaterialTheme.typography.bodyMedium)
                             Text("$availableCount", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Need to buy:", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.nutrition_preview_need_to_buy), style = MaterialTheme.typography.bodyMedium)
                             Text("$missingCount", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Variety Score:", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.nutrition_preview_variety_score), style = MaterialTheme.typography.bodyMedium)
                             Text(varietyIndicator, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = varietyColor)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Shopping Status:", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.nutrition_preview_shopping_status), style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                text = if (missingCount == 0) shoppingIndicator else "$shoppingIndicator ($missingCount missing)",
+                                text = if (missingCount == 0) shoppingIndicator else stringResource(R.string.nutrition_preview_shopping_status_missing, shoppingIndicator, missingCount),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = shoppingIndicatorColor
@@ -621,38 +633,38 @@ fun NutritionPreviewDialog(
                             Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)))
                             Spacer(modifier = Modifier.height(4.dp))
 
-                            Text("Comparison with Current Cycle", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.nutrition_preview_comparison_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
 
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("New recipes:", style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.nutrition_preview_new_recipes), style = MaterialTheme.typography.bodySmall)
                                 Text("+$newRecipesCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Repeated from previous cycle:", style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.nutrition_preview_repeated_from_previous), style = MaterialTheme.typography.bodySmall)
                                 Text("$repeatedFromPrevCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("New ingredients introduced:", style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.nutrition_preview_new_ingredients), style = MaterialTheme.typography.bodySmall)
                                 Text("$newIngredientsCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Ingredients already stocked:", style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.nutrition_preview_ingredients_stocked), style = MaterialTheme.typography.bodySmall)
                                 Text("$availableCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Missing ingredients:", style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.nutrition_preview_missing_ingredients), style = MaterialTheme.typography.bodySmall)
                                 Text("$missingCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Avg Daily Calories:", style = MaterialTheme.typography.bodySmall)
-                                Text("$previewAvg kcal (Current: $currentAvg kcal)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.nutrition_preview_avg_daily_calories), style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.nutrition_preview_calories_comparison, previewAvg, currentAvg), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 }
 
                 // Daily Menu Section
-                Text("Daily Menu", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.nutrition_preview_daily_menu), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 previewPlan.days.forEach { day ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -660,10 +672,10 @@ fun NutritionPreviewDialog(
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Day ${day.dayNumber}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.day_display, day.dayNumber), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 Text(stringResource(day.dayType.labelRes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                             }
-                            Text("Target Calories: ${day.targetCalories} kcal", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                            Text(stringResource(R.string.nutrition_preview_target_calories, day.targetCalories), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
 
                             day.meals.forEach { meal ->
                                 Column(modifier = Modifier.padding(vertical = 4.dp)) {
@@ -681,9 +693,9 @@ fun NutritionPreviewDialog(
                                         )
                                     }
                                     // Recipe / Cooking instructions
-                                    Text("Instructions:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                    Text(stringResource(R.string.nutrition_preview_instructions), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                     com.monkfitness.app.data.model.getTodayCookingInstructionResIds(meal).forEachIndexed { i, stepRes ->
-                                        Text("${i + 1}. ${stringResource(stepRes)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                                        Text(stringResource(R.string.nutrition_preview_step, i + 1, stringResource(stepRes)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                                     }
                                 }
                             }
@@ -692,7 +704,7 @@ fun NutritionPreviewDialog(
                 }
 
                 // Required Products Section
-                Text("Required Products Preview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.nutrition_preview_required_products), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 NutritionShoppingGroup.entries.forEach { group ->
                     val items = previewPlan.shoppingList[group].orEmpty()
                     if (items.isNotEmpty()) {
@@ -719,7 +731,10 @@ fun NutritionPreviewDialog(
                                         Text("• ${stringResource(item.ingredient.nameRes)} — $quantity", style = MaterialTheme.typography.bodySmall)
                                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                                             Text(icon, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Bold)
-                                            Text(if (isAvailable) "Available" else "Missing", style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Bold)
+                                            Text(
+                                            if (isAvailable) stringResource(R.string.nutrition_preview_product_available)
+                                            else stringResource(R.string.nutrition_preview_product_missing),
+                                            style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
