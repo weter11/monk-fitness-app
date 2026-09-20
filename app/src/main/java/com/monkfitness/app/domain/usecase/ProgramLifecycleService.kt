@@ -150,6 +150,29 @@ class ProgramLifecycleService(
             ?: throw ProgramMissing(programId)
     }.refusingOn(programId)
 
+    /**
+     * The revision [programId]'s `currentRevisionId` points at — §22's *"current Revision"*, and the
+     * only read of a Program's structural facts that does not go through the editor.
+     *
+     * §22's Program Detail is *current-state management*: it shows the Program's mode, its schedule and
+     * which revision those facts belong to, and all three live on the revision rather than on the
+     * Program (§6, §23). The detail screen cannot ask a repository for them (§25: the UI reaches no
+     * data layer), so the read is here, beside the selection read, over the collaborator this service
+     * already holds read-only for [copyProgram]. No new collaborator, no new decision: the pointer
+     * decides which revision is current, exactly as the export path reads it (§17 of the transfer
+     * document), and this method does not fall back to "the newest by number".
+     *
+     * A Program that is not stored is [ProgramOperationRefusal.ProgramNotFound]; a Program whose
+     * pointer names a revision that is not stored is **invalid persisted data** and propagates as a
+     * [ProgramOperationResult.Failure] rather than being reported as a Program with no plan (§23, §28,
+     * §33).
+     */
+    suspend fun currentRevision(programId: ProgramId): ProgramOperationResult<ProgramRevision> =
+        storageOutcome {
+            val program = programRepository.programById(programId) ?: throw ProgramMissing(programId)
+            planRepository.currentRevision(programId) ?: throw RevisionNotStored(program.currentRevisionId)
+        }.refusingOn(programId)
+
     // ---------------------------------------------------------------- selection (§3, §21)
 
     /**
@@ -519,6 +542,14 @@ class ProgramLifecycleService(
  * naming [ProgramNotFound]; it never reaches a caller as an exception.
  */
 internal class ProgramMissing(programId: ProgramId) : RuntimeException(ProgramNotFound(programId).message)
+
+/**
+ * A Program's `currentRevisionId` names a revision that is not stored (§23): the row and its pointer
+ * disagree, which is invalid persisted data rather than an expected state, so it reaches the caller as
+ * [ProgramOperationResult.Failure] instead of a refusal or an empty plan.
+ */
+internal class RevisionNotStored(revisionId: RevisionId) :
+    RuntimeException("the revision '${revisionId.value}' a Program's pointer names is not stored (§23)")
 
 /** §4: the built-in Standard Program's content is protected. */
 internal class StandardProgramProtected(programId: ProgramId) :

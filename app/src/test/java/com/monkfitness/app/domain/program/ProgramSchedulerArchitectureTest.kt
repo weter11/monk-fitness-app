@@ -250,8 +250,19 @@ class ProgramSchedulerArchitectureTest {
 
     // ------------------------------------------------------------------ the wiring
 
+    /**
+     * Revised, not relaxed, by §30 step 14.
+     *
+     * §30 step 7 landed the Scheduler without an affordance and pinned that by asserting that no UI source
+     * named `ProgramScheduler` at all. §30 step 14's Program Detail shows §22's *next workout*, which is the
+     * Scheduler's own preview, so the UI must reach it — through the state holder, and without a second
+     * owner of §20's timing.
+     *
+     * The claim the rule always meant: the composition root constructs the Scheduler **once**, no UI source
+     * **constructs one**, and the UI does use the one it is handed (so the rule is not vacuous).
+     */
     @Test
-    fun theCompositionRootWiresTheSchedulerAndNothingInTheUiDoes() {
+    fun theCompositionRootWiresTheSchedulerAndNothingAboveItConstructsOne() {
         val container = File(mainDir, "di/AppContainer.kt")
         assertTrue("the composition root constructs the Scheduler (§26)", container.isFile)
         assertTrue(
@@ -259,17 +270,30 @@ class ProgramSchedulerArchitectureTest {
             container.readText().contains("val programScheduler: ProgramScheduler = ProgramScheduler(")
         )
 
-        val uiReach = File(mainDir, "ui").walkTopDown()
+        val constructions = File(mainDir, "ui").walkTopDown()
             .plus(File(mainDir, "viewmodel").walkTopDown())
+            .filter { it.isFile && it.extension == "kt" }
+            .filter { it.readText().contains("ProgramScheduler(") }
+            .map { it.name }
+            .toList()
+
+        assertTrue(
+            "no ViewModel and no screen constructs the Scheduler: §26 says a view model receives what it " +
+                "needs rather than building it, and a second Scheduler would be a second owner of §20's " +
+                "timing. Found: $constructions",
+            constructions.isEmpty()
+        )
+
+        val consumers = File(mainDir, "ui").walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .filter { it.readText().contains("ProgramScheduler") }
             .map { it.name }
             .toList()
 
         assertTrue(
-            "no ViewModel and no screen reaches the Scheduler yet: the UI integration is a later step, " +
-                "and §26 says a ViewModel receives what it needs rather than finding it. Found: $uiReach",
-            uiReach.isEmpty()
+            "and the UI does reach it, so the rule above is not vacuous: §22's next workout is the " +
+                "Scheduler's own answer rather than a date the detail screen computes. Found: $consumers",
+            consumers.isNotEmpty()
         )
     }
 

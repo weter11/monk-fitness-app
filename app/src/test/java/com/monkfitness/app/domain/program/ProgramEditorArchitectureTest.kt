@@ -223,8 +223,18 @@ class ProgramEditorArchitectureTest {
 
     // ------------------------------------------------------------------ the wiring
 
+    /**
+     * Revised, not relaxed, by §30 step 14.
+     *
+     * §30 step 6 landed the editor without an affordance and pinned that by asserting that no UI source
+     * named `ProgramEditorService` at all. §30 step 14 is the stage that wires it (§7's *"do not route users
+     * into the legacy editor merely because it already exists"*), so the claim the rule always meant is
+     * stated instead: the composition root constructs the editor **once**, and no UI source **constructs
+     * one** — the screens reach it through the state holder the view model hands them. A second construction
+     * is what the original assertion was protecting against, and it is still refused.
+     */
     @Test
-    fun theCompositionRootWiresTheEditorAndNothingInTheUiDoes() {
+    fun theCompositionRootWiresTheEditorAndNothingAboveItConstructsOne() {
         val container = File(mainDir, "di/AppContainer.kt")
         assertTrue("the composition root constructs the editor (§26)", container.isFile)
         assertTrue(
@@ -232,17 +242,30 @@ class ProgramEditorArchitectureTest {
             container.readText().contains("val programEditorService: ProgramEditorService = ProgramEditorService(")
         )
 
-        val uiReach = File(mainDir, "ui").walkTopDown()
+        val constructions = File(mainDir, "ui").walkTopDown()
             .plus(File(mainDir, "viewmodel").walkTopDown())
+            .filter { it.isFile && it.extension == "kt" }
+            .filter { it.readText().contains("ProgramEditorService(") }
+            .map { it.name }
+            .toList()
+
+        assertTrue(
+            "no ViewModel and no screen constructs the editor: §26 says a view model receives what it " +
+                "needs rather than building it, and one editor with two owners is one editor too many. " +
+                "Found: $constructions",
+            constructions.isEmpty()
+        )
+
+        val consumers = File(mainDir, "ui").walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .filter { it.readText().contains("ProgramEditorService") }
             .map { it.name }
             .toList()
 
         assertTrue(
-            "no ViewModel and no screen reaches the editor yet: the UI integration is a later step, " +
-                "and §26 says a ViewModel receives what it needs rather than finding it. Found: $uiReach",
-            uiReach.isEmpty()
+            "and the UI does reach it, so the rule above is not vacuous: §30 step 14 is the affordance " +
+                "§7's editor was waiting for. Found: $consumers",
+            consumers.isNotEmpty()
         )
     }
 

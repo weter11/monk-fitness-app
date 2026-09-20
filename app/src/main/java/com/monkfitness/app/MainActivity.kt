@@ -32,6 +32,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.compose.runtime.key
 import androidx.navigation.navArgument
 import com.monkfitness.app.ui.screens.*
+import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.validation.ValidationPoseScreen
 import com.monkfitness.app.ui.theme.MonkFitnessTheme
 import com.monkfitness.app.viewmodel.MainViewModel
@@ -221,9 +222,133 @@ fun MainApp(viewModel: MainViewModel) {
                 SettingsScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
+                    onOpenPrograms = {
+                        navController.navigate(MainViewModel.ROUTE_PROGRAMS)
+                    },
                     onOpenCustomProgram = {
                         viewModel.openCustomProgramEditor()
                         navController.navigate(MainViewModel.ROUTE_CUSTOM_PROGRAM)
+                    }
+                )
+            }
+            // ---- the Program System (§30 step 14) -------------------------------------------------
+            // Destinations of the app's ONE NavHost. They are addressed by stable identifiers — a
+            // `programId`, and one of §2's two mode names — never by a domain object (§16).
+            composable(MainViewModel.ROUTE_PROGRAMS) {
+                ProgramsScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenMyPrograms = { navController.navigate(MainViewModel.ROUTE_MY_PROGRAMS) },
+                    onOpenCreate = { navController.navigate(MainViewModel.ROUTE_PROGRAM_CREATE) },
+                    onOpenImport = { navController.navigate(MainViewModel.ROUTE_PROGRAM_IMPORT) }
+                )
+            }
+            composable(MainViewModel.ROUTE_MY_PROGRAMS) {
+                MyProgramsScreen(
+                    controller = viewModel.programs,
+                    onBack = { navController.popBackStack() },
+                    onOpenProgram = { programId ->
+                        navController.navigate(MainViewModel.programDetailRoute(programId))
+                    },
+                    onCreateProgram = { navController.navigate(MainViewModel.ROUTE_PROGRAM_CREATE) },
+                    onImportProgram = { navController.navigate(MainViewModel.ROUTE_PROGRAM_IMPORT) }
+                )
+            }
+            composable(MainViewModel.ROUTE_PROGRAM_CREATE) {
+                ProgramCreateChoiceScreen(
+                    onBack = { navController.popBackStack() },
+                    onManual = {
+                        navController.navigate(
+                            MainViewModel.programEditorCreateRoute(ProgramMode.MANUAL.name)
+                        )
+                    },
+                    onGenerated = {
+                        navController.navigate(
+                            MainViewModel.programEditorCreateRoute(ProgramMode.GENERATED.name)
+                        )
+                    }
+                )
+            }
+            composable(
+                route = MainViewModel.ROUTE_PROGRAM_DETAIL,
+                arguments = listOf(navArgument("programId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val programId = backStackEntry.arguments?.getString("programId") ?: ""
+                ProgramDetailScreen(
+                    controller = viewModel.programs,
+                    programId = programId,
+                    onBack = { navController.popBackStack() },
+                    onEditProgram = { id ->
+                        navController.navigate(MainViewModel.programEditorEditRoute(id))
+                    },
+                    onCopyProgram = { id ->
+                        navController.navigate(MainViewModel.programEditorCopyRoute(id))
+                    }
+                )
+            }
+            composable(
+                route = MainViewModel.ROUTE_PROGRAM_EDITOR_CREATE,
+                arguments = listOf(navArgument("mode") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val mode = backStackEntry.arguments?.getString("mode") ?: ProgramMode.MANUAL.name
+                ProgramEditorScreen(
+                    controller = viewModel.programs,
+                    seedKey = MainViewModel.ROUTE_PROGRAM_EDITOR_CREATE + mode,
+                    seed = {
+                        viewModel.programs.openCreateDraft(
+                            ProgramMode.entries.firstOrNull { it.name == mode } ?: ProgramMode.MANUAL
+                        )
+                    },
+                    onBack = { navController.popBackStack() },
+                    onSaved = {
+                        navController.navigate(MainViewModel.ROUTE_MY_PROGRAMS) {
+                            popUpTo(MainViewModel.ROUTE_PROGRAMS)
+                        }
+                    }
+                )
+            }
+            composable(
+                route = MainViewModel.ROUTE_PROGRAM_EDITOR_EDIT,
+                arguments = listOf(navArgument("programId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val programId = backStackEntry.arguments?.getString("programId") ?: ""
+                ProgramEditorScreen(
+                    controller = viewModel.programs,
+                    seedKey = MainViewModel.ROUTE_PROGRAM_EDITOR_EDIT + programId,
+                    seed = { viewModel.programs.openEditDraft(programId) },
+                    onBack = { navController.popBackStack() },
+                    onSaved = {
+                        navController.navigate(MainViewModel.ROUTE_MY_PROGRAMS) {
+                            popUpTo(MainViewModel.ROUTE_PROGRAMS)
+                        }
+                    }
+                )
+            }
+            composable(
+                route = MainViewModel.ROUTE_PROGRAM_EDITOR_COPY,
+                arguments = listOf(navArgument("programId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val programId = backStackEntry.arguments?.getString("programId") ?: ""
+                val copyLabel = stringResource(R.string.programs_copy_of)
+                ProgramEditorScreen(
+                    controller = viewModel.programs,
+                    seedKey = MainViewModel.ROUTE_PROGRAM_EDITOR_COPY + programId,
+                    seed = { viewModel.programs.openCopyDraft(programId, copyLabel) },
+                    onBack = { navController.popBackStack() },
+                    onSaved = {
+                        navController.navigate(MainViewModel.ROUTE_MY_PROGRAMS) {
+                            popUpTo(MainViewModel.ROUTE_PROGRAMS)
+                        }
+                    }
+                )
+            }
+            composable(MainViewModel.ROUTE_PROGRAM_IMPORT) {
+                ProgramImportScreen(
+                    controller = viewModel.programs,
+                    onBack = { navController.popBackStack() },
+                    onImported = {
+                        navController.navigate(MainViewModel.ROUTE_MY_PROGRAMS) {
+                            popUpTo(MainViewModel.ROUTE_PROGRAMS)
+                        }
                     }
                 )
             }

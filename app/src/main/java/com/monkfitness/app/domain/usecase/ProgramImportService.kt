@@ -26,6 +26,7 @@ import com.monkfitness.app.domain.program.transfer.rejecting
 import com.monkfitness.app.domain.program.transfer.transferResult
 import com.monkfitness.app.domain.program.validation
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 
 /**
@@ -186,10 +187,20 @@ class ProgramImportService(
      *   off, the selection is not touched at all — not cleared, not kept, not compared. When it is on, the
      *   imported Program becomes the selected Program through [ProgramLifecycleService], which is the layer
      *   that owns selection, inside the same transaction as the creation.
+     * @param plannedStartDate the date the imported Program is **planned** to start on, or `null` for
+     *   the day it arrived. It is the user's choice when the import UI offers one, and it is part of
+     *   the import request rather than a second transaction: §27's creation unit is *"Program +
+     *   Revision + ProgramDays + ProgramExercises + initial Slots"*, and the initial slots are planned
+     *   **from this date**, so importing and then moving the date would leave the first slots anchored
+     *   to a date the user never chose. The value is a plan (§3) and starts nothing: the lifecycle is
+     *   still `NOT_STARTED` and `actualStartDate` is still `null`, and the Scheduler refuses to plan
+     *   without an anchor rather than inventing one, which is why the date travels here rather than
+     *   being read from the row the save just wrote.
      */
     suspend fun save(
         draft: ProgramImportDraft,
-        makeActive: Boolean = false
+        makeActive: Boolean = false,
+        plannedStartDate: LocalDate? = null
     ): ProgramTransferResult<Program> = transferResult {
         val at = clock.now()
         val programId = ProgramId(idGenerator.newId())
@@ -206,7 +217,7 @@ class ProgramImportService(
             currentRevisionId = revision.revisionId,
             createdAt = at,
             updatedAt = at,
-            plannedStartDate = importedOn(at),
+            plannedStartDate = plannedStartDate ?: importedOn(at),
             actualStartDate = null,
             archivedAt = null
         )
@@ -230,14 +241,16 @@ class ProgramImportService(
     // ---------------------------------------------------------------- the mechanism
 
     /**
-     * The date an imported Program is planned to start on: the day it was imported, read once in [zone].
+     * The date an imported Program is planned to start on when the caller names none: the day it was
+     * imported, read once in [zone].
      *
      * It is a *plan*, not a fact (§3): the imported Program's lifecycle stays `NOT_STARTED` and its
      * `actualStartDate` is `null`, so this writes no history and starts nothing. What it does is give the
      * Scheduler the anchor §27's creation unit needs — a fact of the Program, supplied by the layer that
-     * decides what Program is created, rather than a date the Scheduler invents.
+     * decides what Program is created, rather than a date the Scheduler invents. A caller that *does* name
+     * a date replaces this default; both travel the same way, as the import request's own fact.
      */
-    private fun importedOn(at: Instant): java.time.LocalDate = at.atZone(zone).toLocalDate()
+    private fun importedOn(at: Instant): LocalDate = at.atZone(zone).toLocalDate()
 
     /**
      * Selects the imported Program through the layer that owns selection (§3, §21).
