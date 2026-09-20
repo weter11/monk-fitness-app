@@ -189,6 +189,10 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
             database.migrate(AppDatabase.MIGRATION_8_9)
             database.migrate(AppDatabase.MIGRATION_9_10)
             database.migrate(AppDatabase.MIGRATION_10_11)
+            // §30 step 15: the rig's database is the schema the app opens, so it runs the retirement
+            // step too — otherwise every repository suite would be exercising a database the app can
+            // no longer produce.
+            database.migrate(AppDatabase.MIGRATION_11_12)
         }
     }
 }

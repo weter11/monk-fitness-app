@@ -75,7 +75,7 @@ fun NutritionScreen(
     val showExcludedProductsInNutrition by viewModel.showExcludedProductsInNutrition.collectAsState()
     val plan by viewModel.nutritionPlan.collectAsState()
     val targets by viewModel.currentNutritionTargets.collectAsState()
-    val currentProgramDay by viewModel.currentProgramDay.collectAsState()
+    val currentTrackDay by viewModel.currentTrackDay.collectAsState()
     val activeCycle by viewModel.activeMealCycle.collectAsState()
     val pendingCycle by viewModel.pendingMealCycle.collectAsState()
     val showExpirationWarning by viewModel.shouldShowNutritionExpirationWarning.collectAsState()
@@ -173,7 +173,11 @@ fun NutritionScreen(
                     )
                     NutritionTargetRow(
                         title = stringResource(R.string.nutrition_current_program_day),
-                        value = stringResource(R.string.nutrition_program_day_week, currentProgramDay, ((currentProgramDay - 1) / 7) + 1)
+                        value = stringResource(
+                            R.string.nutrition_program_day_week,
+                            currentTrackDay,
+                            ((currentTrackDay - 1) / 7) + 1
+                        )
                     )
                     NutritionTargetRow(
                         title = stringResource(R.string.nutrition_protein_target),

@@ -805,12 +805,15 @@ class ProgramAdaptiveIntegrationTest {
                 rig.database.count("program_family_progression_state")
             )
         )
+        // §30 step 15 inverted this half. It used to assert the Stage-1 tables were *untouched* by a
+        // target pass — the point of the coexisting generations. They are gone, so the claim is that the
+        // pass wrote nothing outside the target schema at all: every retained global table is empty too.
         assertEquals(
-            "and the Stage-1 adaptive tables are untouched",
+            "and nothing outside the target schema was written",
             listOf(0, 0),
             listOf(
-                rig.database.count("family_progression_state"),
-                rig.database.count("adaptive_decision_record")
+                rig.database.count("posture_session_progress"),
+                rig.database.count("body_weight_log")
             )
         )
     }

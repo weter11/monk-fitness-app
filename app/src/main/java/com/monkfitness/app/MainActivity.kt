@@ -47,16 +47,10 @@ class MainActivity : ComponentActivity() {
         viewModel.handleNotificationIntent(intent)
         setContent {
             val language by viewModel.settingsManager.languageFlow.collectAsState(initial = "ru")
-            val currentStep by viewModel.currentStep.collectAsState()
 
-            // Keep screen on during workout
-            LaunchedEffect(currentStep) {
-                if (currentStep != WorkoutStep.OVERVIEW && currentStep != WorkoutStep.COMPLETE) {
-                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                } else {
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                }
-            }
+            // Keeping the screen on is the *session screen's* own business now (§30 step 15): it is the
+            // only place that knows a workout is running, and the shipped step machine this used to read
+            // is gone with the runtime it belonged to.
 
             val context = LocalContext.current
             val localizedContext = remember(language) {
@@ -176,11 +170,14 @@ fun MainApp(viewModel: MainViewModel) {
             composable(Screen.Home.route) {
                 HomeScreen(
                     viewModel = viewModel,
-                    onStartWorkout = { day ->
-                        navController.navigate("workout/$day")
+                    onStartWorkout = { slotId ->
+                        navController.navigate(MainViewModel.programSessionRoute(slotId))
                     },
-                    onStartPostureWorkout = { day ->
-                        navController.navigate("posture-workout/$day")
+                    onOpenPrograms = {
+                        navController.navigate(MainViewModel.ROUTE_PROGRAMS)
+                    },
+                    onStartPostureWorkout = {
+                        navController.navigate("posture-workout")
                     }
                 )
             }
@@ -225,10 +222,6 @@ fun MainApp(viewModel: MainViewModel) {
                     onOpenPrograms = {
                         navController.navigate(MainViewModel.ROUTE_PROGRAMS)
                     },
-                    onOpenCustomProgram = {
-                        viewModel.openCustomProgramEditor()
-                        navController.navigate(MainViewModel.ROUTE_CUSTOM_PROGRAM)
-                    }
                 )
             }
             // ---- the Program System (§30 step 14) -------------------------------------------------
@@ -352,12 +345,6 @@ fun MainApp(viewModel: MainViewModel) {
                     }
                 )
             }
-            composable(MainViewModel.ROUTE_CUSTOM_PROGRAM) {
-                CustomProgramScreen(
-                    viewModel = viewModel,
-                    onBack = { navController.popBackStack() }
-                )
-            }
             composable("nutrition-shopping-list") {
                 NutritionShoppingListScreen(
                     viewModel = viewModel,
@@ -371,53 +358,39 @@ fun MainApp(viewModel: MainViewModel) {
                 )
             }
             composable(
-                route = "workout/{day}",
-                arguments = listOf(navArgument("day") { type = NavType.IntType })
+                route = MainViewModel.ROUTE_PROGRAM_SESSION,
+                arguments = listOf(navArgument("slotId") { type = NavType.StringType })
             ) { backStackEntry ->
-                val day = backStackEntry.arguments?.getInt("day") ?: 1
-                WorkoutScreen(
-                    day = day,
-                    viewModel = viewModel,
+                val slotId = backStackEntry.arguments?.getString("slotId") ?: ""
+                ProgramSessionScreen(
+                    controller = viewModel.programSession,
+                    slotId = slotId,
+                    vibrationEnabled = viewModel.vibrationEnabled.collectAsState().value,
                     onBack = { navController.popBackStack() },
-                    onExerciseClick = { exercise ->
-                        navController.navigate("exercise/${exercise.id}?day=$day")
+                    onExerciseClick = { exerciseId ->
+                        navController.navigate("exercise/$exerciseId")
                     }
                 )
             }
-            composable(
-                route = "posture-workout/{day}",
-                arguments = listOf(navArgument("day") { type = NavType.IntType })
-            ) { backStackEntry ->
-                val day = backStackEntry.arguments?.getInt("day") ?: 1
-                WorkoutScreen(
-                    day = day,
+            composable("posture-workout") {
+                PostureSessionScreen(
                     viewModel = viewModel,
-                    isPostureMobilitySession = true,
-                    onBack = { navController.popBackStack() },
-                    onExerciseClick = { exercise ->
-                        navController.navigate("exercise/${exercise.id}?day=$day&isPosture=true")
-                    }
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable(
-                route = "exercise/{exerciseId}?day={day}&isPosture={isPosture}",
+                route = "exercise/{exerciseId}",
                 arguments = listOf(
-                    navArgument("exerciseId") { type = NavType.StringType },
-                    navArgument("day") { type = NavType.IntType; defaultValue = -1 },
-                    navArgument("isPosture") { type = NavType.BoolType; defaultValue = false }
+                    navArgument("exerciseId") { type = NavType.StringType }
                 )
             ) { backStackEntry ->
                 val exerciseId = backStackEntry.arguments?.getString("exerciseId") ?: ""
-                val day = backStackEntry.arguments?.getInt("day") ?: -1
                 val difficultyAdjustments by viewModel.exerciseDifficultyAdjustments.collectAsState()
-                val flexibilityTrainingType by viewModel.flexibilityTrainingType.collectAsState()
                 val flexibilityFocusAreas by viewModel.flexibilityFocusAreas.collectAsState()
 
                 val exercise = viewModel.findExerciseById(
                     exerciseId = exerciseId,
-                    day = day,
                     difficultyAdjustments = difficultyAdjustments,
-                    trainingType = flexibilityTrainingType,
                     focusAreas = flexibilityFocusAreas
                 )
 

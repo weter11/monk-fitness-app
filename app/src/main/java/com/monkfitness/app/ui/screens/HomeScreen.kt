@@ -1,6 +1,5 @@
 package com.monkfitness.app.ui.screens
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,15 +18,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,84 +33,59 @@ import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.viewmodel.MainViewModel
 
+/**
+ * **Home** — the app's landing screen, now over the **target Program System** (§30 step 15).
+ *
+ * Before this step Home ran the shipped 56-day program: a day number derived from a stored start date, a
+ * `program_day_state` row for today, a routine generated from the day and a completion written back as
+ * `user_progress`. All of that is retired. What Home shows now is what the Program System already owns
+ * and can answer:
+ *
+ * ```text
+ * the Program being worked on   ProgramLifecycleService   (the one global selection, §3)
+ * the next opportunity          ProgramScheduler          (§20 — the earliest startable opportunity)
+ * the calendar's own counts     ProgramProgressService    (§21 completed / missed / upcoming)
+ * the Program's own streak      ProgramProgressService    (§21, per Program)
+ * ```
+ *
+ * There is **no day number, no cycle and no completion grid**: a workout is identified by the
+ * **opportunity** it is, so "Start workout" navigates to that opportunity's id and the session screen
+ * asks the runtime to start *it*. Repeating a workout is not an action here either: the Scheduler may
+ * hold a missed opportunity, and it is offered as itself rather than as a duplicate of a day.
+ *
+ * The optional posture / mobility track is retained unchanged (§4): it is a daily practice on its own
+ * 56-day rhythm, not part of any Program, and it keeps its own card.
+ */
 @Composable
 fun HomeScreen(
     viewModel: MainViewModel,
-    onStartWorkout: (Int) -> Unit,
-    onStartPostureWorkout: (Int) -> Unit
+    onStartWorkout: (String) -> Unit,
+    onOpenPrograms: () -> Unit,
+    onStartPostureWorkout: () -> Unit
 ) {
-    val uiState by viewModel.homeUiState.collectAsState()
-    val showProgramSummary by viewModel.showProgramSummary.collectAsState()
-    val programStatistics by viewModel.programStatistics.collectAsState()
-    var showRepeatDialog by remember { mutableStateOf(false) }
+    val state by viewModel.homeProgramState.collectAsState()
+    val postureCompleted by viewModel.postureCompletedCount.collectAsState()
+    val additionalPostureTrainingEnabled by viewModel.additionalPostureTrainingEnabled.collectAsState()
+    val flexibilityTrainingType by viewModel.flexibilityTrainingType.collectAsState()
+    val flexibilityFocusAreas by viewModel.flexibilityFocusAreas.collectAsState()
 
-    if (showRepeatDialog) {
-        AlertDialog(
-            onDismissRequest = { showRepeatDialog = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showRepeatDialog = false
-                        onStartWorkout(uiState.currentDay)
-                    }
-                ) {
-                    Text("Start Anyway")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRepeatDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-            title = { Text("Repeat Workout") },
-            text = {
-                Text("Today's workout has already been completed. You may repeat it for practice, but no additional daily completion or reward points will be awarded.")
-            }
-        )
-    }
-    val progressValues by remember(uiState.completedCount, uiState.completedPostureCount) {
+    val postureProgress by remember(postureCompleted) {
         derivedStateOf {
-            (uiState.completedCount.toFloat() / 56f) to (uiState.completedPostureCount.toFloat() / 56f)
+            (postureCompleted.toFloat() / MainViewModel.POSTURE_TRACK_DAYS.toFloat()).coerceIn(0f, 1f)
         }
     }
-    val targetProgress = progressValues.first
-    val postureProgress = progressValues.second
-    val animatedProgress by animateFloatAsState(targetValue = targetProgress, label = "HomeProgressAnimation")
-    val animatedPostureProgress by animateFloatAsState(targetValue = postureProgress, label = "PostureProgressAnimation")
     val fullBodyLabel = stringResource(ExerciseSubCategory.FULL_BODY.labelRes)
-    val selectedFocusAreaLabels = uiState.flexibilityFocusAreas.map { stringResource(it.labelRes) }
-    val focusAreaSummary = if (ExerciseSubCategory.FULL_BODY in uiState.flexibilityFocusAreas) {
+    val selectedFocusAreaLabels = flexibilityFocusAreas.map { area -> stringResource(area.labelRes) }
+    val focusAreaSummary = if (ExerciseSubCategory.FULL_BODY in flexibilityFocusAreas) {
         fullBodyLabel
     } else {
-        selectedFocusAreaLabels.joinToString(", ")
+        selectedFocusAreaLabels.joinToString()
     }
-    val todayStatus = when {
-        uiState.todayProgramDayState.isMissed -> stringResource(R.string.program_status_missed)
-        uiState.todayProgramDayState.isCompleted -> stringResource(R.string.program_status_completed)
-        uiState.todayProgramDayState.isWorkoutDay -> stringResource(R.string.program_status_workout_day)
-        else -> stringResource(R.string.program_status_recovery_day)
-    }
-
-    if (showProgramSummary) {
-        AlertDialog(
-            onDismissRequest = viewModel::dismissProgramSummary,
-            confirmButton = {
-                TextButton(onClick = viewModel::dismissProgramSummary) {
-                    Text(stringResource(R.string.ok))
-                }
-            },
-            title = { Text(stringResource(R.string.program_completed_title)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.program_completion_percent, programStatistics.completionPercentage))
-                    Text(stringResource(R.string.program_completed_sessions, programStatistics.totalWorkoutsCompleted))
-                    Text(stringResource(R.string.program_missed_sessions, programStatistics.totalMissed))
-                    Text(stringResource(R.string.program_total_sets, programStatistics.totalSets))
-                    Text(stringResource(R.string.program_total_exercises, programStatistics.totalExercisesCompleted))
-                    Text(stringResource(R.string.program_prs_achieved, programStatistics.totalPersonalRecords))
-                }
-            }
-        )
+    val programProgress by remember(state.completed, state.missed, state.upcoming) {
+        derivedStateOf {
+            val total = state.completed + state.missed + state.upcoming
+            if (total <= 0) 0f else state.completed.toFloat() / total.toFloat()
+        }
     }
 
     Column(
@@ -124,14 +95,6 @@ fun HomeScreen(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = stringResource(R.string.week_label, ((uiState.currentDay - 1) / 7) + 1),
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -139,39 +102,81 @@ fun HomeScreen(
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
                 Text(
-                    text = stringResource(R.string.today_workout),
+                    text = stringResource(R.string.programs_home_current_program),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.secondary
                 )
                 Text(
-                    text = stringResource(uiState.workout.type.nameRes),
+                    text = state.programName ?: stringResource(R.string.programs_home_no_program),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = todayStatus,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                state.lifecycleStatus?.let { lifecycle ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(lifecycleLabelRes(lifecycle)),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                LinearProgressIndicator(
-                    progress = { animatedProgress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(12.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.Gray.copy(alpha = 0.3f),
+                Text(
+                    text = stringResource(R.string.programs_home_next_workout),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Text(
+                    text = when {
+                        state.scheduleUnreadable ->
+                            stringResource(R.string.programs_home_schedule_unreadable)
+
+                        state.nextPlannedFor != null -> stringResource(
+                            R.string.programs_home_next_planned,
+                            state.nextPlannedFor.toString()
+                        )
+
+                        else -> stringResource(R.string.programs_home_nothing_planned)
+                    },
+                    style = MaterialTheme.typography.titleMedium
                 )
 
-                Text(
-                    text = stringResource(R.string.progress_percent, (targetProgress * 100).toInt()),
-                    modifier = Modifier.align(Alignment.End),
-                    style = MaterialTheme.typography.labelSmall
-                )
+                if (state.hasAnyOpportunity) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    LinearProgressIndicator(
+                        progress = { programProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(12.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.programs_home_calendar,
+                            state.completed,
+                            state.missed,
+                            state.upcoming
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (state.canStartWorkout) {
+            val slotId = state.nextSlotId
+            MonkButton(
+                text = stringResource(R.string.programs_session_start),
+                onClick = { if (slotId != null) onStartWorkout(slotId) }
+            )
+        } else {
+            MonkButton(
+                text = stringResource(R.string.programs_home_open_programs),
+                onClick = onOpenPrograms
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -181,35 +186,25 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             InfoCard(
-                label = stringResource(R.string.streak),
-                value = "${uiState.streak}",
-                modifier = Modifier.weight(1f),
-                icon = "🔥"
+                label = stringResource(R.string.programs_home_streak),
+                value = state.streak.toString(),
+                modifier = Modifier.weight(1f)
             )
             InfoCard(
-                label = stringResource(R.string.day),
-                value = stringResource(R.string.day_format, uiState.currentDay),
-                modifier = Modifier.weight(1f),
-                icon = "📅"
+                label = stringResource(R.string.programs_home_completed),
+                value = state.completed.toString(),
+                modifier = Modifier.weight(1f)
+            )
+            InfoCard(
+                label = stringResource(R.string.programs_home_upcoming),
+                value = state.upcoming.toString(),
+                modifier = Modifier.weight(1f)
             )
         }
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        MonkButton(
-            text = stringResource(R.string.start_workout),
-            onClick = {
-                if (uiState.todayProgramDayState.isCompleted) {
-                    showRepeatDialog = true
-                } else {
-                    onStartWorkout(uiState.currentDay)
-                }
-            }
-        )
-
-        if (uiState.additionalPostureTrainingEnabled) {
-            Spacer(modifier = Modifier.height(24.dp))
-
+        if (additionalPostureTrainingEnabled) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -224,45 +219,18 @@ fun HomeScreen(
                     Text(
                         text = stringResource(
                             R.string.flexibility_session_summary,
-                            stringResource(uiState.flexibilityTrainingType.labelRes),
+                            stringResource(flexibilityTrainingType.labelRes),
                             focusAreaSummary
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.secondary
                     )
-                    if (ExerciseSubCategory.HYPERLORDOSIS in uiState.flexibilityFocusAreas) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                            ),
-                            shape = MaterialTheme.shapes.medium
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(
-                                    text = stringResource(R.string.hyperlordosis_focus_title),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = stringResource(R.string.hyperlordosis_focus_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        }
-                    }
-
                     Spacer(modifier = Modifier.height(12.dp))
                     LinearProgressIndicator(
-                        progress = { animatedPostureProgress },
+                        progress = { postureProgress },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(10.dp),
-                        color = MaterialTheme.colorScheme.secondary,
-                        trackColor = Color.Gray.copy(alpha = 0.3f)
+                            .height(10.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -273,16 +241,44 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     MonkButton(
                         text = stringResource(R.string.start_posture_mobility),
-                        onClick = { onStartPostureWorkout(uiState.currentDay) }
+                        onClick = onStartPostureWorkout
                     )
                 }
             }
         }
     }
+
+    val notice = state.notice
+    if (notice != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissHomeNotice() },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissHomeNotice() }) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = { Text(stringResource(R.string.programs_home_notice_title)) },
+            text = { Text(stringResource(notice.messageRes)) }
+        )
+    }
 }
 
+/** The localized label of a lifecycle status. A label only: no rule is decided from it here. */
+private fun lifecycleLabelRes(status: com.monkfitness.app.domain.program.LifecycleStatus): Int =
+    when (status) {
+        com.monkfitness.app.domain.program.LifecycleStatus.NOT_STARTED ->
+            R.string.programs_lifecycle_not_started
+
+        com.monkfitness.app.domain.program.LifecycleStatus.RUNNING -> R.string.programs_lifecycle_running
+
+        com.monkfitness.app.domain.program.LifecycleStatus.PAUSED -> R.string.programs_lifecycle_paused
+
+        com.monkfitness.app.domain.program.LifecycleStatus.COMPLETED ->
+            R.string.programs_lifecycle_completed
+    }
+
 @Composable
-fun InfoCard(label: String, value: String, modifier: Modifier, icon: String) {
+fun InfoCard(label: String, value: String, modifier: Modifier) {
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -291,8 +287,7 @@ fun InfoCard(label: String, value: String, modifier: Modifier, icon: String) {
             modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(text = icon, fontSize = 24.sp)
-            Text(text = value, style = MaterialTheme.typography.titleLarge)
+            Text(text = value, style = MaterialTheme.typography.headlineSmall, fontSize = 24.sp)
             Text(text = label, style = MaterialTheme.typography.labelSmall)
         }
     }

@@ -10,6 +10,7 @@ import com.monkfitness.app.domain.workout.SessionCompletion
 import java.io.File
 import java.lang.reflect.Modifier
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -352,24 +353,76 @@ class SessionRuntimeArchitectureTest {
     }
 
     @Test
-    fun noUiOrViewModelSourceReachesTheRuntimeYet() {
-        val offenders = listOf(File(mainDir, "ui"), File(mainDir, "viewmodel"))
+    fun theRuntimeIsCalledFromExactlyOneStateHolderAndConstructedOnlyByTheCompositionRoot() {
+        // §30 step 15 inverted this claim. Until then *nothing* in the UI reached the runtime: the
+        // target runtime was DI-wired and unused, and the app still ran the shipped 56-day program. The
+        // cutover makes this screen the production path, so the claim is no longer an absence — it is a
+        // **cardinality**, which is the part that can regress:
+        //
+        //   1. the runtime's operations are called from exactly one place, and it is the state holder
+        //      that the session screen renders;
+        //   2. no ViewModel and no screen ever *constructs* one — §26: it receives the graph the
+        //      composition root built.
+        val operations = listOf(
+            ".startSession(", ".restoreSession(", ".confirmSet(", ".cancelSession(", ".finishSession("
+        )
+        // Comments are stripped first: the session screen *documents* the operations it delegates
+        // (`controller.confirmSet(…)`), and a rule that could not tell prose from a call would push the
+        // documentation out of the sources to keep itself green — which is the wrong trade.
+        fun withoutComments(text: String): String = text
+            .replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), "")
+            .replace(Regex("""//[^\n]*"""), "")
+
+        // A caller of the runtime is a source that *names* the runtime and invokes one of its
+        // operations. Membership by name is what makes the scan able to tell the two apart: a screen
+        // calling `controller.confirmSet(...)` reaches the state holder, not the runtime, and the
+        // controller is the only file that holds one.
+        val callers = listOf(File(mainDir, "ui"), File(mainDir, "viewmodel"))
             .filter { it.isDirectory }
             .flatMap { root ->
-                root.walkTopDown().filter { it.isFile && it.extension == "kt" }.flatMap { source ->
-                    val text = source.readText()
-                    listOf("SessionRuntime", "SessionCompletion", "AdaptiveCompletion")
-                        .filter { text.contains(it) }
-                        .map { "${root.name}/${source.name}: $it" }
-                        .toList()
-                }.toList()
+                root.walkTopDown().filter { it.isFile && it.extension == "kt" }
+                    .filter { source ->
+                        val text = withoutComments(source.readText())
+                        text.contains("SessionRuntime") && operations.any { text.contains(it) }
+                    }
+                    .map { source -> "${root.name}/${source.name}" }
+                    .toList()
             }
+            .sorted()
 
-        assertTrue(
-            "no ViewModel and no screen reaches the session runtime yet: the UI integration is a later " +
-                "step, and §26 says a ViewModel receives what it needs rather than finding it. " +
-                "Found: $offenders",
-            offenders.isEmpty()
+        assertEquals(
+            "the runtime's operations have exactly one caller above it: the state holder the session " +
+                "screen renders. A screen calling the runtime directly, or a second state holder doing " +
+                "so, would be a second workout runtime",
+            listOf("ui/ProgramSessionController.kt"),
+            callers
+        )
+
+        // The other half of the arrow: the screen reaches the runtime only through that state holder,
+        // so it may invoke its methods but must not name the runtime itself.
+        // Belt and braces on the stripping: a KDoc line that survived a partially-matched block still
+        // starts with `*`, so a prose line can never be read as a call site.
+        val screen = withoutComments(File(mainDir, "ui/screens/ProgramSessionScreen.kt").readText())
+            .replace(Regex("""^\s*\*.*$""", RegexOption.MULTILINE), "")
+        assertFalse(
+            "the session screen holds no runtime: it is handed the state holder (§13, §26)",
+            screen.contains("SessionRuntime")
+        )
+
+        // An initializer, not a mention: `class SessionRuntime(` is a declaration, and the file that
+        // declares the class is the last thing that should count as a second construction site.
+        val construction = Regex("""=\s*SessionRuntime\(""")
+        val constructing = mainDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .filter { source -> construction.containsMatchIn(withoutComments(source.readText())) }
+            .map { source -> source.relativeTo(mainDir).path.replace('\\', '/') }
+            .sorted()
+            .toList()
+
+        assertEquals(
+            "and exactly one source constructs one: the composition root (§26)",
+            listOf("di/AppContainer.kt"),
+            constructing
         )
     }
 

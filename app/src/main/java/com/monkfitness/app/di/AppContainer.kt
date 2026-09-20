@@ -3,10 +3,8 @@ package com.monkfitness.app.di
 import android.content.Context
 import androidx.room.withTransaction
 import com.monkfitness.app.data.local.AdaptiveAdjustmentDao
-import com.monkfitness.app.data.local.AdaptiveDecisionHistoryDao
 import com.monkfitness.app.data.local.AppDatabase
 import com.monkfitness.app.data.local.AppStateDao
-import com.monkfitness.app.data.local.FamilyProgressionStateDao
 import com.monkfitness.app.data.local.ProgramAdaptiveDecisionDao
 import com.monkfitness.app.data.local.ProgramDao
 import com.monkfitness.app.data.local.ProgramDayDao
@@ -20,8 +18,8 @@ import com.monkfitness.app.data.local.SessionExerciseDao
 import com.monkfitness.app.data.local.SessionSnapshotDao
 import com.monkfitness.app.data.local.SessionSnapshotExerciseDao
 import com.monkfitness.app.data.local.WorkoutSessionDao
-import com.monkfitness.app.data.repository.AdaptiveRepository
 import com.monkfitness.app.data.repository.AppStateRepository
+import com.monkfitness.app.data.repository.MaintenanceRepository
 import com.monkfitness.app.data.repository.ProgramAdaptiveRepository
 import com.monkfitness.app.data.repository.ProgramPlanRepository
 import com.monkfitness.app.data.repository.ProgramProgressRepository
@@ -467,22 +465,19 @@ class AppContainer(
         zone = zone
     )
 
-    // --- the shipped Stage-1 generation (§30 step 15 retires it) ----------------------------------
-
     /**
-     * The **shipped** adaptive adapter, on the Stage-1 tables it has always owned
-     * (`family_progression_state`, `adaptive_decision_record`).
+     * Settings → **Full reset**: the app's own Program data and its retained daily-track data, wiped as
+     * one unit.
      *
-     * It is wired here for one reason: the two generations are a boundary the composition root is
-     * responsible for, and a boundary that is asserted about only in prose is a boundary nobody
-     * checks. With both adapters in the same graph over the same database, "a write through one is
-     * invisible to the other" is measurable on the engine's own tables. The existing Stage-1 call
-     * sites (`SessionAdaptivePlanReader.of`, `AdaptiveSessionDecisionRecorder.of`) keep their own
-     * instances exactly as they are: this is the same stateless adapter over the same DAOs, not a
-     * second source of state, and no legacy code is changed, moved or removed (§33).
+     * It is a graph node rather than a call the view model assembles, for the same reason every other
+     * atomic operation is: §26 puts the transaction runner in the composition root, and a reset that
+     * opened its own would be a second place where "all or nothing" is decided. The contract it
+     * implements — what it clears, what it keeps — is [MaintenanceRepository]'s and
+     * [com.monkfitness.app.data.local.MaintenanceDao]'s.
      */
-    val adaptiveRepository: AdaptiveRepository = AdaptiveRepository(
-        daos.legacyFamilyState, daos.legacyDecisionHistory, inTransaction
+    val maintenanceRepository: MaintenanceRepository = MaintenanceRepository(
+        dao = database.maintenanceDao(),
+        inTransaction = inTransaction
     )
 
     /**
@@ -514,10 +509,6 @@ class AppContainer(
         val familyState: ProgramFamilyProgressionStateDao = database.programFamilyProgressionStateDao()
         val decision: ProgramAdaptiveDecisionDao = database.programAdaptiveDecisionDao()
         val adjustment: AdaptiveAdjustmentDao = database.adaptiveAdjustmentDao()
-
-        /** The shipped Stage-1 tables the legacy adaptive adapter owns. */
-        val legacyFamilyState: FamilyProgressionStateDao = database.familyProgressionStateDao()
-        val legacyDecisionHistory: AdaptiveDecisionHistoryDao = database.adaptiveDecisionHistoryDao()
     }
 
     companion object {

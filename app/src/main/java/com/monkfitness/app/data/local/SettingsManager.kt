@@ -43,10 +43,23 @@ class SettingsManager(private val context: Context) {
         val NUTRITION_CYCLE_LENGTH = intPreferencesKey("nutrition_cycle_length")
         val NUTRITION_EXCLUDED_FOODS = stringSetPreferencesKey("nutrition_excluded_foods")
         val NUTRITION_AVAILABLE_PRODUCTS = stringSetPreferencesKey("nutrition_available_products")
-        val PROGRAM_START_DATE = stringPreferencesKey("program_start_date")
-        val PROGRAM_SUMMARY_DISMISSED = booleanPreferencesKey("program_summary_dismissed")
-        val PROGRAM_CYCLE_NUMBER = intPreferencesKey("program_cycle_number")
-        val PROGRAM_REVISION = intPreferencesKey("program_revision")
+        /**
+         * The anchor of the retained **daily tracks**: the day their first 56-day cycle began (§4).
+         *
+         * It belonged to the shipped 56-day program and is now the posture/mobility track's and the
+         * nutrition planner's phase — nothing else reads it, and no Program does.
+         */
+        val TRACK_START_DATE = stringPreferencesKey("track_start_date")
+
+        /**
+         * The key the same anchor was stored under while the shipped 56-day program existed.
+         *
+         * Read as a fallback, **never written**: an install that predates §30 step 15 keeps the track
+         * position it already had instead of being silently moved to "today". Preserving the rows of a
+         * retained feature means preserving the calendar they were recorded against, so the one-time read
+         * is part of that preservation and not a compatibility shim — nothing new is ever stored here.
+         */
+        val LEGACY_START_DATE_KEY = stringPreferencesKey("program_start_date")
         val NUTRITION_WARNING_DISMISSED_FOR = stringPreferencesKey("nutrition_warning_dismissed_for")
         val SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION = booleanPreferencesKey("show_excluded_products_in_nutrition")
         val DISABLED_EXERCISE_FAMILIES = stringSetPreferencesKey("disabled_exercise_families")
@@ -264,77 +277,40 @@ class SettingsManager(private val context: Context) {
         )
     }
 
-    val programStartDateFlow: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[PROGRAM_START_DATE] ?: LocalDate.now().toString()
+    /**
+     * The retained daily tracks' anchor, as an ISO date.
+     *
+     * The new key is read first and the pre-§30-step-15 key second, so an existing install keeps the
+     * position it had. A device that has never stored either reads "today" and is stamped with it by
+     * [ensureTrackStartDate], which is exactly how the anchor has always come into being.
+     */
+    val trackStartDateFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[TRACK_START_DATE]
+            ?: preferences[LEGACY_START_DATE_KEY]
+            ?: LocalDate.now().toString()
     }
 
-    suspend fun ensureProgramStartDate() {
+    /**
+     * Stamps the tracks' anchor if it has never been stored — writing it under the current key, so an
+     * install that predates the rename migrates its own anchor the first time it is opened.
+     */
+    suspend fun ensureTrackStartDate() {
         context.dataStore.edit { preferences ->
-            if (preferences[PROGRAM_START_DATE] == null) {
-                preferences[PROGRAM_START_DATE] = LocalDate.now().toString()
+            if (preferences[TRACK_START_DATE] == null) {
+                preferences[TRACK_START_DATE] =
+                    preferences[LEGACY_START_DATE_KEY] ?: LocalDate.now().toString()
             }
         }
     }
 
-    suspend fun resetProgramStartDate(date: String = LocalDate.now().toString()) {
-        context.dataStore.edit { preferences ->
-            preferences[PROGRAM_START_DATE] = date
-            preferences[PROGRAM_SUMMARY_DISMISSED] = false
-        }
-    }
-
-    val programSummaryDismissedFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
-        preferences[PROGRAM_SUMMARY_DISMISSED] ?: false
-    }
-
-    suspend fun setProgramSummaryDismissed(dismissed: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[PROGRAM_SUMMARY_DISMISSED] = dismissed
-        }
-    }
-
-    val programCycleNumberFlow: Flow<Int> = context.dataStore.data.map { preferences ->
-        preferences[PROGRAM_CYCLE_NUMBER] ?: 1
-    }
-
-    suspend fun setProgramCycleNumber(cycle: Int) {
-        context.dataStore.edit { preferences ->
-            preferences[PROGRAM_CYCLE_NUMBER] = cycle
-        }
-    }
-
-    val programRevisionFlow: Flow<Int> = context.dataStore.data.map { preferences ->
-        preferences[PROGRAM_REVISION] ?: 0
-    }
-
-    suspend fun setProgramRevision(revision: Int) {
-        context.dataStore.edit { preferences ->
-            preferences[PROGRAM_REVISION] = revision
-        }
-    }
-
-    /**
-     * C3 "Start Revised Program": starts a new program from [startDate] at cycle 1 in ONE
-     * DataStore edit — revision bumped, start date stamped, stored cycle number set to 1 and
-     * the summary flag un-dismissed together, so no interleaving with the rollover or the
-     * calendar tick can leave the start date and the cycle number disagreeing.
-     *
-     * Prior-cycle history lives in the database and is deliberately not touched here.
-     */
-    suspend fun startRevisedProgram(startDate: LocalDate = LocalDate.now()) {
-        context.dataStore.edit { preferences ->
-            val currentRevision = preferences[PROGRAM_REVISION] ?: 0
-            preferences[PROGRAM_REVISION] = currentRevision + 1
-            preferences[PROGRAM_START_DATE] = startDate.toString()
-            preferences[PROGRAM_CYCLE_NUMBER] = 1
-            preferences[PROGRAM_SUMMARY_DISMISSED] = false
-        }
-    }
+    // C3's "Start Revised Program" is gone (§16): its intent is the target architecture's
+    // *Edit / Copy → a new immutable Revision → lifecycle Start*, and keeping a second way to restart a
+    // program under a new name would be exactly the cycle semantics §16 retires.
 
     /**
      * C3 Full Reset: atomically clears every preference this app owns, returning DataStore
-     * to first-launch state. The next [ensureProgramStartDate] call stamps a fresh start
-     * date and onboarding restarts because IS_ONBOARDING_COMPLETED is gone.
+     * to first-launch state. The next [ensureTrackStartDate] call stamps a fresh anchor for the
+     * retained daily tracks and onboarding restarts because IS_ONBOARDING_COMPLETED is gone.
      */
     suspend fun clearAll() {
         context.dataStore.edit { it.clear() }

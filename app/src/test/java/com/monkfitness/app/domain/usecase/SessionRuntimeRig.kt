@@ -343,10 +343,14 @@ internal class SessionRuntimeRig(key: String = "r", database: SqliteTestDatabase
             "program_day",
             "program_exercise",
             "program",
-            "set_log",
-            "family_progression_state",
-            "adaptive_decision_record",
-            "user_progress"
+            // The retained global tables. §30 step 15 dropped the shipped program's four that this
+            // census used to reach, so these are what "nothing was written" can still cover — and they
+            // are where a careless write would still land.
+            "posture_session_progress",
+            "body_weight_log",
+            "meal_cycles",
+            "meals",
+            "shopping_items"
         )
     }
 }

@@ -4,12 +4,10 @@ import androidx.room.DatabaseConfiguration
 import androidx.room.InvalidationTracker
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import com.monkfitness.app.data.local.AdaptiveAdjustmentDao
-import com.monkfitness.app.data.local.AdaptiveDecisionHistoryDao
-import com.monkfitness.app.data.local.AdaptiveTypeConverters
+import com.monkfitness.app.data.local.MaintenanceDao
 import com.monkfitness.app.data.local.AppDatabase
 import com.monkfitness.app.data.local.AppStateDao
-import com.monkfitness.app.data.local.FamilyProgressionStateDao
-import com.monkfitness.app.data.local.LegacyV7Schema
+import com.monkfitness.app.data.local.NutritionDao
 import com.monkfitness.app.data.local.ProgramAdaptiveDecisionDao
 import com.monkfitness.app.data.local.ProgramDao
 import com.monkfitness.app.data.local.ProgramDayDao
@@ -20,7 +18,7 @@ import com.monkfitness.app.data.local.ProgramRevisionDao
 import com.monkfitness.app.data.local.ProgramSetLogDao
 import com.monkfitness.app.data.local.ProgramWorkoutSlotDao
 import com.monkfitness.app.data.local.WorkoutSessionDao
-import com.monkfitness.app.data.local.ProgressDao
+import com.monkfitness.app.data.local.PostureProgressDao
 import com.monkfitness.app.data.local.SessionExerciseDao
 import com.monkfitness.app.data.local.SessionSnapshotDao
 import com.monkfitness.app.data.local.SessionSnapshotExerciseDao
@@ -39,13 +37,11 @@ import com.monkfitness.app.data.repository.SqliteSessionExerciseDao
 import com.monkfitness.app.data.repository.SqliteSessionSnapshotDao
 import com.monkfitness.app.data.repository.SqliteSessionSnapshotExerciseDao
 import com.monkfitness.app.data.local.SqliteTestDatabase
+import com.monkfitness.app.data.local.LegacyV7Schema
 import com.monkfitness.app.data.repository.SqliteWorkoutSessionDao
-import com.monkfitness.app.data.model.AdaptiveDecisionRecord
-import com.monkfitness.app.data.model.FamilyProgressionState
 import com.monkfitness.app.data.model.ProgramExerciseEntity
 import com.monkfitness.app.data.repository.ProgramGraph
 import com.monkfitness.app.data.repository.ProgramGraphFixture
-import com.monkfitness.app.domain.adaptive.AdaptiveReasonCode
 import com.monkfitness.app.domain.adaptive.AdaptiveState
 import java.time.Instant
 
@@ -115,8 +111,7 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
 
     // --- the shipped Stage-1 tables, on the same engine (§30 step 15 retires them) ----------
 
-    private val legacyFamilyState by lazy { SqliteLegacyStateDao(engine) }
-    private val legacyDecisionHistory by lazy { SqliteLegacyHistoryDao(engine) }
+    private val maintenance by lazy { SqliteMaintenanceDao(engine) }
 
     override fun programDao(): ProgramDao = program.also { asked("programDao") }
 
@@ -153,20 +148,28 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
     override fun adaptiveAdjustmentDao(): AdaptiveAdjustmentDao =
         adjustment.also { asked("adaptiveAdjustmentDao") }
 
-    override fun familyProgressionStateDao(): FamilyProgressionStateDao =
-        legacyFamilyState.also { asked("familyProgressionStateDao") }
-
-    override fun adaptiveDecisionHistoryDao(): AdaptiveDecisionHistoryDao =
-        legacyDecisionHistory.also { asked("adaptiveDecisionHistoryDao") }
+    /**
+     * Settings → Full reset's statements, on the same engine. The composition root constructs the
+     * reset's repository eagerly, so this accessor is asked on every container test.
+     */
+    override fun maintenanceDao(): MaintenanceDao = maintenance.also { asked("maintenanceDao") }
 
     /**
-     * The shipped progress DAO, which the composition root must never ask for (§23: the Program
-     * System takes no new dependency on the shipped progress tables). Asking here is a failure rather
-     * than a stub, so an accidental reach into the Stage-1 progress path cannot pass silently.
+     * The retained global stores — nutrition and the posture / mobility track — which the Program
+     * System's graph must never ask for.
+     *
+     * Asking here is a **failure** rather than a stub: §30 step 15's whole point is that no Program
+     * path reaches an unrelated global store, so an accidental reach has to be loud. A test that wants
+     * those tables uses the DAO's own suite over `SqliteTestDatabase`, not the container.
      */
-    override fun progressDao(): ProgressDao =
+    override fun nutritionDao(): NutritionDao =
         throw UnsupportedOperationException(
-            "the Program System composition root has no business reading the shipped progress tables"
+            "the Program System composition root has no business reading the nutrition tables"
+        )
+
+    override fun postureProgressDao(): PostureProgressDao =
+        throw UnsupportedOperationException(
+            "the Program System composition root has no business reading the posture track"
         )
 
     // --- what a JVM database cannot do ------------------------------------------------------
@@ -196,103 +199,6 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
         throw UnsupportedOperationException("this database holds no Room-managed tables")
 }
 
-// ---------------------------------------------------------------------------------------------
-// The Stage-1 adaptive tables, on the same engine
-// ---------------------------------------------------------------------------------------------
-
-/**
- * The shipped [FamilyProgressionStateDao], executed on SQLite through [SqliteTestDatabase].
- *
- * PR 3's doubles cover the fifteen target DAOs; these two exist because the composition root holds
- * **both** adaptive generations over one database, and "each generation writes only its own tables"
- * is only measurable if both sides write somewhere the test can look. The statements are the ones the
- * schema declares (`LegacyV7Schema.STAGE_ONE_ADAPTIVE_TABLES`), and the stored vocabulary is
- * `AdaptiveTypeConverters`' own — enum names, comma-separated actions — so a value written here is
- * byte-identical to one a device would write.
- */
-internal class SqliteLegacyStateDao(private val engine: SqliteTestDatabase) : FamilyProgressionStateDao {
-
-    override suspend fun getFamilyStates(programRevision: Int): List<FamilyProgressionState> =
-        engine.rows(
-            "SELECT * FROM `family_progression_state` WHERE programRevision = ? ORDER BY familyId ASC",
-            programRevision
-        ).map { it.legacyFamilyState() }
-
-    override suspend fun getFamilyState(programRevision: Int, familyId: String): FamilyProgressionState? =
-        engine.rows(
-            "SELECT * FROM `family_progression_state` WHERE programRevision = ? AND familyId = ? LIMIT 1",
-            programRevision, familyId
-        ).firstOrNull()?.legacyFamilyState()
-
-    override suspend fun upsertFamilyState(state: FamilyProgressionState) {
-        engine.exec(
-            "INSERT OR REPLACE INTO `family_progression_state` (`familyId`, `progressionLevel`, " +
-                "`currentExerciseId`, `adaptationState`, `precedingProgressQualifyingWindows`, " +
-                "`precedingRegressQualifyingWindows`, `precedingHighRiskWindows`, " +
-                "`recoveryQualifyingSessions`, `eligibleSessionsSinceLastProgressionChange`, " +
-                "`programRevision`, `updatedAt`, `policyVersion`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            state.familyId, state.progressionLevel, state.currentExerciseId,
-            AdaptiveTypeConverters().adaptiveStateToName(state.adaptationState),
-            state.precedingProgressQualifyingWindows, state.precedingRegressQualifyingWindows,
-            state.precedingHighRiskWindows, state.recoveryQualifyingSessions,
-            state.eligibleSessionsSinceLastProgressionChange, state.programRevision, state.updatedAt,
-            state.policyVersion
-        )
-    }
-
-    override suspend fun clearFamilyStates() = engine.exec("DELETE FROM `family_progression_state`")
-}
-
-/** The shipped [AdaptiveDecisionHistoryDao], executed on SQLite through [SqliteTestDatabase]. */
-internal class SqliteLegacyHistoryDao(private val engine: SqliteTestDatabase) : AdaptiveDecisionHistoryDao {
-
-    override suspend fun appendDecision(record: AdaptiveDecisionRecord): Long {
-        // `nullif(?, 0)` is Room's own form for an auto-generated key: id 0 means "let the database
-        // assign one", exactly as the generated insert behaves.
-        engine.exec(
-            "INSERT INTO `adaptive_decision_record` (`id`, `familyId`, `programRevision`, `cycleNumber`, " +
-                "`programDay`, `timestamp`, `previousState`, `newState`, `actions`, `reasonCode`, " +
-                "`policyVersion`) VALUES (nullif(?, 0), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            record.id, record.familyId, record.programRevision, record.cycleNumber, record.programDay,
-            record.timestamp, record.previousState.name, record.newState.name,
-            AdaptiveTypeConverters().actionsToNames(record.actions), record.reasonCode.name,
-            record.policyVersion
-        )
-        return requireNotNull(engine.scalar("SELECT last_insert_rowid()")).toLong()
-    }
-
-    override suspend fun getDecisionHistory(programRevision: Int): List<AdaptiveDecisionRecord> =
-        engine.rows(
-            "SELECT * FROM `adaptive_decision_record` WHERE programRevision = ? " +
-                "ORDER BY cycleNumber ASC, programDay ASC, id ASC",
-            programRevision
-        ).map { it.legacyDecisionRecord() }
-
-    override suspend fun getDecisionHistoryForFamily(familyId: String): List<AdaptiveDecisionRecord> =
-        engine.rows(
-            "SELECT * FROM `adaptive_decision_record` WHERE familyId = ? " +
-                "ORDER BY programRevision ASC, cycleNumber ASC, programDay ASC, id ASC",
-            familyId
-        ).map { it.legacyDecisionRecord() }
-
-    override suspend fun countDecisionsFor(
-        programRevision: Int,
-        cycleNumber: Int,
-        programDay: Int,
-        familyId: String
-    ): Int = requireNotNull(
-        engine.scalar(
-            "SELECT COUNT(*) FROM `adaptive_decision_record` WHERE programRevision = ? AND " +
-                "cycleNumber = ? AND programDay = ? AND familyId = ?",
-            programRevision, cycleNumber, programDay, familyId
-        )
-    ).toInt()
-
-    override suspend fun clearDecisionHistory() = engine.exec("DELETE FROM `adaptive_decision_record`")
-}
-
-// ---------------------------------------------------------------------------------------------
-// Planted failures
 // ---------------------------------------------------------------------------------------------
 
 /**
@@ -349,6 +255,7 @@ internal class CompositionRootRig(
         database.migrate(AppDatabase.MIGRATION_8_9)
         database.migrate(AppDatabase.MIGRATION_9_10)
         database.migrate(AppDatabase.MIGRATION_10_11)
+        database.migrate(AppDatabase.MIGRATION_11_12)
     }
 
     val database = SqliteAppDatabase(engine)
@@ -412,32 +319,49 @@ private fun Map<String, String?>.number(column: String): Int = text(column).toIn
 
 private fun Map<String, String?>.millis(column: String): Long = text(column).toLong()
 
-private fun Map<String, String?>.legacyFamilyState() = FamilyProgressionState(
-    familyId = text("familyId"),
-    progressionLevel = number("progressionLevel"),
-    currentExerciseId = this["currentExerciseId"],
-    adaptationState = AdaptiveState.valueOf(text("adaptationState")),
-    precedingProgressQualifyingWindows = number("precedingProgressQualifyingWindows"),
-    precedingRegressQualifyingWindows = number("precedingRegressQualifyingWindows"),
-    precedingHighRiskWindows = number("precedingHighRiskWindows"),
-    recoveryQualifyingSessions = number("recoveryQualifyingSessions"),
-    eligibleSessionsSinceLastProgressionChange =
-        this["eligibleSessionsSinceLastProgressionChange"]?.toInt(),
-    programRevision = number("programRevision"),
-    updatedAt = millis("updatedAt"),
-    policyVersion = number("policyVersion")
-)
+/**
+ * [MaintenanceDao] — Settings → Full reset's statements — executed on SQLite through
+ * [SqliteTestDatabase].
+ *
+ * The statements are [MaintenanceDao]'s own, spelled out here for the same reason every other stub in
+ * this file spells its SQL out: nothing is Room-generated on the JVM, so a reset test measures the
+ * schema's real behaviour (including the `app_state` foreign key that decides the order) rather than a
+ * mock's bookkeeping.
+ */
+internal class SqliteMaintenanceDao(private val engine: SqliteTestDatabase) : MaintenanceDao {
 
-private fun Map<String, String?>.legacyDecisionRecord() = AdaptiveDecisionRecord(
-    id = number("id").toLong(),
-    familyId = text("familyId"),
-    programRevision = number("programRevision"),
-    cycleNumber = number("cycleNumber"),
-    programDay = number("programDay"),
-    timestamp = millis("timestamp"),
-    previousState = AdaptiveState.valueOf(text("previousState")),
-    newState = AdaptiveState.valueOf(text("newState")),
-    actions = AdaptiveTypeConverters().actionsFromNames(text("actions")),
-    reasonCode = AdaptiveReasonCode.valueOf(text("reasonCode")),
-    policyVersion = number("policyVersion")
-)
+    override suspend fun resetAppState(standardProgramId: String) = engine.exec(
+        "UPDATE `app_state` SET `selectedProgramId` = ?, `nextProgramId` = NULL, " +
+            "`nextProgramAutoStart` = 0",
+        standardProgramId
+    )
+
+    override suspend fun clearConfirmedSets() = engine.exec("DELETE FROM `program_set_log`")
+
+    override suspend fun clearSessionExercises() = engine.exec("DELETE FROM `session_exercise`")
+
+    override suspend fun clearSnapshotElements() = engine.exec("DELETE FROM `session_snapshot_exercise`")
+
+    override suspend fun clearSnapshots() = engine.exec("DELETE FROM `session_snapshot`")
+
+    override suspend fun clearSessions() = engine.exec("DELETE FROM `workout_session`")
+
+    override suspend fun clearAdjustments() = engine.exec("DELETE FROM `adaptive_adjustment`")
+
+    override suspend fun clearAdaptiveDecisions() =
+        engine.exec("DELETE FROM `program_adaptive_decision_record`")
+
+    override suspend fun clearFamilyStates() =
+        engine.exec("DELETE FROM `program_family_progression_state`")
+
+    override suspend fun clearPauses() = engine.exec("DELETE FROM `program_pause`")
+
+    override suspend fun clearSlots() = engine.exec("DELETE FROM `program_workout_slot`")
+
+    override suspend fun clearUserPrograms(standardProgramId: String) =
+        engine.exec("DELETE FROM `program` WHERE `programId` != ?", standardProgramId)
+
+    override suspend fun clearPostureTrack() = engine.exec("DELETE FROM `posture_session_progress`")
+
+    override suspend fun clearBodyWeightLog() = engine.exec("DELETE FROM `body_weight_log`")
+}

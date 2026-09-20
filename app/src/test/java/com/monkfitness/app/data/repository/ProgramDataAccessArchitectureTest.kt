@@ -1,6 +1,7 @@
 package com.monkfitness.app.data.repository
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -180,24 +181,34 @@ class ProgramDataAccessArchitectureTest {
     // ---- the two persistence generations ----------------------------------------------------------
 
     @Test
-    fun theTargetPersistenceNamesNoStageOneTable() {
-        val stageOneTables = listOf("`set_log`", "`family_progression_state`", "`adaptive_decision_record`")
+    fun noPersistenceSourceNamesARetiredTable() {
+        val retiredTables = listOf(
+            "`set_log`", "`family_progression_state`", "`adaptive_decision_record`",
+            "`user_progress`", "`program_day_state`"
+        )
         val offenders = codeOf(targetDaoFiles() + targetMapperFiles() + targetRepositoryFiles())
-            .flatMap { (name, text) -> stageOneTables.filter { text.contains(it) }.map { "$name: $it" } }
+            .flatMap { (name, text) -> retiredTables.filter { text.contains(it) }.map { "$name: $it" } }
 
         assertTrue(
-            "the target tables have their own names and nothing here reaches across the boundary " +
-                "(§30 step 15 retires the Stage-1 tables): $offenders",
+            "the target tables have their own names and nothing here reaches a retired one " +
+                "(§30 step 15 retires all five): $offenders",
             offenders.isEmpty()
         )
-        assertTrue(
-            "and the shipped Stage-1 persistence still owns its own tables (named here as it writes them)",
-            File(appRoot, "data/local/FamilyProgressionStateDao.kt").readText()
-                .contains("family_progression_state") &&
-                File(appRoot, "data/local/AdaptiveDecisionHistoryDao.kt").readText()
-                    .contains("adaptive_decision_record") &&
-                File(appRoot, "data/local/ProgressDao.kt").readText().contains("set_log")
-        )
+
+        // §30 step 15 inverted this half. The shipped Stage-1 persistence used to still own its own
+        // tables, so a test could read its DAOs and check they named them; now those tables are dropped
+        // by `MIGRATION_11_12` **and** their DAOs are gone, so the claim is that no such file exists at
+        // all — a stronger fact than "it names the right table", and the one that cannot silently rot.
+        for (retiredDao in listOf(
+            "data/local/FamilyProgressionStateDao.kt",
+            "data/local/AdaptiveDecisionHistoryDao.kt",
+            "data/local/ProgressDao.kt"
+        )) {
+            assertFalse(
+                "the retired DAO $retiredDao is gone, not merely unreferenced",
+                File(appRoot, retiredDao).exists()
+            )
+        }
     }
 
     // ---- the DAOs and the harness agree -----------------------------------------------------------

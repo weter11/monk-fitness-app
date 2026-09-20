@@ -61,7 +61,6 @@ fun SettingsScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit,
     onOpenPrograms: () -> Unit,
-    onOpenCustomProgram: () -> Unit
 ) {
     val context = LocalContext.current
     val timerTicksEnabled by viewModel.timerTicksEnabled.collectAsState()
@@ -283,23 +282,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // The Custom Program editor: its own screen, reached from here. It configures which exercises
-            // the *shipped* workout generator may use (`ProgramConfiguration`), which is a different
-            // question from what the Program System owns; the audit that keeps it here, and what §30
-            // step 15 removes with it, is recorded in `docs/PROGRAM_UI_NAVIGATION.md`.
-            Text(text = stringResource(R.string.custom_program), style = MaterialTheme.typography.titleLarge)
-            Text(
-                text = stringResource(R.string.custom_program_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary
-            )
-            androidx.compose.material3.Button(
-                onClick = onOpenCustomProgram,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(text = stringResource(R.string.custom_program))
-            }
-
             Spacer(modifier = Modifier.height(24.dp))
 
             ExerciseFamiliesSelector(
@@ -315,8 +297,6 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             ProgramControlsSection(
-                onRestartCycle = viewModel::restartCurrentCycle,
-                onStartRevisedProgram = viewModel::startRevisedProgram,
                 onFullReset = viewModel::fullReset
             )
 
@@ -438,51 +418,25 @@ private fun ExerciseFamiliesSelector(
 
 @Composable
 private fun ProgramControlsSection(
-    onRestartCycle: () -> Unit,
-    onStartRevisedProgram: () -> Unit,
     onFullReset: () -> Unit
 ) {
-    var showRestartCycleDialog by remember { mutableStateOf(false) }
-    var showRevisedProgramDialog by remember { mutableStateOf(false) }
     var showFullResetDialog by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // Audited for §30 step 14 and kept deliberately: these three controls act on the app's *shipped*
-        // 56-day program (`ProgramDayState`, the stored cycle number, `ProgramConfiguration`), which the
-        // Home screen still runs. The target Program System owns Programs, revisions and their lifecycle,
-        // and none of these is a target operation; §30 step 15 removes them together with the shipped
-        // generation they belong to. The sentence below says so to the user, so the screen never looks
-        // like two mechanisms managing one program.
-        Text(
-            text = stringResource(R.string.programs_legacy_controls_note),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary
-        )
+        // §16, after §30 step 15: **only** the one genuinely global maintenance operation is left here.
+        //
+        // "Restart current cycle" is gone — there is no target Program concept of a current cycle — and
+        // "Start revised program" is gone with the legacy implementation it had. Its *intent* is provided
+        // by the target architecture the way §16 requires (`Edit / Copy → a new immutable Revision →
+        // lifecycle Start`, in the Programs section above), and keeping a second way to restart a program
+        // would be exactly the cycle semantics this stage retires.
+        //
+        // What remains is a wipe, and its contract is mapped onto the current schema rather than named
+        // after the retired tables: it clears the user's Programs and every opportunity, attempt,
+        // snapshot and confirmed set, the pauses and the target adaptive rows, and the retained
+        // posture/mobility track and body-weight log — while keeping the built-in Standard Program and
+        // the nutrition plans.
         Text(text = stringResource(R.string.program_controls_title), style = MaterialTheme.typography.titleLarge)
-
-        Text(
-            text = stringResource(R.string.restart_current_cycle_desc),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary
-        )
-        androidx.compose.material3.Button(
-            onClick = { showRestartCycleDialog = true },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(text = stringResource(R.string.restart_current_cycle))
-        }
-
-        Text(
-            text = stringResource(R.string.start_revised_program_desc),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary
-        )
-        androidx.compose.material3.Button(
-            onClick = { showRevisedProgramDialog = true },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(text = stringResource(R.string.start_revised_program))
-        }
 
         Text(
             text = stringResource(R.string.full_reset_desc),
@@ -500,30 +454,6 @@ private fun ProgramControlsSection(
         }
     }
 
-    if (showRestartCycleDialog) {
-        ConfirmationDialog(
-            title = stringResource(R.string.restart_current_cycle_confirm),
-            text = stringResource(R.string.restart_current_cycle_confirm_text),
-            confirmLabel = stringResource(R.string.restart_current_cycle),
-            onConfirm = {
-                showRestartCycleDialog = false
-                onRestartCycle()
-            },
-            onDismiss = { showRestartCycleDialog = false }
-        )
-    }
-    if (showRevisedProgramDialog) {
-        ConfirmationDialog(
-            title = stringResource(R.string.start_revised_program_confirm),
-            text = stringResource(R.string.start_revised_program_confirm_text),
-            confirmLabel = stringResource(R.string.start_revised_program),
-            onConfirm = {
-                showRevisedProgramDialog = false
-                onStartRevisedProgram()
-            },
-            onDismiss = { showRevisedProgramDialog = false }
-        )
-    }
     if (showFullResetDialog) {
         ConfirmationDialog(
             title = stringResource(R.string.full_reset_confirm),

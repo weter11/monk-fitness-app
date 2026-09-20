@@ -28,12 +28,7 @@ import com.monkfitness.app.data.model.NutritionIngredient
 import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.NutritionMealType
 import com.monkfitness.app.data.model.NutritionPlan
-import com.monkfitness.app.data.model.PostureSessionProgress
-import com.monkfitness.app.data.model.ProgramDayState
-import com.monkfitness.app.data.model.ProgramStatistics
 import com.monkfitness.app.data.model.UserPreferences
-import com.monkfitness.app.data.model.UserProgress
-import com.monkfitness.app.data.model.VolumeHistoryPoint
 import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.model.applyDifficultyAdjustment
 import com.monkfitness.app.data.model.calculateMuscleGainNutritionTargets
@@ -42,20 +37,18 @@ import com.monkfitness.app.data.model.nutritionExclusionIngredients
 import com.monkfitness.app.data.model.toMealEntities
 import com.monkfitness.app.data.model.toShoppingItemEntities
 import com.monkfitness.app.data.model.validateAvailableProductSelection
-import com.monkfitness.app.data.repository.AdaptiveSessionDecisionRecorder
-import com.monkfitness.app.data.repository.SessionAdaptiveInputs
-import com.monkfitness.app.data.repository.SessionAdaptivePlanReader
-import com.monkfitness.app.data.repository.WorkoutRepository
-import com.monkfitness.app.data.repository.programConfigurationRepository
-import com.monkfitness.app.domain.adaptive.ProgramType
-import com.monkfitness.app.domain.adaptive.WorkoutConfigurationSnapshot
-import com.monkfitness.app.domain.usecase.AdaptiveSessionPlan
-import com.monkfitness.app.domain.usecase.AdaptiveWorkoutGenerationRequest
-import com.monkfitness.app.domain.usecase.AdaptiveWorkoutIntegration
+import com.monkfitness.app.data.repository.NutritionRepository
+import com.monkfitness.app.data.repository.PostureRepository
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
-import com.monkfitness.app.ui.customprogram.CustomProgramEditor
 import com.monkfitness.app.platform.ProgramShareSheet
+import com.monkfitness.app.domain.track.TrackCalendar
+import com.monkfitness.app.domain.program.StandardProgram
 import com.monkfitness.app.ui.programs.ExerciseOptionUi
+import com.monkfitness.app.ui.programs.ProgramHomeController
+import com.monkfitness.app.ui.programs.ProgramHomeUiState
+import com.monkfitness.app.ui.programs.ProgramProgressController
+import com.monkfitness.app.ui.programs.ProgramProgressUiState
+import com.monkfitness.app.ui.programs.ProgramSessionController
 import com.monkfitness.app.ui.programs.ProgramsController
 import com.monkfitness.app.validation.EngineeringValidationFilter
 import com.monkfitness.app.validation.ValidationCategory
@@ -63,11 +56,6 @@ import com.monkfitness.app.validation.ValidationPose
 import com.monkfitness.app.validation.ValidationSettings
 import com.monkfitness.app.validation.ValidationPoseRegistry
 import com.monkfitness.app.util.normalize
-import com.monkfitness.app.domain.usecase.calculateProgramDay
-import com.monkfitness.app.domain.usecase.resolveCycleAndDay
-import com.monkfitness.app.domain.usecase.shouldOfferCycleCompletion
-import com.monkfitness.app.domain.usecase.synchronizeProgramStates
-import com.monkfitness.app.ui.screens.WorkoutStep
 import com.monkfitness.app.util.NotificationScheduler
 import com.monkfitness.app.util.matchesQuery
 import com.monkfitness.app.util.withLocalizedSearchText
@@ -96,24 +84,89 @@ import kotlin.math.roundToInt
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private data class HomeMetrics(
-        val currentDay: Int,
-        val completedCount: Int,
-        val completedPostureCount: Int,
-        val streak: Int
-    )
-
-    enum class SessionMode {
-        DAILY,
-        POSTURE_MOBILITY
-    }
-
-    private val repository: WorkoutRepository
     private val workoutGenerator = WorkoutGenerator()
-    private val emptyWorkout = Workout(id = -1, type = com.monkfitness.app.data.model.WorkoutType.REST, exercises = emptyList())
+
+    /**
+     * The app's settings store, and the two **retained global** stores the composition root owns.
+     *
+     * §30 step 15 removed this view model's own `WorkoutRepository`, its adaptive reader and its adaptive
+     * recorder — the three objects that made it the shipped 56-day program's persistence layer (§26). What
+     * is left is what has no Program in it: the nutrition tables (meals, shopping, body weight) and the
+     * posture / mobility track. Both reach storage through the composition root's database, never through a
+     * Program repository, and neither is keyed by a cycle or a program day.
+     */
+    val settingsManager: SettingsManager
+
+    /** The nutrition domain's storage, and the body-weight log its targets are computed from. */
+    private val nutritionRepository: NutritionRepository
+
+    /** The retained posture / mobility track: its own rows, on its own 56-day calendar (§4). */
+    private val postureRepository: PostureRepository
+
+    /** The anchor the retained daily tracks keep their 56-day rhythm from, parsed once. */
+    private val trackStartDate: Flow<LocalDate>
+
+    /** Home's Program state: the selection, its next opportunity and its calendar (§30 step 15). */
+    private val homeProgram: ProgramHomeController
+
+    /** The Progress screen's Program state: §21's measures and history (§30 step 15). */
+    private val programProgress: ProgramProgressController
+
+    /** The one production workout runtime's UI half (§19, §27, §30 step 15). */
+    val programSession: ProgramSessionController
+
+    init {
+        val container = (application as MonkFitnessApplication).container
+        val settings = SettingsManager(application)
+        settingsManager = settings
+        trackStartDate = settings.trackStartDateFlow.map { raw ->
+            runCatching { LocalDate.parse(raw) }.getOrDefault(LocalDate.now())
+        }
+        nutritionRepository = NutritionRepository(container.database.nutritionDao())
+        postureRepository = PostureRepository(
+            dao = container.database.postureProgressDao(),
+            trackStartDate = trackStartDate,
+            zone = container.zone,
+            clock = container.clock
+        )
+        homeProgram = ProgramHomeController(
+            lifecycle = container.programLifecycleService,
+            scheduler = container.programScheduler,
+            progress = container.programProgressService
+        )
+        programProgress = ProgramProgressController(
+            lifecycle = container.programLifecycleService,
+            progress = container.programProgressService
+        )
+        programSession = ProgramSessionController(
+            runtime = container.sessionRuntime,
+            adaptive = container.programAdaptiveIntegration,
+            lifecycle = container.programLifecycleService,
+            catalogue = {
+                workoutGenerator.getExerciseLibrary().map { exercise ->
+                    ExerciseOptionUi(
+                        exerciseId = exercise.id,
+                        nameRes = exercise.nameRes,
+                        familyId = exercise.familyId,
+                        isTimerBased = exercise.isTimerBased
+                    )
+                }
+            }
+        )
+        viewModelScope.launch { settings.ensureTrackStartDate() }
+    }
 
     companion object {
         const val ROUTE_HOME = "home"
+
+        /**
+         * One cycle of the retained daily-track calendar, in days (§4).
+         *
+         * It is the posture / mobility track's own rhythm — the same 56 days it has always had — and it is
+         * **not** a length of any Program: the Program System's plans have as many days as their revision
+         * says, and nothing in the target architecture is 56 days long by construction.
+         */
+        const val POSTURE_TRACK_DAYS = TrackCalendar.TRACK_DAYS
         const val ROUTE_NUTRITION = "nutrition"
 
         /** The Custom Program editor's destination in the app's single navigation graph. */
@@ -144,6 +197,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         /** §5's import flow. */
         const val ROUTE_PROGRAM_IMPORT = "programs/import"
+
+        /**
+         * The app's **one workout route**, identified by the opportunity it is for (§30 step 15).
+         *
+         * The retired route was `workout/{day}`, and a day number was never an identity: it said which
+         * calendar date of a 56-day grid the user was on, so two different workouts of two different
+         * programs could not be told apart by it. An opportunity id is the identity the target runtime
+         * starts, restores and completes against (§19, §20).
+         */
+        const val ROUTE_PROGRAM_SESSION = "programs/session/{slotId}"
+
+        /** The concrete route for one opportunity. */
+        fun programSessionRoute(slotId: String): String = "programs/session/$slotId"
 
         /** The detail destination for one Program. */
         fun programDetailRoute(programId: String): String = "programs/detail/$programId"
@@ -192,27 +258,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Workout Session State
-    private val _currentWorkoutDay = MutableStateFlow<Int?>(null)
-    val currentWorkoutDay = _currentWorkoutDay.asStateFlow()
-
-    private val _currentSessionMode = MutableStateFlow(SessionMode.DAILY)
-    val currentSessionMode = _currentSessionMode.asStateFlow()
-
-    private val _currentStep = MutableStateFlow(WorkoutStep.OVERVIEW)
-    val currentStep = _currentStep.asStateFlow()
-
-    private val _exerciseIndex = MutableStateFlow(0)
-    val exerciseIndex = _exerciseIndex.asStateFlow()
-
-    private val _isRestTime = MutableStateFlow(false)
-    val isRestTime = _isRestTime.asStateFlow()
-
-    private val _restTargetIndex = MutableStateFlow<Int?>(null)
-    val restTargetIndex = _restTargetIndex.asStateFlow()
-
-    private val _completedExercises = MutableStateFlow<Map<String, Int>>(emptyMap())
-    val completedExercises = _completedExercises.asStateFlow()
-
     // Timer State
     private val _timeLeft = MutableStateFlow(0)
     val timeLeft = _timeLeft.asStateFlow()
@@ -223,43 +268,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var timerJob: Job? = null
     private var endTimeMillis: Long = 0
 
-    val settingsManager: SettingsManager
-
-    /** Reads this session's persisted adaptive inputs; writes nothing. See `SessionAdaptivePlanReader`. */
-    private val sessionAdaptivePlanReader: SessionAdaptivePlanReader
-
-    /**
-     * Records the adaptive decisions of a finalized session; the app's only adaptive writer.
-     *
-     * It is the mirror of [sessionAdaptivePlanReader]: that one derives what a session is *presented*
-     * with and writes nothing, this one records what a finished session *decided* and reads nothing but
-     * the history and the current progression rows. Both keep their joins in the data layer, so this
-     * class orchestrates the lifecycle without implementing any adaptive rule.
-     */
-    private val adaptiveDecisionRecorder: AdaptiveSessionDecisionRecorder
-
-    init {
-        // The app's one database, from the composition root (§26): a view model does not acquire a
-        // database, a DAO or a repository. It is the *same* instance this class used to open —
-        // `AppContainer` holds `AppDatabase.getDatabase(application)`'s result — so nothing about
-        // session behaviour changes. Everything below is the shipped Stage-1 wiring and is
-        // deliberately untouched: §30 step 15 retires it, and no Program System repository is
-        // constructed on this path.
-        val db = (application as MonkFitnessApplication).container.database
-        repository = WorkoutRepository(db)
-        sessionAdaptivePlanReader = SessionAdaptivePlanReader.of(db, workoutGenerator)
-        adaptiveDecisionRecorder = AdaptiveSessionDecisionRecorder.of(db, workoutGenerator)
-        settingsManager = SettingsManager(application)
-    }
-
     private val _currentDate = MutableStateFlow(LocalDate.now())
     val currentDate = _currentDate.asStateFlow()
     private val _nutritionMessageEvents = MutableSharedFlow<Int>(extraBufferCapacity = 1)
     val nutritionMessageEvents = _nutritionMessageEvents.asSharedFlow()
 
-    val programStartDate = settingsManager.programStartDateFlow.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), LocalDate.now().toString()
-    )
+    /**
+     * The 1-based day of the retained 56-day daily-track calendar, capped at its length.
+     *
+     * It is the number the nutrition planner phases its meal rotation by and the number the nutrition
+     * screen shows. It is **not** a Program's day: the retired 56-day program had one, the Program System
+     * has none, and this one belongs to the daily tracks ([com.monkfitness.app.domain.track.TrackCalendar]).
+     */
+    val currentTrackDay = combine(trackStartDate, currentDate) { anchor, today ->
+        TrackCalendar.cappedDay(anchor, today)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
 
     val nutritionWarningDismissedFor = settingsManager.nutritionWarningDismissedForFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), null
@@ -272,60 +295,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // cycle's grid. (Letting the stamp start the next cycle early would put cycle N+1 day 1 on
     // two calendar dates — the rollover date and its own — and demote the real day 1 to a
     // no-credit repeat.)
-    val currentProgramDay = combine(
-        programStartDate,
-        currentDate
-    ) { startDate, today ->
-        resolveCycleAndDay(parseDate(startDate, today), today).second
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
-
-    val programCycleNumber = combine(
-        programStartDate,
-        currentDate
-    ) { startDate, today ->
-        resolveCycleAndDay(parseDate(startDate, today), today).first
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
-
-    // C3 "Start Revised Program" marker: bumped on each revised start; currently informational.
-    val programRevision = settingsManager.programRevisionFlow.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), 0
-    )
-
-    val allProgress = repository.getAllProgress(programCycleNumber).stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
-    )
-
-    val programDayStates = repository.getProgramDayStates(programCycleNumber).stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
-    )
-
-    val programCompletedDaysCount = programDayStates
-        .map { states -> states.count { it.isCompleted } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    val todayProgramDayState = combine(programDayStates, currentProgramDay, programCycleNumber) { states, day, cycle ->
-        states.firstOrNull { it.programDay == day }
-            ?: ProgramDayState(
-                cycleNumber = cycle,
-                programDay = day,
-                isWorkoutDay = getWorkoutTypeForDay(day) != com.monkfitness.app.data.model.WorkoutType.REST,
-                isCompleted = false,
-                isMissed = false,
-                completedAt = null
-            )
-    }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        ProgramDayState(
-            cycleNumber = 1,
-            programDay = 1,
-            isWorkoutDay = true,
-            isCompleted = false,
-            isMissed = false,
-            completedAt = null
-        )
-    )
-
     val exerciseDifficultyAdjustments = settingsManager.exerciseDifficultyAdjustmentsFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap()
     )
@@ -360,40 +329,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _postureSelectedSubCategory = MutableStateFlow<ExerciseSubCategory?>(null)
     private val _expandedFamilyIds = MutableStateFlow<Set<String>>(emptySet())
 
-    val completedDaysCount = repository.getCompletedDaysCount(programCycleNumber).stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), 0
-    )
-
-    val programStatistics = combine(
-        repository.getProgramStatistics(programCycleNumber),
-        exercisePersonalRecords
-    ) { snapshot, personalRecords ->
-        val denominator = (snapshot.totalWorkoutsCompleted + snapshot.totalMissed).coerceAtLeast(1)
-        ProgramStatistics(
-            totalWorkoutsCompleted = snapshot.totalWorkoutsCompleted,
-            totalMissed = snapshot.totalMissed,
-            totalSets = snapshot.totalSets,
-            totalReps = snapshot.totalReps,
-            totalTimerSeconds = snapshot.totalTimerSeconds,
-            totalExercisesCompleted = snapshot.totalExercisesCompleted,
-            totalPersonalRecords = personalRecords.values.count { it > 0 },
-            completionPercentage = ((snapshot.totalWorkoutsCompleted * 100f) / denominator).roundToInt()
-        )
-    }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        ProgramStatistics(0, 0, 0, 0, 0, 0, 0, 0)
-    )
-
-    val volumeHistory = repository.getDailyVolumeHistory().stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
-    )
-
-    val workoutFrequencyHistory = repository.getWorkoutFrequencyByWeek().stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
-    )
-
-    val bodyWeightHistory = repository.getBodyWeightEntriesSince(
+    val bodyWeightHistory = nutritionRepository.getBodyWeightEntriesSince(
         LocalDate.now().minusDays(89).toString()
     ).stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
@@ -403,11 +339,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .map { history -> history.lastOrNull() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val postureProgress = repository.getAllPostureProgress(programCycleNumber).stateIn(
+    /** The posture / mobility track's rows for its current 56-day cycle (§4). */
+    val postureProgress = postureRepository.progressOfCurrentCycle().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
-    val completedPostureDaysCount = repository.getCompletedPostureDaysCount(programCycleNumber).stateIn(
+    /** How many days of the posture track's current cycle are completed. */
+    val postureCompletedCount = postureRepository.completedCountOfCurrentCycle().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 0
     )
 
@@ -416,8 +354,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         LibraryStats(0, 0, 0, 0, 0, 0)
     )
 
-    private val _streak = MutableStateFlow(0)
-    val streak: StateFlow<Int> = _streak
     private val _bodyWeightErrorEvents = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val bodyWeightErrorEvents = _bodyWeightErrorEvents.asSharedFlow()
 
@@ -433,22 +369,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), ValidationSettings.DEFAULT_ENABLED
     )
 
-    // ---- Custom Program editor -----------------------------------------------------------------
-    // The editor is a state holder of its own rather than another pile of flows on this view model:
-    // it owns the draft, the deterministic family grouping and the apply/reset flow, and this bridge
-    // only hands it the app's own library, families and equipment and forwards the user's taps. The
-    // configuration repository is the persistence authority; nothing here decides a source, a version,
-    // a validation outcome or what a family toggle means.
-    private val programConfigurationRepository = application.programConfigurationRepository()
-
-    val customProgramEditor = CustomProgramEditor(
-        repository = programConfigurationRepository,
-        exerciseLibrary = { workoutGenerator.getExerciseLibrary().map { exercise -> enrichExercise(exercise) } },
-        families = workoutGenerator.families,
-        availableEquipment = { availableEquipment.value }
-    )
-
-    val customProgramState = customProgramEditor.state
+    // The Custom Program editor is retired (§30 step 15). It configured which exercises the *shipped*
+    // generator's routine may use, and its only reader was the legacy session's configuration capture,
+    // which this stage deleted — so post-P15 it was a user setting that could not affect anything, and
+    // §16 does not keep one of those for compatibility's sake. The target Program editor is a different
+    // screen with different ownership (§11): it edits a Program's revision through `ProgramEditorService`,
+    // and it is reached from the Programs section, not from here.
 
     // ---- the Program System's UI (§30 step 14) ---------------------------------------------------
     // The Program screens' state holder. It is not another pile of flows on this view model: it owns the
@@ -488,52 +414,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         zone = programGraph.zone
     )
 
-    /** Loads the persisted configuration into a fresh draft and opens the editor. */
-    fun openCustomProgramEditor() {
-        viewModelScope.launch {
-            customProgramEditor.open()
-        }
-    }
-
-    fun setCustomProgramSearchQuery(query: String) {
-        customProgramEditor.setSearchQuery(query)
-    }
-
-    fun toggleCustomProgramExercise(exerciseId: String) {
-        customProgramEditor.toggleExercise(exerciseId)
-    }
-
-    fun toggleCustomProgramFamily(familyId: String) {
-        customProgramEditor.toggleFamily(familyId)
-    }
-
-    /** Cancel: the draft is discarded and nothing that was persisted is touched. */
-    fun cancelCustomProgramEditor() {
-        customProgramEditor.discardDraft()
-    }
-
-    /** Apply: the editor validates the draft and stores it only if the validator accepts it. */
-    fun applyCustomProgram() {
-        viewModelScope.launch {
-            customProgramEditor.apply()
-        }
-    }
-
-    fun requestCustomProgramReset() {
-        customProgramEditor.requestResetToDefault()
-    }
-
-    fun dismissCustomProgramReset() {
-        customProgramEditor.dismissResetConfirmation()
-    }
-
-    /** Reset to default: a separate, confirmed action that restores the selection and nothing else. */
-    fun confirmCustomProgramReset() {
-        viewModelScope.launch {
-            customProgramEditor.confirmResetToDefault()
-        }
-    }
-
     fun setShowEngineeringValidation(enabled: Boolean) {
         viewModelScope.launch {
             settingsManager.setShowEngineeringValidation(enabled)
@@ -557,203 +437,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
     )
 
-    private val homeMetrics = combine(
-        currentProgramDay,
-        programCompletedDaysCount,
-        completedPostureDaysCount,
-        streak
-    ) { currentDay, completedCount, completedPostureCount, streakCount ->
-        HomeMetrics(
-            currentDay = currentDay,
-            completedCount = completedCount,
-            completedPostureCount = completedPostureCount,
-            streak = streakCount
-        )
+    // ---- the target Program, as Home renders it (§30 step 15) ----------------------------------
+    // Home used to run the shipped 56-day program: a day number, a `program_day_state` row for today and
+    // a routine generated from the day. All three are gone. What Home shows now is the selected Program
+    // and its next **opportunity**, read through the application services the composition root built —
+    // this view model only hands the state holder over (§13, §26).
+
+    /** Home's Program state. */
+    val homeProgramState: StateFlow<ProgramHomeUiState> = homeProgram.state
+
+    /** Re-reads Home's Program state. Called when the screen appears and after a session completes. */
+    fun refreshHomeProgram() {
+        viewModelScope.launch { homeProgram.load() }
     }
 
-    val homeUiState = combine(
-        homeMetrics,
-        additionalPostureTrainingEnabled,
-        flexibilityTrainingType,
-        flexibilityFocusAreas,
-        exerciseDifficultyAdjustments,
-        availableEquipment,
-        todayProgramDayState,
-        disabledExerciseFamilies
-    ) { values ->
-        val metrics = values[0] as HomeMetrics
-        val additionalPostureEnabled = values[1] as Boolean
-        val trainingType = values[2] as FlexibilityTrainingType
-        @Suppress("UNCHECKED_CAST")
-        val focusAreas = values[3] as Set<ExerciseSubCategory>
-        @Suppress("UNCHECKED_CAST")
-        val difficultyAdjustments = values[4] as Map<String, Int>
-        @Suppress("UNCHECKED_CAST")
-        val availableEquipment = values[5] as Set<Equipment>
-        val todayState = values[6] as ProgramDayState
-        @Suppress("UNCHECKED_CAST")
-        val disabledFamilies = values[7] as Set<String>
-        HomeUiState(
-            currentDay = metrics.currentDay,
-            workout = getWorkoutForDay(metrics.currentDay, difficultyAdjustments, trainingType, focusAreas, availableEquipment, disabledFamilies),
-            completedCount = metrics.completedCount,
-            completedPostureCount = metrics.completedPostureCount,
-            streak = metrics.streak,
-            additionalPostureTrainingEnabled = additionalPostureEnabled,
-            flexibilityTrainingType = trainingType,
-            flexibilityFocusAreas = focusAreas,
-            todayProgramDayState = todayState
-        )
-    }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        HomeUiState(
-            currentDay = 1,
-            workout = emptyWorkout,
-            completedCount = 0,
-            completedPostureCount = 0,
-            streak = 0,
-            additionalPostureTrainingEnabled = false,
-            flexibilityTrainingType = FlexibilityTrainingType.BOTH,
-            flexibilityFocusAreas = setOf(ExerciseSubCategory.FULL_BODY),
-            todayProgramDayState = ProgramDayState(
-                cycleNumber = 1,
-                programDay = 1,
-                isWorkoutDay = true,
-                isCompleted = false,
-                isMissed = false,
-                completedAt = null
-            )
-        )
-    )
+    /** Clears the sentence Home is showing. */
+    fun dismissHomeNotice() = homeProgram.dismissNotice()
 
-    // ---- The session configuration boundary --------------------------------------------------------
-    // The configuration a running workout session is allowed to generate from. It is captured once,
-    // at the session start transition below, and never read again: `programConfigurationRepository`
-    // is the user's *future* configuration (an edit there belongs to the next workout), while this is
-    // what the session already started with. The Custom Program editor's bridge is the only other
-    // consumer of the configuration, and it deliberately touches no session state. The holder itself
-    // is pure Kotlin and holds no store, so a later edit, state emission, recomposition or navigation
-    // has nothing to rebuild the running session's configuration from.
-    private val activeWorkoutConfiguration = ActiveWorkoutConfiguration()
+    /** §21's measures and history, as the Progress screen renders them. */
+    val programProgressState: StateFlow<ProgramProgressUiState> = programProgress.state
 
-    /** The configuration the running workout session runs on, as the session state presents it. */
-    val sessionConfiguration: Flow<WorkoutConfigurationSnapshot?> = activeWorkoutConfiguration.effectiveConfiguration
-
-    // ---- Task 13: the session's adaptive plan ------------------------------------------------------
-    // Three things stay apart on purpose, and nothing here blurs them:
-    //   * the session's *configuration* is Task 12's frozen snapshot — never the live store;
-    //   * the session's *adaptive plan* comes from the session's own reader, derived from that
-    //     snapshot plus the persisted adaptive state, and is read once per session (see below);
-    //   * the *workout* is built by the existing `WorkoutGenerator`, constrained by that plan.
-    // No threshold, state transition or progression step is decided in this class: the adaptive
-    // domain decides those through `AdaptiveWorkoutIntegration`, and this view model only supplies
-    // its inputs and applies the values it returns — through the existing difficulty mechanism, and
-    // through the existing generator.
-    private val adaptiveWorkoutIntegration = AdaptiveWorkoutIntegration(workoutGenerator)
-
-    /**
-     * The adaptive plan of the running session, or `null` before its configuration is captured.
-     *
-     * It is derived from `sessionConfiguration`, so it is computed from the session's own frozen
-     * snapshot and never from the live configuration store: an edit during the session changes the
-     * next session's plan, not this one's. It is held eagerly — one read per session start, the value
-     * the session generates from — rather than recomputed per subscriber, so navigating away and back
-     * into a running session cannot re-derive (and therefore re-shape) the workout it is presenting.
-     */
-    private val sessionAdaptivePlan: StateFlow<AdaptiveSessionPlan?> = sessionConfiguration
-        .map { snapshot -> snapshot?.let { captured -> readSessionAdaptivePlan(captured) } }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    /**
-     * The adaptive inputs of one session, read once, from the session's captured configuration.
-     *
-     * Which stored value is the source of which number — the normalized history, the current family
-     * progression of the session's program revision — is the reader's business, not this class's. The
-     * reader writes nothing, so no generation can move a stored level, and a failed read degrades to
-     * no evidence (HOLD for every family) rather than to an invented progression step.
-     */
-    private suspend fun readSessionAdaptivePlan(
-        configuration: WorkoutConfigurationSnapshot
-    ): AdaptiveSessionPlan {
-        val session = requireNotNull(activeWorkoutConfiguration.activeSession.value)
-        val context = requireNotNull(session.context)
-        val revision = context.programRevision
-
-        return sessionAdaptivePlanReader.read(
-            SessionAdaptiveInputs(
-                programDay = session.identity.day,
-                programCycle = context.programCycle,
-                programType = if (revision == STANDARD_PROGRAM_REVISION) {
-                    ProgramType.STANDARD
-                } else {
-                    ProgramType.REVISED
-                },
-                programRevision = revision,
-                configuration = configuration,
-                availableEquipment = context.generation.availableEquipment,
-                programStartDate = context.programStartDate
-            )
-        )
+    /** Re-reads the Progress screen's measures. Called when the screen appears. */
+    fun refreshProgress() {
+        viewModelScope.launch { programProgress.load() }
     }
 
-    val workoutSessionUiState = combine(
-        currentWorkoutDay,
-        currentSessionMode,
-        activeWorkoutConfiguration.activeSession,
-        sessionConfiguration,
-        sessionAdaptivePlan
-    ) { day, sessionMode, session, effectiveConfiguration, adaptivePlan ->
-        val generation = session?.context?.generation ?: WorkoutSessionGeneration()
-        val difficultyAdjustments = generation.difficultyAdjustments
-        val trainingType = generation.trainingType
-        val focusAreas = generation.focusAreas
-        val availableEquipment = generation.availableEquipment
-        val disabledFamilies = generation.disabledFamilies
-        // The configuration this session runs on: captured at the start transition and immutable
-        // from then on, so nothing observed here can be re-pointed by a later edit. It is presented
-        // as session state because the session's own behaviour is the only thing allowed to consume it.
-        // The adaptive plan of this session, derived from that same captured configuration. A session
-        // has no workout until both exist: before the configuration is captured there is no
-        // configuration to generate from, and generating one anyway would present a workout this
-        // session was never configured for — which is exactly how a disabled exercise reaches a
-        // session that never enabled it.
-        if (day == null || effectiveConfiguration == null || adaptivePlan == null) {
-            WorkoutSessionUiState(
-                day = day,
-                workout = emptyWorkout,
-                warmupExercises = emptyList(),
-                isPostureMobilitySession = sessionMode == SessionMode.POSTURE_MOBILITY,
-                effectiveConfiguration = effectiveConfiguration
-            )
-        } else {
-            WorkoutSessionUiState(
-                day = day,
-                workout = if (sessionMode == SessionMode.POSTURE_MOBILITY) {
-                    getPostureMobilityWorkout(day, difficultyAdjustments, trainingType, focusAreas, availableEquipment, disabledFamilies, adaptivePlan)
-                } else {
-                    getWorkoutForDay(day, difficultyAdjustments, trainingType, focusAreas, availableEquipment, disabledFamilies, adaptivePlan)
-                },
-                warmupExercises = if (sessionMode == SessionMode.POSTURE_MOBILITY) {
-                    emptyList()
-                } else {
-                    getWarmupExercises(difficultyAdjustments)
-                },
-                isPostureMobilitySession = sessionMode == SessionMode.POSTURE_MOBILITY,
-                effectiveConfiguration = effectiveConfiguration
-            )
-        }
-    }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        WorkoutSessionUiState(
-            day = null,
-            workout = emptyWorkout,
-            warmupExercises = emptyList(),
-            isPostureMobilitySession = false,
-            effectiveConfiguration = null
-        )
-    )
+    /** Clears the sentence the Progress screen is showing. */
+    fun dismissProgressNotice() = programProgress.dismissNotice()
 
     val postureUiState = combine(
         exerciseDifficultyAdjustments,
@@ -846,8 +556,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            settingsManager.ensureProgramStartDate()
-            refreshCalendarState()
+            syncNutritionCycles()
         }
         viewModelScope.launch {
             while (isActive) {
@@ -855,87 +564,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (_currentDate.value != today) {
                     _currentDate.value = today
                 }
-                refreshCalendarState()
+                syncNutritionCycles()
                 delay(60_000)
             }
         }
-        viewModelScope.launch {
-            allProgress.collect {
-                updateStreak()
-            }
-        }
-    }
-
-    private fun updateStreak() {
-        viewModelScope.launch {
-            _streak.value = repository.calculateStreak()
-        }
-    }
-
-    /**
-     * The calendar day's workout as the session presents it.
-     *
-     * With a [sessionPlan] — the running session's own adaptive plan — generation runs inside that
-     * plan's constraints: the exercises the session's captured configuration and equipment permit are
-     * the only candidates, the families' resolved variations are preferred among the choices the
-     * routine's rules already offer, and the resolved low-level steps are composed with the user's own
-     * through the existing difficulty mechanism. Without one — the home preview, the library screens —
-     * generation is exactly what it always was.
-     */
-    fun getWorkoutForDay(
-        day: Int,
-        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
-        trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
-        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value,
-        availableEquipment: Set<Equipment> = this.availableEquipment.value,
-        disabledFamilies: Set<String> = disabledExerciseFamilies.value,
-        sessionPlan: AdaptiveSessionPlan? = null
-    ): Workout {
-        val adjustments = sessionPlan?.effectiveAdjustments(difficultyAdjustments) ?: difficultyAdjustments
-        val workout = if (sessionPlan == null) {
-            workoutGenerator.generateWorkout(day, trainingType, focusAreas, availableEquipment, disabledFamilies)
-        } else {
-            adaptiveWorkoutIntegration.generateWorkout(
-                AdaptiveWorkoutGenerationRequest(
-                    programDay = day,
-                    trainingType = trainingType,
-                    focusAreas = focusAreas,
-                    availableEquipment = availableEquipment,
-                    disabledFamilies = disabledFamilies
-                ),
-                sessionPlan
-            )
-        }
-        return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, adjustments)) })
-    }
-
-    /** The optional posture/mobility routine, constrained exactly as [getWorkoutForDay] is. */
-    fun getPostureMobilityWorkout(
-        day: Int,
-        difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
-        trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
-        focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value,
-        availableEquipment: Set<Equipment> = this.availableEquipment.value,
-        disabledFamilies: Set<String> = disabledExerciseFamilies.value,
-        sessionPlan: AdaptiveSessionPlan? = null
-    ): Workout {
-        val adjustments = sessionPlan?.effectiveAdjustments(difficultyAdjustments) ?: difficultyAdjustments
-        val workout = if (sessionPlan == null) {
-            workoutGenerator.generatePostureMobilityWorkout(day, trainingType, focusAreas, availableEquipment, disabledFamilies)
-        } else {
-            adaptiveWorkoutIntegration.generateWorkout(
-                AdaptiveWorkoutGenerationRequest(
-                    programDay = day,
-                    trainingType = trainingType,
-                    focusAreas = focusAreas,
-                    availableEquipment = availableEquipment,
-                    disabledFamilies = disabledFamilies,
-                    isPostureMobilitySession = true
-                ),
-                sessionPlan
-            )
-        }
-        return workout.copy(exercises = workout.exercises.map { enrichExercise(applyDifficultyAdjustment(it, adjustments)) })
     }
 
     fun getExerciseLibrary(
@@ -984,11 +616,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         enrichExercise(applyDifficultyAdjustment(it, difficultyAdjustments))
     }
 
+    /**
+     * Looks one exercise up in the app's own catalogue, by its library id.
+     *
+     * The `day` parameter this used to take is gone with the shipped generator's per-day variants: the
+     * catalogue is the same list on every day, so a day was never an input to this lookup, and the target
+     * session links to an exercise by the id its plan element stores (§10).
+     */
     fun findExerciseById(
         exerciseId: String,
-        day: Int,
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
-        trainingType: FlexibilityTrainingType = flexibilityTrainingType.value,
         focusAreas: Set<ExerciseSubCategory> = flexibilityFocusAreas.value,
         availableEquipment: Set<Equipment> = this.availableEquipment.value
     ): Exercise? {
@@ -1031,12 +668,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return settingsManager.getExerciseDifficultyAdjustmentFlow(exerciseId)
     }
 
-    fun getExercisePersonalRecord(exerciseId: String): Flow<Int> {
-        return settingsManager.getExercisePersonalRecordFlow(exerciseId)
+    /**
+     * The optional posture / mobility routine for the track's current day (§4).
+     *
+     * It is generated by the same catalogue and the same selection rules the app has always used
+     * (`WorkoutGenerator.generatePostureMobilityWorkout`), constrained by the user's own training type,
+     * focus areas, equipment and disabled families. **Nothing else shapes it**: the Stage-1 adaptive plan
+     * that used to overlay this routine is retired (§9), so what the user sees is the generator's own
+     * answer rather than that answer plus an adaptation no target layer can explain.
+     *
+     * The routine is a *presentation*: it is not stored, it belongs to no Program, and completing the
+     * session writes one row of the track's own table ([completePostureWorkout]) rather than a session,
+     * an opportunity or a set log — a mobility session is not a Program workout (§4, §19).
+     */
+    fun postureMobilityWorkout(): Workout {
+        val workout = workoutGenerator.generatePostureMobilityWorkout(
+            day = currentTrackDay.value,
+            flexibilityTrainingType = flexibilityTrainingType.value,
+            focusAreas = flexibilityFocusAreas.value,
+            availableEquipment = availableEquipment.value,
+            disabledFamilies = disabledExerciseFamilies.value
+        )
+        return workout.copy(
+            exercises = workout.exercises.map { exercise -> enrichExercise(exercise) }
+        )
     }
 
-    fun getExerciseVolumeHistory(exerciseId: String): Flow<List<VolumeHistoryPoint>> {
-        return repository.getExerciseVolumeHistory(exerciseId)
+    /**
+     * Records the posture / mobility track's session for today.
+     *
+     * One row of the track's own table and nothing else — no set log, no session, no opportunity (§4). The
+     * track resolves *which* day this is from its own calendar, so nothing here has to know a day number,
+     * and the retired reward-stamp cycle key that used to gate it is gone with the cycle it named.
+     */
+    fun completePostureWorkout() {
+        viewModelScope.launch {
+            postureRepository.markCompleted(
+                focusArea = flexibilityFocusAreas.value.joinToString(",") { it.name }
+            )
+        }
     }
 
     fun logBodyWeight(kg: Float) {
@@ -1046,7 +716,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
-            repository.insertBodyWeightEntry(
+            nutritionRepository.insertBodyWeightEntry(
                 BodyWeightEntry(
                     weightKg = kg,
                     date = currentSessionDate()
@@ -1069,14 +739,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val validPreferredKeys = if (validateAvailableProductSelection(preferredIngredientKeys) == null) preferredIngredientKeys else emptySet()
             val plan = generateNutritionPlan(
                 seed = cycleStartDate.toEpochDay().toInt(),
-                startDay = calculateProgramDay(parseDate(programStartDate.value, cycleStartDate), cycleStartDate),
+                startDay = TrackCalendar.cappedDay(trackStartDate.first(), cycleStartDate),
                 daysCount = safeDuration,
                 weightKg = nutritionWeight.value.toIntOrNull(),
                 heightCm = nutritionHeight.value.toIntOrNull(),
                 excludedIngredientKeys = nutritionExcludedFoods.value,
                 preferredIngredientKeys = validPreferredKeys,
                 cycleId = dummyCycleId,
-                workoutTypeForDay = ::getWorkoutTypeForDay
             )
             _previewNutritionPlan.value = plan
         }
@@ -1103,7 +772,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 isCompleted = false,
                 autoGenerated = false
             )
-            val storedCycleId = repository.insertMealCycle(baseCycle)
+            val storedCycleId = nutritionRepository.insertMealCycle(baseCycle)
             val cycleId = if (storedCycleId == 0L) baseCycle.id else storedCycleId
 
             val finalPlan = plan.copy(
@@ -1115,7 +784,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             )
 
-            repository.replaceCycleMeals(cycleId, finalPlan.toMealEntities(cycleId), finalPlan.toShoppingItemEntities(cycleId))
+            nutritionRepository.replaceCycleMeals(cycleId, finalPlan.toMealEntities(cycleId), finalPlan.toShoppingItemEntities(cycleId))
             settingsManager.dismissNutritionWarningFor(null)
             _previewNutritionPlan.value = null
         }
@@ -1129,168 +798,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val current = exerciseDifficultyAdjustments.value[exerciseId] ?: 0
             settingsManager.setExerciseDifficultyAdjustment(exerciseId, current + delta)
-        }
-    }
-
-    fun startWorkoutSession(day: Int, mode: SessionMode = SessionMode.DAILY) {
-        if (_currentWorkoutDay.value != day || _currentSessionMode.value != mode) {
-            _currentWorkoutDay.value = day
-            _currentSessionMode.value = mode
-            _currentStep.value = WorkoutStep.OVERVIEW
-            _exerciseIndex.value = 0
-            _isRestTime.value = false
-            _restTargetIndex.value = null
-            _completedExercises.value = emptyMap()
-            stopTimer()
-        }
-        beginWorkoutSessionConfiguration(day, mode)
-    }
-
-    /**
-     * The session start transition's configuration step — the one moment a workout's effective
-     * configuration is decided.
-     *
-     * This is the app's authoritative "a workout has started" boundary: it is where the session's day
-     * and mode become the state the workout session is generated from. The persisted configuration is
-     * read here, once, and frozen for that session; `ActiveWorkoutConfiguration` ignores every later
-     * entry for the same (day, mode) without reading anything, so a recomposition or a navigation back
-     * into the running session cannot create a second capture, and a later edit to the configuration
-     * cannot reach this session. Entering a *different* session captures afresh — that is what makes
-     * an edit apply to the next workout rather than to none.
-     *
-     * The screen performs this on entry (`WorkoutScreen`'s start effect) and the app has no second
-     * way to start a session, so this is also the only place any session's configuration can be born.
-     */
-    private fun beginWorkoutSessionConfiguration(day: Int, mode: SessionMode) {
-        viewModelScope.launch {
-            activeWorkoutConfiguration.beginSession(
-                identity = WorkoutSessionIdentity(
-                    day = day,
-                    isPostureMobilitySession = mode == SessionMode.POSTURE_MOBILITY
-                ),
-                readContext = { currentProgramContext() }
-            ) { programConfigurationRepository.load() }
-        }
-    }
-
-    /**
-     * The program context the session starting right now runs under: the revision, the calendar and the
-     * cycle that are live at this instant, read ONCE, at the start transition, and frozen with the session
-     * by `ActiveWorkoutConfiguration`.
-     *
-     * This is the only place those three values are read for a session, and it exists so that no later part
-     * of the session path has to: a session that started before a `Start Revised Program`, a cycle
-     * rollover or a configuration edit keeps the context it began under, and finalizing it uses exactly
-     * that. Reading them again at completion time is what would let a revised program re-file a finished
-     * workout under the new revision and calendar.
-     */
-    private fun currentProgramContext() = WorkoutSessionContext(
-        programCycle = programCycleNumber.value,
-        programRevision = programRevision.value,
-        programStartDate = parseDate(programStartDate.value, LocalDate.now()),
-        generation = WorkoutSessionGeneration(
-            availableEquipment = availableEquipment.value,
-            difficultyAdjustments = exerciseDifficultyAdjustments.value,
-            trainingType = flexibilityTrainingType.value,
-            focusAreas = flexibilityFocusAreas.value,
-            disabledFamilies = disabledExerciseFamilies.value
-        )
-    )
-
-    fun setWorkoutStep(step: WorkoutStep) {
-        _currentStep.value = step
-        _exerciseIndex.value = 0
-        _isRestTime.value = false
-        _restTargetIndex.value = null
-        stopTimer()
-
-        if (shouldStartRestFor(getExercisesForStep(step).firstOrNull())) {
-            startRestBefore(0)
-        }
-    }
-
-    fun nextExercise(currentExerciseList: List<Exercise>) {
-        if (_isRestTime.value) {
-            _isRestTime.value = false
-            _exerciseIndex.value = _restTargetIndex.value ?: _exerciseIndex.value
-            _restTargetIndex.value = null
-            stopTimer()
-            _timeLeft.value = 0
-            return
-        }
-
-        currentExerciseList.getOrNull(_exerciseIndex.value)?.let { exercise ->
-            val totalSets = exercise.sets.coerceAtLeast(1)
-            val completedSets = ((_completedExercises.value[exercise.id] ?: 0) + 1).coerceAtMost(totalSets)
-            _completedExercises.value = _completedExercises.value + (exercise.id to completedSets)
-            persistCompletedSet(exercise)
-            updateExercisePersonalRecord(exercise)
-
-            if (completedSets < totalSets) {
-                _isRestTime.value = false
-                _restTargetIndex.value = null
-                if (exercise.isTimerBased) {
-                    resetTimer(exercise.durationSeconds)
-                } else {
-                    stopTimer()
-                    _timeLeft.value = 0
-                }
-                return
-            }
-        }
-
-        if (_exerciseIndex.value < currentExerciseList.size - 1) {
-            val nextIndex = _exerciseIndex.value + 1
-            if (shouldStartRestFor(currentExerciseList.getOrNull(nextIndex))) {
-                startRestBefore(nextIndex)
-            } else {
-                _exerciseIndex.value = nextIndex
-                _restTargetIndex.value = null
-                stopTimer()
-            }
-        } else {
-            val nextStep = when (_currentStep.value) {
-                WorkoutStep.WARMUP -> WorkoutStep.MAIN
-                WorkoutStep.MAIN -> WorkoutStep.COMPLETE
-                else -> WorkoutStep.COMPLETE
-            }
-            setWorkoutStep(nextStep)
-        }
-    }
-
-    fun previousExercise() {
-        _isRestTime.value = false
-        _restTargetIndex.value = null
-
-        val currentExercise = getExercisesForStep(_currentStep.value).getOrNull(_exerciseIndex.value)
-        if (currentExercise != null) {
-            val completedSets = _completedExercises.value[currentExercise.id] ?: 0
-            if (completedSets > 0) {
-                val updatedSets = completedSets - 1
-                _completedExercises.value = _completedExercises.value.toMutableMap().apply {
-                    if (updatedSets > 0) {
-                        put(currentExercise.id, updatedSets)
-                    } else {
-                        remove(currentExercise.id)
-                    }
-                }
-                rollbackCompletedSet(currentExercise.id)
-                if (currentExercise.isTimerBased) {
-                    resetTimer(currentExercise.durationSeconds)
-                } else {
-                    stopTimer()
-                    _timeLeft.value = 0
-                }
-                return
-            }
-        }
-
-        if (_exerciseIndex.value > 0) {
-            _exerciseIndex.value--
-            stopTimer()
-            _timeLeft.value = 0
-        } else {
-            // Optionally handle going back to previous step, but for now just stay at index 0
         }
     }
 
@@ -1321,14 +828,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _timeLeft.value = remaining
                 if (remaining <= 0) {
                     _isTimerRunning.value = false
-                    if (!_isRestTime.value) {
-                        playBeep(500)
-                    } else {
-                        playStartSound()
-                    }
-                    if (vibrationEnabled.value) {
-                        vibrate()
-                    }
+                    // The rest/workout distinction this used to make belonged to the retired workout
+                    // session's set machine (§30 step 15). What is left is the standalone exercise
+                    // timer the exercise screen drives: it sounds out and stops.
+                    playBeep(500)
                     // Auto-advance logic will be handled by UI observing timeLeft and isTimerRunning
                     break
                 }
@@ -1355,129 +858,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         stopTimer()
         _timeLeft.value = durationSeconds
     }
-
-    fun completeWorkout(day: Int) {
-        viewModelScope.launch {
-            val cycle = programCycleNumber.value
-            val rewardKey = "workout_${cycle}_$day"
-            if (rewardsGrantedDays.value.contains(rewardKey)) {
-                // Suppress rewards/completion updates for repeated workouts
-                return@launch
-            }
-            val completedAt = System.currentTimeMillis()
-            val progress = UserProgress(
-                cycleNumber = cycle,
-                day = day,
-                isCompleted = true,
-                completionDate = completedAt,
-                workoutType = workoutGenerator.generateWorkout(day).type.name
-            )
-            repository.updateProgress(progress)
-            repository.upsertProgramDayState(
-                ProgramDayState(
-                    cycleNumber = cycle,
-                    programDay = day,
-                    isWorkoutDay = true,
-                    isCompleted = true,
-                    isMissed = false,
-                    completedAt = completedAt
-                )
-            )
-            settingsManager.setRewardGranted(rewardKey)
-
-            // The workout is now finalized: the observation of it is the one the stored rows establish,
-            // so this is the only place a decision may be recorded from it.
-            recordAdaptiveDecision()
-        }
-    }
-
-    /**
-     * Records the adaptive decisions of the session that has just been finalized.
-     *
-     * Called only from the daily completion path, after the day-level completion has been persisted, and
-     * it hands the recorder the session's own frozen facts — the program day, cycle and revision it ran
-     * as, the calendar its history is interpreted against, and the configuration it was STARTED with —
-     * never the live revision, the live calendar or the live configuration store. A session that began
-     * under one revision and is completed after a `Start Revised Program` is therefore finalized as the
-     * session it was, not as the one the app is running now.
-     *
-     * Nothing is recomputed here: which stored value is the source of which number is the recorder's
-     * business, and whether a transition is warranted is the adaptive domain's. A session that is not
-     * finalized, a rest day, and a session whose context or configuration was never captured all end in no
-     * decision rather than in an invented one.
-     *
-     * A failure is logged and swallowed on purpose: the workout is already persisted and the user has
-     * already been credited for it, so a recording problem must not make a finished session look failed.
-     */
-    private suspend fun recordAdaptiveDecision() {
-        val session = activeWorkoutConfiguration.activeSession.value ?: return
-        val request = sessionFinalizationRequest(
-            session = session,
-            availableEquipment = session.context?.generation?.availableEquipment ?: return
-        ) ?: return
-
-        try {
-            adaptiveDecisionRecorder.recordFinalizedSession(request)
-        } catch (e: Exception) {
-            Log.w(TAG, "adaptive decisions not recorded for cycle ${request.programCycle} day ${request.programDay}", e)
-        }
-    }
-
-    fun completeRecoveryDay(day: Int) {
-        viewModelScope.launch {
-            val cycle = programCycleNumber.value
-            val rewardKey = "recovery_${cycle}_$day"
-            if (rewardsGrantedDays.value.contains(rewardKey)) {
-                return@launch
-            }
-            repository.upsertProgramDayState(
-                ProgramDayState(
-                    cycleNumber = cycle,
-                    programDay = day,
-                    isWorkoutDay = false,
-                    isCompleted = true,
-                    isMissed = false,
-                    completedAt = System.currentTimeMillis()
-                )
-            )
-            settingsManager.setRewardGranted(rewardKey)
-        }
-    }
-
-    fun completePostureWorkout(day: Int) {
-        viewModelScope.launch {
-            val cycle = programCycleNumber.value
-            val rewardKey = "posture_${cycle}_$day"
-            if (rewardsGrantedDays.value.contains(rewardKey)) {
-                return@launch
-            }
-            val progress = PostureSessionProgress(
-                cycleNumber = cycle,
-                day = day,
-                isCompleted = true,
-                completionDate = System.currentTimeMillis(),
-                focusArea = flexibilityFocusAreas.value.joinToString(",") { it.name }
-            )
-            repository.updatePostureProgress(progress)
-            settingsManager.setRewardGranted(rewardKey)
-        }
-    }
-
-    fun completeCurrentSession(day: Int) {
-        if (_currentSessionMode.value == SessionMode.POSTURE_MOBILITY) {
-            completePostureWorkout(day)
-        } else if (getWorkoutTypeForDay(day) == com.monkfitness.app.data.model.WorkoutType.REST) {
-            completeRecoveryDay(day)
-        } else {
-            completeWorkout(day)
-        }
-    }
-
-    fun getCurrentDay(): Int {
-        return currentProgramDay.value
-    }
-
-    fun getWorkoutTypeForDay(day: Int) = workoutGenerator.getWorkoutType(day)
 
     fun setNotificationTime(hour: Int, minute: Int) {
         viewModelScope.launch {
@@ -1640,7 +1020,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val nutritionExclusionOptions: List<NutritionIngredient> = nutritionExclusionIngredients
 
-    val mealCycles = repository.getMealCycles().stateIn(
+    val mealCycles = nutritionRepository.getMealCycles().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
@@ -1660,7 +1040,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (cycle == null || nutritionCycleLength.value == 0) {
             flowOf(NutritionPlan(emptyList()))
         } else {
-            repository.getMealsForCycle(cycle.id).map { meals ->
+            nutritionRepository.getMealsForCycle(cycle.id).map { meals ->
                 if (meals.isEmpty()) NutritionPlan(emptyList(), cycle.id)
                 else mealEntitiesToNutritionPlan(cycle.id, meals)
             }
@@ -1671,7 +1051,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         NutritionPlan(emptyList())
     )
 
-    val todayNutritionPlan = combine(nutritionPlan, currentProgramDay) { plan, day ->
+    val todayNutritionPlan = combine(nutritionPlan, currentTrackDay) { plan, day ->
         plan.days.firstOrNull { it.programDay == day }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -1707,24 +1087,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    val showProgramSummary = combine(
-        currentProgramDay,
-        todayProgramDayState,
-        programCycleNumber,
-        settingsManager.programCycleNumberFlow
-    ) { day, state, cycle, storedCycle ->
-        // C2: the "program completed" dialog is the automatic-rollover gate — it appears on the
-        // last day of a finished cycle and stays visible until the rollover runs (or the user
-        // dismisses it). The stamp closes it, so it fires once per cycle; see
-        // shouldOfferCycleCompletion.
-        shouldOfferCycleCompletion(
-            programDay = day,
-            isDayCompleted = state.isCompleted,
-            activeCycle = cycle,
-            storedCycle = storedCycle
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
     fun setNutritionCycleLength(days: Int) {
         viewModelScope.launch {
             settingsManager.setNutritionCycleLength(days)
@@ -1747,43 +1109,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun dismissProgramSummary() {
-        viewModelScope.launch {
-            // C2: dismissing the completion dialog IS the automatic rollover. The dialog
-            // reappears on every relaunch until it runs, so the rollover is effectively
-            // guaranteed even if this call is interrupted. Works for ANY cycle N -> N+1.
-            val finishedCycle = programCycleNumber.value
-            val storedCycle = settingsManager.programCycleNumberFlow.first()
-            if (shouldOfferCycleCompletion(
-                    programDay = currentProgramDay.value,
-                    isDayCompleted = todayProgramDayState.value.isCompleted,
-                    activeCycle = finishedCycle,
-                    storedCycle = storedCycle
-                )
-            ) {
-                val nextCycle = finishedCycle + 1
-                // 1) Seed the next cycle's grid as a fresh copy of the template (nothing
-                //    completed, nothing missed) stamped onto the new cycle. The grid is scored
-                //    against the new cycle's OWN day 1: scoring it against the finished cycle's
-                //    day 56 would mark every earlier day of the new cycle as missed. The
-                //    finished cycle's rows — completions AND missed days — stay untouched as
-                //    history.
-                val freshGrid = synchronizeProgramStates(
-                    existing = emptyList(),
-                    currentProgramDay = 1,
-                    cycleNumber = nextCycle,
-                    workoutTypeForDay = ::getWorkoutTypeForDay
-                )
-                repository.upsertProgramDayStates(freshGrid)
-
-                // 2) Stamp the stored cycle number; programCycleNumber flips to nextCycle
-                //    and every cycle-scoped flow re-resolves against it automatically.
-                settingsManager.setProgramCycleNumber(nextCycle)
-            }
-            settingsManager.setProgramSummaryDismissed(true)
-        }
-    }
-
     fun dismissNutritionExpirationWarning() {
         viewModelScope.launch {
             settingsManager.dismissNutritionWarningFor(activeMealCycle.value?.startDate)
@@ -1801,6 +1126,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val maintenanceEvents = _maintenanceEvents.asSharedFlow()
 
     /**
+     * Settings → **Full reset**: the app's own history and its retained daily-track data, wiped in one
+     * Room transaction, then the preferences.
+     *
+     * ### What it clears, after §30 step 15
+     *
+     * The three C3 controls this class used to offer are gone: *"Restart current cycle"* and *"Start
+     * revised program"* were operations on a cycle that no longer exists (§16), and the target
+     * architecture already provides their intent through **Edit / Copy → a new immutable Revision →
+     * lifecycle Start**. What remains is the one genuinely global maintenance operation, and its contract
+     * is re-derived for the *current* schema rather than carried over:
+     *
+     * ```text
+     * cleared   every Program the user created, every opportunity, session, snapshot and confirmed set,
+     *           every pause and every target adaptive row, plus the posture/mobility track and the
+     *           body-weight log
+     * kept      the built-in Standard Program's own definition (it is a built-in, §12, and the lifecycle
+     *           layer's delete-fallback selects it), and the nutrition plans (their meal-cycle calendar is
+     *           independent of the program calendar — the same boundary the screen's text states)
+     * ```
+     *
+     * A retired table is **not** named here: the tables this used to clear no longer exist, and naming one
+     * would be a reference to something the schema does not have.
+     *
+     * Reports [MaintenanceResult.Failure] if a phase throws — the transaction rolls back, so no partial
+     * reset is left behind, and the two phases' distinct failure modes are the ones [runFullReset]
+     * documents.
+     */
+    fun fullReset() {
+        viewModelScope.launch {
+            val result = runFullReset(
+                clearRoomData = { programGraph.maintenanceRepository.clearAll(StandardProgram.programId.value) },
+                clearPreferences = { settingsManager.clearAll() }
+            )
+            _maintenanceEvents.tryEmit(result)
+            homeProgram.load()
+        }
+    }
+
+    /**
      * C3 "Restart Current Cycle": wipes ONLY the active cycle's progress rows in one Room
      * transaction. Start date, the stored cycle number, settings and prior cycles' history
      * are untouched; the template grid is re-seeded fresh (nothing completed) by the next
@@ -1809,74 +1173,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * Reports [MaintenanceResult.Failure] if the wipe throws — the transaction rolls back, so
      * no partial reset is left behind, and the user is told instead of seeing a silent no-op.
      */
-    fun restartCurrentCycle() {
-        viewModelScope.launch {
-            val cycle = programCycleNumber.value
-            val outcome = try {
-                repository.deleteProgressForCycle(cycle)
-                refreshCalendarState()
-                MaintenanceResult.Success(R.string.program_controls_restart_done)
-            } catch (e: Exception) {
-                Log.w(TAG, "restartCurrentCycle: cycle $cycle not reset", e)
-                MaintenanceResult.Failure(R.string.program_controls_restart_failed)
-            }
-            _maintenanceEvents.tryEmit(outcome)
-        }
-    }
-
-    /**
-     * C3 "Start Revised Program": bumps the program revision marker and restarts the calendar
-     * from today at cycle 1, day 1. The stored cycle number is stamped to 1 in the SAME DataStore
-     * edit as the new start date, so no interleaving can leave the two disagreeing. Prior program
-     * history stays in the database for the archive view.
-     */
-    fun startRevisedProgram() {
-        viewModelScope.launch {
-            val outcome = try {
-                settingsManager.startRevisedProgram(LocalDate.now())
-                refreshCalendarState()
-                MaintenanceResult.Success(R.string.program_controls_revised_done)
-            } catch (e: Exception) {
-                Log.w(TAG, "startRevisedProgram: not applied", e)
-                MaintenanceResult.Failure(R.string.program_controls_revised_failed)
-            }
-            _maintenanceEvents.tryEmit(outcome)
-        }
-    }
-
-    /**
-     * C3 "Full Reset": complete wipe back to first-launch state — every progress/history Room
-     * table cleared, all preferences cleared. Onboarding restarts on next navigation because
-     * IS_ONBOARDING_COMPLETED is gone.
-     *
-     * The Room clear and the DataStore clear are independent stores that cannot share a
-     * transaction, so this is an ordered sequence, not an atomic one. The Room wipe runs first
-     * and reports [MaintenanceResult.Failure] if it throws, leaving a fully intact database and
-     * untouched preferences (the DataStore clear is never reached, so the app keeps working and
-     * the user can retry). If the Room wipe succeeds and the preference clear then throws, the
-     * outcome is also [MaintenanceResult.Failure] — with a message that names the exact partial
-     * state: the database is empty, the preferences are not. A destructive operation must never
-     * report success while part of what it promised is still half done.
-     */
-    fun fullReset() {
-        viewModelScope.launch {
-            _maintenanceEvents.tryEmit(
-                runFullReset(
-                    clearRoomData = { repository.clearAllProgressData() },
-                    // The program configuration lives in a store of its own (deliberately not the
-                    // settings store, which a reset of this kind clears wholesale), so returning the
-                    // exercise selection to the authoritative default is this path's own step — through
-                    // the configuration repository's own API, which advances nothing else and leaves the
-                    // workout history alone.
-                    clearPreferences = {
-                        settingsManager.clearAll()
-                        programConfigurationRepository.resetToDefault()
-                    }
-                )
-            )
-        }
-    }
-
     fun generateNextNutritionCycle() {
         viewModelScope.launch {
             createOrQueueMealCycle(
@@ -1928,7 +1224,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 },
                 cycleId = cycle.id
             )
-            repository.replaceCycleMeals(cycle.id, updatedPlan.toMealEntities(cycle.id), updatedPlan.toShoppingItemEntities(cycle.id))
+            nutritionRepository.replaceCycleMeals(cycle.id, updatedPlan.toMealEntities(cycle.id), updatedPlan.toShoppingItemEntities(cycle.id))
         }
     }
 
@@ -1988,57 +1284,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun refreshCalendarState() {
-        syncProgramDayStates()
-        syncNutritionCycles()
-    }
-
-    private suspend fun syncProgramDayStates() {
-        val cycle = programCycleNumber.value
-        val currentDay = currentProgramDay.value
-        // Legacy backfill: rows migrated from before the rollover existed carry no
-        // template grid for future cycles. If the active cycle has no grid yet, seed it
-        // fresh (nothing completed) without touching earlier cycles' history. The grid is
-        // scored against the day the active cycle is actually on, not against the last day of
-        // the program — a fresh cycle must not open with days it has not reached yet marked
-        // missed.
-        if (cycle > 1 && repository.getProgramDayStatesSnapshot(cycle).isEmpty()) {
-            val freshGrid = synchronizeProgramStates(
-                existing = emptyList(),
-                currentProgramDay = currentDay,
-                cycleNumber = cycle,
-                workoutTypeForDay = ::getWorkoutTypeForDay
-            )
-            repository.upsertProgramDayStates(freshGrid)
-        }
-        val legacyProgress = allProgress.value.filter { it.cycleNumber == cycle }.associateBy { it.day }
-        val synchronizedStates = synchronizeProgramStates(
-            existing = repository.getProgramDayStatesSnapshot(cycle),
-            currentProgramDay = currentDay,
-            cycleNumber = cycle,
-            workoutTypeForDay = ::getWorkoutTypeForDay
-        ).map { state ->
-            val legacy = legacyProgress[state.programDay]
-            if (legacy != null && state.isWorkoutDay) {
-                state.copy(isCompleted = true, isMissed = false, completedAt = legacy.completionDate)
-            } else {
-                state
-            }
-        }
-        repository.upsertProgramDayStates(synchronizedStates)
-    }
-
     private suspend fun syncNutritionCycles() {
         if (nutritionCycleLength.value == 0) return
 
         val today = currentDate.value
-        val cycles = repository.getMealCyclesSnapshot()
+        val cycles = nutritionRepository.getMealCyclesSnapshot()
         val expiredCycles = cycles.filter { !it.isCompleted && mealCycleEndDate(it).isBefore(today) }
         expiredCycles.forEach { expired ->
-            repository.insertMealCycle(expired.copy(isCompleted = true))
+            nutritionRepository.insertMealCycle(expired.copy(isCompleted = true))
         }
 
-        val refreshedCycles = repository.getMealCyclesSnapshot()
+        val refreshedCycles = nutritionRepository.getMealCyclesSnapshot()
         val active = refreshedCycles
             .filter { !it.isCompleted && !parseDate(it.startDate, today).isAfter(today) }
             .maxByOrNull { it.startDate }
@@ -2081,21 +1337,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             isCompleted = false,
             autoGenerated = autoGenerated
         )
-        val storedCycleId = repository.insertMealCycle(baseCycle)
+        val storedCycleId = nutritionRepository.insertMealCycle(baseCycle)
         val cycleId = if (storedCycleId == 0L) baseCycle.id else storedCycleId
         val validPreferredKeys = if (validateAvailableProductSelection(preferredIngredientKeys) == null) preferredIngredientKeys else emptySet()
         val plan = generateNutritionPlan(
             seed = cycleStartDate.toEpochDay().toInt(),
-            startDay = calculateProgramDay(parseDate(programStartDate.value, cycleStartDate), cycleStartDate),
+            startDay = TrackCalendar.cappedDay(trackStartDate.first(), cycleStartDate),
             daysCount = safeDuration,
             weightKg = nutritionWeight.value.toIntOrNull(),
             heightCm = nutritionHeight.value.toIntOrNull(),
             excludedIngredientKeys = nutritionExcludedFoods.value,
             preferredIngredientKeys = validPreferredKeys,
             cycleId = cycleId,
-            workoutTypeForDay = ::getWorkoutTypeForDay
         )
-        repository.replaceCycleMeals(cycleId, plan.toMealEntities(cycleId), plan.toShoppingItemEntities(cycleId))
+        nutritionRepository.replaceCycleMeals(cycleId, plan.toMealEntities(cycleId), plan.toShoppingItemEntities(cycleId))
         settingsManager.dismissNutritionWarningFor(null)
     }
 
@@ -2117,83 +1372,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         toneG.startTone(ToneGenerator.TONE_DTMF_0, 400)
     }
 
-    private fun updateExercisePersonalRecord(exercise: Exercise) {
-        val recordValue = if (exercise.isTimerBased) {
-            exercise.durationSeconds
-        } else {
-            exercise.maxReps.coerceAtLeast(exercise.reps)
-        }
-
-        if (recordValue <= 0) return
-
-        viewModelScope.launch {
-            val currentRecord = exercisePersonalRecords.value[exercise.id] ?: 0
-            if (recordValue > currentRecord) {
-                settingsManager.setExercisePersonalRecord(exercise.id, recordValue)
-            }
-        }
-    }
-
-    private fun persistCompletedSet(exercise: Exercise) {
-        val setLog = observedSetLog(
-            exercise = exercise,
-            remainingSeconds = _timeLeft.value,
-            timestamp = System.currentTimeMillis(),
-            sessionDate = currentSessionDate()
-        )
-
-        viewModelScope.launch {
-            repository.insertSetLog(setLog)
-        }
-    }
-
-    private fun rollbackCompletedSet(exerciseId: String) {
-        viewModelScope.launch {
-            repository.deleteLatestSetLogForExerciseOnDate(exerciseId, currentSessionDate())
-        }
-    }
-
     private fun currentSessionDate(): String = LocalDate.now().toString()
 
-    private fun shouldStartRestFor(exercise: Exercise?): Boolean {
-        return exercise?.isTimerBased == true
-    }
-
-    private fun startRestBefore(targetIndex: Int) {
-        _restTargetIndex.value = targetIndex
-        _isRestTime.value = true
-        startTimer(5)
-    }
-
-    private fun getExercisesForStep(step: WorkoutStep): List<Exercise> {
-        val sessionState = workoutSessionUiState.value
-        return when (step) {
-            WorkoutStep.WARMUP -> sessionState.warmupExercises
-            WorkoutStep.MAIN -> sessionState.workout.exercises
-            else -> emptyList()
-        }
-    }
 
     override fun onCleared() {
         super.onCleared()
         toneG.release()
-    }
-
-    private fun vibrate() {
-        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = getApplication<Application>().getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vibratorManager.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getApplication<Application>().getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(500)
-        }
     }
 
     private fun applyDifficultyAdjustment(

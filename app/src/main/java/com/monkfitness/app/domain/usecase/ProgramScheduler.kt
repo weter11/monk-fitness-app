@@ -155,6 +155,45 @@ class ProgramScheduler(
         pass(programId, persist = false)
 
     /**
+     * The one opportunity the user can act on next, or `null` when the Program has none.
+     *
+     * ### Why this read lives here
+     *
+     * An opportunity is the Scheduler's own row, so *"which one is next"* is a question only it can
+     * answer without a second copy of the rule. The answer is defined mechanically by the value the
+     * opportunity already carries — the earliest `plannedFor` among the ones [WorkoutSlot.isStartable]
+     * admits — so this method holds no threshold, no horizon, no window and no policy of its own: a
+     * missed opportunity is offered because a missed opportunity is startable, and a completed or
+     * superseded one is not offered because it is not.
+     *
+     * ### What it deliberately is not
+     *
+     * It is **not** a pass. It plans nothing, extends no horizon, supersedes nothing, marks nothing
+     * missed, mints no id, opens no transaction and writes nothing at all — the three entry points
+     * above remain the only ways anything is ever decided or stored. A caller that wants the plan
+     * advanced wants [schedule]; a caller that wants to show the user what they can start right now
+     * wants this, and running it cannot change what the next pass will do.
+     *
+     * The refusals are the pass's own and are raised for the same reasons, so a caller reads one
+     * vocabulary: an archived Program is not planned (and has nothing to offer), a completed one is
+     * terminal, and a Program that is not stored is a refusal rather than an empty answer.
+     *
+     * @return the earliest startable opportunity, or `null` when the Program has none — which is an
+     *   answer, not a failure: a Program whose plan has not been scheduled yet legitimately has none.
+     */
+    suspend fun nextOpportunity(programId: ProgramId): ProgramSchedulingResult<WorkoutSlot?> =
+        schedulingResult {
+            val program = programRepository.programById(programId)
+                ?: throw SchedulingProgramMissing(programId)
+            if (program.isArchived) throw SchedulingProgramArchived(programId)
+            if (program.lifecycleStatus.isTerminal) throw SchedulingProgramCompleted(programId)
+
+            scheduleRepository.slotsOfProgram(programId)
+                .filter { slot -> slot.isStartable }
+                .minWithOrNull(compareBy({ slot -> slot.plannedFor }, { slot -> slot.slotId.value }))
+        }.refusing(programId)
+
+    /**
      * The opportunities a Program **being created** receives — §27's creation unit, decided by this same
      * pass.
      *

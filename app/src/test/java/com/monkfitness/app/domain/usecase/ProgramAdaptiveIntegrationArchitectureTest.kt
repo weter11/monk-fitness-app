@@ -4,6 +4,7 @@ import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationOutcom
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationResult
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveTargetElement
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -119,11 +120,15 @@ class ProgramAdaptiveIntegrationArchitectureTest {
             "AdaptiveJudgement", "AdaptiveTargetSlot", "AdaptiveWindowRule", "PresentedElement",
             "ProgressionRelationProvider", "ExerciseFamilyClassification", "ProgramAdaptiveIntegration"
         )
-        val offenders = legacyAndEngineNames(engineSources + legacySources, integrationNames)
+        // §30 step 15 removed the second half of this scan: `legacySources` used to be swept for the
+        // integration's vocabulary to prove the Stage-1 generation was unaware of its successor. That
+        // generation is gone, so there is nothing left to be unaware — and the half that still means
+        // something is kept: the *engine* must not know its caller.
+        val offenders = legacyAndEngineNames(engineSources, integrationNames)
 
         assertTrue(
-            "the engine and the Stage-1 generation are both unaware of the integration: an engine that " +
-                "knew its caller would be a component with a collaborator. Found: $offenders",
+            "the engine is unaware of the integration: an engine that knew its caller would be a " +
+                "component with a collaborator. Found: $offenders",
             offenders.isEmpty()
         )
     }
@@ -214,12 +219,17 @@ class ProgramAdaptiveIntegrationArchitectureTest {
             offenders.isEmpty()
         )
 
-        // The legacy files are still there, and still name none of this stage's types. A file that has
-        // been deleted cannot name anything, so the two assertions are one claim.
+        // §30 step 15 inverted the inverse half. It used to read each Stage-1 file and check it named
+        // none of this stage's types — "a file that has been deleted cannot name anything, so the two
+        // assertions are one claim". The files are deleted now, so the claim is stated on its stronger
+        // footing directly: there is no Stage-1 source to name anything at all.
         legacySources.forEach { source ->
-            assertTrue("$source must still exist: this stage removes nothing", File(mainDir, source).isFile)
+            assertFalse(
+                "$source must be gone: §30 step 15 retires the Stage-1 generation",
+                File(mainDir, source).isFile
+            )
         }
-        val inverse = legacyAndEngineNames(legacySources, integrationNamesOfThisStage())
+        val inverse = emptyList<String>()
         assertTrue(
             "the two generations do not depend on each other in either direction (§30 step 11 keeps " +
                 "them separate until step 15 collapses them). Found: $inverse",
@@ -287,19 +297,40 @@ class ProgramAdaptiveIntegrationArchitectureTest {
 
     /** No ViewModel and no screen reaches the integration or the engine yet (§23 of the brief). */
     @Test
-    fun noViewModelOrScreenReachesTheAdaptiveStage() {
-        val names = listOf("ProgramAdaptiveIntegration", "ProgramAdaptiveEngine", "ProgramAdaptivePolicy")
-        val offenders = listOf(File(mainDir, "ui"), File(mainDir, "viewmodel"))
+    fun theUiReachesTheIntegrationAndNeverTheEngineOrThePolicy() {
+        // §30 step 15 inverted this claim. It used to be an *absence* — "the UI integration is a later
+        // step" — and the later step is this one: the session screen's completion asks the integration
+        // for the adaptive half of §27's transaction, and the view model hands the node over. What must
+        // still hold is the part that can regress: the UI reaches the **integration** and nothing below
+        // it. An engine or a policy named above the integration would be a screen deciding what to adapt.
+        val above = listOf(File(mainDir, "ui"), File(mainDir, "viewmodel"))
             .filter { it.isDirectory }
             .flatMap { root -> root.walkTopDown().filter { it.isFile && it.extension == "kt" } }
-            .filter { source -> names.any { source.readText().contains(it) } }
-            .map { it.name }
             .toList()
 
+        val engineOffenders = above
+            .filter { source -> listOf("ProgramAdaptiveEngine", "ProgramAdaptivePolicy").any { source.readText().contains(it) } }
+            .map { it.name }
+
         assertTrue(
-            "this stage lands a use case and a value vocabulary: the UI integration is a later step and " +
-                "this test is what says so. Found: $offenders",
-            offenders.isEmpty()
+            "no screen and no view model names the adaptive engine or its policy: the integration is " +
+                "the only door, and a threshold with a second home can disagree with itself. Found: " +
+                "$engineOffenders",
+            engineOffenders.isEmpty()
+        )
+
+        val integrationCallers = above
+            .filter { source -> source.readText().contains("ProgramAdaptiveIntegration") }
+            .map { it.name }
+            .sorted()
+
+        assertEquals(
+            "and the integration's *type* is named in exactly one place above the composition root: the " +
+                "state holder that asks it for a completion's adaptive half. The view model receives the " +
+                "built node and forwards it without naming its type — which is the §26 shape, and worth " +
+                "pinning: the moment a view model names the integration it can start deciding with it",
+            listOf("ProgramSessionController.kt"),
+            integrationCallers
         )
     }
 

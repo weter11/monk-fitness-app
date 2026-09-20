@@ -1010,7 +1010,6 @@ class SessionRuntimeTest {
         assertEquals(0, rig.database.count("program_adaptive_decision_record"))
         assertEquals(0, rig.database.count("adaptive_adjustment"))
         assertEquals(0, rig.database.count("program_family_progression_state"))
-        assertEquals(0, rig.database.count("family_progression_state"))
     }
 
     @Test

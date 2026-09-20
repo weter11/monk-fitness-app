@@ -408,12 +408,13 @@ internal object SchedulerFixture {
     fun shortDays(tag: String): List<ProgramDay> = days(tag).take(2)
 
     /**
-     * Every table the migrated database holds — the Program System's fifteen and the ten the app already
-     * shipped.
+     * Every table the migrated database holds — the Program System's fifteen and the five retained
+     * global ones.
      *
-     * Including the shipped ones matters: "the pass wrote nothing" is a claim about the whole database,
-     * and `set_log` / `user_progress` / `program_day_state` are exactly where a careless integration
-     * would quietly leave a mark.
+     * §30 step 15 inverted what "the pass wrote nothing" has to cover. It used to include the shipped
+     * program's tables (`set_log`, `user_progress`, `program_day_state`), because a careless integration
+     * could quietly leave a mark in one of them; those tables no longer exist, so the claim is now about
+     * the whole schema that does — and the retained global tables are where a mark could still land.
      */
     val TABLES: List<String> = listOf(
         "program",
@@ -431,16 +432,14 @@ internal object SchedulerFixture {
         "program_family_progression_state",
         "program_adaptive_decision_record",
         "adaptive_adjustment",
-        "user_progress",
+        // The retained global tables. §30 step 15 dropped the shipped program's five, so these are
+        // what "the pass wrote nothing" still has to cover — and they are the ones a careless
+        // integration could mark.
         "posture_session_progress",
-        "set_log",
         "body_weight_log",
-        "program_day_state",
         "meal_cycles",
         "meals",
-        "shopping_items",
-        "family_progression_state",
-        "adaptive_decision_record"
+        "shopping_items"
     )
 
 }

@@ -127,9 +127,12 @@ class ProgramsNavigationTest {
             .toSet()
 
         assertEquals(
-            "§16: a route carries a Program's id, one of §2's mode names, and the app's own existing " +
-                "arguments — never a domain object",
-            setOf("programId", "mode", "day", "exerciseId", "isPosture", "poseId"),
+            "§16: a route carries a Program's id, one of §2's mode names, an opportunity id, an " +
+                "exercise id and a pose id — identifiers and simple values, never a domain object. " +
+                "§30 step 15 removed the day-based workout arguments: a day number was the retired " +
+                "56-day grid's position, not an identity, and the one workout route now carries the " +
+                "**opportunity** it is for",
+            setOf("programId", "mode", "slotId", "exerciseId", "poseId"),
             arguments
         )
         listOf("programId", "mode").forEach { argument ->
@@ -165,27 +168,22 @@ class ProgramsNavigationTest {
     }
 
     @Test
-    fun theLegacyCustomProgramRouteIsRetainedButIsNoLongerTheProgramEntryPoint() {
-        assertTrue(
-            "§7 does not blind-delete what still runs: the legacy editor configures the shipped " +
-                "generator's exercise selection and its destination is kept for §30 step 15",
+    fun theLegacyCustomProgramRouteIsGoneAndTheProgramSystemIsTheOnlyEntryPoint() {
+        // §30 step 15 inverted this claim. Until then the legacy route was *retained* — pinned as
+        // "reached from exactly one place" — because its editor still configured the shipped generator's
+        // exercise selection. The final audit showed that selection had no reader left (its only consumer
+        // was the legacy session's configuration capture, which this stage deleted), so it became a
+        // setting that could affect nothing and the whole surface was retired with its route.
+        assertFalse(
+            "the legacy editor's screen is gone, not merely unreached",
             activity.contains("CustomProgramScreen(")
         )
-        assertEquals(
-            "and it is reached from exactly one place — the legacy callback of the Settings section that " +
-                "configures the shipped generator — so it is no longer the Program architecture's entry",
-            1,
-            Regex("""navigate\(MainViewModel\.ROUTE_CUSTOM_PROGRAM\)""").findAll(activity).count()
-        )
-        val legacyCallback = activity
-            .substringAfter("onOpenCustomProgram = {")
-            .substringBefore("}")
         assertFalse(
-            "the legacy callback does not open the Program System",
-            legacyCallback.contains("ROUTE_PROGRAMS")
+            "and so is the destination it was reached by",
+            activity.contains("ROUTE_CUSTOM_PROGRAM")
         )
         assertTrue(
-            "and the Program System is reached from its own Settings callback, which navigates to its " +
+            "the Program System is reached from its own Settings callback, which navigates to its " +
                 "own destination",
             activity.contains("onOpenPrograms = {")
         )

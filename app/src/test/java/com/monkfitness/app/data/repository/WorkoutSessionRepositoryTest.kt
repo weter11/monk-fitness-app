@@ -124,7 +124,6 @@ class WorkoutSessionRepositoryTest {
     @Test
     fun confirmedSetsAreRowsInProgramSetLogAndComeBackInSetOrder() = runBlocking {
         startAndLoad()
-        rig.database.exec("INSERT INTO `set_log` (`exerciseId`, `repsCompleted`, `durationSeconds`, `timestamp`, `sessionDate`) VALUES ('pushup', 12, 0, 1700000000000, '2026-09-21')")
         val occurrence = SessionExerciseId("session-ex-a-1")
 
         rig.workoutSessionRepository.appendSet(occurrence, SetResult(SetLogId("set-a-3"), 3, 8, 0, ProgramGraphFixture.SET_THREE))
@@ -142,14 +141,9 @@ class WorkoutSessionRepositoryTest {
             rig.database.scalar("SELECT COUNT(*) FROM `program_set_log`")
         )
         assertEquals(
-            "and the legacy set log is not the table this layer writes (§30 step 15)",
-            "1",
-            rig.database.scalar("SELECT COUNT(*) FROM `set_log`")
-        )
-        assertEquals(
-            "the legacy row is untouched",
-            "12",
-            rig.database.scalar("SELECT `repsCompleted` FROM `set_log`")
+            "and `program_set_log` is the only set log there is (§30 step 15 dropped the shipped one)",
+            false,
+            rig.database.tableNames().contains("set_log")
         )
     }
 

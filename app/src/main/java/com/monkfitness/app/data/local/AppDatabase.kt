@@ -8,17 +8,14 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.monkfitness.app.data.model.AdaptiveAdjustmentEntity
-import com.monkfitness.app.data.model.AdaptiveDecisionRecord
 import com.monkfitness.app.data.model.AdaptiveDecisionRecordEntity
 import com.monkfitness.app.data.model.AppStateEntity
 import com.monkfitness.app.data.model.BodyWeightEntry
-import com.monkfitness.app.data.model.FamilyProgressionState
 import com.monkfitness.app.data.model.FamilyProgressionStateEntity
 import com.monkfitness.app.data.model.MealCycle
 import com.monkfitness.app.data.model.MealEntity
 import com.monkfitness.app.data.model.PostureSessionProgress
 import com.monkfitness.app.data.model.ProgramDayEntity
-import com.monkfitness.app.data.model.ProgramDayState
 import com.monkfitness.app.data.model.ProgramEntity
 import com.monkfitness.app.data.model.ProgramExerciseEntity
 import com.monkfitness.app.data.model.ProgramPauseEntity
@@ -27,26 +24,25 @@ import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
 import com.monkfitness.app.data.model.SessionExerciseEntity
 import com.monkfitness.app.data.model.SessionSnapshotEntity
 import com.monkfitness.app.data.model.SessionSnapshotExerciseEntity
-import com.monkfitness.app.data.model.SetLog
 import com.monkfitness.app.data.model.SetLogEntity
 import com.monkfitness.app.data.model.ShoppingItemEntity
-import com.monkfitness.app.data.model.UserProgress
 import com.monkfitness.app.data.model.WorkoutSessionEntity
 
 @Database(
     entities = [
-        UserProgress::class,
+        // The retained global tables: the posture / mobility track, the body-weight log and the
+        // nutrition plan's own calendar. None of them is keyed by a Program, a cycle or a program day,
+        // and all of them survive §30 step 15 unchanged — except `posture_session_progress`, whose own
+        // row identity was renamed to `trackCycle` / `trackDay` by `MIGRATION_11_12`.
         PostureSessionProgress::class,
-        SetLog::class,
         BodyWeightEntry::class,
-        ProgramDayState::class,
         MealCycle::class,
         MealEntity::class,
         ShoppingItemEntity::class,
-        FamilyProgressionState::class,
-        AdaptiveDecisionRecord::class,
-        // Program System target schema (§23). The ten entities above are the shipped ones and are
-        // unchanged by this stage: the target tables are added beside them, never in place of them.
+        // The Program System's schema (§23) — the only Program architecture the app has after §30
+        // step 15. The retired tables (`user_progress`, `program_day_state`, `set_log`,
+        // `family_progression_state`, `adaptive_decision_record`) are no longer declared here and are
+        // dropped by `MIGRATION_11_12`; nothing in this list was added to stand in for them.
         ProgramEntity::class,
         AppStateEntity::class,
         ProgramRevisionEntity::class,
@@ -63,21 +59,24 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         AdaptiveDecisionRecordEntity::class,
         AdaptiveAdjustmentEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
 abstract class AppDatabase : RoomDatabase() {
-    abstract fun progressDao(): ProgressDao
+    // The retained global accessors. `progressDao` is gone: the mixed DAO was **split** rather than
+    // deleted, and the operations that served unrelated global features now live in the DAO that owns
+    // them — `nutritionDao` for the meal-cycle calendar, its meals, its shopping list and the
+    // body-weight log, and `postureProgressDao` for the posture / mobility track.
+    abstract fun nutritionDao(): NutritionDao
 
-    abstract fun familyProgressionStateDao(): FamilyProgressionStateDao
+    abstract fun postureProgressDao(): PostureProgressDao
 
-    abstract fun adaptiveDecisionHistoryDao(): AdaptiveDecisionHistoryDao
+    /** Settings → Full reset. Global maintenance, over the tables the reset's contract names. */
+    abstract fun maintenanceDao(): MaintenanceDao
 
-    // Program System target DAOs (§30 step 3). One per target table, added beside the shipped
-    // accessors above — which are unchanged and still serve the tables they always served. No target
-    // DAO reads a Stage-1 table, and no Stage-1 DAO reads a target one: the two persistence
-    // generations coexist until §30 step 15 (docs/PROGRAM_ROOM_SCHEMA.md §3).
+    // The Program System's DAOs (§30 step 3): one per target table, and the only Program accessors
+    // there are. No target DAO reads a retired table, and no retired table is declared any more.
     abstract fun programDao(): ProgramDao
 
     abstract fun appStateDao(): AppStateDao
@@ -879,6 +878,80 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * §30 step 15 — the legacy schema is retired and the posture/mobility track's identity is renamed.
+         *
+         * ### What it drops, and why dropping is the right verb
+         *
+         * Five tables are removed, never converted:
+         *
+         * ```text
+         * user_progress              the shipped 56-day program's day-level completion
+         * program_day_state          its 1..56 grid, its cycle number and its missed flags
+         * set_log                    its set log — the target writes `program_set_log`
+         * family_progression_state   the Stage-1 adaptive generation's per-family progression
+         * adaptive_decision_record   the Stage-1 adaptive generation's decision audit trail
+         * ```
+         *
+         * The blueprint is explicit that **no legacy program or history migration is required**, so no row
+         * of these becomes a target row: a `UserProgress` row is not a session, a `ProgramDayState` row is
+         * not an opportunity, and a Stage-1 family level is not a target family state. Converting them
+         * would be inventing a mapping the data does not support, and the resulting target rows would claim
+         * a history that never happened. The destruction is deliberate, documented here and measured by
+         * `ProgramLegacyRemovalMigrationTest`.
+         *
+         * ### What it preserves, and how
+         *
+         * Everything else — the Program System's own tables, `app_state`, the body-weight log, the
+         * nutrition plan's calendar, meals and shopping list — is untouched: this migration issues no
+         * statement against any of them.
+         *
+         * `posture_session_progress` is the one table that changes shape, and its **rows are copied, not
+         * recreated**: `cycleNumber`/`day` become `trackCycle`/`trackDay`, which is a rename of the row's
+         * identity and not a reinterpretation of it (the track keeps its own 56-day calendar and its day 1
+         * is the same day). The table is rebuilt and filled from the old one rather than renamed in place,
+         * because `ALTER TABLE … RENAME COLUMN` needs SQLite 3.25 and this app's `minSdk` predates it on
+         * devices the app still supports; the copy is a plain column-for-column `SELECT`, so no row and no
+         * value is lost or invented.
+         */
+        internal val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // 1. The retained track: the same rows under its own two column names.
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `posture_session_progress_new` (
+                        `trackCycle` INTEGER NOT NULL,
+                        `trackDay` INTEGER NOT NULL,
+                        `isCompleted` INTEGER NOT NULL,
+                        `completionDate` INTEGER NOT NULL,
+                        `focusArea` TEXT NOT NULL,
+                        PRIMARY KEY(`trackCycle`, `trackDay`)
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    INSERT INTO `posture_session_progress_new`
+                        (`trackCycle`, `trackDay`, `isCompleted`, `completionDate`, `focusArea`)
+                    SELECT `cycleNumber`, `day`, `isCompleted`, `completionDate`, `focusArea`
+                    FROM `posture_session_progress`
+                    """.trimIndent()
+                )
+                database.execSQL("DROP TABLE `posture_session_progress`")
+                database.execSQL(
+                    "ALTER TABLE `posture_session_progress_new` RENAME TO `posture_session_progress`"
+                )
+
+                // 2. The retired tables. `IF EXISTS` because a database that was created from scratch at
+                //    an older version may legitimately never have held one of them.
+                database.execSQL("DROP TABLE IF EXISTS `user_progress`")
+                database.execSQL("DROP TABLE IF EXISTS `program_day_state`")
+                database.execSQL("DROP TABLE IF EXISTS `set_log`")
+                database.execSQL("DROP TABLE IF EXISTS `family_progression_state`")
+                database.execSQL("DROP TABLE IF EXISTS `adaptive_decision_record`")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -896,7 +969,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_7_8,
                         MIGRATION_8_9,
                         MIGRATION_9_10,
-                        MIGRATION_10_11
+                        MIGRATION_10_11,
+                        MIGRATION_11_12
                     )
                     .build()
                 INSTANCE = instance
