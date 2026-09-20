@@ -79,17 +79,21 @@ class AdaptiveDomainPurityTest {
     }
 
     @Test
-    fun thePlannedExerciseTypeLivesInThisPackage() {
-        // A pure domain type the mapper consumes: resolving it here means it is defined in
-        // domain.adaptive, not re-exported from the data layer.
-        val resolved = Class.forName("com.monkfitness.app.domain.adaptive.PlannedExercise")
+    fun thePurePresentationValueTheTargetRuntimeConsumesLivesInTheDomain() {
+        // §30 step 15 replaced this probe's subject. `PlannedExercise` was the Stage-1 mapper's pure
+        // type and is retired with it; the target runtime's equivalent — the presentation composed from
+        // a revision plus its standing adjustments — is `domain.workout.EffectiveExercise`, and the
+        // claim is the same one: it is a domain type, not something re-exported from the data layer.
+        val resolved = Class.forName("com.monkfitness.app.domain.workout.EffectiveExercise")
         assertEquals(
-            "PlannedExercise must live in the adaptive domain package",
-            javaClass.`package`?.name,
+            "the presented element must live in the domain, not in the data layer",
+            "com.monkfitness.app.domain.workout",
             resolved.`package`?.name
         )
-        // Pure: no data-layer supertype leaks through it.
         val name = resolved.superclass.name
-        assertTrue("PlannedExercise must not extend a data-layer type: $name", name == "java.lang.Object")
+        assertTrue(
+            "it must not extend a data-layer type: $name",
+            name == "java.lang.Object"
+        )
     }
 }

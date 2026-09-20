@@ -221,9 +221,12 @@ class CompositionRootArchitectureTest {
         val accessor = Regex("""database\.\w+Dao\(\)""")
 
         assertEquals(
-            "the composition root takes every DAO of the Program System graph from the one database — " +
-                "one accessor call per target table, and nowhere else in production",
-            17,
+            "the composition root takes every DAO of the target graph from the one database — one " +
+                "accessor call per target table — plus §16's reset. §30 step 15 changed the count from " +
+                "17 to 16 by removing the two Stage-1 handles (`familyProgressionStateDao`, " +
+                "`adaptiveDecisionHistoryDao`) and adding the reset's own, and nowhere else in " +
+                "production may take one",
+            16,
             accessor.findAll(codeOf("di/AppContainer.kt")).count()
         )
 
@@ -243,28 +246,38 @@ class CompositionRootArchitectureTest {
     }
 
     @Test
-    fun theShippedStageOneConstructionSitesAreUnchangedAndClosed() {
+    fun theShippedStageOneGenerationHasNoConstructionSiteLeft() {
+        // §30 step 15 inverted this claim rather than relaxing it. Until then the pin was a *closed
+        // list* — three sites, none of them new — because the Stage-1 generation was still wired
+        // beside the target one. Now the class itself is gone, so the closed list is the empty one and
+        // the claim is stronger: no source can construct a Stage-1 adapter, because there is none.
         assertEquals(
-            "the shipped Stage-1 adaptive adapter has exactly four construction sites: the composition " +
-                "root that wires both generations, and the two session-path factories that predate this " +
-                "stage and keep their own instances (§30 step 15 retires them)",
-            listOf(
-                "data/repository/AdaptiveSessionDecisionRecorder.kt",
-                "data/repository/SessionAdaptivePlanReader.kt",
-                "di/AppContainer.kt"
-            ),
+            "nothing constructs `AdaptiveRepository` any more: the Stage-1 generation is retired, not " +
+                "merely unwired",
+            emptyList<String>(),
             filesConstructing("AdaptiveRepository")
         )
-
-        val viewModel = codeOf("viewmodel/MainViewModel.kt")
         assertEquals(
-            "the view model's shipped constructions are pinned: this stage changes one line of the " +
-                "view model and must not grow it",
-            1,
-            occurrences(viewModel, "WorkoutRepository(")
+            "and the class does not exist to be constructed",
+            emptyList<String>(),
+            filesContaining("class AdaptiveRepository(")
         )
-        assertEquals(1, occurrences(viewModel, "SessionAdaptivePlanReader.of("))
-        assertEquals(1, occurrences(viewModel, "AdaptiveSessionDecisionRecorder.of("))
+
+        // The view model's three shipped constructions are gone with the session they belonged to, so
+        // the pin is that they cannot come back — a `WorkoutRepository(db)` line in the view model was
+        // the §26 violation this whole stage closes.
+        val viewModel = codeOf("viewmodel/MainViewModel.kt")
+        for (retired in listOf(
+            "WorkoutRepository(", "SessionAdaptivePlanReader.of(", "AdaptiveSessionDecisionRecorder.of(",
+            "SessionAdaptivePlanReader(", "AdaptiveSessionDecisionRecorder(", "AdaptiveWorkoutIntegration("
+        )) {
+            assertEquals(
+                "the view model must not construct `$retired` (§26: it receives what the composition " +
+                    "root built)",
+                0,
+                occurrences(viewModel, retired)
+            )
+        }
     }
 
     // ---- nothing above the composition root reaches down --------------------------------------------
@@ -292,17 +305,35 @@ class CompositionRootArchitectureTest {
         )
 
         assertEquals(
-            "and the one reach that remains is the shipped Stage-1 path taking the shared database " +
-                "from the application — pinned to that single line, which is exactly what §30 step 15 " +
-                "will delete",
+            "and the reaches that remain are the retained global stores the view model owns, taken from " +
+                "the shared database the application holds. §30 step 15 deleted the legacy " +
+                "`WorkoutRepository(db)` line this used to pin and replaced it with the two stores that " +
+                "have no Program in them — nutrition and the posture/mobility track",
             listOf("viewmodel/MainViewModel.kt"),
             filesContaining("container.database")
         )
         assertEquals(
-            "the view model takes the database, not the graph: it never names the composition root's type",
-            1,
+            "the view model takes the database, not the graph: it never names the composition root's " +
+                "type, and it reaches the database for exactly its two retained global stores. A third " +
+                "would be a third store appearing on the path this stage just cleared",
+            2,
             occurrences(codeOf("viewmodel/MainViewModel.kt"), "container.database")
         )
+        // The other direction of the same rule: none of those reaches may be a Program store.
+        val viewModel = codeOf("viewmodel/MainViewModel.kt")
+        for (targetDao in listOf(
+            "programDao()", "programRevisionDao()", "programDayDao()", "programExerciseDao()",
+            "programWorkoutSlotDao()", "workoutSessionDao()", "sessionSnapshotDao()",
+            "programSetLogDao()", "programAdaptiveDecisionDao()", "adaptiveAdjustmentDao()",
+            "appStateDao()", "maintenanceDao()"
+        )) {
+            assertEquals(
+                "the view model must not reach `$targetDao`: target Program work goes through the " +
+                    "services and controllers the container hands it",
+                0,
+                occurrences(viewModel, targetDao)
+            )
+        }
     }
 
     // ---- wiring is not behaviour --------------------------------------------------------------------

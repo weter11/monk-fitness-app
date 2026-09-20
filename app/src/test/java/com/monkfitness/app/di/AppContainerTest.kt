@@ -3,10 +3,8 @@ package com.monkfitness.app.di
 import com.monkfitness.app.data.local.AppDatabase
 import com.monkfitness.app.data.local.LegacyV7Schema
 import com.monkfitness.app.data.local.SqliteTestDatabase
-import com.monkfitness.app.data.model.FamilyProgressionState as StoredFamilyState
 import com.monkfitness.app.data.repository.ProgramGraphFixture
 import com.monkfitness.app.data.repository.failureOf
-import com.monkfitness.app.domain.adaptive.AdaptiveReasonCode
 import com.monkfitness.app.domain.adaptive.AdaptiveState
 import com.monkfitness.app.domain.adaptive.ConfidenceLevel
 import com.monkfitness.app.domain.adaptive.EvidenceLevel
@@ -105,8 +103,11 @@ class AppContainerTest {
                 .toMap()
 
             assertEquals(
-                "the container constructs exactly the Program System's repositories and both adaptive " +
-                    "generations: a missing one is a wiring gap, an extra one is a second owner",
+                "the container constructs exactly the Program System's repositories, the target " +
+                    "adaptive pair and §16's reset: a missing one is a wiring gap, an extra one is a " +
+                    "second owner. §30 step 15 removed `AdaptiveRepository` — the Stage-1 generation's " +
+                    "node — so the map is shorter by one and `programAdaptiveRepository` is the only " +
+                    "adaptive repository there is",
                 mapOf(
                     "programRepository" to "ProgramRepository",
                     "programPlanRepository" to "ProgramPlanRepository",
@@ -115,18 +116,18 @@ class AppContainerTest {
                     "programProgressRepository" to "ProgramProgressRepository",
                     "appStateRepository" to "AppStateRepository",
                     "programAdaptiveRepository" to "ProgramAdaptiveRepository",
-                    "adaptiveRepository" to "AdaptiveRepository"
+                    "maintenanceRepository" to "MaintenanceRepository"
                 ),
                 constructed
             )
 
-            // Constructed means constructed: eight live objects over the database, none of them the
+            // Constructed means constructed: every node live over the database, none of them the
             // same object as another, and none of them a `lateinit` waiting for a consumer.
             val repositories = listOf(
                 rig.container.programRepository, rig.container.programPlanRepository,
                 rig.container.programScheduleRepository, rig.container.workoutSessionRepository,
                 rig.container.programProgressRepository, rig.container.appStateRepository,
-                rig.container.programAdaptiveRepository, rig.container.adaptiveRepository
+                rig.container.programAdaptiveRepository, rig.container.maintenanceRepository
             )
             repositories.forEach { assertNotNull("a repository the container declares is null", it) }
             assertEquals(
@@ -285,12 +286,15 @@ class AppContainerTest {
                 "programWorkoutSlotDao", "workoutSessionDao", "sessionSnapshotDao",
                 "sessionSnapshotExerciseDao", "sessionExerciseDao", "programSetLogDao", "programPauseDao",
                 "programFamilyProgressionStateDao", "programAdaptiveDecisionDao", "adaptiveAdjustmentDao",
-                "familyProgressionStateDao", "adaptiveDecisionHistoryDao"
+                // §30 step 15: the two Stage-1 handles are gone and §16's one global maintenance
+                // operation takes its own. It is a graph node because the reset's transaction runner
+                // belongs to the composition root (§26), not because a Program path reaches it.
+                "maintenanceDao"
             )
 
             assertEquals(
-                "the composition root takes exactly one DAO per table the Program System uses, and " +
-                    "nothing else from the database",
+                "the composition root takes exactly one DAO per table the Program System uses, plus " +
+                    "the reset's own, and nothing else from the database",
                 expected.sorted(),
                 rig.database.accessorCalls.keys.sorted()
             )
@@ -300,11 +304,14 @@ class AppContainerTest {
                 expected.associateWith { 1 },
                 rig.database.accessorCalls.toMap()
             )
-            assertTrue(
-                "the Program System reads no shipped progress table (§23: no new architecture " +
-                    "dependency on `UserProgress`)",
-                "progressDao" !in rig.database.accessorCalls
-            )
+            // §30 step 15 strengthened this half: the retired accessors are not merely unasked, they
+            // are no longer *declared* on the database, so there is nothing for a future caller to ask.
+            for (retired in listOf("progressDao", "familyProgressionStateDao", "adaptiveDecisionHistoryDao")) {
+                assertTrue(
+                    "the retired accessor $retired is gone from the database",
+                    retired !in rig.database.accessorCalls
+                )
+            }
         } finally {
             rig.close()
         }
@@ -468,122 +475,5 @@ class AppContainerTest {
         } finally {
             rig.close()
         }
-    }
-
-    // ---- the two persistence generations ---------------------------------------------------------
-
-    @Test
-    fun theTwoAdaptiveGenerationsAreWiredToTheirOwnTables() = runBlocking {
-        val rig = newRig("generations")
-        try {
-            val revisionId = RevisionId(ProgramGraphFixture.revisionId("generations"))
-            rig.container.programRepository.createProgram(
-                rig.graph.program, rig.graph.revision, rig.graph.slots
-            )
-
-            // The shipped generation, written through the container: its tables, and the stamp the
-            // caller chose rather than any clock the container holds.
-            rig.container.adaptiveRepository.saveFamilyState(
-                StoredFamilyState(
-                    familyId = "push-family",
-                    progressionLevel = 1,
-                    currentExerciseId = "pushup",
-                    adaptationState = AdaptiveState.PROGRESS,
-                    eligibleSessionsSinceLastProgressionChange = 4,
-                    programRevision = 0,
-                    updatedAt = LEGACY_STAMP
-                )
-            )
-            rig.container.adaptiveRepository.appendDecision(
-                rig.container.adaptiveRepository.decisionRecord(
-                    decision = LEGACY_DECISION,
-                    programRevision = 0,
-                    cycleNumber = 1,
-                    programDay = 3,
-                    timestamp = LEGACY_STAMP
-                )
-            )
-
-            assertEquals(1, rig.rowCount("family_progression_state"))
-            assertEquals(1, rig.rowCount("adaptive_decision_record"))
-            assertEquals(
-                "a write through the shipped adapter reached no target table",
-                0,
-                rig.rowCount("program_family_progression_state") +
-                    rig.rowCount("program_adaptive_decision_record")
-            )
-            assertEquals(
-                "the shipped adapter stamps nothing — the stored stamp is the caller's, not the " +
-                    "container's clock (which reads ${ProgramGraphFixture.CREATED} here)",
-                LEGACY_STAMP,
-                rig.engine.scalar("SELECT updatedAt FROM `family_progression_state`")!!.toLong()
-            )
-
-            val shippedRows =
-                rig.rows("family_progression_state") + rig.rows("adaptive_decision_record")
-
-            // The target generation: the same shape of write, on its own tables of the same database.
-            rig.container.programAdaptiveRepository.saveFamilyState(
-                FamilyProgressionState(
-                    revisionId = revisionId,
-                    familyId = "push-family",
-                    progressionLevel = 2,
-                    adaptationState = AdaptiveState.PROGRESS,
-                    updatedAt = ProgramGraphFixture.STARTED
-                )
-            )
-            rig.container.programAdaptiveRepository.persistDecision(
-                AdaptiveDecision(
-                    decisionId = DecisionId("decision-generations"),
-                    programId = rig.graph.program.programId,
-                    revisionId = revisionId,
-                    slotId = rig.graph.slotFor(1).slotId,
-                    target = AdaptiveTarget.Family("push-family"),
-                    action = AdaptiveAction.PROGRESS,
-                    outcome = DecisionOutcome.NOT_APPLIED,
-                    evidence = EvidenceLevel.STRONG,
-                    confidence = ConfidenceLevel.HIGH,
-                    recovery = RecoveryContext.FAVORABLE,
-                    decidedAt = ProgramGraphFixture.CREATED
-                )
-            )
-
-            assertEquals(1, rig.rowCount("program_family_progression_state"))
-            assertEquals(1, rig.rowCount("program_adaptive_decision_record"))
-            assertEquals(
-                "a target write changes nothing in the shipped tables: the two generations share a " +
-                    "database and no rows",
-                shippedRows,
-                rig.rows("family_progression_state") + rig.rows("adaptive_decision_record")
-            )
-            assertEquals(
-                "the target generation stamps with the container's clock while the shipped one keeps " +
-                    "the caller's value — the two are separate in both directions",
-                ProgramGraphFixture.CREATED.toEpochMilli(),
-                rig.engine.scalar("SELECT updatedAt FROM `program_family_progression_state`")!!.toLong()
-            )
-        } finally {
-            rig.close()
-        }
-    }
-
-    private companion object {
-
-        /** A stamp no clock in the container produces, so "who stamped this row" is decidable. */
-        const val LEGACY_STAMP = 1_700_000_000_000L
-
-        /**
-         * The shipped Stage-1 adaptive decision, in the pilot's own vocabulary
-         * (`domain.adaptive`, not `domain.adaptive.decision`): the two names coexist until §30 step
-         * 15, and a test that used the target type here would be testing the wrong generation.
-         */
-        val LEGACY_DECISION = com.monkfitness.app.domain.adaptive.AdaptiveDecision(
-            state = AdaptiveState.PROGRESS,
-            previousState = AdaptiveState.HOLD,
-            actions = listOf(com.monkfitness.app.domain.adaptive.AdaptiveAction.INCREASE_STIMULUS),
-            reasonCode = AdaptiveReasonCode.SUSTAINED_POSITIVE_PERFORMANCE,
-            policyVersion = 1,
-            familyId = "push-family"
-        )
     }
 }

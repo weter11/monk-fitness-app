@@ -70,30 +70,17 @@ class ProgramAdaptiveRepositoryTest {
         supersedesAdjustmentId = supersedes?.let { AdjustmentId("adjustment-$it") }
     )
 
-    private suspend fun stageOneRows(): List<Map<String, String?>> {
-        rig.database.exec(
-            "INSERT INTO `family_progression_state` (`familyId`, `progressionLevel`, `currentExerciseId`, " +
-                "`adaptationState`, `precedingProgressQualifyingWindows`, `precedingRegressQualifyingWindows`, " +
-                "`precedingHighRiskWindows`, `recoveryQualifyingSessions`, " +
-                "`eligibleSessionsSinceLastProgressionChange`, `programRevision`, `updatedAt`, `policyVersion`) " +
-                "VALUES ('push-family', 1, 'pushup', 'PROGRESS', 2, 0, 0, 0, 4, 0, 1700000000000, 1)"
-        )
-        rig.database.exec(
-            "INSERT INTO `adaptive_decision_record` (`familyId`, `programRevision`, `cycleNumber`, " +
-                "`programDay`, `timestamp`, `previousState`, `newState`, `actions`, `reasonCode`, " +
-                "`policyVersion`) VALUES ('push-family', 0, 1, 3, 1700000000000, 'HOLD', 'PROGRESS', " +
-                "'PROGRESS', 'PROGRESS_CONFIRMED', 1)"
-        )
-        return rig.database.rows("SELECT * FROM `family_progression_state`") +
-            rig.database.rows("SELECT * FROM `adaptive_decision_record`")
-    }
-
-    // ---- the target/legacy separation -------------------------------------------------------------
+    // ---- the target repository is the only adaptive persistence -------------------------------------
 
     @Test
     fun theTargetRepositoryReadsAndWritesOnlyTheTargetTables() = runBlocking {
         rig.createGraph()
-        val legacyBefore = stageOneRows()
+
+        // §30 step 15 inverted this test's second half. It used to stage rows in the two Stage-1 tables
+        // and prove every target write left them byte-identical — the point being that two generations
+        // shared one database without touching each other. There is one generation now and those tables
+        // are dropped, so there is nothing left to be left alone; what the test still measures is the half
+        // that can regress: a target write lands in the target tables, and the *retained* tables stay empty.
 
         val state = FamilyProgressionState(
             revisionId = revisionId,
@@ -116,10 +103,14 @@ class ProgramAdaptiveRepositoryTest {
             )
         )
         assertEquals(
-            "and the Stage-1 rows are byte-identical after every target write (§30 step 15)",
-            legacyBefore,
-            rig.database.rows("SELECT * FROM `family_progression_state`") +
-                rig.database.rows("SELECT * FROM `adaptive_decision_record`")
+            "and the retired tables are not in the schema for a target write to reach, and the retained " +
+                "global ones are untouched",
+            listOf(0, 0, 0),
+            listOf(
+                rig.database.count("posture_session_progress"),
+                rig.database.count("body_weight_log"),
+                rig.database.count("meal_cycles")
+            )
         )
         assertEquals(
             "the target repository sees only its own family state",
@@ -134,7 +125,7 @@ class ProgramAdaptiveRepositoryTest {
     }
 
     @Test
-    fun theStageOneAdaptiveRepositoryIsStillTheOnlyClassWithThatName() = runBlocking {
+    fun noClassNamedAdaptiveRepositorySurvivesAndTheTargetOneIsTheOnlyAdaptiveRepository() = runBlocking {
         val sources = java.io.File("src/main/java/com/monkfitness/app/data/repository").let {
             if (it.isDirectory) it else java.io.File("app/src/main/java/com/monkfitness/app/data/repository")
         }
@@ -142,10 +133,14 @@ class ProgramAdaptiveRepositoryTest {
             .filter { it.readText().contains("class AdaptiveRepository(") }
             .map { it.name }
 
+        // §30 step 15 inverted this claim. Until then the *target* repository had to keep its own name
+        // because the Stage-1 `AdaptiveRepository` was still wired beside it; now the Stage-1 class is
+        // gone, so the target one is simply *the* adaptive repository and the generic name is free — and
+        // must stay free, because a second class claiming it would be a second owner of the same tables.
         assertEquals(
-            "the target layer took its own name; the shipped Stage-1 class was neither renamed nor " +
-                "duplicated (§24)",
-            listOf("AdaptiveRepository.kt"),
+            "the Stage-1 `AdaptiveRepository` is retired; `ProgramAdaptiveRepository` is the only " +
+                "adaptive repository and the generic name belongs to nothing",
+            emptyList<String>(),
             declaring
         )
     }

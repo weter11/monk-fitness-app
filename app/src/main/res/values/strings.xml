@@ -730,14 +730,6 @@
 
     <!-- C3 Manual Controls -->
     <string name="program_controls_title">Program controls</string>
-    <string name="restart_current_cycle">Restart current cycle</string>
-    <string name="restart_current_cycle_desc">Clears progress for the current cycle only. Start date, settings and previous cycle history are kept.</string>
-    <string name="restart_current_cycle_confirm">Restart current cycle?</string>
-    <string name="restart_current_cycle_confirm_text">All completions of the current cycle will be cleared. Previous cycle history is kept. This cannot be undone.</string>
-    <string name="start_revised_program">Start revised program</string>
-    <string name="start_revised_program_desc">Restarts the program from day 1 today. Previous program history stays available in the archive.</string>
-    <string name="start_revised_program_confirm">Start revised program?</string>
-    <string name="start_revised_program_confirm_text">The program calendar restarts from today at day 1. Your previous program history remains in the archive. This cannot be undone.</string>
     <string name="full_reset">Full reset</string>
     <string name="full_reset_desc">Erases your program data: workouts, posture sessions, statistics, settings and onboarding state. Nutrition plans are kept. The app returns to first launch.</string>
     <string name="full_reset_confirm">Perform full reset?</string>
@@ -756,34 +748,6 @@
     <string name="cancel">Cancel</string>
 
     <!-- Custom Program editor -->
-    <string name="custom_program">Custom Program</string>
-    <string name="custom_program_desc">Choose which exercises a generated workout may use.</string>
-    <string name="custom_program_future_only_hint">Changes apply to your next workout that has not started yet.</string>
-    <string name="custom_program_default_selection">Default selection</string>
-    <string name="custom_program_custom_selection">Custom selection</string>
-    <string name="custom_program_enabled_count">%1$d exercises enabled</string>
-    <string name="custom_program_search_label">Search exercises</string>
-    <string name="custom_program_search_clear">Clear search</string>
-    <string name="custom_program_no_results">No exercise matches this search.</string>
-    <string name="custom_program_apply">Apply</string>
-    <string name="custom_program_reset">Reset to default</string>
-    <string name="custom_program_reset_confirm_title">Reset to the default selection?</string>
-    <string name="custom_program_reset_confirm_text">The standard set of exercises is restored. Training history, progress and the program calendar are kept.</string>
-    <string name="custom_program_error_header">This selection cannot be applied</string>
-    <string name="custom_program_error_missing_domain">No enabled exercise covers %1$s.</string>
-    <string name="custom_program_error_unavailable_equipment">%1$s needs equipment you have not selected. You can change your equipment in Settings.</string>
-    <string name="custom_program_requires_equipment">Requires</string>
-    <string name="custom_program_warning_header">Balance warnings</string>
-    <string name="custom_program_warning_region_not_covered">No enabled exercise trains %1$s. The program days can still be filled from the other regions.</string>
-    <string name="custom_program_warning_region_concentration">%1$s holds %2$d enabled exercises, more than all other regions together.</string>
-    <string name="custom_program_family_all_enabled">All enabled</string>
-    <string name="custom_program_family_partial">Partially enabled</string>
-    <string name="custom_program_family_none_enabled">None enabled</string>
-    <string name="custom_program_family_count">%1$d of %2$d exercises enabled</string>
-    <string name="custom_program_family_toggle_description">%1$s, %2$s. Toggles the whole family.</string>
-    <string name="custom_program_domain_strength">the strength domain</string>
-    <string name="custom_program_domain_flexibility">the flexibility domain</string>
-    <string name="custom_program_unknown_family">Other exercises</string>
 
     <!-- ======================================================================================
          §30 step 14 — the Program System's user interface (Programs / My Programs / Detail /
@@ -967,7 +931,63 @@
     <string name="programs_refused_archive_selection">The active program cannot be archived. Select another program first.</string>
     <string name="programs_refused_transition">This action is not allowed in the program\'s current state.</string>
     <string name="programs_refused_not_found">The program no longer exists.</string>
-    <string name="programs_legacy_controls_note">These controls act on the app\'s built-in workout program. Your own programs are managed under Programs.</string>
     <string name="programs_notice_planned_start_set">Planned start date saved</string>
     <string name="programs_detail_next_workout_unreadable">The schedule could not be read</string>
+    <string name="programs_session_title">Workout</string>
+    <string name="programs_session_start">Start workout</string>
+    <string name="programs_session_loading">Preparing the workout…</string>
+    <string name="programs_session_planned_date">Planned for %1$s</string>
+    <string name="programs_session_sets_progress">%1$d of %2$d sets</string>
+    <string name="programs_session_set_of">Set %1$d of %2$d</string>
+    <string name="programs_session_reps_target">%1$d reps</string>
+    <string name="programs_session_seconds_target">%1$d s</string>
+    <string name="programs_session_confirm_set">Confirm set</string>
+    <string name="programs_session_rest">Rest %1$d s</string>
+    <string name="programs_session_skip_rest">Skip rest</string>
+    <string name="programs_session_finish">Finish workout</string>
+    <string name="programs_session_finish_early_title">Finish anyway?</string>
+    <string name="programs_session_finish_early_text">Not every set is confirmed. Finishing records this workout as completed.</string>
+    <string name="programs_session_cancel">Cancel workout</string>
+    <string name="programs_session_cancel_confirm_title">Cancel this workout?</string>
+    <string name="programs_session_cancel_confirm_text">The workout stays on the plan and is saved as a cancelled attempt, so you can start it again later.</string>
+    <string name="programs_session_result_completed">Workout complete</string>
+    <string name="programs_session_result_cancelled">Workout cancelled</string>
+    <string name="programs_session_exercise_details">Exercise details</string>
+    <string name="programs_session_notice_title">Notice</string>
+    <string name="programs_session_slot_unavailable">This workout cannot be started from the plan it belongs to.</string>
+    <string name="programs_session_already_in_progress">This workout is already in progress, but the stored attempt could not be read.</string>
+    <string name="programs_session_completed_adaptive_unavailable">The workout was saved. The adaptive part could not be read, so nothing was changed.</string>
+    <string name="programs_home_current_program">Current program</string>
+    <string name="programs_home_no_program">No program is selected</string>
+    <string name="programs_home_next_workout">Next workout</string>
+    <string name="programs_home_next_planned">Planned for %1$s</string>
+    <string name="programs_home_nothing_planned">Nothing is planned yet</string>
+    <string name="programs_home_schedule_unreadable">The schedule could not be read</string>
+    <string name="programs_home_calendar">%1$d completed, %2$d missed, %3$d upcoming</string>
+    <string name="programs_home_open_programs">Open Programs</string>
+    <string name="programs_home_streak">Streak</string>
+    <string name="programs_home_completed">Completed</string>
+    <string name="programs_home_upcoming">Upcoming</string>
+    <string name="programs_home_notice_title">Notice</string>
+    <string name="posture_session_complete">Complete session</string>
+    <string name="posture_session_nothing_to_present">There is nothing to present for this track day.</string>
+    <string name="progress_scope_all">All programs</string>
+    <string name="progress_calendar_title">Calendar</string>
+    <string name="progress_calendar_value">%1$d completed \u00b7 %2$d missed \u00b7 %3$d upcoming \u00b7 %4$d superseded</string>
+    <string name="progress_frequency_title">Training frequency</string>
+    <string name="progress_frequency_training_days">Training days: %1$d of %2$d</string>
+    <string name="progress_frequency_per_week">Sessions per 7 days: %1$s</string>
+    <string name="progress_duration_value">Average of %1$d measured sessions: %2$s</string>
+    <string name="progress_duration_unmeasured">No finished session is measurable yet</string>
+    <string name="progress_streak_title">Program streak</string>
+    <string name="progress_streak_row">%1$s \u2014 current %2$d, longest %3$d</string>
+    <string name="progress_history_title">Recent workouts</string>
+    <string name="progress_history_row">%1$s \u00b7 %2$s \u00b7 %3$d sets \u00b7 %4$d exercises</string>
+    <string name="progress_history_empty">No workout has been attempted yet.</string>
+    <string name="progress_performance_title">Exercise progression</string>
+    <string name="progress_performance_rep_row">%1$s \u2014 %2$d observations, best %3$d reps</string>
+    <string name="progress_performance_time_row">%1$s \u2014 %2$d observations, best %3$d s</string>
+    <string name="progress_performance_empty">No comparable set has been recorded yet.</string>
+    <string name="progress_deferred_title">Not computed yet</string>
+    <string name="progress_notice_title">Notice</string>
 </resources>

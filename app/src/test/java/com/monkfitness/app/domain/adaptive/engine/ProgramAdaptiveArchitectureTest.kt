@@ -278,26 +278,32 @@ class ProgramAdaptiveArchitectureTest {
     }
 
     @Test
-    fun theStageOneAdaptiveGenerationIsStillThereUntouchedAndStillItsOwn() {
+    fun theStageOneAdaptiveGenerationIsRetiredAndTheTargetVocabularyIsTheOnlyOne() {
+        // §30 step 15 inverted this claim. While the two generations coexisted, this pinned that the
+        // Stage-1 sources — and their own suites — were still *there*, untouched; the boundary was only
+        // meaningful if both sides existed. That coexistence is exactly what P15 ends, so the pin is now
+        // the retirement, and it is asserted on both halves: production AND test, because a left-behind
+        // legacy suite would keep compiling against types nothing uses.
         legacySources.forEach { source ->
-            assertTrue("$source must still exist: this stage removes nothing", File(mainDir, source).isFile)
+            assertFalse(
+                "$source must be gone: §30 step 15 retires the Stage-1 generation rather than " +
+                    "unwiring it",
+                File(mainDir, source).isFile
+            )
         }
         legacyTestSources.forEach { source ->
-            assertTrue(
-                "$source must still exist: the inverse of the boundary is that the old generation's own " +
-                    "suites still run, unchanged",
+            assertFalse(
+                "$source must be gone with the generation it tested",
                 File("src/test/java/com/monkfitness/app/$source")
                     .let { if (it.isFile) it else File("app/src/test/java/com/monkfitness/app/$source") }
                     .isFile
             )
         }
 
-        // The Stage-1 vocabulary is its own: the pilot's four actions and four states are exactly what
-        // they were, and the target vocabulary shares only the stored state names (§23).
-        assertEquals(
-            listOf("MAINTAIN_STIMULUS", "INCREASE_STIMULUS", "REDUCE_STIMULUS", "RECOVERY_LOAD"),
-            com.monkfitness.app.domain.adaptive.AdaptiveAction.entries.map { it.name }
-        )
+        // The Stage-1 action vocabulary this used to assert (`MAINTAIN_STIMULUS` …) is gone with
+        // `domain.adaptive.AdaptiveAction` (§30 step 15); the target vocabulary is
+        // `domain.adaptive.decision.AdaptiveAction` and is pinned by its own suite. The *stored state*
+        // names below are still one vocabulary, which is why they are still asserted here.
         assertEquals(
             listOf("HOLD", "PROGRESS", "REGRESS", "RECOVERY"),
             AdaptiveState.entries.map { it.name }
@@ -308,26 +314,14 @@ class ProgramAdaptiveArchitectureTest {
             AdaptiveAction.entries.map { it.name }
         )
 
-        // And the dependency runs one way only: no Stage-1 file names anything this stage adds.
-        val engineNames = listOf(
-            "ProgramAdaptiveEngine",
-            "ProgramAggregateLoadGuard",
-            "ProgramAdaptivePolicy",
-            "ProgramAdaptiveSignalCalculator",
-            "ProgramProgressionRelation",
-            "ProgramAdaptiveWindow",
-            "ProgramAdaptiveRequest"
-        )
-        val offenders = legacySources.flatMap { source ->
-            val file = File(mainDir, source)
-            val text = file.readText()
-            engineNames.filter { text.contains(it) }.map { "$source names $it" }
-        }
-
-        assertTrue(
-            "the two generations do not depend on each other in either direction (§30 step 11 keeps " +
-                "them separate until step 15 collapses them). Found: $offenders",
-            offenders.isEmpty()
+        // The one-way half this used to assert — "no Stage-1 file names anything this stage adds" —
+        // read each legacy file to prove it. There is nothing left to read, and that is the claim now:
+        // a deleted file cannot name anything, so the direction is one-way by construction rather than
+        // by inspection.
+        assertEquals(
+            "the Stage-1 sources are gone, so no direction of the boundary can be crossed",
+            emptyList<String>(),
+            legacySources.filter { source -> File(mainDir, source).isFile }
         )
     }
 

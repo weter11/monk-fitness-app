@@ -723,14 +723,6 @@
 
     <!-- C3 Manual Controls -->
     <string name="program_controls_title">Управление программой</string>
-    <string name="restart_current_cycle">Перезапустить текущий цикл</string>
-    <string name="restart_current_cycle_desc">Очищает прогресс только текущего цикла. Дата старта, настройки и история прошлых циклов сохраняются.</string>
-    <string name="restart_current_cycle_confirm">Перезапустить текущий цикл?</string>
-    <string name="restart_current_cycle_confirm_text">Все отметки выполнения текущего цикла будут удалены. История прошлых циклов сохранится. Отменить это нельзя.</string>
-    <string name="start_revised_program">Начать пересмотренную программу</string>
-    <string name="start_revised_program_desc">Запускает программу заново с 1-го дня начиная с сегодняшнего. Прошлая история программы останется в архиве.</string>
-    <string name="start_revised_program_confirm">Начать пересмотренную программу?</string>
-    <string name="start_revised_program_confirm_text">Календарь программы начнётся заново с сегодняшнего дня, с 1-го дня. Прошлая история программы останется в архиве. Отменить это нельзя.</string>
     <string name="full_reset">Полный сброс</string>
     <string name="full_reset_desc">Удаляет данные программы: тренировки, занятия осанкой, статистику, настройки и состояние онбординга. Планы питания сохраняются. Приложение вернётся к первому запуску.</string>
     <string name="full_reset_confirm">Выполнить полный сброс?</string>
@@ -749,34 +741,6 @@
     <string name="cancel">Отмена</string>
 
     <!-- Custom Program editor -->
-    <string name="custom_program">Своя программа</string>
-    <string name="custom_program_desc">Выберите, какие упражнения могут использоваться в тренировке.</string>
-    <string name="custom_program_future_only_hint">Изменения применятся к следующей ещё не начатой тренировке.</string>
-    <string name="custom_program_default_selection">Стандартный выбор</string>
-    <string name="custom_program_custom_selection">Свой выбор</string>
-    <string name="custom_program_enabled_count">Включено упражнений: %1$d</string>
-    <string name="custom_program_search_label">Поиск упражнений</string>
-    <string name="custom_program_search_clear">Очистить поиск</string>
-    <string name="custom_program_no_results">По этому запросу упражнений нет.</string>
-    <string name="custom_program_apply">Применить</string>
-    <string name="custom_program_reset">Сбросить к стандартным</string>
-    <string name="custom_program_reset_confirm_title">Сбросить выбор к стандартному?</string>
-    <string name="custom_program_reset_confirm_text">Вернётся стандартный набор упражнений. История тренировок, прогресс и календарь программы сохранятся.</string>
-    <string name="custom_program_error_header">Этот выбор нельзя применить</string>
-    <string name="custom_program_error_missing_domain">Ни одно включённое упражнение не покрывает %1$s.</string>
-    <string name="custom_program_error_unavailable_equipment">Для %1$s нужно оборудование, которое вы не выбрали. Изменить оборудование можно в настройках.</string>
-    <string name="custom_program_requires_equipment">Требуется</string>
-    <string name="custom_program_warning_header">Предупреждения о балансе</string>
-    <string name="custom_program_warning_region_not_covered">Ни одно включённое упражнение не прорабатывает %1$s. Дни программы всё равно можно заполнить из других зон.</string>
-    <string name="custom_program_warning_region_concentration">На %1$s приходится %2$d включённых упражнений — больше, чем на все остальные зоны вместе.</string>
-    <string name="custom_program_family_all_enabled">Включена полностью</string>
-    <string name="custom_program_family_partial">Включена частично</string>
-    <string name="custom_program_family_none_enabled">Ничего не включено</string>
-    <string name="custom_program_family_count">Включено %1$d из %2$d упражнений</string>
-    <string name="custom_program_family_toggle_description">%1$s, %2$s. Переключает всю группу.</string>
-    <string name="custom_program_domain_strength">силовое направление</string>
-    <string name="custom_program_domain_flexibility">направление гибкости</string>
-    <string name="custom_program_unknown_family">Другие упражнения</string>
 
     <!-- ======================================================================================
          §30 step 14 — the Program System's user interface (Programs / My Programs / Detail /
@@ -960,7 +924,63 @@
     <string name="programs_refused_archive_selection">Активную программу нельзя отправить в архив. Сначала выберите другую.</string>
     <string name="programs_refused_transition">Это действие недоступно в текущем состоянии программы.</string>
     <string name="programs_refused_not_found">Программы больше не существует.</string>
-    <string name="programs_legacy_controls_note">Эти действия относятся к встроенной программе тренировок. Свои программы ведите в разделе «Программы».</string>
     <string name="programs_notice_planned_start_set">Дата начала сохранена</string>
     <string name="programs_detail_next_workout_unreadable">Не удалось прочитать расписание</string>
+    <string name="programs_session_title">Тренировка</string>
+    <string name="programs_session_start">Начать тренировку</string>
+    <string name="programs_session_loading">Подготовка тренировки…</string>
+    <string name="programs_session_planned_date">Запланировано на %1$s</string>
+    <string name="programs_session_sets_progress">%1$d из %2$d подходов</string>
+    <string name="programs_session_set_of">Подход %1$d из %2$d</string>
+    <string name="programs_session_reps_target">%1$d повторов</string>
+    <string name="programs_session_seconds_target">%1$d с</string>
+    <string name="programs_session_confirm_set">Подтвердить подход</string>
+    <string name="programs_session_rest">Отдых %1$d с</string>
+    <string name="programs_session_skip_rest">Пропустить отдых</string>
+    <string name="programs_session_finish">Завершить тренировку</string>
+    <string name="programs_session_finish_early_title">Всё равно завершить?</string>
+    <string name="programs_session_finish_early_text">Подтверждены не все подходы. При завершении тренировка будет записана как выполненная.</string>
+    <string name="programs_session_cancel">Отменить тренировку</string>
+    <string name="programs_session_cancel_confirm_title">Отменить эту тренировку?</string>
+    <string name="programs_session_cancel_confirm_text">Тренировка остаётся в плане и сохраняется как отменённая попытка — начать её можно позже.</string>
+    <string name="programs_session_result_completed">Тренировка выполнена</string>
+    <string name="programs_session_result_cancelled">Тренировка отменена</string>
+    <string name="programs_session_exercise_details">Описание упражнения</string>
+    <string name="programs_session_notice_title">Сообщение</string>
+    <string name="programs_session_slot_unavailable">Эту тренировку нельзя начать по плану, к которому она относится.</string>
+    <string name="programs_session_already_in_progress">Эта тренировка уже выполняется, но сохранённую попытку не удалось прочитать.</string>
+    <string name="programs_session_completed_adaptive_unavailable">Тренировка сохранена. Адаптивную часть прочитать не удалось, поэтому ничего не изменено.</string>
+    <string name="programs_home_current_program">Текущая программа</string>
+    <string name="programs_home_no_program">Программа не выбрана</string>
+    <string name="programs_home_next_workout">Следующая тренировка</string>
+    <string name="programs_home_next_planned">Запланировано на %1$s</string>
+    <string name="programs_home_nothing_planned">Пока ничего не запланировано</string>
+    <string name="programs_home_schedule_unreadable">Не удалось прочитать расписание</string>
+    <string name="programs_home_calendar">Выполнено: %1$d, пропущено: %2$d, впереди: %3$d</string>
+    <string name="programs_home_open_programs">Открыть «Программы»</string>
+    <string name="programs_home_streak">Серия</string>
+    <string name="programs_home_completed">Выполнено</string>
+    <string name="programs_home_upcoming">Впереди</string>
+    <string name="programs_home_notice_title">Сообщение</string>
+    <string name="posture_session_complete">Завершить занятие</string>
+    <string name="posture_session_nothing_to_present">Для этого дня трека нечего показать.</string>
+    <string name="progress_scope_all">Все программы</string>
+    <string name="progress_calendar_title">Календарь</string>
+    <string name="progress_calendar_value">%1$d выполнено \u00b7 %2$d пропущено \u00b7 %3$d впереди \u00b7 %4$d замещено</string>
+    <string name="progress_frequency_title">Частота тренировок</string>
+    <string name="progress_frequency_training_days">Тренировочных дней: %1$d из %2$d</string>
+    <string name="progress_frequency_per_week">Тренировок за 7 дней: %1$s</string>
+    <string name="progress_duration_value">Среднее по %1$d измеренным тренировкам: %2$s</string>
+    <string name="progress_duration_unmeasured">Пока нет завершённой тренировки, которую можно измерить</string>
+    <string name="progress_streak_title">Серия программы</string>
+    <string name="progress_streak_row">%1$s \u2014 текущая %2$d, лучшая %3$d</string>
+    <string name="progress_history_title">Последние тренировки</string>
+    <string name="progress_history_row">%1$s \u00b7 %2$s \u00b7 подходов: %3$d \u00b7 упражнений: %4$d</string>
+    <string name="progress_history_empty">Пока не начато ни одной тренировки.</string>
+    <string name="progress_performance_title">Прогресс по упражнениям</string>
+    <string name="progress_performance_rep_row">%1$s \u2014 наблюдений: %2$d, лучшее %3$d повторов</string>
+    <string name="progress_performance_time_row">%1$s \u2014 наблюдений: %2$d, лучшее %3$d с</string>
+    <string name="progress_performance_empty">Пока нет сопоставимого подхода.</string>
+    <string name="progress_deferred_title">Пока не вычисляется</string>
+    <string name="progress_notice_title">Сообщение</string>
 </resources>

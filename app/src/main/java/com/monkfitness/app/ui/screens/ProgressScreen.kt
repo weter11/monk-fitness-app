@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
@@ -26,6 +27,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,6 +58,9 @@ import com.github.mikephil.charting.data.LineDataSet
 import com.github.mikephil.charting.formatter.IndexAxisValueFormatter
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.BodyWeightEntry
+import com.monkfitness.app.domain.prescription.PrescriptionDimension
+import com.monkfitness.app.domain.program.LifecycleStatus
+import com.monkfitness.app.domain.workout.SessionStatus
 import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.viewmodel.MainViewModel
@@ -67,82 +72,34 @@ import kotlinx.coroutines.flow.collectLatest
 fun ProgressScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    val progressList by viewModel.allProgress.collectAsState()
+    val progressState by viewModel.programProgressState.collectAsState()
     val postureProgressList by viewModel.postureProgress.collectAsState()
-    val volumeHistory by viewModel.volumeHistory.collectAsState()
-    val workoutFrequencyHistory by viewModel.workoutFrequencyHistory.collectAsState()
     val bodyWeightHistory by viewModel.bodyWeightHistory.collectAsState()
     val latestBodyWeight by viewModel.latestBodyWeight.collectAsState()
-    val personalRecords by viewModel.exercisePersonalRecords.collectAsState()
-    val currentProgramDay by viewModel.currentProgramDay.collectAsState()
-    val streak by viewModel.streak.collectAsState()
-    val programStatistics by viewModel.programStatistics.collectAsState()
 
-    val legacyEntries = remember(progressList) {
-        progressList
-            .filter { it.isCompleted }
-            .groupBy { ((it.day - 1) / 7) + 1 }
-            .map { (week, list) -> BarEntry(week.toFloat(), list.size.toFloat()) }
-            .sortedBy { it.x }
+    LaunchedEffect(viewModel) {
+        viewModel.refreshProgress()
+        viewModel.bodyWeightErrorEvents.collectLatest { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    if (progressState.loading && !progressState.hasProgram && progressState.notice == null) {
+        // The measures are still being read. The screen is not blanked while that happens: the body-weight
+        // log and the posture track are retained features that do not depend on this read.
     }
 
     val postureEntries = remember(postureProgressList) {
         postureProgressList
             .filter { it.isCompleted }
-            .groupBy { ((it.day - 1) / 7) + 1 }
+            .groupBy { ((it.trackDay - 1) / 7) + 1 }
             .map { (week, list) -> BarEntry(week.toFloat(), list.size.toFloat()) }
             .sortedBy { it.x }
     }
-
-    val volumeEntries = remember(volumeHistory) { volumeHistory.takeLast(7) }
-    val frequencyEntries = remember(workoutFrequencyHistory) { workoutFrequencyHistory.takeLast(8) }
-
-    val volumeChartEntries = remember(volumeEntries) {
-        volumeEntries.mapIndexed { index, point -> BarEntry(index.toFloat(), point.totalReps.toFloat()) }
-    }
-    val volumeChartLabels = remember(volumeEntries) {
-        volumeEntries.map { formatSessionDateLabel(it.sessionDate) }
-    }
-    val frequencyChartEntries = remember(frequencyEntries) {
-        frequencyEntries.mapIndexed { index, point -> BarEntry(index.toFloat(), point.sessionCount.toFloat()) }
-    }
-    val frequencyChartLabels = remember(frequencyEntries) {
-        frequencyEntries.map { formatWeekLabel(it.weekLabel) }
-    }
-
-    val volumeStats = remember(volumeHistory) {
-        val total = volumeHistory.sumOf { it.totalReps }
-        val average = if (volumeHistory.isNotEmpty()) total / volumeHistory.size else 0
-        val latest = volumeHistory.lastOrNull()?.totalReps ?: 0
-        Triple(total, average, latest)
-    }
-    val totalVolume = volumeStats.first
-    val averageVolume = volumeStats.second
-    val latestVolume = volumeStats.third
-
     val secondaryColor = MaterialTheme.colorScheme.secondary.toArgb()
     val postureCompletionRatio = remember(postureProgressList) {
-        postureProgressList.count { it.isCompleted }.toFloat() / 56f
-    }
-    val topPersonalRecords = remember(personalRecords, currentProgramDay) {
-        personalRecords.entries
-            .asSequence()
-            .sortedByDescending { it.value }
-            .mapNotNull { entry ->
-                val exercise = viewModel.findExerciseById(
-                    exerciseId = entry.key,
-                    day = currentProgramDay,
-                    availableEquipment = Equipment.entries.toSet()
-                )
-                exercise?.let { it to entry.value }
-            }
-            .take(3)
-            .toList()
-    }
-    LaunchedEffect(viewModel) {
-        viewModel.bodyWeightErrorEvents.collectLatest { message ->
-            snackbarHostState.showSnackbar(message)
-        }
+        postureProgressList.count { it.isCompleted }.toFloat() /
+            MainViewModel.POSTURE_TRACK_DAYS.toFloat()
     }
 
     Scaffold(
@@ -158,6 +115,27 @@ fun ProgressScreen(viewModel: MainViewModel) {
             Text(
                 text = stringResource(R.string.your_progress),
                 style = MaterialTheme.typography.headlineLarge
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Which Program these numbers are about, said out loud: one Program's own measures and §21's
+            // "All Programs" aggregate are different facts, and a screen that showed one as the other
+            // would attribute a total to a program that did not earn it.
+            Text(
+                text = listOfNotNull(
+                    progressState.programName
+                        ?: if (progressState.isAggregate) {
+                            stringResource(R.string.progress_scope_all)
+                        } else {
+                            null
+                        },
+                    progressState.lifecycleStatus?.let { lifecycle ->
+                        stringResource(lifecycleLabelRes(lifecycle))
+                    }
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -176,134 +154,138 @@ fun ProgressScreen(viewModel: MainViewModel) {
             ) {
                 DashboardStatCard(
                     title = stringResource(R.string.program_completed_sessions_label),
-                    value = programStatistics.totalWorkoutsCompleted.toString(),
+                    value = progressState.completed.toString(),
                     modifier = Modifier.weight(1f)
                 )
                 DashboardStatCard(
                     title = stringResource(R.string.program_missed_sessions_label),
-                    value = programStatistics.totalMissed.toString(),
+                    value = progressState.missed.toString(),
                     modifier = Modifier.weight(1f)
                 )
                 DashboardStatCard(
                     title = stringResource(R.string.streak),
-                    value = streak.toString(),
+                    value = (progressState.streaks.firstOrNull()?.current ?: 0).toString(),
                     modifier = Modifier.weight(1f)
                 )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.program_statistics_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+            ProgressLineCard(
+                title = stringResource(R.string.progress_calendar_title),
+                lines = if (progressState.hasOpportunities) {
+                    listOf(
+                        stringResource(
+                            R.string.progress_calendar_value,
+                            progressState.completed,
+                            progressState.missed,
+                            progressState.upcoming,
+                            progressState.superseded
+                        )
                     )
-                    Text(stringResource(R.string.program_completion_percent, programStatistics.completionPercentage))
-                    Text(stringResource(R.string.program_total_sets, programStatistics.totalSets))
-                    Text(stringResource(R.string.program_total_reps, programStatistics.totalReps))
-                    Text(stringResource(R.string.program_total_timer_seconds, programStatistics.totalTimerSeconds))
-                    Text(stringResource(R.string.program_prs_achieved, programStatistics.totalPersonalRecords))
-                }
+                } else {
+                    emptyList()
+                },
+                emptyText = stringResource(R.string.no_progress_yet),
+                progress = if (progressState.hasOpportunities) progressState.completedShare else null
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            ProgressLineCard(
+                title = stringResource(R.string.progress_frequency_title),
+                lines = listOfNotNull(
+                    progressState.frequency?.let { frequency ->
+                        stringResource(
+                            R.string.progress_frequency_training_days,
+                            frequency.trainingDays,
+                            frequency.calendarDays
+                        )
+                    },
+                    progressState.frequency?.let { frequency ->
+                        stringResource(
+                            R.string.progress_frequency_per_week,
+                            String.format(Locale.US, "%.1f", frequency.sessionsPerSevenDays)
+                        )
+                    },
+                    if (progressState.measuredSessions > 0) {
+                        stringResource(
+                            R.string.progress_duration_value,
+                            progressState.measuredSessions,
+                            formatDuration(progressState.averageSessionSeconds)
+                        )
+                    } else {
+                        stringResource(R.string.progress_duration_unmeasured)
+                    }
+                ),
+                emptyText = stringResource(R.string.no_workout_frequency_yet)
+            )
+
+            if (progressState.streaks.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(24.dp))
+                ProgressLineCard(
+                    title = stringResource(R.string.progress_streak_title),
+                    lines = progressState.streaks.map { streak ->
+                        stringResource(
+                            R.string.progress_streak_row,
+                            streak.programName,
+                            streak.current,
+                            streak.longest
+                        )
+                    },
+                    emptyText = stringResource(R.string.no_progress_yet)
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            MetricChartCard(
-                title = stringResource(R.string.daily_volume_title),
-                subtitle = stringResource(R.string.daily_volume_subtitle, averageVolume, latestVolume),
-                emptyText = stringResource(R.string.no_volume_history_yet),
-                entries = volumeChartEntries,
-                labels = volumeChartLabels,
-                dataSetLabel = stringResource(R.string.daily_volume_dataset),
-                color = MaterialTheme.colorScheme.primary.toArgb()
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            MetricChartCard(
-                title = stringResource(R.string.workout_frequency_title),
-                subtitle = stringResource(R.string.workout_frequency_subtitle),
-                emptyText = stringResource(R.string.no_workout_frequency_yet),
-                entries = frequencyChartEntries,
-                labels = frequencyChartLabels,
-                dataSetLabel = stringResource(R.string.workout_frequency_dataset),
-                color = MaterialTheme.colorScheme.tertiary.toArgb(),
-                maxVisibleValue = 7f
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            PersonalRecordsCard(
-                records = topPersonalRecords,
-                emptyText = stringResource(R.string.no_personal_records_yet)
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(300.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                if (legacyEntries.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.no_progress_yet),
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(16.dp)
+            ProgressLineCard(
+                title = stringResource(R.string.progress_performance_title),
+                lines = progressState.performance.take(8).map { row ->
+                    if (row.dimension == PrescriptionDimension.TIME_BASED) {
+                        stringResource(
+                            R.string.progress_performance_time_row,
+                            row.exerciseId,
+                            row.observations,
+                            row.best
+                        )
+                    } else {
+                        stringResource(
+                            R.string.progress_performance_rep_row,
+                            row.exerciseId,
+                            row.observations,
+                            row.best
                         )
                     }
-                } else {
-                    AndroidView(
-                        factory = { chartContext ->
-                            BarChart(chartContext).apply {
-                                layoutParams = ViewGroup.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.MATCH_PARENT
-                                )
-                                description.isEnabled = false
-                                setDrawGridBackground(false)
-                                setDrawBarShadow(false)
-                                setTouchEnabled(false)
-                                xAxis.position = XAxis.XAxisPosition.BOTTOM
-                                xAxis.setDrawGridLines(false)
-                                xAxis.textColor = android.graphics.Color.WHITE
-                                xAxis.granularity = 1f
-                                axisLeft.textColor = android.graphics.Color.WHITE
-                                axisLeft.axisMinimum = 0f
-                                axisLeft.axisMaximum = 7f
-                                axisRight.isEnabled = false
-                                legend.isEnabled = false
-                            }
-                        },
-                        update = { chart ->
-                            val dataSet = BarDataSet(legacyEntries, context.getString(R.string.chart_label))
-                            dataSet.color = android.graphics.Color.GREEN
-                            dataSet.valueTextColor = android.graphics.Color.WHITE
-                            dataSet.valueTextSize = 10f
-                            chart.data = BarData(dataSet)
-                            chart.invalidate()
-                        },
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
-            }
+                },
+                emptyText = stringResource(R.string.progress_performance_empty)
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Text(
-                text = stringResource(R.string.completed_days, progressList.count { it.isCompleted }),
-                style = MaterialTheme.typography.titleMedium
+            ProgressLineCard(
+                title = stringResource(R.string.progress_history_title),
+                lines = progressState.history.map { attempt ->
+                    stringResource(
+                        R.string.progress_history_row,
+                        attempt.plannedFor.toString(),
+                        stringResource(sessionStatusLabelRes(attempt.status)),
+                        attempt.performedSets,
+                        attempt.exposedExercises
+                    )
+                },
+                emptyText = stringResource(R.string.progress_history_empty)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // §21's measures the target facts cannot carry yet, reported as *not computed* rather than as
+            // a zero: "you have no personal records" and "this cannot be measured" are different claims,
+            // and only one of them is true (§12, §17).
+            ProgressLineCard(
+                title = stringResource(R.string.progress_deferred_title),
+                lines = progressState.deferred.map { measure -> measure.reason },
+                emptyText = stringResource(R.string.progress_performance_empty)
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -379,9 +361,99 @@ fun ProgressScreen(viewModel: MainViewModel) {
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = stringResource(R.string.completed_posture_sessions, postureProgressList.count { it.isCompleted }),
+                text = stringResource(
+                    R.string.completed_posture_sessions,
+                    postureProgressList.count { it.isCompleted }
+                ),
                 style = MaterialTheme.typography.titleMedium
             )
+        }
+    }
+
+    val notice = progressState.notice
+    if (notice != null) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissProgressNotice,
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissProgressNotice) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = { Text(stringResource(R.string.progress_notice_title)) },
+            text = { Text(stringResource(notice.messageRes)) }
+        )
+    }
+}
+
+/** The lifecycle's own label, for the "which program is this" line. A label only, never a rule. */
+private fun lifecycleLabelRes(status: LifecycleStatus): Int = when (status) {
+    LifecycleStatus.NOT_STARTED -> R.string.programs_lifecycle_not_started
+    LifecycleStatus.RUNNING -> R.string.programs_lifecycle_running
+    LifecycleStatus.PAUSED -> R.string.programs_lifecycle_paused
+    LifecycleStatus.COMPLETED -> R.string.programs_lifecycle_completed
+}
+
+/** An attempt's own status label. */
+private fun sessionStatusLabelRes(status: SessionStatus): Int = when (status) {
+    SessionStatus.IN_PROGRESS -> R.string.programs_session_in_progress
+    SessionStatus.COMPLETED -> R.string.programs_session_completed
+    SessionStatus.CANCELLED -> R.string.programs_session_cancelled
+}
+
+/** A measured duration, as `m:ss`; `--` when the layer did not measure one (§21). */
+private fun formatDuration(seconds: Double?): String {
+    if (seconds == null || !seconds.isFinite() || seconds <= 0.0) return "--"
+    val total = seconds.toLong()
+    return String.format(Locale.US, "%d:%02d", total / 60, total % 60)
+}
+
+/**
+ * A titled card of plain lines, with an optional progress bar.
+ *
+ * It is the *shape* the target measures need: every one of §21's measures this screen shows is either a
+ * number with a sentence around it or a list of rows, and none of them is a per-day series the retired
+ * bar charts could plot. The one series that is still plotted — the posture track's own weekly bars — is a
+ * retained feature and keeps its chart.
+ */
+@Composable
+private fun ProgressLineCard(
+    title: String,
+    lines: List<String>,
+    emptyText: String,
+    progress: Float? = null
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            if (progress != null) {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                )
+            }
+            if (lines.isEmpty()) {
+                Text(
+                    text = emptyText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            } else {
+                lines.forEach { line ->
+                    Text(text = line, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
         }
     }
 }
@@ -413,91 +485,6 @@ private fun DashboardStatCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary
             )
-        }
-    }
-}
-
-@Composable
-private fun MetricChartCard(
-    title: String,
-    subtitle: String,
-    emptyText: String,
-    entries: List<BarEntry>,
-    labels: List<String>,
-    dataSetLabel: String,
-    color: Int,
-    maxVisibleValue: Float? = null
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(280.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (entries.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = emptyText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            } else {
-                AndroidView(
-                    factory = { chartContext ->
-                        BarChart(chartContext).apply {
-                            layoutParams = ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                            description.isEnabled = false
-                            setDrawGridBackground(false)
-                            setDrawBarShadow(false)
-                            setTouchEnabled(false)
-                            setFitBars(true)
-                            xAxis.position = XAxis.XAxisPosition.BOTTOM
-                            xAxis.setDrawGridLines(false)
-                            xAxis.textColor = android.graphics.Color.WHITE
-                            xAxis.granularity = 1f
-                            axisLeft.textColor = android.graphics.Color.WHITE
-                            axisLeft.axisMinimum = 0f
-                            axisRight.isEnabled = false
-                            legend.isEnabled = false
-                        }
-                    },
-                    update = { chart ->
-                        val dataSet = BarDataSet(entries, dataSetLabel)
-                        dataSet.color = color
-                        dataSet.valueTextColor = android.graphics.Color.WHITE
-                        dataSet.valueTextSize = 10f
-                        chart.xAxis.valueFormatter = IndexAxisValueFormatter(labels)
-                        chart.axisLeft.axisMaximum = maxVisibleValue ?: (entries.maxOf { it.y } + 2f).coerceAtLeast(5f)
-                        chart.data = BarData(dataSet).apply {
-                            barWidth = 0.6f
-                        }
-                        chart.invalidate()
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
         }
     }
 }
@@ -651,72 +638,10 @@ private fun BodyWeightCard(
     }
 }
 
-@Composable
-private fun PersonalRecordsCard(
-    records: List<Pair<Exercise, Int>>,
-    emptyText: String
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.personal_records_highlights),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
 
-            if (records.isEmpty()) {
-                Text(
-                    text = emptyText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-            } else {
-                records.forEach { (exercise, value) ->
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = stringResource(exercise.nameRes),
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = if (exercise.isTimerBased) {
-                                    stringResource(R.string.personal_record_seconds, value)
-                                } else {
-                                    stringResource(R.string.personal_record_reps, value)
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.secondary,
-                                textAlign = TextAlign.End
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
-private fun formatSessionDateLabel(sessionDate: String): String = sessionDate.takeLast(5)
-
-private fun formatWeekLabel(weekLabel: String): String = "W${weekLabel.substringAfter('W', weekLabel)}"
 
 private fun formatBodyWeight(weightKg: Float): String = String.format(Locale.US, "%.1f", weightKg)
+
+/** The body-weight chart's x labels: the month and day of a stored date, `yyyy-MM-dd` shaped. */
+private fun formatSessionDateLabel(sessionDate: String): String = sessionDate.takeLast(5)

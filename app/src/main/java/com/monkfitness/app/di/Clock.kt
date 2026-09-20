@@ -12,9 +12,10 @@ import java.time.Instant
  * the composition root hands over, so the clock a process runs on is decided in one place.
  *
  * It is deliberately a *port*, not a utility: an implementation returns an instant and decides
- * nothing else. It reads no calendar, resolves no program day, validates no window and starts no
- * timer — a program day is `domain.usecase.ProgramCalendar`'s decision, and the moment a row was
- * written is persistence's. A clock with a rule in it would put a scheduling decision in the wiring.
+ * nothing else. It reads no calendar, resolves no track day, validates no window and starts no
+ * timer — which day a date is belongs to the calendar that owns it (the Scheduler's, for a Program's
+ * opportunities; `domain.track.TrackCalendar`'s, for the retained daily tracks), and the moment a row
+ * was written is persistence's. A clock with a rule in it would put a scheduling decision in the wiring.
  *
  * The domain stays clock-free (§11): this port lives beside the composition root and the layers that
  * receive a clock receive it as a plain value they were given.

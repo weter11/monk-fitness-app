@@ -1,8 +1,6 @@
 package com.monkfitness.app.data.local
 
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.monkfitness.app.domain.adaptive.AdaptiveAction
-import com.monkfitness.app.domain.adaptive.AdaptiveReasonCode
 import com.monkfitness.app.domain.adaptive.AdaptiveState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -170,14 +168,13 @@ class AdaptivePersistenceSchemaTest {
     // ---- the database declaration ------------------------------------------------------------------
 
     @Test
-    fun theDatabaseKeepsEveryShippedEntityAndAddsTheTargetSchema() {
+    fun theDatabaseDeclaresOnlyTheRetainedAndTheTargetSchema() {
         val source = File(mainSources, "data/local/AppDatabase.kt").readText()
 
         assertTrue(
-            "the database version moves with the schema (7 → 8 for the Program System target schema, " +
-                "9 for the schedule-frequency correction, 10 for the Goal/Focus columns §8 made " +
-                "structural, then 11 for the adaptive window bookkeeping §30 step 12 stores)",
-            source.contains("version = 11")
+            "the database version moves with the schema: 12 is §30 step 15, which retires the " +
+                "shipped 56-day program's tables and the Stage-1 adaptive pair",
+            source.contains("version = 12")
         )
 
         val registered = Regex("entities = \\[(.*?)]", RegexOption.DOT_MATCHES_ALL)
@@ -186,19 +183,16 @@ class AdaptivePersistenceSchemaTest {
             .let { Regex("(\\w+)::class").findAll(it).map { match -> match.groupValues[1] }.toList() }
 
         assertEquals(
-            "the ten shipped entities are untouched, and the Program System target tables are added " +
-                "beside them",
+            "the five retained global entities and the fifteen target ones — and **nothing that stood " +
+                "in for a retired table**. `UserProgress`, `SetLog`, `ProgramDayState`, " +
+                "`FamilyProgressionState` and `AdaptiveDecisionRecord` are gone from the declaration " +
+                "because `MIGRATION_11_12` drops them, not because a replacement was added",
             listOf(
-                "UserProgress",
                 "PostureSessionProgress",
-                "SetLog",
                 "BodyWeightEntry",
-                "ProgramDayState",
                 "MealCycle",
                 "MealEntity",
                 "ShoppingItemEntity",
-                "FamilyProgressionState",
-                "AdaptiveDecisionRecord",
                 "ProgramEntity",
                 "AppStateEntity",
                 "ProgramRevisionEntity",
@@ -231,69 +225,64 @@ class AdaptivePersistenceSchemaTest {
             "MIGRATION_7_8",
             "MIGRATION_8_9",
             "MIGRATION_9_10",
-            "MIGRATION_10_11"
+            "MIGRATION_10_11",
+            "MIGRATION_11_12"
         )) {
             assertTrue("$migration is registered", migrations.contains(migration))
         }
-        assertTrue(
-            "the state DAO is reachable from the database",
-            source.contains("fun familyProgressionStateDao(): FamilyProgressionStateDao")
-        )
-        assertTrue(
-            "the history DAO is reachable from the database",
-            source.contains("fun adaptiveDecisionHistoryDao(): AdaptiveDecisionHistoryDao")
-        )
+
+        // The retained and target accessors are reachable from the database...
+        for (accessor in listOf(
+            "fun nutritionDao(): NutritionDao",
+            "fun postureProgressDao(): PostureProgressDao",
+            "fun maintenanceDao(): MaintenanceDao"
+        )) {
+            assertTrue("$accessor is reachable from the database", source.contains(accessor))
+        }
+
+        // ...and the retired ones are not declared at all. This is the §33 half of the claim: a
+        // schema that dropped a table must not still hand out a DAO over it.
+        for (retired in listOf(
+            "fun progressDao(): ProgressDao",
+            "fun familyProgressionStateDao(): FamilyProgressionStateDao",
+            "fun adaptiveDecisionHistoryDao(): AdaptiveDecisionHistoryDao"
+        )) {
+            assertFalse("the retired accessor $retired is gone", source.contains(retired))
+        }
     }
 
     @Test
-    fun theAdaptiveDaosExposeNoWayToRewriteHistory() {
-        val stateDao = File(mainSources, "data/local/FamilyProgressionStateDao.kt").readText()
-        val historyDao = File(mainSources, "data/local/AdaptiveDecisionHistoryDao.kt").readText()
+    fun theTargetAdaptiveDaosExposeNoWayToRewriteHistory() {
+        val decisionDao = File(mainSources, "data/local/ProgramAdaptiveDecisionDao.kt").readText()
+        val familyStateDao = File(mainSources, "data/local/ProgramFamilyProgressionStateDao.kt").readText()
 
-        assertFalse("a current-state row is written, never deleted one at a time", stateDao.contains("@Delete"))
-
-        for (mutator in listOf("@Update", "@Delete", "@Upsert", "OnConflictStrategy", "UPDATE ")) {
+        assertTrue("a decision is appended", decisionDao.contains("suspend fun insertDecision"))
+        for (mutator in listOf("@Update", "@Delete", "@Upsert", "UPDATE ")) {
             assertFalse(
-                "a decision record is append-only: the history DAO must not contain $mutator",
-                historyDao.contains(mutator)
+                "a decision record is append-only: the target decision DAO must not contain $mutator",
+                decisionDao.contains(mutator)
             )
         }
 
-        // The only delete either DAO may expose is the C3 "Full Reset" clear, which takes the whole
-        // program record at once — Task 8 deliberately left the reset semantics to the lifecycle task,
-        // and a reset that kept adaptive progression while erasing the workout history it was derived
-        // from is not a reset. What still must be impossible is the delete that REWRITES history: one
-        // that names a row, a window, a family or a revision. Pinning the exact literals, and asserting
-        // that none of them carries a WHERE clause, is that rule — a narrowed delete cannot hide here.
-        assertEquals(
-            "the state DAO clears the whole table and nothing narrower",
-            listOf("DELETE FROM family_progression_state"),
-            deleteStatementsIn(stateDao)
-        )
-        assertEquals(
-            "the history DAO clears the whole trail and nothing narrower",
-            listOf("DELETE FROM adaptive_decision_record"),
-            deleteStatementsIn(historyDao)
-        )
-
-        assertTrue("history is appended", historyDao.contains("suspend fun appendDecision"))
+        // A family's current state is a *position*, so it is replaced rather than accumulated — and it is
+        // never deleted through this DAO either.
         assertTrue(
-            "and both history queries name a total order",
-            Regex("ORDER BY").findAll(historyDao).count() == 2 &&
-                Regex("ORDER BY[^\\\"]*id ASC").findAll(historyDao).count() == 2
+            "a family state is upserted",
+            familyStateDao.contains("@Insert(onConflict = OnConflictStrategy.REPLACE)")
+        )
+        assertFalse("a family state DAO does not delete", familyStateDao.contains("@Delete"))
+
+        // The one place either table is cleared is §16's Full reset, and it says so in one file.
+        val maintenanceDao = File(mainSources, "data/local/MaintenanceDao.kt").readText()
+        assertTrue(
+            "the reset clears the target decision rows",
+            maintenanceDao.contains("DELETE FROM `program_adaptive_decision_record`")
+        )
+        assertTrue(
+            "the reset clears the target family state rows",
+            maintenanceDao.contains("DELETE FROM `program_family_progression_state`")
         )
     }
-
-    /**
-     * Every `DELETE FROM …` literal a DAO source declares, verbatim: the count and the text of each are
-     * the assertion, so a narrowed (row-scoped) delete shows up as a different literal rather than passing
-     * as "a delete exists".
-     */
-    private fun deleteStatementsIn(daoSource: String): List<String> =
-        Regex("""DELETE FROM [a-zA-Z_]+(?: WHERE [^"\n]*)?""")
-            .findAll(daoSource)
-            .map { it.value.trim() }
-            .toList()
 
     // ---- the stored vocabulary ----------------------------------------------------------------------
 
@@ -313,52 +302,16 @@ class AdaptivePersistenceSchemaTest {
     }
 
     @Test
-    fun everyActionRoundTripsThroughItsStoredName() {
-        val converters = AdaptiveTypeConverters()
-
-        assertEquals(
-            "the action vocabulary, each one stored under its own name",
-            AdaptiveAction.entries.toList(),
-            AdaptiveAction.entries.map { action ->
-                val stored = converters.actionsToNames(listOf(action))
-                assertEquals("stored as the enum's own name, not its ordinal", action.name, stored)
-                converters.actionsFromNames(stored).single()
-            }
-        )
-        assertEquals(
-            "an ordered action list keeps its order",
-            listOf(AdaptiveAction.RECOVERY_LOAD, AdaptiveAction.REDUCE_STIMULUS),
-            converters.actionsFromNames(
-                converters.actionsToNames(
-                    listOf(AdaptiveAction.RECOVERY_LOAD, AdaptiveAction.REDUCE_STIMULUS)
-                )
-            )
-        )
-        assertEquals("no actions is an empty list, not a parse failure", emptyList<AdaptiveAction>(), converters.actionsFromNames(""))
-    }
-
-    @Test
-    fun everyReasonCodeRoundTripsThroughItsStoredName() {
-        val converters = AdaptiveTypeConverters()
-
-        assertEquals(
-            "the reason vocabulary, including the code reserved for the custom-program stage",
-            AdaptiveReasonCode.entries.toList(),
-            AdaptiveReasonCode.entries.map { reason ->
-                val stored = converters.reasonCodeToName(reason)
-                assertEquals("stored as the enum's own name, not its ordinal", reason.name, stored)
-                converters.reasonCodeFromName(stored)
-            }
-        )
-    }
-
-    @Test
     fun anUnknownStoredNameFailsLoudlyRatherThanResolvingToSomethingElse() {
         val converters = AdaptiveTypeConverters()
 
         assertThrows(IllegalArgumentException::class.java) { converters.adaptiveStateFromName("PROMOTED") }
-        assertThrows(IllegalArgumentException::class.java) { converters.reasonCodeFromName("BECAUSE") }
-        assertThrows(IllegalArgumentException::class.java) { converters.actionsFromNames("INCREASE_STIMULUS,SPIN") }
+        // The action and reason-code halves of this probe belonged to the Stage-1 vocabulary and its
+        // converter pair, both retired by §30 step 15; what a *stored name* must do — resolve or fail
+        // loudly — is asserted for the vocabulary that survives.
+        assertThrows(IllegalArgumentException::class.java) {
+            converters.adaptiveStateFromName("RECOVERY_LOAD")
+        }
     }
 
     @Test
@@ -376,39 +329,6 @@ class AdaptivePersistenceSchemaTest {
                 AdaptiveState.RECOVERY to "RECOVERY"
             ),
             AdaptiveState.entries.associateWith { converters.adaptiveStateToName(it) }
-        )
-        assertEquals(
-            mapOf(
-                AdaptiveAction.MAINTAIN_STIMULUS to "MAINTAIN_STIMULUS",
-                AdaptiveAction.INCREASE_STIMULUS to "INCREASE_STIMULUS",
-                AdaptiveAction.REDUCE_STIMULUS to "REDUCE_STIMULUS",
-                AdaptiveAction.RECOVERY_LOAD to "RECOVERY_LOAD"
-            ),
-            AdaptiveAction.entries.associateWith { converters.actionsToNames(listOf(it)) }
-        )
-        assertEquals(
-            mapOf(
-                AdaptiveReasonCode.INSUFFICIENT_EVIDENCE to "INSUFFICIENT_EVIDENCE",
-                AdaptiveReasonCode.SUSTAINED_POSITIVE_PERFORMANCE to "SUSTAINED_POSITIVE_PERFORMANCE",
-                AdaptiveReasonCode.SUSTAINED_DECLINE to "SUSTAINED_DECLINE",
-                AdaptiveReasonCode.HIGH_LOAD_DETERIORATION to "HIGH_LOAD_DETERIORATION",
-                AdaptiveReasonCode.RECOVERY to "RECOVERY",
-                AdaptiveReasonCode.PROGRESSION_COOLDOWN to "PROGRESSION_COOLDOWN",
-                AdaptiveReasonCode.CUSTOM_CONFIGURATION_LIMITATION to "CUSTOM_CONFIGURATION_LIMITATION"
-            ),
-            AdaptiveReasonCode.entries.associateWith { converters.reasonCodeToName(it) }
-        )
-
-        // A stored row is read back from constant literals, not from values computed out of the enums:
-        // this is the read an upgraded device performs on data an earlier build wrote.
-        assertEquals(AdaptiveState.RECOVERY, converters.adaptiveStateFromName("RECOVERY"))
-        assertEquals(
-            listOf(AdaptiveAction.REDUCE_STIMULUS, AdaptiveAction.RECOVERY_LOAD),
-            converters.actionsFromNames("REDUCE_STIMULUS,RECOVERY_LOAD")
-        )
-        assertEquals(
-            AdaptiveReasonCode.HIGH_LOAD_DETERIORATION,
-            converters.reasonCodeFromName("HIGH_LOAD_DETERIORATION")
         )
     }
 }

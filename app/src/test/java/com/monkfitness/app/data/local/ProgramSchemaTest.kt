@@ -209,18 +209,16 @@ class ProgramSchemaTest {
             declared
         )
         assertEquals(
-            "the database declares the version-7 entities unchanged, then the target ones",
+            "the database declares the five **retained global** entities and then the target ones. The " +
+                "ten shipped Program/Stage-1 entities this used to list are gone because " +
+                "`MIGRATION_11_12` drops their tables (§30 step 15) — none of them was renamed into a " +
+                "target entity, and no target entity was added to stand in for one",
             listOf(
-                "UserProgress",
                 "PostureSessionProgress",
-                "SetLog",
                 "BodyWeightEntry",
-                "ProgramDayState",
                 "MealCycle",
                 "MealEntity",
-                "ShoppingItemEntity",
-                "FamilyProgressionState",
-                "AdaptiveDecisionRecord"
+                "ShoppingItemEntity"
             ) + ProgramSchemaFixture.ENTITIES.map { it.first },
             registeredEntities()
         )
@@ -288,8 +286,15 @@ class ProgramSchemaTest {
         )
         assertEquals(11, AppDatabase.MIGRATION_10_11.endVersion)
         assertEquals(
+            "§30 step 15's retirement is the step after that one: it drops the retired tables and " +
+                "renames the retained track's row identity",
+            11,
+            AppDatabase.MIGRATION_11_12.startVersion
+        )
+        assertEquals(12, AppDatabase.MIGRATION_11_12.endVersion)
+        assertEquals(
             "and the declared version is where the chain ends",
-            AppDatabase.MIGRATION_10_11.endVersion,
+            AppDatabase.MIGRATION_11_12.endVersion,
             currentVersion()
         )
     }

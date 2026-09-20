@@ -508,10 +508,13 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
             "program_day",
             "program_exercise",
             "program",
-            "set_log",
-            "family_progression_state",
-            "adaptive_decision_record",
-            "user_progress"
+            // the retained global tables: §30 step 15 dropped the shipped program's tables this
+            // census used to include
+            "posture_session_progress",
+            "body_weight_log",
+            "meal_cycles",
+            "meals",
+            "shopping_items"
         )
 
         /** The classification the rig wires: the family's three variants, and nothing else. */

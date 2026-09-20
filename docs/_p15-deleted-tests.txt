@@ -1,0 +1,116 @@
+§30 step 15 — test classes retired with the architecture they tested.
+
+Each entry's subject (the class, function or table) no longer exists in the tree. Where the
+behaviour is still a contract, the successor suite is named in the reason.
+
+domain/adaptive/AdaptiveProgramEngineTest.kt
+    Tests `AdaptiveProgramEngine`, `AdaptiveProgramInput` and `AdaptiveSignals` — the Stage-1 engine §9 retires. The target engine (`ProgramAdaptiveEngine`) has its own suites.
+
+domain/adaptive/AdaptivePolicyTest.kt
+    Tests `AdaptivePolicy`, the Stage-1 threshold table. The target policy is `ProgramAdaptivePolicy`, tested by `ProgramAdaptivePolicyTest`.
+
+domain/adaptive/AdaptiveSignalCalculatorTest.kt
+    Tests `AdaptiveSignalCalculator`, the Stage-1 signal arithmetic. The target calculator is `ProgramAdaptiveSignalCalculator`, tested by `ProgramAdaptiveSignalCalculatorTest`.
+
+domain/adaptive/ProgressionResolverTest.kt
+    Tests `ProgressionResolver` and `PilotProgressionProfiles` — the Stage-1 pilot ladder §10 forbids the target generation to consume.
+
+domain/adaptive/SessionObservationTest.kt
+    Tests `SessionObservation`/`SessionObservationMapper`, the Stage-1 adapters that read the retired `user_progress` rows.
+
+domain/adaptive/SameTimestampRowsTest.kt
+    A `SessionObservationMapper` ordering probe over the retired day-level table.
+
+data/repository/AdaptiveRepositoryTest.kt
+    Tests `AdaptiveRepository` over `family_progression_state` / `adaptive_decision_record`, both dropped by `MIGRATION_11_12`. `ProgramAdaptiveRepository` owns the only adaptive tables now.
+
+data/repository/AdaptiveSessionDecisionRecorderTest.kt
+    Tests `AdaptiveSessionDecisionRecorder`, which wrote the Stage-1 decision rows from the retired 56-day session runtime.
+
+data/repository/SessionAdaptivePlanReaderTest.kt
+    Tests `SessionAdaptivePlanReader`, the Stage-1 reader that shaped a legacy session's routine.
+
+data/repository/SessionHistoryAdapterTest.kt
+    Tests `SessionHistoryAdapter`, which translated the retired day-level progress rows into Stage-1 observations.
+
+data/repository/AdaptiveLifecycleRig.kt
+    The rig the four Stage-1 repository suites above were built on; unused once they go.
+
+data/repository/AdaptiveLifecycleTest.kt
+    Drives the Stage-1 adaptive lifecycle through that rig.
+
+data/repository/AdaptiveConfigurationInvariantTest.kt
+    Pins invariants of `AdaptiveRepository` + `ProgramConfiguration` as the *legacy* session used them; the legacy session is gone. The `ProgramConfiguration` validators keep their own suites.
+
+data/repository/AdaptiveStateMachineInvariantTest.kt
+    Pins the Stage-1 state machine's transitions, which lived in `AdaptivePolicy` + `AdaptiveRepository`.
+
+domain/usecase/AdaptiveWorkoutIntegrationTest.kt
+    Tests `AdaptiveWorkoutIntegration`, the Stage-1 overlay the retired session applied to the generated routine.
+
+domain/usecase/AdaptiveSelectionInvariantTest.kt
+    Pins the Stage-1 selection invariants of that integration.
+
+domain/usecase/AdaptiveGenerationWiringTest.kt
+    Asserts the Stage-1 generation's wiring — reader, recorder, adapter — all of which are gone.
+
+viewmodel/AdaptiveLifecycleWiringTest.kt
+    Asserts the retired view model's Stage-1 adaptive wiring.
+
+ProgramCalendarTest.kt
+    Tests `resolveCycleAndDay` / `calculateProgramDay` / `synchronizeProgramStates`. The program calendar is retired; the *retained daily tracks'* arithmetic moved to `TrackCalendar`, which has its own `TrackCalendarTest` (including the cases ported from this class).
+
+ProgramCycleRolloverTest.kt
+    Tests the shipped program's automatic cycle rollover, which has no target equivalent: a Program's days come from its revision, not from a 56-day calendar.
+
+domain/usecase/ProgramCalendarC3MaintenanceTest.kt
+    Tests C3's per-cycle wipe. "Restart current cycle" is gone (§16 has no target cycle); the surviving maintenance contract is Full reset, re-tested by `MaintenanceRepositoryTest`.
+
+data/repository/ProgramMaintenanceTest.kt
+    Tests the retired `ProgramMaintenance` (the per-cycle wipe and the old Full-Reset table lists). The Full-Reset contract is re-tested against the new tables by `MaintenanceRepositoryTest`.
+
+data/repository/FullResetAtomicityInvariantTest.kt
+    Pins the all-or-nothing guarantee of the old `clearAllProgressData`. The same guarantee is pinned for its successor by `MaintenanceRepositoryTest`.
+
+viewmodel/SessionFinalizationTest.kt
+    Tests the retired view model's session-completion legs (day completion, recovery day, adaptive decision recording).
+
+viewmodel/SetLogObservationTest.kt
+    Tests the retired view model's `SetLogObservation`, which built a legacy `SetLog` from an exercise.
+
+viewmodel/StartedWorkoutInvariantTest.kt
+    Pins the retired view model's started-workout invariants over the legacy session state.
+
+viewmodel/WorkoutSessionGenerationValueTest.kt
+    Pins the retired view model's per-day workout generation as a value object.
+domain/adaptive/AdaptiveDomainBoundaryTest.kt
+    Probes the `domain.adaptive` package fence through `PlannedExercise`, a Stage-1 type that is gone. The fence itself is not loosened: `AdaptiveDomainPurityTest` pins the same boundary over the surviving packages, which is where the guarantee now lives.
+
+domain/adaptive/WorkoutConfigurationSnapshotTest.kt
+    Pins the *legacy session's* configuration freeze: `ActiveWorkoutConfiguration` capturing a
+    configuration once and never re-reading the live store, and `WorkoutSessionContext` carrying
+    that session's program day and revision. Both holders are retired with the session they
+    belonged to. The freeze itself is not unpinned: the target session's equivalent is the
+    immutable `WorkoutSessionSnapshot`, captured at `SessionRuntime.startSession` and read back
+    through `WorkoutSessionRepository.sessionById` — pinned by the session runtime's own suites
+    and by `WorkoutSession`'s construction rules.
+
+viewmodel/WorkoutConfigurationFreezeArchitectureTest.kt
+    Pins the *legacy session's* configuration freeze in the view model: `startWorkoutSession`
+    as the one place a session captures its configuration, `WorkoutSessionUiState` presenting it,
+    and `ActiveWorkoutConfiguration` holding it with no persistence. Every one of those subjects
+    is retired, so all eight of its claims are false by construction rather than merely
+    inconvenient. The invariant it protected is the target session snapshot's, captured at
+    `SessionRuntime.startSession` and never re-derived — pinned by the session runtime's suites
+    and by `WorkoutSession`'s own construction rules.
+
+ui/customprogram/ (CustomProgramArchitectureTest, CustomProgramEditorRig, …)
+data/repository/ProgramConfigurationRepositoryTest.kt
+domain/adaptive/ProgramConfigurationTest.kt
+domain/adaptive/ProgramConfigurationValidatorTest.kt
+    The whole suite set that pinned the `ProgramConfiguration` editor, its repository and its
+    validators. The audit above showed the stored selection has no production reader after §30
+    step 15 — its only consumer was the legacy session's configuration capture — so the editor is a
+    setting that cannot affect anything and is retired rather than kept for compatibility. The
+    target Program editor keeps its own suites (`ProgramEditorService`'s and `ProgramsController`'s).
+

@@ -1,6 +1,7 @@
 package com.monkfitness.app.data.local
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -87,6 +88,8 @@ class ProgramMigrationPreservationTest {
         // The deployed chain, in the order a device runs it.
         database.migrate(AppDatabase.MIGRATION_9_10)
         database.migrate(AppDatabase.MIGRATION_10_11)
+        // §30 step 15: the retirement step, and the last one in the chain.
+        database.migrate(AppDatabase.MIGRATION_11_12)
     }
 
     /** A populated **version-8** database: what a device that ran the target-schema release holds. */
@@ -109,7 +112,7 @@ class ProgramMigrationPreservationTest {
         database.tableNames().filterNot { it.startsWith("sqlite_") }.sorted()
 
     @Test
-    fun theUpgradeAddsTheTargetTablesAndKeepsEveryShippedOne() {
+    fun theUpgradeEndsWithTheRetainedAndTheTargetTablesAndNothingElse() {
         val before = versionSevenDatabase()
         val after = migratedDatabase()
 
@@ -119,44 +122,128 @@ class ProgramMigrationPreservationTest {
             tablesOf(before)
         )
         assertEquals(
-            "after the upgrade every shipped table is still there, with the fifteen target tables " +
-                "beside them — and nothing else",
-            (ProgramSchemaFixture.ALL_TABLES + "room_master_table").sorted(),
+            "after the whole chain the database is the five retained global tables and the fifteen " +
+                "target ones — and nothing else. The other five shipped tables are dropped by §30 " +
+                "step 15, and no table stands in for one",
+            (ProgramSchemaFixture.ALL_TABLES_AT_CURRENT_VERSION + "room_master_table").sorted(),
             tablesOf(after)
         )
     }
 
     @Test
-    fun everyLegacyRowSurvivesTheUpgradeUnchanged() {
+    fun everyRetainedRowSurvivesTheUpgradeUnchanged() {
         val before = versionSevenDatabase()
         val after = migratedDatabase()
 
-        val legacyRows = mapOf(
-            "user_progress" to "SELECT * FROM `user_progress`",
-            "posture_session_progress" to "SELECT * FROM `posture_session_progress`",
-            "set_log" to "SELECT * FROM `set_log`",
-            "body_weight_log" to "SELECT * FROM `body_weight_log`",
-            "program_day_state" to "SELECT * FROM `program_day_state`",
-            "meal_cycles" to "SELECT * FROM `meal_cycles`",
-            "meals" to "SELECT * FROM `meals`",
-            "shopping_items" to "SELECT * FROM `shopping_items`",
-            "family_progression_state" to "SELECT * FROM `family_progression_state`",
-            "adaptive_decision_record" to "SELECT * FROM `adaptive_decision_record`"
+        // The posture track's row is compared through an explicit projection, because its *row
+        // identity* is renamed by this step (`cycleNumber`/`day` → `trackCycle`/`trackDay`) while every
+        // value it holds must survive: the rename is the claim, and a `SELECT *` would compare two
+        // different column sets instead of the values.
+        assertEquals(
+            "the track's row keeps every value it held; only the two identity columns are renamed. The " +
+                "projections are compared by *value* and in the same order, because the column names " +
+                "differing is the rename itself",
+            before.rows("SELECT `cycleNumber`, `day`, `isCompleted`, `completionDate`, `focusArea` " +
+                "FROM `posture_session_progress`").map { row -> row.values.toList() },
+            after.rows("SELECT `trackCycle`, `trackDay`, `isCompleted`, `completionDate`, `focusArea` " +
+                "FROM `posture_session_progress`").map { row -> row.values.toList() }
         )
 
-        for ((table, query) in legacyRows) {
-            val expected = before.rows(query)
+        val retainedRows = listOf("body_weight_log", "meal_cycles", "meals", "shopping_items")
+        for (table in retainedRows) {
+            val expected = before.rows("SELECT * FROM `$table`")
             assertTrue("the fixture wrote a row into `$table`", expected.isNotEmpty())
-            assertEquals("`$table` rows survive the upgrade byte for byte", expected, after.rows(query))
+            assertEquals("`$table` rows survive the upgrade byte for byte", expected, after.rows("SELECT * FROM `$table`"))
         }
     }
 
     @Test
-    fun theUpgradeDoesNotRewriteAnyLegacyTableDefinition() {
+    fun theTrackRowIsRenamedAndNotRewritten() {
+        // The one table this stage changes shape. The claim is narrower than "the row is still there":
+        // it is that the row is the SAME row — same cycle, same day, same completion stamp, same focus
+        // area — under its own vocabulary. A drop-and-recreate without the copy would leave the table
+        // present and empty, which is the failure this test exists to catch.
+        val database = migratedDatabase()
+
+        assertEquals("the track's rows were copied, not discarded", 1, database.count("posture_session_progress"))
+        assertEquals(
+            "and the copied row is the one the device held: cycle and day became the track's own names",
+            listOf("2|7|1|1700000000000|UPPER_BACK"),
+            database.strings(
+                "SELECT trackCycle || '|' || trackDay || '|' || isCompleted || '|' || completionDate " +
+                    "|| '|' || focusArea FROM `posture_session_progress`"
+            )
+        )
+        assertEquals(
+            "the renamed identity is still the primary key, in the same order",
+            listOf("trackCycle", "trackDay"),
+            database.primaryKey("posture_session_progress")
+        )
+        assertEquals(
+            "the old column names are gone, so nothing can read the track through the retired vocabulary",
+            listOf("trackCycle", "trackDay", "isCompleted", "completionDate", "focusArea"),
+            database.columnNames("posture_session_progress")
+        )
+    }
+
+    @Test
+    fun theRetiredTablesAndTheirRowsAreGone() {
+        val after = migratedDatabase()
+
+        for (table in ProgramSchemaFixture.RETIRED_TABLES) {
+            assertFalse(
+                "`$table` is dropped by §30 step 15, not kept and not renamed",
+                after.tableNames().contains(table)
+            )
+        }
+        assertEquals(
+            "and the database holds no table outside the retained and target sets, so nothing was " +
+                "left behind under another name",
+            (ProgramSchemaFixture.ALL_TABLES_AT_CURRENT_VERSION + "room_master_table").sorted(),
+            tablesOf(after)
+        )
+    }
+
+    @Test
+    fun noLegacyRowBecomesATargetRow() {
+        // The blueprint's "no legacy program/history migration is required" read as a measurement: the
+        // upgrade drops the legacy rows and writes **nothing** into the target schema. A conversion —
+        // a `UserProgress` row becoming a Session, a legacy `set_log` row becoming a target set — would
+        // show up here as a non-empty target table.
+        val database = migratedDatabase()
+
+        for (table in ProgramSchemaFixture.TABLES) {
+            assertEquals(
+                "`$table` is empty after the upgrade: the retired rows were not reinterpreted as target " +
+                    "rows (the target history starts with the target runtime)",
+                0,
+                database.count(table)
+            )
+        }
+    }
+
+    @Test
+    fun theUpgradeDoesNotUseADestructiveRecreation() {
+        // The other half of "a real migration, not a recreation": the database must never be dropped and
+        // rebuilt, because that would take the retained rows with it. Room's destructive fallback is the
+        // switch that does exactly that, so its absence from the builder is the guard.
+        val source = java.io.File("src/main/java/com/monkfitness/app/data/local/AppDatabase.kt").let {
+            if (it.isFile) it else java.io.File("app/src/main/java/com/monkfitness/app/data/local/AppDatabase.kt")
+        }.readText()
+
+        assertFalse(
+            "the builder must not accept a destructive fallback: a device that cannot migrate must fail " +
+                "loudly rather than lose the retained rows",
+            source.contains("fallbackToDestructiveMigration")
+        )
+    }
+
+    @Test
+    fun theUpgradeRewritesNoRetainedTableDefinitionButTheTracks() {
         val before = versionSevenDatabase().masterSql()
         val after = migratedDatabase().masterSql()
 
-        for (table in LegacyV7Schema.TABLES) {
+        for (table in ProgramSchemaFixture.RETAINED_TABLES.filterNot { it == "posture_session_progress" }) {
             assertNotNull("`$table` existed before the upgrade", before[table])
             assertEquals(
                 "`$table` is neither reshaped nor renamed by the upgrade",
@@ -165,54 +252,72 @@ class ProgramMigrationPreservationTest {
             )
         }
         assertEquals(
-            "the legacy indices are the same ones afterwards",
+            "and the track is the one retained table this stage rewrites — its identity columns are " +
+                "renamed, and nothing else about it changes. The shape is read back from the engine " +
+                "rather than compared as a DDL string, because the engine's own spelling of that string " +
+                "is not the claim",
+            listOf("trackCycle", "trackDay", "isCompleted", "completionDate", "focusArea"),
+            migratedDatabase().columnNames("posture_session_progress")
+        )
+        assertEquals(
+            "with the same affinities the columns always had",
+            listOf("INTEGER", "INTEGER", "INTEGER", "INTEGER", "TEXT"),
+            listOf("trackCycle", "trackDay", "isCompleted", "completionDate", "focusArea")
+                .map { column -> migratedDatabase().columnType("posture_session_progress", column) }
+        )
+        assertEquals(
+            "the retained tables' indices are the same ones afterwards",
             indicesOfLegacyTables(before),
             indicesOfLegacyTables(after)
         )
     }
 
-    /** The indices of the ten shipped tables, which the upgrade may neither drop nor redefine. */
+    /** The indices of the tables the upgrade keeps, which it may neither drop nor redefine. */
     private fun indicesOfLegacyTables(schema: Map<String, String>): Map<String, String> =
         schema
             .filterKeys { name ->
                 name.startsWith("index_") &&
-                    LegacyV7Schema.TABLES.any { table -> name.startsWith("index_${table}_") }
+                    ProgramSchemaFixture.RETAINED_TABLES.any { table -> name.startsWith("index_${table}_") }
             }
             .mapValues { storedForm(it.value) }
 
     @Test
-    fun theStageOneAdaptivePersistenceIsStillWritableAfterTheUpgrade() {
+    fun theStageOneAdaptivePersistenceIsGoneAndTheTargetOneIsWhatRemains() {
+        // §30 step 15 inverted this claim. It used to prove the Stage-1 tables were still *writable*
+        // after the upgrade — the point of the coexisting generations. The coexistence is over: the
+        // Stage-1 tables are dropped and the target ones are the only adaptive persistence there is, so
+        // the claim becomes that a write lands in the target tables and nowhere else.
         val database = migratedDatabase()
 
-        database.exec(
-            "INSERT INTO `family_progression_state` (`familyId`, `progressionLevel`, " +
-                "`currentExerciseId`, `adaptationState`, `precedingProgressQualifyingWindows`, " +
-                "`precedingRegressQualifyingWindows`, `precedingHighRiskWindows`, " +
-                "`recoveryQualifyingSessions`, `eligibleSessionsSinceLastProgressionChange`, " +
-                "`programRevision`, `updatedAt`, `policyVersion`) VALUES ('squat-family', 0, NULL, " +
-                "'RECOVERY', 0, 0, 0, 1, NULL, 1, 1700000000000, 1)"
-        )
-        database.exec(
-            "INSERT INTO `adaptive_decision_record` (`familyId`, `programRevision`, `cycleNumber`, " +
-                "`programDay`, `timestamp`, `previousState`, `newState`, `actions`, `reasonCode`, " +
-                "`policyVersion`) VALUES ('squat-family', 1, 2, 8, 1700000000000, 'HOLD', 'RECOVERY', " +
-                "'RECOVERY_LOAD', 'RECOVERY', 1)"
-        )
+        for (retired in listOf("family_progression_state", "adaptive_decision_record")) {
+            assertFalse("`$retired` is dropped", database.tableNames().contains(retired))
+        }
 
-        assertEquals(
-            "the Stage-1 current-state table takes new rows under the revision integer key it owns",
-            2,
-            database.count("family_progression_state")
+        // The target family state is owned by a revision, so the write needs one to exist: the FK is
+        // part of what makes the target table the *owned* one the Stage-1 table never was.
+        ProgramGraphInserts.insertCompleteProgram(database, "1")
+
+        database.exec(
+            "INSERT INTO `program_family_progression_state` (`revisionId`, `familyId`, " +
+                "`progressionLevel`, `adaptationState`, `currentExerciseId`, `updatedAt`) " +
+                "VALUES ('revision-1', 'squat-family', 1, 'PROGRESS', 'squats', 1700000000000)"
         )
         assertEquals(
-            "and its audit trail still appends under the same contract",
+            "the target family state is the one an upgrade leaves writable — the graph fixture's own " +
+                "row plus the one just written",
             2,
-            database.count("adaptive_decision_record")
+            database.count("program_family_progression_state")
         )
         assertEquals(
-            "the two Stage-1 tables are keyed exactly as they were: no target column was added to them",
-            "INTEGER",
-            database.columnType("family_progression_state", "programRevision")
+            "and it is keyed by the revision *identity*, not by the retired revision integer",
+            "TEXT",
+            database.columnType("program_family_progression_state", "revisionId")
+        )
+        assertEquals(
+            "the target decision table is the only audit trail there is — the one row the graph " +
+                "fixture wrote, and nothing the upgrade invented on its way past the retired one",
+            1,
+            database.count("program_adaptive_decision_record")
         )
     }
 
@@ -336,26 +441,26 @@ class ProgramMigrationPreservationTest {
     }
 
     @Test
-    fun theLegacySetLogAndTheTargetSetLogAreIndependentTables() {
+    fun theTargetSetLogIsTheOnlySetLogAfterTheUpgrade() {
+        // §30 step 15 inverted this claim: it used to be about two independent set logs coexisting.
+        // One is retired, so the claim is that there is exactly one — and that it is the target one.
         val database = migratedDatabase()
         ProgramGraphInserts.insertCompleteProgram(database, "1")
 
-        assertEquals("the shipped logging table keeps its own row", 1, database.count("set_log"))
+        assertFalse(
+            "the shipped logging table is dropped, so nothing can write a second set log",
+            database.tableNames().contains("set_log")
+        )
         assertEquals("the target set log holds the confirmed set", 1, database.count("program_set_log"))
         assertEquals(
-            "the two rows are different shapes: the legacy one is dated, the target one is owned",
-            "2026-09-14",
-            database.scalar("SELECT sessionDate FROM `set_log`")
-        )
-        assertEquals(
-            "and the target row names the session exercise it belongs to",
+            "and the row names the session exercise it belongs to — there is no date-keyed shape left",
             "session-exercise-1",
             database.scalar("SELECT sessionExerciseId FROM `program_set_log`")
         )
         assertEquals(
-            "neither table was emptied by the upgrade",
-            1,
-            database.scalar("SELECT COUNT(*) FROM `set_log`")!!.toInt()
+            "the target table's columns are exactly the owned ones",
+            listOf("setLogId", "sessionExerciseId", "setIndex", "completedReps", "durationSeconds", "performedAt"),
+            database.columnNames("program_set_log")
         )
     }
 
@@ -480,6 +585,8 @@ class ProgramMigrationPreservationTest {
         assertEquals(10, AppDatabase.MIGRATION_9_10.endVersion)
         assertEquals(10, AppDatabase.MIGRATION_10_11.startVersion)
         assertEquals(11, AppDatabase.MIGRATION_10_11.endVersion)
+        assertEquals(11, AppDatabase.MIGRATION_11_12.startVersion)
+        assertEquals(12, AppDatabase.MIGRATION_11_12.endVersion)
 
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
@@ -488,6 +595,7 @@ class ProgramMigrationPreservationTest {
             database.migrate(AppDatabase.MIGRATION_8_9)
             database.migrate(AppDatabase.MIGRATION_9_10)
             database.migrate(AppDatabase.MIGRATION_10_11)
+            database.migrate(AppDatabase.MIGRATION_11_12)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }
@@ -502,9 +610,14 @@ class ProgramMigrationPreservationTest {
             database.columnNames("program_revision")
         )
         assertEquals(
-            "including the adaptive window bookkeeping the final step appended to the family-state table",
+            "including the adaptive window bookkeeping the window step appended to the family-state table",
             ProgramSchemaFixture.columnsNow("program_family_progression_state").map { it.name },
             database.columnNames("program_family_progression_state")
+        )
+        assertEquals(
+            "and the last step leaves the database with the retained tables and the target ones only",
+            (ProgramSchemaFixture.ALL_TABLES_AT_CURRENT_VERSION + "room_master_table").sorted(),
+            database.tableNames().filterNot { it.startsWith("sqlite_") }.sorted()
         )
     }
 

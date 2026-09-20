@@ -43,7 +43,12 @@ class ProgramsLocalizationTest {
         "ui/screens/MyProgramsScreen.kt",
         "ui/screens/ProgramDetailScreen.kt",
         "ui/screens/ProgramEditorScreen.kt",
-        "ui/screens/ProgramImportScreen.kt"
+        "ui/screens/ProgramImportScreen.kt",
+        // §30 step 15: Home and the workout session screen became part of the Program UI — Home starts a
+        // workout from the selected Program's next opportunity, and the session screen is the target
+        // runtime's only presentation. Their copy is this feature's copy, so its rules cover them.
+        "ui/screens/HomeScreen.kt",
+        "ui/screens/ProgramSessionScreen.kt"
     ).map { path -> File(mainSourceRoot, path) }
 
     /**

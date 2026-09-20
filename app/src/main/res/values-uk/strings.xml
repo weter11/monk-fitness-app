@@ -723,14 +723,6 @@
 
     <!-- C3 Manual Controls -->
     <string name="program_controls_title">Керування програмою</string>
-    <string name="restart_current_cycle">Перезапустити поточний цикл</string>
-    <string name="restart_current_cycle_desc">Очищає прогрес лише поточного циклу. Дата старту, налаштування та історія минулих циклів зберігаються.</string>
-    <string name="restart_current_cycle_confirm">Перезапустити поточний цикл?</string>
-    <string name="restart_current_cycle_confirm_text">Усі позначки виконання поточного циклу буде видалено. Історія минулих циклів збережеться. Скасувати це неможливо.</string>
-    <string name="start_revised_program">Почати переглянуту програму</string>
-    <string name="start_revised_program_desc">Запускає програму знову з 1-го дня починаючи з сьогоднішнього. Минула історія програми залишиться в архіві.</string>
-    <string name="start_revised_program_confirm">Почати переглянуту програму?</string>
-    <string name="start_revised_program_confirm_text">Календар програми почнеться заново з сьогоднішнього дня, з 1-го дня. Минула історія програми залишиться в архіві. Скасувати це неможливо.</string>
     <string name="full_reset">Повне скидання</string>
     <string name="full_reset_desc">Видаляє дані програми: тренування, заняття поставою, статистику, налаштування та стан онбордингу. Плани харчування зберігаються. Застосунок повернеться до першого запуску.</string>
     <string name="full_reset_confirm">Виконати повне скидання?</string>
@@ -749,34 +741,6 @@
     <string name="cancel">Скасувати</string>
 
     <!-- Custom Program editor -->
-    <string name="custom_program">Власна програма</string>
-    <string name="custom_program_desc">Виберіть, які вправи можуть використовуватися в тренуванні.</string>
-    <string name="custom_program_future_only_hint">Зміни застосуються до наступного ще не розпочатого тренування.</string>
-    <string name="custom_program_default_selection">Стандартний вибір</string>
-    <string name="custom_program_custom_selection">Власний вибір</string>
-    <string name="custom_program_enabled_count">Увімкнено вправ: %1$d</string>
-    <string name="custom_program_search_label">Пошук вправ</string>
-    <string name="custom_program_search_clear">Очистити пошук</string>
-    <string name="custom_program_no_results">За цим запитом вправ немає.</string>
-    <string name="custom_program_apply">Застосувати</string>
-    <string name="custom_program_reset">Скинути до стандартних</string>
-    <string name="custom_program_reset_confirm_title">Скинути вибір до стандартного?</string>
-    <string name="custom_program_reset_confirm_text">Повернеться стандартний набір вправ. Історія тренувань, прогрес і календар програми збережуться.</string>
-    <string name="custom_program_error_header">Цей вибір не можна застосувати</string>
-    <string name="custom_program_error_missing_domain">Жодна увімкнена вправа не покриває %1$s.</string>
-    <string name="custom_program_error_unavailable_equipment">Для %1$s потрібне обладнання, яке ви не вибрали. Змінити обладнання можна в налаштуваннях.</string>
-    <string name="custom_program_requires_equipment">Потрібно</string>
-    <string name="custom_program_warning_header">Попередження про баланс</string>
-    <string name="custom_program_warning_region_not_covered">Жодна увімкнена вправа не опрацьовує %1$s. Дні програми все одно можна заповнити з інших зон.</string>
-    <string name="custom_program_warning_region_concentration">На %1$s припадає %2$d увімкнених вправ — більше, ніж на всі інші зони разом.</string>
-    <string name="custom_program_family_all_enabled">Увімкнена повністю</string>
-    <string name="custom_program_family_partial">Увімкнена частково</string>
-    <string name="custom_program_family_none_enabled">Нічого не увімкнено</string>
-    <string name="custom_program_family_count">Увімкнено %1$d з %2$d вправ</string>
-    <string name="custom_program_family_toggle_description">%1$s, %2$s. Перемикає всю групу.</string>
-    <string name="custom_program_domain_strength">силовий напрямок</string>
-    <string name="custom_program_domain_flexibility">напрямок гнучкості</string>
-    <string name="custom_program_unknown_family">Інші вправи</string>
 
     <!-- ======================================================================================
          §30 step 14 — the Program System's user interface (Programs / My Programs / Detail /
@@ -960,7 +924,63 @@
     <string name="programs_refused_archive_selection">Активну програму не можна заархівувати. Спершу виберіть іншу.</string>
     <string name="programs_refused_transition">Ця дія недоступна в поточному стані програми.</string>
     <string name="programs_refused_not_found">Програми більше не існує.</string>
-    <string name="programs_legacy_controls_note">Ці дії стосуються вбудованої програми тренувань. Свої програми ведіть у розділі «Програми».</string>
     <string name="programs_notice_planned_start_set">Дату початку збережено</string>
     <string name="programs_detail_next_workout_unreadable">Не вдалося прочитати розклад</string>
+    <string name="programs_session_title">Тренування</string>
+    <string name="programs_session_start">Почати тренування</string>
+    <string name="programs_session_loading">Підготовка тренування…</string>
+    <string name="programs_session_planned_date">Заплановано на %1$s</string>
+    <string name="programs_session_sets_progress">%1$d з %2$d підходів</string>
+    <string name="programs_session_set_of">Підхід %1$d з %2$d</string>
+    <string name="programs_session_reps_target">%1$d повторень</string>
+    <string name="programs_session_seconds_target">%1$d с</string>
+    <string name="programs_session_confirm_set">Підтвердити підхід</string>
+    <string name="programs_session_rest">Відпочинок %1$d с</string>
+    <string name="programs_session_skip_rest">Пропустити відпочинок</string>
+    <string name="programs_session_finish">Завершити тренування</string>
+    <string name="programs_session_finish_early_title">Усе одно завершити?</string>
+    <string name="programs_session_finish_early_text">Підтверджено не всі підходи. Після завершення тренування буде записано як виконане.</string>
+    <string name="programs_session_cancel">Скасувати тренування</string>
+    <string name="programs_session_cancel_confirm_title">Скасувати це тренування?</string>
+    <string name="programs_session_cancel_confirm_text">Тренування залишається в плані та зберігається як скасована спроба — почати його можна пізніше.</string>
+    <string name="programs_session_result_completed">Тренування виконано</string>
+    <string name="programs_session_result_cancelled">Тренування скасовано</string>
+    <string name="programs_session_exercise_details">Опис вправи</string>
+    <string name="programs_session_notice_title">Повідомлення</string>
+    <string name="programs_session_slot_unavailable">Це тренування не можна почати за планом, до якого воно належить.</string>
+    <string name="programs_session_already_in_progress">Це тренування вже виконується, але збережену спробу не вдалося прочитати.</string>
+    <string name="programs_session_completed_adaptive_unavailable">Тренування збережено. Адаптивну частину прочитати не вдалося, тому нічого не змінено.</string>
+    <string name="programs_home_current_program">Поточна програма</string>
+    <string name="programs_home_no_program">Програму не вибрано</string>
+    <string name="programs_home_next_workout">Наступне тренування</string>
+    <string name="programs_home_next_planned">Заплановано на %1$s</string>
+    <string name="programs_home_nothing_planned">Поки нічого не заплановано</string>
+    <string name="programs_home_schedule_unreadable">Не вдалося прочитати розклад</string>
+    <string name="programs_home_calendar">Виконано: %1$d, пропущено: %2$d, попереду: %3$d</string>
+    <string name="programs_home_open_programs">Відкрити «Програми»</string>
+    <string name="programs_home_streak">Серія</string>
+    <string name="programs_home_completed">Виконано</string>
+    <string name="programs_home_upcoming">Попереду</string>
+    <string name="programs_home_notice_title">Повідомлення</string>
+    <string name="posture_session_complete">Завершити заняття</string>
+    <string name="posture_session_nothing_to_present">Для цього дня треку немає чого показати.</string>
+    <string name="progress_scope_all">Усі програми</string>
+    <string name="progress_calendar_title">Календар</string>
+    <string name="progress_calendar_value">%1$d виконано \u00b7 %2$d пропущено \u00b7 %3$d попереду \u00b7 %4$d замінено</string>
+    <string name="progress_frequency_title">Частота тренувань</string>
+    <string name="progress_frequency_training_days">Тренувальних днів: %1$d з %2$d</string>
+    <string name="progress_frequency_per_week">Тренувань за 7 днів: %1$s</string>
+    <string name="progress_duration_value">Середнє за %1$d виміряними тренуваннями: %2$s</string>
+    <string name="progress_duration_unmeasured">Поки немає завершеного тренування, яке можна виміряти</string>
+    <string name="progress_streak_title">Серія програми</string>
+    <string name="progress_streak_row">%1$s \u2014 поточна %2$d, найкраща %3$d</string>
+    <string name="progress_history_title">Останні тренування</string>
+    <string name="progress_history_row">%1$s \u00b7 %2$s \u00b7 підходів: %3$d \u00b7 вправ: %4$d</string>
+    <string name="progress_history_empty">Ще не розпочато жодного тренування.</string>
+    <string name="progress_performance_title">Поступ за вправами</string>
+    <string name="progress_performance_rep_row">%1$s \u2014 спостережень: %2$d, найкраще %3$d повторень</string>
+    <string name="progress_performance_time_row">%1$s \u2014 спостережень: %2$d, найкраще %3$d с</string>
+    <string name="progress_performance_empty">Ще немає зіставного підходу.</string>
+    <string name="progress_deferred_title">Поки не обчислюється</string>
+    <string name="progress_notice_title">Повідомлення</string>
 </resources>

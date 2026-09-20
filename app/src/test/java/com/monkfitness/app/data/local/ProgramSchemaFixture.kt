@@ -59,6 +59,38 @@ internal object ProgramSchemaFixture {
     /** Every table the version-8 database contains. */
     val ALL_TABLES: List<String> = LEGACY_TABLES + TABLES
 
+    /**
+     * The shipped tables **§30 step 15 keeps**, because they belong to global features and not to a
+     * Program: the posture/mobility track, the body-weight log, and the nutrition plan's own calendar.
+     */
+    val RETAINED_TABLES: List<String> = listOf(
+        "posture_session_progress",
+        "body_weight_log",
+        "meal_cycles",
+        "meals",
+        "shopping_items"
+    )
+
+    /**
+     * The shipped tables **§30 step 15 retires**, and `MIGRATION_11_12` drops.
+     *
+     * They are the shipped 56-day program's own state (`user_progress`, `program_day_state`,
+     * `set_log`) and the Stage-1 adaptive generation's (`family_progression_state`,
+     * `adaptive_decision_record`). The blueprint states that no legacy program/history migration is
+     * required, so they are dropped rather than converted — and this list is what makes "dropped"
+     * measurable instead of a claim about the migration's text.
+     */
+    val RETIRED_TABLES: List<String> = listOf(
+        "user_progress",
+        "program_day_state",
+        "set_log",
+        "family_progression_state",
+        "adaptive_decision_record"
+    )
+
+    /** Every table the current (version 12) database contains: the retained global ones, then the target. */
+    val ALL_TABLES_AT_CURRENT_VERSION: List<String> = RETAINED_TABLES + TABLES
+
     /** One declared column. */
     data class Column(val name: String, val type: String, val nullable: Boolean = false)
 

@@ -220,16 +220,7 @@ class ProgramRepositoryTest {
             ProgramGraphFixture.session("b", other.slots.first())
         )
         rig.database.exec("INSERT INTO `program_family_progression_state` (`revisionId`, `familyId`, `progressionLevel`, `adaptationState`, `currentExerciseId`, `updatedAt`) VALUES ('revision-b', 'push-family', 1, 'HOLD', NULL, 1700000000000)")
-        rig.database.exec("INSERT INTO `set_log` (`exerciseId`, `repsCompleted`, `durationSeconds`, `timestamp`, `sessionDate`) VALUES ('pushup', 12, 0, 1700000000000, '2026-09-21')")
         rig.database.exec("INSERT INTO `body_weight_log` (`weightKg`, `date`) VALUES (80.5, '2026-09-21')")
-        rig.database.exec(
-            "INSERT INTO `family_progression_state` (`familyId`, `progressionLevel`, `currentExerciseId`, " +
-                "`adaptationState`, `precedingProgressQualifyingWindows`, " +
-                "`precedingRegressQualifyingWindows`, `precedingHighRiskWindows`, " +
-                "`recoveryQualifyingSessions`, `eligibleSessionsSinceLastProgressionChange`, " +
-                "`programRevision`, `updatedAt`, `policyVersion`) VALUES ('push-family', 0, NULL, " +
-                "'HOLD', 0, 0, 0, 0, NULL, 0, 1700000000000, 1)"
-        )
 
         rig.programRepository.deleteProgram(programId)
 
@@ -270,13 +261,11 @@ class ProgramRepositoryTest {
             rig.freshSessionRepository().sessionById(com.monkfitness.app.domain.common.SessionId("session-b"))!!.slotId
         )
         assertEquals(
-            "and the global rows a Program does not own survive (§29)",
-            listOf("1", "1", "1"),
-            listOf(
-                rig.database.scalar("SELECT COUNT(*) FROM `set_log`"),
-                rig.database.scalar("SELECT COUNT(*) FROM `body_weight_log`"),
-                rig.database.scalar("SELECT COUNT(*) FROM `family_progression_state`")
-            )
+            "and the retained global rows a Program does not own survive (§29). §30 step 15 inverted " +
+                "this list: it used to include the shipped `set_log` and `family_progression_state` rows, " +
+                "which no longer have a table to survive in",
+            "1",
+            rig.database.scalar("SELECT COUNT(*) FROM `body_weight_log`")
         )
     }
 
@@ -329,16 +318,24 @@ class ProgramRepositoryTest {
     }
 
     @Test
-    fun deletingAProgramDoesNotTouchTheLegacyTables() = runBlocking {
+    fun deletingAProgramTouchesNoTableOutsideItsOwnGraph() = runBlocking {
         rig.createGraph()
-        rig.database.exec("INSERT INTO `adaptive_decision_record` (`familyId`, `programRevision`, `cycleNumber`, `programDay`, `timestamp`, `previousState`, `newState`, `actions`, `reasonCode`, `policyVersion`) VALUES ('push-family', 0, 1, 1, 1700000000000, 'HOLD', 'PROGRESS', 'PROGRESS', 'EVIDENCE_STABLE', 1)")
+        rig.database.exec("INSERT INTO `body_weight_log` (`weightKg`, `date`) VALUES (80.5, '2026-09-21')")
+        rig.database.exec("INSERT INTO `posture_session_progress` (`trackCycle`, `trackDay`, `isCompleted`, `completionDate`, `focusArea`) VALUES (1, 3, 1, 1700000000000, 'SPINE')")
 
         rig.programRepository.deleteProgram(programId)
 
+        // §30 step 15 inverted this test. It used to prove the deletion left the *Stage-1* audit trail
+        // alone — "not Program-owned, not deleted" — and the Stage-1 tables are gone. A retained global
+        // row is the same claim on the schema that exists: deleting a Program is not a reset, and it
+        // reaches nothing outside the graph it owns (§29).
         assertEquals(
-            "the Stage-1 audit trail is not Program-owned and is not deleted with a Program (§30 step 15)",
-            "1",
-            rig.database.scalar("SELECT COUNT(*) FROM `adaptive_decision_record`")
+            "a retained global row is not Program-owned and is not deleted with a Program",
+            listOf("1", "1"),
+            listOf(
+                rig.database.scalar("SELECT COUNT(*) FROM `body_weight_log`"),
+                rig.database.scalar("SELECT COUNT(*) FROM `posture_session_progress`")
+            )
         )
         assertEquals(
             "and the target tables are empty of the deleted Program",

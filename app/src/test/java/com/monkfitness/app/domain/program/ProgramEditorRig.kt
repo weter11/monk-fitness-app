@@ -158,10 +158,11 @@ internal class ProgramEditorRig(key: String = "a") {
         /**
          * Every table the migrated database holds.
          *
-         * The Program System's fifteen target tables, and the ten tables the app already shipped —
-         * including them matters: "the editor wrote nothing" is a claim about the whole database, and
-         * the shipped `set_log` / `user_progress` / `program_day_state` tables are exactly where a
-         * careless editor integration would quietly leave a mark.
+         * The Program System's fifteen target tables and the five retained global ones.
+         *
+         * The census used to include the shipped program's tables, because a careless editor integration
+         * could quietly leave a mark in one of them. §30 step 15 removed them, so the claim is about the
+         * whole schema that exists — and the retained tables are where a mark could still land.
          */
         val TABLES: List<String> = listOf(
             // the Program System target schema (§23)
@@ -180,17 +181,13 @@ internal class ProgramEditorRig(key: String = "a") {
             "program_family_progression_state",
             "program_adaptive_decision_record",
             "adaptive_adjustment",
-            // the tables the app already shipped
-            "user_progress",
+            // the retained global tables the app still holds (§30 step 15 dropped the shipped
+            // program's five, and those are the ones this census used to reach)
             "posture_session_progress",
-            "set_log",
             "body_weight_log",
-            "program_day_state",
             "meal_cycles",
             "meals",
-            "shopping_items",
-            "family_progression_state",
-            "adaptive_decision_record"
+            "shopping_items"
         )
     }
 }
