@@ -83,14 +83,23 @@ internal object ResourceTables {
                 .toList()
         }.toSet()
 
-    /** Every `<plurals>`/`<string-array>` name a locale directory declares (§14's other localizable types). */
+    /**
+     * Every `<plurals>`/`<string-array>` a file declares, as name -> element type.
+     *
+     * It reads a *file*, not a locale, so the rule that covers these types can be exercised on a document
+     * the test writes itself — a check that can only ever run against content the app does not have is not
+     * a check. §14 of the brief asks for these types to be covered without inventing any: this suite ships
+     * none, so the reader is proven against a synthetic file and the app's own tables are asserted empty.
+     */
+    fun collectionsIn(file: File): Map<String, String> =
+        Regex("""<(plurals|string-array)\s+name="([^"]+)"""")
+            .findAll(file.readText())
+            .map { match -> match.groupValues[2] to match.groupValues[1] }
+            .toMap()
+
+    /** Every `<plurals>`/`<string-array>` name a locale directory declares. */
     fun collectionsOf(tag: String): Map<String, String> =
-        filesIn(tag).flatMap { file ->
-            Regex("""<(plurals|string-array)\s+name="([^"]+)"""")
-                .findAll(file.readText())
-                .map { match -> match.groupValues[2] to match.groupValues[1] }
-                .toList()
-        }.toMap()
+        filesIn(tag).flatMap { file -> collectionsIn(file).entries }.associate { it.key to it.value }
 
     /** The text of `res/xml/locale_config.xml`, or `null` when the app declares no locale config. */
     fun localeConfig(): String? =

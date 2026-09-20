@@ -50,9 +50,11 @@ build_new() {
 
 build_legacy() {
     local dir="$OUT/legacy"
-    echo "=================== legacy ($(git -C "$REPO" rev-parse HEAD)) ==================="
+    local base
+    base=$(git -C "$REPO" rev-parse origin/main)
+    echo "=================== legacy ($base = origin/main) ==================="
     git -C "$REPO" worktree remove "$dir" --force 2>/dev/null
-    git -C "$REPO" worktree add --detach "$dir" HEAD > "$OUT/legacy.worktree.log" 2>&1 || {
+    git -C "$REPO" worktree add --detach "$dir" "$base" > "$OUT/legacy.worktree.log" 2>&1 || {
         echo "worktree add failed"; tail -3 "$OUT/legacy.worktree.log"; return 1
     }
     cp "$REPO/local.properties" "$dir/local.properties" 2>/dev/null

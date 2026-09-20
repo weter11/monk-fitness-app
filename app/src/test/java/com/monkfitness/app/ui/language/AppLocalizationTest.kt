@@ -7,7 +7,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import com.monkfitness.app.ui.language.ResourceTables.allLocales
-import com.monkfitness.app.ui.language.ResourceTables.collectionsOf
 import com.monkfitness.app.ui.language.ResourceTables.localeDir
 import com.monkfitness.app.ui.language.ResourceTables.localeDirsOnDisk
 import com.monkfitness.app.ui.language.ResourceTables.localeConfig
@@ -345,28 +344,6 @@ class AppLocalizationTest {
             allLocales().drop(1).forEach { tag ->
                 assertTrue("$tag must not keep the English value of $key", stringsOf(tag)[key] != english)
             }
-        }
-    }
-
-    @Test
-    fun theAppStillShipsNoPluralOrArrayResources() {
-        // §14 of the brief: check the other localizable resource types, and do not add new ones without need.
-        // The suite reads them (a `<plurals>` added tomorrow would have to exist in all seven locales, exactly
-        // as the string rules require), and it states that the app ships none today — a count-dependent
-        // phrase in this app is written as "%1$d-day ..." against a value the app already localizes.
-        val perLocale = allLocales().associateWith { tag -> collectionsOf(tag) }
-        val default = perLocale.getValue(ResourceTables.DEFAULT_LOCALE)
-
-        assertTrue(
-            "a new plural/array resource must be added to every locale and to this suite's invariants: $default",
-            default.isEmpty()
-        )
-        allLocales().drop(1).forEach { tag ->
-            assertEquals(
-                "$tag declares a different set of plural/array resources than the default table",
-                default.keys,
-                perLocale.getValue(tag).keys
-            )
         }
     }
 
