@@ -554,22 +554,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     )
 
-    init {
-        viewModelScope.launch {
-            syncNutritionCycles()
-        }
-        viewModelScope.launch {
-            while (isActive) {
-                val today = LocalDate.now()
-                if (_currentDate.value != today) {
-                    _currentDate.value = today
-                }
-                syncNutritionCycles()
-                delay(60_000)
-            }
-        }
-    }
-
     fun getExerciseLibrary(
         difficultyAdjustments: Map<String, Int> = exerciseDifficultyAdjustments.value,
         availableEquipment: Set<Equipment> = this.availableEquipment.value,
@@ -1086,6 +1070,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             tomorrowIsEnd && dismissedFor != warningKey
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /**
+     * The startup tick — and it is deliberately the **last** thing in this class's initialisation order.
+     *
+     * Kotlin runs property initializers and `init` blocks strictly top-to-bottom, and `viewModelScope`
+     * dispatches on `Dispatchers.Main.immediate`: a `launch` from the main thread — which is the thread a
+     * view model is constructed on — runs its body **synchronously** up to the first suspension point. So
+     * the first `syncNutritionCycles()` here executes *during construction*, and every property it reads
+     * must already be initialised when it does.
+     *
+     * It reads `nutritionCycleLength` (and through `createOrQueueMealCycle`: `mealCycles`,
+     * `activeMealCycle`, `pendingMealCycle`, `nutritionWeight`, `nutritionHeight`,
+     * `nutritionExcludedFoods`, `nutritionAvailableProducts`) plus `currentDate` and the nutrition
+     * repository. All of those are declared **above this block**, which is why it sits here, below the
+     * nutrition state, rather than beside the other startup wiring near the top of the class. Reading a
+     * `val` before its initializer runs is a null at runtime while the compiler sees nothing wrong — the
+     * lambda hides the read from its flow analysis — so the position is load-bearing, not cosmetic.
+     *
+     * `MainViewModelInitializationOrderTest` asserts it mechanically: no `init` block may call, even
+     * transitively, a member that reads a property declared below it.
+     */
+    init {
+        viewModelScope.launch {
+            syncNutritionCycles()
+        }
+        viewModelScope.launch {
+            while (isActive) {
+                val today = LocalDate.now()
+                if (_currentDate.value != today) {
+                    _currentDate.value = today
+                }
+                syncNutritionCycles()
+                delay(60_000)
+            }
+        }
+    }
 
     fun setNutritionCycleLength(days: Int) {
         viewModelScope.launch {

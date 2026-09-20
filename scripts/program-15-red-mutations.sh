@@ -27,6 +27,7 @@ SCHEMA="com.monkfitness.app.data.local.ProgramSchemaTest"
 MIGRATION="com.monkfitness.app.data.local.ProgramMigrationPreservationTest"
 ACCEPT="com.monkfitness.app.architecture.ProgramTargetAcceptanceTest"
 NAV="com.monkfitness.app.ui.programs.ProgramsNavigationTest"
+INIT_ORDER="com.monkfitness.app.viewmodel.MainViewModelInitializationOrderTest"
 
 FILES=(
     "$MAIN/di/AppContainer.kt"
@@ -89,7 +90,7 @@ FAIL=0
 declare -a RESULTS
 
 echo "=================== control: nothing mutated ==================="
-if run_suite "$GATE" && run_suite "$MIGRATION" && run_suite "$ACCEPT" && run_suite "$SCHEMA"; then
+if run_suite "$GATE" && run_suite "$MIGRATION" && run_suite "$ACCEPT" && run_suite "$SCHEMA" && run_suite "$INIT_ORDER"; then
     echo "control GREEN"
     RESULTS+=("control                          GREEN   ok")
 else
@@ -221,6 +222,21 @@ t = t.replace(
 )
 '
 check_red "10 a target DAO reads the retired set log" "$GATE"
+
+# ---- 11. the startup init is ordered above the state it reads -----------------------------------
+echo "=================== 11. the startup init above the nutrition state ==================="
+mutate "$MAIN/viewmodel/MainViewModel.kt" '
+# The startup bug this stage shipped and had to fix: a `launch` from an init block runs synchronously on
+# the constructing thread, so an init placed above the properties it reads crashes at startup — which the
+# JVM suite cannot see, because nothing in it can construct this class.
+start = t.index("    /**\n     * The startup tick")
+end = t.index("    fun setNutritionCycleLength(days: Int) {")
+block = t[start:end]
+t = t[:start] + t[end:]
+anchor = "    private val workoutGenerator = WorkoutGenerator()\n"
+t = t.replace(anchor, anchor + "\n" + block, 1)
+'
+check_red "11 the startup init is ordered above the nutrition state" "$INIT_ORDER"
 
 echo
 echo "=================== source restoration ==================="
