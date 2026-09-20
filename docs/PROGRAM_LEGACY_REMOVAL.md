@@ -378,15 +378,134 @@ at the assertion. Four of the inversions are worth naming here:
 
 ---
 
-## 14. Verification
+## 14. Runtime verification on a device
+
+The JVM suite is green and **structurally blind to `MainViewModel`**: this project has no Robolectric
+harness, so nothing in `src/test` can construct an `AndroidViewModel`. That gap shipped a startup crash in
+the first P15 commit, and closing it is part of this stage.
+
+### 14.1 The crash, and why the suite could not see it
+
+`MainViewModel`'s nutrition tick `init` block sat **above** the nutrition properties its call path reads:
+
+```text
+init (line 557) → viewModelScope.launch { syncNutritionCycles() }
+syncNutritionCycles (1288) reads nutritionCycleLength … declared at 954
+                            plus nutritionWeight 934, nutritionHeight 944, nutritionExcludedFoods 958,
+                            nutritionAvailableProducts 1013, mealCycles 1023,
+                            activeMealCycle 1027, pendingMealCycle 1033
+```
+
+Two facts make it fatal rather than merely untidy: `viewModelScope` dispatches on
+`Dispatchers.Main.immediate`, and a view model is constructed on the main thread — so the block's first
+`launch` runs its body **synchronously inside `<init>`**, up to the first suspension point. Kotlin runs
+property initializers top-to-bottom, so the property is still `null`. The compiler cannot help: the read
+sits inside a lambda, so flow analysis never reaches it.
+
+Reproduced on the emulator by installing the pre-fix APK (`d74ee3a`) fresh and launching it:
+
+```text
+FATAL EXCEPTION: main
+java.lang.NullPointerException: Attempt to invoke interface method
+    'java.lang.Object kotlinx.coroutines.flow.StateFlow.getValue()' on a null object reference
+        at MainViewModel.syncNutritionCycles(MainViewModel.kt:1288)
+        at MainViewModel.access$syncNutritionCycles(MainViewModel.kt:85)
+        at MainViewModel$4.invokeSuspend(MainViewModel.kt:559)
+        at kotlinx.coroutines.intrinsics.CancellableKt.startCoroutineCancellable(...)
+        at kotlinx.coroutines.BuildersKt__Builders_commonKt.launch(Builders.common.kt:56)
+        at MainViewModel.<init>(MainViewModel.kt:558)
+```
+
+The stack is the proof of the mechanism: no dispatcher hop appears between `launch` and `invokeSuspend`,
+and the frame below it is `<init>`.
+
+### 14.2 The fix
+
+The tick `init` block moves below every property its call path reads — below `nutritionPlan`, just above
+`setNutritionCycleLength`'s first function — with the ordering requirement written into its KDoc. No lazy
+wrapper, no catch, nothing suppressed, and no change to the nutrition or Program architecture.
+
+### 14.3 The three device scenarios
+
+| scenario | artifact | result |
+| --- | --- | --- |
+| fresh install → launch | pre-fix (`d74ee3a`) | **FATAL**, process gone — the reproduction |
+| fresh install → launch | fixed (`66286e5`) | `Status: ok` (988 ms), process alive, **0 FATAL**, onboarding rendered |
+| schema-11 data → upgrade → launch | P14 (`6f56493`) then fixed P15 over it | `Status: ok` (1009 ms), alive, **0 FATAL**, database migrated |
+
+Fresh-install evidence, from the device:
+
+```text
+uiautomator:  text="Monk Fitness" · "Добро пожаловать в Monk Fitness" · "Начать" + the onboarding body
+topResumedActivity=com.monkfitness.app/.MainActivity
+user_version = 12 · 23 tables · retired tables present: NONE
+```
+
+Upgrade evidence — the P14 app's own database, seeded with a posture row, a body-weight row and the meal
+plan the app had generated, then upgraded in place (`adb install -r`, no uninstall):
+
+```text
+                                  before (v11)                     after (v12)
+user_version                      11                               12
+retired tables                    all five present                 NONE
+posture columns                   cycleNumber, day                 trackCycle, trackDay
+posture row                       (2, 7, 1, 1700000000000,         (2, 7, 1, 1700000000000,
+                                   'UPPER_BACK')                    'UPPER_BACK')   ← same row
+body weight                       (78.5, '2026-09-14')             (78.5, '2026-09-14')
+meal_cycles / meals / shopping    2 / 12 / 12                      2 / 12 / 12
+target tables (program, slots,    0 everywhere                     0 everywhere
+sessions, set logs, adaptive)                                      ← nothing converted
+```
+
+This is the brief's *"the migration must preserve existing `posture_session_progress` rows"* measured on a
+real device, on a database the P14 app itself created — not only in the JVM SQLite test.
+
+The APKs are x86_64 builds made in throwaway worktrees, because the app's debug APK is `arm64-v8a`-only and
+this host's emulator is x86_64. `abiFilters` changes which native libraries are packaged and nothing about
+the Kotlin/Dex code under test; the branch's build configuration is untouched.
+
+### 14.4 The regression test
+
+`MainViewModelInitializationOrderTest` asserts the **rule**, not the incident's shape:
+
+```text
+for every `init` block
+  for every member it calls (transitively, through the class's own functions)
+    every property that call path reads must be declared above it
+```
+
+That is the real initialisation contract, so a future `init` placed beside the wiring at the top of the
+class fails here instead of on a device. A second test names the nutrition tick's transitive read, so the
+load-bearing ordering is visible to a reader.
+
+The guard is a source-level *availability* analysis because no harness can construct the class — a weaker
+check than instantiation, and that weakness is recorded here rather than hidden. Its power is measured, not
+asserted: `scripts/program-15-red-mutations.sh` mutation 11 moves the tick back above the nutrition state
+and the suite requires that test to fail.
+
+### 15.1 Found during the runtime pass, reported not fixed
+
+`onboarding_desc` (en / ru / uk) still reads *"Embark on a structured **8-week** program … follow daily
+workouts … our streak system"*. That describes the shipped 56-day program this stage retired, so the copy
+promises something the app no longer ships: a new user is now taken to the Program System to pick or build
+a program. It is a **copy/product decision**, not a compatibility path, and this stage did not take it.
+The key is `onboarding_desc` in all three locale files.
+
+---
+
+## 15. Verification
 
 Every number below comes from a run whose JUnit XML timestamps were checked against the wall clock, so none
 of them is a carried-over figure.
 
 ```text
 pristine origin/main (6f56493)     270 classes / 2578 tests / 0F / 0E / 0S
-this branch, §30 step 15          235 classes / 2024 tests / 0F / 0E / 0S
+this branch, §30 step 15          236 classes / 2026 tests / 0F / 0E / 0S
 ```
+
+The final census is *larger* than the pre-fix one by one class and two tests: the startup fix added
+`MainViewModelInitializationOrderTest`, whose two tests are the guard for the ordering the runtime pass
+caught.
 
 The census is smaller by 35 classes and 554 tests, and every one of them is itemised in
 `docs/_p15-deleted-tests.txt`: the suites that tested the shipped program's runtime, the Stage-1 adaptive
@@ -420,6 +539,7 @@ removed none. The task still fails, as it already did, on the pre-existing pair.
 | `ProgramLegacyRemovalGateTest` | 6 tests, 0F |
 | `ProgramTargetAcceptanceTest` | 2 tests, 0F |
 | `TrackCalendarTest` | 9 tests, 0F |
+| `MainViewModelInitializationOrderTest` | 2 tests, 0F |
 
 ### The RED mutation suite
 
@@ -427,11 +547,15 @@ removed none. The task still fails, as it already did, on the pre-existing pair.
 
 ```text
 control                                GREEN
-10 mutations                           caught
+11 mutations                           caught
 0 mutations                            missed
 every mutated source                   restored byte-identically (md5sum -c)
 residual mutations in the tree         none
 ```
+
+Mutation 11 is the startup-ordering bug this stage shipped and then fixed (§14): it moves the nutrition
+tick back above the state it reads, and the suite requires `MainViewModelInitializationOrderTest` to catch
+it — which is how the regression test's power is measured rather than asserted.
 
 The suite is built to fail loudly rather than quietly pass: a mutation that does not change its source
 aborts the run (a no-op mutation would read as a hole in the oracle), and the sources are re-checksummed
