@@ -40,6 +40,8 @@ import com.monkfitness.app.data.model.validateAvailableProductSelection
 import com.monkfitness.app.data.repository.NutritionRepository
 import com.monkfitness.app.data.repository.PostureRepository
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
+import com.monkfitness.app.language.AppLanguage
+import com.monkfitness.app.language.AppLanguageManager
 import com.monkfitness.app.platform.ProgramShareSheet
 import com.monkfitness.app.domain.track.TrackCalendar
 import com.monkfitness.app.domain.program.StandardProgram
@@ -96,6 +98,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * Program repository, and neither is keyed by a cycle or a program day.
      */
     val settingsManager: SettingsManager
+
+    /**
+     * The app's **one owner of language selection** (localization stage §2).
+     *
+     * The view model does not keep a language of its own and does not apply a locale: it hands the
+     * user's choice to this object, which writes it as the *application locale*, and it reads the
+     * current choice back from there — so a language picked in Android's own per-app language screen
+     * and a language picked in Settings are the same state, not two.
+     */
+    private val appLanguageManager: AppLanguageManager =
+        (application as MonkFitnessApplication).appLanguageManager
 
     /** The nutrition domain's storage, and the body-weight log its targets are computed from. */
     private val nutritionRepository: NutritionRepository
@@ -850,11 +863,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setLanguage(language: String) {
-        viewModelScope.launch {
-            settingsManager.setLanguage(language)
-        }
-    }
+    /** The language the user has selected; [AppLanguage.SYSTEM_DEFAULT] when no override is applied. */
+    fun currentAppLanguage(): AppLanguage = appLanguageManager.selection()
+
+    /**
+     * Applies [language] as the app's language — including [AppLanguage.SYSTEM_DEFAULT], which clears the
+     * application locale so the app follows the device again. The platform recreates the Activity, which
+     * is what makes every screen follow the change.
+     */
+    fun selectAppLanguage(language: AppLanguage) = appLanguageManager.select(language)
+
+    /**
+     * The one-time hand-off of the language a pre-localization install stored for itself (§5), triggered
+     * by `MainActivity.onCreate` before the first composition. It applies nothing — and writes nothing —
+     * when this install never stored a language, which is what keeps a user who never chose one on the
+     * system language.
+     */
+    suspend fun migrateLanguageSelectionIfNeeded() = appLanguageManager.migrateLegacySelection()
 
     val isOnboardingCompleted = settingsManager.isOnboardingCompletedFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), true

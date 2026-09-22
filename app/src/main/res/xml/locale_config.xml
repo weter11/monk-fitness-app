@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The languages Monk Fitness can present, declared for Android 13's per-app language screen (§4).
+
+    This file and the app's `AppLanguage.supported` list are two physical representations of one policy,
+    so they must agree key for key and in this order; `AppLocalizationTest` fails when they drift.
+
+    `en` is first because it is the ultimate fallback — the locale of `res/values/` itself. "System
+    language" is deliberately absent: it is the *absence* of an application locale, not a language the
+    system could apply, and listing it would offer users a language the app does not have.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="ru" />
+    <locale android:name="uk" />
+    <locale android:name="bg" />
+    <locale android:name="pt" />
+    <locale android:name="es" />
+    <locale android:name="it" />
+</locale-config>

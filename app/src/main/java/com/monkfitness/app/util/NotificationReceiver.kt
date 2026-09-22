@@ -7,22 +7,18 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.monkfitness.app.R
-import com.monkfitness.app.data.local.SettingsManager
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import java.util.Locale
+import com.monkfitness.app.util.NotificationScheduler
 
 class NotificationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val settingsManager = SettingsManager(context)
-        val language = runBlocking { settingsManager.languageFlow.first() }
-
-        val locale = Locale(language)
-        Locale.setDefault(locale)
-        val config = context.resources.configuration
-        config.setLocale(locale)
-        val localizedContext = context.createConfigurationContext(config)
+        // The reminder is written in the app's own language, which is the *application locale* — not a
+        // tag read back out of DataStore, and not a locale this receiver applies for itself (localization
+        // stage §2). `ContextCompat.getContextForLanguage` is the AndroidX helper for exactly this case:
+        // outside an Activity. On Android 13+ the platform has already applied the app locale to this
+        // process; on API 24–32 it rebuilds the context from the application locale AppCompat stored.
+        val localizedContext = ContextCompat.getContextForLanguage(context)
 
         val notificationManager = localizedContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channelId = "daily_reminder"

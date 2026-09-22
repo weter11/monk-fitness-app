@@ -99,9 +99,6 @@
     <string name="flexibility_session_summary">%1$s • %2$s</string>
     <string name="no_posture_progress_yet">Enable and complete extra posture sessions to see separate progress here.</string>
     <string name="completed_posture_sessions">Completed posture sessions: %d</string>
-    <string name="lang_en">English</string>
-    <string name="lang_ru">Russian</string>
-    <string name="lang_uk">Ukrainian</string>
     <string name="home">Home</string>
     <string name="progress">Progress</string>
     <string name="posture">Posture</string>
@@ -990,4 +987,69 @@
     <string name="progress_performance_empty">No comparable set has been recorded yet.</string>
     <string name="progress_deferred_title">Not computed yet</string>
     <string name="progress_notice_title">Notice</string>
+    <!--
+        Localization stage: the language setting itself, plus the user-visible copy that used to live as
+        string literals in Kotlin (the Settings category list and the nutrition preview dialog). Same rules
+        as every other string here — one key, one line, present in every locale the app ships.
+    -->
+    <string name="language_system_default">System language</string>
+    <string name="language_system_settings">App language settings</string>
+    <string name="settings_exercises_title">Exercises</string>
+    <string name="settings_filter_library_title">Show only exercises matching selected categories</string>
+    <string name="settings_filter_library_hint">When enabled, the Exercise Library and Search only display exercises belonging to the selected categories.</string>
+    <string name="settings_category_required_title">At least one category must remain enabled</string>
+    <string name="settings_category_required_text">Please enable at least one exercise category to generate workouts.</string>
+    <string name="settings_enable_all">Enable All</string>
+    <string name="settings_disable_all">Disable All</string>
+    <string name="category_filter_shaolin">Shaolin</string>
+    <string name="category_filter_calisthenics">Calisthenics</string>
+    <string name="category_filter_functional_fitness">Functional Fitness</string>
+    <string name="category_filter_bodyweight_strength">Bodyweight Strength</string>
+    <string name="category_filter_mobility">Mobility</string>
+    <string name="category_filter_stretching">Stretching</string>
+    <string name="category_filter_hyperlordosis">Hyperlordosis</string>
+    <string name="category_filter_posture_correction">Posture Correction</string>
+    <string name="category_filter_neck">Neck</string>
+    <string name="category_filter_lower_back">Lower Back</string>
+    <string name="category_filter_shoulders">Shoulders</string>
+    <string name="category_filter_knees">Knees</string>
+    <string name="category_filter_balance">Balance</string>
+    <string name="category_filter_senior">Senior</string>
+    <string name="category_filter_rehabilitation">Rehabilitation</string>
+    <string name="category_group_training_styles">Training Styles</string>
+    <string name="category_group_special_programs">Special Programs</string>
+    <string name="nutrition_preview_next_cycle">Preview Next Cycle</string>
+    <string name="nutrition_preview_accept">Accept Cycle</string>
+    <string name="nutrition_preview_duration_title">Select Preview Duration:</string>
+    <string name="nutrition_preview_summary_title">Cycle Summary</string>
+    <string name="nutrition_preview_duration">Duration:</string>
+    <string name="nutrition_preview_recipes">Recipes:</string>
+    <string name="nutrition_preview_unique_recipes">Unique recipes:</string>
+    <string name="nutrition_preview_repeated_recipes">Repeated recipes:</string>
+    <string name="nutrition_preview_products_required">Products required:</string>
+    <string name="nutrition_preview_already_available">Already available:</string>
+    <string name="nutrition_preview_need_to_buy">Need to buy:</string>
+    <string name="nutrition_preview_variety_score">Variety Score:</string>
+    <string name="nutrition_variety_excellent">Excellent Variety</string>
+    <string name="nutrition_variety_good">Good Variety</string>
+    <string name="nutrition_variety_low">Low Variety</string>
+    <string name="nutrition_preview_shopping_status">Shopping Status:</string>
+    <string name="nutrition_shopping_ready_to_cook">Ready to cook</string>
+    <string name="nutrition_shopping_needed">Need shopping</string>
+    <string name="nutrition_preview_shopping_status_missing">%1$s (%2$d missing)</string>
+    <string name="nutrition_preview_comparison_title">Comparison with Current Cycle</string>
+    <string name="nutrition_preview_new_recipes">New recipes:</string>
+    <string name="nutrition_preview_repeated_from_previous">Repeated from previous cycle:</string>
+    <string name="nutrition_preview_new_ingredients">New ingredients introduced:</string>
+    <string name="nutrition_preview_ingredients_stocked">Ingredients already stocked:</string>
+    <string name="nutrition_preview_missing_ingredients">Missing ingredients:</string>
+    <string name="nutrition_preview_avg_daily_calories">Avg Daily Calories:</string>
+    <string name="nutrition_preview_calories_comparison">%1$d kcal (Current: %2$d kcal)</string>
+    <string name="nutrition_preview_daily_menu">Daily Menu</string>
+    <string name="nutrition_preview_target_calories">Target Calories: %1$d kcal</string>
+    <string name="nutrition_preview_instructions">Instructions:</string>
+    <string name="nutrition_preview_step">%1$d. %2$s</string>
+    <string name="nutrition_preview_required_products">Required Products Preview</string>
+    <string name="nutrition_preview_product_available">Available</string>
+    <string name="nutrition_preview_product_missing">Missing</string>
 </resources>

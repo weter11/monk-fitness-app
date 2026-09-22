@@ -10,14 +10,15 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:localeConfig="@xml/locale_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+        android:theme="@style/Theme.MonkFitness">
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+            android:theme="@style/Theme.MonkFitness">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -25,6 +26,21 @@
         </activity>
 
         <receiver android:name=".util.NotificationReceiver" />
+
+        <!--
+            Localization (§3): the app's application locale has to survive a restart on API 24–32 as well,
+            and on those versions AndroidX owns that storage. This service is the opt-in for it — declared
+            `android:enabled="false"` because it is a marker, never started, and it is what makes the
+            app-language state the same one Android 13's own per-app language screen edits.
+        -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
 
         <!--
             The Share Sheet's transport (§30 step 13, §11): the provider that mints the `content://` URI a

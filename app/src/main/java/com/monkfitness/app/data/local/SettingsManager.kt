@@ -17,6 +17,7 @@ import com.monkfitness.app.data.model.flexibilityFocusAreas
 import com.monkfitness.app.data.model.flexibilitySpecificFocusAreas
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 
@@ -27,7 +28,15 @@ class SettingsManager(private val context: Context) {
     companion object {
         private const val EXERCISE_DIFFICULTY_PREFIX = "exercise_difficulty_"
         private const val EXERCISE_PERSONAL_RECORD_PREFIX = "exercise_personal_record_"
-        val LANGUAGE_KEY = stringPreferencesKey("language")
+        /**
+         * The key the **pre-localization** builds stored the chosen language under.
+         *
+         * Nothing writes it any more: the application locale is the app's one language state (§5 of the
+         * localization brief), and this key survives only so the one-time hand-off in
+         * `AppLanguageManager.migrateLegacySelection` can read the choice an existing user already made.
+         * The hand-off removes it, after which there is nothing here to compete with the platform.
+         */
+        val LEGACY_LANGUAGE_KEY = stringPreferencesKey("language")
         val NOTIFICATION_HOUR = intPreferencesKey("notification_hour")
         val NOTIFICATION_MINUTE = intPreferencesKey("notification_minute")
         val IS_ONBOARDING_COMPLETED = booleanPreferencesKey("is_onboarding_completed")
@@ -117,13 +126,24 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    val languageFlow: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[LANGUAGE_KEY] ?: "ru"
-    }
+    /**
+     * The language a pre-localization build stored for this install, or `null` when it stored none.
+     *
+     * There is deliberately **no default**: the old flow read an absent value as `"ru"`, which would move
+     * every user who never chose a language into Russian. Absence means "the user never chose", and the
+     * app answers that with the system language.
+     *
+     * Read once at start-up by `AppLanguageManager.migrateLegacySelection`, which is also the only caller.
+     */
+    suspend fun readLegacyLanguage(): String? = context.dataStore.data.first()[LEGACY_LANGUAGE_KEY]
 
-    suspend fun setLanguage(language: String) {
+    /**
+     * Removes the legacy key, so the platform's application locale is the app's only language state and a
+     * second migration can never re-apply a choice the user has since replaced.
+     */
+    suspend fun clearLegacyLanguage() {
         context.dataStore.edit { preferences ->
-            preferences[LANGUAGE_KEY] = language
+            preferences.remove(LEGACY_LANGUAGE_KEY)
         }
     }
 

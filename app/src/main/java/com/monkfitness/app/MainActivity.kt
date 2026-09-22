@@ -3,7 +3,7 @@ package com.monkfitness.app
 import android.os.Bundle
 import android.content.Intent
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
@@ -19,7 +19,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
@@ -29,45 +28,51 @@ import androidx.navigation.compose.composable
 import androidx.compose.runtime.collectAsState
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.runtime.key
 import androidx.navigation.navArgument
 import com.monkfitness.app.ui.screens.*
 import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.validation.ValidationPoseScreen
 import com.monkfitness.app.ui.theme.MonkFitnessTheme
 import com.monkfitness.app.viewmodel.MainViewModel
-import java.util.Locale
-import android.content.res.Configuration
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+/**
+ * The app's single Activity.
+ *
+ * It owns no language of its own (localization stage §8): the app language is an application-level
+ * setting, applied by the platform through `AppLanguageManager` and read by every `stringResource` call
+ * in the tree below. A language change therefore recreates this Activity, which is the platform's normal
+ * way of re-reading resources, and the app needs no second mechanism to make the UI follow.
+ */
+class MainActivity : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // The one-time hand-off of the language a pre-localization install stored for itself (§5). It is
+        // triggered here, and not from the Application object, because the app-locale API reaches the
+        // platform through the *active* AppCompat-attached Activity: asked any earlier, it silently does
+        // nothing on Android 13+ and the user's own choice would be lost on upgrade.
+        //
+        // It runs in a coroutine rather than in a `runBlocking` on the main thread, which this code did at
+        // first and which froze the app: the hand-off reads and writes DataStore, and DataStore notifies its
+        // collectors through the dispatcher they were collected on — the main thread — so blocking the main
+        // thread while a `viewModelScope` flow is collecting deadlocks the write. The cost of not blocking is
+        // one frame in the system language on the first launch after an upgrade; the cost of blocking is an
+        // app that never finishes starting.
+        lifecycleScope.launch {
+            viewModel.migrateLanguageSelectionIfNeeded()
+        }
+
         viewModel.handleNotificationIntent(intent)
         setContent {
-            val language by viewModel.settingsManager.languageFlow.collectAsState(initial = "ru")
-
             // Keeping the screen on is the *session screen's* own business now (§30 step 15): it is the
             // only place that knows a workout is running, and the shipped step machine this used to read
             // is gone with the runtime it belonged to.
-
-            val context = LocalContext.current
-            val localizedContext = remember(language) {
-                val locale = Locale(language)
-                Locale.setDefault(locale)
-                val config = Configuration(context.resources.configuration)
-                config.setLocale(locale)
-                context.createConfigurationContext(config)
-            }
-
-            CompositionLocalProvider(LocalContext provides localizedContext) {
-                MonkFitnessTheme {
-                    // Keying MainApp with language ensures full recomposition on language change
-                    key(language) {
-                        MainApp(viewModel)
-                    }
-                }
+            MonkFitnessTheme {
+                MainApp(viewModel)
             }
         }
     }
