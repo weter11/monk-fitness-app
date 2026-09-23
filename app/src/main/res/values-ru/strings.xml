@@ -871,6 +871,10 @@
     <string name="programs_editor_discard">Отменить изменения</string>
     <string name="programs_editor_generate">Сгенерировать план</string>
     <string name="programs_editor_no_draft">Черновик не открыт.</string>
+    <string name="programs_editor_start_date">Планируемая дата начала</string>
+    <string name="programs_editor_start_date_hint">Это план, а не факт: программа начнётся только когда вы её запустите. Если дата не выбрана, планируемое начало — сегодня.</string>
+    <string name="programs_editor_start_date_choose">Выбрать конкретную дату</string>
+    <string name="programs_editor_search_no_results">Ни одно упражнение не соответствует запросу.</string>
     <string name="programs_review_title">Что произойдёт при сохранении</string>
     <string name="programs_review_creates_program">Будет создана новая программа с первой версией плана.</string>
     <string name="programs_review_creates_revision">Будет создана новая версия плана этой программы.</string>

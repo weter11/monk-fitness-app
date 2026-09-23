@@ -299,6 +299,14 @@ class ProgramsControllerTest {
     @Test
     fun aSchedulingRefusalIsAnOrdinaryAbsenceAndNotAFailure() = runBlocking {
         val created = rig.createProgramThroughTheUi("No date yet")!!
+        // Setup revised with P1: a creation now always carries a planned start date, so an *anchorless*
+        // Program can no longer be produced through the UI — it is planted directly here, because the
+        // subject of this test is what the **Detail** does with the Scheduler's `NoSchedulingAnchor`
+        // refusal, and that refusal must stay renderable as an ordinary absence.
+        val stored = rig.storedProgram(ProgramId(created))!!
+        rig.transfer.programRepository.updateProgram(
+            stored.copy(plannedStartDate = null, actualStartDate = null)
+        )
         // The create's own notice is shown and cleared, as the screen does when the user dismisses it, so
         // what follows is only what opening the Detail publishes.
         rig.controller.dismissNotice()
@@ -387,8 +395,18 @@ class ProgramsControllerTest {
 
     // ---------------------------------------------------------------- the editor (§7)
 
+    /**
+     * The remediation's central claim, measured through the UI's own path: a Save that creates a
+     * Program creates §27's whole unit, not a bare graph.
+     *
+     * The previous version of this test pinned the *defect*: `plannedStartDate == null` with the
+     * reason *"a Program created this way names no planned date of its own"* — which is exactly why
+     * the Scheduler then refused to plan it. The claim is revised, not relaxed: creation is now
+     * anchored (an explicit choice, else today from the injected clock and calendar) and carries the
+     * Scheduler's initial opportunities, while still starting nothing and selecting nothing.
+     */
     @Test
-    fun creatingThroughTheUiSavesThroughTheEditorService() = runBlocking {
+    fun creatingThroughTheUiSavesTheWholeCreationUnit() = runBlocking {
         val id = rig.createProgramThroughTheUi("Built by hand")
         assertNotNull("the save must produce a Program the list can see", id)
 
@@ -396,12 +414,57 @@ class ProgramsControllerTest {
         assertEquals(ProgramSource.USER, program.source)
         assertEquals(LifecycleStatus.NOT_STARTED, program.lifecycleStatus)
         assertEquals("a creation makes exactly one revision", 1, rig.revisionCount(ProgramId(id)))
-        assertNull(
-            "creating a Program is not starting it, and it names no planned date of its own (§3, §6)",
+        assertEquals(
+            "no explicit date in the request → today, from the injected clock and the injected calendar",
+            rig.clock.now().atZone(rig.zone).toLocalDate(),
             program.plannedStartDate
+        )
+        assertNull("creating a Program is not starting it (§3)", program.actualStartDate)
+        assertTrue(
+            "§27: the creation unit includes the Scheduler's initial opportunities — Slots > 0",
+            rig.slotsOf(ProgramId(id)).isNotEmpty()
+        )
+        assertNull(
+            "and creation is no selection (§9): the new Program is not implicitly selected",
+            rig.selectedProgramId()
         )
         assertNull(rig.state.draft)
         assertEquals(ProgramNotice.DRAFT_SAVED, rig.state.notice)
+    }
+
+    @Test
+    fun anExplicitPlannedStartDateIsStoredVerbatimAndClearedFromTheRequestAfterTheSave() = runBlocking {
+        val exact = java.time.LocalDate.parse("2026-10-07")
+        rig.controller.openCreateDraft(ProgramMode.MANUAL)
+        rig.controller.setDraftName("Future start")
+        rig.controller.addDraftDay(com.monkfitness.app.domain.program.ProgramDayType.TRAINING)
+        val dayId = rig.state.draft!!.days.first().programDayId
+        rig.controller.addDraftElement(dayId, ProgramsRig.FIRST_EXERCISE)
+
+        rig.controller.setDraftPlannedStartDate(exact)
+        assertEquals("the choice is held beside the draft, not inside it",
+            exact, rig.state.draftPlannedStartDate)
+
+        assertTrue(rig.controller.saveDraft())
+
+        val created = rig.storedPrograms().single { program -> program.name == "Future start" }
+        assertEquals(
+            "the exact date survives the Save untouched — today does not replace it",
+            exact,
+            created.plannedStartDate
+        )
+        assertNotEquals(
+            "the exact date is a different day from today, so this also proves no silent defaulting",
+            rig.clock.now().atZone(rig.zone).toLocalDate(),
+            created.plannedStartDate
+        )
+        assertEquals(
+            "the first opportunity is anchored to the chosen date",
+            exact,
+            rig.slotsOf(created.programId).minOf { slot -> slot.plannedFor }
+        )
+        assertNull("the request's date belongs to one creation: the Save clears it",
+            rig.state.draftPlannedStartDate)
     }
 
     @Test
@@ -531,6 +594,75 @@ class ProgramsControllerTest {
         assertEquals(ProgramNotice.STORAGE_FAILED, rig.state.notice)
         assertNotNull("the draft is still opened, so the user keeps their work", rig.state.draft)
         assertEquals(emptyList<ExerciseOptionUi>(), rig.state.exerciseOptions)
+    }
+
+    // ---------------------------------------------------------------- draft recreation (P2 UI-03)
+
+    /**
+     * The recreation contract: a screen re-composing its destination re-runs its seed, and a seed
+     * must never overwrite the draft the user is working on. Rotation, configuration changes and the
+     * screen simply reappearing all funnel through [ProgramsController.seedEditor] with the same key.
+     */
+    @Test
+    fun aRecreatedEditorFlowKeepsTheWorkingDraft() = runBlocking {
+        rig.controller.seedEditor("createMANUAL") {
+            rig.controller.openCreateDraft(ProgramMode.MANUAL)
+        }
+        rig.controller.setDraftName("Half done")
+        rig.controller.setDraftDescription("typed before rotating")
+
+        // The configuration change: same destination, same key, the seed runs again…
+        rig.controller.seedEditor("createMANUAL") {
+            rig.controller.openCreateDraft(ProgramMode.MANUAL)
+        }
+
+        assertEquals("the name survives recreation", "Half done", rig.state.draft?.name)
+        assertEquals("and so does the description", "typed before rotating", rig.state.draft?.description)
+
+        // …and editing after the recreation continues the SAME draft rather than a fresh one.
+        rig.controller.setDraftName("Half done, continued")
+        assertEquals("Half done, continued", rig.state.draft?.name)
+    }
+
+    @Test
+    fun aDifferentEditorFlowReplacesTheDraft() = runBlocking {
+        rig.storeSourceProgram()
+        rig.controller.seedEditor("createMANUAL") {
+            rig.controller.openCreateDraft(ProgramMode.MANUAL)
+        }
+        rig.controller.setDraftName("Abandoned create")
+
+        rig.controller.seedEditor("edit-source") {
+            rig.controller.openEditDraft(rig.sourceProgramId.value)
+        }
+
+        assertEquals(
+            "a new flow is a new draft: the editor shows the Program it was opened for, not the old work",
+            ProgramDraftEntry.EDIT,
+            rig.state.draft?.entry
+        )
+        assertNotEquals("Abandoned create", rig.state.draft?.name)
+    }
+
+    @Test
+    fun theSeedRunsWhenNoDraftIsOpenAndAfterAnExplicitDiscard() = runBlocking {
+        rig.controller.seedEditor("createMANUAL") {
+            rig.controller.openCreateDraft(ProgramMode.MANUAL)
+        }
+        rig.controller.setDraftName("Then discarded")
+        rig.controller.discardDraft()
+        assertNull("Discard leaves no draft", rig.state.draft)
+
+        rig.controller.seedEditor("createMANUAL") {
+            rig.controller.openCreateDraft(ProgramMode.MANUAL)
+        }
+
+        assertEquals(
+            "with nothing to keep, the same key seeds a fresh editor flow",
+            ProgramDraftEntry.CREATE,
+            rig.state.draft?.entry
+        )
+        assertEquals("", rig.state.draft?.name)
     }
 
     // ---------------------------------------------------------------- Program Detail (§22)

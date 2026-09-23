@@ -171,11 +171,29 @@ private fun ProgramEntry(titleRes: Int, descriptionRes: Int, onClick: () -> Unit
 }
 
 /**
- * Shows the last operation's outcome, and clears it.
+ * Shows the last operation's outcome, **awaits the snackbar, and only then clears it** (P2 `UI-01`).
  *
  * §15's four classes are what the user must be able to tell apart, so the duration is not a detail: a
  * [ProgramNotice.Done] disappears by itself, while a refusal, an invalid file and a failure stay until
  * the user dismisses them — a failed operation must never scroll past looking like a completed one.
+ *
+ * The lifecycle is what makes that true. The effect is keyed on [notice], so the moment the notice
+ * changes this coroutine is cancelled and relaunched — which means clearing the notice *inside* it,
+ * as this host used to do, cancelled `showSnackbar` at its very first suspension point and the user
+ * saw nothing: `Generation unavailable`, a refusal, a save failure could all vanish unread. The order
+ * is therefore
+ *
+ * ```text
+ * notice published → effect starts → old snackbar dismissed → showSnackbar(...) awaited
+ *                 → onShown() clears the notice → the key change retires the (already finished) effect
+ * ```
+ *
+ * `showSnackbar` suspends until the snackbar is dismissed — immediately for the action-labeled
+ * indefinite ones (the user pressed OK), after its duration for the Short ones — so "awaited" is
+ * exactly "handled by the user or timed out". A newer notice published meanwhile simply replaces
+ * this coroutine with one for the newer value, and the dismissal above guarantees the older message
+ * does not sit on top of it. The notice itself is domain input: this host decides no new taxonomy,
+ * it only decides *when* the controller may clear it.
  */
 @Composable
 fun ProgramNoticeHost(
@@ -187,7 +205,6 @@ fun ProgramNoticeHost(
     val dismissLabel = stringResource(R.string.ok)
     LaunchedEffect(notice) {
         val current = notice ?: return@LaunchedEffect
-        onShown()
         snackbarHostState.currentSnackbarData?.dismiss()
         snackbarHostState.showSnackbar(
             message = context.getString(current.messageRes),
@@ -198,6 +215,8 @@ fun ProgramNoticeHost(
                 SnackbarDuration.Indefinite
             }
         )
+        // After the await: the user has seen this notice, so — and only so — the controller clears it.
+        onShown()
     }
 }
 

@@ -34,6 +34,7 @@ import com.monkfitness.app.domain.usecase.ProgramImportService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
+import com.monkfitness.app.domain.usecase.ProgramSaveService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -99,7 +100,12 @@ fun interface ExerciseCatalogue {
  * through [load] — so a screen that renders it renders the service's answer (§3, §21).
  *
  * @param lifecycle the selection, lifecycle, rename, archive and delete owner (§3, §4, §29).
- * @param editor the draft-first editor and the §6/§27 revision rule.
+ * @param editor the draft-first editor: opening drafts, validating them, reviewing them, and the §6
+ *   revision rule for an edit's own save.
+ * @param saver §27's production Save: the creation unit (Program + first Revision + initial Slots,
+ *   anchored to the creation request's date) and the revision-plus-reconciliation pair. This object
+ *   hands it the draft and the date the user chose — it never builds a slot, never chooses a date
+ *   itself and never runs a scheduling pass.
  * @param importer §5's pipeline and §27's creation unit, including the planned start date the import
  *   review chooses.
  * @param exporter §5's export half. This object never builds the JSON (§11).
@@ -115,6 +121,7 @@ fun interface ExerciseCatalogue {
 class ProgramsController(
     private val lifecycle: ProgramLifecycleService,
     private val editor: ProgramEditorService,
+    private val saver: ProgramSaveService,
     private val importer: ProgramImportService,
     private val exporter: ProgramExportService,
     private val progress: ProgramProgressService,
@@ -138,6 +145,24 @@ class ProgramsController(
      * presentation is rebuilt on every edit, so the two cannot drift.
      */
     private var workingDraft: ProgramEditorDraft? = null
+
+    /**
+     * Which editor flow the [workingDraft] belongs to — the route-derived key its seed opened it with.
+     *
+     * The screens re-run their seed on every composition of an editor destination, which includes the
+     * recreations a rotation or a configuration change causes. Without recording *which flow* the
+     * working draft came from, "the screen appeared again" and "the user opened a new editor" would be
+     * indistinguishable, and the first of them would silently destroy the user's work — [seedEditor]
+     * is what tells them apart: same key with a draft present → keep it; anything else → seed.
+     *
+     * It does **not** survive process death: `workingDraft` lives in this object, which lives in the
+     * view model, which the platform may destroy without a configuration change. Restoring an unsaved
+     * draft across a process death needs a persistence/restore seam that does not exist yet; until it
+     * does, the guarantee this field supports is scoped to *configuration* recreation, and losing a
+     * draft to process death is a recorded gap rather than a silent one (see
+     * `docs/PROGRAM_UI_NAVIGATION.md`).
+     */
+    private var draftSeedKey: String? = null
 
     // ---------------------------------------------------------------- My Programs (§21)
 
@@ -322,6 +347,34 @@ class ProgramsController(
     // ---------------------------------------------------------------- the editor (§7)
 
     /**
+     * Runs the editor flow's seed **unless the same flow's working draft is already open**.
+     *
+     * A screen re-runs its seed every time its destination composes again — a rotation, a density or
+     * language-driven configuration change, the screen simply reappearing — and [openCreateDraft] and
+     * friends would replace the user's half-edited draft with a fresh empty one each time (P2
+     * `UI-03`). This is the guard: the seed key names the flow (`create MANUAL`, `edit <id>`,
+     * `copy <id>`), and
+     *
+     * ```text
+     * a draft exists AND the key matches   → the same flow re-appeared: keep the draft, do nothing
+     * anything else                        → a genuinely new editor flow (or none open): run the seed
+     * ```
+     *
+     * A *different* flow still replaces the draft — returning from `edit A` into `create` must show
+     * `create`, not Program A's plan — and an explicit [discardDraft], [saveDraft] or direct
+     * `open…Draft` call clears the key with the draft, so the next seed of any key runs.
+     *
+     * @param seedKey the route-derived identity of the editor flow, owned by the screen that has the
+     *   route; this layer never builds one.
+     * @param seed the screen's own call into `openCreateDraft` / `openEditDraft` / `openCopyDraft`.
+     */
+    suspend fun seedEditor(seedKey: String, seed: suspend () -> Unit) {
+        if (workingDraft != null && draftSeedKey == seedKey) return
+        seed()
+        draftSeedKey = seedKey
+    }
+
+    /**
      * Opens a new draft: §7's two creation entry paths, as the mode the draft is being edited in.
      *
      * ```text
@@ -334,13 +387,25 @@ class ProgramsController(
      * this stage.
      */
     suspend fun openCreateDraft(mode: ProgramMode) {
+        beginEditorFlow()
         loadExerciseOptions()
         workingDraft = editor.editor(editor.newDraft()).withMode(mode).draft
         publishDraft(review = null)
     }
 
+    /**
+     * Leaving whichever editor flow was open: its draft identity and its creation date are that
+     * flow's alone, so a new flow starts with neither. Called by every explicit `open…Draft` — the
+     * seed guard above funnels through them for the same reason.
+     */
+    private fun beginEditorFlow() {
+        draftSeedKey = null
+        mutableState.update { it.copy(draftPlannedStartDate = null) }
+    }
+
     /** Opens the draft that edits [programId]'s current revision. Refused for the Standard Program (§4). */
     suspend fun openEditDraft(programId: String) {
+        beginEditorFlow()
         loadExerciseOptions()
         when (val result = editor.editDraft(ProgramId(programId))) {
             is ProgramEditorResult.Success -> {
@@ -365,6 +430,7 @@ class ProgramsController(
      * stable identifier and not the Program itself (§16).
      */
     suspend fun openCopyDraft(programId: String, copyLabel: String) {
+        beginEditorFlow()
         loadExerciseOptions()
         val program = valueOf { lifecycle.program(ProgramId(programId)) } ?: return
         val name = "$copyLabel ${program.name}".trim()
@@ -385,7 +451,19 @@ class ProgramsController(
     /** Abandons the draft. Nothing that is stored is touched — a draft is not a revision (§6, §7). */
     fun discardDraft() {
         workingDraft = null
-        mutableState.update { it.copy(draft = null) }
+        draftSeedKey = null
+        mutableState.update { it.copy(draft = null, draftPlannedStartDate = null) }
+    }
+
+    /**
+     * The planned start date the user explicitly chose for a **new** Program, or `null` when they
+     * chose none — the creation request's own fact (§3, §6), held beside the draft rather than inside
+     * it: the draft is structure, and changing only this must never create a revision. `null` means
+     * *no exact choice*, which [ProgramSaveService.save] resolves to today from the injected clock at
+     * Save time — not at the moment this was opened.
+     */
+    fun setDraftPlannedStartDate(date: LocalDate?) {
+        mutableState.update { it.copy(draftPlannedStartDate = date) }
     }
 
     /**
@@ -522,7 +600,14 @@ class ProgramsController(
     }
 
     /**
-     * §7's **Save**: at most one new revision, or none (§6), decided by the editor service.
+     * §7's **Save**, through §27's production Save: at most one new revision, or none (§6) — and for
+     * a create or a copy, the whole creation unit (Program + first Revision + plan + initial Slots,
+     * anchored to the chosen or defaulted start date).
+     *
+     * The date handed down is the user's explicit choice or `null` (→ *today*, read by the save
+     * service from the injected clock at this moment); it travels with the same call that creates the
+     * Program and its slots, so no second transaction can move the anchor after the slots are planned
+     * from it.
      *
      * @return whether the draft was written — `true` when a Program or a revision was created or the
      *   Program's own facts were saved, `false` when nothing was written. The screen uses it to decide
@@ -531,11 +616,16 @@ class ProgramsController(
      */
     suspend fun saveDraft(): Boolean {
         val draft = workingDraft ?: return false
-        return when (val result = editor.save(draft)) {
+        return when (
+            val result = saver.save(draft, mutableState.value.draftPlannedStartDate)
+        ) {
             is ProgramEditorResult.Success -> {
                 val notice = saveNotice(result.value)
                 workingDraft = null
-                mutableState.update { it.copy(draft = null, notice = notice) }
+                draftSeedKey = null
+                mutableState.update {
+                    it.copy(draft = null, draftPlannedStartDate = null, notice = notice)
+                }
                 load()
                 result.value !is ProgramSaveOutcome.NothingToChange
             }

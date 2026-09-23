@@ -197,10 +197,12 @@ class ProgramScheduler(
      * The opportunities a Program **being created** receives — §27's creation unit, decided by this same
      * pass.
      *
-     * This is the Scheduler's third entry point and it exists for exactly one caller, the import (§30 step
-     * 13): §8 requires an accepted import to create
-     * `Program + Revision + ProgramDays + ProgramExercises + initial slots` as **one atomic operation**, and
-     * §27 names the same unit for `Create / Copy / Import`. A creation cannot go through [schedule],
+     * This is the Scheduler's third entry point, and its callers are the two creation paths §27 names:
+     * the import (§30 step 13, through [ProgramImportService]) and the editor's production Save —
+     * Create and Copy — through [ProgramSaveService] (the creation remediation). §8 requires an accepted
+     * import to create `Program + Revision + ProgramDays + ProgramExercises + initial slots` as **one
+     * atomic operation**, and §27 names the same unit for `Create / Copy / Import`. A creation cannot go
+     * through [schedule],
      * because [schedule] plans a *stored* Program — it reads the Program row, its slots and its pauses —
      * and the whole point of the creation unit is that nothing is stored until everything can be.
      *
@@ -222,8 +224,9 @@ class ProgramScheduler(
      * runner is used, no slot is written, and no repository appears beyond the two §26 ports and the
      * calendar. Deciding and persisting are separated here on purpose — the caller that owns the creation
      * unit (`ProgramRepository.createProgram`) is the caller that writes, and the Scheduler's answer is
-     * what it writes. That is what keeps *"Scheduler owns timing/opportunities"* true while the importer
-     * owns *"what Program is being created"* (§8).
+     * what it writes. That is what keeps *"Scheduler owns timing/opportunities"* true while each creation
+     * path — the importer (§8) and the Save orchestration for Create/Copy (§27) — owns *"what Program
+     * is being created"*.
      *
      * @return the opportunities the new revision receives, in date order. The existing-opportunity
      *   reconciliations of a pass are necessarily empty here: there are none to reconcile.

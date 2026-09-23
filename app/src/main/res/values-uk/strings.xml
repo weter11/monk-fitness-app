@@ -871,6 +871,10 @@
     <string name="programs_editor_discard">Скасувати зміни</string>
     <string name="programs_editor_generate">Згенерувати план</string>
     <string name="programs_editor_no_draft">Чернетку не відкрито.</string>
+    <string name="programs_editor_start_date">Планована дата початку</string>
+    <string name="programs_editor_start_date_hint">Це план, а не факт: програма розпочнеться лише тоді, коли ви її запустите. Якщо дату не вибрано, планований початок — сьогодні.</string>
+    <string name="programs_editor_start_date_choose">Вибрати конкретну дату</string>
+    <string name="programs_editor_search_no_results">Жодна вправа не відповідає вашому запиту.</string>
     <string name="programs_review_title">Що станеться під час збереження</string>
     <string name="programs_review_creates_program">Буде створено нову програму з першою версією плану.</string>
     <string name="programs_review_creates_revision">Буде створено нову версію плану цієї програми.</string>

@@ -408,6 +408,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val programs = ProgramsController(
         lifecycle = programGraph.programLifecycleService,
         editor = programGraph.programEditorService,
+        saver = programGraph.programSaveService,
         importer = programGraph.programImportService,
         exporter = programGraph.programExportService,
         progress = programGraph.programProgressService,

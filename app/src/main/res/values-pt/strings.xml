@@ -873,6 +873,10 @@
     <string name="programs_editor_discard">Descartar rascunho</string>
     <string name="programs_editor_generate">Gerar o plano</string>
     <string name="programs_editor_no_draft">Nenhum rascunho aberto.</string>
+    <string name="programs_editor_start_date">Data de início planejada</string>
+    <string name="programs_editor_start_date_hint">É um plano, não um início: o programa só começa quando você o iniciar. Sem uma data escolhida, o início planejado é hoje.</string>
+    <string name="programs_editor_start_date_choose">Escolher uma data específica</string>
+    <string name="programs_editor_search_no_results">Nenhum exercício corresponde à sua busca.</string>
     <string name="programs_review_title">O que o salvamento fará</string>
     <string name="programs_review_creates_program">Um novo programa será criado com sua primeira revisão.</string>
     <string name="programs_review_creates_revision">Uma nova revisão deste programa será criada.</string>

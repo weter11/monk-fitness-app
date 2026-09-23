@@ -92,30 +92,41 @@ class ProgramTargetAcceptanceTest {
                 catalogue = { rig.catalogueOptions }
             )
 
-            // ---- 1. Create a Program and save revision 1 --------------------------------------------
+            // ---- 1. Create a Program — as §27's whole unit ------------------------------------------
             val createdId = rig.createProgramThroughTheUi("Acceptance Program")
-            assertNotNull("the editor's save stored a Program", createdId)
+            assertNotNull("the Save stored a Program", createdId)
             val id = ProgramId(createdId!!)
             assertEquals("a creation mints exactly one revision", 1, rig.revisionCount(id))
+
+            // Revised with the creation remediation: the anchor and the initial opportunities are part
+            // of the creation unit itself. The previous version of this scenario asserted the *defect*
+            // here — a refused pass and a manual `setPlannedStartDate` before anything could be
+            // scheduled — and that manual stepping is exactly what no longer exists: the request named
+            // no exact date, so the anchor is today from the injected clock and calendar, and the
+            // Scheduler's initial opportunities were written in the same transaction.
+            val createdProgram = rig.storedProgram(id)!!
+            assertEquals(
+                "no exact date was chosen, so plannedStartDate is today from the injected clock",
+                rig.clock.now().atZone(rig.zone).toLocalDate(),
+                createdProgram.plannedStartDate
+            )
+            assertEquals(
+                "creating is not starting (§3)",
+                com.monkfitness.app.domain.program.LifecycleStatus.NOT_STARTED,
+                createdProgram.lifecycleStatus
+            )
+            assertTrue(
+                "and the creation unit carries the Scheduler's initial opportunities",
+                rig.slotsOf(id).isNotEmpty()
+            )
 
             // ---- 2. Select it, and take the next startable opportunity -------------------------------
             rig.controller.select(createdId)
             assertEquals("the selection is the global one", id, rig.selectedProgramId())
 
-            // A pass is an application step, not a side effect of saving — and it needs an **anchor**:
-            // §3 is explicit that a Program with neither an actual nor a planned start date has no
-            // `day 1`, and the Scheduler refuses rather than inventing one. So the user's own step comes
-            // first, and the refusal is asserted before the date is chosen.
             assertTrue(
-                "the Scheduler refuses to plan a Program with no anchor, rather than picking today",
-                rig.transfer.scheduler.schedule(id) is ProgramSchedulingResult.Refused
-            )
-            rig.controller.setPlannedStartDate(
-                createdId,
-                rig.clock.now().atZone(rig.zone).toLocalDate()
-            )
-            assertTrue(
-                "and with a planned start date the pass runs",
+                "a pass runs on the anchored Program — the Scheduler still refuses only anchorless " +
+                    "ones, and a creation is never anchorless",
                 rig.transfer.scheduler.schedule(id) is ProgramSchedulingResult.Success
             )
             val next = (rig.transfer.scheduler.nextOpportunity(id) as ProgramSchedulingResult.Success).value

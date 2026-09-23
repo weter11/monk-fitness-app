@@ -76,8 +76,12 @@ needs, and stores what was decided in one transaction.
 ### The third entry point (§30 step 13)
 
 `initialSlotsFor(program, revision)` decides the opportunities a Program **being created** receives, and it
-exists for exactly one caller: the import. §27 requires `Import → Program + Revision + initial Slots` to be
-one atomic operation, and a creation cannot go through `schedule(programId)` — that entry point plans a
+has exactly the two callers §27's creation unit names: the import (`ProgramImportService.save`, §30 step
+13) and the editor's production Save for Create/Copy (`ProgramSaveService.save`, the creation
+remediation). Each of them composes it the same way — decide the slots first, then write the whole unit
+through `ProgramRepository.createProgram` in one transaction — and §27 requires `Create / Copy / Import →
+Program + Revision + initial Slots` to be one atomic operation in every case. A creation cannot go
+through `schedule(programId)` — that entry point plans a
 *stored* Program (it reads the Program row, its slots and its pauses), and the whole point of the creation
 unit is that nothing is stored until everything can be. So the inputs arrive as values instead of being read
 and everything else is unchanged:
@@ -91,8 +95,13 @@ no transaction       it decides and writes nothing; §27's owner (ProgramReposit
 ```
 
 Deciding and persisting are separated there on purpose: the caller that owns the creation unit is the caller
-that writes, which is what keeps *"the Scheduler owns timing/opportunities"* true while the importer owns
-*"what Program is being created"*. See `docs/PROGRAM_IMPORT_EXPORT.md` §13.
+that writes, which is what keeps *"the Scheduler owns timing/opportunities"* true while each creation path
+owns *"what Program is being created"* — the importer (see `docs/PROGRAM_IMPORT_EXPORT.md` §13) and the
+Save orchestration (see `docs/PROGRAM_MANUAL_EDITOR.md`). The second half of §27's Save line is composed
+the same way: `ProgramSaveService` runs one `schedule(programId)` pass after an edit's revision is stored,
+inside the save's transaction, so *`Save Editor → new Revision + future-slot reconciliation`* is a
+production behaviour rather than a documented intention — the pass itself, including its idempotence and
+its refusal to touch completed attempts, remains entirely the Scheduler's.
 
 ### The two dates
 

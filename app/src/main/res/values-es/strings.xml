@@ -873,6 +873,10 @@
     <string name="programs_editor_discard">Descartar borrador</string>
     <string name="programs_editor_generate">Generar el plan</string>
     <string name="programs_editor_no_draft">No hay ningún borrador abierto.</string>
+    <string name="programs_editor_start_date">Fecha de inicio prevista</string>
+    <string name="programs_editor_start_date_hint">Es un plan, no un comienzo: el programa solo empezará cuando lo inicies. Si no eliges una fecha, el inicio previsto es hoy.</string>
+    <string name="programs_editor_start_date_choose">Elegir una fecha concreta</string>
+    <string name="programs_editor_search_no_results">Ningún ejercicio coincide con tu búsqueda.</string>
     <string name="programs_review_title">Qué hará el guardado</string>
     <string name="programs_review_creates_program">Se creará un programa nuevo con su primera revisión.</string>
     <string name="programs_review_creates_revision">Se creará una nueva revisión de este programa.</string>

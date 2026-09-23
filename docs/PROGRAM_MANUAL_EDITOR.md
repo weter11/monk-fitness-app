@@ -102,7 +102,7 @@ with it:
 | Exercise Library data is never mutated (§10) | The editor holds no library port and never resolves an exercise id; `ProgramEditorArchitectureTest` pins that. Behaviourally, `theEditorNeverMutatesExerciseLibraryData` runs a full create/edit/copy cycle and compares the app's own library, read through `WorkoutGenerator.getExerciseLibrary()`, before and after. |
 | Invalid drafts are rejected before persistence (§7, §28) | `save` validates first and returns `Rejected(InvalidDraft(validation))`; no DAO is reached, and `anUnfinishedDraftIsRejectedBeforeAnythingIsWritten` / `aDayThatPlansNothingIsRejectedBeforeItIsSaved` measure the row counts. The rules are the plan a revision must be able to hold (§6, §23 — days, identities, numbering), §20's rest-day rule read in the direction that matters, and §7's three entry points. |
 | Failed Save is atomic (§27) | An edit's facts write and its revision write are one transaction, with the facts first (a Program row written *after* `saveNewRevision` would point back at the plan it replaced). A create/copy is `ProgramRepository.createProgram`, which PR 3 already makes one transaction. `aFailedSaveLeavesNoRevisionNoMovedPointerAndNoRenamedProgram` and `aFailedCreateLeavesNoProgramBehind` plant a DAO fault and measure the revision count, the pointer, the whole Program row and the row count of every table. |
-| Saving a new revision does not reconcile or modify scheduler slots (§20, §27, §30 step 7) | The editor has no schedule repository at all, and `createProgramFrom` passes no initial slots. `savingDoesNotReconcileOrModifySchedulerSlots` compares the slots before and after (they still present the revision they were planned from) and `creatingAProgramDoesNotScheduleIt` proves a creation writes no slot row. |
+| Saving a new revision does not reconcile or modify scheduler slots **in the editor itself** (§20, §30 step 7) | The editor has no schedule repository at all, and `createProgramFrom` passes no initial slots. `savingDoesNotReconcileOrModifySchedulerSlots` compares the slots before and after (they still present the revision they were planned from) and `creatingAProgramDoesNotScheduleIt` proves the editor's own creation writes no slot row. **Revised with the creation remediation:** §27's two lines are now composed *above* the editor by `ProgramSaveService` — a production Create/Copy writes the Scheduler's initial slots in the creation transaction (`ProgramSaveServiceTest`), and a production structural Save runs the reconciliation pass inside the save's transaction (`aStructuralSaveReconcilesFutureOpportunities`, `aCompletedOpportunitySurvivesReconciliationAsHistory`, `repeatedReconciliationIsIdempotent`). The editor remains free of the collaborator; the production path is no longer missing the composition. |
 | ViewModels free of Room/DAO access (§26, §33) | No ViewModel is wired by this PR, and `ProgramEditorArchitectureTest` asserts that neither `ui/` nor `viewmodel/` references `ProgramEditorService` — so the wiring that will be added later is added deliberately, not by drift. |
 | No second persistence model, no second revision mechanism | The editor adds no entity, no DAO, no mapper and no repository method: persistence goes through the PR 3 repositories, and the revision mechanism is `ProgramPlanRepository.saveNewRevision`. `ProgramEditorArchitectureTest` scans the editor's sources for DAO, entity and Room tokens and requires the composition root to be the only place the service is constructed. |
 
@@ -129,10 +129,13 @@ identities, which is exactly the thing that must not change.
 
 ## 5. What this change does not do
 
-* **No slot reconciliation.** §27's `Save Editor → new Revision + future-slot reconciliation` is
-  implemented in its first half only: the revision is written and the pointer moves; which slots a new
-  plan supersedes is §30 step 7's decision, and this stage deliberately does not have the collaborator
-  to make it.
+* **No slot reconciliation — in this class.** §27's `Save Editor → new Revision + future-slot
+  reconciliation` is implemented in its first half *here*: the revision is written and the pointer
+  moves; which slots a new plan supersedes is §30 step 7's decision, and this class deliberately does
+  not have the collaborator to make it. **The production half is not missing:** `ProgramSaveService`
+  (the creation remediation) runs the Scheduler's pass after every structural Save, so the §27 line
+  holds end-to-end while the editor's constructor stays exactly as pinned. What this class still does
+  not do — and what no layer above it lets it do — is decide a date or a slot of its own.
 * **No generation and no Focus/goals.** §7's editor has a *Goals & Focus* section; goals, focus
   percentages and their validation belong to the Focus Planner (§8, §30 step 10), which is also where
   `generate`/`regenerate` live. A draft's mode is stored, never exercised: a `GENERATED` draft saves
@@ -144,8 +147,12 @@ identities, which is exactly the thing that must not change.
 * **No seeding of the Standard Program.** The built-in Program's *content* is a later stage's decision
   (as PR 5 recorded too); until it exists, `editDraft`/`copyDraft` on it report §28's `ProgramNotFound`
   rather than inventing one.
-* **No planned start date in the draft.** It is a Program fact that creates no revision (§6) and PR 5's
-  `ProgramLifecycleService.setPlannedStartDate` already owns it.
+* **No planned start date in the draft.** It is a Program fact that creates no revision (§6). Two
+  owners now carry it: PR 5's `ProgramLifecycleService.setPlannedStartDate` for an existing Program,
+  and the editor's creation request — held beside the draft in `ProgramsUiState.draftPlannedStartDate`,
+  handed to `ProgramSaveService.save` at Save, defaulted to *today* there — for a Program being
+  created. Neither path puts it into `ProgramStructure`, so choosing or changing it creates no
+  Revision either way.
 
 ## 6. Verification
 

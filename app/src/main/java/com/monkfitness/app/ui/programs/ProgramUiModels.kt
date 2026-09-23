@@ -29,6 +29,39 @@ import java.time.LocalDate
  * History keep their own screens (§22).
  */
 
+/**
+ * Whether one exercise option answers the picker's search [query] — the rule itself, as a pure
+ * function the JVM tests can decide without a Compose harness.
+ *
+ * The match is on the **user's own display name** first (the localized label resolved for this
+ * locale — searching `Flexion` in Spanish must find the exercise a Spanish reader calls that) and on
+ * the **stable exercise id** second, because an id is a legitimate thing to paste and §10 keeps ids
+ * opaque but real. Matching is case-insensitive **and diacritic-insensitive** — the reader who types
+ * `Flexion` is not expected to reproduce `Flexión`'s accent — the query is trimmed; a blank query
+ * matches everything, which is the unfiltered list rather than a match.
+ *
+ * The fold is `NFD` decomposition minus the combining marks, applied identically to the needle and
+ * both haystacks, so whatever locale's text is being compared is transformed the same way on both
+ * sides and the comparison stays consistent under any device locale.
+ *
+ * @param query what the user typed, unmodified.
+ * @param exerciseId the option's stable id (§10: opaque in both directions).
+ * @param displayName the option's localized display name, already resolved by the screen — a pure
+ *   function may not resolve a string resource, and the screen already has it for rendering.
+ */
+fun matchesExerciseQuery(query: String, exerciseId: String, displayName: String): Boolean {
+    val needle = query.trim().searchable()
+    if (needle.isEmpty()) return true
+    return displayName.searchable().contains(needle) ||
+        exerciseId.searchable().contains(needle)
+}
+
+/** Lower-cased and stripped of diacritics — one fold, applied to every side of a search comparison. */
+private fun String.searchable(): String = java.text.Normalizer
+    .normalize(this, java.text.Normalizer.Form.NFD)
+    .replace(Regex("\\p{M}+"), "")
+    .lowercase()
+
 /** One exercise the plan editor may add: the id the plan stores and the label the UI shows. */
 data class ExerciseOptionUi(
     /** The library id a plan element stores (§10: opaque in both directions). */
@@ -260,6 +293,14 @@ data class ProgramsUiState(
     val detail: ProgramDetailUi? = null,
     /** The open editor draft, or `null` when the editor screen is not open. */
     val draft: ProgramDraftUi? = null,
+    /**
+     * The planned start date the user explicitly chose for a **new** Program in the open editor
+     * session, or `null` when they chose none — the creation request's own fact (§3, §6), held beside
+     * [draft] rather than inside it: the draft is structure, and choosing a date must never create a
+     * Revision. `null` is not *no date* — it is *no exact choice*, which the Save resolves to today
+     * from the injected clock at Save time.
+     */
+    val draftPlannedStartDate: LocalDate? = null,
     /**
      * The reviewed import, held from the review step to the confirmation.
      *

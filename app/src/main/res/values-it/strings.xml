@@ -873,6 +873,10 @@
     <string name="programs_editor_discard">Scarta bozza</string>
     <string name="programs_editor_generate">Genera il piano</string>
     <string name="programs_editor_no_draft">Nessuna bozza aperta.</string>
+    <string name="programs_editor_start_date">Data di inizio prevista</string>
+    <string name="programs_editor_start_date_hint">"È un piano, non un avvio: il programma inizia solo quando lo avvii. Senza una data scelta, l'inizio previsto è oggi."</string>
+    <string name="programs_editor_start_date_choose">Scegli una data specifica</string>
+    <string name="programs_editor_search_no_results">Nessun esercizio corrisponde alla tua ricerca.</string>
     <string name="programs_review_title">Che cosa farà il salvataggio</string>
     <string name="programs_review_creates_program">Verrà creato un nuovo programma con la sua prima revisione.</string>
     <string name="programs_review_creates_revision">Verrà creata una nuova revisione di questo programma.</string>

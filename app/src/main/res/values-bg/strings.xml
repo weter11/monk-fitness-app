@@ -873,6 +873,10 @@
     <string name="programs_editor_discard">Отхвърли черновата</string>
     <string name="programs_editor_generate">Генерирай плана</string>
     <string name="programs_editor_no_draft">Няма отворена чернова.</string>
+    <string name="programs_editor_start_date">Планирана дата на начало</string>
+    <string name="programs_editor_start_date_hint">Това е план, а не факт: програмата стартира само когато я стартирате. Ако дата не е избрана, планираното начало е днес.</string>
+    <string name="programs_editor_start_date_choose">Избери конкретна дата</string>
+    <string name="programs_editor_search_no_results">Няма упражнения, отговарящи на търсенето.</string>
     <string name="programs_review_title">Какво ще направи запазването</string>
     <string name="programs_review_creates_program">Ще бъде създадена нова програма с първата ѝ ревизия.</string>
     <string name="programs_review_creates_revision">Ще бъде създадена нова ревизия на тази програма.</string>

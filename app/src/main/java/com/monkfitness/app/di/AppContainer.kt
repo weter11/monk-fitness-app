@@ -36,6 +36,7 @@ import com.monkfitness.app.domain.usecase.ProgramImportService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
+import com.monkfitness.app.domain.usecase.ProgramSaveService
 import com.monkfitness.app.domain.usecase.SessionRuntime
 import com.monkfitness.app.domain.program.StandardProgram
 import java.time.ZoneId
@@ -286,6 +287,42 @@ class AppContainer(
         scheduleRepository = programScheduleRepository,
         clock = clock,
         idGenerator = idGenerator,
+        inTransaction = inTransaction
+    )
+
+    /**
+     * The **Save** orchestration — §27's two composition lines, over the three owners above.
+     *
+     * It is a graph node for the same reason every atomic operation in this container is: §26 puts
+     * the transaction runner in the composition root, and §27's lines are pairings of writes that
+     * must land together — `Create / Copy → Program + Revision + plan + initial Slots`, and
+     * `Save Editor → new Revision + future-slot reconciliation`. The editor alone cannot hold
+     * either (it may not touch a slot or a date), the Scheduler alone plans only what is stored, and
+     * a screen assembling the two would be the UI deciding when a scheduling pass runs (§16, §33).
+     *
+     * ```text
+     * editor              the draft's structure: validation, the minted Program + first Revision,
+     *                     and an edit's own revision rule (§6, §7)
+     * programRepository   the creation primitive: the whole graph and its slots, or nothing (§27)
+     * scheduler           initial opportunities for a creation; the one reconciliation pass after
+     *                     an edit (§20)
+     * clock, zone         *today*, only when a creation request names no exact start date (§26)
+     * inTransaction       the unit: a failure at any leg leaves no partial Program and no
+     *                     half-applied save
+     * ```
+     *
+     * There is **no** lifecycle service here, so a creation cannot move a selection (§3, §9), no
+     * plan repository (the editor holds the revision rule), no DAO and no session or progress port.
+     *
+     * This is **wiring, not behaviour**: the container decides which objects the Save receives and
+     * nothing about what it does with them.
+     */
+    val programSaveService: ProgramSaveService = ProgramSaveService(
+        editor = programEditorService,
+        programRepository = programRepository,
+        scheduler = programScheduler,
+        clock = clock,
+        zone = zone,
         inTransaction = inTransaction
     )
 
