@@ -11,6 +11,7 @@ import com.monkfitness.app.domain.program.transfer.ProgramTransferFile
 import com.monkfitness.app.domain.program.transfer.ProgramTransferFixture
 import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
+import com.monkfitness.app.domain.usecase.ProgramSaveService
 import com.monkfitness.app.domain.usecase.ProgramTransferRig
 
 /**
@@ -54,6 +55,21 @@ internal class ProgramsRig(key: String = "ui") {
         inTransaction = transfer.data.transaction
     )
 
+    /**
+     * §27's production Save — the creation unit (Program + first Revision + initial Slots, anchored
+     * to the request's date) and the revision-plus-reconciliation pair — wired as `MainViewModel`
+     * wires it through the composition root, over the same repositories, the same Scheduler and the
+     * same transaction runner.
+     */
+    val saveService = ProgramSaveService(
+        editor = editor,
+        programRepository = transfer.programRepository,
+        scheduler = transfer.scheduler,
+        clock = transfer.clock,
+        zone = transfer.zone,
+        inTransaction = transfer.data.transaction
+    )
+
     /** §21's Progress/History layer, read by the Detail screen only. */
     val progress = ProgramProgressService(
         programRepository = transfer.programRepository,
@@ -86,6 +102,7 @@ internal class ProgramsRig(key: String = "ui") {
     val controller = ProgramsController(
         lifecycle = transfer.lifecycleService,
         editor = editor,
+        saver = saveService,
         importer = transfer.importService,
         exporter = transfer.exportService,
         progress = progress,

@@ -275,10 +275,13 @@ class ProgramAdaptiveIntegrationArchitectureTest {
         assertEquals(
             "and hands that same value to both sides of the rule — once to the runtime, once to the " +
                 "integration — plus, since §30 step 13, to the import, which plans an imported revision's " +
-                "opportunities in the same calendar the rest of the graph reads dates in. That third " +
-                "hand-over *strengthens* this rule rather than relaxing it: every layer that turns an " +
-                "instant into a date is still handed the one value the container owns.",
-            3,
+                "opportunities in the same calendar the rest of the graph reads dates in, plus, since " +
+                "the creation remediation, to the Save orchestration, which reads *today* for a creation " +
+                "request that named no exact start date. Every added hand-over *strengthens* this rule " +
+                "rather than relaxing it — revised, not relaxed — because every layer that turns an " +
+                "instant into a date is still handed the one value the container owns, and a fourth " +
+                "acquiring its own calendar would break the count this assertion measures.",
+            4,
             Regex(Regex.escape("zone = zone")).findAll(container).count()
         )
         assertTrue(

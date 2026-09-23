@@ -41,12 +41,13 @@ primary entry into the Program architecture.
 | `ProgramCreateChoiceScreen` | §7's `Build it myself` / `Build for me` | none — it opens the editor with the draft's mode |
 | `MyProgramsScreen` | §21's management list | **Select** → `ProgramLifecycleService.selectProgram`; a row opens Detail |
 | `ProgramDetailScreen` | §22's current-state management | **Select, Rename, Archive / Unarchive, Delete, Start / Pause / Resume / Finish** → `ProgramLifecycleService`; **Edit** → `ProgramEditorService.editDraft`; **Copy** → `ProgramEditorService.copyDraft`; **Share** → `ProgramExportService.export` then §11's platform boundary |
-| `ProgramEditorScreen` | §7's draft-first editor and its Review step | every edit → `ProgramDraftEditor` through `ProgramEditorService`; **Review** → `ProgramEditorService.review`; **Save** → `ProgramEditorService.save` |
+| `ProgramEditorScreen` | §7's draft-first editor and its Review step | every edit → `ProgramDraftEditor` through `ProgramEditorService`; **Review** → `ProgramEditorService.review`; **Save** → `ProgramSaveService.save` (the creation remediation: Create/Copy goes through §27's whole creation unit — Program + first Revision + the Scheduler's initial slots, anchored to the request's date — and an edit performs the revision plus the reconciliation pass; the state holder never calls `ProgramEditorService.save` directly, pinned by `ProgramsArchitectureTest.theStateHolderSavesThroughTheSaveOrchestrationAndRunsNoPassItself`); **start date (create/copy)** → held in `ProgramsUiState.draftPlannedStartDate`, beside the draft |
 | `ProgramImportScreen` | §5's import flow | the picker and the bounded read → `platform/ProgramDocumentImport`; review → `ProgramImportService.review`; confirm → `ProgramImportService.save`; Share is not here (it is on Detail/My Programs) |
 
 `ui/programs/ProgramsController.kt` is the single state holder: the Compose screens render its
-`ProgramsUiState` and call its actions, and its constructor takes **exactly** the six application services,
-the two UI ports (the exercise catalogue and the share target) and the two §26 ports (`Clock`, `ZoneId`).
+`ProgramsUiState` and call its actions, and its constructor takes **exactly** the seven application
+services (the six §30 step 14 wired plus `ProgramSaveService`, the creation remediation's §27 Save), the
+two UI ports (the exercise catalogue and the share target) and the two §26 ports (`Clock`, `ZoneId`).
 There is no DAO, no Room entity, no repository, no `AppState` write, no revision construction, no
 scheduling and no JSON in it — `ProgramsArchitectureTest` pins that against the sources **and** against the
 compiled constructor.
@@ -96,6 +97,24 @@ decision 5). It is now the user's:
 * `ProgramImportService.save`'s parameter defaults to `null`, which preserves §30 step 13's behaviour
   (the day it arrived) for any caller that does not choose.
 
+### The same rule on Create and Copy — the editor's creation request
+
+The editor got the identical configuration item (the creation remediation, §1 of the brief):
+
+* a **separate section** on the create and copy entries — *Planned start date* — with the hint that
+  says what it is: a **plan, not a start** (`programs_editor_start_date_hint`). The edit entry does
+  not show it: an existing Program's date keeps its own owner,
+  `ProgramLifecycleService.setPlannedStartDate` (a change that creates no Revision), and no parallel
+  date model was added;
+* **no explicit choice** is a first-class state: `ProgramsUiState.draftPlannedStartDate` stays `null`
+  and `ProgramSaveService.save` resolves it to **today from the injected `Clock` + `ZoneId` at Save
+  time** — not when the screen opened, and never chosen by the Scheduler;
+* the choice lives **beside the draft, not inside it**: it is not part of `ProgramEditorDraft` /
+  `ProgramStructure`, so picking or changing it creates no Revision (§6), and it never starts the
+  Program — the lifecycle stays `NOT_STARTED`, `actualStartDate` `null`;
+* it travels **in the same call** that creates the Program and its slots, so the initial opportunities
+  are anchored to the date the user actually chose (the reason the import's date travels the same way).
+
 ## 4. The activation checkbox
 
 `Make this program active` is §5's checkbox, and it **defaults OFF**:
@@ -109,6 +128,37 @@ Importing the same file twice still creates two independent Programs, each with 
 with, and either of them can be the selected one.
 
 ---
+
+### The notice lifecycle: shown, awaited, then cleared (P2 UI-01)
+
+`ProgramNoticeHost` clears the controller's notice **after** `showSnackbar` completes, not before.
+The effect is keyed on the notice, so clearing it mid-effect used to cancel that very coroutine at its
+first suspension point — `Generation unavailable`, a refusal, a storage failure and the save/import
+successes could all vanish unread. The order is now
+`notice published → dismiss any old snackbar → showSnackbar(...) awaited → onShown()`, which for a
+`Done` means after the short duration and for the other three classes after the user pressed OK. The
+domain error taxonomy is untouched; only *when* the controller may clear it changed.
+`ProgramsArchitectureTest.theNoticeHostAwaitsTheSnackbarBeforeItClearsTheNotice` pins the order.
+
+### The working draft survives recreation (P2 UI-03)
+
+The editor's seed runs through `ProgramsController.seedEditor(seedKey) { … }`: the route-derived key
+names the flow, and a seed whose key matches the already-open working draft is skipped — a rotation,
+a configuration change or the screen simply reappearing can no longer replace a half-edited draft with
+a fresh empty one. A *different* flow still replaces it (entering `edit <id>` after an abandoned
+`create` shows the Program, not the stale draft), and Discard/Save clear the key with the draft. The
+**residual gap is process death**, recorded in §6 below rather than papered over.
+
+### Home loads its Program on every open (P1)
+
+`Programs → Home` no longer renders the state holder's initial value: `HomeScreen` triggers
+`viewModel.refreshHomeProgram()` in a `LaunchedEffect` keyed on the holder — the same mechanism
+`ProgressScreen` already used for its own controller — and `MainViewModel.refreshHomeProgram` runs
+`ProgramHomeController.load()`. The read itself stays in the controller (selected Program → the
+Scheduler's next opportunity → the calendar's counts); the screen touches no service. With a created,
+selected Program and its initial slots, Home now shows the Program and the next workout, and **Start**
+becomes available. `ProgramsArchitectureTest.homeIsLoadedByALifecycleAwareEffectWhenTheScreenOpens`
+pins the call site; `ProgramHomeControllerTest` measures the controller's behaviour.
 
 ## 5. What was removed, replaced, or kept — the Settings audit
 
@@ -132,6 +182,17 @@ The legacy `custom-program` destination is retained for §30 step 15 and is reac
 ---
 
 ## 6. Architecture gaps recorded, not filled
+
+### The working draft does not survive process death
+
+`workingDraft` (and its seed key and start-date choice) live in `ProgramsController`, which lives in
+the view model. Configuration recreation — rotation, density/language changes, the screen
+reappearing — is covered by the `seedEditor` guard above. **Process death is not**: the platform may
+destroy the process without a configuration change, and nothing persists an unsaved draft, so after a
+restore the editor re-seeds and the user's unsaved arrangement is gone. The honest fix is a
+persistence/restore seam (a `SavedStateHandle`-style store for the draft, or a room-less serialized
+form), which is its own work; until it exists this gap is recorded here and in
+`ProgramsController.draftSeedKey`'s KDoc rather than being lost silently.
 
 ### The Generated entry path, and why no plan is fabricated
 

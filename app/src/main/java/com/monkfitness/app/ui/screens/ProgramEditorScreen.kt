@@ -2,6 +2,8 @@ package com.monkfitness.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +34,7 @@ import com.monkfitness.app.ui.programs.ProgramDraftElementUi
 import com.monkfitness.app.ui.programs.ProgramDraftEntry
 import com.monkfitness.app.ui.programs.ProgramDraftUi
 import com.monkfitness.app.ui.programs.ProgramsController
+import com.monkfitness.app.ui.programs.matchesExerciseQuery
 
 /**
  * The Program Editor — §7's `Basics / Schedule / Plan / Review` over the target editor, draft-first.
@@ -44,7 +47,7 @@ import com.monkfitness.app.ui.programs.ProgramsController
  * What the screen owns is presentation: which section is open, which dialog is up, what the working name
  * is while it is being typed. What it does not own is any rule about Programs.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ProgramEditorScreen(
     controller: ProgramsController,
@@ -57,10 +60,17 @@ fun ProgramEditorScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var showExercisePicker by remember { mutableStateOf<String?>(null) }
+    var showStartDatePicker by remember { mutableStateOf(false) }
 
     // Which of §7's entry points opened this session. It is a *seed* rather than a decision: the route
     // says `create MODE`, `edit PROGRAM` or `copy PROGRAM`, and the controller opens the draft.
-    LaunchedEffect(seedKey) { seed() }
+    //
+    // The seed runs through the controller's guard because this effect re-runs on every re-composition
+    // of the destination — a rotation or any configuration change re-creates the composition while the
+    // controller (and its working draft) survives — and a bare `seed()` would replace the user's
+    // half-edited draft with a fresh empty one on every such event (P2 `UI-03`). Same flow, draft
+    // present → the guard keeps it; a genuinely new flow → the seed runs.
+    LaunchedEffect(seedKey) { controller.seedEditor(seedKey) { seed() } }
 
     val draft: ProgramDraftUi? = state.draft
 
@@ -161,8 +171,40 @@ fun ProgramEditorScreen(
                 )
             }
 
+            // §3/§6 and P1: the planned start date is a separate configuration item of a *new*
+            // Program — not a field of the structural draft (choosing it creates no Revision) and not
+            // a start (nothing here moves the lifecycle). It appears on the create and copy entries,
+            // where it is part of the creation request; an existing Program's date has its own owner
+            // — Program Detail/settings through ProgramLifecycleService.setPlannedStartDate — and is
+            // deliberately not duplicated into the edit entry.
+            if (current.entry != ProgramDraftEntry.EDIT) {
+                ProgramSection(stringResource(R.string.programs_editor_start_date))
+                Text(
+                    text = stringResource(R.string.programs_editor_start_date_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                val chosenDate = state.draftPlannedStartDate
+                if (chosenDate == null) {
+                    // No exact choice: the Save resolves this to today from the injected clock. The
+                    // button says what the choice *is* — a specific date — so "start with a concrete
+                    // date" is distinguishable from "already started", which only the lifecycle says.
+                    TextButton(onClick = { showStartDatePicker = true }) {
+                        Text(stringResource(R.string.programs_editor_start_date_choose))
+                    }
+                } else {
+                    Text(text = dateLabel(chosenDate), style = MaterialTheme.typography.titleMedium)
+                    TextButton(onClick = { showStartDatePicker = true }) {
+                        Text(stringResource(R.string.programs_import_change_date))
+                    }
+                }
+            }
+
             ProgramSection(stringResource(R.string.programs_editor_schedule))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 (SCHEDULE_OPTIONS).forEach { sessions ->
                     FilterChip(
                         selected = current.schedule == ProgramSchedule.FlexiblePerWeek(sessions),
@@ -315,6 +357,36 @@ fun ProgramEditorScreen(
                     controller.addDraftElement(picker, exerciseId)
                 }
             )
+        }
+
+        // The creation request's own date choice — the same Material picker the import review uses,
+        // held beside the draft rather than in it (§6: the date is no part of the structure).
+        if (showStartDatePicker) {
+            val datePickerState = rememberDatePickerState(
+                initialSelectedDateMillis = state.draftPlannedStartDate?.toPickerMillis()
+            )
+            DatePickerDialog(
+                onDismissRequest = { showStartDatePicker = false },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            datePickerState.selectedDateMillis?.let { millis ->
+                                controller.setDraftPlannedStartDate(pickerMillisToDate(millis))
+                            }
+                            showStartDatePicker = false
+                        }
+                    ) {
+                        Text(stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showStartDatePicker = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            ) {
+                DatePicker(state = datePickerState)
+            }
         }
     }
 }
@@ -474,24 +546,40 @@ private fun ExercisePickerDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                val filtered = remember(query, options) {
-                    options.filter { option ->
-                        query.isBlank() || option.exerciseId.contains(query, ignoreCase = true)
+                // P3 `UI-04`: the search matches the **user's localized display name** (resolved
+                // here for this locale) *and* the stable id — it used to match the id alone, so
+                // `Flexion` found nothing in Spanish while the Spanish reader saw no other name.
+                // Resolving the labels once outside the filter also means the row the user taps
+                // shows exactly the string the match was made against.
+                val named = options.map { option ->
+                    option to if (option.nameRes != 0) {
+                        stringResource(option.nameRes)
+                    } else {
+                        option.exerciseId
                     }
                 }
-                LazyColumn(modifier = Modifier.height(PICKER_HEIGHT)) {
-                    items(filtered, key = { option -> option.exerciseId }) { option ->
-                        TextButton(
-                            onClick = { onPick(option.exerciseId) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = if (option.nameRes != 0) {
-                                    stringResource(option.nameRes)
-                                } else {
-                                    option.exerciseId
-                                }
-                            )
+                val filtered = remember(query, named) {
+                    named.filter { (option, displayName) ->
+                        matchesExerciseQuery(query, option.exerciseId, displayName)
+                    }
+                }
+                if (filtered.isEmpty()) {
+                    // A search with no results is an explained state, never a blank list (P3).
+                    Text(
+                        text = stringResource(R.string.programs_editor_search_no_results),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    )
+                } else {
+                    LazyColumn(modifier = Modifier.height(PICKER_HEIGHT)) {
+                        items(filtered, key = { (option, _) -> option.exerciseId }) { (option, displayName) ->
+                            TextButton(
+                                onClick = { onPick(option.exerciseId) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(text = displayName)
+                            }
                         }
                     }
                 }

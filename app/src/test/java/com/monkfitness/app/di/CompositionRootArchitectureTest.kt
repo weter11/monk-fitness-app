@@ -373,18 +373,20 @@ class CompositionRootArchitectureTest {
 
         assertEquals(
             "the Scheduler is a graph node and nothing beside it: the container names it in exactly " +
-                "five places — the import, the property's name, its type, the construction, and the one " +
-                "consumer §30 step 13 handed it to (the import service) — so a scheduling decision " +
-                "cannot ride along with the wiring unnoticed. Revised by §30 step 13 rather than relaxed: " +
-                "the extra mention is the *hand-over* of the node, and the hand-over is pinned exactly " +
-                "below.",
-            5,
+                "six places of code — the property's name, its type, its construction, §30 step 7's " +
+                "wiring mentions, and the consumer hand-over lines — so a scheduling decision cannot " +
+                "ride along with the wiring unnoticed. Revised (not relaxed) by the creation " +
+                "remediation: the sixth place is the Save orchestration's hand-over line " +
+                "(`scheduler = programScheduler,`), pinned as the second consumer below.",
+            6,
             occurrences(text, "Scheduler")
         )
         assertEquals(
-            "and the one consumer is stated as one line: the Scheduler is handed to the transfer stage and " +
-                "to nothing else, exactly once",
-            1,
+            "and the consumers are stated as one line each: the Scheduler is handed to the transfer " +
+                "stage (§30 step 13) and to the Save orchestration (the creation remediation — §27's " +
+                "creation unit and reconciliation are composed there, not in a screen) — exactly twice, " +
+                "and to nothing else",
+            2,
             occurrences(text, "scheduler = programScheduler,")
         )
         assertEquals(

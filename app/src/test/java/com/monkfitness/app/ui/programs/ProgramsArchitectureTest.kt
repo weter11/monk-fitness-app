@@ -2,6 +2,7 @@ package com.monkfitness.app.ui.programs
 
 import com.monkfitness.app.di.Clock
 import com.monkfitness.app.domain.usecase.ProgramEditorService
+import com.monkfitness.app.domain.usecase.ProgramSaveService
 import com.monkfitness.app.domain.usecase.ProgramExportService
 import com.monkfitness.app.domain.usecase.ProgramImportService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
@@ -111,9 +112,9 @@ class ProgramsArchitectureTest {
     fun noProgramScreenConstructsAnApplicationService() = assertNoToken(
         screenSources,
         listOf(
-            "ProgramLifecycleService(", "ProgramEditorService(", "ProgramImportService(",
-            "ProgramExportService(", "ProgramProgressService(", "ProgramScheduler(",
-            "ProgramsController("
+            "ProgramLifecycleService(", "ProgramEditorService(", "ProgramSaveService(",
+            "ProgramImportService(", "ProgramExportService(", "ProgramProgressService(",
+            "ProgramScheduler(", "ProgramsController("
         ),
         "a screen receives its state holder; it does not build one, and it builds no service"
     )
@@ -144,6 +145,7 @@ class ProgramsArchitectureTest {
         listOf(
             "programGraph.programLifecycleService",
             "programGraph.programEditorService",
+            "programGraph.programSaveService",
             "programGraph.programImportService",
             "programGraph.programExportService",
             "programGraph.programProgressService",
@@ -184,12 +186,16 @@ class ProgramsArchitectureTest {
         val collaborators = constructor.parameterTypes.map { type -> type.name }
 
         assertEquals(
-            "§24/§26: the six application services, the two UI ports, and the two ports \"today\" is read " +
+            "§24/§26: the seven application services, the two UI ports, and the two ports \"today\" is read " +
                 "from — and nothing else. A repository, a DAO, a clock of its own or a platform type in " +
-                "this list would be a layer reached around",
+                "this list would be a layer reached around. Revised (not relaxed) by the creation " +
+                "remediation: `ProgramSaveService` joins as §27's Save — the controller hands it the " +
+                "draft and the chosen date precisely so the controller itself never builds a slot, " +
+                "never chooses a date and never runs a scheduling pass",
             listOf(
                 ProgramLifecycleService::class.java.name,
                 ProgramEditorService::class.java.name,
+                ProgramSaveService::class.java.name,
                 ProgramImportService::class.java.name,
                 ProgramExportService::class.java.name,
                 ProgramProgressService::class.java.name,
@@ -277,5 +283,113 @@ class ProgramsArchitectureTest {
                 file.readText().contains("import androidx.compose")
             )
         }
+    }
+
+    // ---- the creation remediation's source-level contracts -------------------------------------------
+    // These screens have no Compose harness (§17), so the wiring half of each fix is pinned against
+    // the source; the behaviour half is measured through the controllers in `ProgramsControllerTest`,
+    // `ProgramHomeControllerTest` and `ProgramSaveServiceTest`.
+
+    @Test
+    fun homeIsLoadedByALifecycleAwareEffectWhenTheScreenOpens() {
+        val home = codeOf("ui/screens/HomeScreen.kt").replace(Regex("""\s+"""), " ")
+        assertTrue(
+            "P1: Home triggers its Program read through the existing refresh mechanism — without " +
+                "this call ProgramHomeController.load() had no production caller and the card " +
+                "rendered the state holder's initial value forever",
+            home.contains("LaunchedEffect(viewModel) { viewModel.refreshHomeProgram() }")
+        )
+        val viewModel = codeOf("viewmodel/MainViewModel.kt").replace(Regex("""\s+"""), " ")
+        assertTrue(
+            "and that refresh reaches the controller's own load — the screen touches no service",
+            viewModel.contains("viewModelScope.launch { homeProgram.load() }")
+        )
+    }
+
+    @Test
+    fun theNoticeHostAwaitsTheSnackbarBeforeItClearsTheNotice() {
+        val host = codeOf("ui/screens/ProgramsScreen.kt").replace(Regex("""\s+"""), " ")
+        val body = host.substringAfter("LaunchedEffect(notice) {")
+        val show = body.indexOf("showSnackbar(")
+        val clear = body.indexOf("onShown()")
+        assertTrue("the effect still shows the notice", show >= 0)
+        assertTrue("and still clears it afterwards", clear >= 0)
+        assertTrue(
+            "P2 UI-01: `showSnackbar` is awaited BEFORE `onShown()` — clearing the notice " +
+                "cancelled this very coroutine at its first suspension point, so refusals, " +
+                "GENERATION_UNAVAILABLE and storage failures could pass by unread",
+            show < clear
+        )
+        assertEquals(
+            "exactly one clear, after the await — not a second one on another path",
+            1,
+            Regex("""onShown\(\)""").findAll(body).count()
+        )
+    }
+
+    @Test
+    fun everyScheduleOptionIsRenderedInAWrappingLayout() {
+        val editor = codeOf("ui/screens/ProgramEditorScreen.kt")
+        assertTrue(
+            "P2 UI-02: the five supported weekly frequencies remain declared — none is dropped " +
+                "to make the row fit",
+            editor.contains("SCHEDULE_OPTIONS = listOf(2, 3, 4, 5, 6)")
+        )
+        val collapsed = editor.replace(Regex("""\s+"""), " ")
+        val flow = collapsed.indexOf("FlowRow(")
+        val options = collapsed.indexOf("(SCHEDULE_OPTIONS).forEach")
+        assertTrue("the editor renders a wrapping layout at all", flow >= 0)
+        assertTrue("…and renders the schedule chips inside it", options >= 0)
+        assertTrue(
+            "so chips wrap onto further rows on portrait 360dp instead of clipping 5 and 6",
+            flow < options
+        )
+    }
+
+    @Test
+    fun thePickerSearchesLocalizedNameAndIdAndExplainsAnEmptyResult() {
+        val editor = codeOf("ui/screens/ProgramEditorScreen.kt").replace(Regex("""\s+"""), " ")
+        assertTrue(
+            "P3 UI-04: the filter is the shared pure rule, fed the resolved display name and the " +
+                "stable id — a search on the id alone could never find the localized name",
+            editor.contains("matchesExerciseQuery(query, option.exerciseId, displayName)")
+        )
+        assertTrue(
+            "and a search with no results shows an explained message instead of a blank list",
+            editor.contains("if (filtered.isEmpty())")
+        )
+        assertTrue(
+            "the empty state is this feature's own string resource (§14)",
+            editor.contains("stringResource(R.string.programs_editor_search_no_results)")
+        )
+    }
+
+    @Test
+    fun theStateHolderSavesThroughTheSaveOrchestrationAndRunsNoPassItself() {
+        val holder = codeOf("ui/programs/ProgramsController.kt").replace(Regex("""\s+"""), " ")
+        assertTrue(
+            "§27's Save is the one production path: the draft and the chosen date are handed down",
+            holder.contains("saver.save(draft, mutableState.value.draftPlannedStartDate)")
+        )
+        assertFalse(
+            "and the controller never calls the editor's structure-level save directly — that " +
+                "entry writes no slots and is not the creation unit",
+            holder.contains("editor.save(")
+        )
+        assertFalse(
+            "nor does it ever run a scheduling pass itself: only the Save service decides when a " +
+                "pass runs, and only the Scheduler decides what it does",
+            holder.contains("scheduler.schedule(")
+        )
+    }
+
+    @Test
+    fun theEditorSeedGoesThroughTheControllersFlowGuard() {
+        val editor = codeOf("ui/screens/ProgramEditorScreen.kt").replace(Regex("""\s+"""), " ")
+        assertTrue(
+            "P2 UI-03: the screen's seed runs through the guard that tells a re-appearing flow " +
+                "apart from a new one — a bare `seed()` would wipe the draft on every rotation",
+            editor.contains("LaunchedEffect(seedKey) { controller.seedEditor(seedKey) { seed() } }")
+        )
     }
 }

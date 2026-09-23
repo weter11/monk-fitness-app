@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -63,6 +64,18 @@ fun HomeScreen(
     onOpenPrograms: () -> Unit,
     onStartPostureWorkout: () -> Unit
 ) {
+    // P1 of the creation remediation: `ProgramHomeController.load()` existed but Home never called
+    // it, so the card rendered the state holder's initial value — no Program, no next workout, no
+    // Start — no matter what was created, selected or scheduled. This is ProgressScreen's own
+    // mechanism (`LaunchedEffect(viewModel) { viewModel.refreshProgress() }`): a lifecycle-aware
+    // effect keyed on the holder, re-read on every composition of this destination — first open and
+    // every return to Home — and cancelled with the composition, so there is no read outliving the
+    // screen that asked for it. The read itself stays in the controller; nothing here touches a
+    // repository or a service.
+    LaunchedEffect(viewModel) {
+        viewModel.refreshHomeProgram()
+    }
+
     val state by viewModel.homeProgramState.collectAsState()
     val postureCompleted by viewModel.postureCompletedCount.collectAsState()
     val additionalPostureTrainingEnabled by viewModel.additionalPostureTrainingEnabled.collectAsState()

@@ -873,6 +873,10 @@
     <string name="programs_editor_discard">Discard draft</string>
     <string name="programs_editor_generate">Generate the plan</string>
     <string name="programs_editor_no_draft">No draft is open.</string>
+    <string name="programs_editor_start_date">Planned start date</string>
+    <string name="programs_editor_start_date_hint">This is a plan, not a start: the program starts only when you start it. With no date chosen here, the program is planned to start today.</string>
+    <string name="programs_editor_start_date_choose">Choose a specific date</string>
+    <string name="programs_editor_search_no_results">No exercises match your search.</string>
     <string name="programs_review_title">What saving will do</string>
     <string name="programs_review_creates_program">A new program will be created with its first revision.</string>
     <string name="programs_review_creates_revision">A new revision of this program will be created.</string>

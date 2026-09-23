@@ -11,6 +11,7 @@ import com.monkfitness.app.domain.common.RevisionId
 import com.monkfitness.app.domain.program.DraftIdSource
 import com.monkfitness.app.domain.program.LifecycleStatus
 import com.monkfitness.app.domain.program.Program
+import com.monkfitness.app.domain.program.ProgramCreation
 import com.monkfitness.app.domain.program.ProgramDraftEditor
 import com.monkfitness.app.domain.program.ProgramDraftReview
 import com.monkfitness.app.domain.program.ProgramDraftValidation
@@ -26,6 +27,7 @@ import com.monkfitness.app.domain.program.structure
 import com.monkfitness.app.domain.program.validation
 import com.monkfitness.app.domain.program.withRenumberedDays
 import java.time.Instant
+import java.time.LocalDate
 
 /**
  * The Manual Program Editor — §30 step 6, over the persistence of steps 3 and 4 and beside the
@@ -83,7 +85,12 @@ import java.time.Instant
  *  * **No slot writes.** Creating or re-saving a Program does not schedule it: no date is chosen, no
  *    slot is added, and no slot is reconciled when a revision changes, because §20's scheduling is
  *    §30 step 7's. The constructor takes no `ProgramScheduleRepository` at all — the guarantee is the
- *    absence of the collaborator, not a promise not to use one.
+ *    absence of the collaborator, not a promise not to use one. §27's *creation unit* and §27's
+ *    *Save → future-slot reconciliation* are therefore **not** this class's to perform: they are
+ *    composed above it by [ProgramSaveService], which asks the Scheduler and this class's
+ *    [prepareCreation] for their answers and performs the single transactional write. A caller that
+ *    needs a created Program to have initial slots must go through that path rather than through
+ *    [save]'s structure-level create entry.
  *  * **No generation.** `Generate`/`Regenerate` are the Generated editor's (§30 step 10); a draft's
  *    mode is content, and this class stores it without ever producing a plan.
  *  * **No adaptive work and no import/export.** Steps 11–13.
@@ -136,6 +143,69 @@ class ProgramEditorService(
 
     /** The draft's validation — §7's `validate` step, decided from the draft alone. */
     fun validate(draft: ProgramEditorDraft): ProgramDraftValidation = draft.validation()
+
+    /**
+     * The Program and its first revision a create or copy save would produce — validated, minted with
+     * fresh identities, and **written nowhere** (§27's creation unit, before its other two halves).
+     *
+     * This is the seam the application-level Save orchestration composes against: the editor answers
+     * *"what Program and first revision does this draft describe?"* and the orchestration answers the
+     * two questions that are not the editor's — which initial opportunities the Scheduler decides for
+     * that pair ([com.monkfitness.app.domain.usecase.ProgramScheduler.initialSlotsFor]), and the one
+     * transactional `createProgram(program, revision, slots)` that stores them together. Nothing here
+     * opens a transaction or touches a row, so a caller that is refused — or one whose scheduling leg
+     * fails before the write — has still written nothing at all.
+     *
+     * The planned start date arrives as a **value** rather than being read here: §3 makes it a fact of
+     * the Program and §6 says it is no part of the structure, and the layer that receives the user's
+     * creation request is the layer that decides what date it names (an exact choice, or *today* from
+     * the injected clock). The Scheduler never invents one — a Program created without an anchor could
+     * not be planned at all ([com.monkfitness.app.domain.program.ProgramSchedulingRefusal
+     * .NoSchedulingAnchor]).
+     *
+     * @param draft a draft that names no Program: a create (`Build it myself` / `Build for me`) or a
+     *   copy. An edit is refused here — it has a Program, and its save is [save]'s own path.
+     * @param plannedStartDate the date the Program is **planned** to start on. A plan, never a start:
+     *   the lifecycle stays `NOT_STARTED` and `actualStartDate` stays `null`.
+     * An unfinished draft is a [ProgramEditorRejection.InvalidDraft] result, decided before any
+     * identity reaches storage — and nothing is stored either way, whichever way it is decided.
+     */
+    fun prepareCreation(
+        draft: ProgramEditorDraft,
+        plannedStartDate: LocalDate
+    ): ProgramEditorResult<ProgramCreation> = editorResult {
+        require(draft.isNewProgram) {
+            "a prepared creation names no Program: this draft edits " +
+                "'${draft.programId?.value}', and an edit saves through save(), not through a creation"
+        }
+        val validation = draft.validation()
+        if (!validation.isValid) throw DraftRejected(validation)
+
+        val at = clock.now()
+        val programId = ProgramId(idGenerator.newId())
+        val revision = mintRevision(
+            draft = draft,
+            programId = programId,
+            revisionNumber = ProgramRevision.FIRST_REVISION_NUMBER,
+            at = at
+        )
+        ProgramCreation(
+            program = Program(
+                programId = programId,
+                name = draft.name,
+                description = draft.description,
+                source = ProgramSource.USER,
+                lifecycleStatus = LifecycleStatus.NOT_STARTED,
+                currentRevisionId = revision.revisionId,
+                createdAt = at,
+                updatedAt = at,
+                plannedStartDate = plannedStartDate,
+                actualStartDate = null,
+                archivedAt = null
+            ),
+            revision = revision
+        )
+    }.rejecting()
 
     /**
      * A draft that edits [programId]'s current plan.
