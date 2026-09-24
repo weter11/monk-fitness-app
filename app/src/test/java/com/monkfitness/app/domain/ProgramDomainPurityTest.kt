@@ -40,7 +40,7 @@ class ProgramDomainPurityTest {
      * a second scan.
      */
     private val newPackages = listOf(
-        "common", "program", "prescription", "workout", "adaptive/decision", "adaptive/engine",
+        "common", "program", "program/target", "prescription", "workout", "adaptive/decision", "adaptive/engine",
         // §30 step 13 added the transfer model, the JSON codec and the mappers. Naming the sub-package
         // explicitly is deliberate: it is the package a reader and a writer of *untrusted text* live in,
         // which is exactly where "no `var`, no mutable collection, no floating point, no random source and
