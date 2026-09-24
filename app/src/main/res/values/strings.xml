@@ -941,6 +941,9 @@
     <string name="programs_session_set_of">Set %1$d of %2$d</string>
     <string name="programs_session_reps_target">%1$d reps</string>
     <string name="programs_session_seconds_target">%1$d s</string>
+    <string name="programs_session_actual_reps">Actual repetitions</string>
+    <string name="programs_session_actual_seconds">Actual seconds</string>
+    <string name="programs_session_actual_invalid">Enter a whole number greater than zero</string>
     <string name="programs_session_confirm_set">Confirm set</string>
     <string name="programs_session_rest">Rest %1$d s</string>
     <string name="programs_session_skip_rest">Skip rest</string>

@@ -85,7 +85,7 @@ class ProgramTargetAcceptanceTest {
             // operation it offers is a call on the runtime. Driving the scenario through it — rather than
             // through the runtime directly — is what makes "the target runtime is the production path"
             // measurable instead of assumed.
-            val session = ProgramSessionController(
+            var session = ProgramSessionController(
                 runtime = runtime,
                 adaptive = integration,
                 lifecycle = rig.transfer.lifecycleService,
@@ -146,15 +146,29 @@ class ProgramTargetAcceptanceTest {
             assertTrue("the captured presentation is stored", capturedBefore.workout.exercises.isNotEmpty())
 
             // ---- 4. Confirm every set of every occurrence, through the screen's own operations -------
+            val firstOccurrence = session.state.value.currentExercise
+            assertNotNull("a set is ready for confirmation", firstOccurrence)
+            val invalidWasStored = session.confirmActualSet("-1")
+            assertFalse("a negative actual result is rejected", invalidWasStored)
+            assertEquals(
+                "invalid input is not silently replaced with the prescribed target",
+                0,
+                database.count("program_set_log")
+            )
+
+            var confirmedWithDifferentActual = false
             var guard = 0
             while (!session.state.value.everythingConfirmed && guard++ < 20) {
-                val current = session.state.value.currentExercise
-                    ?: break
-                if (current.dimension == PrescriptionDimension.TIME_BASED) {
-                    session.confirmSet(durationSeconds = current.nextTarget)
+                val current = session.state.value.currentExercise ?: break
+                val actual = if (!confirmedWithDifferentActual &&
+                    current.dimension == PrescriptionDimension.REP_BASED
+                ) {
+                    confirmedWithDifferentActual = true
+                    "8"
                 } else {
-                    session.confirmSet(completedReps = current.nextTarget)
+                    current.nextTarget.toString()
                 }
+                assertTrue("the entered actual result is stored", session.confirmActualSet(actual))
             }
             assertTrue("every prescribed set is confirmed", session.state.value.everythingConfirmed)
             assertEquals(
@@ -162,6 +176,37 @@ class ProgramTargetAcceptanceTest {
                 session.state.value.prescribedSetCount,
                 runtimeRead(runtime, sessionId).exercises.sumOf { it.results.size }
             )
+            val firstSet = runtimeRead(runtime, sessionId).exercises.first().results.first()
+            assertEquals(
+                "the persisted observation is what the user entered, not the prescription",
+                8,
+                firstSet.completedReps
+            )
+
+            // Leaving is not cancellation. A fresh controller opens the same slot and must restore the
+            // same attempt from its persisted rows, including the actual result that differs from target.
+            val beforeLeave = session.state.value.confirmedSetCount
+            session.back()
+            val reopened = ProgramSessionController(
+                runtime = runtime,
+                adaptive = integration,
+                lifecycle = rig.transfer.lifecycleService,
+                catalogue = { rig.catalogueOptions }
+            )
+            reopened.open(slotId.value)
+            assertEquals(SessionStage.PRESENTING, reopened.state.value.stage)
+            assertEquals(sessionId.value, reopened.state.value.sessionId)
+            assertEquals(
+                "reopening restores the persisted progress, not a new or recomputed session",
+                beforeLeave,
+                reopened.state.value.confirmedSetCount
+            )
+            assertEquals(
+                8,
+                (runtime.restoreSession(sessionId) as SessionRuntimeResult.Success).value
+                    .exercises.first().results.first().completedReps
+            )
+            session = reopened
 
             // ---- 5. The adaptive leg is evaluated, and reports its honest boundary -------------------
             val adaptive = integration.adaptAfter(sessionId)

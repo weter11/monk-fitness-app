@@ -941,6 +941,9 @@
     <string name="programs_session_set_of">Serie %1$d di %2$d</string>
     <string name="programs_session_reps_target">%1$d ripetizioni</string>
     <string name="programs_session_seconds_target">%1$d s</string>
+    <string name="programs_session_actual_reps">Ripetizioni effettive</string>
+    <string name="programs_session_actual_seconds">Secondi effettivi</string>
+    <string name="programs_session_actual_invalid">Inserisci un numero intero maggiore di zero</string>
     <string name="programs_session_confirm_set">Conferma serie</string>
     <string name="programs_session_rest">Riposo %1$d s</string>
     <string name="programs_session_skip_rest">Salta riposo</string>

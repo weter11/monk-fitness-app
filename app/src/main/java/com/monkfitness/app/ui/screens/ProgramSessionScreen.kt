@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -23,6 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
@@ -102,6 +105,8 @@ fun ProgramSessionScreen(
     var showFinishDialog by remember { mutableStateOf(false) }
     var showCancelDialog by remember { mutableStateOf(false) }
     var showNotice by remember { mutableStateOf(false) }
+    var actualValue by remember(state.currentExercise) { mutableStateOf(state.currentExercise?.nextTarget?.toString().orEmpty()) }
+    var actualInputInvalid by remember { mutableStateOf(false) }
 
     val notice = state.notice
     LaunchedEffect(notice) { showNotice = notice != null }
@@ -251,20 +256,52 @@ fun ProgramSessionScreen(
                     }
 
                     state.currentExercise?.let { current ->
+                        OutlinedTextField(
+                            value = actualValue,
+                            onValueChange = { value ->
+                                actualValue = value.filter(Char::isDigit)
+                                actualInputInvalid = false
+                            },
+                            label = {
+                                Text(
+                                    stringResource(
+                                        when (current.dimension) {
+                                            PrescriptionDimension.TIME_BASED -> R.string.programs_session_actual_seconds
+                                            else -> R.string.programs_session_actual_reps
+                                        }
+                                    )
+                                )
+                            },
+                            singleLine = true,
+                            isError = actualInputInvalid,
+                            supportingText = if (actualInputInvalid) {
+                                { Text(stringResource(R.string.programs_session_actual_invalid)) }
+                            } else {
+                                null
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
                         MonkButton(
                             text = stringResource(R.string.programs_session_confirm_set),
                             onClick = {
-                                restSecondsLeft = if (current.completedSets + 1 < current.setCount) {
-                                    REST_SECONDS
-                                } else {
-                                    0
-                                }
-                                if (vibrationEnabled) VibrationFeedback.buzz(context)
-                                val target = current.nextTarget
-                                if (current.dimension == PrescriptionDimension.TIME_BASED) {
-                                    scope.launch { controller.confirmSet(durationSeconds = target) }
-                                } else {
-                                    scope.launch { controller.confirmSet(completedReps = target) }
+                                scope.launch {
+                                    val stored = controller.confirmActualSet(actualValue)
+                                    actualInputInvalid = !stored
+                                    if (stored) {
+                                        actualValue = state.currentExercise
+                                            ?.takeIf { it.sessionExerciseId != current.sessionExerciseId }
+                                            ?.nextTarget
+                                            ?.toString()
+                                            .orEmpty()
+                                        restSecondsLeft = if (current.completedSets + 1 < current.setCount) {
+                                            REST_SECONDS
+                                        } else {
+                                            0
+                                        }
+                                        if (vibrationEnabled) VibrationFeedback.buzz(context)
+                                    }
                                 }
                             },
                             enabled = restSecondsLeft == 0

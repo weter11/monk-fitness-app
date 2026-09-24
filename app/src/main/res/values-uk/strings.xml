@@ -939,6 +939,9 @@
     <string name="programs_session_set_of">Підхід %1$d з %2$d</string>
     <string name="programs_session_reps_target">%1$d повторень</string>
     <string name="programs_session_seconds_target">%1$d с</string>
+    <string name="programs_session_actual_reps">Фактичні повторення</string>
+    <string name="programs_session_actual_seconds">Фактичні секунди</string>
+    <string name="programs_session_actual_invalid">Введіть ціле число більше нуля</string>
     <string name="programs_session_confirm_set">Підтвердити підхід</string>
     <string name="programs_session_rest">Відпочинок %1$d с</string>
     <string name="programs_session_skip_rest">Пропустити відпочинок</string>
