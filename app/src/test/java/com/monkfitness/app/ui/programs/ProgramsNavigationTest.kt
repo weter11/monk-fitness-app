@@ -106,11 +106,11 @@ class ProgramsNavigationTest {
 
     @Test
     fun everyProgramRouteReachesTheAcceptanceFlowsScreens() {
-        // The final acceptance scenario walks Settings → Programs → My Programs → Detail, the two
+        // The acceptance scenario opens My Programs directly from the primary tab, then walks the two
         // creation entry paths, the editor, and Import. Each hop below is a hop that scenario takes.
         assertTrue("Programs → My Programs", activity.contains("MainViewModel.ROUTE_MY_PROGRAMS"))
-        assertTrue("Programs → Create Program", activity.contains("MainViewModel.ROUTE_PROGRAM_CREATE"))
-        assertTrue("Programs → Import Program", activity.contains("MainViewModel.ROUTE_PROGRAM_IMPORT"))
+        assertTrue("My Programs → Create Program", activity.contains("MainViewModel.ROUTE_PROGRAM_CREATE"))
+        assertTrue("My Programs → Import Program", activity.contains("MainViewModel.ROUTE_PROGRAM_IMPORT"))
         assertTrue("a row → Program Detail", activity.contains("MainViewModel.programDetailRoute("))
         assertTrue("Detail → Edit", activity.contains("MainViewModel.programEditorEditRoute("))
         assertTrue("Detail → Copy", activity.contains("MainViewModel.programEditorCopyRoute("))
@@ -145,35 +145,68 @@ class ProgramsNavigationTest {
 
     // ---- the legacy path is no longer the entry point (§7) ---------------------------------------
 
-    @Test
-    fun theProgramSystemsEntryPointIsTheSettingsProgramsSection() {
-        val settings = code(source("ui/screens/SettingsScreen.kt"))
+    private fun primaryScreens(): List<String> {
+        val declaration = Regex("""val screens = listOf\((.*?)\n\s*\)""", RegexOption.DOT_MATCHES_ALL)
+            .find(activity)
+            ?.groupValues?.get(1)
+            ?: throw AssertionError("the primary bottom-bar screen list is missing")
+        return Regex("""Screen\.(Home|Programs|Nutrition|Progress|Posture)""")
+            .findAll(declaration)
+            .map { it.groupValues[1] }
+            .toList()
+    }
 
+    @Test
+    fun programsIsThePrimaryDestinationAndItLandsDirectlyOnMyPrograms() {
         assertTrue(
-            "Settings offers the Program System's entry point",
-            settings.contains("onOpenPrograms")
+            "Programs is declared as a primary screen beside Home, Nutrition, Progress and Posture",
+            activity.contains("object Programs : Screen(MainViewModel.ROUTE_MY_PROGRAMS")
+        )
+        assertEquals(
+            "the bottom bar has exactly the five primary destinations in product order",
+            listOf("Home", "Programs", "Nutrition", "Progress", "Posture"),
+            primaryScreens()
         )
         assertTrue(
-            "§12: the section is labelled with the Program System's own title resource",
-            settings.contains("R.string.programs_title")
-        )
-        assertTrue(
-            "and it is given its own description, so it does not read as a second program manager",
-            settings.contains("R.string.programs_desc")
-        )
-        assertTrue(
-            "the graph navigates from Settings to the Programs destination",
-            activity.contains("MainViewModel.ROUTE_PROGRAMS")
+            "the primary Programs tab directly registers MyProgramsScreen",
+            Regex("""composable\(MainViewModel\.ROUTE_MY_PROGRAMS\).*?MyProgramsScreen\(""", RegexOption.DOT_MATCHES_ALL)
+                .containsMatchIn(activity)
         )
     }
 
     @Test
+    fun settingsIsSecondaryButRemainsIndependentlyReachable() {
+        assertEquals(5, primaryScreens().size)
+        assertTrue(
+            "Settings is not rendered by the primary bottom bar",
+            primaryScreens().none { it == "Settings" }
+        )
+        assertTrue(
+            "Home offers the app's existing Settings icon convention",
+            source("ui/screens/HomeScreen.kt").contains("Icons.Default.Settings")
+        )
+        assertTrue(
+            "My Programs also keeps Settings independently reachable from its primary surface",
+            source("ui/screens/MyProgramsScreen.kt").contains("Icons.Default.Settings")
+        )
+        assertTrue(
+            "the one graph still registers Settings as an ordinary destination",
+            activity.contains("composable(\"settings\")")
+        )
+        assertTrue(
+            "Home's callback navigates through the one controller to Settings",
+            activity.contains("navController.navigate(\"settings\")")
+        )
+    }
+
+    @Test
+    fun settingsNoLongerContainsAProgramsManagerEntry() {
+        val settings = code(source("ui/screens/SettingsScreen.kt"))
+        assertFalse("Settings has no Programs callback", settings.contains("onOpenPrograms"))
+    }
+
+    @Test
     fun theLegacyCustomProgramRouteIsGoneAndTheProgramSystemIsTheOnlyEntryPoint() {
-        // §30 step 15 inverted this claim. Until then the legacy route was *retained* — pinned as
-        // "reached from exactly one place" — because its editor still configured the shipped generator's
-        // exercise selection. The final audit showed that selection had no reader left (its only consumer
-        // was the legacy session's configuration capture, which this stage deleted), so it became a
-        // setting that could affect nothing and the whole surface was retired with its route.
         assertFalse(
             "the legacy editor's screen is gone, not merely unreached",
             activity.contains("CustomProgramScreen(")
@@ -181,11 +214,6 @@ class ProgramsNavigationTest {
         assertFalse(
             "and so is the destination it was reached by",
             activity.contains("ROUTE_CUSTOM_PROGRAM")
-        )
-        assertTrue(
-            "the Program System is reached from its own Settings callback, which navigates to its " +
-                "own destination",
-            activity.contains("onOpenPrograms = {")
         )
     }
 }

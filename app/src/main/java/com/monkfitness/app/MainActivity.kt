@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
@@ -86,10 +87,10 @@ class MainActivity : AppCompatActivity() {
 
 sealed class Screen(val route: String, val titleRes: Int, val icon: ImageVector) {
     object Home : Screen("home", R.string.home, Icons.Default.Home)
+    object Programs : Screen(MainViewModel.ROUTE_MY_PROGRAMS, R.string.programs_title, Icons.Default.List)
     object Nutrition : Screen("nutrition", R.string.nutrition, Icons.Default.Favorite)
     object Progress : Screen("progress", R.string.progress, Icons.Default.Star)
     object Posture : Screen("posture", R.string.exercises_tab, Icons.Default.Person)
-    object Settings : Screen("settings", R.string.settings, Icons.Default.Settings)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -119,17 +120,17 @@ fun MainApp(viewModel: MainViewModel) {
     Scaffold(
         bottomBar = {
             if (isOnboardingCompleted && (currentRoute == Screen.Home.route ||
+                currentRoute == Screen.Programs.route ||
                 currentRoute == Screen.Nutrition.route ||
                 currentRoute == Screen.Progress.route ||
-                currentRoute == Screen.Posture.route ||
-                currentRoute == Screen.Settings.route)) {
+                currentRoute == Screen.Posture.route)) {
                 NavigationBar {
                     val screens = listOf(
                         Screen.Home,
+                        Screen.Programs,
                         Screen.Nutrition,
                         Screen.Progress,
-                        Screen.Posture,
-                        Screen.Settings
+                        Screen.Posture
                     )
                     screens.forEach { screen ->
                         NavigationBarItem(
@@ -179,7 +180,10 @@ fun MainApp(viewModel: MainViewModel) {
                         navController.navigate(MainViewModel.programSessionRoute(slotId))
                     },
                     onOpenPrograms = {
-                        navController.navigate(MainViewModel.ROUTE_PROGRAMS)
+                        navController.navigate(Screen.Programs.route)
+                    },
+                    onOpenSettings = {
+                        navController.navigate("settings")
                     },
                     onStartPostureWorkout = {
                         navController.navigate("posture-workout")
@@ -196,7 +200,7 @@ fun MainApp(viewModel: MainViewModel) {
                         navController.navigate("nutrition-shopping-list")
                     },
                     onNavigateToSettings = {
-                        navController.navigate(Screen.Settings.route) {
+                        navController.navigate("settings") {
                             popUpTo(navController.graph.startDestinationId) {
                                 saveState = true
                             }
@@ -220,13 +224,10 @@ fun MainApp(viewModel: MainViewModel) {
                     }
                 )
             }
-            composable(Screen.Settings.route) {
+            composable("settings") {
                 SettingsScreen(
                     viewModel = viewModel,
-                    onBack = { navController.popBackStack() },
-                    onOpenPrograms = {
-                        navController.navigate(MainViewModel.ROUTE_PROGRAMS)
-                    },
+                    onBack = { navController.popBackStack() }
                 )
             }
             // ---- the Program System (§30 step 14) -------------------------------------------------
@@ -248,7 +249,8 @@ fun MainApp(viewModel: MainViewModel) {
                         navController.navigate(MainViewModel.programDetailRoute(programId))
                     },
                     onCreateProgram = { navController.navigate(MainViewModel.ROUTE_PROGRAM_CREATE) },
-                    onImportProgram = { navController.navigate(MainViewModel.ROUTE_PROGRAM_IMPORT) }
+                    onImportProgram = { navController.navigate(MainViewModel.ROUTE_PROGRAM_IMPORT) },
+                    onOpenSettings = { navController.navigate("settings") }
                 )
             }
             composable(MainViewModel.ROUTE_PROGRAM_CREATE) {
@@ -299,7 +301,8 @@ fun MainApp(viewModel: MainViewModel) {
                     onBack = { navController.popBackStack() },
                     onSaved = {
                         navController.navigate(MainViewModel.ROUTE_MY_PROGRAMS) {
-                            popUpTo(MainViewModel.ROUTE_PROGRAMS)
+                            launchSingleTop = true
+                            restoreState = true
                         }
                     }
                 )
@@ -316,7 +319,8 @@ fun MainApp(viewModel: MainViewModel) {
                     onBack = { navController.popBackStack() },
                     onSaved = {
                         navController.navigate(MainViewModel.ROUTE_MY_PROGRAMS) {
-                            popUpTo(MainViewModel.ROUTE_PROGRAMS)
+                            launchSingleTop = true
+                            restoreState = true
                         }
                     }
                 )
@@ -334,7 +338,8 @@ fun MainApp(viewModel: MainViewModel) {
                     onBack = { navController.popBackStack() },
                     onSaved = {
                         navController.navigate(MainViewModel.ROUTE_MY_PROGRAMS) {
-                            popUpTo(MainViewModel.ROUTE_PROGRAMS)
+                            launchSingleTop = true
+                            restoreState = true
                         }
                     }
                 )
@@ -345,7 +350,8 @@ fun MainApp(viewModel: MainViewModel) {
                     onBack = { navController.popBackStack() },
                     onImported = {
                         navController.navigate(MainViewModel.ROUTE_MY_PROGRAMS) {
-                            popUpTo(MainViewModel.ROUTE_PROGRAMS)
+                            launchSingleTop = true
+                            restoreState = true
                         }
                     }
                 )

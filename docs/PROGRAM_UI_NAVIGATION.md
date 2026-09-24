@@ -13,23 +13,43 @@ Everything below is measured; the numbers are in “Verification”, and every c
 One `NavHost`, one `NavController`, one place where destinations are declared (`MainActivity.kt`), and the
 route constants sit with the app's other routes in `MainViewModel`'s companion. No nested graph, no second
 controller, no navigation library. Every route carries a **stable identifier or a simple value** — a
-`programId`, or one of §2's two mode names:
+`programId`, or one of §2's two mode names.
+
+As of the first-class Programs navigation phase, Programs is a **primary bottom-navigation destination**
+and its landing destination is `MyProgramsScreen` directly. The primary destinations are:
 
 ```text
-Settings (existing bottom-bar destination)
-  └─ programs                        Programs hub
-       ├─ programs/my-programs       §21 My Programs
-       │    └─ programs/detail/{programId}      §22 Program Detail
-       │         ├─ programs/editor/edit/{programId}   §7 Edit
-       │         └─ programs/editor/copy/{programId}   §4 Copy
-       ├─ programs/create            §7's two entry paths
-       │    ├─ programs/editor/create/MANUAL
-       │    └─ programs/editor/create/GENERATED
-       └─ programs/import            §5 Import (picker → review → confirm)
+Home | Programs | Nutrition | Progress | Posture
 ```
 
-The Settings screen gained a **Programs** section, which is the entry point. It stopped being the hidden
-primary entry into the Program architecture.
+Settings remains registered as an ordinary secondary destination. It is reachable through the app's
+existing settings-icon convention on Home and My Programs, retains all of its existing controls, and its
+Back action returns to the destination from which it was opened. The former `Settings → Programs → My
+Programs` route is no longer mandatory.
+
+```text
+Home / Programs
+  └─ programs/my-programs            primary Programs tab (My Programs)
+       ├─ programs/create
+       │    ├─ programs/editor/create/MANUAL
+       │    └─ programs/editor/create/GENERATED
+       │  ├─ programs/import
+       │  └─ programs/detail/{programId}
+            ├─ programs/editor/edit/{programId}
+            └─ programs/editor/copy/{programId}
+
+Home / Programs
+  └─ settings                        secondary Settings destination
+```
+
+The existing `ProgramsScreen` route and hub remain registered as an internal destination for compatibility,
+but no primary navigation path requires the user to pass through it. `MyProgramsScreen`, Detail, Editor and
+Import continue to consume the one `ProgramsController`; selection remains owned by
+`ProgramLifecycleService`. This phase changes navigation and entry UI only: it adds no controller,
+graph, state source, Program rule, Scheduler or lifecycle behaviour.
+
+`ProgramsScreen` / Programs hub may remain as a secondary/internal destination only where genuinely useful,
+but it is not a mandatory step before My Programs.
 
 ---
 
