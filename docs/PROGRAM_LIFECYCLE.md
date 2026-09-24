@@ -124,10 +124,13 @@ an empty list (§33).
 
 ## 5. What this change does not do
 
-The Standard Program's *plan* is not built here. §4's contract is recorded in `StandardProgram.kt`
-and its identity is stable, but the exercise library, the slot structure and the seeding belong to the
-stage that owns generation. A missing Standard Program is a loud `StandardProgramNotSeeded`, not an
-auto-created one.
+The Standard Program now has a product-owned, explicit MANUAL plan: a 30-day
+`FixedDays` revision scheduled on Monday, Tuesday, Thursday, and Saturday, with four
+plan days and 20 exercise occurrences. The production bootstrap assigns the first
+bootstrap date as its `plannedStartDate`, leaves it `NOT_STARTED`, and asks the existing
+Scheduler for its initial opportunities. Repeated bootstrap runs are a no-op. The plan
+is independent of the legacy 56-day generator, generated planners, adaptive state, and
+legacy runtime.
 
 No ViewModel is wired. The service is constructed in `AppContainer` and fully tested through the
 production DAOs, but the UI integration is a later step.

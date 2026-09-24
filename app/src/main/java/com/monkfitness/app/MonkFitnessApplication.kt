@@ -60,6 +60,9 @@ class MonkFitnessApplication : Application() {
 
         val settingsManager = SettingsManager(this)
         MainScope().launch {
+            container.standardProgramBootstrap.bootstrap()
+        }
+        MainScope().launch {
             val time = settingsManager.notificationTimeFlow.first()
             NotificationScheduler.scheduleDailyReminder(this@MonkFitnessApplication, time.first, time.second)
         }

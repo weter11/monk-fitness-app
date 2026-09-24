@@ -23,25 +23,22 @@ import com.monkfitness.app.domain.common.ProgramId
  * Program the user may then edit freely. This object's job is the identity itself, because three
  * places need to agree on it and a constant in one place is what keeps them from drifting: the delete
  * fallback ("deleting the selected Program selects the Standard Program", §3), the guard that protects
- * it, and the caller that will seed the Program's plan in a later stage.
+ * it, and the production bootstrap that creates its explicit plan.
  *
- * ### Why the id is stable and why the plan is not here
+ * ### The plan
  *
- * The id is a fixed string rather than a generated one, because §3's fallback has to *find* this
- * Program after a delete — a generated id would make "select the Standard Program" a lookup with no
- * key. The plan is deliberately absent: deciding what the app's own program prescribes is the
- * editor/scheduler/Focus-Planner work of §30 steps 6–10, and this stage implements the *lifecycle*
- * contract only. [STANDARD_PROGRAM_PLAN_NOTE] records what a later stage has to provide and what this
- * stage assumes.
+ * The product-owned plan is [com.monkfitness.app.domain.product.StandardProgramDefinition].
+ * It is a MANUAL 30-day program scheduled Monday/Tuesday/Thursday/Saturday with four
+ * plan days and 20 occurrences. [com.monkfitness.app.bootstrap.StandardProgramBootstrap]
+ * creates this definition once, assigns the first bootstrap date as `plannedStartDate`,
+ * and uses the existing Scheduler for opportunities. It does not depend on the legacy
+ * generator or on generated/adaptive planning.
  *
  * ### What this stage does not do
  *
- * It does not seed the row. A Program that has no plan is not a representable state ([ProgramRevision]
- * requires a non-empty plan, and [ProgramRepository.createProgram] requires the Program to point at a
- * revision it creates), so seeding a Program without a plan would store an invalid graph. The
- * lifecycle layer therefore *requires* the Standard Program and reports it loudly when the delete
- * fallback finds it absent — see [ProgramLifecycleService]'s class docs — rather than inventing a
- * placeholder the architecture forbids.
+ * It does not choose the plan dynamically. The stable identity and lifecycle contract
+ * remain in this object; the explicit product definition and production bootstrap are
+ * separate collaborators so the lifecycle layer does not own creation or scheduling.
  */
 object StandardProgram {
 
@@ -66,16 +63,6 @@ object StandardProgram {
 }
 
 /**
- * What a later stage has to provide for the Standard Program, and what this stage assumes about it.
- *
- * Recorded instead of implemented, because the constraint is a contract the next stages must keep:
- * the Program must be created with a first revision that carries a real plan (§23, §27), and once it
- * is, this stage's rules apply to it unchanged — it is selectable, copyable and shareable, protected
- * from a direct edit and from deletion, and it is the fallback the selection moves to when the
- * selected Program is deleted.
+ * The Standard Program is created by [com.monkfitness.app.bootstrap.StandardProgramBootstrap]
+ * from the explicit product definition, including its first revision and scheduled opportunities.
  */
-internal const val STANDARD_PROGRAM_PLAN_NOTE: String =
-    "The Standard Program's plan is seeded by a later stage (§30 steps 6–10: the editor, the " +
-        "scheduler and the Focus Planner). This stage requires only that the Program exists with the " +
-        "id `standard-program`, a `STANDARD` source and a first revision carrying a real plan; the " +
-        "lifecycle, selection, archive, copy and delete rules then apply to it unchanged."
