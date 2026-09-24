@@ -1,14 +1,5 @@
 package com.monkfitness.app.domain.program
 
-import com.monkfitness.app.domain.program.ActualResult
-import com.monkfitness.app.domain.program.CompletionAssessment
-import com.monkfitness.app.domain.program.CompletionCalculator
-import com.monkfitness.app.domain.program.ExecutionEvidence
-import com.monkfitness.app.domain.program.OccurrenceExecution
-import com.monkfitness.app.domain.program.PerformedWork
-import com.monkfitness.app.domain.program.PlannedWork
-import com.monkfitness.app.domain.program.ScheduleEditReconciler
-import com.monkfitness.app.domain.program.WorkRequirement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -31,8 +22,13 @@ class SemanticContractsTest {
         assertNotEquals(everyTwoDays.cadence, ScheduleCadence.Daily)
         assertNotEquals(everyTwoDays.cadence, fixed.cadence)
         assertTrue(everyTwoDays.matches(LocalDate.parse("2026-10-03")))
-        assertFalse(threePerWeek.matches(LocalDate.parse("2026-10-03")))
-        assertTrue(threePerWeek.matches(LocalDate.parse("2026-10-05")))
+        var sessionsPerWeekNeedsResolver = false
+        try {
+            threePerWeek.matches(LocalDate.parse("2026-10-03"))
+        } catch (_: IllegalStateException) {
+            sessionsPerWeekNeedsResolver = true
+        }
+        assertTrue(sessionsPerWeekNeedsResolver)
         assertTrue(fixed.matches(LocalDate.parse("2026-10-05")))
         assertTrue(daily.matches(LocalDate.parse("2026-10-05")))
     }
@@ -46,14 +42,18 @@ class SemanticContractsTest {
         )
         val date = LocalDate.parse("2026-10-01")
 
-        val separate = OccurrenceComposer.compose(date, rules, OccurrenceComposition.SEPARATE)
-        val combined = OccurrenceComposer.compose(date, rules, OccurrenceComposition.COMBINED)
+        val separate = OccurrenceComposer.compose(date, rules, CompositionSelection())
+        val combined = OccurrenceComposer.compose(
+            date,
+            rules,
+            CompositionSelection.combine("mobility", "posture")
+        )
 
         assertEquals(3, separate.size)
         assertTrue(separate.all { it.components.size == 1 })
-        assertEquals(1, combined.size)
-        assertEquals(3, combined.single().components.size)
-        assertEquals(listOf("strength", "mobility", "posture"), combined.single().components.map { it.ruleId })
+        assertEquals(2, combined.size)
+        assertEquals(listOf("mobility", "posture"), combined.single { it.components.size == 2 }.components.map { it.ruleId })
+        assertTrue(combined.any { it.components.single().ruleId == "strength" })
     }
 
     @Test

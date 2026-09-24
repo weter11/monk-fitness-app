@@ -36,13 +36,16 @@ data class ScheduleRule(
         require(workoutId.isNotBlank()) { "a schedule rule needs a workout identity" }
     }
 
+    /** The frequency is a semantic input; concrete dates are resolved by a later scheduler stage. */
     fun matches(date: LocalDate): Boolean = when (cadence) {
         ScheduleCadence.Daily -> true
         is ScheduleCadence.EveryNDays -> {
             val distance = ChronoUnit.DAYS.between(anchorDate, date)
             distance >= 0 && distance % cadence.days == 0L
         }
-        is ScheduleCadence.SessionsPerWeek -> date.dayOfWeek in flexibleSpread(cadence.sessionsPerWeek)
+        is ScheduleCadence.SessionsPerWeek -> error(
+            "SessionsPerWeek is a frequency semantic; concrete dates require the Stage 2 resolver"
+        )
         is ScheduleCadence.FixedWeekdays -> date.dayOfWeek in cadence.weekdays
         is ScheduleCadence.DerivedExcluding -> error("derived rules require a source date set")
     }
@@ -75,7 +78,15 @@ data class ScheduleRule(
     }
 }
 
-enum class OccurrenceComposition { SEPARATE, COMBINED }
+/** Stage 1's explicit grouping choice; the final selective policy is a later Stage 2/3 concern. */
+data class CompositionSelection(val combinedRuleIds: Set<String> = emptySet()) {
+    init { require(combinedRuleIds.none { it.isBlank() }) { "composition rule ids cannot be blank" } }
+
+    companion object {
+        fun combine(vararg ruleIds: String): CompositionSelection =
+            CompositionSelection(ruleIds.toSet())
+    }
+}
 
 data class OccurrenceComponent(val ruleId: String, val workoutId: String)
 
@@ -91,22 +102,25 @@ object OccurrenceComposer {
     fun compose(
         date: LocalDate,
         rules: List<ScheduleRule>,
-        composition: OccurrenceComposition
+        selection: CompositionSelection
     ): List<PlannedOccurrence> {
         val matching = rules.filter { it.matches(date) }
-        return when (composition) {
-            OccurrenceComposition.SEPARATE -> matching.map { rule ->
+        val combined = matching.filter { it.ruleId in selection.combinedRuleIds }
+        val separate = matching.filterNot { it.ruleId in selection.combinedRuleIds }
+        return separate.map { rule ->
+            PlannedOccurrence(
+                occurrenceKey = "${rule.ruleId}:$date",
+                plannedFor = date,
+                components = listOf(OccurrenceComponent(rule.ruleId, rule.workoutId))
+            )
+        } + if (combined.isEmpty()) {
+            emptyList()
+        } else {
+            listOf(
                 PlannedOccurrence(
-                    occurrenceKey = "${rule.ruleId}:$date",
+                    occurrenceKey = "combined:$date:${combined.joinToString(",") { it.ruleId }}",
                     plannedFor = date,
-                    components = listOf(OccurrenceComponent(rule.ruleId, rule.workoutId))
-                )
-            }
-            OccurrenceComposition.COMBINED -> if (matching.isEmpty()) emptyList() else listOf(
-                PlannedOccurrence(
-                    occurrenceKey = "combined:$date",
-                    plannedFor = date,
-                    components = matching.map { OccurrenceComponent(it.ruleId, it.workoutId) }
+                    components = combined.map { OccurrenceComponent(it.ruleId, it.workoutId) }
                 )
             )
         }
