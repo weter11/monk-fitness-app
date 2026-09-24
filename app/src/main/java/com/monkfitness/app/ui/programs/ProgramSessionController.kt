@@ -77,7 +77,8 @@ enum class SessionStage {
  */
 data class SessionOccurrence(
     val sessionExerciseId: String,
-    val exerciseId: String
+    val exerciseId: String,
+    val dimension: PrescriptionDimension
 )
 
 /** The whole state of one attempt's screen. */
@@ -267,9 +268,32 @@ class ProgramSessionController(
      * @param durationSeconds seconds performed, for an occurrence prescribed in time.
      */
     suspend fun confirmSet(completedReps: Int = 0, durationSeconds: Int = 0) {
-        val current = currentAttempt() ?: return
-        val occurrence = occurrenceToPerform(current) ?: return
-        when (
+        val stored = confirmSetInternal(completedReps, durationSeconds)
+        if (!stored) return
+    }
+
+    /**
+     * Parses and confirms the value the user actually performed.
+     *
+     * Blank, non-integral, zero and negative values return `false` without calling [SessionRuntime].
+     * The prescribed target is never used as a fallback: it remains presentation only until the user
+     * explicitly confirms a valid actual result.
+     */
+    suspend fun confirmActualSet(rawValue: String): Boolean {
+        val value = rawValue.trim().toIntOrNull() ?: return false
+        if (value <= 0) return false
+        val current = currentAttempt() ?: return false
+        val occurrence = occurrenceToPerform(current) ?: return false
+        return confirmSetInternal(
+            completedReps = if (occurrence.dimension == PrescriptionDimension.TIME_BASED) 0 else value,
+            durationSeconds = if (occurrence.dimension == PrescriptionDimension.TIME_BASED) value else 0
+        )
+    }
+
+    private suspend fun confirmSetInternal(completedReps: Int, durationSeconds: Int): Boolean {
+        val current = currentAttempt() ?: return false
+        val occurrence = occurrenceToPerform(current) ?: return false
+        return when (
             val confirmed = runtime.confirmSet(
                 sessionId = current.sessionId,
                 sessionExerciseId = SessionExerciseId(occurrence.sessionExerciseId),
@@ -277,14 +301,19 @@ class ProgramSessionController(
                 durationSeconds = durationSeconds
             )
         ) {
-            is SessionRuntimeResult.Success -> present(confirmed.value)
-
-            is SessionRuntimeResult.Refused -> mutableState.update { state ->
-                state.copy(notice = ProgramSessionNotice.SLOT_UNAVAILABLE)
+            is SessionRuntimeResult.Success -> {
+                present(confirmed.value)
+                true
             }
 
-            is SessionRuntimeResult.Failure -> mutableState.update { state ->
-                state.copy(notice = ProgramSessionNotice.STORAGE_FAILED)
+            is SessionRuntimeResult.Refused -> {
+                mutableState.update { state -> state.copy(notice = ProgramSessionNotice.SLOT_UNAVAILABLE) }
+                false
+            }
+
+            is SessionRuntimeResult.Failure -> {
+                mutableState.update { state -> state.copy(notice = ProgramSessionNotice.STORAGE_FAILED) }
+                false
             }
         }
     }
@@ -367,7 +396,8 @@ class ProgramSessionController(
             ?.let { occurrence ->
                 SessionOccurrence(
                     sessionExerciseId = occurrence.sessionExerciseId.value,
-                    exerciseId = occurrence.exerciseId
+                    exerciseId = occurrence.exerciseId,
+                    dimension = occurrence.prescription.dimension
                 )
             }
 

@@ -726,6 +726,60 @@ class SessionRuntimeTest {
     }
 
     @Test
+    fun actualPerformedValueIsStoredInsteadOfThePrescription() = runBlocking {
+        val (session, occurrence) = startedWithOneSet()
+
+        val after = SessionFixture.valueOf(
+            rig.runtime.confirmSet(session.sessionId, occurrence, completedReps = 8)
+        )
+
+        assertEquals(
+            "the persisted observations are the actual performances: 12 then 8",
+            listOf("12", "8"),
+            rig.storedSets(occurrence.value).map { it["completedReps"]!! }
+        )
+        assertEquals(listOf(12, 8), after.exercises.first().results.map { it.completedReps })
+        assertEquals("the prescription remains the separate frozen target", 12, after.exercises.first().prescription.targetForSet(1))
+    }
+
+    @Test
+    fun actualTimedValueIsStoredInsteadOfThePrescription() = runBlocking {
+        rig.createProgram()
+        val session = SessionFixture.valueOf(rig.runtime.startSession(rig.slotId(3)))
+        val plank = session.exercises.single { it.exerciseId == "plank" }
+
+        val after = SessionFixture.valueOf(
+            rig.runtime.confirmSet(session.sessionId, plank.sessionExerciseId, durationSeconds = 22)
+        )
+
+        val stored = rig.storedSets(plank.sessionExerciseId.value).single()
+        assertEquals("the persisted observation is the actual held time", "22", stored["durationSeconds"])
+        assertEquals(22, after.exercises.single { it.exerciseId == "plank" }.results.single().durationSeconds)
+        assertEquals("the frozen prescription remains separate", 30, after.exercises.single { it.exerciseId == "plank" }.prescription.targetForSet(1))
+    }
+
+    @Test
+    fun negativeActualValuesAreRefusedWithoutWritingASetLog() = runBlocking {
+        val (repSession, repOccurrence) = startedWithOneSet()
+        val repsBefore = rig.storedSets(repOccurrence.value).size
+
+        val repRefusal = SessionFixture.refusalOf(
+            rig.runtime.confirmSet(repSession.sessionId, repOccurrence, completedReps = -1)
+        )
+        assertTrue(repRefusal is SessionRefusal.SetIsNotInThePrescribedUnit)
+        assertEquals(repsBefore, rig.storedSets(repOccurrence.value).size)
+
+        val timedSession = SessionFixture.valueOf(rig.runtime.startSession(rig.slotId(3)))
+        val plank = timedSession.exercises.single { it.exerciseId == "plank" }
+        val timedBefore = rig.storedSets(plank.sessionExerciseId.value).size
+        val durationRefusal = SessionFixture.refusalOf(
+            rig.runtime.confirmSet(timedSession.sessionId, plank.sessionExerciseId, durationSeconds = -1)
+        )
+        assertTrue(durationRefusal is SessionRefusal.SetIsNotInThePrescribedUnit)
+        assertEquals(timedBefore, rig.storedSets(plank.sessionExerciseId.value).size)
+    }
+
+    @Test
     fun aTimedOccurrenceLogsSecondsAndARepOccurrenceLogsRepetitions() = runBlocking {
         val session = started()
         val occurrence = session.exercises.first().sessionExerciseId
