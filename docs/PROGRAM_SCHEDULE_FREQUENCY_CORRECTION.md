@@ -1,5 +1,53 @@
 # Program System — schedule-frequency correction (PR 2.1)
 
+## 1. Stage 1 semantic-contract addendum
+
+This addendum records the Stage 1 domain contracts added on top of the existing schema correction.
+It does not change Room, migrations, persistence, the Scheduler, `SessionRuntime`, existing session
+storage, UI, import/export, or the adaptive state machine.
+
+## 2. Schedule semantics
+
+The target schedule vocabulary keeps these meanings distinct:
+
+- `EveryNDays(days)`: an interval anchored to a date;
+- `Daily`: every date in the requested range;
+- `FixedWeekdays(weekdays)`: membership in an explicit weekday set;
+- `SessionsPerWeek(count)`: the legacy `FlexiblePerWeek` count semantics, retained as a distinct
+  weekly-frequency rule;
+- `DerivedExcluding(sourceRuleId)`: dates in the range after an explicitly supplied source rule's
+  dates are removed.
+
+`FlexiblePerWeek` and `EveryNDays` are **not equivalent** and are not converted into one another.
+The Stage 2 acceptance wording is corrected accordingly: Stage 2 must preserve the distinction and
+must not treat `FlexiblePerWeek` and `EveryNDays` as interchangeable.
+
+## 3. Composition and execution contracts
+
+A rule occurrence can be composed as separate occurrences or as one occurrence with multiple
+components. This is a pure representation decision; it does not create a `CompositeSession`.
+
+Required work that has no explicit actual result remains incomplete. Optional work that has no actual
+result remains optional and never blocks completion. `ActualResult` is created only from explicit
+performed data. Partial execution is valid evidence, but it does not imply an automatic adaptive
+regress decision.
+
+Catch-up keeps `plannedDate` and `actualDate` separate. Pause is represented at program scope.
+Future schedule reconciliation preserves started/completed occurrences and their actuals; only future
+planned material is replaced.
+
+## 4. Legacy mapping
+
+Legacy `FlexiblePerWeek` maps only to the target `SessionsPerWeek` semantic. It is never silently
+rewritten as `EveryNDays`. The mapper is a compatibility boundary, not a data migration.
+
+## 5. Verification
+
+The focused matrix is `SemanticContractsTest`; it is deterministic and independent of Room. The
+normal project verification gates remain the compile, unit-test, debug assemble, and release compile
+checks defined by the repository. Room schema and lifecycle implementation are intentionally absent
+from this stage.
+
 Scope: the **schema correction** the data-access stage reported — a `FLEXIBLE_PER_WEEK` revision could
 not store the sessions-per-week frequency its schedule is defined by. This document records the evidence
 that it is a defect rather than a design choice, the smallest change that closes it, what the change
