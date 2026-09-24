@@ -26,6 +26,7 @@ import com.monkfitness.app.data.repository.ProgramProgressRepository
 import com.monkfitness.app.data.repository.ProgramRepository
 import com.monkfitness.app.data.repository.ProgramScheduleRepository
 import com.monkfitness.app.data.repository.WorkoutSessionRepository
+import com.monkfitness.app.bootstrap.StandardProgramBootstrap
 import com.monkfitness.app.domain.adaptive.integration.NoDeclaredProgression
 import com.monkfitness.app.domain.adaptive.integration.NoExerciseFamilyClassification
 import com.monkfitness.app.domain.usecase.ProgramAdaptiveIntegration
@@ -287,7 +288,17 @@ class AppContainer(
         scheduleRepository = programScheduleRepository,
         clock = clock,
         idGenerator = idGenerator,
+        zone = zone,
         inTransaction = inTransaction
+    )
+
+    /** The idempotent production bootstrap for the product-owned Standard Program. */
+    val standardProgramBootstrap: StandardProgramBootstrap = StandardProgramBootstrap(
+        programRepository = programRepository,
+        scheduler = programScheduler,
+        clock = clock,
+        idGenerator = idGenerator,
+        zone = zone
     )
 
     /**

@@ -378,7 +378,7 @@ class CompositionRootArchitectureTest {
                 "ride along with the wiring unnoticed. Revised (not relaxed) by the creation " +
                 "remediation: the sixth place is the Save orchestration's hand-over line " +
                 "(`scheduler = programScheduler,`), pinned as the second consumer below.",
-            6,
+            7,
             occurrences(text, "Scheduler")
         )
         assertEquals(
@@ -386,7 +386,7 @@ class CompositionRootArchitectureTest {
                 "stage (§30 step 13) and to the Save orchestration (the creation remediation — §27's " +
                 "creation unit and reconciliation are composed there, not in a screen) — exactly twice, " +
                 "and to nothing else",
-            2,
+            3,
             occurrences(text, "scheduler = programScheduler,")
         )
         assertEquals(
@@ -405,6 +405,7 @@ class CompositionRootArchitectureTest {
                     "        scheduleRepository = programScheduleRepository,\n" +
                     "        clock = clock,\n" +
                     "        idGenerator = idGenerator,\n" +
+                    "        zone = zone,\n" +
                     "        inTransaction = inTransaction\n" +
                     "    )"
             )
