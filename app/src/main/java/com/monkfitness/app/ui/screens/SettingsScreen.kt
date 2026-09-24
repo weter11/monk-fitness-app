@@ -63,7 +63,6 @@ import java.util.Calendar
 fun SettingsScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit,
-    onOpenPrograms: () -> Unit,
 ) {
     val context = LocalContext.current
     val timerTicksEnabled by viewModel.timerTicksEnabled.collectAsState()
@@ -285,26 +284,6 @@ fun SettingsScreen(
                 onToggle = viewModel::toggleNutritionExcludedFood,
                 options = viewModel.nutritionExclusionOptions
             )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // The Program System's entry point (§30 step 14). Settings owns global application settings;
-            // Programs are managed by the Program System's own screens, and this section is the way in —
-            // it is not a second program manager and it decides nothing.
-            Text(text = stringResource(R.string.programs_title), style = MaterialTheme.typography.titleLarge)
-            Text(
-                text = stringResource(R.string.programs_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary
-            )
-            androidx.compose.material3.Button(
-                onClick = onOpenPrograms,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(text = stringResource(R.string.programs_title))
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
 
             Spacer(modifier = Modifier.height(24.dp))
 

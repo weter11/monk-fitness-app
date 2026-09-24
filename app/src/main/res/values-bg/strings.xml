@@ -752,7 +752,6 @@
          source-scanning suite `ProgramsLocalizationTest` enforces exactly that.
          ====================================================================================== -->
     <string name="programs_title">Програми</string>
-    <string name="programs_desc">Създавайте, импортирайте и управлявайте програмите си.</string>
     <string name="programs_hub_description">Всяка запазена програма, нейният график и нейният жизнен цикъл.</string>
     <string name="programs_my_programs">Моите програми</string>
     <string name="programs_my_programs_desc">Изберете, редактирайте, споделете или изтрийте запазена програма.</string>

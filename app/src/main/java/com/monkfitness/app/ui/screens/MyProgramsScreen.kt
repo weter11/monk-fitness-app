@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,7 +43,8 @@ fun MyProgramsScreen(
     onBack: () -> Unit,
     onOpenProgram: (String) -> Unit,
     onCreateProgram: () -> Unit,
-    onImportProgram: () -> Unit
+    onImportProgram: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val state by controller.state.collectAsState()
     val scope = rememberCoroutineScope()
@@ -59,6 +61,14 @@ fun MyProgramsScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.previous)
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = stringResource(R.string.settings)
                         )
                     }
                 }

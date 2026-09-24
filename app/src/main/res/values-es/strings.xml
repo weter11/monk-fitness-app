@@ -752,7 +752,6 @@
          source-scanning suite `ProgramsLocalizationTest` enforces exactly that.
          ====================================================================================== -->
     <string name="programs_title">Programas</string>
-    <string name="programs_desc">Crea, importa y gestiona tus programas.</string>
     <string name="programs_hub_description">Todos los programas guardados, su calendario y su ciclo de vida.</string>
     <string name="programs_my_programs">Mis programas</string>
     <string name="programs_my_programs_desc">Selecciona, edita, comparte o elimina un programa guardado.</string>

@@ -750,7 +750,6 @@
          source-scanning suite `ProgramsLocalizationTest` enforces exactly that.
          ====================================================================================== -->
     <string name="programs_title">Программы</string>
-    <string name="programs_desc">Создавайте, импортируйте и ведите свои программы.</string>
     <string name="programs_hub_description">Все сохранённые программы, их расписание и жизненный цикл.</string>
     <string name="programs_my_programs">Мои программы</string>
     <string name="programs_my_programs_desc">Выберите, отредактируйте, отправьте или удалите сохранённую программу.</string>
