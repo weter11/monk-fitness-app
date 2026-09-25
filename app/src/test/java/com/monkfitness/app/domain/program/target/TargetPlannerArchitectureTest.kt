@@ -25,6 +25,7 @@ class TargetPlannerArchitectureTest {
                 "TargetOccurrenceComposer.kt",
                 "TargetOccurrenceReconciler.kt",
                 "TargetPlanner.kt",
+                "TargetSchedulePolicy.kt",
                 "TargetScheduleResolver.kt"
             ),
             sources
