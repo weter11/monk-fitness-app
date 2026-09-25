@@ -255,7 +255,9 @@ class TargetScheduleApplicationServiceTest {
     private fun service(): TargetScheduleApplicationService = TargetScheduleApplicationService(
         slotPersister = TargetScheduleSlotPersister(
             scheduleRepository = rig.programScheduleRepository,
-            idGenerator = IdGenerator { "slot-${generatedIds.size + 1}".also(generatedIds::add) }
+            occurrenceRepository = rig.targetScheduleOccurrenceRepository,
+            idGenerator = IdGenerator { "slot-${generatedIds.size + 1}".also(generatedIds::add) },
+            inTransaction = rig.transaction
         )
     )
 

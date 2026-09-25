@@ -16,6 +16,7 @@ import com.monkfitness.app.data.local.ProgramFamilyProgressionStateDao
 import com.monkfitness.app.data.local.ProgramPauseDao
 import com.monkfitness.app.data.local.ProgramRevisionDao
 import com.monkfitness.app.data.local.ProgramSetLogDao
+import com.monkfitness.app.data.local.ProgramTargetOccurrenceDao
 import com.monkfitness.app.data.local.ProgramWorkoutSlotDao
 import com.monkfitness.app.data.local.WorkoutSessionDao
 import com.monkfitness.app.data.local.PostureProgressDao
@@ -32,6 +33,7 @@ import com.monkfitness.app.data.repository.SqliteProgramFamilyProgressionStateDa
 import com.monkfitness.app.data.repository.SqliteProgramPauseDao
 import com.monkfitness.app.data.repository.SqliteProgramRevisionDao
 import com.monkfitness.app.data.repository.SqliteProgramSetLogDao
+import com.monkfitness.app.data.repository.SqliteProgramTargetOccurrenceDao
 import com.monkfitness.app.data.repository.SqliteProgramWorkoutSlotDao
 import com.monkfitness.app.data.repository.SqliteSessionExerciseDao
 import com.monkfitness.app.data.repository.SqliteSessionSnapshotDao
@@ -91,7 +93,7 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
     /** The number of rows in one table of this database, as the engine reports it. */
     fun rowCount(table: String): Int = engine.count(table)
 
-    // --- the fifteen target DAOs (§30 step 3), on the engine --------------------------------
+    // --- the target DAOs (§30 step 3), on the engine -------------------------------------------
 
     private val program by lazy { SqliteProgramDao(engine) }
     private val appState by lazy { SqliteAppStateDao(engine) }
@@ -99,6 +101,7 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
     private val day by lazy { SqliteProgramDayDao(engine) }
     private val exercise by lazy { ProgramExerciseDaoFence(SqliteProgramExerciseDao(engine), faults) }
     private val slot by lazy { SqliteProgramWorkoutSlotDao(engine) }
+    private val targetOccurrence by lazy { SqliteProgramTargetOccurrenceDao(engine) }
     private val session by lazy { SqliteWorkoutSessionDao(engine) }
     private val snapshot by lazy { SqliteSessionSnapshotDao(engine) }
     private val snapshotExercise by lazy { SqliteSessionSnapshotExerciseDao(engine) }
@@ -124,6 +127,9 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
     override fun programExerciseDao(): ProgramExerciseDao = exercise.also { asked("programExerciseDao") }
 
     override fun programWorkoutSlotDao(): ProgramWorkoutSlotDao = slot.also { asked("programWorkoutSlotDao") }
+
+    override fun programTargetOccurrenceDao(): ProgramTargetOccurrenceDao =
+        targetOccurrence.also { asked("programTargetOccurrenceDao") }
 
     override fun workoutSessionDao(): WorkoutSessionDao = session.also { asked("workoutSessionDao") }
 
@@ -257,6 +263,7 @@ internal class CompositionRootRig(
         database.migrate(AppDatabase.MIGRATION_10_11)
         database.migrate(AppDatabase.MIGRATION_11_12)
         database.migrate(AppDatabase.MIGRATION_12_13)
+        database.migrate(AppDatabase.MIGRATION_13_14)
     }
 
     val database = SqliteAppDatabase(engine)

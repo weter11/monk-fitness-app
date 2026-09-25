@@ -13,6 +13,7 @@ import com.monkfitness.app.data.local.ProgramFamilyProgressionStateDao
 import com.monkfitness.app.data.local.ProgramPauseDao
 import com.monkfitness.app.data.local.ProgramRevisionDao
 import com.monkfitness.app.data.local.ProgramSetLogDao
+import com.monkfitness.app.data.local.ProgramTargetOccurrenceDao
 import com.monkfitness.app.data.local.ProgramWorkoutSlotDao
 import com.monkfitness.app.data.local.SessionExerciseDao
 import com.monkfitness.app.data.local.SessionSnapshotDao
@@ -25,6 +26,7 @@ import com.monkfitness.app.data.repository.ProgramPlanRepository
 import com.monkfitness.app.data.repository.ProgramProgressRepository
 import com.monkfitness.app.data.repository.ProgramRepository
 import com.monkfitness.app.data.repository.ProgramScheduleRepository
+import com.monkfitness.app.data.repository.TargetScheduleOccurrenceRepository
 import com.monkfitness.app.data.repository.WorkoutSessionRepository
 import com.monkfitness.app.bootstrap.StandardProgramBootstrap
 import com.monkfitness.app.domain.adaptive.integration.NoDeclaredProgression
@@ -296,10 +298,31 @@ class AppContainer(
         inTransaction = inTransaction
     )
 
-    /** Target-stage persistence bridge; it is wired beside, never into, the legacy Scheduler. */
+    /**
+     * The target occurrence's own semantic persistence (§30 step 14): the planned date and the
+     * ordered rule/workout components, stored beside the slot rather than reconstructed from it.
+     *
+     * It is a **separate** repository from [programScheduleRepository] on purpose. A slot row has no
+     * component columns, so a repository that owned both would be a repository whose read-back
+     * sometimes answers and sometimes has to invent — and the inventing would be invisible at the
+     * call site. Keeping the semantic payload behind its own contract means a caller that wants an
+     * occurrence's components has to ask the question that has an answer.
+     */
+    val targetScheduleOccurrenceRepository: TargetScheduleOccurrenceRepository =
+        TargetScheduleOccurrenceRepository(daos.targetOccurrence)
+
+    /**
+     * Target-stage persistence bridge; it is wired beside, never into, the legacy Scheduler.
+     *
+     * The transaction runner is the container's shared one, so the target slot and the target
+     * occurrence it presents are committed as one unit: a pass that failed between them would leave
+     * a slot pointing at a semantic record that does not exist (§30 step 14's atomicity claim).
+     */
     val targetScheduleSlotPersister: TargetScheduleSlotPersister = TargetScheduleSlotPersister(
         scheduleRepository = programScheduleRepository,
-        idGenerator = idGenerator
+        occurrenceRepository = targetScheduleOccurrenceRepository,
+        idGenerator = idGenerator,
+        inTransaction = inTransaction
     )
 
     /** Application boundary that presents and persists a ready target schedule decision. */
@@ -578,6 +601,7 @@ class AppContainer(
         val day: ProgramDayDao = database.programDayDao()
         val exercise: ProgramExerciseDao = database.programExerciseDao()
         val slot: ProgramWorkoutSlotDao = database.programWorkoutSlotDao()
+        val targetOccurrence: ProgramTargetOccurrenceDao = database.programTargetOccurrenceDao()
         val session: WorkoutSessionDao = database.workoutSessionDao()
         val snapshot: SessionSnapshotDao = database.sessionSnapshotDao()
         val snapshotExercise: SessionSnapshotExerciseDao = database.sessionSnapshotExerciseDao()

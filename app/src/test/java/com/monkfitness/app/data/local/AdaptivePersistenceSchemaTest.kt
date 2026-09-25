@@ -171,9 +171,19 @@ class AdaptivePersistenceSchemaTest {
     fun theDatabaseDeclaresOnlyTheRetainedAndTheTargetSchema() {
         val source = File(mainSources, "data/local/AppDatabase.kt").readText()
 
+        // The version is the last step of the chain, and the chain is what a device runs. Phase 8
+        // added the target-occurrence identity seam at 13; §30 step 14 added the target occurrence's
+        // semantic tables at 14, so 14 is now what the schema declares.
         assertTrue(
-            "the database version moves with the schema: 13 is Phase 8's additive target-occurrence identity seam",
-            source.contains("version = 13")
+            "the database version moves with the schema: 13 is Phase 8's additive target-occurrence " +
+                "identity seam and 14 is §30 step 14's target-occurrence semantic payload",
+            source.contains("version = 14")
+        )
+        assertTrue(
+            "and the step that reaches it is declared, and registered in the builder's chain right " +
+                "after the step it follows",
+            source.contains("MIGRATION_13_14 = object : Migration(13, 14)") &&
+                Regex("MIGRATION_12_13,\\s*MIGRATION_13_14").containsMatchIn(source)
         )
 
         val registered = Regex("entities = \\[(.*?)]", RegexOption.DOT_MATCHES_ALL)
@@ -182,7 +192,7 @@ class AdaptivePersistenceSchemaTest {
             .let { Regex("(\\w+)::class").findAll(it).map { match -> match.groupValues[1] }.toList() }
 
         assertEquals(
-            "the five retained global entities and the fifteen target ones — and **nothing that stood " +
+            "the five retained global entities and the seventeen target ones — and **nothing that stood " +
                 "in for a retired table**. `UserProgress`, `SetLog`, `ProgramDayState`, " +
                 "`FamilyProgressionState` and `AdaptiveDecisionRecord` are gone from the declaration " +
                 "because `MIGRATION_11_12` drops them, not because a replacement was added",
@@ -198,6 +208,12 @@ class AdaptivePersistenceSchemaTest {
                 "ProgramDayEntity",
                 "ProgramExerciseEntity",
                 "ProgramWorkoutSlotEntity",
+                // §30 step 14: the target occurrence's semantic payload, declared immediately after the
+                // slot whose occurrence they are. They are **new storage**, not a replacement for any
+                // retired table — the retired ones below are still absent because MIGRATION_11_12 drops
+                // them, and nothing here was renamed into their place.
+                "ProgramTargetOccurrenceEntity",
+                "ProgramTargetOccurrenceComponentEntity",
                 "WorkoutSessionEntity",
                 "SessionSnapshotEntity",
                 "SessionSnapshotExerciseEntity",

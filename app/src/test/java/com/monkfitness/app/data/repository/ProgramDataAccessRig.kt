@@ -8,6 +8,7 @@ import com.monkfitness.app.data.local.LegacyV7Schema
 import com.monkfitness.app.data.local.ProgramDayDao
 import com.monkfitness.app.data.local.ProgramExerciseDao
 import com.monkfitness.app.data.local.ProgramSetLogDao
+import com.monkfitness.app.data.local.ProgramTargetOccurrenceDao
 import com.monkfitness.app.data.local.ProgramWorkoutSlotDao
 import com.monkfitness.app.data.local.SessionExerciseDao
 import com.monkfitness.app.data.local.SessionSnapshotDao
@@ -17,6 +18,8 @@ import com.monkfitness.app.data.model.AdaptiveDecisionRecordEntity
 import com.monkfitness.app.data.model.FamilyProgressionStateEntity
 import com.monkfitness.app.data.model.ProgramDayEntity
 import com.monkfitness.app.data.model.ProgramExerciseEntity
+import com.monkfitness.app.data.model.ProgramTargetOccurrenceComponentEntity
+import com.monkfitness.app.data.model.ProgramTargetOccurrenceEntity
 import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
 import com.monkfitness.app.data.model.SessionExerciseEntity
 import com.monkfitness.app.data.model.SessionSnapshotEntity
@@ -101,6 +104,11 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
     val dayDao = SqliteProgramDayDao(database)
     val exerciseDao: ProgramExerciseDao = FailingProgramExerciseDao(SqliteProgramExerciseDao(database), faults)
     val slotDao: ProgramWorkoutSlotDao = FailingProgramWorkoutSlotDao(SqliteProgramWorkoutSlotDao(database), faults)
+    // §30 step 14: the target occurrence's semantic payload, with one switchable failure on the
+    // *component* insert — the second leg of the atomic unit whose first leg is the slot insert, so a
+    // rollback claim is measurable at a point other than the last write.
+    val targetOccurrenceDao: ProgramTargetOccurrenceDao =
+        FailingProgramTargetOccurrenceDao(SqliteProgramTargetOccurrenceDao(database), faults)
     val sessionDao = SqliteWorkoutSessionDao(database)
     val snapshotDao: SessionSnapshotDao = FailingSessionSnapshotDao(SqliteSessionSnapshotDao(database), faults)
     val snapshotExerciseDao = SqliteSessionSnapshotExerciseDao(database)
@@ -118,6 +126,7 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
     val programRepository = ProgramRepository(programDao, revisionDao, dayDao, exerciseDao, slotDao, transaction)
     val programPlanRepository = ProgramPlanRepository(programDao, revisionDao, dayDao, exerciseDao, transaction)
     val programScheduleRepository = ProgramScheduleRepository(slotDao, sessionDao, pauseDao)
+    val targetScheduleOccurrenceRepository = TargetScheduleOccurrenceRepository(targetOccurrenceDao)
     val workoutSessionRepository = WorkoutSessionRepository(
         sessionDao, snapshotDao, snapshotExerciseDao, sessionExerciseDao, setLogDao, slotDao, transaction
     )
@@ -194,6 +203,9 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
             // no longer produce.
             database.migrate(AppDatabase.MIGRATION_11_12)
             database.migrate(AppDatabase.MIGRATION_12_13)
+            // §30 step 14: the target occurrence's semantic tables. Stopping short would leave every
+            // repository suite below exercising a database the app can no longer produce.
+            database.migrate(AppDatabase.MIGRATION_13_14)
         }
     }
 }
@@ -235,6 +247,55 @@ internal class ProgramDaoFaults {
      * next date.
      */
     var failSlotRead: Boolean = false
+
+    /**
+     * When set, inserting a target occurrence's **components** fails — the second leg of §30 step 14's
+     * atomic unit, the first leg being the slot insert that precedes it.
+     *
+     * It is deliberately the component insert and not the parent insert: failing the parent would fail
+     * the unit at its first statement, which proves only that nothing ran. Failing the *second* leg
+     * proves the rollback is real, because the parent row and the slot row have both been written by
+     * then and both have to disappear.
+     */
+    var failTargetOccurrenceComponentInsert: Boolean = false
+}
+
+/**
+ * The target occurrence's semantic rows, with one switchable failure on the component insert.
+ *
+ * The failure sits on the **second** of the unit's two writes on purpose. §30 step 14's claim is that
+ * the target slot and the target occurrence it presents are one atomic operation, and the only way to
+ * measure that is to fail after the first write has already landed: a fault on the first write proves
+ * only that nothing started, while a fault on the second proves the rollback reaches back and undoes a
+ * row that was genuinely written.
+ */
+private class FailingProgramTargetOccurrenceDao(
+    private val delegate: ProgramTargetOccurrenceDao,
+    private val faults: ProgramDaoFaults
+) : ProgramTargetOccurrenceDao {
+    override suspend fun insertOccurrences(occurrences: List<ProgramTargetOccurrenceEntity>) =
+        delegate.insertOccurrences(occurrences)
+
+    override suspend fun insertComponents(components: List<ProgramTargetOccurrenceComponentEntity>) {
+        if (faults.failTargetOccurrenceComponentInsert) {
+            throw IllegalStateException("planted fault: target occurrence component insert")
+        }
+        delegate.insertComponents(components)
+    }
+
+    override suspend fun occurrenceOf(
+        programId: String,
+        occurrenceKey: String
+    ): ProgramTargetOccurrenceEntity? = delegate.occurrenceOf(programId, occurrenceKey)
+
+    override suspend fun componentsOf(
+        programId: String,
+        occurrenceKey: String
+    ): List<ProgramTargetOccurrenceComponentEntity> = delegate.componentsOf(programId, occurrenceKey)
+
+    override suspend fun occurrencesOfProgram(
+        programId: String
+    ): List<ProgramTargetOccurrenceEntity> = delegate.occurrencesOfProgram(programId)
 }
 
 private class FailingAdaptiveDecisionDao(

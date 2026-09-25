@@ -191,11 +191,19 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
             .map { it["name"]!! }
 
     /**
-     * The foreign keys SQLite records for one table: child column, parent table, parent column and
+     * The foreign keys SQLite records for one table: child columns, parent table, parent columns and
      * the delete action — read from the engine's own metadata, not from the DDL text.
+     *
+     * SQLite's `pragma_foreign_key_list` reports **one row per column**, with the columns of a single
+     * key sharing an `id` and ordered by `seq`. A composite key — such as a target occurrence's
+     * components, which reference the occurrence by the whole `(programId, occurrenceKey)` pair — is
+     * therefore several rows, and reading them as separate keys would both misreport that table's
+     * ownership graph and make a two-column key indistinguishable from two independent one-column
+     * ones. Rows are grouped by `id` so one declared key is one recorded key, with its columns in
+     * declaration order.
      */
     fun foreignKeys(table: String): List<ForeignKey> {
-        val keys = mutableListOf<ForeignKey>()
+        val grouped = LinkedHashMap<Int, MutableList<Map<String, String?>>>()
         connection.createStatement().use { statement ->
             statement.executeQuery("SELECT * FROM pragma_foreign_key_list('$table')").use { rows ->
                 val meta = rows.metaData
@@ -203,17 +211,20 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
                     val row = (1..meta.columnCount).associate { index ->
                         meta.getColumnName(index) to (rows.getString(index) ?: "")
                     }
-                    keys += ForeignKey(
-                        childColumn = row["from"]!!,
-                        parentTable = row["table"]!!,
-                        parentColumn = row["to"]!!,
-                        onDelete = row["on_delete"]!!,
-                        onUpdate = row["on_update"]!!
-                    )
+                    grouped.getOrPut(row["id"]!!.toInt()) { mutableListOf() }.add(row)
                 }
             }
         }
-        return keys
+        return grouped.values.map { group ->
+            val ordered = group.sortedBy { it["seq"]!!.toInt() }
+            ForeignKey(
+                childColumns = ordered.map { it["from"]!! },
+                parentTable = ordered.first()["table"]!!,
+                parentColumns = ordered.map { it["to"]!! },
+                onDelete = ordered.first()["on_delete"]!!,
+                onUpdate = ordered.first()["on_update"]!!
+            )
+        }
     }
 
     /**
@@ -298,11 +309,18 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
         connection.close()
     }
 
-    /** One foreign key as the engine records it. */
+    /**
+     * One foreign key as the engine records it.
+     *
+     * The columns are lists because the engine's own metadata is per-column: one declared composite
+     * key is several `pragma_foreign_key_list` rows, grouped back into one key by
+     * [foreignKeys] so that "one ownership edge" and "one engine row" do not have to be the same
+     * number.
+     */
     data class ForeignKey(
-        val childColumn: String,
+        val childColumns: List<String>,
         val parentTable: String,
-        val parentColumn: String,
+        val parentColumns: List<String>,
         val onDelete: String,
         val onUpdate: String
     )

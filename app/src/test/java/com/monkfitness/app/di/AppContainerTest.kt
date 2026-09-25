@@ -107,11 +107,17 @@ class AppContainerTest {
                     "adaptive pair and §16's reset: a missing one is a wiring gap, an extra one is a " +
                     "second owner. §30 step 15 removed `AdaptiveRepository` — the Stage-1 generation's " +
                     "node — so the map is shorter by one and `programAdaptiveRepository` is the only " +
-                    "adaptive repository there is",
+                    "adaptive repository there is. §30 step 14 added the target occurrence's " +
+                    "own repository, which is a node because a slot row cannot hold an occurrence's " +
+                    "components",
                 mapOf(
                     "programRepository" to "ProgramRepository",
                     "programPlanRepository" to "ProgramPlanRepository",
                     "programScheduleRepository" to "ProgramScheduleRepository",
+                    // §30 step 14: the target occurrence's semantic payload, a node of its own rather
+                    // than part of the schedule repository — a slot row has no component columns, so a
+                    // repository owning both would be one whose read-back sometimes has to invent.
+                    "targetScheduleOccurrenceRepository" to "TargetScheduleOccurrenceRepository",
                     "workoutSessionRepository" to "WorkoutSessionRepository",
                     "programProgressRepository" to "ProgramProgressRepository",
                     "appStateRepository" to "AppStateRepository",
@@ -283,7 +289,8 @@ class AppContainerTest {
         try {
             val expected = listOf(
                 "programDao", "appStateDao", "programRevisionDao", "programDayDao", "programExerciseDao",
-                "programWorkoutSlotDao", "workoutSessionDao", "sessionSnapshotDao",
+                "programWorkoutSlotDao", "programTargetOccurrenceDao", "workoutSessionDao",
+                "sessionSnapshotDao",
                 "sessionSnapshotExerciseDao", "sessionExerciseDao", "programSetLogDao", "programPauseDao",
                 "programFamilyProgressionStateDao", "programAdaptiveDecisionDao", "adaptiveAdjustmentDao",
                 // §30 step 15: the two Stage-1 handles are gone and §16's one global maintenance

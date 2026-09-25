@@ -10,6 +10,7 @@ import com.monkfitness.app.data.local.ProgramFamilyProgressionStateDao
 import com.monkfitness.app.data.local.ProgramPauseDao
 import com.monkfitness.app.data.local.ProgramRevisionDao
 import com.monkfitness.app.data.local.ProgramSetLogDao
+import com.monkfitness.app.data.local.ProgramTargetOccurrenceDao
 import com.monkfitness.app.data.local.ProgramWorkoutSlotDao
 import com.monkfitness.app.data.local.SessionAttemptRow
 import com.monkfitness.app.data.local.SessionExerciseDao
@@ -26,6 +27,8 @@ import com.monkfitness.app.data.model.ProgramEntity
 import com.monkfitness.app.data.model.ProgramExerciseEntity
 import com.monkfitness.app.data.model.ProgramPauseEntity
 import com.monkfitness.app.data.model.ProgramRevisionEntity
+import com.monkfitness.app.data.model.ProgramTargetOccurrenceComponentEntity
+import com.monkfitness.app.data.model.ProgramTargetOccurrenceEntity
 import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
 import com.monkfitness.app.data.model.SessionExerciseEntity
 import com.monkfitness.app.data.model.SessionSnapshotEntity
@@ -78,6 +81,8 @@ internal val TARGET_ENTITY_TABLES: Map<Class<*>, String> = mapOf(
     ProgramDayEntity::class.java to "program_day",
     ProgramExerciseEntity::class.java to "program_exercise",
     ProgramWorkoutSlotEntity::class.java to "program_workout_slot",
+    ProgramTargetOccurrenceEntity::class.java to "program_target_occurrence",
+    ProgramTargetOccurrenceComponentEntity::class.java to "program_target_occurrence_component",
     WorkoutSessionEntity::class.java to "workout_session",
     SessionSnapshotEntity::class.java to "session_snapshot",
     SessionSnapshotExerciseEntity::class.java to "session_snapshot_exercise",
@@ -217,6 +222,24 @@ private fun Map<String, String?>.slotEntity() = ProgramWorkoutSlotEntity(
     completedAt = this["completedAt"]?.toLong(),
     targetOccurrenceKey = this["targetOccurrenceKey"]
 )
+
+private fun Map<String, String?>.targetOccurrenceEntity() = ProgramTargetOccurrenceEntity(
+    programId = text("programId"),
+    occurrenceKey = text("occurrenceKey"),
+    plannedFor = text("plannedFor")
+)
+
+private fun Map<String, String?>.targetOccurrenceComponentEntity() =
+    ProgramTargetOccurrenceComponentEntity(
+        programId = text("programId"),
+        occurrenceKey = text("occurrenceKey"),
+        position = number("position"),
+        // Read exactly as stored: the rule and workout identities are the two columns that hold them,
+        // and a harness that derived either from the occurrence key or from a plan day would be
+        // measuring its own invention instead of the round trip.
+        ruleId = text("ruleId"),
+        workoutId = text("workoutId")
+    )
 
 private fun Map<String, String?>.sessionEntity() = WorkoutSessionEntity(
     sessionId = text("sessionId"),
@@ -454,6 +477,41 @@ internal class SqliteProgramWorkoutSlotDao(private val database: SqliteTestDatab
 
     override suspend fun countByStatus(programId: String, status: String): Int =
         database.first(ProgramDaoSql.PROGRAM_WORKOUT_SLOT_DAO_COUNT_BY_STATUS, programId, status)
+}
+
+internal class SqliteProgramTargetOccurrenceDao(private val database: SqliteTestDatabase) :
+    ProgramTargetOccurrenceDao {
+
+    override suspend fun insertOccurrences(occurrences: List<ProgramTargetOccurrenceEntity>) =
+        occurrences.forEach { database.insertRow(it) }
+
+    override suspend fun insertComponents(components: List<ProgramTargetOccurrenceComponentEntity>) =
+        components.forEach { database.insertRow(it) }
+
+    override suspend fun occurrenceOf(
+        programId: String,
+        occurrenceKey: String
+    ): ProgramTargetOccurrenceEntity? = database.rows(
+        ProgramDaoSql.PROGRAM_TARGET_OCCURRENCE_DAO_OCCURRENCE_OF,
+        programId,
+        occurrenceKey
+    ).firstOrNull()?.targetOccurrenceEntity()
+
+    override suspend fun componentsOf(
+        programId: String,
+        occurrenceKey: String
+    ): List<ProgramTargetOccurrenceComponentEntity> = database.rows(
+        ProgramDaoSql.PROGRAM_TARGET_OCCURRENCE_DAO_COMPONENTS_OF,
+        programId,
+        occurrenceKey
+    ).map { it.targetOccurrenceComponentEntity() }
+
+    override suspend fun occurrencesOfProgram(
+        programId: String
+    ): List<ProgramTargetOccurrenceEntity> = database.rows(
+        ProgramDaoSql.PROGRAM_TARGET_OCCURRENCE_DAO_OCCURRENCES_OF_PROGRAM,
+        programId
+    ).map { it.targetOccurrenceEntity() }
 }
 
 internal class SqliteWorkoutSessionDao(private val database: SqliteTestDatabase) : WorkoutSessionDao {

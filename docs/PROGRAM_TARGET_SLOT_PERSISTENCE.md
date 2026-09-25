@@ -85,6 +85,8 @@ Stage 10 adds no scheduler algorithm, resolver, composer, reconciler, temporal p
 
 The schema seam is the one already supplied by Phase 8: `WorkoutSlot.targetOccurrenceKey` and the unique `(programId, targetOccurrenceKey)` index.
 
+> **Superseded in part by §30 step 14.** That phase keeps this boundary's identity checks and its repository-only storage access, and adds the two writes it performs — the slot and the occurrence's semantic payload — inside one transaction. The occurrence itself is no longer implied by the key alone: it is stored, and readable without parsing anything. See `docs/PROGRAM_TARGET_OCCURRENCE_PERSISTENCE.md`. The statement below about no schema change describes *this* phase, which is still true of it.
+
 ## Verification map
 
 - `TargetScheduleSlotPersisterTest`: missing-key creation, repeated idempotency, same-date independence, Program scoping, started/completed state preservation, storage identity preservation, no date fallback, typed payload conflict, Stage 9 mapping, input immutability, and no semantic drift.

@@ -30,20 +30,21 @@ class ProgramDataAccessArchitectureTest {
 
     private val targetDaos = listOf(
         "ProgramDao", "AppStateDao", "ProgramRevisionDao", "ProgramDayDao", "ProgramExerciseDao",
-        "ProgramWorkoutSlotDao", "WorkoutSessionDao", "SessionSnapshotDao", "SessionSnapshotExerciseDao",
+        "ProgramWorkoutSlotDao", "ProgramTargetOccurrenceDao", "WorkoutSessionDao",
+        "SessionSnapshotDao", "SessionSnapshotExerciseDao",
         "SessionExerciseDao", "ProgramSetLogDao", "ProgramPauseDao", "ProgramFamilyProgressionStateDao",
         "ProgramAdaptiveDecisionDao", "AdaptiveAdjustmentDao"
     )
 
     private val targetMappers = listOf(
         "StoredValues", "ProgramMappers", "PlanMappers", "ScheduleMappers", "SessionMappers",
-        "AdaptiveMappers", "AppStateMappers"
+        "AdaptiveMappers", "AppStateMappers", "TargetOccurrenceMappers"
     )
 
     private val targetRepositories = listOf(
         "ProgramRepository", "ProgramPlanRepository", "ProgramScheduleRepository",
-        "WorkoutSessionRepository", "ProgramAdaptiveRepository", "ProgramProgressRepository",
-        "AppStateRepository"
+        "TargetScheduleOccurrenceRepository", "WorkoutSessionRepository", "ProgramAdaptiveRepository",
+        "ProgramProgressRepository", "AppStateRepository"
     )
 
     private fun dao(name: String) = File(appRoot, "data/local/$name.kt")
@@ -384,13 +385,16 @@ class ProgramDataAccessArchitectureTest {
     }
 
     @Test
-    fun theHarnessRegistersTheFifteenTargetTablesAndNothingElse() {
+    fun theHarnessRegistersTheSeventeenTargetTablesAndNothingElse() {
         assertEquals(
-            "the harness's entity-to-table map is the target schema, not a wider one",
+            "the harness's entity-to-table map is the target schema, not a wider one — §30 step 14 " +
+                "added the two target-occurrence tables, and the map has to know them so the harness " +
+                "inserts their real fields rather than dropping or misplacing a column",
             listOf(
                 "adaptive_adjustment", "app_state", "program", "program_adaptive_decision_record",
                 "program_day", "program_exercise", "program_family_progression_state", "program_pause",
-                "program_revision", "program_set_log", "program_workout_slot",
+                "program_revision", "program_set_log", "program_target_occurrence",
+                "program_target_occurrence_component", "program_workout_slot",
                 "session_exercise", "session_snapshot", "session_snapshot_exercise", "workout_session"
             ),
             TARGET_ENTITY_TABLES.values.sorted()

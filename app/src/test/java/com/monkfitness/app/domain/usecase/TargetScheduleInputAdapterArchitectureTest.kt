@@ -45,6 +45,11 @@ class TargetScheduleInputAdapterArchitectureTest {
         assertEquals(
             listOf(
                 "TargetOccurrenceComposer.kt",
+                // §30 step 14: the target occurrence's persisted semantic value and its typed
+                // conflict. It is a pure value in this package because it is schedule *semantics* —
+                // the same kind of thing the reconciler already holds — with no storage, no clock and
+                // no id generator of its own. The list stays closed: a ninth file still fails here.
+                "TargetOccurrencePersistence.kt",
                 "TargetOccurrencePresenter.kt",
                 "TargetOccurrenceReconciler.kt",
                 "TargetPlanner.kt",

@@ -32,6 +32,8 @@ internal object ProgramSchemaFixture {
         "ProgramDayEntity" to "program_day",
         "ProgramExerciseEntity" to "program_exercise",
         "ProgramWorkoutSlotEntity" to "program_workout_slot",
+        "ProgramTargetOccurrenceEntity" to "program_target_occurrence",
+        "ProgramTargetOccurrenceComponentEntity" to "program_target_occurrence_component",
         "WorkoutSessionEntity" to "workout_session",
         "SessionSnapshotEntity" to "session_snapshot",
         "SessionSnapshotExerciseEntity" to "session_snapshot_exercise",
@@ -94,13 +96,33 @@ internal object ProgramSchemaFixture {
     /** One declared column. */
     data class Column(val name: String, val type: String, val nullable: Boolean = false)
 
-    /** One declared foreign key, with the action the architecture requires on delete. */
+    /**
+     * One declared foreign key, with the action the architecture requires on delete.
+     *
+     * The columns are **lists** because one key in this schema is genuinely composite: a target
+     * occurrence's component rows are owned by the occurrence, and "the occurrence" is the pair
+     * `(programId, occurrenceKey)` rather than either column alone. Modelling that as a single child
+     * column would have to pick one of the two — leaving the other unreferenced, so a component could
+     * name a Program its own occurrence does not belong to. [single] is the one-column case, which is
+     * every other key in the schema, and it says the same thing without a one-element list at each of
+     * the two dozen call sites.
+     */
     data class ExpectedForeignKey(
-        val childColumn: String,
+        val childColumns: List<String>,
         val parentTable: String,
-        val parentColumn: String,
+        val parentColumns: List<String>,
         val onDelete: String
-    )
+    ) {
+        companion object {
+            /** The one-column case: a child column referencing a single parent column. */
+            fun single(
+                childColumn: String,
+                parentTable: String,
+                parentColumn: String,
+                onDelete: String
+            ) = ExpectedForeignKey(listOf(childColumn), parentTable, listOf(parentColumn), onDelete)
+        }
+    }
 
     /** One declared index. */
     data class ExpectedIndex(val name: String, val columns: List<String>, val unique: Boolean)
@@ -171,6 +193,18 @@ internal object ProgramSchemaFixture {
             Column("plannedFor", TEXT),
             Column("status", TEXT),
             Column("completedAt", INTEGER, nullable = true)
+        ),
+        "program_target_occurrence" to listOf(
+            Column("programId", TEXT),
+            Column("occurrenceKey", TEXT),
+            Column("plannedFor", TEXT)
+        ),
+        "program_target_occurrence_component" to listOf(
+            Column("programId", TEXT),
+            Column("occurrenceKey", TEXT),
+            Column("position", INTEGER),
+            Column("ruleId", TEXT),
+            Column("workoutId", TEXT)
         ),
         "workout_session" to listOf(
             Column("sessionId", TEXT),
@@ -271,6 +305,8 @@ internal object ProgramSchemaFixture {
         "program_day" to listOf("programDayId"),
         "program_exercise" to listOf("programExerciseId"),
         "program_workout_slot" to listOf("slotId"),
+        "program_target_occurrence" to listOf("programId", "occurrenceKey"),
+        "program_target_occurrence_component" to listOf("programId", "occurrenceKey", "position"),
         "workout_session" to listOf("sessionId"),
         "session_snapshot" to listOf("sessionId"),
         "session_snapshot_exercise" to listOf("sessionId", "programExerciseId"),
@@ -294,56 +330,67 @@ internal object ProgramSchemaFixture {
     val FOREIGN_KEYS: Map<String, List<ExpectedForeignKey>> = mapOf(
         "program" to emptyList(),
         "app_state" to listOf(
-            ExpectedForeignKey("selectedProgramId", "program", "programId", "NO ACTION"),
-            ExpectedForeignKey("nextProgramId", "program", "programId", "SET NULL")
+            ExpectedForeignKey.single("selectedProgramId", "program", "programId", "NO ACTION"),
+            ExpectedForeignKey.single("nextProgramId", "program", "programId", "SET NULL")
         ),
         "program_revision" to listOf(
-            ExpectedForeignKey("programId", "program", "programId", "CASCADE")
+            ExpectedForeignKey.single("programId", "program", "programId", "CASCADE")
         ),
         "program_day" to listOf(
-            ExpectedForeignKey("revisionId", "program_revision", "revisionId", "CASCADE")
+            ExpectedForeignKey.single("revisionId", "program_revision", "revisionId", "CASCADE")
         ),
         "program_exercise" to listOf(
-            ExpectedForeignKey("programDayId", "program_day", "programDayId", "CASCADE")
+            ExpectedForeignKey.single("programDayId", "program_day", "programDayId", "CASCADE")
         ),
         "program_workout_slot" to listOf(
-            ExpectedForeignKey("programId", "program", "programId", "CASCADE"),
-            ExpectedForeignKey("revisionId", "program_revision", "revisionId", "CASCADE"),
-            ExpectedForeignKey("programDayId", "program_day", "programDayId", "CASCADE")
+            ExpectedForeignKey.single("programId", "program", "programId", "CASCADE"),
+            ExpectedForeignKey.single("revisionId", "program_revision", "revisionId", "CASCADE"),
+            ExpectedForeignKey.single("programDayId", "program_day", "programDayId", "CASCADE")
+        ),
+        "program_target_occurrence" to listOf(
+            ExpectedForeignKey.single("programId", "program", "programId", "CASCADE")
+        ),
+        "program_target_occurrence_component" to listOf(
+            ExpectedForeignKey(
+                childColumns = listOf("programId", "occurrenceKey"),
+                parentTable = "program_target_occurrence",
+                parentColumns = listOf("programId", "occurrenceKey"),
+                onDelete = "CASCADE"
+            )
         ),
         "workout_session" to listOf(
-            ExpectedForeignKey("slotId", "program_workout_slot", "slotId", "CASCADE"),
-            ExpectedForeignKey("programId", "program", "programId", "CASCADE"),
-            ExpectedForeignKey("revisionId", "program_revision", "revisionId", "CASCADE")
+            ExpectedForeignKey.single("slotId", "program_workout_slot", "slotId", "CASCADE"),
+            ExpectedForeignKey.single("programId", "program", "programId", "CASCADE"),
+            ExpectedForeignKey.single("revisionId", "program_revision", "revisionId", "CASCADE")
         ),
         "session_snapshot" to listOf(
-            ExpectedForeignKey("sessionId", "workout_session", "sessionId", "CASCADE")
+            ExpectedForeignKey.single("sessionId", "workout_session", "sessionId", "CASCADE")
         ),
         "session_snapshot_exercise" to listOf(
-            ExpectedForeignKey("sessionId", "session_snapshot", "sessionId", "CASCADE")
+            ExpectedForeignKey.single("sessionId", "session_snapshot", "sessionId", "CASCADE")
         ),
         "session_exercise" to listOf(
-            ExpectedForeignKey("sessionId", "workout_session", "sessionId", "CASCADE")
+            ExpectedForeignKey.single("sessionId", "workout_session", "sessionId", "CASCADE")
         ),
         "program_set_log" to listOf(
-            ExpectedForeignKey("sessionExerciseId", "session_exercise", "sessionExerciseId", "CASCADE")
+            ExpectedForeignKey.single("sessionExerciseId", "session_exercise", "sessionExerciseId", "CASCADE")
         ),
         "program_pause" to listOf(
-            ExpectedForeignKey("programId", "program", "programId", "CASCADE")
+            ExpectedForeignKey.single("programId", "program", "programId", "CASCADE")
         ),
         "program_family_progression_state" to listOf(
-            ExpectedForeignKey("revisionId", "program_revision", "revisionId", "CASCADE")
+            ExpectedForeignKey.single("revisionId", "program_revision", "revisionId", "CASCADE")
         ),
         "program_adaptive_decision_record" to listOf(
-            ExpectedForeignKey("programId", "program", "programId", "CASCADE"),
-            ExpectedForeignKey("revisionId", "program_revision", "revisionId", "CASCADE"),
-            ExpectedForeignKey("slotId", "program_workout_slot", "slotId", "CASCADE")
+            ExpectedForeignKey.single("programId", "program", "programId", "CASCADE"),
+            ExpectedForeignKey.single("revisionId", "program_revision", "revisionId", "CASCADE"),
+            ExpectedForeignKey.single("slotId", "program_workout_slot", "slotId", "CASCADE")
         ),
         "adaptive_adjustment" to listOf(
-            ExpectedForeignKey("decisionId", "program_adaptive_decision_record", "decisionId", "CASCADE"),
-            ExpectedForeignKey("programId", "program", "programId", "CASCADE"),
-            ExpectedForeignKey("revisionId", "program_revision", "revisionId", "CASCADE"),
-            ExpectedForeignKey("slotId", "program_workout_slot", "slotId", "CASCADE")
+            ExpectedForeignKey.single("decisionId", "program_adaptive_decision_record", "decisionId", "CASCADE"),
+            ExpectedForeignKey.single("programId", "program", "programId", "CASCADE"),
+            ExpectedForeignKey.single("revisionId", "program_revision", "revisionId", "CASCADE"),
+            ExpectedForeignKey.single("slotId", "program_workout_slot", "slotId", "CASCADE")
         )
     )
 
@@ -394,6 +441,14 @@ internal object ProgramSchemaFixture {
                 "index_program_workout_slot_programId_targetOccurrenceKey",
                 listOf("programId", "targetOccurrenceKey"),
                 unique = true
+            )
+        ),
+        "program_target_occurrence" to emptyList(),
+        "program_target_occurrence_component" to listOf(
+            ExpectedIndex(
+                "index_program_target_occurrence_component_programId_occurrenceKey",
+                listOf("programId", "occurrenceKey"),
+                unique = false
             )
         ),
         "workout_session" to listOf(
@@ -614,11 +669,32 @@ internal object ProgramSchemaFixture {
         val primaryKey =
             "PRIMARY KEY(" + PRIMARY_KEYS.getValue(table).joinToString(", ") { "`$it`" } + ")"
         val foreignKeys = FOREIGN_KEYS.getValue(table).joinToString("") { key ->
-            ", FOREIGN KEY(`${key.childColumn}`) REFERENCES `${key.parentTable}`(`${key.parentColumn}`)" +
+            ", FOREIGN KEY(" + key.childColumns.joinToString(", ") { "`$it`" } +
+                ") REFERENCES `${key.parentTable}`(" +
+                key.parentColumns.joinToString(", ") { "`$it`" } + ")" +
                 " ON UPDATE NO ACTION ON DELETE ${key.onDelete} "
         }
         return "CREATE TABLE IF NOT EXISTS `$table` ($columns, $primaryKey$foreignKeys)"
     }
+
+    /**
+     * The target tables that a **later** migration step creates, so `MIGRATION_7_8`'s own statement
+     * list does not claim them.
+     *
+     * The version-8 step is the one that creates the bulk of the target schema, and
+     * [EXPECTED_MIGRATION_STATEMENTS] is *its* contract. §30 step 14's two tables are not part of
+     * that step: they are created by `MIGRATION_13_14`, alongside the index that step adds, and
+     * [EXPECTED_TARGET_OCCURRENCE_STATEMENTS] is that step's contract instead. Keeping the two lists
+     * apart is the same discipline the additive steps use — a step's statements are its own contract,
+     * so a table a later step creates is never expected of an earlier one.
+     */
+    val LATER_TABLES: List<String> = listOf(
+        "program_target_occurrence",
+        "program_target_occurrence_component"
+    )
+
+    /** The tables the version-7 → version-8 migration creates, in the order it creates them. */
+    val VERSION_EIGHT_TABLES: List<String> = TABLES.filterNot { it in LATER_TABLES }
 
     /** The `CREATE [UNIQUE] INDEX` statement Room emits for one declared index. */
     fun expectedIndexDdl(table: String, index: ExpectedIndex): String {
@@ -627,7 +703,7 @@ internal object ProgramSchemaFixture {
         return "$kind IF NOT EXISTS `${index.name}` ON `$table` ($columns)"
     }
 
-    /** The indices the version-7 → version-8 migration creates; later steps append their own. */
+    /** The indices the version-7 → version-8 migration creates; later steps create their own. */
     private val VERSION_EIGHT_INDICES: Map<String, List<ExpectedIndex>> = INDEXES.mapValues { (_, indices) ->
         indices.filterNot { it.name == "index_program_workout_slot_programId_targetOccurrenceKey" }
     }
@@ -636,10 +712,28 @@ internal object ProgramSchemaFixture {
      * Every statement the version-7 → version-8 migration must execute, in the order Room emits them:
      * per entity, its table and then the indices that existed at that version.
      */
-    val EXPECTED_MIGRATION_STATEMENTS: List<String> = TABLES.flatMap { table ->
+    val EXPECTED_MIGRATION_STATEMENTS: List<String> = VERSION_EIGHT_TABLES.flatMap { table ->
         listOf(expectedTableDdl(table)) +
             VERSION_EIGHT_INDICES.getValue(table).map { expectedIndexDdl(table, it) }
     }
+
+    /**
+     * Every statement the version-13 → version-14 migration must execute, in order: the two target
+     * occurrence tables and the component table's lookup index.
+     *
+     * It is **only** those three statements. The step creates storage and writes no row, so there is
+     * no `UPDATE`, `INSERT`, `DELETE`, `ALTER` or `RENAME` here and no backfill of the new tables from
+     * `program_workout_slot` — a slot carries no components, so any such row would have to invent
+     * them, and an invented payload that reads back as stored is worse than an absent record.
+     */
+    val EXPECTED_TARGET_OCCURRENCE_STATEMENTS: List<String> = listOf(
+        expectedTableDdl("program_target_occurrence"),
+        expectedTableDdl("program_target_occurrence_component"),
+        expectedIndexDdl(
+            "program_target_occurrence_component",
+            INDEXES.getValue("program_target_occurrence_component").single()
+        )
+    )
 
     /** Whitespace-collapsed SQL, so a multi-line statement and Room's single-line one compare equal. */
     fun normalized(sql: String): String = sql
