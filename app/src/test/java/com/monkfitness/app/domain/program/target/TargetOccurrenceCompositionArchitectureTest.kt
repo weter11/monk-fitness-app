@@ -111,7 +111,14 @@ class TargetOccurrenceCompositionArchitectureTest {
             .map { it.name }
             .sorted()
 
-        assertEquals(listOf("TargetOccurrenceComposer.kt", "TargetScheduleResolver.kt"), sources)
+        assertEquals(
+            listOf(
+                "TargetOccurrenceComposer.kt",
+                "TargetOccurrenceReconciler.kt",
+                "TargetScheduleResolver.kt"
+            ),
+            sources
+        )
     }
 
     private fun codeLines(source: File): List<String> = source.readText()
