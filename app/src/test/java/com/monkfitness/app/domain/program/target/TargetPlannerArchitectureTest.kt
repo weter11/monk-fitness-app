@@ -14,7 +14,7 @@ class TargetPlannerArchitectureTest {
     private val plannerFile = File(targetDir, "TargetPlanner.kt")
 
     @Test
-    fun targetPackageContainsExactlyTheStageTwoThroughSevenProductionFiles() {
+    fun targetPackageContainsExactlyTheStageTwoThroughNineProductionFiles() {
         val sources = targetDir.listFiles { file -> file.isFile && file.extension == "kt" }
             .orEmpty()
             .map { it.name }
@@ -27,7 +27,8 @@ class TargetPlannerArchitectureTest {
                 "TargetOccurrenceReconciler.kt",
                 "TargetPlanner.kt",
                 "TargetSchedulePolicy.kt",
-                "TargetScheduleResolver.kt"
+                "TargetScheduleResolver.kt",
+                "TargetSlotMaterializer.kt"
             ),
             sources
         )

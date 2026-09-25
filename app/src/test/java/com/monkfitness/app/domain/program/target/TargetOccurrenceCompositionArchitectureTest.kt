@@ -105,7 +105,7 @@ class TargetOccurrenceCompositionArchitectureTest {
     }
 
     @Test
-    fun targetPackageNowContainsExactlyTheStageTwoThroughSevenProductionFiles() {
+    fun targetPackageNowContainsExactlyTheStageTwoThroughNineProductionFiles() {
         val sources = targetDir.listFiles { file -> file.isFile && file.extension == "kt" }
             .orEmpty()
             .map { it.name }
@@ -118,7 +118,8 @@ class TargetOccurrenceCompositionArchitectureTest {
                 "TargetOccurrenceReconciler.kt",
                 "TargetPlanner.kt",
                 "TargetSchedulePolicy.kt",
-                "TargetScheduleResolver.kt"
+                "TargetScheduleResolver.kt",
+                "TargetSlotMaterializer.kt"
             ),
             sources
         )
