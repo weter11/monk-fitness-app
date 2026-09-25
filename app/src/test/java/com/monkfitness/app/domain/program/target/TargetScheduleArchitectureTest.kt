@@ -21,6 +21,7 @@ class TargetScheduleArchitectureTest {
             listOf(
                 "TargetOccurrenceComposer.kt",
                 "TargetOccurrenceReconciler.kt",
+                "TargetPlanner.kt",
                 "TargetScheduleResolver.kt"
             ),
             sources.map { it.name }.sorted()

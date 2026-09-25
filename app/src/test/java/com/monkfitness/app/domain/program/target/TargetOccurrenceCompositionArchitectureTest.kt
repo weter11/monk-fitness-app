@@ -115,6 +115,7 @@ class TargetOccurrenceCompositionArchitectureTest {
             listOf(
                 "TargetOccurrenceComposer.kt",
                 "TargetOccurrenceReconciler.kt",
+                "TargetPlanner.kt",
                 "TargetScheduleResolver.kt"
             ),
             sources
