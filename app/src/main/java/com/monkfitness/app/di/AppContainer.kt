@@ -38,6 +38,7 @@ import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
 import com.monkfitness.app.domain.usecase.ProgramSaveService
+import com.monkfitness.app.domain.usecase.TargetScheduleApplicationService
 import com.monkfitness.app.domain.usecase.TargetScheduleSlotPersister
 import com.monkfitness.app.domain.usecase.SessionRuntime
 import com.monkfitness.app.domain.program.StandardProgram
@@ -298,6 +299,12 @@ class AppContainer(
         scheduleRepository = programScheduleRepository,
         idGenerator = idGenerator
     )
+
+    /** Application boundary that presents and persists a ready target schedule decision. */
+    val targetScheduleApplicationService: TargetScheduleApplicationService =
+        TargetScheduleApplicationService(
+            slotPersister = targetScheduleSlotPersister
+        )
 
     /** The idempotent production bootstrap for the product-owned Standard Program. */
     val standardProgramBootstrap: StandardProgramBootstrap = StandardProgramBootstrap(
