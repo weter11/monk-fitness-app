@@ -71,6 +71,15 @@ internal object ProgramDaoSql {
     /** `ProgramWorkoutSlotDao.countByStatus`. */
     const val PROGRAM_WORKOUT_SLOT_DAO_COUNT_BY_STATUS = "SELECT COUNT(*) FROM `program_workout_slot` WHERE `programId` = :programId AND `status` = :status"
 
+    /** `ProgramTargetOccurrenceDao.occurrenceOf`. */
+    const val PROGRAM_TARGET_OCCURRENCE_DAO_OCCURRENCE_OF = "SELECT * FROM `program_target_occurrence` WHERE `programId` = :programId AND `occurrenceKey` = :occurrenceKey LIMIT 1"
+
+    /** `ProgramTargetOccurrenceDao.componentsOf` — ordered by the stored position, nothing else. */
+    const val PROGRAM_TARGET_OCCURRENCE_DAO_COMPONENTS_OF = "SELECT * FROM `program_target_occurrence_component` WHERE `programId` = :programId AND `occurrenceKey` = :occurrenceKey ORDER BY `position` ASC"
+
+    /** `ProgramTargetOccurrenceDao.occurrencesOfProgram`. */
+    const val PROGRAM_TARGET_OCCURRENCE_DAO_OCCURRENCES_OF_PROGRAM = "SELECT * FROM `program_target_occurrence` WHERE `programId` = :programId ORDER BY `plannedFor` ASC, `occurrenceKey` ASC"
+
     /** `WorkoutSessionDao.sessionById`. */
     const val WORKOUT_SESSION_DAO_SESSION_BY_ID = "SELECT * FROM `workout_session` WHERE `sessionId` = :sessionId LIMIT 1"
 
@@ -204,6 +213,9 @@ internal object ProgramDaoSql {
         "ProgramWorkoutSlotDao.slotsFrom" to PROGRAM_WORKOUT_SLOT_DAO_SLOTS_FROM,
         "ProgramWorkoutSlotDao.updateOutcome" to PROGRAM_WORKOUT_SLOT_DAO_UPDATE_OUTCOME,
         "ProgramWorkoutSlotDao.countByStatus" to PROGRAM_WORKOUT_SLOT_DAO_COUNT_BY_STATUS,
+        "ProgramTargetOccurrenceDao.occurrenceOf" to PROGRAM_TARGET_OCCURRENCE_DAO_OCCURRENCE_OF,
+        "ProgramTargetOccurrenceDao.componentsOf" to PROGRAM_TARGET_OCCURRENCE_DAO_COMPONENTS_OF,
+        "ProgramTargetOccurrenceDao.occurrencesOfProgram" to PROGRAM_TARGET_OCCURRENCE_DAO_OCCURRENCES_OF_PROGRAM,
         "WorkoutSessionDao.sessionById" to WORKOUT_SESSION_DAO_SESSION_BY_ID,
         "WorkoutSessionDao.sessionsOfSlot" to WORKOUT_SESSION_DAO_SESSIONS_OF_SLOT,
         "WorkoutSessionDao.sessionsOfProgram" to WORKOUT_SESSION_DAO_SESSIONS_OF_PROGRAM,

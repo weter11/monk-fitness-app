@@ -50,10 +50,10 @@ class CompositionRootArchitectureTest {
         "AppStateRepository"
     )
 
-    /** The fifteen target tables' accessors, as `AppDatabase` declares them. */
+    /** The target tables' accessors, as `AppDatabase` declares them. */
     private val targetAccessors = listOf(
         "programDao", "appStateDao", "programRevisionDao", "programDayDao", "programExerciseDao",
-        "programWorkoutSlotDao", "workoutSessionDao", "sessionSnapshotDao",
+        "programWorkoutSlotDao", "programTargetOccurrenceDao", "workoutSessionDao", "sessionSnapshotDao",
         "sessionSnapshotExerciseDao", "sessionExerciseDao", "programSetLogDao", "programPauseDao",
         "programFamilyProgressionStateDao", "programAdaptiveDecisionDao", "adaptiveAdjustmentDao"
     )
@@ -224,9 +224,10 @@ class CompositionRootArchitectureTest {
             "the composition root takes every DAO of the target graph from the one database — one " +
                 "accessor call per target table — plus §16's reset. §30 step 15 changed the count from " +
                 "17 to 16 by removing the two Stage-1 handles (`familyProgressionStateDao`, " +
-                "`adaptiveDecisionHistoryDao`) and adding the reset's own, and nowhere else in " +
+                "`adaptiveDecisionHistoryDao`) and adding the reset's own, and §30 step 14 raised it " +
+                "again to 17 by adding the target occurrence's own accessor; nowhere else in " +
                 "production may take one",
-            16,
+            17,
             accessor.findAll(codeOf("di/AppContainer.kt")).count()
         )
 

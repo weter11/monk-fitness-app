@@ -1,12 +1,14 @@
 package com.monkfitness.app.domain.usecase
 
 import com.monkfitness.app.data.repository.ProgramScheduleRepository
+import com.monkfitness.app.data.repository.TargetScheduleOccurrenceRepository
 import com.monkfitness.app.di.IdGenerator
 import com.monkfitness.app.domain.common.ProgramDayId
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.RevisionId
 import com.monkfitness.app.domain.common.SlotId
 import com.monkfitness.app.domain.program.WorkoutSlot
+import com.monkfitness.app.domain.program.target.PersistedTargetOccurrence
 import com.monkfitness.app.domain.program.target.TargetOccurrencePresentation
 import com.monkfitness.app.domain.program.target.TargetScheduleDecision
 import com.monkfitness.app.domain.program.target.TargetSlotMaterializationInput
@@ -53,10 +55,45 @@ class TargetSlotPersistenceException(
     "target occurrence $targetOccurrenceKey already exists with a different semantic payload"
 )
 
-/** Orchestrates target lookup, Stage 9 materialization, and repository insertion. */
+/**
+ * Orchestrates target lookup, Stage 9 materialization, and repository insertion.
+ *
+ * ### The two writes are one unit
+ *
+ * A target occurrence is now two stored things: the `WorkoutSlot` a user trains against, and the
+ * [PersistedTargetOccurrence] that records what the occurrence actually *was* — its planned date and
+ * its ordered components, which a slot row has no column for. Both are written inside one
+ * `inTransaction` block, so the engine commits them together or rolls both back. A pass that failed
+ * between them would otherwise leave a slot pointing at a target identity whose components do not
+ * exist anywhere, and a read-back that had to reconstruct those components from the key or the slot
+ * would be inventing them.
+ *
+ * The transaction is a **port** ([inTransaction]), not a database: this class still reaches storage
+ * only through the two repositories, exactly as §30 step 10's boundary was written. Production passes
+ * the database's own `withTransaction`; the unit tests pass the SQLite engine's real
+ * `BEGIN`/`COMMIT`/`ROLLBACK`, so "atomic" here is decided by the engine rather than by this code's
+ * bookkeeping.
+ *
+ * ### Every presented occurrence is stored, created or retained
+ *
+ * The semantic record is written for **all** presentations, not only the newly created ones, and
+ * that is what makes the store idempotent-or-refusing rather than create-only. A repeated pass whose
+ * payload is identical writes nothing; a repeated pass whose payload differs — a moved date, a
+ * changed rule or workout identity, a reordered component list — is refused by the occurrence
+ * repository with a typed [com.monkfitness.app.domain.program.target.TargetOccurrencePersistenceException]
+ * and the stored record is left exactly as it was. A later revision or reconciliation pass therefore
+ * cannot quietly rewrite a stored occurrence just because a slot with the same target identity is
+ * already there: the slot's existence is not evidence that the occurrence's payload is unchanged.
+ *
+ * The read phase above it is unchanged and still authoritative for the **slot** row: membership stays
+ * exactly `(programId, targetOccurrenceKey)` with no date, plan day, revision or position fallback,
+ * and [requireSemanticMatch] still refuses a stored slot whose own fields disagree with the decision.
+ */
 class TargetScheduleSlotPersister(
     private val scheduleRepository: ProgramScheduleRepository,
-    private val idGenerator: IdGenerator
+    private val occurrenceRepository: TargetScheduleOccurrenceRepository,
+    private val idGenerator: IdGenerator,
+    private val inTransaction: suspend (suspend () -> Unit) -> Unit
 ) {
     suspend fun persist(
         input: TargetScheduleSlotPersistenceInput
@@ -82,7 +119,17 @@ class TargetScheduleSlotPersister(
             }
         }
 
-        scheduleRepository.addSlots(created)
+        inTransaction {
+            scheduleRepository.addSlots(created)
+            input.presentations.forEach { presentation ->
+                occurrenceRepository.store(
+                    PersistedTargetOccurrence(
+                        programId = input.programId,
+                        occurrence = presentation.occurrence
+                    )
+                )
+            }
+        }
         return TargetScheduleSlotPersistenceResult(created, retained)
     }
 

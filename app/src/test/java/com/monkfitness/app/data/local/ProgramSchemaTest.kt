@@ -10,6 +10,8 @@ import com.monkfitness.app.data.model.ProgramEntity
 import com.monkfitness.app.data.model.ProgramExerciseEntity
 import com.monkfitness.app.data.model.ProgramPauseEntity
 import com.monkfitness.app.data.model.ProgramRevisionEntity
+import com.monkfitness.app.data.model.ProgramTargetOccurrenceComponentEntity
+import com.monkfitness.app.data.model.ProgramTargetOccurrenceEntity
 import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
 import com.monkfitness.app.data.model.SessionExerciseEntity
 import com.monkfitness.app.data.model.SessionSnapshotEntity
@@ -90,7 +92,11 @@ class ProgramSchemaTest {
             SupportSQLiteDatabase::class.java.classLoader,
             arrayOf(SupportSQLiteDatabase::class.java)
         ) { _, method, args ->
-            if (method.name == "execSQL") statements += args!![0] as String
+            // Trimmed because §30 step 14's first two statements are written across several lines:
+            // the leading newline and indentation would make every `startsWith("CREATE TABLE ...")`
+            // predicate below miss them, and a schema assertion that silently finds nothing is worse
+            // than one that fails. The text is otherwise exactly what SQLite is handed.
+            if (method.name == "execSQL") statements += (args!![0] as String).trim()
             null
         } as SupportSQLiteDatabase
 
@@ -111,8 +117,20 @@ class ProgramSchemaTest {
     /** Every statement the version-10 → version-11 step executes: §30 step 12's window bookkeeping. */
     private fun windowStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_10_11)
 
-    /** The two exact statements the target-slot-identity migration executes, in order. */
+    /**
+     * The two exact statements the **target slot identity** step (12 -> 13) executes, in order.
+     *
+     * The name is the historical one and it is kept: this is Stage 8's additive column plus its unique
+     * index, and §30 step 14's separate step is [semanticOccurrenceStatements].
+     */
     private fun targetOccurrenceStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_12_13)
+
+    /**
+     * The three exact statements §30 step 14's **semantic payload** step (13 -> 14) executes: the two
+     * target occurrence tables and the component table's lookup index.
+     */
+    private fun semanticOccurrenceStatements(): List<String> =
+        recordStatements(AppDatabase.MIGRATION_13_14)
 
     private fun allAdditiveStatements(): List<String> =
         additiveStatements() + focusStatements() + windowStatements()
@@ -141,9 +159,17 @@ class ProgramSchemaTest {
     private fun normalized(statements: List<String>): List<String> =
         statements.map { ProgramSchemaFixture.normalized(it) }
 
-    /** The one `CREATE TABLE` statement for [table] — matched by its own name, never as a substring. */
+    /**
+     * The one `CREATE TABLE` statement for [table] — matched by its own name, never as a substring.
+     *
+     * It is looked up across every step that creates a table, because two of the target tables are
+     * created by `MIGRATION_13_14` rather than by the version-8 step. Each table is still created
+     * exactly once: `single` asserts that here, and each step's own statement list is asserted
+     * separately, so a table cannot quietly appear in both.
+     */
     private fun statementFor(table: String): String =
-        migrationStatements().single { it.startsWith("CREATE TABLE IF NOT EXISTS `$table` ") }
+        (migrationStatements() + semanticOccurrenceStatements())
+            .single { it.startsWith("CREATE TABLE IF NOT EXISTS `$table` ") }
 
     private fun columnsOf(table: String): List<String> =
         ProgramSchemaFixture.COLUMNS.getValue(table).map { it.name }
@@ -155,11 +181,38 @@ class ProgramSchemaTest {
             .split(", ")
             .map { it.trim().trim('`') }
 
+    /**
+     * The foreign keys a table's own `CREATE TABLE` declares, as child columns, parent table, parent
+     * columns and delete action.
+     *
+     * Both column groups are read as **lists**: a target occurrence's component rows are owned by the
+     * occurrence, and "the occurrence" is the pair `(programId, occurrenceKey)` rather than either
+     * column alone, so one key in this schema genuinely spans two columns on each side. Capturing a
+     * single `\w+` there would read a composite key as none at all, which is exactly the kind of gap a
+     * schema assertion exists to close.
+     */
     private fun foreignKeysOf(table: String): List<List<String>> =
-        Regex(
-            "FOREIGN KEY\\(`(\\w+)`\\) REFERENCES `(\\w+)`\\(`(\\w+)`\\) " +
-                "ON UPDATE NO ACTION ON DELETE (CASCADE|SET NULL|NO ACTION)"
-        ).findAll(statementFor(table)).map { match -> match.groupValues.drop(1) }.toList()
+        foreignKeyRegex.findAll(ProgramSchemaFixture.normalized(statementFor(table))).map { match ->
+            listOf(
+                match.groupValues[1].split(",").joinToString(",") { it.trim().trim('`') },
+                match.groupValues[2],
+                match.groupValues[3].split(",").joinToString(",") { it.trim().trim('`') },
+                match.groupValues[4]
+            )
+        }.toList()
+
+    /**
+     * The `FOREIGN KEY(...) REFERENCES ...(...) ON UPDATE NO ACTION ON DELETE ...` shape.
+     *
+     * Matched against the **normalized** statement, because §30 step 14's DDL wraps the parent
+     * columns onto their own line and this pattern asks for a single space between the clauses. A
+     * statement the migration really executes must not read as "no foreign keys" merely because it is
+     * laid out across lines — that is a silently empty assertion, not a passing one.
+     */
+    private val foreignKeyRegex = Regex(
+        "FOREIGN KEY\\(([^)]*)\\) REFERENCES `(\\w+)`\\(([^)]*)\\) " +
+            "ON UPDATE NO ACTION ON DELETE (CASCADE|SET NULL|NO ACTION)"
+    )
 
     /** The `@Database(entities = [...])` list, read from the source that declares it. */
     private fun registeredEntities(): List<String> =
@@ -195,6 +248,8 @@ class ProgramSchemaTest {
             ProgramDayEntity::class.java,
             ProgramExerciseEntity::class.java,
             ProgramWorkoutSlotEntity::class.java,
+            ProgramTargetOccurrenceEntity::class.java,
+            ProgramTargetOccurrenceComponentEntity::class.java,
             WorkoutSessionEntity::class.java,
             SessionSnapshotEntity::class.java,
             SessionSnapshotExerciseEntity::class.java,
@@ -302,11 +357,168 @@ class ProgramSchemaTest {
         )
         assertEquals(13, AppDatabase.MIGRATION_12_13.endVersion)
         assertEquals(
+            "the target occurrence's semantic payload is the step after that one (§30 step 14)",
+            13,
+            AppDatabase.MIGRATION_13_14.startVersion
+        )
+        assertEquals(14, AppDatabase.MIGRATION_13_14.endVersion)
+        assertEquals(
             "and the declared version is where the chain ends",
-            AppDatabase.MIGRATION_12_13.endVersion,
+            AppDatabase.MIGRATION_13_14.endVersion,
             currentVersion()
         )
     }
+
+    // ---- the target occurrence's semantic payload (§30 step 14) ---------------------------------------
+
+    @Test
+    fun theSemanticOccurrenceMigrationCreatesTheTwoTablesAndWritesNoRow() {
+        val statements = semanticOccurrenceStatements()
+
+        assertEquals(
+            "13 -> 14 creates exactly the two target occurrence tables and the component table's " +
+                "lookup index, token for token",
+            normalized(ProgramSchemaFixture.EXPECTED_TARGET_OCCURRENCE_STATEMENTS),
+            normalized(statements)
+        )
+        assertEquals(
+            "and those are the only statements it executes",
+            3,
+            statements.size
+        )
+    }
+
+    @Test
+    fun theSemanticOccurrenceMigrationInventsNoOccurrenceFromASlot() {
+        val statements = semanticOccurrenceStatements()
+
+        // The delete actions of the two foreign keys are the only `DELETE` the clause `ON DELETE
+        // CASCADE` contains, so they are removed before the verbs are looked for: what the rule
+        // forbids is a statement that acts on an existing row.
+        val acting = statements.map { statement ->
+            statement.replace(Regex("ON UPDATE NO ACTION ON DELETE CASCADE"), "")
+        }
+        for (keyword in listOf("UPDATE", "INSERT", "DELETE", "ALTER", "RENAME", "REPLACE", "DROP")) {
+            assertFalse(
+                "13 -> 14 creates storage and writes no row, so it contains no $keyword statement: " +
+                    "$statements",
+                acting.any { Regex("\\b$keyword\\b").containsMatchIn(it.uppercase()) }
+            )
+        }
+        assertTrue(
+            "and in particular it backfills nothing from `program_workout_slot`: a slot carries no " +
+                "components, so such a row would have to invent them, and an invented payload that " +
+                "reads back as stored is worse than an absent record — $statements",
+            statements.none { it.contains("program_workout_slot") }
+        )
+        assertTrue(
+            "nor does it backfill from any other table, legacy or target",
+            statements.none { statement ->
+                ProgramSchemaFixture.LEGACY_TABLES.any { legacy ->
+                    statement.contains(ProgramSchemaFixture.tableToken(legacy))
+                }
+            }
+        )
+    }
+
+    @Test
+    fun theSemanticMembershipIdentityIsTheProgramAndTheOccurrenceKey() {
+        assertEquals(
+            "a target occurrence IS the pair (programId, occurrenceKey) — that is what lets two " +
+                "Programs hold the same key independently and stops one Program holding it twice",
+            listOf("programId", "occurrenceKey"),
+            ProgramSchemaFixture.PRIMARY_KEYS.getValue("program_target_occurrence")
+        )
+        assertEquals(
+            "a component is that pair plus its own place in the presented order",
+            listOf("programId", "occurrenceKey", "position"),
+            ProgramSchemaFixture.PRIMARY_KEYS.getValue("program_target_occurrence_component")
+        )
+        val parentKeys = ProgramSchemaFixture.FOREIGN_KEYS.getValue("program_target_occurrence")
+        assertEquals(
+            "an occurrence belongs to its Program and cascades with it (§23, §29)",
+            listOf(
+                ExpectedKey(listOf("programId"), "program", listOf("programId"), "CASCADE")
+            ),
+            parentKeys.map {
+                ExpectedKey(it.childColumns, it.parentTable, it.parentColumns, it.onDelete)
+            }
+        )
+        assertEquals(
+            "a component belongs to the occurrence — and to the *pair*, so a component row cannot " +
+                "name a Program its own occurrence does not belong to",
+            listOf(
+                ExpectedKey(
+                    listOf("programId", "occurrenceKey"),
+                    "program_target_occurrence",
+                    listOf("programId", "occurrenceKey"),
+                    "CASCADE"
+                )
+            ),
+            ProgramSchemaFixture.FOREIGN_KEYS.getValue("program_target_occurrence_component").map {
+                ExpectedKey(it.childColumns, it.parentTable, it.parentColumns, it.onDelete)
+            }
+        )
+    }
+
+    @Test
+    fun theSemanticPayloadIsStoredAsFieldsAndNotAsAnEncodedOccurrenceKey() {
+        val columns = ProgramSchemaFixture.columnsNow("program_target_occurrence")
+        assertEquals(
+            "the date is its own column, so no one ever has to read the key to learn it",
+            listOf("programId", "occurrenceKey", "plannedFor"),
+            columns.map { it.name }
+        )
+        val componentColumns = ProgramSchemaFixture.columnsNow("program_target_occurrence_component")
+        assertEquals(
+            "each component field is its own column, and the order is a stored integer rather than " +
+                "something a reader has to parse back out of a blob",
+            listOf("programId", "occurrenceKey", "position", "ruleId", "workoutId"),
+            componentColumns.map { it.name }
+        )
+        assertTrue(
+            "the key column stores the occurrence's own text and nothing else — no serialized " +
+                "component list shares it, which is what would make a read-back depend on a parsing " +
+                "convention instead of on stored rows",
+            columns.none { it.name != "occurrenceKey" && it.type != "TEXT" }
+        )
+        assertEquals(
+            "one lookup index, and it is the identity pair: a read of an occurrence's components is " +
+                "keyed by (programId, occurrenceKey) and by nothing else",
+            listOf("programId", "occurrenceKey"),
+            ProgramSchemaFixture.INDEXES.getValue("program_target_occurrence_component")
+                .single().columns
+        )
+        assertTrue(
+            "and no index makes a date, a plan day or a slot id a target identity",
+            ProgramSchemaFixture.INDEXES.getValue("program_target_occurrence_component")
+                .none { it.columns == listOf("plannedFor") || it.columns == listOf("position") }
+        )
+    }
+
+    @Test
+    fun theTwoEntitiesDeclareTheirColumnsInTheStoredOrder() {
+        assertEquals(
+            listOf("programId", "occurrenceKey", "plannedFor"),
+            ProgramTargetOccurrenceEntity::class.java.declaredFields
+                .filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }
+                .map { it.name }
+        )
+        assertEquals(
+            listOf("programId", "occurrenceKey", "position", "ruleId", "workoutId"),
+            ProgramTargetOccurrenceComponentEntity::class.java.declaredFields
+                .filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }
+                .map { it.name }
+        )
+    }
+
+    /** A foreign key reduced to the four facts the schema assertions compare. */
+    private data class ExpectedKey(
+        val childColumns: List<String>,
+        val parentTable: String,
+        val parentColumns: List<String>,
+        val onDelete: String
+    )
 
     // ---- the migration -------------------------------------------------------------------------------
 
@@ -327,7 +539,12 @@ class ProgramSchemaTest {
             .filter { it.startsWith("CREATE TABLE IF NOT EXISTS ") }
             .map { it.substringAfter("CREATE TABLE IF NOT EXISTS `").substringBefore("`") }
 
-        assertEquals("one CREATE TABLE per target table, in the declared order", ProgramSchemaFixture.TABLES, tables)
+        assertEquals(
+            "one CREATE TABLE per target table the version-8 step creates, in the declared order — the " +
+                "two target occurrence tables belong to MIGRATION_13_14 and are asserted there instead",
+            ProgramSchemaFixture.VERSION_EIGHT_TABLES,
+            tables
+        )
         assertEquals("no table is created twice", tables.size, tables.toSet().size)
         assertTrue(
             "every statement is a CREATE TABLE or a CREATE INDEX: $statements",
@@ -1065,7 +1282,8 @@ class ProgramSchemaTest {
                 "ownership",
             listOf("programId -> program.programId CASCADE"),
             upgraded.foreignKeys("program_revision").map {
-                "${it.childColumn} -> ${it.parentTable}.${it.parentColumn} ${it.onDelete}"
+                "${it.childColumns.joinToString(",")} -> " +
+                    "${it.parentTable}.${it.parentColumns.joinToString(",")} ${it.onDelete}"
             }
         )
     }
@@ -1474,7 +1692,12 @@ class ProgramSchemaTest {
             assertEquals(
                 "`$table`'s foreign keys are the ownership graph of §23",
                 ProgramSchemaFixture.FOREIGN_KEYS.getValue(table).map {
-                    listOf(it.childColumn, it.parentTable, it.parentColumn, it.onDelete)
+                    listOf(
+                        it.childColumns.joinToString(","),
+                        it.parentTable,
+                        it.parentColumns.joinToString(","),
+                        it.onDelete
+                    )
                 },
                 foreignKeysOf(table)
             )
@@ -1499,7 +1722,8 @@ class ProgramSchemaTest {
         for (table in ProgramSchemaFixture.PROGRAM_OWNED_TABLES) {
             for (key in ProgramSchemaFixture.FOREIGN_KEYS.getValue(table)) {
                 assertEquals(
-                    "`$table`.`${key.childColumn}` is Program-owned and cascades with its owner",
+                    "`$table`.`${key.childColumns.joinToString(", ")}` is Program-owned and " +
+                        "cascades with its owner",
                     "CASCADE",
                     key.onDelete
                 )
@@ -1580,7 +1804,9 @@ class ProgramSchemaTest {
         val added = ProgramSchemaFixture.normalized(
             (allAdditiveStatements() + targetOccurrenceStatements()).joinToString(" ")
         )
-
+        // §30 step 14 creates its two tables outright rather than appending columns, so their columns
+        // are checked against their own `CREATE TABLE` — which is what [statementFor] returns for them.
+        // No column of either new table is an *additive* one, so nothing joins `added` here.
         for (table in ProgramSchemaFixture.TABLES) {
             val created = ProgramSchemaFixture.normalized(statementFor(table))
             for (column in ProgramSchemaFixture.COLUMNS.getValue(table)) {

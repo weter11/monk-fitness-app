@@ -20,12 +20,18 @@ class ProgramOwnershipCascadeTest {
     private fun migratedDatabase(): SqliteTestDatabase {
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
-        // The deployed chain: the target schema, then the schedule-frequency correction. A suite that
-        // stopped at version 8 would be exercising a database no device runs.
+        // The deployed chain, all the way to the version the app opens. A suite that stopped at
+        // version 8 would be exercising a database no device runs, and one that stopped at 13 would
+        // not have the target occurrence's semantic tables at all.
         database.migrate(AppDatabase.MIGRATION_7_8)
         database.migrate(AppDatabase.MIGRATION_8_9)
-        ProgramGraphInserts.insertCompleteProgram(database, "1")
-        ProgramGraphInserts.insertCompleteProgram(database, "2")
+        database.migrate(AppDatabase.MIGRATION_9_10)
+        database.migrate(AppDatabase.MIGRATION_10_11)
+        database.migrate(AppDatabase.MIGRATION_11_12)
+        database.migrate(AppDatabase.MIGRATION_12_13)
+        database.migrate(AppDatabase.MIGRATION_13_14)
+        ProgramGraphInserts.insertCompleteProgram(database, "1", targetOccurrenceRows = true)
+        ProgramGraphInserts.insertCompleteProgram(database, "2", targetOccurrenceRows = true)
         ProgramGraphInserts.insertAppState(database, selected = "program-1", next = "program-2")
         return database
     }
@@ -37,6 +43,11 @@ class ProgramOwnershipCascadeTest {
         Triple("program_day", "programDayId", "day-1"),
         Triple("program_exercise", "programExerciseId", "plan-exercise-1"),
         Triple("program_workout_slot", "slotId", "slot-1"),
+        // §30 step 14: a target occurrence and its component, both owned through the Program. The
+        // component's identity column is `ruleId` because `position` is the same on every row of a
+        // one-component occurrence, so it could not tell the survivor apart from the deleted row.
+        Triple("program_target_occurrence", "occurrenceKey", "strength:1"),
+        Triple("program_target_occurrence_component", "ruleId", "rule-strength"),
         Triple("workout_session", "sessionId", "session-1"),
         Triple("session_snapshot", "sessionId", "session-1"),
         Triple("session_snapshot_exercise", "sessionId", "session-1"),
@@ -77,7 +88,12 @@ class ProgramOwnershipCascadeTest {
                 database.strings("SELECT `$column` FROM `$table`")
             )
         }
-        assertEquals("no owned table was wiped wholesale", 13, ProgramSchemaFixture.PROGRAM_OWNED_TABLES.size)
+        assertEquals(
+            "no owned table was wiped wholesale — §30 step 14 added two Program-owned tables to the " +
+                "thirteen §30 step 15 left",
+            15,
+            ProgramSchemaFixture.PROGRAM_OWNED_TABLES.size
+        )
     }
 
     @Test

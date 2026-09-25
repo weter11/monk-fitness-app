@@ -93,6 +93,7 @@ class ProgramMigrationPreservationTest {
         database.migrate(AppDatabase.MIGRATION_11_12)
         // Target slot semantic identity: nullable, additive, and no legacy backfill.
         database.migrate(AppDatabase.MIGRATION_12_13)
+        database.migrate(AppDatabase.MIGRATION_13_14)
     }
 
     /** A populated **version-8** database: what a device that ran the target-schema release holds. */
@@ -298,7 +299,7 @@ class ProgramMigrationPreservationTest {
 
         // The target family state is owned by a revision, so the write needs one to exist: the FK is
         // part of what makes the target table the *owned* one the Stage-1 table never was.
-        ProgramGraphInserts.insertCompleteProgram(database, "1")
+        ProgramGraphInserts.insertCompleteProgram(database, "1", targetOccurrenceRows = true)
 
         database.exec(
             "INSERT INTO `program_family_progression_state` (`revisionId`, `familyId`, " +
@@ -368,19 +369,19 @@ class ProgramMigrationPreservationTest {
 
         for (table in ProgramSchemaFixture.TABLES) {
             // The engine lists a table's keys in its own order, which carries no meaning, so the
-            // comparison is by child column: the graph, not the sequence it was written in.
+            // comparison is by child columns: the graph, not the sequence it was written in.
             assertEquals(
                 "`$table`'s foreign keys as SQLite records them",
                 ProgramSchemaFixture.FOREIGN_KEYS.getValue(table).map {
                     SqliteTestDatabase.ForeignKey(
-                        childColumn = it.childColumn,
+                        childColumns = it.childColumns,
                         parentTable = it.parentTable,
-                        parentColumn = it.parentColumn,
+                        parentColumns = it.parentColumns,
                         onDelete = it.onDelete,
                         onUpdate = "NO ACTION"
                     )
-                }.sortedBy { it.childColumn },
-                database.foreignKeys(table).sortedBy { it.childColumn }
+                }.sortedBy { it.childColumns.joinToString(",") },
+                database.foreignKeys(table).sortedBy { it.childColumns.joinToString(",") }
             )
         }
     }
@@ -448,7 +449,7 @@ class ProgramMigrationPreservationTest {
         // §30 step 15 inverted this claim: it used to be about two independent set logs coexisting.
         // One is retired, so the claim is that there is exactly one — and that it is the target one.
         val database = migratedDatabase()
-        ProgramGraphInserts.insertCompleteProgram(database, "1")
+        ProgramGraphInserts.insertCompleteProgram(database, "1", targetOccurrenceRows = true)
 
         assertFalse(
             "the shipped logging table is dropped, so nothing can write a second set log",
@@ -470,7 +471,7 @@ class ProgramMigrationPreservationTest {
     @Test
     fun aPrescriptionSurvivesTheDatabaseUnchangedAndPerSet() {
         val database = migratedDatabase()
-        ProgramGraphInserts.insertCompleteProgram(database, "1")
+        ProgramGraphInserts.insertCompleteProgram(database, "1", targetOccurrenceRows = true)
         database.exec(
             "INSERT INTO `program_exercise` (`programExerciseId`, `programDayId`, `position`, " +
                 "`exerciseId`, `prescriptionDimension`, `perSetTargets`, `origin`, `isPinned`) " +
@@ -512,7 +513,7 @@ class ProgramMigrationPreservationTest {
     @Test
     fun aRestDaySlotAndAMissedSlotCarryNoPerformanceRows() {
         val database = migratedDatabase()
-        ProgramGraphInserts.insertCompleteProgram(database, "1")
+        ProgramGraphInserts.insertCompleteProgram(database, "1", targetOccurrenceRows = true)
         database.exec(
             "INSERT INTO `program_day` (`programDayId`, `revisionId`, `position`, `type`, `name`) " +
                 "VALUES ('day-rest', 'revision-1', 2, 'REST', NULL)"
@@ -556,7 +557,7 @@ class ProgramMigrationPreservationTest {
     @Test
     fun aCancelledSessionKeepsItsPartialWorkAndDoesNotCompleteItsSlot() {
         val database = migratedDatabase()
-        ProgramGraphInserts.insertCompleteProgram(database, "1")
+        ProgramGraphInserts.insertCompleteProgram(database, "1", targetOccurrenceRows = true)
         database.exec("UPDATE `workout_session` SET status = 'CANCELLED', finishedAt = 1700000004000")
         database.exec("UPDATE `program_workout_slot` SET status = 'MISSED'")
 
@@ -603,6 +604,7 @@ class ProgramMigrationPreservationTest {
             database.migrate(AppDatabase.MIGRATION_10_11)
             database.migrate(AppDatabase.MIGRATION_11_12)
             database.migrate(AppDatabase.MIGRATION_12_13)
+        database.migrate(AppDatabase.MIGRATION_13_14)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }
@@ -645,6 +647,7 @@ class ProgramMigrationPreservationTest {
         val sessionsBefore = database.rows("SELECT * FROM `workout_session`")
 
         database.migrate(AppDatabase.MIGRATION_12_13)
+        database.migrate(AppDatabase.MIGRATION_13_14)
 
         assertEquals(
             "the existing row and every old value survive byte for byte",

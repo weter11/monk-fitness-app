@@ -9,7 +9,8 @@ package com.monkfitness.app.data.local
  * one program removed its own rows and nothing else" measurable rather than asserted.
  *
  * The rows are a legal graph, not arbitrary values: one program, its revision, its day and plan
- * element, a slot for that day, a session started for the slot with its frozen snapshot, the exercise
+ * element, a slot for that day, the target occurrence that slot presents with its one
+ * component (§30 step 14), a session started for the slot with its frozen snapshot, the exercise
  * occurrence as it ran, one confirmed set, the pause interval, the revision's family progression
  * state, one applied decision and the adjustment it produced.
  *
@@ -23,7 +24,18 @@ internal object ProgramGraphInserts {
     fun insertCompleteProgram(
         database: SqliteTestDatabase,
         key: String,
-        targetOccurrenceKey: String? = null
+        targetOccurrenceKey: String? = null,
+        /**
+         * Whether the graph also carries §30 step 14's target-occurrence semantic rows.
+         *
+         * It is a parameter because the fixture is also used to populate databases that have **not**
+         * reached version 14 yet — `ProgramMigrationPreservationTest` writes a complete graph at
+         * version 12 precisely so the 12 -> 13 -> 14 steps have real rows to preserve, and inserting a
+         * row into a table that step has not created yet would fail for the wrong reason. Callers
+         * exercising a current database pass `true`; a pre-14 caller leaves it `false` and gets a graph
+         * that is complete *for its own version*.
+         */
+        targetOccurrenceRows: Boolean = false
     ) {
         val program = "program-$key"
         val revision = "revision-$key"
@@ -61,6 +73,21 @@ internal object ProgramGraphInserts {
             "INSERT INTO `program_workout_slot` (`slotId`, `programId`, `revisionId`, `programDayId`, " +
                 "$slotColumns) VALUES ('$slot', '$program', '$revision', '$day', $slotValues)"
         )
+        if (targetOccurrenceRows) {
+            // §30 step 14: the target occurrence's semantic payload. `occurrenceKey` is deliberately
+            // shaped like the real composer's (`<rule>:<date>`) so that a suite would notice if
+            // anything ever parsed it — and the component's `ruleId`/`workoutId` are real identities
+            // that appear nowhere in the key, so a key-derived reconstruction would visibly disagree.
+            database.exec(
+                "INSERT INTO `program_target_occurrence` (`programId`, `occurrenceKey`, `plannedFor`) " +
+                    "VALUES ('$program', 'strength:1', '2026-09-18')"
+            )
+            database.exec(
+                "INSERT INTO `program_target_occurrence_component` (`programId`, `occurrenceKey`, " +
+                    "`position`, `ruleId`, `workoutId`) VALUES ('$program', 'strength:1', 0, " +
+                    "'rule-strength', 'pushup')"
+            )
+        }
         database.exec(
             "INSERT INTO `workout_session` (`sessionId`, `slotId`, `programId`, `revisionId`, " +
                 "`status`, `startedAt`, `finishedAt`) VALUES ('$session', '$slot', '$program', " +

@@ -20,6 +20,8 @@ import com.monkfitness.app.data.model.ProgramEntity
 import com.monkfitness.app.data.model.ProgramExerciseEntity
 import com.monkfitness.app.data.model.ProgramPauseEntity
 import com.monkfitness.app.data.model.ProgramRevisionEntity
+import com.monkfitness.app.data.model.ProgramTargetOccurrenceComponentEntity
+import com.monkfitness.app.data.model.ProgramTargetOccurrenceEntity
 import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
 import com.monkfitness.app.data.model.SessionExerciseEntity
 import com.monkfitness.app.data.model.SessionSnapshotEntity
@@ -49,6 +51,12 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         ProgramDayEntity::class,
         ProgramExerciseEntity::class,
         ProgramWorkoutSlotEntity::class,
+        // §30 step 14: the target occurrence's own semantic payload — the planned date and the
+        // ordered rule/workout components a slot row has no column for. Two tables because the
+        // components are an ordered list, and an order that has to be recovered by parsing a
+        // serialized blob is not a stored order.
+        ProgramTargetOccurrenceEntity::class,
+        ProgramTargetOccurrenceComponentEntity::class,
         WorkoutSessionEntity::class,
         SessionSnapshotEntity::class,
         SessionSnapshotExerciseEntity::class,
@@ -59,7 +67,7 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         AdaptiveDecisionRecordEntity::class,
         AdaptiveAdjustmentEntity::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
@@ -88,6 +96,12 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun programExerciseDao(): ProgramExerciseDao
 
     abstract fun programWorkoutSlotDao(): ProgramWorkoutSlotDao
+
+    /**
+     * The target occurrence's semantic payload (§30 step 14) — the parent row and its ordered
+     * component rows, read and written as one occurrence and never reconstructed from a slot.
+     */
+    abstract fun programTargetOccurrenceDao(): ProgramTargetOccurrenceDao
 
     abstract fun workoutSessionDao(): WorkoutSessionDao
 
@@ -967,6 +981,124 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Version 13 → version 14: a target occurrence's **semantic payload** becomes a stored fact
+         * (§30 step 14).
+         *
+         * Until this step a persisted target slot remembered one thing about its occurrence:
+         * `program_workout_slot.targetOccurrenceKey`, the occurrence's identity. The occurrence that
+         * key names also carries a planned date and an ordered list of components — the rule and
+         * workout identities that say *what* the occurrence is — and a slot row has no column for
+         * any of them. So the semantics existed only in the value that produced the slot, and any
+         * later read had to invent them: parse the key, derive identities from a plan day, or reach
+         * back into the legacy scheduler. None of those is a fact about the occurrence; all three
+         * are guesses dressed as reads.
+         *
+         * Two tables are created, and they are two because of one property:
+         *
+         * ```text
+         * program_target_occurrence
+         *   programId      TEXT   the Program it belongs to        } the membership identity,
+         *   occurrenceKey  TEXT   the occurrence's own key        }  and exactly that
+         *   plannedFor     TEXT   the calendar date it was planned for
+         *
+         * program_target_occurrence_component
+         *   programId      TEXT   repeated from the parent
+         *   occurrenceKey  TEXT   repeated from the parent
+         *   position       INTEGER  the component's place in the presented order, from zero
+         *   ruleId         TEXT   the schedule rule's own identity
+         *   workoutId      TEXT   the workout's own identity
+         * ```
+         *
+         * ### Why normalized rows and not one serialized column
+         *
+         * The alternative — a single `TEXT` column holding an encoded component list — was rejected
+         * for three reasons, each of which is a way of losing something:
+         *
+         *  * **Order would stop being stored.** The presenter's order is part of the payload, and it
+         *    is part of the primary key here, so it cannot be lost or contradicted. A blob would have
+         *    to be *parsed* to recover the order, which means the read-back would depend on an
+         *    encoding convention rather than on stored rows.
+         *  * **A field would stop being a field.** `ruleId` and `workoutId` are two independent
+         *    identities stored in two independent columns. Reading either one back is a column
+         *    fetch, not a delimiter split.
+         *  * **A component would become fabricable.** A short list, a padded list, a list with a
+         *    placeholder token in it — all representable in a blob, none of them representable here.
+         *    There is no nullable component row and no default identity, so a record either holds
+         *    its real components or does not exist.
+         *
+         * ### The identity, and what this migration refuses to do
+         *
+         * `(programId, occurrenceKey)` **is** the primary key of the parent table, which is what makes
+         * two Programs able to hold the same key independently and one Program unable to hold it
+         * twice — and, because the pair is the key, what makes a stored record impossible to
+         * re-point at another Program or another key by a write. This is consistent with Stage 8,
+         * where the same pair became the slot's unique target identity.
+         *
+         * `occurrenceKey` is stored as an opaque token. Nothing in this schema, and nothing that reads
+         * it, splits it, trims it, normalizes it or derives a component from its text: the key's own
+         * string is not a serialization of anything. `plannedFor` and the two component identities
+         * are stored beside it as their own columns precisely so that no one ever has to read the key
+         * to recover them.
+         *
+         * ### What the migration does to existing data: nothing
+         *
+         * Two `CREATE TABLE` statements and one index, and **no** `UPDATE`, `INSERT`, `DELETE`,
+         * `ALTER` or `RENAME`. It creates storage; it writes no row and changes no existing one.
+         * There is deliberately **no** backfill of the new tables from `program_workout_slot`: a slot
+         * carries no components, so any such row would have to invent them, and a row that invents
+         * its own payload is worse than an absent one — a later read would return the invention
+         * believing it was stored. A target occurrence that has not been persisted through this
+         * stage's path simply has no semantic record yet, and its absence is honest.
+         *
+         * The `CASCADE` foreign keys are the ownership graph, not a convenience: an occurrence is
+         * destroyed with its Program, and its components with the occurrence. That is what keeps a
+         * component row from outliving the occurrence whose identity it repeats.
+         *
+         * Version 7 to 12 devices are not affected differently: they run the earlier steps of the
+         * chain first, which is what `ProgramMigrationPreservationTest` executes on a real engine.
+         *
+         * Visible to the unit tests on purpose, like every step before it: the statements are the
+         * deployable proof of the change and the schema suites compare them token for token.
+         */
+        internal val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `program_target_occurrence` (
+                        `programId` TEXT NOT NULL,
+                        `occurrenceKey` TEXT NOT NULL,
+                        `plannedFor` TEXT NOT NULL,
+                        PRIMARY KEY(`programId`, `occurrenceKey`),
+                        FOREIGN KEY(`programId`) REFERENCES `program`(`programId`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `program_target_occurrence_component` (
+                        `programId` TEXT NOT NULL,
+                        `occurrenceKey` TEXT NOT NULL,
+                        `position` INTEGER NOT NULL,
+                        `ruleId` TEXT NOT NULL,
+                        `workoutId` TEXT NOT NULL,
+                        PRIMARY KEY(`programId`, `occurrenceKey`, `position`),
+                        FOREIGN KEY(`programId`, `occurrenceKey`)
+                            REFERENCES `program_target_occurrence`(`programId`, `occurrenceKey`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS `index_program_target_occurrence_component_programId_occurrenceKey`
+                    ON `program_target_occurrence_component` (`programId`, `occurrenceKey`)
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -986,7 +1118,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_9_10,
                         MIGRATION_10_11,
                         MIGRATION_11_12,
-                        MIGRATION_12_13
+                        MIGRATION_12_13,
+                        MIGRATION_13_14
                     )
                     .build()
                 INSTANCE = instance

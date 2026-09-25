@@ -232,7 +232,9 @@ class TargetScheduleSlotPersisterTest {
         val next = ids.iterator()
         return TargetScheduleSlotPersister(
             scheduleRepository = rig.programScheduleRepository,
-            idGenerator = IdGenerator { if (next.hasNext()) next.next() else error("unexpected id generation") }
+            occurrenceRepository = rig.targetScheduleOccurrenceRepository,
+            idGenerator = IdGenerator { if (next.hasNext()) next.next() else error("unexpected id generation") },
+            inTransaction = rig.transaction
         )
     }
 

@@ -408,7 +408,9 @@ class TargetScheduleOrchestratorTest {
         applicationService = TargetScheduleApplicationService(
             slotPersister = TargetScheduleSlotPersister(
                 scheduleRepository = targetRig.programScheduleRepository,
-                idGenerator = IdGenerator { "orch-slot-${ids.size + 1}".also(ids::add) }
+                occurrenceRepository = targetRig.targetScheduleOccurrenceRepository,
+                idGenerator = IdGenerator { "orch-slot-${ids.size + 1}".also(ids::add) },
+                inTransaction = targetRig.transaction
             )
         )
     )

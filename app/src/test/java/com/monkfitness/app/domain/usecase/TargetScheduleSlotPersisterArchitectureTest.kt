@@ -30,13 +30,16 @@ class TargetScheduleSlotPersisterArchitectureTest {
             .toList()
         val offenders = targetSources.mapNotNull { source ->
             if (source.readText().contains("ProgramScheduleRepository") ||
+                source.readText().contains("TargetScheduleOccurrenceRepository") ||
                 source.readText().contains("IdGenerator") ||
-                source.readText().contains("addSlots(")
+                source.readText().contains("addSlots(") ||
+                source.readText().contains("occurrenceRepository.store(")
             ) source.path else null
         }
 
         assertTrue("pure target components must not depend on persistence or id generation: $offenders", offenders.isEmpty())
         assertTrue(persisterFile.readText().contains("ProgramScheduleRepository"))
+        assertTrue(persisterFile.readText().contains("TargetScheduleOccurrenceRepository"))
         assertTrue(persisterFile.readText().contains("IdGenerator"))
     }
 
@@ -45,7 +48,12 @@ class TargetScheduleSlotPersisterArchitectureTest {
         val code = codeLines(persisterFile)
         val forbidden = listOf(
             "androidx.room", "AppDatabase", "ProgramWorkoutSlotDao", "ProgramWorkoutSlotEntity",
-            "Sqlite", "Room", "insertSlots", "updateOutcome", "recordSlotOutcome"
+            "Sqlite", "Room", "insertSlots", "updateOutcome", "recordSlotOutcome",
+            // §30 step 14: the boundary may name the occurrence *repository*, never the DAO, the
+            // entities or Room itself — a slot's payload and an occurrence's payload are two
+            // repositories, and the boundary that joins them is still not storage code.
+            "ProgramTargetOccurrenceDao", "ProgramTargetOccurrenceEntity",
+            "ProgramTargetOccurrenceComponentEntity"
         )
         val offenders = code.filter { line -> forbidden.any { token -> line.contains(token) } }
 
@@ -82,7 +90,10 @@ class TargetScheduleSlotPersisterArchitectureTest {
         val forbidden = listOf(
             "TargetPlanner", "TargetSchedulePolicy", "TargetScheduleResolver",
             "TargetOccurrenceComposer", "TargetOccurrenceReconciler", "TargetOccurrencePresenter",
-            "SlotPlanner", "ScheduleCalendar", "ProgramScheduler"
+            "SlotPlanner", "ScheduleCalendar", "ProgramScheduler",
+            // §30 step 14: the boundary stores and reads occurrences; it never *decides* one, and
+            // the reconciler is exactly the stage that would.
+            "TargetOccurrenceReconciler", "hasSamePayloadAs"
         )
         val offenders = codeLines(persisterFile).filter { line -> forbidden.any { token -> line.contains(token) } }
 
@@ -111,18 +122,69 @@ class TargetScheduleSlotPersisterArchitectureTest {
             TargetSlotPersistenceException::class.java,
             TargetScheduleSlotPersister::class.java
         )
+        // §30 step 14 extended this list explicitly rather than dropping it: the boundary now holds a
+        // second repository port and a transaction runner, and both are named here so a *third*
+        // collaborator is still a failure rather than a silence. The regression at the bottom of this
+        // class is what proves the list is closed rather than merely permissive.
+        val allowedCollaborators = listOf(
+            "com.monkfitness.app.data.repository.ProgramScheduleRepository",
+            "com.monkfitness.app.data.repository.TargetScheduleOccurrenceRepository",
+            "com.monkfitness.app.di.IdGenerator",
+            "kotlin.jvm.functions.Function2"
+        )
         val offenders = types.flatMap { type ->
             type.declaredMethods.flatMap { method ->
                 (method.parameterTypes.toList() + listOf(method.returnType)).mapNotNull { referenced ->
                     val name = if (referenced.isArray) referenced.componentType.name else referenced.name
                     val allowed = name.startsWith("kotlin.") || name.startsWith("java.") ||
-                        name.startsWith("com.monkfitness.app.domain.") || referenced.isPrimitive
+                        name.startsWith("com.monkfitness.app.domain.") || referenced.isPrimitive ||
+                        name in allowedCollaborators
                     if (allowed) null else "${type.simpleName}.${method.name} references $name"
                 }
             }
         }
 
         assertTrue("integration may depend on domain values and JVM coroutine types only: $offenders", offenders.isEmpty())
+    }
+
+    /**
+     * The regression that keeps the extended collaborator list a **closed** list.
+     *
+     * §30 step 14 had to widen [integrationInputKeepsTheDecisionAndPresentationAsValues]'s allow-list
+     * by exactly two entries — the target occurrence repository and the transaction runner. Widening a
+     * closed list is only safe if a third entry still fails, so this builds the same boundary with one
+     * extra, unlisted collaborator and asserts that the rule rejects it. Without this, "extended" and
+     * "opened" would be indistinguishable.
+     */
+    @Test
+    fun aThirdCollaboratorIsStillRefusedByTheClosedList() {
+        val allowed = listOf(
+            "com.monkfitness.app.data.repository.ProgramScheduleRepository",
+            "com.monkfitness.app.data.repository.TargetScheduleOccurrenceRepository",
+            "com.monkfitness.app.di.IdGenerator",
+            "kotlin.jvm.functions.Function2"
+        )
+        val permitted = allowed + "com.monkfitness.app.data.repository.ProgramRepository"
+        val names = (listOf("com.monkfitness.app.domain.usecase.TargetScheduleSlotPersister") +
+            permitted).map { Class.forName(it) }
+
+        val offenders = names.flatMap { type ->
+            type.declaredMethods.flatMap { method ->
+                (method.parameterTypes.toList() + listOf(method.returnType)).mapNotNull { referenced ->
+                    val name = if (referenced.isArray) referenced.componentType.name else referenced.name
+                    val allowedHere = name.startsWith("kotlin.") || name.startsWith("java.") ||
+                        name.startsWith("com.monkfitness.app.domain.") || referenced.isPrimitive ||
+                        name in allowed
+                    if (allowedHere) null else name
+                }
+            }
+        }
+
+        assertTrue(
+            "adding one more collaborator to the list is what makes the extended list closed again — " +
+                "the third repository is still refused: $offenders",
+            offenders.contains("com.monkfitness.app.data.repository.ProgramRepository")
+        )
     }
 
     private fun codeLines(source: File): List<String> = source.readText()
