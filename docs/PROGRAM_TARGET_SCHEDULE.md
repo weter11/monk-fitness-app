@@ -50,7 +50,7 @@ The target package may use `java.time`, Kotlin values, and pure `domain.program`
 
 ## Why the existing scheduler remains untouched
 
-This stage answers only “which target dates does this rule produce in this explicit window?” Composition remains the separate question of which already-resolved rules appear together. The shipped scheduler still owns its existing §30 persistence-facing behavior. Later wiring, persistence, runtime, adaptive, progress, import/export, UI, and legacy work remain outside Stage 2.
+This stage answers only “which target dates does this rule produce in this explicit window?” Stage 3 (`docs/PROGRAM_TARGET_COMPOSITION.md`) then answers the separate question of which already-resolved occurrences appear together. The shipped scheduler still owns its existing §30 persistence-facing behavior. Later wiring, persistence, runtime, adaptive, progress, import/export, UI, and legacy work remain outside Stage 2.
 
 ## Verification map
 

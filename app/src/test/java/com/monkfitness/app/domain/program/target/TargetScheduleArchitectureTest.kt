@@ -17,7 +17,10 @@ class TargetScheduleArchitectureTest {
     fun targetPackageContainsOnlyTheFocusedPureStage() {
         val sources = targetDir.listFiles { file -> file.isFile && file.extension == "kt" }?.toList().orEmpty()
 
-        assertEquals(listOf("TargetScheduleResolver.kt"), sources.map { it.name }.sorted())
+        assertEquals(
+            listOf("TargetOccurrenceComposer.kt", "TargetScheduleResolver.kt"),
+            sources.map { it.name }.sorted()
+        )
     }
 
     @Test
