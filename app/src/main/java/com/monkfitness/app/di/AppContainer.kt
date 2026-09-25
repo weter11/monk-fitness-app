@@ -39,6 +39,7 @@ import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
 import com.monkfitness.app.domain.usecase.ProgramSaveService
 import com.monkfitness.app.domain.usecase.TargetScheduleApplicationService
+import com.monkfitness.app.domain.usecase.TargetScheduleOrchestrator
 import com.monkfitness.app.domain.usecase.TargetScheduleSlotPersister
 import com.monkfitness.app.domain.usecase.SessionRuntime
 import com.monkfitness.app.domain.program.StandardProgram
@@ -305,6 +306,11 @@ class AppContainer(
         TargetScheduleApplicationService(
             slotPersister = targetScheduleSlotPersister
         )
+
+    /** Phase 12 orchestration over planner, policy and the application boundary. */
+    val targetScheduleOrchestrator: TargetScheduleOrchestrator = TargetScheduleOrchestrator(
+        applicationService = targetScheduleApplicationService
+    )
 
     /** The idempotent production bootstrap for the product-owned Standard Program. */
     val standardProgramBootstrap: StandardProgramBootstrap = StandardProgramBootstrap(
