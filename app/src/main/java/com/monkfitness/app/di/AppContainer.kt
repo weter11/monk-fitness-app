@@ -38,6 +38,7 @@ import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
 import com.monkfitness.app.domain.usecase.ProgramSaveService
+import com.monkfitness.app.domain.usecase.TargetScheduleSlotPersister
 import com.monkfitness.app.domain.usecase.SessionRuntime
 import com.monkfitness.app.domain.program.StandardProgram
 import java.time.ZoneId
@@ -290,6 +291,12 @@ class AppContainer(
         idGenerator = idGenerator,
         zone = zone,
         inTransaction = inTransaction
+    )
+
+    /** Target-stage persistence bridge; it is wired beside, never into, the legacy Scheduler. */
+    val targetScheduleSlotPersister: TargetScheduleSlotPersister = TargetScheduleSlotPersister(
+        scheduleRepository = programScheduleRepository,
+        idGenerator = idGenerator
     )
 
     /** The idempotent production bootstrap for the product-owned Standard Program. */
