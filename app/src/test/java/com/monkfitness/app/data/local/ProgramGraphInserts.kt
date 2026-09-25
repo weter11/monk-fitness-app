@@ -20,7 +20,11 @@ package com.monkfitness.app.data.local
 internal object ProgramGraphInserts {
 
     /** One row in every target table, all keyed by [key]. */
-    fun insertCompleteProgram(database: SqliteTestDatabase, key: String) {
+    fun insertCompleteProgram(
+        database: SqliteTestDatabase,
+        key: String,
+        targetOccurrenceKey: String? = null
+    ) {
         val program = "program-$key"
         val revision = "revision-$key"
         val day = "day-$key"
@@ -51,10 +55,11 @@ internal object ProgramGraphInserts {
                 "`exerciseId`, `prescriptionDimension`, `perSetTargets`, `origin`, `isPinned`) " +
                 "VALUES ('$planExercise', '$day', 1, 'pushup', 'REP_BASED', '12,10,8,6', 'GENERATED', 0)"
         )
+        val slotColumns = "`plannedFor`, `status`, `completedAt`${if (targetOccurrenceKey == null) "" else ", `targetOccurrenceKey`"}"
+        val slotValues = "'2026-09-18', 'PLANNED', NULL${if (targetOccurrenceKey == null) "" else ", '$targetOccurrenceKey'"}"
         database.exec(
             "INSERT INTO `program_workout_slot` (`slotId`, `programId`, `revisionId`, `programDayId`, " +
-                "`plannedFor`, `status`, `completedAt`) VALUES ('$slot', '$program', '$revision', " +
-                "'$day', '2026-09-18', 'PLANNED', NULL)"
+                "$slotColumns) VALUES ('$slot', '$program', '$revision', '$day', $slotValues)"
         )
         database.exec(
             "INSERT INTO `workout_session` (`sessionId`, `slotId`, `programId`, `revisionId`, " +

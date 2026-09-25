@@ -43,7 +43,8 @@ internal fun ProgramWorkoutSlotEntity.toDomain(attempts: List<SessionId>): Worko
     plannedFor = storedDate("program_workout_slot.plannedFor", plannedFor),
     status = storedToken(status, SlotStatus.entries, "program_workout_slot.status"),
     attempts = attempts,
-    completedAt = completedAt?.let { storedInstant("program_workout_slot.completedAt", it) }
+    completedAt = completedAt?.let { storedInstant("program_workout_slot.completedAt", it) },
+    targetOccurrenceKey = targetOccurrenceKey
 )
 
 /**
@@ -58,7 +59,8 @@ internal fun WorkoutSlot.toEntity(): ProgramWorkoutSlotEntity = ProgramWorkoutSl
     programDayId = programDayId.value,
     plannedFor = storedDateValue(plannedFor),
     status = status.name,
-    completedAt = completedAt?.let { storedMilliseconds(it) }
+    completedAt = completedAt?.let { storedMilliseconds(it) },
+    targetOccurrenceKey = targetOccurrenceKey
 )
 
 /** The domain pause interval of one stored row. */

@@ -34,6 +34,18 @@ interface ProgramWorkoutSlotDao {
     @Query("SELECT * FROM `program_workout_slot` WHERE `slotId` = :slotId LIMIT 1")
     suspend fun slotById(slotId: String): ProgramWorkoutSlotEntity?
 
+    /**
+     * The slot persisted for one semantic target occurrence within one Program, or `null`.
+     *
+     * The lookup is exactly the stored identity pair. It never falls back to a date, plan day,
+     * revision or position: those are slot facts, not substitutes for the occurrence key.
+     */
+    @Query("SELECT * FROM `program_workout_slot` WHERE `programId` = :programId AND `targetOccurrenceKey` = :targetOccurrenceKey LIMIT 1")
+    suspend fun slotByTargetOccurrenceKey(
+        programId: String,
+        targetOccurrenceKey: String
+    ): ProgramWorkoutSlotEntity?
+
     /** Every slot of one Program, earliest planned date first, identity as the tiebreak. */
     @Query("SELECT * FROM `program_workout_slot` WHERE `programId` = :programId ORDER BY `plannedFor` ASC, `slotId` ASC")
     suspend fun slotsOfProgram(programId: String): List<ProgramWorkoutSlotEntity>

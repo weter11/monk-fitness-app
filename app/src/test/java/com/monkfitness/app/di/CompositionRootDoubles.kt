@@ -256,6 +256,7 @@ internal class CompositionRootRig(
         database.migrate(AppDatabase.MIGRATION_9_10)
         database.migrate(AppDatabase.MIGRATION_10_11)
         database.migrate(AppDatabase.MIGRATION_11_12)
+        database.migrate(AppDatabase.MIGRATION_12_13)
     }
 
     val database = SqliteAppDatabase(engine)

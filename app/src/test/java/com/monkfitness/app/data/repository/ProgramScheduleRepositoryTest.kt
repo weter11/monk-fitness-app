@@ -114,6 +114,127 @@ class ProgramScheduleRepositoryTest {
     }
 
     @Test
+    fun targetIdentityLookupUsesOnlyProgramAndOccurrenceKey() = runBlocking {
+        rig.createGraph()
+        val target = targetSlot("slot-a-4", "2026-10-05", "strength:2026-10-05")
+        rig.programScheduleRepository.addSlots(listOf(target))
+
+        val found = rig.programScheduleRepository.slotByTargetOccurrenceKey(
+            programId,
+            "strength:2026-10-05"
+        )
+
+        assertEquals(target, found)
+        assertNull(
+            rig.programScheduleRepository.slotByTargetOccurrenceKey(programId, "missing:2026-10-05")
+        )
+        assertNull(
+            "the same date is not a fallback identity",
+            rig.programScheduleRepository.slotByTargetOccurrenceKey(programId, "mobility:2026-10-05")
+        )
+        assertEquals(
+            ProgramDaoSql.PROGRAM_WORKOUT_SLOT_DAO_SLOT_BY_TARGET_OCCURRENCE_KEY,
+            "SELECT * FROM `program_workout_slot` WHERE `programId` = :programId AND " +
+                "`targetOccurrenceKey` = :targetOccurrenceKey LIMIT 1"
+        )
+    }
+
+    @Test
+    fun oneProgramCanPersistMultipleTargetOccurrencesOnTheSameDate() = runBlocking {
+        rig.createGraph()
+        val strength = targetSlot("slot-a-4", "2026-10-05", "strength:2026-10-05")
+        val mobility = targetSlot("slot-a-5", "2026-10-05", "mobility:2026-10-05")
+
+        rig.programScheduleRepository.addSlots(listOf(strength, mobility))
+
+        val stored = rig.programScheduleRepository.slotsOfProgram(programId)
+            .filter { it.plannedFor == LocalDate.parse("2026-10-05") }
+        assertEquals(listOf(strength, mobility), stored)
+        assertEquals(
+            "each semantic key finds its own row",
+            strength,
+            rig.programScheduleRepository.slotByTargetOccurrenceKey(
+                programId,
+                "strength:2026-10-05"
+            )
+        )
+        assertEquals(
+            mobility,
+            rig.programScheduleRepository.slotByTargetOccurrenceKey(programId, "mobility:2026-10-05")
+        )
+    }
+
+    @Test
+    fun oneProgramCannotPersistTheSameTargetOccurrenceTwiceButAnotherProgramMay() = runBlocking {
+        rig.createGraph()
+        val first = targetSlot("slot-a-4", "2026-10-05", "strength:2026-10-05")
+        val duplicate = first.copy(slotId = SlotId("slot-a-duplicate"))
+        rig.programScheduleRepository.addSlots(listOf(first))
+
+        val duplicateFailure = runCatching {
+            rig.programScheduleRepository.addSlots(listOf(duplicate))
+        }.exceptionOrNull()
+        assertTrue(
+            "the Program/key unique index refuses the duplicate: $duplicateFailure",
+            duplicateFailure?.message?.contains("UNIQUE constraint failed") == true
+        )
+        assertNull(rig.programScheduleRepository.slotById(duplicate.slotId))
+
+        val otherProgram = ProgramId(ProgramGraphFixture.programId("b"))
+        val otherGraph = ProgramGraphFixture.graph("b")
+        rig.programRepository.createProgram(otherGraph.program, otherGraph.revision, otherGraph.slots)
+        val sameKeyElsewhere = targetSlot(
+            "slot-b-4",
+            "2026-10-05",
+            "strength:2026-10-05",
+            otherProgram,
+            otherGraph.revision.revisionId,
+            otherGraph.revision.days.first().programDayId
+        )
+        rig.programScheduleRepository.addSlots(listOf(sameKeyElsewhere))
+        assertEquals(
+            "identity is scoped by Program",
+            sameKeyElsewhere,
+            rig.programScheduleRepository.slotByTargetOccurrenceKey(
+                otherProgram,
+                "strength:2026-10-05"
+            )
+        )
+    }
+
+    @Test
+    fun multipleLegacyNullTargetKeysCanShareAProgramAndDate() = runBlocking {
+        rig.createGraph()
+        val first = targetSlot("slot-a-4", "2026-10-05", null)
+        val second = targetSlot("slot-a-5", "2026-10-05", null)
+
+        rig.programScheduleRepository.addSlots(listOf(first, second))
+
+        assertEquals(
+            listOf(first, second),
+            rig.programScheduleRepository.slotsOfProgram(programId)
+                .filter { it.plannedFor == LocalDate.parse("2026-10-05") }
+        )
+    }
+
+    private fun targetSlot(
+        slotId: String,
+        date: String,
+        targetOccurrenceKey: String?,
+        owner: ProgramId = programId,
+        revision: RevisionId = revisionId,
+        day: ProgramDayId = ProgramDayId(ProgramGraphFixture.dayId("a", 1))
+    ) = WorkoutSlot(
+        slotId = SlotId(slotId),
+        programId = owner,
+        revisionId = revision,
+        programDayId = day,
+        plannedFor = LocalDate.parse(date),
+        status = SlotStatus.PLANNED,
+        targetOccurrenceKey = targetOccurrenceKey
+    )
+
+    @Test
     fun recordingAnOutcomeChangesThatSlotAndNothingElse() = runBlocking {
         rig.createGraph()
         val missed = SlotId(ProgramGraphFixture.slotId("a", 1))
@@ -174,7 +295,7 @@ class ProgramScheduleRepositoryTest {
             "and the surface is the slots and the pauses",
             listOf(
                 "addPause", "addSlots", "closePause", "countSlots", "pauseById", "pausesOfProgram",
-                "recordSlotOutcome", "slotById", "slotsFrom", "slotsOfProgram", "slotsOfRevision"
+                "recordSlotOutcome", "slotById", "slotByTargetOccurrenceKey", "slotsFrom", "slotsOfProgram", "slotsOfRevision"
             ),
             names.sorted()
         )

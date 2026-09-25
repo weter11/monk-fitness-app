@@ -59,7 +59,12 @@ import androidx.room.PrimaryKey
     indices = [
         Index("programId"),
         Index("programDayId"),
-        Index("revisionId", "plannedFor")
+        Index("revisionId", "plannedFor"),
+        Index(
+            value = ["programId", "targetOccurrenceKey"],
+            unique = true,
+            name = "index_program_workout_slot_programId_targetOccurrenceKey"
+        )
     ]
 )
 data class ProgramWorkoutSlotEntity(
@@ -69,10 +74,14 @@ data class ProgramWorkoutSlotEntity(
     val programDayId: String,
     val plannedFor: String,
     val status: String,
-    val completedAt: Long? = null
+    val completedAt: Long? = null,
+    val targetOccurrenceKey: String? = null
 ) {
 
     init {
+        require(targetOccurrenceKey == null || targetOccurrenceKey.isNotBlank()) {
+            "targetOccurrenceKey is either absent for a legacy slot or non-blank"
+        }
         require((status == COMPLETED) == (completedAt != null)) {
             "only a $COMPLETED slot happened, and a completed slot says when: status=$status " +
                 "completedAt=$completedAt"

@@ -53,6 +53,9 @@ internal object ProgramDaoSql {
     /** `ProgramWorkoutSlotDao.slotById`. */
     const val PROGRAM_WORKOUT_SLOT_DAO_SLOT_BY_ID = "SELECT * FROM `program_workout_slot` WHERE `slotId` = :slotId LIMIT 1"
 
+    /** `ProgramWorkoutSlotDao.slotByTargetOccurrenceKey`. */
+    const val PROGRAM_WORKOUT_SLOT_DAO_SLOT_BY_TARGET_OCCURRENCE_KEY = "SELECT * FROM `program_workout_slot` WHERE `programId` = :programId AND `targetOccurrenceKey` = :targetOccurrenceKey LIMIT 1"
+
     /** `ProgramWorkoutSlotDao.slotsOfProgram`. */
     const val PROGRAM_WORKOUT_SLOT_DAO_SLOTS_OF_PROGRAM = "SELECT * FROM `program_workout_slot` WHERE `programId` = :programId ORDER BY `plannedFor` ASC, `slotId` ASC"
 
@@ -195,6 +198,7 @@ internal object ProgramDaoSql {
         "ProgramDayDao.daysOfRevision" to PROGRAM_DAY_DAO_DAYS_OF_REVISION,
         "ProgramExerciseDao.exercisesOfRevision" to PROGRAM_EXERCISE_DAO_EXERCISES_OF_REVISION,
         "ProgramWorkoutSlotDao.slotById" to PROGRAM_WORKOUT_SLOT_DAO_SLOT_BY_ID,
+        "ProgramWorkoutSlotDao.slotByTargetOccurrenceKey" to PROGRAM_WORKOUT_SLOT_DAO_SLOT_BY_TARGET_OCCURRENCE_KEY,
         "ProgramWorkoutSlotDao.slotsOfProgram" to PROGRAM_WORKOUT_SLOT_DAO_SLOTS_OF_PROGRAM,
         "ProgramWorkoutSlotDao.slotsOfRevision" to PROGRAM_WORKOUT_SLOT_DAO_SLOTS_OF_REVISION,
         "ProgramWorkoutSlotDao.slotsFrom" to PROGRAM_WORKOUT_SLOT_DAO_SLOTS_FROM,

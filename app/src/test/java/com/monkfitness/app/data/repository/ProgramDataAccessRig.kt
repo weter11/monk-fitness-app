@@ -193,6 +193,7 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
             // step too — otherwise every repository suite would be exercising a database the app can
             // no longer produce.
             database.migrate(AppDatabase.MIGRATION_11_12)
+            database.migrate(AppDatabase.MIGRATION_12_13)
         }
     }
 }
@@ -335,6 +336,11 @@ private class FailingProgramWorkoutSlotDao(
     override suspend fun insertSlots(slots: List<ProgramWorkoutSlotEntity>) = delegate.insertSlots(slots)
 
     override suspend fun slotById(slotId: String): ProgramWorkoutSlotEntity? = delegate.slotById(slotId)
+
+    override suspend fun slotByTargetOccurrenceKey(
+        programId: String,
+        targetOccurrenceKey: String
+    ): ProgramWorkoutSlotEntity? = delegate.slotByTargetOccurrenceKey(programId, targetOccurrenceKey)
 
     override suspend fun slotsOfProgram(programId: String): List<ProgramWorkoutSlotEntity> {
         if (faults.failSlotRead) throw IllegalStateException("planted fault: slot read")

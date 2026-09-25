@@ -53,7 +53,7 @@ class MissedAndCancelledAreNotZeroPerformanceTest {
         assertEquals(
             setOf(
                 "slotId", "programId", "revisionId", "programDayId", "plannedFor", "status",
-                "attempts", "completedAt"
+                "attempts", "completedAt", "targetOccurrenceKey"
             ),
             fields
         )

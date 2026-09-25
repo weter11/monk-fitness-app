@@ -3,6 +3,7 @@ package com.monkfitness.app.data.local
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.sql.SQLException
@@ -88,8 +89,10 @@ class ProgramMigrationPreservationTest {
         // The deployed chain, in the order a device runs it.
         database.migrate(AppDatabase.MIGRATION_9_10)
         database.migrate(AppDatabase.MIGRATION_10_11)
-        // §30 step 15: the retirement step, and the last one in the chain.
+        // §30 step 15: the retirement step.
         database.migrate(AppDatabase.MIGRATION_11_12)
+        // Target slot semantic identity: nullable, additive, and no legacy backfill.
+        database.migrate(AppDatabase.MIGRATION_12_13)
     }
 
     /** A populated **version-8** database: what a device that ran the target-schema release holds. */
@@ -534,7 +537,10 @@ class ProgramMigrationPreservationTest {
         )
         assertEquals(
             "a missed opportunity records no amount at all — there is no column to zero (§12)",
-            listOf("slotId", "programId", "revisionId", "programDayId", "plannedFor", "status", "completedAt"),
+            listOf(
+                "slotId", "programId", "revisionId", "programDayId", "plannedFor", "status", "completedAt",
+                "targetOccurrenceKey"
+            ),
             database.columnNames("program_workout_slot")
         )
         assertEquals(
@@ -596,6 +602,7 @@ class ProgramMigrationPreservationTest {
             database.migrate(AppDatabase.MIGRATION_9_10)
             database.migrate(AppDatabase.MIGRATION_10_11)
             database.migrate(AppDatabase.MIGRATION_11_12)
+            database.migrate(AppDatabase.MIGRATION_12_13)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }
@@ -619,6 +626,39 @@ class ProgramMigrationPreservationTest {
             (ProgramSchemaFixture.ALL_TABLES_AT_CURRENT_VERSION + "room_master_table").sorted(),
             database.tableNames().filterNot { it.startsWith("sqlite_") }.sorted()
         )
+    }
+
+    @Test
+    fun targetIdentityMigrationPreservesAPopulatedLegacySlotAndItsSessions() {
+        val database = SqliteTestDatabase.inMemory()
+        database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
+        database.migrate(AppDatabase.MIGRATION_7_8)
+        database.migrate(AppDatabase.MIGRATION_8_9)
+        database.migrate(AppDatabase.MIGRATION_9_10)
+        database.migrate(AppDatabase.MIGRATION_10_11)
+        database.migrate(AppDatabase.MIGRATION_11_12)
+        ProgramGraphInserts.insertCompleteProgram(database, "v12", targetOccurrenceKey = null)
+        val slotBefore = database.rows(
+            "SELECT `slotId`, `programId`, `revisionId`, `programDayId`, `plannedFor`, `status`, " +
+                "`completedAt` FROM `program_workout_slot` WHERE `slotId` = 'slot-v12'"
+        ).single()
+        val sessionsBefore = database.rows("SELECT * FROM `workout_session`")
+
+        database.migrate(AppDatabase.MIGRATION_12_13)
+
+        assertEquals(
+            "the existing row and every old value survive byte for byte",
+            slotBefore,
+            database.rows(
+                "SELECT `slotId`, `programId`, `revisionId`, `programDayId`, `plannedFor`, `status`, " +
+                    "`completedAt` FROM `program_workout_slot` WHERE `slotId` = 'slot-v12'"
+            ).single()
+        )
+        assertNull(
+            "a legacy slot has no artificial target identity",
+            database.scalar("SELECT `targetOccurrenceKey` FROM `program_workout_slot` WHERE `slotId` = 'slot-v12'")
+        )
+        assertEquals("its session rows are untouched", sessionsBefore, database.rows("SELECT * FROM `workout_session`"))
     }
 
     @Test

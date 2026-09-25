@@ -402,6 +402,11 @@ private class FaultableSlotDao(
 
     override suspend fun slotById(slotId: String): ProgramWorkoutSlotEntity? = delegate.slotById(slotId)
 
+    override suspend fun slotByTargetOccurrenceKey(
+        programId: String,
+        targetOccurrenceKey: String
+    ): ProgramWorkoutSlotEntity? = delegate.slotByTargetOccurrenceKey(programId, targetOccurrenceKey)
+
     override suspend fun slotsOfProgram(programId: String): List<ProgramWorkoutSlotEntity> =
         delegate.slotsOfProgram(programId)
 

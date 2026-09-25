@@ -111,6 +111,9 @@ class ProgramSchemaTest {
     /** Every statement the version-10 → version-11 step executes: §30 step 12's window bookkeeping. */
     private fun windowStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_10_11)
 
+    /** The two exact statements the target-slot-identity migration executes, in order. */
+    private fun targetOccurrenceStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_12_13)
+
     private fun allAdditiveStatements(): List<String> =
         additiveStatements() + focusStatements() + windowStatements()
 
@@ -293,8 +296,14 @@ class ProgramSchemaTest {
         )
         assertEquals(12, AppDatabase.MIGRATION_11_12.endVersion)
         assertEquals(
+            "target slot identity is the next additive step",
+            12,
+            AppDatabase.MIGRATION_12_13.startVersion
+        )
+        assertEquals(13, AppDatabase.MIGRATION_12_13.endVersion)
+        assertEquals(
             "and the declared version is where the chain ends",
-            AppDatabase.MIGRATION_11_12.endVersion,
+            AppDatabase.MIGRATION_12_13.endVersion,
             currentVersion()
         )
     }
@@ -990,6 +999,31 @@ class ProgramSchemaTest {
     )
 
     @Test
+    fun theFreshRoomSchemaContainsTheFinalSlotIdentityDefinition() {
+        val generated = sequenceOf(
+            File("build/generated/ksp/debug/java/com/monkfitness/app/data/local/AppDatabase_Impl.java"),
+            File("app/build/generated/ksp/debug/java/com/monkfitness/app/data/local/AppDatabase_Impl.java")
+        ).first(File::isFile).readText()
+
+        assertTrue(
+            "fresh Room DDL declares the nullable semantic identity",
+            generated.contains("`targetOccurrenceKey` TEXT")
+        )
+        assertTrue(
+            "fresh Room DDL declares the same unique Program/key index",
+            generated.contains(
+                "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                    "`index_program_workout_slot_programId_targetOccurrenceKey`"
+            )
+        )
+        assertTrue(
+            "plannedFor is not made a unique identity by this stage",
+            !generated.contains("UNIQUE INDEX IF NOT EXISTS `index_program_workout_slot_plannedFor`") &&
+                !generated.contains("UNIQUE INDEX IF NOT EXISTS `index_program_workout_slot_programId_plannedFor`")
+        )
+    }
+
+    @Test
     fun theMigratedRevisionTableIsTheTableTheContractDescribes() {
         // Room validates a migrated table against the DDL it generates for the entity on open, so the
         // claim that matters is: the table a v9 device ends up with **is** the DDL the entity emits.
@@ -1087,6 +1121,70 @@ class ProgramSchemaTest {
         scheduleSessionsPerWeek = sessionsPerWeek,
         createdAt = 1_700_000_000_000L
     )
+
+    @Test
+    fun theTargetOccurrenceMigrationChangesOnlyTheSlotColumnsAndIndices() {
+        val statements = targetOccurrenceStatements()
+
+        assertEquals(
+            normalized(
+                listOf(
+                    "ALTER TABLE `program_workout_slot` ADD COLUMN `targetOccurrenceKey` TEXT",
+                    "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                        "`index_program_workout_slot_programId_targetOccurrenceKey` " +
+                        "ON `program_workout_slot` (`programId`, `targetOccurrenceKey`)"
+                )
+            ),
+            normalized(statements)
+        )
+        assertTrue(
+            "12 -> 13 is additive and assigns, rewrites, deletes, drops or renames no row: $statements",
+            statements.none { statement ->
+                Regex("\\b(UPDATE|INSERT|DELETE|DROP|RENAME|REPLACE)\\b")
+                    .containsMatchIn(statement.uppercase())
+            }
+        )
+        assertTrue(
+            "the nullable target identity has no invented default: $statements",
+            statements.none { it.contains("DEFAULT", ignoreCase = true) }
+        )
+    }
+
+    @Test
+    fun theSlotIdentityColumnsAndIndicesAreDistinctFromItsStorageIdentity() {
+        assertEquals(
+            "slotId remains the storage primary key; targetOccurrenceKey is semantic identity",
+            listOf("slotId"),
+            ProgramSchemaFixture.PRIMARY_KEYS.getValue("program_workout_slot")
+        )
+        assertEquals(
+            "the current slot row has the nullable target identity appended",
+            listOf(
+                "slotId", "programId", "revisionId", "programDayId", "plannedFor", "status", "completedAt",
+                "targetOccurrenceKey"
+            ),
+            ProgramSchemaFixture.columnsNow("program_workout_slot").map { it.name }
+        )
+        assertTrue(
+            "targetOccurrenceKey is nullable and the mapper/database never defaults it",
+            ProgramSchemaFixture.columnsAddedBy("MIGRATION_12_13", "program_workout_slot")
+                .single() == ProgramSchemaFixture.Column("targetOccurrenceKey", "TEXT", nullable = true)
+        )
+        val slotIndices = ProgramSchemaFixture.INDEXES.getValue("program_workout_slot")
+        assertEquals(
+            listOf("programId", "targetOccurrenceKey"),
+            slotIndices.single { it.name == "index_program_workout_slot_programId_targetOccurrenceKey" }
+                .columns
+        )
+        assertTrue(
+            "one Program cannot hold the same semantic target identity twice",
+            slotIndices.single { it.name == "index_program_workout_slot_programId_targetOccurrenceKey" }.unique
+        )
+        assertTrue(
+            "a date is deliberately not target identity: several occurrences may share it",
+            slotIndices.none { it.columns == listOf("plannedFor") || it.columns == listOf("programId", "plannedFor") }
+        )
+    }
 
     @Test
     fun theSlotCarriesNoAmountOfWork() {
@@ -1479,7 +1577,9 @@ class ProgramSchemaTest {
 
     @Test
     fun everyDeclaredColumnIsStoredInTheStatementThatIntroducesIt() {
-        val added = ProgramSchemaFixture.normalized(allAdditiveStatements().joinToString(" "))
+        val added = ProgramSchemaFixture.normalized(
+            (allAdditiveStatements() + targetOccurrenceStatements()).joinToString(" ")
+        )
 
         for (table in ProgramSchemaFixture.TABLES) {
             val created = ProgramSchemaFixture.normalized(statementFor(table))

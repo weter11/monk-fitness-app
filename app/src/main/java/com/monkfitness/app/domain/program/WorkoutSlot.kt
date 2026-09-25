@@ -37,6 +37,9 @@ import java.time.LocalDate
  * @property status what happened to the opportunity.
  * @property attempts the sessions started for it, in start order.
  * @property completedAt when a session completed it, or `null`.
+ * @property targetOccurrenceKey the semantic identity of the target occurrence this slot persists, or
+ *   `null` for a legacy/non-target slot. It never replaces [slotId], and neither [plannedFor] nor
+ *   [programDayId] is a substitute for it.
  */
 data class WorkoutSlot(
     val slotId: SlotId,
@@ -46,10 +49,14 @@ data class WorkoutSlot(
     val plannedFor: LocalDate,
     val status: SlotStatus,
     val attempts: List<SessionId> = emptyList(),
-    val completedAt: Instant? = null
+    val completedAt: Instant? = null,
+    val targetOccurrenceKey: String? = null
 ) {
 
     init {
+        require(targetOccurrenceKey == null || targetOccurrenceKey.isNotBlank()) {
+            "targetOccurrenceKey is either absent for a legacy slot or non-blank"
+        }
         require(attempts.toSet().size == attempts.size) {
             "a session belongs to a slot at most once"
         }
