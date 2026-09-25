@@ -14,12 +14,13 @@ class TargetScheduleArchitectureTest {
     private val targetDir = File(mainDir, "domain/program/target")
 
     @Test
-    fun targetPackageContainsOnlyTheFocusedPureStage() {
+    fun targetPackageContainsExactlyTheStageTwoThroughSevenProductionFiles() {
         val sources = targetDir.listFiles { file -> file.isFile && file.extension == "kt" }?.toList().orEmpty()
 
         assertEquals(
             listOf(
                 "TargetOccurrenceComposer.kt",
+                "TargetOccurrencePresenter.kt",
                 "TargetOccurrenceReconciler.kt",
                 "TargetPlanner.kt",
                 "TargetSchedulePolicy.kt",

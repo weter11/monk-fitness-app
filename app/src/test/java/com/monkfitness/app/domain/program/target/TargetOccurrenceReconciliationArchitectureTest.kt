@@ -85,7 +85,7 @@ class TargetOccurrenceReconciliationArchitectureTest {
     }
 
     @Test
-    fun targetPackageNowContainsExactlyResolverComposerAndReconciler() {
+    fun targetPackageNowContainsExactlyTheStageTwoThroughSevenProductionFiles() {
         val sources = targetDir.listFiles { file -> file.isFile && file.extension == "kt" }
             .orEmpty()
             .map { it.name }
@@ -94,6 +94,7 @@ class TargetOccurrenceReconciliationArchitectureTest {
         assertEquals(
             listOf(
                 "TargetOccurrenceComposer.kt",
+                "TargetOccurrencePresenter.kt",
                 "TargetOccurrenceReconciler.kt",
                 "TargetPlanner.kt",
                 "TargetSchedulePolicy.kt",
