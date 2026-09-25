@@ -74,12 +74,34 @@ class TargetSchedulePolicyArchitectureTest {
     }
 
     @Test
-    fun stageSixIsNotWiredIntoAnyOtherProductionPackage() {
+    fun stageSixHasExactlyOneProductionCallerAndItIsTheStageTwelveOrchestrator() {
+        // Stage 12 revised this claim rather than relaxing it. While nothing orchestrated a pass, the
+        // pin was an *absence*: no production source outside the pure target package named the
+        // policy. The Stage 12 orchestrator is now that one caller, so the closed list is the
+        // single-element one and a second consumer appearing later still fails here.
         val outsideReferences = File(mainDir, "domain").walkTopDown()
             .filter { it.isFile && it.extension == "kt" && it.parentFile != targetDir }
             .mapNotNull { source -> if (source.readText().contains("TargetSchedulePolicy")) source.path else null }
+            .map { it.replace(File.separatorChar, '/').substringAfter("/com/monkfitness/app/") }
+            .sorted()
             .toList()
-        assertTrue("Stage 6 must not wire the existing scheduler: $outsideReferences", outsideReferences.isEmpty())
+
+        assertEquals(listOf("domain/usecase/TargetScheduleOrchestrator.kt"), outsideReferences)
+        assertLegacyContourDoesNotReach("TargetSchedulePolicy")
+    }
+
+    /**
+     * The legacy contour must never reach a target stage: it is a separate generation, and this
+     * assertion is kept explicit so an inversion above can never quietly remove it.
+     */
+    private fun assertLegacyContourDoesNotReach(token: String) {
+        assertTrue(File(mainDir, "domain/usecase/ProgramScheduler.kt").isFile)
+        assertTrue(File(mainDir, "domain/program/SlotPlanner.kt").isFile)
+        assertTrue(File(mainDir, "domain/program/ScheduleCalendar.kt").isFile)
+        listOf("ProgramScheduler.kt", "SlotPlanner.kt", "ScheduleCalendar.kt").forEach { name ->
+            val source = File(mainDir, "domain").walkTopDown().first { it.name == name }
+            assertTrue("the legacy contour must not reach $token: $name", !source.readText().contains(token))
+        }
     }
 
     private fun codeLines(source: File): List<String> = source.readText()

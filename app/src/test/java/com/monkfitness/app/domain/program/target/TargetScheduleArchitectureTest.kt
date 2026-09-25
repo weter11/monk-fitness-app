@@ -100,7 +100,13 @@ class TargetScheduleArchitectureTest {
     }
 
     @Test
-    fun oldSchedulerSourcesRemainOutsideAndTheNewLayerIsNotWiredIntoProduction() {
+    fun oldSchedulerSourcesRemainOutsideAndStageTwoHasExactlyOneProductionCaller() {
+        // Stage 12 revised this claim rather than relaxing it. While nothing orchestrated a pass, the
+        // pin was an *absence*: no production source outside the pure target package named a Stage 2
+        // type. The Stage 12 orchestrator request now carries a TargetScheduleWindow and a
+        // ResolvedScheduleSource map, so the closed list is the single-element one and a second
+        // consumer appearing later still fails here. The resolver itself stays uncalled: Stage 2's
+        // date resolution is still the planner's alone.
         val otherProduction = File(mainDir, "domain").walkTopDown()
             .filter { it.isFile && it.extension == "kt" && it.parentFile != targetDir }
             .toList()
@@ -109,13 +115,25 @@ class TargetScheduleArchitectureTest {
             if (
                 text.contains("TargetScheduleResolver") ||
                 text.contains("TargetScheduleWindow") ||
-                text.contains("ResolvedScheduleOccurrence")
+                text.contains("ResolvedScheduleOccurrence") ||
+                text.contains("ResolvedScheduleSource")
             ) source.path else null
         }
+            .map { it.replace(File.separatorChar, '/').substringAfter("/com/monkfitness/app/") }
+            .sorted()
+            .toList()
 
+        assertEquals(listOf("domain/usecase/TargetScheduleOrchestrator.kt"), outsideReferences)
         assertTrue(File(mainDir, "domain/program/SlotPlanner.kt").isFile)
         assertTrue(File(mainDir, "domain/program/ScheduleCalendar.kt").isFile)
-        assertTrue("Stage 2 must not wire the existing Scheduler: $outsideReferences", outsideReferences.isEmpty())
+        listOf(
+            File(mainDir, "domain/usecase/ProgramScheduler.kt"),
+            File(mainDir, "domain/program/SlotPlanner.kt"),
+            File(mainDir, "domain/program/ScheduleCalendar.kt")
+        ).forEach { legacy ->
+            val text = legacy.readText()
+            assertTrue("the legacy contour must not reach Stage 2: ${legacy.name}", !text.contains("TargetSchedule"))
+        }
     }
 
     private fun codeLines(source: File): List<String> = source.readText()
