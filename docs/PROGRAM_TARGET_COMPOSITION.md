@@ -105,5 +105,6 @@ The existing `ProgramScheduler`, `SlotPlanner`, and `ScheduleCalendar` are untou
 
 - `TargetOccurrenceComposerTest`: composition semantics, selective grouping, missing selected rules, date boundaries, input/set-order independence, canonical ordering, deterministic identity, duplicate and blank validation, empty output, pure result shape, strong semantic example permutations, and Stage 1 parity.
 - `TargetOccurrenceCompositionArchitectureTest`: pure dependency direction, no resolver/date resolution, no platform/storage/runtime/UI, no ambient state, no scheduler wiring, and exact target package contents.
-- `TargetScheduleArchitectureTest`: Stage 2's exact target-package census was revised from one source to the two focused sources; its purity and non-wiring rules were not relaxed.
+- `TargetOccurrenceReconciliationArchitectureTest` and `TargetScheduleArchitectureTest`: Stage 4 extends the exact target package census to resolver, composer, and reconciler while retaining Stage 2/3 purity and non-wiring rules.
+- `docs/PROGRAM_TARGET_RECONCILIATION.md`: Stage 4 occurrence-identity reconciliation contract.
 - `scripts/program-stage3-red-mutations.sh`: control GREEN plus eleven mutations covering selected/unselected inversion, cross-date grouping, input ordering, component ordering, key ordering, fabrication, duplicate repair, resolver reach, current time, and random identity. Every mutated source is restored byte-identically by MD5.

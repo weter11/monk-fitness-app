@@ -18,7 +18,11 @@ class TargetScheduleArchitectureTest {
         val sources = targetDir.listFiles { file -> file.isFile && file.extension == "kt" }?.toList().orEmpty()
 
         assertEquals(
-            listOf("TargetOccurrenceComposer.kt", "TargetScheduleResolver.kt"),
+            listOf(
+                "TargetOccurrenceComposer.kt",
+                "TargetOccurrenceReconciler.kt",
+                "TargetScheduleResolver.kt"
+            ),
             sources.map { it.name }.sorted()
         )
     }
