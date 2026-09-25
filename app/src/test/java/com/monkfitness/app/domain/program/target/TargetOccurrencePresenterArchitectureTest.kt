@@ -101,16 +101,32 @@ class TargetOccurrencePresenterArchitectureTest {
     }
 
     @Test
-    fun stageSevenIsNotWiredIntoAnyOtherProductionPackage() {
+    fun stageSevenHasExactlyOneProductionCallerAndItIsTheStageElevenApplicationBoundary() {
+        // Stage 11 revised this claim rather than relaxing it. While nothing applied a decision, the
+        // pin was an *absence*: no production source outside the pure target package named the
+        // presenter. The application boundary is now that one caller, so the closed list is the
+        // single-element one — a second consumer appearing later still fails here.
         val outsideReferences = File(mainDir, "domain").walkTopDown()
             .filter { it.isFile && it.extension == "kt" && it.parentFile != targetDir }
             .mapNotNull { source -> if (source.readText().contains("TargetOccurrencePresenter")) source.path else null }
+            .map { it.replace(File.separatorChar, '/').substringAfter("/com/monkfitness/app/").let { p -> "com/monkfitness/app/$p" } }
+            .sorted()
             .toList()
 
-        assertTrue("Stage 7 must not wire the existing Scheduler: $outsideReferences", outsideReferences.isEmpty())
+        assertEquals(
+            listOf("com/monkfitness/app/domain/usecase/TargetScheduleApplicationService.kt"),
+            outsideReferences
+        )
         assertTrue(File(mainDir, "domain/usecase/ProgramScheduler.kt").isFile)
         assertTrue(File(mainDir, "domain/program/SlotPlanner.kt").isFile)
         assertTrue(File(mainDir, "domain/program/ScheduleCalendar.kt").isFile)
+        listOf("ProgramScheduler.kt", "SlotPlanner.kt", "ScheduleCalendar.kt").forEach { name ->
+            val source = File(mainDir, "domain").walkTopDown().first { it.name == name }
+            assertTrue(
+                "the legacy contour must not reach the Stage 7 presenter: $name",
+                !source.readText().contains("TargetOccurrencePresenter")
+            )
+        }
     }
 
     private fun codeLines(source: File): List<String> = source.readText()
