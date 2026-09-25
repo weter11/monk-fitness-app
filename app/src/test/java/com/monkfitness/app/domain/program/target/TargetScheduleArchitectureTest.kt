@@ -100,13 +100,14 @@ class TargetScheduleArchitectureTest {
     }
 
     @Test
-    fun oldSchedulerSourcesRemainOutsideAndStageTwoHasExactlyOneProductionCaller() {
-        // Stage 12 revised this claim rather than relaxing it. While nothing orchestrated a pass, the
-        // pin was an *absence*: no production source outside the pure target package named a Stage 2
-        // type. The Stage 12 orchestrator request now carries a TargetScheduleWindow and a
-        // ResolvedScheduleSource map, so the closed list is the single-element one and a second
-        // consumer appearing later still fails here. The resolver itself stays uncalled: Stage 2's
-        // date resolution is still the planner's alone.
+    fun oldSchedulerSourcesRemainOutsideAndStageTwoHasExactlyTwoProductionCallers() {
+        // Stage 13 revised this claim rather than relaxing it. The pin is a *closed* list, not an
+        // absence, so the list grows only when a named component genuinely has to name a Stage 2
+        // type — and the Stage 13 input adapter does: its caller-owned input carries a
+        // TargetScheduleWindow and a ResolvedScheduleSource map, and forwarding them unchanged is
+        // precisely its contract. A third consumer appearing later still fails here. The resolver
+        // itself stays uncalled outside the pure target package: Stage 2's date resolution is still
+        // the planner's alone, and the adapter does not resolve a source to fill the map it forwards.
         val otherProduction = File(mainDir, "domain").walkTopDown()
             .filter { it.isFile && it.extension == "kt" && it.parentFile != targetDir }
             .toList()
@@ -123,7 +124,13 @@ class TargetScheduleArchitectureTest {
             .sorted()
             .toList()
 
-        assertEquals(listOf("domain/usecase/TargetScheduleOrchestrator.kt"), outsideReferences)
+        assertEquals(
+            listOf(
+                "domain/usecase/TargetScheduleInputAdapter.kt",
+                "domain/usecase/TargetScheduleOrchestrator.kt"
+            ),
+            outsideReferences
+        )
         assertTrue(File(mainDir, "domain/program/SlotPlanner.kt").isFile)
         assertTrue(File(mainDir, "domain/program/ScheduleCalendar.kt").isFile)
         listOf(

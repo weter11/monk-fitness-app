@@ -39,6 +39,7 @@ import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
 import com.monkfitness.app.domain.usecase.ProgramSaveService
 import com.monkfitness.app.domain.usecase.TargetScheduleApplicationService
+import com.monkfitness.app.domain.usecase.TargetScheduleInputAdapter
 import com.monkfitness.app.domain.usecase.TargetScheduleOrchestrator
 import com.monkfitness.app.domain.usecase.TargetScheduleSlotPersister
 import com.monkfitness.app.domain.usecase.SessionRuntime
@@ -311,6 +312,15 @@ class AppContainer(
     val targetScheduleOrchestrator: TargetScheduleOrchestrator = TargetScheduleOrchestrator(
         applicationService = targetScheduleApplicationService
     )
+
+    /**
+     * Phase 13 target input boundary: explicit caller definitions become an orchestration request.
+     *
+     * It is wired with no collaborator at all, which is the point: the adapter is a value
+     * conversion, so a repository, a clock or an identity generator handed to it would be a
+     * collaborator it has no use for and must not be able to consult.
+     */
+    val targetScheduleInputAdapter: TargetScheduleInputAdapter = TargetScheduleInputAdapter()
 
     /** The idempotent production bootstrap for the product-owned Standard Program. */
     val standardProgramBootstrap: StandardProgramBootstrap = StandardProgramBootstrap(
