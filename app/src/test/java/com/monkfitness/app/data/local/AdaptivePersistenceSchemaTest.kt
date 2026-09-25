@@ -172,9 +172,8 @@ class AdaptivePersistenceSchemaTest {
         val source = File(mainSources, "data/local/AppDatabase.kt").readText()
 
         assertTrue(
-            "the database version moves with the schema: 12 is §30 step 15, which retires the " +
-                "shipped 56-day program's tables and the Stage-1 adaptive pair",
-            source.contains("version = 12")
+            "the database version moves with the schema: 13 is Phase 8's additive target-occurrence identity seam",
+            source.contains("version = 13")
         )
 
         val registered = Regex("entities = \\[(.*?)]", RegexOption.DOT_MATCHES_ALL)
@@ -226,7 +225,8 @@ class AdaptivePersistenceSchemaTest {
             "MIGRATION_8_9",
             "MIGRATION_9_10",
             "MIGRATION_10_11",
-            "MIGRATION_11_12"
+            "MIGRATION_11_12",
+            "MIGRATION_12_13"
         )) {
             assertTrue("$migration is registered", migrations.contains(migration))
         }

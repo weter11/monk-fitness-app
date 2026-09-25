@@ -53,6 +53,21 @@ class ProgramScheduleRepository(
         return slot.toDomain(attempts)
     }
 
+    /**
+     * The slot persisted for one target occurrence within one Program, or `null`.
+     *
+     * This is a storage identity read only. It does not reconcile occurrences, choose a replacement,
+     * read the clock, or fall back to a date or plan day.
+     */
+    suspend fun slotByTargetOccurrenceKey(
+        programId: ProgramId,
+        targetOccurrenceKey: String
+    ): WorkoutSlot? {
+        val slot = slotDao.slotByTargetOccurrenceKey(programId.value, targetOccurrenceKey) ?: return null
+        val attempts = sessionDao.sessionsOfSlot(slot.slotId).map { SessionId(it.sessionId) }
+        return slot.toDomain(attempts)
+    }
+
     /** Every slot of one Program, earliest planned date first, each with its attempts in start order. */
     suspend fun slotsOfProgram(programId: ProgramId): List<WorkoutSlot> =
         withAttempts(

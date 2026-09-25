@@ -670,7 +670,10 @@ class SlotPlannerTest {
             "a slot is an opportunity and nothing else: the fields are identity, ownership, the " +
                 "planned date, what happened and when — there is no repetitions field, no duration " +
                 "field and no score for a missed opportunity to be a zero of (§12, §20)",
-            listOf("slotId", "programId", "revisionId", "programDayId", "plannedFor", "status", "attempts", "completedAt"),
+            listOf(
+                "slotId", "programId", "revisionId", "programDayId", "plannedFor", "status", "attempts",
+                "completedAt", "targetOccurrenceKey"
+            ),
             fields
         )
         assertFalse(

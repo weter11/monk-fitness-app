@@ -214,7 +214,8 @@ private fun Map<String, String?>.slotEntity() = ProgramWorkoutSlotEntity(
     programDayId = text("programDayId"),
     plannedFor = text("plannedFor"),
     status = text("status"),
-    completedAt = this["completedAt"]?.toLong()
+    completedAt = this["completedAt"]?.toLong(),
+    targetOccurrenceKey = this["targetOccurrenceKey"]
 )
 
 private fun Map<String, String?>.sessionEntity() = WorkoutSessionEntity(
@@ -422,6 +423,15 @@ internal class SqliteProgramWorkoutSlotDao(private val database: SqliteTestDatab
     override suspend fun slotById(slotId: String): ProgramWorkoutSlotEntity? =
         database.rows(ProgramDaoSql.PROGRAM_WORKOUT_SLOT_DAO_SLOT_BY_ID, slotId)
             .firstOrNull()?.slotEntity()
+
+    override suspend fun slotByTargetOccurrenceKey(
+        programId: String,
+        targetOccurrenceKey: String
+    ): ProgramWorkoutSlotEntity? = database.rows(
+        ProgramDaoSql.PROGRAM_WORKOUT_SLOT_DAO_SLOT_BY_TARGET_OCCURRENCE_KEY,
+        programId,
+        targetOccurrenceKey
+    ).firstOrNull()?.slotEntity()
 
     override suspend fun slotsOfProgram(programId: String): List<ProgramWorkoutSlotEntity> =
         database.rows(ProgramDaoSql.PROGRAM_WORKOUT_SLOT_DAO_SLOTS_OF_PROGRAM, programId)

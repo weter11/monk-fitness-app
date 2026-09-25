@@ -50,6 +50,33 @@ class ScheduleMapperTest {
     }
 
     @Test
+    fun aLegacySlotKeepsANullTargetOccurrenceKey() {
+        val entity = open.toEntity()
+
+        assertNull("a legacy row has no invented target identity", entity.targetOccurrenceKey)
+        assertNull(entity.toDomain(emptyList()).targetOccurrenceKey)
+    }
+
+    @Test
+    fun aTargetOccurrenceKeyRoundTripsWithoutTransformation() {
+        val target = open.copy(targetOccurrenceKey = "strength:2026-10-05")
+
+        val entity = target.toEntity()
+
+        assertEquals("strength:2026-10-05", entity.targetOccurrenceKey)
+        assertEquals("strength:2026-10-05", entity.toDomain(emptyList()).targetOccurrenceKey)
+    }
+
+    @Test
+    fun aBlankTargetOccurrenceKeyIsRefused() {
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            open.copy(targetOccurrenceKey = "  ")
+        }
+
+        assertTrue(failure.message!!.contains("targetOccurrenceKey"))
+    }
+
+    @Test
     fun aCompletedSlotRoundTripsWithItsAttemptsInStartOrder() {
         val entity = completed.toEntity()
 
@@ -75,7 +102,8 @@ class ScheduleMapperTest {
                 "programDayId",
                 "plannedFor",
                 "status",
-                "completedAt"
+                "completedAt",
+                "targetOccurrenceKey"
             ),
             columns
         )

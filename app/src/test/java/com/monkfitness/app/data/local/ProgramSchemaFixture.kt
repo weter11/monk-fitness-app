@@ -88,7 +88,7 @@ internal object ProgramSchemaFixture {
         "adaptive_decision_record"
     )
 
-    /** Every table the current (version 12) database contains: the retained global ones, then the target. */
+    /** Every table the current (version 13) database contains: the retained global ones, then the target. */
     val ALL_TABLES_AT_CURRENT_VERSION: List<String> = RETAINED_TABLES + TABLES
 
     /** One declared column. */
@@ -389,6 +389,11 @@ internal object ProgramSchemaFixture {
                 "index_program_workout_slot_revisionId_plannedFor",
                 listOf("revisionId", "plannedFor"),
                 unique = false
+            ),
+            ExpectedIndex(
+                "index_program_workout_slot_programId_targetOccurrenceKey",
+                listOf("programId", "targetOccurrenceKey"),
+                unique = true
             )
         ),
         "workout_session" to listOf(
@@ -526,6 +531,11 @@ internal object ProgramSchemaFixture {
             "program_adaptive_decision_record" to listOf(
                 Column("reason", TEXT, nullable = true)
             )
+        ),
+        "MIGRATION_12_13" to mapOf(
+            "program_workout_slot" to listOf(
+                Column("targetOccurrenceKey", TEXT, nullable = true)
+            )
         )
     )
 
@@ -617,12 +627,18 @@ internal object ProgramSchemaFixture {
         return "$kind IF NOT EXISTS `${index.name}` ON `$table` ($columns)"
     }
 
+    /** The indices the version-7 → version-8 migration creates; later steps append their own. */
+    private val VERSION_EIGHT_INDICES: Map<String, List<ExpectedIndex>> = INDEXES.mapValues { (_, indices) ->
+        indices.filterNot { it.name == "index_program_workout_slot_programId_targetOccurrenceKey" }
+    }
+
     /**
      * Every statement the version-7 → version-8 migration must execute, in the order Room emits them:
-     * per entity, its table and then its indices.
+     * per entity, its table and then the indices that existed at that version.
      */
     val EXPECTED_MIGRATION_STATEMENTS: List<String> = TABLES.flatMap { table ->
-        listOf(expectedTableDdl(table)) + INDEXES.getValue(table).map { expectedIndexDdl(table, it) }
+        listOf(expectedTableDdl(table)) +
+            VERSION_EIGHT_INDICES.getValue(table).map { expectedIndexDdl(table, it) }
     }
 
     /** Whitespace-collapsed SQL, so a multi-line statement and Room's single-line one compare equal. */
