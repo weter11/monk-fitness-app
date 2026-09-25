@@ -14,7 +14,7 @@ class TargetSchedulePolicyArchitectureTest {
     private val policyFile = File(targetDir, "TargetSchedulePolicy.kt")
 
     @Test
-    fun targetPackageContainsExactlyTheStageTwoThroughSevenProductionFiles() {
+    fun targetPackageContainsExactlyTheStageTwoThroughNineProductionFiles() {
         val sources = targetDir.listFiles { file -> file.isFile && file.extension == "kt" }
             .orEmpty().map { it.name }.sorted()
 
@@ -25,7 +25,8 @@ class TargetSchedulePolicyArchitectureTest {
                 "TargetOccurrenceReconciler.kt",
                 "TargetPlanner.kt",
                 "TargetSchedulePolicy.kt",
-                "TargetScheduleResolver.kt"
+                "TargetScheduleResolver.kt",
+                "TargetSlotMaterializer.kt"
             ),
             sources
         )
