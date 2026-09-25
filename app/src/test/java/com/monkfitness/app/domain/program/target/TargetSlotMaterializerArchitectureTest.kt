@@ -142,14 +142,15 @@ class TargetSlotMaterializerArchitectureTest {
     }
 
     @Test
-    fun stageNineIsNotWiredIntoAnyOtherProductionPackage() {
+    fun stageNineHasNoPersistenceOrSchedulerWiringOutsideTheIntegrationBoundary() {
         val outsideReferences = File(mainDir, "domain").walkTopDown()
             .filter { it.isFile && it.extension == "kt" && it.parentFile != targetDir }
+            .filterNot { it.path.endsWith("domain/usecase/TargetScheduleSlotPersister.kt") }
             .mapNotNull { source ->
                 if (source.readText().contains("TargetSlotMaterializer")) source.path else null
             }.toList()
 
-        assertTrue("Stage 9 must not persist or wire the existing Scheduler: $outsideReferences", outsideReferences.isEmpty())
+        assertTrue("only the Stage 10 integration boundary may consume the pure materializer: $outsideReferences", outsideReferences.isEmpty())
         assertTrue(File(mainDir, "domain/usecase/ProgramScheduler.kt").isFile)
         assertTrue(File(mainDir, "domain/program/SlotPlanner.kt").isFile)
         assertTrue(File(mainDir, "domain/program/ScheduleCalendar.kt").isFile)
