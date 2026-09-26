@@ -114,10 +114,15 @@ class TargetOccurrenceCompositionArchitectureTest {
         assertEquals(
             listOf(
                 "TargetOccurrenceComposer.kt",
+                // §30 step 15: the target occurrence's stored execution read-back value, its pure
+                // aggregation and its typed refusals. It is a pure value in this package for the same
+                // reason as the Phase 14 entry below — the same semantic facts, read back — and it
+                // holds no storage, no clock, no id generator and, deliberately, no execution verdict.
+                "TargetOccurrenceExecutionRead.kt",
                 // §30 step 14: the target occurrence's persisted semantic value and its typed
                 // conflict. It is a pure value in this package because it is schedule *semantics* —
                 // the same kind of thing the reconciler already holds — with no storage, no clock and
-                // no id generator of its own. The list stays closed: a ninth file still fails here.
+                // no id generator of its own. The list stays closed: a tenth file still fails here.
                 "TargetOccurrencePersistence.kt",
                 "TargetOccurrencePresenter.kt",
                 "TargetOccurrenceReconciler.kt",
