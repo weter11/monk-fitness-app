@@ -8,12 +8,10 @@ import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.RevisionId
 import com.monkfitness.app.domain.common.SessionId
 import com.monkfitness.app.domain.common.SlotId
-import com.monkfitness.app.domain.program.ActualResult
 import com.monkfitness.app.domain.program.CompositionSelection
-import com.monkfitness.app.domain.program.ExistingOccurrence
+import com.monkfitness.app.domain.program.target.TargetExistingOccurrence
 import com.monkfitness.app.domain.program.OccurrenceComponent
 import com.monkfitness.app.domain.program.OccurrenceExecution
-import com.monkfitness.app.domain.program.PerformedWork
 import com.monkfitness.app.domain.program.PlannedOccurrence
 import com.monkfitness.app.domain.program.ProgramPauseWindow
 import com.monkfitness.app.domain.program.SlotStatus
@@ -419,7 +417,7 @@ class TargetScheduleOrchestratorTest {
         asOf: LocalDate,
         schedules: List<TargetSchedule> = listOf(TargetSchedule.daily("strength", "strength-workout", DAY)),
         window: TargetScheduleWindow = TargetScheduleWindow(DAY, DAY.plusDays(2)),
-        existing: List<ExistingOccurrence> = emptyList(),
+        existing: List<TargetExistingOccurrence> = emptyList(),
         pauses: List<ProgramPauseWindow> = emptyList(),
         bindings: List<TargetProgramDayBinding> = listOf(binding("strength-workout"))
     ) = TargetScheduleOrchestrationRequest(
@@ -446,15 +444,7 @@ class TargetScheduleOrchestratorTest {
     private fun existing(
         occurrence: PlannedOccurrence,
         execution: OccurrenceExecution
-    ) = ExistingOccurrence(
-        occurrence = occurrence,
-        execution = execution,
-        actuals = if (execution == OccurrenceExecution.PLANNED) {
-            emptyList()
-        } else {
-            listOf(ActualResult("work-1", PerformedWork.reps(12)))
-        }
-    )
+    ) = TargetExistingOccurrence(occurrence = occurrence, execution = execution)
 
     private fun binding(workoutId: String) =
         TargetProgramDayBinding(workoutId, programDayId)

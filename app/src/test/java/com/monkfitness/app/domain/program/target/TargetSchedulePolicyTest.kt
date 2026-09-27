@@ -1,10 +1,7 @@
 package com.monkfitness.app.domain.program.target
 
-import com.monkfitness.app.domain.program.ActualResult
-import com.monkfitness.app.domain.program.ExistingOccurrence
 import com.monkfitness.app.domain.program.OccurrenceComponent
 import com.monkfitness.app.domain.program.OccurrenceExecution
-import com.monkfitness.app.domain.program.PerformedWork
 import com.monkfitness.app.domain.program.PlannedOccurrence
 import com.monkfitness.app.domain.program.ProgramPauseWindow
 import org.junit.Assert.assertEquals
@@ -25,15 +22,19 @@ class TargetSchedulePolicyTest {
     @Test
     fun startedCompletedAndCancelledHistoricalFactsArePreservedExactly() {
         val existing = listOf(
-            existing(planned("started", AS_OF), OccurrenceExecution.STARTED, actuals()),
-            existing(planned("completed", AS_OF), OccurrenceExecution.COMPLETED, actuals()),
-            existing(planned("cancelled", AS_OF), OccurrenceExecution.CANCELLED, actuals())
+            existing(planned("started", AS_OF), OccurrenceExecution.STARTED),
+            existing(planned("completed", AS_OF), OccurrenceExecution.COMPLETED),
+            existing(planned("cancelled", AS_OF), OccurrenceExecution.CANCELLED)
         )
 
         val result = decide(plan(emptyList(), existing), existing, listOf(PAUSE))
 
         assertEquals(existing.sortedBy { it.occurrence.occurrenceKey }, result.preserved)
-        result.preserved.forEach { assertSame(it.actuals, result.preserved.first { found -> found.occurrence == it.occurrence }.actuals) }
+        // The preserved instances are the caller's own values, carried by reference: the policy
+        // classifies them and never rebuilds one.
+        result.preserved.forEach {
+            assertSame(it, result.preserved.first { found -> found.occurrence == it.occurrence })
+        }
         assertTrue(result.retained.isEmpty())
         assertTrue(result.superseded.isEmpty())
         assertTrue(result.missed.isEmpty())
@@ -260,14 +261,19 @@ class TargetSchedulePolicyTest {
     }
 
     @Test
-    fun historicalActualResultsRemainExactlyPreserved() {
-        val actuals = listOf(ActualResult.fromPerformed("set-1", PerformedWork.reps(12)))
-        val historical = existing(planned("historical", AS_OF), OccurrenceExecution.COMPLETED, actuals)
+    fun aHistoricalOccurrenceNeedsNoActualResultsToBePreserved() {
+        // Phase 17 revised this test rather than relaxing it. It used to plant `ActualResult`s and
+        // assert they survived the pass identically, which was true only because the target input
+        // borrowed a type that carried them. Target scheduling reads identity and execution and
+        // nothing else, so the same case is now stated as what the value *is*: a completed
+        // occurrence with no performance payload at all is preserved whole.
+        val historical = existing(planned("historical", AS_OF), OccurrenceExecution.COMPLETED)
 
         val result = decide(plan(emptyList(), listOf(historical)), listOf(historical), listOf(PAUSE))
 
         assertEquals(historical, result.preserved.single())
-        assertSame(actuals, result.preserved.single().actuals)
+        assertEquals(OccurrenceExecution.COMPLETED, result.preserved.single().execution)
+        assertEquals(planned("historical", AS_OF), result.preserved.single().occurrence)
     }
 
     @Test
@@ -286,20 +292,20 @@ class TargetSchedulePolicyTest {
 
     private fun decide(
         targetPlan: TargetPlan,
-        existing: List<ExistingOccurrence>,
+        existing: List<TargetExistingOccurrence>,
         pauses: List<ProgramPauseWindow>
     ) = TargetSchedulePolicy.decide(targetPlan, existing, AS_OF, pauses)
 
     private fun plan(vararg occurrences: PlannedOccurrence) = plan(occurrences.toList())
 
-    private fun plan(occurrences: List<PlannedOccurrence>, existing: List<ExistingOccurrence> = emptyList()): TargetPlan {
+    private fun plan(occurrences: List<PlannedOccurrence>, existing: List<TargetExistingOccurrence> = emptyList()): TargetPlan {
         val existingKeys = existing.map { it.occurrence.occurrenceKey }.toSet()
         val replacement = occurrences.sortedWith(compareBy<PlannedOccurrence> { it.plannedFor }.thenBy { it.occurrenceKey })
         return TargetPlan(
             replacement,
             TargetOccurrenceReconciliation(
                 preserved = existing.filter { it.execution != OccurrenceExecution.PLANNED }
-                    .sortedWith(compareBy<ExistingOccurrence> { it.occurrence.plannedFor }.thenBy { it.occurrence.occurrenceKey }),
+                    .sortedWith(compareBy<TargetExistingOccurrence> { it.occurrence.plannedFor }.thenBy { it.occurrence.occurrenceKey }),
                 superseded = existing.filter { it.execution == OccurrenceExecution.PLANNED && it.occurrence.occurrenceKey !in replacement.map { p -> p.occurrenceKey }.toSet() },
                 added = replacement.filter { it.occurrenceKey !in existingKeys }
             )
@@ -318,11 +324,8 @@ class TargetSchedulePolicyTest {
 
     private fun existing(
         occurrence: PlannedOccurrence,
-        execution: OccurrenceExecution = OccurrenceExecution.PLANNED,
-        actuals: List<ActualResult> = emptyList()
-    ) = ExistingOccurrence(occurrence, execution, actuals)
-
-    private fun actuals() = listOf(ActualResult.fromPerformed("set-1", PerformedWork.reps(12)))
+        execution: OccurrenceExecution = OccurrenceExecution.PLANNED
+    ) = TargetExistingOccurrence(occurrence, execution)
 
     private companion object {
         val AS_OF: LocalDate = LocalDate.parse("2026-10-05")

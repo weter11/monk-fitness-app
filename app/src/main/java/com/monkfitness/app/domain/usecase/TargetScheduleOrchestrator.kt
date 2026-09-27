@@ -3,9 +3,9 @@ package com.monkfitness.app.domain.usecase
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.RevisionId
 import com.monkfitness.app.domain.program.CompositionSelection
-import com.monkfitness.app.domain.program.ExistingOccurrence
 import com.monkfitness.app.domain.program.ProgramPauseWindow
 import com.monkfitness.app.domain.program.target.ResolvedScheduleSource
+import com.monkfitness.app.domain.program.target.TargetExistingOccurrence
 import com.monkfitness.app.domain.program.target.TargetPlan
 import com.monkfitness.app.domain.program.target.TargetPlanner
 import com.monkfitness.app.domain.program.target.TargetProgramDayBinding
@@ -27,7 +27,7 @@ data class TargetScheduleOrchestrationRequest(
     val schedules: List<TargetSchedule>,
     val window: TargetScheduleWindow,
     val selection: CompositionSelection,
-    val existing: List<ExistingOccurrence>,
+    val existing: List<TargetExistingOccurrence>,
     val sources: Map<String, ResolvedScheduleSource>,
     val asOf: LocalDate,
     val pauses: List<ProgramPauseWindow>,

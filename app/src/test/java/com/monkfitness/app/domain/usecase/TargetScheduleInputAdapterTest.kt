@@ -3,12 +3,10 @@ package com.monkfitness.app.domain.usecase
 import com.monkfitness.app.domain.common.ProgramDayId
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.RevisionId
-import com.monkfitness.app.domain.program.ActualResult
 import com.monkfitness.app.domain.program.CompositionSelection
-import com.monkfitness.app.domain.program.ExistingOccurrence
+import com.monkfitness.app.domain.program.target.TargetExistingOccurrence
 import com.monkfitness.app.domain.program.OccurrenceComponent
 import com.monkfitness.app.domain.program.OccurrenceExecution
-import com.monkfitness.app.domain.program.PerformedWork
 import com.monkfitness.app.domain.program.PlannedOccurrence
 import com.monkfitness.app.domain.program.ProgramDay
 import com.monkfitness.app.domain.program.ProgramDayType
@@ -408,13 +406,18 @@ class TargetScheduleInputAdapterTest {
     }
 
     @Test
-    fun anExecutionActualIsNotReinterpreted() {
+    fun anExecutionClassificationIsForwardedUnchangedAndReinterpretedNowhere() {
+        // Phase 17 revised this test rather than relaxing it. It used to assert an `ActualResult`
+        // list survived the adaptation, which was a statement about a payload the target scheduling
+        // input no longer carries. The surviving claim is the one the boundary still owns: the
+        // execution classification crosses the boundary by value and is decided nowhere here.
         val completed = existing(strengthOn(DAY), OccurrenceExecution.COMPLETED)
 
         val request = adapter.adapt(input(existing = listOf(completed)))
 
-        assertEquals(completed.actuals, request.existing.single().actuals)
-        assertEquals(1, request.existing.single().actuals.size)
+        assertEquals(completed, request.existing.single())
+        assertEquals(OccurrenceExecution.COMPLETED, request.existing.single().execution)
+        assertEquals(strengthOn(DAY), request.existing.single().occurrence)
     }
 
     // ------------------------------------------------------------------ 12. sources are caller-owned
@@ -554,7 +557,7 @@ class TargetScheduleInputAdapterTest {
         ),
         window: TargetScheduleWindow = TargetScheduleWindow(DAY, DAY.plusDays(6)),
         selection: CompositionSelection = CompositionSelection(),
-        existing: List<ExistingOccurrence> = emptyList(),
+        existing: List<TargetExistingOccurrence> = emptyList(),
         sources: Map<String, ResolvedScheduleSource> = emptyMap(),
         asOf: LocalDate = DAY,
         pauses: List<ProgramPauseWindow> = emptyList(),
@@ -614,15 +617,7 @@ class TargetScheduleInputAdapterTest {
     private fun existing(
         occurrence: PlannedOccurrence,
         execution: OccurrenceExecution = OccurrenceExecution.PLANNED
-    ) = ExistingOccurrence(
-        occurrence = occurrence,
-        execution = execution,
-        actuals = if (execution == OccurrenceExecution.PLANNED) {
-            emptyList()
-        } else {
-            listOf(ActualResult("work-1", PerformedWork.reps(12)))
-        }
-    )
+    ) = TargetExistingOccurrence(occurrence = occurrence, execution = execution)
 
     private companion object {
         // Absolute, so the suite's expectations never move with the device's date.
