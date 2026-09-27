@@ -44,6 +44,13 @@ class TargetScheduleInputAdapterArchitectureTest {
 
         assertEquals(
             listOf(
+                // §30 step 17: the target scheduling input occurrence — the planned payload plus the
+                // one execution classification the scheduling rules read. It is a pure value in this
+                // package for the same reason as the entries above (schedule semantics, no storage,
+                // no clock, no id generator) and it is deliberately narrower than the domain's
+                // `ExistingOccurrence`: it carries no ActualResult, no performed work and no
+                // session or slot state. The list stays closed: a twelfth file still fails here.
+                "TargetExistingOccurrence.kt",
                 "TargetOccurrenceComposer.kt",
                 // §30 step 16: the occurrence-execution *precedence*, and the single owner of it. It
                 // belongs in this pure package for the same reason as the two entries below — schedule
@@ -91,11 +98,11 @@ class TargetScheduleInputAdapterArchitectureTest {
                 "import com.monkfitness.app.domain.common.ProgramId",
                 "import com.monkfitness.app.domain.common.RevisionId",
                 "import com.monkfitness.app.domain.program.CompositionSelection",
-                "import com.monkfitness.app.domain.program.ExistingOccurrence",
                 "import com.monkfitness.app.domain.program.ProgramPauseWindow",
                 "import com.monkfitness.app.domain.program.ScheduleCadence",
                 "import com.monkfitness.app.domain.program.target.ResolvedScheduleSource",
                 "import com.monkfitness.app.domain.program.target.TargetProgramDayBinding",
+                "import com.monkfitness.app.domain.program.target.TargetExistingOccurrence",
                 "import com.monkfitness.app.domain.program.target.TargetSchedule",
                 "import com.monkfitness.app.domain.program.target.TargetScheduleWindow",
                 "import java.time.LocalDate"

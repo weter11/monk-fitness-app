@@ -1,11 +1,8 @@
 package com.monkfitness.app.domain.program.target
 
-import com.monkfitness.app.domain.program.ActualResult
 import com.monkfitness.app.domain.program.CompositionSelection
-import com.monkfitness.app.domain.program.ExistingOccurrence
 import com.monkfitness.app.domain.program.OccurrenceComponent
 import com.monkfitness.app.domain.program.OccurrenceExecution
-import com.monkfitness.app.domain.program.PerformedWork
 import com.monkfitness.app.domain.program.PlannedOccurrence
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -98,9 +95,9 @@ class TargetPlannerTest {
         val completed = planned("completed", DAY_ONE, listOf("completed"))
         val cancelled = planned("cancelled", DAY_ONE, listOf("cancelled"))
         val existing = listOf(
-            existing(started, OccurrenceExecution.STARTED, actuals()),
-            existing(completed, OccurrenceExecution.COMPLETED, actuals()),
-            existing(cancelled, OccurrenceExecution.CANCELLED, actuals())
+            existing(started, OccurrenceExecution.STARTED),
+            existing(completed, OccurrenceExecution.COMPLETED),
+            existing(cancelled, OccurrenceExecution.CANCELLED)
         )
 
         val result = TargetPlanner.plan(emptyList(), WINDOW, existing = existing)
@@ -110,7 +107,13 @@ class TargetPlannerTest {
             result.reconciliation.preserved
         )
         assertTrue(result.reconciliation.superseded.isEmpty())
-        assertEquals(actuals(), result.reconciliation.preserved.first().actuals)
+        // Phase 17 revised this assertion rather than relaxing it: `actuals` is no longer part of a
+        // target scheduling input at all, so what is preserved is identity/payload plus execution.
+        assertEquals(
+            OccurrenceExecution.CANCELLED,
+            result.reconciliation.preserved.first().execution
+        )
+        assertEquals(cancelled, result.reconciliation.preserved.first().occurrence)
     }
 
     @Test
@@ -199,11 +202,8 @@ class TargetPlannerTest {
 
     private fun existing(
         occurrence: PlannedOccurrence,
-        execution: OccurrenceExecution = OccurrenceExecution.PLANNED,
-        actuals: List<ActualResult> = emptyList()
-    ) = ExistingOccurrence(occurrence, execution, actuals)
-
-    private fun actuals() = listOf(ActualResult.fromPerformed("set-1", PerformedWork.reps(12)))
+        execution: OccurrenceExecution = OccurrenceExecution.PLANNED
+    ) = TargetExistingOccurrence(occurrence, execution)
 
     private fun selection(vararg ids: String) = CompositionSelection(ids.toSet())
 

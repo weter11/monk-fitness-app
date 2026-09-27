@@ -1,6 +1,5 @@
 package com.monkfitness.app.domain.program.target
 
-import com.monkfitness.app.domain.program.ExistingOccurrence
 import com.monkfitness.app.domain.program.OccurrenceExecution
 import com.monkfitness.app.domain.program.PlannedOccurrence
 import com.monkfitness.app.domain.program.ProgramPauseWindow
@@ -12,25 +11,25 @@ enum class TargetSupersessionReason {
 }
 
 data class TargetSupersededOccurrence(
-    val occurrence: ExistingOccurrence,
+    val occurrence: TargetExistingOccurrence,
     val reason: TargetSupersessionReason
 )
 
 /** Pure temporal interpretation of a Stage 5 target plan at an explicit as-of date. */
 data class TargetScheduleDecision(
     val targetPlan: TargetPlan,
-    val preserved: List<ExistingOccurrence>,
-    val retained: List<ExistingOccurrence>,
+    val preserved: List<TargetExistingOccurrence>,
+    val retained: List<TargetExistingOccurrence>,
     val created: List<PlannedOccurrence>,
     val superseded: List<TargetSupersededOccurrence>,
-    val missed: List<ExistingOccurrence>
+    val missed: List<TargetExistingOccurrence>
 )
 
 /** Applies scheduling-time status without resolving, composing, reconciling, or persisting anything. */
 object TargetSchedulePolicy {
     fun decide(
         targetPlan: TargetPlan,
-        existing: List<ExistingOccurrence>,
+        existing: List<TargetExistingOccurrence>,
         asOf: LocalDate,
         pauses: List<ProgramPauseWindow>
     ): TargetScheduleDecision {
@@ -74,8 +73,8 @@ object TargetSchedulePolicy {
     private fun isPaused(date: LocalDate, pauses: List<ProgramPauseWindow>): Boolean =
         pauses.any { it.covers(date) }
 
-    private fun List<ExistingOccurrence>.canonicalExistingOrder(): List<ExistingOccurrence> =
-        sortedWith(compareBy<ExistingOccurrence> { it.occurrence.plannedFor }
+    private fun List<TargetExistingOccurrence>.canonicalExistingOrder(): List<TargetExistingOccurrence> =
+        sortedWith(compareBy<TargetExistingOccurrence> { it.occurrence.plannedFor }
             .thenBy { it.occurrence.occurrenceKey })
 
     private fun List<PlannedOccurrence>.canonicalPlannedOrder(): List<PlannedOccurrence> =

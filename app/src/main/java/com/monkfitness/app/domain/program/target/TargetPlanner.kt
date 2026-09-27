@@ -1,7 +1,6 @@
 package com.monkfitness.app.domain.program.target
 
 import com.monkfitness.app.domain.program.CompositionSelection
-import com.monkfitness.app.domain.program.ExistingOccurrence
 import com.monkfitness.app.domain.program.PlannedOccurrence
 
 /** Immutable result of the pure target planning pipeline. */
@@ -16,7 +15,7 @@ object TargetPlanner {
         schedules: List<TargetSchedule>,
         window: TargetScheduleWindow,
         selection: CompositionSelection = CompositionSelection(),
-        existing: List<ExistingOccurrence> = emptyList(),
+        existing: List<TargetExistingOccurrence> = emptyList(),
         sources: Map<String, ResolvedScheduleSource> = emptyMap()
     ): TargetPlan {
         val resolved = TargetScheduleResolver.resolve(schedules, window, sources)

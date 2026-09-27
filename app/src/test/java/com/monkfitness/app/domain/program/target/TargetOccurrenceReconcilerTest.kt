@@ -1,10 +1,7 @@
 package com.monkfitness.app.domain.program.target
 
-import com.monkfitness.app.domain.program.ActualResult
-import com.monkfitness.app.domain.program.ExistingOccurrence
 import com.monkfitness.app.domain.program.OccurrenceComponent
 import com.monkfitness.app.domain.program.OccurrenceExecution
-import com.monkfitness.app.domain.program.PerformedWork
 import com.monkfitness.app.domain.program.PlannedOccurrence
 import com.monkfitness.app.domain.program.ScheduleEditReconciler
 import com.monkfitness.app.domain.program.ScheduleReconciliation
@@ -31,8 +28,8 @@ class TargetOccurrenceReconcilerTest {
 
         val result = TargetOccurrenceReconciler.reconcile(existing, listOf(existingOccurrence))
 
-        assertEquals(emptyList<ExistingOccurrence>(), result.preserved)
-        assertEquals(emptyList<ExistingOccurrence>(), result.superseded)
+        assertEquals(emptyList<TargetExistingOccurrence>(), result.preserved)
+        assertEquals(emptyList<TargetExistingOccurrence>(), result.superseded)
         assertEquals(emptyList<PlannedOccurrence>(), result.added)
     }
 
@@ -46,7 +43,7 @@ class TargetOccurrenceReconcilerTest {
         )
 
         assertEquals(listOf(existingOccurrence), result.superseded.map { it.occurrence })
-        assertEquals(emptyList<ExistingOccurrence>(), result.preserved)
+        assertEquals(emptyList<TargetExistingOccurrence>(), result.preserved)
         assertEquals(emptyList<PlannedOccurrence>(), result.added)
     }
 
@@ -62,41 +59,41 @@ class TargetOccurrenceReconcilerTest {
     @Test
     fun startedExistingOccurrenceSurvivesRemoval() {
         val occurrence = planned("strength", DAY_ONE)
-        val existing = existing(occurrence, OccurrenceExecution.STARTED, actuals())
+        val existing = existing(occurrence, OccurrenceExecution.STARTED)
 
         val result = TargetOccurrenceReconciler.reconcile(listOf(existing), emptyList())
 
         assertEquals(listOf(existing), result.preserved)
-        assertEquals(emptyList<ExistingOccurrence>(), result.superseded)
+        assertEquals(emptyList<TargetExistingOccurrence>(), result.superseded)
         assertEquals(emptyList<PlannedOccurrence>(), result.added)
     }
 
     @Test
     fun completedExistingOccurrenceSurvivesRemoval() {
         val occurrence = planned("mobility", DAY_ONE)
-        val existing = existing(occurrence, OccurrenceExecution.COMPLETED, actuals())
+        val existing = existing(occurrence, OccurrenceExecution.COMPLETED)
 
         val result = TargetOccurrenceReconciler.reconcile(listOf(existing), emptyList())
 
         assertEquals(listOf(existing), result.preserved)
-        assertEquals(emptyList<ExistingOccurrence>(), result.superseded)
+        assertEquals(emptyList<TargetExistingOccurrence>(), result.superseded)
     }
 
     @Test
     fun cancelledExistingOccurrenceSurvivesRemoval() {
         val occurrence = planned("posture", DAY_ONE)
-        val existing = existing(occurrence, OccurrenceExecution.CANCELLED, actuals())
+        val existing = existing(occurrence, OccurrenceExecution.CANCELLED)
 
         val result = TargetOccurrenceReconciler.reconcile(listOf(existing), emptyList())
 
         assertEquals(listOf(existing), result.preserved)
-        assertEquals(emptyList<ExistingOccurrence>(), result.superseded)
+        assertEquals(emptyList<TargetExistingOccurrence>(), result.superseded)
     }
 
     @Test
     fun factualExistingOccurrenceWithSameIdentityPreventsReplacementDuplication() {
         val occurrence = planned("strength", DAY_ONE)
-        val existing = existing(occurrence, OccurrenceExecution.COMPLETED, actuals())
+        val existing = existing(occurrence, OccurrenceExecution.COMPLETED)
 
         val result = TargetOccurrenceReconciler.reconcile(listOf(existing), listOf(occurrence))
 
@@ -114,7 +111,7 @@ class TargetOccurrenceReconcilerTest {
 
         assertEquals(listOf(old), result.superseded.map { it.occurrence })
         assertEquals(listOf(replacement), result.added)
-        assertEquals(emptyList<ExistingOccurrence>(), result.preserved)
+        assertEquals(emptyList<TargetExistingOccurrence>(), result.preserved)
     }
 
     @Test
@@ -226,21 +223,19 @@ class TargetOccurrenceReconcilerTest {
     }
 
     @Test
-    fun historicalActualResultsRemainEqualityIdentical() {
-        val actuals = listOf(
-            ActualResult.fromPerformed("set-1", PerformedWork.reps(12))
-        )
-        val existing = existing(
-            planned("strength", DAY_ONE),
-            OccurrenceExecution.COMPLETED,
-            actuals
-        )
+    fun aHistoricalOccurrenceIsPreservedEqualityIdenticalWithoutAnyActualResults() {
+        // Phase 17 revised this test rather than relaxing it. It planted `ActualResult`s and asserted
+        // they came back identically, which was only observable because the target input borrowed a
+        // type that carried them. The reconciler never read them; the same preservation case is now
+        // stated over the two facts it does read — identity/payload and execution classification.
+        val existing = existing(planned("strength", DAY_ONE), OccurrenceExecution.COMPLETED)
 
         val result = TargetOccurrenceReconciler.reconcile(listOf(existing), emptyList())
 
         assertEquals(existing, result.preserved.single())
-        assertEquals(actuals, result.preserved.single().actuals)
-        assertSame(actuals, result.preserved.single().actuals)
+        assertEquals(OccurrenceExecution.COMPLETED, result.preserved.single().execution)
+        assertEquals(planned("strength", DAY_ONE), result.preserved.single().occurrence)
+        assertSame(existing, result.preserved.single())
     }
 
     @Test
@@ -285,9 +280,12 @@ class TargetOccurrenceReconcilerTest {
         val startedOccurrence = planned("strength", DAY_ONE)
         val completedOccurrence = planned("mobility", DAY_TWO)
         val replacement = planned("posture", DAY_ONE)
+        // Phase 17 revised this test rather than relaxing it. It exercises the *legacy* Stage 1
+        // reconciler, so it now states its input in the legacy vocabulary: the target contour no
+        // longer speaks `ExistingOccurrence`, but the legacy contour is untouched and still is.
         val existing = listOf(
-            existing(startedOccurrence, OccurrenceExecution.STARTED, actuals()),
-            existing(completedOccurrence, OccurrenceExecution.COMPLETED, actuals())
+            legacyExisting(startedOccurrence, OccurrenceExecution.STARTED),
+            legacyExisting(completedOccurrence, OccurrenceExecution.COMPLETED)
         )
 
         val result = ScheduleEditReconciler.reconcile(existing, replacement)
@@ -305,8 +303,8 @@ class TargetOccurrenceReconcilerTest {
         val oldCombined = planned("old-combined", DAY_TWO)
         val newCombined = planned("new-combined", DAY_TWO)
         val existing = listOf(
-            existing(strength, OccurrenceExecution.STARTED, actuals()),
-            existing(mobility, OccurrenceExecution.COMPLETED, actuals()),
+            existing(strength, OccurrenceExecution.STARTED),
+            existing(mobility, OccurrenceExecution.COMPLETED),
             existing(posture),
             existing(oldCombined)
         )
@@ -331,11 +329,23 @@ class TargetOccurrenceReconcilerTest {
 
     private fun existing(
         occurrence: PlannedOccurrence,
-        execution: OccurrenceExecution = OccurrenceExecution.PLANNED,
-        actuals: List<ActualResult> = emptyList()
-    ) = ExistingOccurrence(occurrence, execution, actuals)
+        execution: OccurrenceExecution = OccurrenceExecution.PLANNED
+    ) = TargetExistingOccurrence(occurrence, execution)
 
-    private fun actuals() = listOf(ActualResult.fromPerformed("set-1", PerformedWork.reps(12)))
+    /** The legacy Stage 1 input, used only by the legacy-parity case above. */
+    private fun legacyExisting(
+        occurrence: PlannedOccurrence,
+        execution: OccurrenceExecution
+    ) = com.monkfitness.app.domain.program.ExistingOccurrence(
+        occurrence = occurrence,
+        execution = execution,
+        actuals = listOf(
+            com.monkfitness.app.domain.program.ActualResult(
+                "work-1",
+                com.monkfitness.app.domain.program.PerformedWork.reps(12)
+            )
+        )
+    )
 
     private companion object {
         val DAY_ONE: LocalDate = LocalDate.parse("2026-10-05")

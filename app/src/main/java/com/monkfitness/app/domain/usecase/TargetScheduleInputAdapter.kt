@@ -3,11 +3,11 @@ package com.monkfitness.app.domain.usecase
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.RevisionId
 import com.monkfitness.app.domain.program.CompositionSelection
-import com.monkfitness.app.domain.program.ExistingOccurrence
 import com.monkfitness.app.domain.program.ProgramPauseWindow
 import com.monkfitness.app.domain.program.ScheduleCadence
 import com.monkfitness.app.domain.program.target.ResolvedScheduleSource
 import com.monkfitness.app.domain.program.target.TargetProgramDayBinding
+import com.monkfitness.app.domain.program.target.TargetExistingOccurrence
 import com.monkfitness.app.domain.program.target.TargetSchedule
 import com.monkfitness.app.domain.program.target.TargetScheduleWindow
 import java.time.LocalDate
@@ -73,7 +73,7 @@ data class TargetScheduleInput(
     val scheduleDefinitions: List<TargetScheduleDefinition>,
     val window: TargetScheduleWindow,
     val selection: CompositionSelection,
-    val existingOccurrences: List<ExistingOccurrence>,
+    val existingOccurrences: List<TargetExistingOccurrence>,
     val sources: Map<String, ResolvedScheduleSource>,
     val asOf: LocalDate,
     val pauses: List<ProgramPauseWindow>,

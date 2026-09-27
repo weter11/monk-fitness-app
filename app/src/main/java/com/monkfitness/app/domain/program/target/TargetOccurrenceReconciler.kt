@@ -1,13 +1,12 @@
 package com.monkfitness.app.domain.program.target
 
-import com.monkfitness.app.domain.program.ExistingOccurrence
 import com.monkfitness.app.domain.program.OccurrenceExecution
 import com.monkfitness.app.domain.program.PlannedOccurrence
 
 /** Immutable result of comparing stored occurrence facts with a replacement target plan. */
 data class TargetOccurrenceReconciliation(
-    val preserved: List<ExistingOccurrence>,
-    val superseded: List<ExistingOccurrence>,
+    val preserved: List<TargetExistingOccurrence>,
+    val superseded: List<TargetExistingOccurrence>,
     val added: List<PlannedOccurrence>
 )
 
@@ -17,7 +16,7 @@ data class TargetOccurrenceReconciliation(
  */
 object TargetOccurrenceReconciler {
     fun reconcile(
-        existing: List<ExistingOccurrence>,
+        existing: List<TargetExistingOccurrence>,
         replacement: List<PlannedOccurrence>
     ): TargetOccurrenceReconciliation {
         val existingByKey = indexExisting(existing)
@@ -46,8 +45,8 @@ object TargetOccurrenceReconciler {
         return TargetOccurrenceReconciliation(preserved, superseded, added)
     }
 
-    private fun indexExisting(existing: List<ExistingOccurrence>): Map<String, ExistingOccurrence> {
-        val result = LinkedHashMap<String, ExistingOccurrence>()
+    private fun indexExisting(existing: List<TargetExistingOccurrence>): Map<String, TargetExistingOccurrence> {
+        val result = LinkedHashMap<String, TargetExistingOccurrence>()
         existing.forEach { occurrence ->
             val key = occurrence.occurrence.occurrenceKey
             require(result.put(key, occurrence) == null) { "duplicate existing occurrence key $key" }
@@ -65,8 +64,8 @@ object TargetOccurrenceReconciler {
         return result
     }
 
-    private fun List<ExistingOccurrence>.canonicalExistingOrder(): List<ExistingOccurrence> =
-        sortedWith(compareBy<ExistingOccurrence> { it.occurrence.plannedFor }
+    private fun List<TargetExistingOccurrence>.canonicalExistingOrder(): List<TargetExistingOccurrence> =
+        sortedWith(compareBy<TargetExistingOccurrence> { it.occurrence.plannedFor }
             .thenBy { it.occurrence.occurrenceKey })
 
     private fun List<PlannedOccurrence>.canonicalPlannedOrder(): List<PlannedOccurrence> =
