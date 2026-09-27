@@ -22,6 +22,12 @@ class TargetOccurrencePresenterArchitectureTest {
         assertEquals(
             listOf(
                 "TargetOccurrenceComposer.kt",
+                // §30 step 16: the occurrence-execution *precedence*, and the single owner of it. It
+                // belongs in this pure package for the same reason as the two entries below — schedule
+                // semantics over an already-read record — and it holds no storage, no clock and no id
+                // generator. Unlike the read-back below it does hold a verdict, which is exactly why it
+                // is a *named* owner rather than an incidental member of a record or a repository.
+                "TargetOccurrenceExecutionPolicy.kt",
                 // §30 step 15: the target occurrence's stored execution read-back value, its pure
                 // aggregation and its typed refusals. It is a pure value in this package for the same
                 // reason as the Phase 14 entry below — the same semantic facts, read back — and it
@@ -30,7 +36,7 @@ class TargetOccurrencePresenterArchitectureTest {
                 // §30 step 14: the target occurrence's persisted semantic value and its typed
                 // conflict. It is a pure value in this package because it is schedule *semantics* —
                 // the same kind of thing the reconciler already holds — with no storage, no clock and
-                // no id generator of its own. The list stays closed: a tenth file still fails here.
+                // no id generator of its own. The list stays closed: an eleventh file still fails here.
                 "TargetOccurrencePersistence.kt",
                 "TargetOccurrencePresenter.kt",
                 "TargetOccurrenceReconciler.kt",
