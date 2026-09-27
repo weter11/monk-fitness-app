@@ -16,9 +16,15 @@
 #    line survived as real code.
 #  * **a mutation must be type-correct in the *whole* tree.** Changing a public signature breaks
 #    every caller, so the test source set fails to compile and no oracle runs. Rows 1–4 therefore add
-#    a *second declaration* in the legacy vocabulary (an unused private helper, an overload without
-#    default arguments, a secondary constructor) rather than editing the one the tests call. That is
-#    the shape a careless new caller would actually have, and it is what the gate must refuse.
+#    a *second declaration* in the legacy vocabulary (an unused private helper, a distinctly named
+#    private function, an extra property) rather than editing the one the tests call. That is the
+#    shape a careless new caller would actually have, and it is what the gate must refuse. (A Kotlin
+#    *overload* is not a workaround: it erases to the same JVM signature and fails with
+#    `Platform declaration clash`.)
+#
+# Rows 19–23 break a narrower thing: *which payload* the existing occurrence carries. Each keeps the
+# execution correct and changes only the stored payload the value holds, so a bridge that forwarded
+# the caller's occurrence — losing a real payload conflict — cannot pass.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
@@ -197,8 +203,11 @@ VALUE_SHAPE='data class TargetExistingOccurrence(
     val execution: OccurrenceExecution
 )'
 
-# 9./18. The bridge's single call into the Phase 16 policy.
+# 9./18. The bridge's single call into the Phase 16 policy, and the single construction site that
+#       follows it. `BRIDGE_BUILD` is the line that decides *whose payload* the value carries, which
+#       is what rows 19–23 break.
 BRIDGE_DECIDE='        val decision = TargetOccurrenceExecutionPolicy.decide(record)'
+BRIDGE_BUILD='        return TargetExistingOccurrence(record.occurrence.occurrence, decision)'
 
 # 10. The reconciler's membership key.
 RECONCILE_KEY='            val key = occurrence.occurrence.occurrenceKey'
@@ -334,6 +343,35 @@ preflight 'target path reads the current ProgramRevision' "$RECONCILER" "$RECONC
             .filter { it.execution != OccurrenceExecution.PLANNED }
             .canonicalExistingOrder()'
 
+# 19.–23. The payload the existing occurrence carries. Every row below keeps the execution
+#        correct and breaks only *which payload* the value holds, so the behavioural regression and
+#        the architecture gate have to be what refuses them.
+preflight 'bridge substitutes the caller payload' "$BRIDGE" "$BRIDGE_BUILD" \
+    '        return TargetExistingOccurrence(occurrence, decision)'
+preflight 'bridge rebuilds the payload from the caller components' "$BRIDGE" "$BRIDGE_BUILD" \
+    '        return TargetExistingOccurrence(
+            occurrence.copy(components = occurrence.components),
+            decision
+        )'
+preflight 'bridge keeps only the stored key' "$BRIDGE" "$BRIDGE_BUILD" \
+    '        return TargetExistingOccurrence(
+            record.occurrence.occurrence.copy(components = emptyList()),
+            decision
+        )'
+preflight 'bridge validates the caller then returns it' "$BRIDGE" "$BRIDGE_DECIDE" \
+    '        if (record.occurrence.occurrence != occurrence) {
+            require(record.occurrence.occurrence == occurrence) {
+                "caller payload conflicts with the stored payload"
+            }
+        }
+        val decision = TargetOccurrenceExecutionPolicy.decide(record)'
+preflight 'bridge derives the payload from the current revision' "$BRIDGE" "$BRIDGE_BUILD" \
+    '        val currentRevision = com.monkfitness.app.domain.common.RevisionId("revision-1")
+        return TargetExistingOccurrence(
+            record.occurrence.occurrence.copy(plannedFor = currentRevision.value.length.let { record.occurrence.occurrence.plannedFor }),
+            decision
+        )'
+
 echo 'all mutation anchors verified'
 
 echo '== control =='
@@ -445,6 +483,36 @@ mutate 'target path constructs an ActualResult' "$BRIDGE" "$BRIDGE_DECIDE" \
             )
         )
         val decision = TargetOccurrenceExecutionPolicy.decide(record)'
+
+mutate 'bridge substitutes the caller payload' "$BRIDGE" "$BRIDGE_BUILD" \
+    '        return TargetExistingOccurrence(occurrence, decision)'
+
+mutate 'bridge rebuilds the payload from the caller components' "$BRIDGE" "$BRIDGE_BUILD" \
+    '        return TargetExistingOccurrence(
+            occurrence.copy(components = occurrence.components),
+            decision
+        )'
+
+mutate 'bridge keeps only the stored key' "$BRIDGE" "$BRIDGE_BUILD" \
+    '        return TargetExistingOccurrence(
+            record.occurrence.occurrence.copy(components = emptyList()),
+            decision
+        )'
+
+mutate 'bridge validates the caller then returns it' "$BRIDGE" "$BRIDGE_DECIDE" \
+    '        if (record.occurrence.occurrence != occurrence) {
+            require(record.occurrence.occurrence == occurrence) {
+                "caller payload conflicts with the stored payload"
+            }
+        }
+        val decision = TargetOccurrenceExecutionPolicy.decide(record)'
+
+mutate 'bridge derives the payload from the current revision' "$BRIDGE" "$BRIDGE_BUILD" \
+    '        val currentRevision = com.monkfitness.app.domain.common.RevisionId("revision-1")
+        return TargetExistingOccurrence(
+            record.occurrence.occurrence.copy(plannedFor = currentRevision.value.length.let { record.occurrence.occurrence.plannedFor }),
+            decision
+        )'
 
 restore
 if md5sum -c "$WORK/before.md5" > "$WORK/md5check.log" 2>&1; then

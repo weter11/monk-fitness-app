@@ -40,6 +40,9 @@ class TargetExistingOccurrenceArchitectureTest {
     private val targetDir = File(mainDir, "domain/program/target")
     private val valueFile = File(targetDir, "TargetExistingOccurrence.kt")
 
+    /** The Phase 15/16 -> Phase 17 bridge: the one place a stored occurrence becomes a scheduling input. */
+    private val bridgeFile = File(mainDir, "domain/usecase/TargetExistingOccurrenceReader.kt")
+
     private val legacyNames = listOf(
         "ProgramScheduler.kt", "SlotPlanner.kt", "ScheduleCalendar.kt"
     )
@@ -364,7 +367,6 @@ class TargetExistingOccurrenceArchitectureTest {
     @Test
     fun noSecondAdapterInventsExecutionPrecedence() {
         // The bridge from Phase 15/16 to the target input must *call* the policy, not restate it.
-        val bridgeFile = File(mainDir, "domain/usecase/TargetExistingOccurrenceReader.kt")
         assertTrue("the bridge exists", bridgeFile.isFile)
         val bridge = code(bridgeFile)
 
@@ -395,6 +397,89 @@ class TargetExistingOccurrenceArchitectureTest {
             listOf("executionReader" to "TargetOccurrenceExecutionReader"),
             declared
         )
+    }
+
+    @Test
+    fun theBridgeUsesTheCallerOccurrenceOnlyForItsKeyAndCarriesTheStoredPayload() {
+        val bridge = code(bridgeFile)
+        val returnLine = Regex("return TargetExistingOccurrence\\(([^)]*)\\)").find(bridge)
+        assertTrue(
+            "the bridge builds exactly one TargetExistingOccurrence: ${returnLine?.value}",
+            returnLine != null
+        )
+        val arguments = returnLine!!.groupValues[1]
+
+        // The stored payload is what the value carries. Without this, a replacement payload would
+        // be compared against itself inside the reconciler and the conflict would vanish.
+        assertTrue(
+            "the returned occurrence is the persisted one from the Phase 15 record, not the " +
+                "caller's: ${returnLine.value}",
+            arguments.contains("record.occurrence.occurrence")
+        )
+        assertFalse(
+            "and the caller's payload is never forwarded into the value: ${returnLine.value}",
+            Regex("TargetExistingOccurrence\\(\\s*occurrence\\s*,").containsMatchIn(bridge)
+        )
+        // The execution is the Phase 16 decision, and only that.
+        assertTrue(
+            "the execution still comes only from the policy's decision",
+            arguments.contains("decision")
+        )
+        assertTrue(
+            "and the decision is the one the Phase 16 policy produced",
+            bridge.contains("TargetOccurrenceExecutionPolicy.decide(record)")
+        )
+    }
+
+    @Test
+    fun theCallerOccurrenceSuppliesLookupIdentityOnly() {
+        val bridge = code(bridgeFile)
+
+        // The caller's occurrence is read for exactly one thing: the key that locates the record.
+        // `(?<![.\\w])` matters: it matches the *caller's* bare `occurrence.` and not the
+        // `record.occurrence.occurrence` the value is built from, which is the read this test is
+        // not about.
+        val keyReads = Regex("(?<![.\\w])occurrence\\.(\\w+)").findAll(bridge)
+            .map { it.groupValues[1] }.toList()
+        assertEquals(
+            "the caller's occurrence contributes its key and nothing else: $keyReads",
+            listOf("occurrenceKey"),
+            keyReads
+        )
+        assertTrue(
+            "and that key is handed to the Phase 15 reader unchanged",
+            bridge.contains("executionReader.executionRecordOf(programId, occurrence.occurrenceKey)")
+        )
+    }
+
+    @Test
+    fun theBridgeIntroducesNoSecondPayloadReconciliation() {
+        val bridge = code(bridgeFile)
+
+        // The reconciler owns payload equality. The bridge must not compare the caller's payload to
+        // the stored one, refuse on a mismatch, or reconstruct an occurrence — all three would be a
+        // second copy of a rule that already exists, and the first two would also *consume* the
+        // replacement before the reconciler ever sees it.
+        for (forbidden in listOf(
+            "require(", "check(", "IllegalArgumentException", "!!",
+            "PersistedTargetOccurrence(", "PlannedOccurrence("
+        )) {
+            assertFalse(
+                "payload equality belongs to TargetOccurrenceReconciler and is not re-implemented " +
+                    "or short-circuited here ($forbidden)",
+                bridge.contains(forbidden)
+            )
+        }
+        // And it reconciles nothing: no reconciler, planner or policy call of its own beyond the
+        // execution policy it is explicitly allowed to ask.
+        for (forbidden in listOf(
+            "TargetOccurrenceReconciler", "TargetPlanner", "TargetSchedulePolicy", "TargetPlan("
+        )) {
+            assertFalse(
+                "the bridge is a sequence of four owned steps, not a second scheduler ($forbidden)",
+                bridge.contains(forbidden)
+            )
+        }
     }
 
     // ---- 11. the legacy contour stays isolated ------------------------------------------------------

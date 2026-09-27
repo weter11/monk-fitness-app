@@ -66,6 +66,9 @@ Two fields, and the shape is the claim: target scheduling needs an occurrence's 
 and an execution classification, and those are the two fields. It also exposes `occurrenceKey`,
 `plannedFor` and `isPlanned` as read-only projections — no second identity, no stored duplicate.
 
+`occurrence` is the **persisted** target occurrence: the payload storage already holds, which is
+what the reconciler must compare against a replacement.
+
 The orchestration chain is now stated in the target contour's own vocabulary:
 
 ```text
@@ -128,11 +131,45 @@ conversion is a projection of an already-decided fact and never a recomputation.
 deliberately no constructor that takes a `TargetOccurrenceExecutionRecord` and decides for itself:
 that would be a second route to the verdict, which is the failure Phase 16 exists to prevent.
 
-The **payload** side is caller-stated rather than read. A persisted `WorkoutSlot` does not carry a
-full occurrence payload, so no honest read-back of the components exists yet; the caller states the
-`PlannedOccurrence` it planned, and the bridge answers the only question storage can answer — what
-happened to that occurrence. That is also what keeps the reconciler's payload-equality rule exact:
-it compares planned payloads, and nothing on the way in rewrites one.
+Both halves of the record are used, and neither is dropped: `record.occurrence` is the payload and
+`decision.execution` is the classification. Discarding the stored payload — substituting the
+caller's occurrence for it — is a defect, and the architecture gate now names that explicitly
+alongside the precedence rules.
+
+### The payload comes from storage; the caller's occurrence is only a key
+
+A `TargetExistingOccurrence` **represents the persisted target occurrence**, not the one the caller
+is planning. The caller's `PlannedOccurrence` supplies **lookup identity only** — its
+`occurrenceKey` is what locates the stored record through the Phase 15 reader. Everything the
+returned value carries about *what* the occurrence is comes from `record.occurrence`, Phase 15's
+own read-back of the semantic target occurrence.
+
+This is precisely what preserves exact payload-conflict detection. `TargetOccurrenceReconciler`
+compares the **stored** payload against the **replacement** payload and refuses a same-key
+mismatch, and it can only do that if the stored payload is what reaches it:
+
+```text
+persisted   key=strength  components=OLD
+caller      key=strength  components=NEW      the replacement
+
+forwarding the caller's occurrence   reconciler compares NEW == NEW   conflict lost
+carrying record.occurrence           reconciler compares OLD == NEW   conflict observed
+```
+
+A payload conflict is a real target fact, so forwarding the caller's occurrence is not a harmless
+default — it is a silently swallowed defect, and it is exactly the kind that survives review
+precisely because the suite that would notice it is the reconciler's. `TargetExistingOccurrenceReaderTest`
+therefore stages that OLD/NEW pair explicitly and asserts the reconciler's own refusal still fires.
+
+The bridge deliberately does **not** act on the conflict itself: it does not compare the two
+payloads, refuse on a mismatch, or reconcile anything. Payload equality is the reconciler's rule and
+stays there, unchanged. The bridge only refuses to destroy the input that rule needs. Note also that
+the *planned date* is part of a payload's equality, so the same rule covers a replacement that moved
+an occurrence's date — the bridge preserves that too, for the same reason.
+
+A caller that presents a payload *agreeing* with storage gets the stored payload back, which is why
+the disagreement case cannot be satisfied by a bridge that ignores the caller and returns something
+constant; both cases are tested.
 
 ## Why performance / `ActualResult` remains outside this contract
 
@@ -189,13 +226,23 @@ Both directions are pinned, and the legacy generation is untouched:
 
 * `TargetExistingOccurrenceArchitectureTest` — the twelve boundaries, swept over the whole
   production tree, including the positive regression that a new target caller importing
-  `ExistingOccurrence` would fail the gate.
+  `ExistingOccurrence` would fail the gate. Four further cases govern the bridge specifically: the
+  returned occurrence is `record.occurrence.occurrence` and the caller's payload is never
+  forwarded into the value; the caller's occurrence is read for `occurrenceKey` and nothing else;
+  the execution still comes only from `TargetOccurrenceExecutionPolicy.decide(record)`; and the
+  bridge contains no `require(`, no `PlannedOccurrence(` and no reconciler/planner/policy call, so
+  it introduces no second payload-reconciliation rule and does not short-circuit the reconciler's
+  own. The reconciler's own payload-equality guard is untouched and none of these weaken it.
 * `TargetExistingOccurrenceBoundaryTest` — the value, every execution state, and every scheduling
   verdict reached without performance data.
 * `TargetExistingOccurrenceReaderTest` — the bridge on a real SQLite engine, staged through the
   production write paths: no attempt → `PLANNED`, started → `STARTED`, completed → `COMPLETED`,
   cancelled → `CANCELLED`, the verdict equal to the Phase 16 policy's over the same stored history,
-  the caller's payload forwarded unchanged, and a read refusal propagating rather than defaulting.
+  a read refusal propagating rather than defaulting, and the declared shape carrying no performance
+  field. The load-bearing case is `theStoredPayloadIsReturnedAndAReplacementConflictStillReachesTheReconciler`:
+  it persists `OLD`, presents a `NEW` payload under the same key, asserts the returned payload is
+  the **stored** one, and asserts the reconciler's own payload-conflict refusal still fires — which
+  is the regression that the pre-remediation bridge would have failed.
 * The pre-existing target suites (`TargetOccurrenceReconcilerTest`, `TargetPlannerTest`,
   `TargetSchedulePolicyTest`, `TargetScheduleOrchestratorTest`, `TargetScheduleInputAdapterTest`)
   are preserved, with their fixtures re-pointed at the new value.
@@ -216,7 +263,24 @@ Both directions are pinned, and the legacy generation is untouched:
   * **row 13 reads a current `ProgramRevision` from *inside* the reconciler** rather than taking one
     as a parameter, for the same reason: a new parameter breaks every caller before an oracle runs.
 
-  Result: `caught: 18`, `missed: 0`, `source restored byte-identically`, `exit 0`.
+  Rows 19–23 cover the payload, the defect this remediation fixed. Each keeps the execution correct
+  and breaks only *which* payload the existing occurrence carries:
+
+  | # | mutation | must fail because |
+  | --- | --- | --- |
+  | 19 | substitute the caller's payload for the stored one | the OLD/NEW conflict regression |
+  | 20 | rebuild the occurrence from the caller's components | the OLD/NEW conflict regression |
+  | 21 | keep only the stored key, drop the stored payload | the stored payload is asserted field-for-field |
+  | 22 | validate caller == stored, then return the caller's payload | the bridge must preserve, not consume |
+  | 23 | derive the payload from the current `ProgramRevision` | a revision is not an occurrence's identity |
+
+  Result: `caught: 23`, `missed: 0`, `source restored byte-identically`, `exit 0`.
+
+  The gate is measured, not asserted: reverting the bridge to the pre-remediation
+  `TargetExistingOccurrence(occurrence, decision)` fails **two** oracles —
+  `theStoredPayloadIsReturnedAndAReplacementConflictStillReachesTheReconciler` and
+  `theBridgeUsesTheCallerOccurrenceOnlyForItsKeyAndCarriesTheStoredPayload` — so the regression is
+  load-bearing rather than decorative.
 
 ### The full fresh census
 
@@ -226,16 +290,16 @@ compile error can never be reported as a clean baseline:
 ```text
 gradle exit code: 0
 classes: 279
-tests:   2586
+tests:   2591
 failures:0
 errors:  0
 skipped: 0
-xml timestamp range: 2026-09-27T20:15:41 .. 2026-09-27T20:16:16
+xml timestamp range: 2026-09-27T21:06:13 .. 2026-09-27T21:06:41
 non-green suites: none
 ```
 
-Cross-checked against the sources, and it matches exactly: 279 files containing `@Test`, 2586
-`@Test` annotations. The three new suites contribute 13 + 15 + 9 = 37 cases.
+Cross-checked against the sources, and it matches exactly: 279 files containing `@Test`, 2591
+`@Test` annotations. The three Phase 17 suites contribute 16 + 15 + 11 = 42 cases.
 
 Focused target suites (planner, reconciler, policy, orchestration, input adapter and the three new
 ones) were also run on their own and are green. `:app:compileDebugKotlin`,
@@ -254,10 +318,17 @@ Four prior claims changed and each was rewritten as the claim that is now true, 
 
 ### Architecture gaps recorded
 
-* The target scheduling input's **payload** is still caller-stated. A `PlannedOccurrence`'s
-  components are not read back from storage, and no phase owns that read yet. It is not a gap this
-  boundary created — Phase 13 recorded the same three caller-owned facts and named this one — and it
-  is recorded here so the next stage inherits it explicitly.
+* *(revised by this remediation)* The target scheduling input's payload is **not** a caller-owned
+  fact. Phase 13 listed the existing occurrences among the caller-stated values, and the first
+  version of this phase carried that forward; both were wrong, because the existing occurrence is
+  the one already **persisted**. Phase 15 reads that payload back as `record.occurrence`, so it is
+  read rather than stated, and the caller's occurrence supplies lookup identity only. What remains
+  genuinely caller-owned is the *replacement* payload — the planned occurrences a pass produces —
+  which the planner composes and the reconciler compares, and which was never in doubt.
+* An occurrence's persisted `WorkoutSlot` does not itself carry the occurrence payload; the
+  semantic payload lives in the Phase 14 target-occurrence row the reader reaches first. Nothing
+  needs changing for this phase, but it is the reason a reader alone would have been an incomplete
+  answer to "what is the existing occurrence?".
 * The `SlotStatus` of an occurrence's slot is carried into the Phase 16 decision and is deliberately
   **not** a scheduling input. Whether any target rule should read it is an open policy question, not
   a boundary one; nothing in the current pipeline does, and this phase does not add it.

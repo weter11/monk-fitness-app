@@ -15,6 +15,7 @@ import com.monkfitness.app.domain.program.PlannedOccurrence
 import com.monkfitness.app.domain.program.SlotStatus
 import com.monkfitness.app.domain.program.WorkoutSlot
 import com.monkfitness.app.domain.program.target.TargetExistingOccurrence
+import com.monkfitness.app.domain.program.target.TargetOccurrenceReconciler
 import com.monkfitness.app.domain.program.target.TargetOccurrencePresentation
 import com.monkfitness.app.domain.program.target.TargetScheduleDecision
 import com.monkfitness.app.domain.program.target.TargetOccurrenceExecutionReadException
@@ -157,22 +158,71 @@ class TargetExistingOccurrenceReaderTest {
     // ---- 4. the payload and the absence of performance ----------------------------------------------
 
     @Test
-    fun theCallerStatedPayloadIsForwardedUnchangedAndNothingIsAggregatedFromIt() = runBlocking {
-        val planned = persistTarget("strength", DAY)
-        completeSession("a", planned)
-        // A payload that differs from the stored semantic record's components in its own text: the
-        // bridge must forward the caller's payload verbatim, because reconciling payloads is the
-        // planner's rule and rewriting one here would defeat it.
-        val stated = PlannedOccurrence(
+    fun theStoredPayloadIsReturnedAndAReplacementConflictStillReachesTheReconciler() = runBlocking {
+        // The stored occurrence is `OLD`. The caller presents the same identity with a different
+        // payload, `NEW` — which is what a replacement plan looks like when it has drifted from
+        // storage. The existing occurrence the bridge returns must be the *stored* one, because the
+        // reconciler can only observe that conflict if it is handed what is actually persisted.
+        val stored = persistTarget("strength", DAY)
+        completeSession("a", stored)
+        val replacement = PlannedOccurrence(
             occurrenceKey = "strength",
             plannedFor = DAY,
-            components = listOf(OccurrenceComponent("rule-a", "workout-a"))
+            components = listOf(OccurrenceComponent("rule-new", "workout-new"))
+        )
+        assertEquals(
+            "the fixture is meaningful: the caller's payload really does differ from the stored one",
+            false,
+            replacement == occurrence("strength", DAY)
         )
 
-        val existing = reader().existingOccurrenceOf(programId, stated)
+        val existing = reader().existingOccurrenceOf(programId, replacement)
 
-        assertSamePayload(stated, existing.occurrence)
+        // 1. The identity is the caller's, unchanged — the key is what the lookup used.
+        assertEquals("strength", existing.occurrenceKey)
+        // 2. The execution is the Phase 16 verdict, not the caller's and not a default.
         assertEquals(OccurrenceExecution.COMPLETED, existing.execution)
+        // 3. The payload is the *persisted* one, not the caller's.
+        assertSamePayload(occurrence("strength", DAY), existing.occurrence)
+        assertEquals(
+            "the caller's payload must not have been forwarded",
+            false,
+            existing.occurrence == replacement
+        )
+
+        // 4. And the conflict is still visible to the existing reconciler rule, unchanged.
+        val failure = runCatching {
+            TargetOccurrenceReconciler.reconcile(listOf(existing), listOf(replacement))
+        }.exceptionOrNull()
+
+        assertTrue(
+            "a stored/replacement payload conflict must still be refused rather than silently " +
+                "comparing the caller against itself: $failure",
+            failure is IllegalArgumentException
+        )
+        assertTrue(
+            "and the message names the conflict the reconciler already owned",
+            failure?.message?.contains("conflicts with the existing occurrence payload") == true
+        )
+    }
+
+    @Test
+    fun theStoredPayloadIsReturnedEvenWhenTheCallerAgreesWithIt() = runBlocking {
+        // The agreeing case, stated separately so the disagreement case above cannot be satisfied
+        // by a bridge that simply ignores the caller and returns something constant.
+        persistTarget("strength", DAY)
+
+        val existing = reader().existingOccurrenceOf(programId, occurrence("strength", DAY))
+
+        assertSamePayload(occurrence("strength", DAY), existing.occurrence)
+        // And a matching replacement is not a conflict — the reconciler still agrees the occurrence
+        // is retained, which is what makes the refusal above a real observation and not a blanket one.
+        val result = TargetOccurrenceReconciler.reconcile(
+            listOf(existing),
+            listOf(occurrence("strength", DAY))
+        )
+        assertTrue(result.preserved.isEmpty())
+        assertTrue(result.added.isEmpty())
     }
 
     @Test
@@ -191,6 +241,35 @@ class TargetExistingOccurrenceReaderTest {
         assertEquals(
             listOf(OccurrenceExecution.CANCELLED, OccurrenceExecution.COMPLETED),
             existing.map { it.execution }
+        )
+    }
+
+    // ---- 5. no performance data crosses this boundary -----------------------------------------------
+
+    @Test
+    fun noActualResultIsConstructedAndNoPerformanceIsAggregated() = runBlocking {
+        // The attempt below confirmed two real sets of real reps. None of that may reach the
+        // scheduling input, because nothing on the scheduling path reads performance.
+        val slot = persistTarget("strength", DAY)
+        completeSession("a", slot)
+
+        val existing = reader().existingOccurrenceOf(programId, occurrence("strength", DAY))
+
+        assertEquals("the execution still comes from the stored history", OccurrenceExecution.COMPLETED, existing.execution)
+        // The declared shape is the whole surface: payload plus execution, and nothing else can be
+        // read off it, so a performance field could not be carried even if one were added.
+        assertEquals(
+            setOf("occurrence", "execution"),
+            TargetExistingOccurrence::class.java.declaredFields
+                .filterNot { it.isSynthetic }
+                .filter { !it.name.startsWith("$") }
+                .map { it.name }
+                .toSet()
+        )
+        assertEquals(
+            "and the payload is the stored schedule data, not a summary of what was performed",
+            occurrence("strength", DAY).components,
+            existing.occurrence.components
         )
     }
 
