@@ -19,6 +19,7 @@ import com.monkfitness.app.domain.program.ProgramSchedule
 import com.monkfitness.app.domain.program.SchedulerFixture
 import com.monkfitness.app.domain.program.SequentialIds
 import com.monkfitness.app.domain.program.WorkoutSlot
+import com.monkfitness.app.domain.program.target.TargetProgramDayBinding
 import com.monkfitness.app.domain.prescription.RepPrescription
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -81,11 +82,17 @@ internal class ProgramSaveRig(private val key: String = "s") {
         inTransaction = data.transaction
     )
 
-    /** The behaviour under test. */
+    /**
+     * The behaviour under test, wired with the same collaborators the composition root passes — the
+     * editor, the creation repository, the Scheduler and the explicit target-source repository, over a
+     * [MovableClock] and a [SequentialIds] generator so every date and identity in a test is a value
+     * the test chose.
+     */
     val service: ProgramSaveService = ProgramSaveService(
         editor = editor,
         programRepository = data.programRepository,
         scheduler = scheduler,
+        targetSourceRepository = data.targetScheduleSourceRepository,
         clock = clock,
         zone = zone,
         inTransaction = data.transaction
@@ -94,10 +101,13 @@ internal class ProgramSaveRig(private val key: String = "s") {
     /** The faults a test plants to prove a failed leg leaves nothing behind. */
     val faults get() = data.faults
 
-    /** The graph's persistence — reachable so a test can compose a *second* service over the same rows. */
+    /**
+     * The graph's persistence — reachable so a test can compose a *second* service over the same rows,
+     * and so a test can read back the explicit target source a save stated. */
     val programRepository get() = data.programRepository
     val planRepository get() = data.programPlanRepository
     val scheduleRepository get() = data.programScheduleRepository
+    val targetSourceRepository get() = data.targetScheduleSourceRepository
     val transaction get() = data.transaction
 
     /**
@@ -191,6 +201,29 @@ internal class ProgramSaveRig(private val key: String = "s") {
 
     /** The selection row itself — a creation must leave it untouched. */
     suspend fun selection() = data.appStateRepository.state()
+
+    /**
+     * The explicit target source stored for [revisionId], read through a **fresh** repository so
+     * nothing is a cache — the same read a production caller of the bridge would make.
+     */
+    suspend fun storedTargetSource(revisionId: RevisionId): TargetScheduleSourceRead =
+        data.freshTargetScheduleSourceRepository().sourceOf(revisionId)
+
+    /** The rules stored for [revisionId], or the typed absence, read fresh. */
+    suspend fun storedTargetRules(revisionId: RevisionId): List<TargetScheduleDefinition> =
+        when (val read = storedTargetSource(revisionId)) {
+            is TargetScheduleSourceRead.Source -> read.source.rules
+            is TargetScheduleSourceRead.Missing -> emptyList()
+            is TargetScheduleSourceRead.Malformed -> emptyList()
+        }
+
+    /** The `workoutId -> ProgramDayId` bindings stored for [revisionId], or the typed absence. */
+    suspend fun storedTargetBindings(revisionId: RevisionId): List<TargetProgramDayBinding> =
+        when (val read = storedTargetSource(revisionId)) {
+            is TargetScheduleSourceRead.Source -> read.source.programDayBindings
+            is TargetScheduleSourceRead.Missing -> emptyList()
+            is TargetScheduleSourceRead.Malformed -> emptyList()
+        }
 
     /** Makes [programId] the selection through the state row, so *"a creation does not clear it"* is measurable. */
     suspend fun select(programId: ProgramId) {

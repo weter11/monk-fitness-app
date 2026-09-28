@@ -405,9 +405,13 @@ class AppContainer(
      * programRepository   the creation primitive: the whole graph and its slots, or nothing (§27)
      * scheduler           initial opportunities for a creation; the one reconciliation pass after
      *                     an edit (§20)
+     * targetSourceRepository
+     *                     the revision-owned explicit target source: a stated authoring is written
+     *                     against the revision this save creates, inside the same transaction; none
+     *                     stated means no row and a typed `Missing` (§30 step 19)
      * clock, zone         *today*, only when a creation request names no exact start date (§26)
-     * inTransaction       the unit: a failure at any leg leaves no partial Program and no
-     *                     half-applied save
+     * inTransaction       the unit: a failure at any leg leaves no partial Program, no half-applied
+     *                     save and no orphaned target source
      * ```
      *
      * There is **no** lifecycle service here, so a creation cannot move a selection (§3, §9), no
@@ -420,6 +424,7 @@ class AppContainer(
         editor = programEditorService,
         programRepository = programRepository,
         scheduler = programScheduler,
+        targetSourceRepository = targetScheduleSourceRepository,
         clock = clock,
         zone = zone,
         inTransaction = inTransaction

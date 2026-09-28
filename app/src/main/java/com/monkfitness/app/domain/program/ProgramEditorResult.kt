@@ -1,5 +1,6 @@
 package com.monkfitness.app.domain.program
 
+import com.monkfitness.app.domain.common.ProgramDayId
 import com.monkfitness.app.domain.common.RevisionId
 
 /**
@@ -109,11 +110,17 @@ sealed interface ProgramSaveOutcome {
      *   points — as opposed to a new revision of an existing one.
      * @property revision the revision that was saved. It is a new immutable value: the revision it
      *   replaces keeps describing exactly what it described (§6).
+     * @property mintedProgramDays the editor's own draft-handle to saved-identity correspondence for
+     *   the days of [revision]. It exists so a caller can state a `workoutId -> ProgramDayId` binding
+     *   against a draft handle and have it re-pointed at the identity that handle actually became —
+     *   the editor is the single component that performs that re-identification, so it is the one that
+     *   reports it, and nothing downstream re-derives it.
      */
     data class RevisionSaved(
         override val program: Program,
         val revision: ProgramRevision,
-        val createdProgram: Boolean
+        val createdProgram: Boolean,
+        val mintedProgramDays: Map<ProgramDayId, ProgramDayId>
     ) : ProgramSaveOutcome {
 
         override val currentRevisionId: RevisionId

@@ -21,6 +21,8 @@ import com.monkfitness.app.data.model.ProgramDayEntity
 import com.monkfitness.app.data.model.ProgramExerciseEntity
 import com.monkfitness.app.data.model.ProgramTargetOccurrenceComponentEntity
 import com.monkfitness.app.data.model.ProgramTargetOccurrenceEntity
+import com.monkfitness.app.data.model.ProgramTargetProgramDayBindingEntity
+import com.monkfitness.app.data.model.ProgramTargetScheduleRuleEntity
 import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
 import com.monkfitness.app.data.model.SessionExerciseEntity
 import com.monkfitness.app.data.model.SessionSnapshotEntity
@@ -110,11 +112,13 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
     // rollback claim is measurable at a point other than the last write.
     val targetOccurrenceDao: ProgramTargetOccurrenceDao =
         FailingProgramTargetOccurrenceDao(SqliteProgramTargetOccurrenceDao(database), faults)
-    // Stage 18: a revision's explicit target schedule source. No planted fault here yet — the
-    // repository's own refusals are what its suite measures, and a second fault switch would only add
-    // a way for a rollback claim to be about the wrong statement.
+    // Stage 18: a revision's explicit target schedule source, with §30 step 19's one switchable
+    // failure on the *binding* insert. That is the source's second write and the save unit's last
+    // leg, so faulting it leaves the Program, its revision, its plan, its slots and the source's own
+    // rule rows genuinely written — which is what makes "the source and the revision are one unit"
+    // measurable rather than a claim that anything failed at the first statement.
     val targetScheduleSourceDao: ProgramTargetScheduleSourceDao =
-        SqliteProgramTargetScheduleSourceDao(database)
+        FailingProgramTargetScheduleSourceDao(SqliteProgramTargetScheduleSourceDao(database), faults)
     val sessionDao = SqliteWorkoutSessionDao(database)
     val snapshotDao: SessionSnapshotDao = FailingSessionSnapshotDao(SqliteSessionSnapshotDao(database), faults)
     val snapshotExerciseDao = SqliteSessionSnapshotExerciseDao(database)
@@ -274,6 +278,61 @@ internal class ProgramDaoFaults {
      * then and both have to disappear.
      */
     var failTargetOccurrenceComponentInsert: Boolean = false
+
+    /**
+     * When set, inserting a target source's **bindings** fails — the second of the source's two writes
+     * and the last leg of §30 step 19's revision-creation unit.
+     *
+     * §30 step 19's claim is that a revision and its explicit target source are one atomic operation.
+     * The only way to measure that is to fail after the first write has already landed: a fault on the
+     * rule insert would fail the unit at its first statement and prove only that nothing ran, while a
+     * fault on the *binding* insert proves the rollback reaches back over a Program, a revision, a
+     * plan, a set of initial slots and the source's own rule rows.
+     */
+    var failTargetBindingInsert: Boolean = false
+
+    /** Clears every planted failure, so one test's fault cannot colour the next one's baseline. */
+    fun clear() {
+        failExerciseInsert = false
+        failSnapshotInsert = false
+        failSessionExerciseInsert = false
+        failSlotOutcomeUpdate = false
+        failSetLogInsert = false
+        failAdjustmentInsert = false
+        failDecisionInsert = false
+        failFamilyStateInsert = false
+        failSlotRead = false
+        failTargetOccurrenceComponentInsert = false
+        failTargetBindingInsert = false
+    }
+}
+
+/**
+ * A revision's explicit target source rows, with one switchable failure on the **binding** insert.
+ *
+ * §30 step 19 writes a revision and its target source in one unit, and the source's own two writes are
+ * its rules then its bindings. The failure sits on the second because that is the statement that makes
+ * the rollback claim measurable: when it fires, the Program, the revision, the plan, the initial slots
+ * and the source's rule rows are all already on disk, and all of them have to disappear.
+ */
+private class FailingProgramTargetScheduleSourceDao(
+    private val delegate: ProgramTargetScheduleSourceDao,
+    private val faults: ProgramDaoFaults
+) : ProgramTargetScheduleSourceDao {
+    override suspend fun insertRules(rules: List<ProgramTargetScheduleRuleEntity>) =
+        delegate.insertRules(rules)
+
+    override suspend fun insertBindings(bindings: List<ProgramTargetProgramDayBindingEntity>) {
+        if (faults.failTargetBindingInsert) {
+            throw IllegalStateException("planted fault: target schedule source binding insert")
+        }
+        delegate.insertBindings(bindings)
+    }
+
+    override suspend fun rulesOfRevision(revisionId: String) = delegate.rulesOfRevision(revisionId)
+
+    override suspend fun bindingsOfRevision(revisionId: String) =
+        delegate.bindingsOfRevision(revisionId)
 }
 
 /**
