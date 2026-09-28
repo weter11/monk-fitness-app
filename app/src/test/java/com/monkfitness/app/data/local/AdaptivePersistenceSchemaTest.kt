@@ -173,17 +173,19 @@ class AdaptivePersistenceSchemaTest {
 
         // The version is the last step of the chain, and the chain is what a device runs. Phase 8
         // added the target-occurrence identity seam at 13; §30 step 14 added the target occurrence's
-        // semantic tables at 14, so 14 is now what the schema declares.
+        // semantic tables at 14; Stage 18 added the revision-owned explicit target schedule source at
+        // 15, so 15 is now what the schema declares.
         assertTrue(
             "the database version moves with the schema: 13 is Phase 8's additive target-occurrence " +
-                "identity seam and 14 is §30 step 14's target-occurrence semantic payload",
-            source.contains("version = 14")
+                "identity seam, 14 is §30 step 14's target-occurrence semantic payload and 15 is " +
+                "Stage 18's explicit target schedule source",
+            source.contains("version = 15")
         )
         assertTrue(
             "and the step that reaches it is declared, and registered in the builder's chain right " +
                 "after the step it follows",
-            source.contains("MIGRATION_13_14 = object : Migration(13, 14)") &&
-                Regex("MIGRATION_12_13,\\s*MIGRATION_13_14").containsMatchIn(source)
+            source.contains("MIGRATION_14_15 = object : Migration(14, 15)") &&
+                Regex("MIGRATION_13_14,\\s*MIGRATION_14_15").containsMatchIn(source)
         )
 
         val registered = Regex("entities = \\[(.*?)]", RegexOption.DOT_MATCHES_ALL)
@@ -192,7 +194,7 @@ class AdaptivePersistenceSchemaTest {
             .let { Regex("(\\w+)::class").findAll(it).map { match -> match.groupValues[1] }.toList() }
 
         assertEquals(
-            "the five retained global entities and the seventeen target ones — and **nothing that stood " +
+            "the five retained global entities and the nineteen target ones — and **nothing that stood " +
                 "in for a retired table**. `UserProgress`, `SetLog`, `ProgramDayState`, " +
                 "`FamilyProgressionState` and `AdaptiveDecisionRecord` are gone from the declaration " +
                 "because `MIGRATION_11_12` drops them, not because a replacement was added",
@@ -214,6 +216,12 @@ class AdaptivePersistenceSchemaTest {
                 // them, and nothing here was renamed into their place.
                 "ProgramTargetOccurrenceEntity",
                 "ProgramTargetOccurrenceComponentEntity",
+                // Stage 18: the revision-owned explicit target schedule source, declared immediately
+                // after the target occurrence's own tables — they are the semantic *configuration* the
+                // occurrence's presentation reads, and they are new storage, not a replacement for
+                // anything retired.
+                "ProgramTargetScheduleRuleEntity",
+                "ProgramTargetProgramDayBindingEntity",
                 "WorkoutSessionEntity",
                 "SessionSnapshotEntity",
                 "SessionSnapshotExerciseEntity",
@@ -242,7 +250,9 @@ class AdaptivePersistenceSchemaTest {
             "MIGRATION_9_10",
             "MIGRATION_10_11",
             "MIGRATION_11_12",
-            "MIGRATION_12_13"
+            "MIGRATION_12_13",
+            "MIGRATION_13_14",
+            "MIGRATION_14_15"
         )) {
             assertTrue("$migration is registered", migrations.contains(migration))
         }

@@ -22,6 +22,8 @@ import com.monkfitness.app.data.model.ProgramPauseEntity
 import com.monkfitness.app.data.model.ProgramRevisionEntity
 import com.monkfitness.app.data.model.ProgramTargetOccurrenceComponentEntity
 import com.monkfitness.app.data.model.ProgramTargetOccurrenceEntity
+import com.monkfitness.app.data.model.ProgramTargetProgramDayBindingEntity
+import com.monkfitness.app.data.model.ProgramTargetScheduleRuleEntity
 import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
 import com.monkfitness.app.data.model.SessionExerciseEntity
 import com.monkfitness.app.data.model.SessionSnapshotEntity
@@ -57,6 +59,13 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         // serialized blob is not a stored order.
         ProgramTargetOccurrenceEntity::class,
         ProgramTargetOccurrenceComponentEntity::class,
+        // The revision-owned **explicit target schedule source**: the rules a revision states (each
+        // with its cadence form, that form's own payload and its anchor date) and the explicit
+        // `workoutId -> ProgramDayId` bindings beside them. Two tables rather than columns on
+        // `program_revision`, because the values are a *list* whose order and membership are the
+        // contract — the same reasoning §30 step 14 used for an occurrence's ordered components.
+        ProgramTargetScheduleRuleEntity::class,
+        ProgramTargetProgramDayBindingEntity::class,
         WorkoutSessionEntity::class,
         SessionSnapshotEntity::class,
         SessionSnapshotExerciseEntity::class,
@@ -67,7 +76,7 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         AdaptiveDecisionRecordEntity::class,
         AdaptiveAdjustmentEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
@@ -102,6 +111,12 @@ abstract class AppDatabase : RoomDatabase() {
      * component rows, read and written as one occurrence and never reconstructed from a slot.
      */
     abstract fun programTargetOccurrenceDao(): ProgramTargetOccurrenceDao
+
+    /**
+     * A revision's explicit target schedule source: its stated target rules and its stated
+     * `workoutId -> ProgramDayId` bindings, read and written as one immutable unit.
+     */
+    abstract fun programTargetScheduleSourceDao(): ProgramTargetScheduleSourceDao
 
     abstract fun workoutSessionDao(): WorkoutSessionDao
 
@@ -1099,6 +1114,123 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Version 14 → version 15: a revision's **explicit target schedule source** becomes a stored
+         * fact.
+         *
+         * Until this step a revision stored only its legacy `program_schedule`, and every would-be
+         * target scheduling entry point had to *invent* the target rules it needed: pick a rule
+         * identity, pick a workout identity, pick an anchor date, and — for a derived rule — pick the
+         * rule it derives from. None of those is in the legacy vocabulary, so each was a guess dressed
+         * as a read. This step gives the application somewhere honest to state them.
+         *
+         * ```text
+         * program_target_schedule_rule
+         *   revisionId              TEXT     the immutable revision that states it     } membership
+         *   ruleId                  TEXT     the rule's own identity                  } identity,
+         *   workoutId               TEXT     the workout the rule produces            }  and exactly it
+         *   cadenceType             TEXT     DAILY | EVERY_N_DAYS | SESSIONS_PER_WEEK
+         *                                       | FIXED_WEEKDAYS | DERIVED_EXCLUDING
+         *   cadenceDays             INTEGER  the interval, for EVERY_N_DAYS only
+         *   cadenceSessionsPerWeek  INTEGER  the frequency, for SESSIONS_PER_WEEK only
+         *   cadenceWeekdays         TEXT     the named days, for FIXED_WEEKDAYS only
+         *   cadenceSourceRuleId     TEXT     the named source, for DERIVED_EXCLUDING only
+         *   anchorDate              TEXT     the date the rule is anchored to
+         *
+         * program_target_program_day_binding
+         *   revisionId              TEXT     the immutable revision that states it
+         *   workoutId               TEXT     the target workout identity
+         *   programDayId            TEXT     the plan day this workout presents
+         * ```
+         *
+         * ### Why two tables, and why four cadence columns
+         *
+         * Not columns on `program_revision`: a revision states a *list* of rules and a *list* of
+         * bindings, and both the order and the membership of those lists are part of what is stored. A
+         * set of columns could hold one rule, or one rule behind a delimiter that a read would then
+         * have to parse — and §30 step 14 already rejected that shape for an occurrence's components.
+         *
+         * The cadence is a **discriminator plus one payload column per form** rather than one encoded
+         * value, for the three reasons that shape exists: the payload is a field, so reading it back is
+         * a column fetch rather than a delimiter split; a form that has no payload cannot be confused
+         * with a form whose payload is zero, because absent stays absent; and `SessionsPerWeek` cannot
+         * be normalized into a weekday set or an interval on the way through. The entity's own guard
+         * holds the discriminator and its payload consistent, exactly as `program_revision`'s guard
+         * holds `scheduleType` and `scheduleWeekdays`.
+         *
+         * ### The identities, and what they refuse
+         *
+         * `(revisionId, ruleId)` **is** the primary key of the rule table: one revision may state a
+         * rule once, two revisions may state the same rule identity independently, and a stored rule
+         * can never be re-pointed at another revision by a write. `(revisionId, workoutId)` is the
+         * primary key of the binding table for the same reason — one workout presents one plan day per
+         * revision, so which day it presents is a fact rather than a preference.
+         *
+         * The binding's `programDayId` cascades with its plan day, and its `revisionId` cascades with
+         * its revision. What a foreign key cannot say is that the day belongs to *this* revision, and
+         * the repository refuses that case explicitly rather than storing a binding that would present
+         * one revision's schedule against another revision's plan.
+         *
+         * ### What this migration does to existing data: nothing
+         *
+         * Two `CREATE TABLE` statements and **no** `UPDATE`, `INSERT`, `DELETE`, `ALTER` or `RENAME`.
+         * It creates storage; it writes no row and changes no existing one.
+         *
+         * There is deliberately **no** backfill from `program_revision.scheduleType`,
+         * `scheduleWeekdays` or `scheduleSessionsPerWeek`. Those columns say when a revision's legacy
+         * slots fall; a target rule also needs a rule identity, a workout identity, an anchor date and,
+         * for a derived rule, its source — none of which those columns carry. Any row manufactured from
+         * them would have to invent those four facts, and an invented row that later reads back as
+         * *stored* is worse than an absent one. So an upgraded revision states no target source, and a
+         * read reports that as a typed absence rather than a plausible-looking default.
+         *
+         * Version 7 to 13 devices are not affected differently: they run the earlier steps of the chain
+         * first, which is what `ProgramMigrationPreservationTest` executes on a real engine.
+         *
+         * Visible to the unit tests on purpose, like every step before it: the statements are the
+         * deployable proof of the change and the schema suites compare them token for token.
+         */
+        internal val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `program_target_schedule_rule` (
+                        `revisionId` TEXT NOT NULL,
+                        `ruleId` TEXT NOT NULL,
+                        `workoutId` TEXT NOT NULL,
+                        `cadenceType` TEXT NOT NULL,
+                        `cadenceDays` INTEGER,
+                        `cadenceSessionsPerWeek` INTEGER,
+                        `cadenceWeekdays` TEXT,
+                        `cadenceSourceRuleId` TEXT,
+                        `anchorDate` TEXT NOT NULL,
+                        PRIMARY KEY(`revisionId`, `ruleId`),
+                        FOREIGN KEY(`revisionId`) REFERENCES `program_revision`(`revisionId`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `program_target_program_day_binding` (
+                        `revisionId` TEXT NOT NULL,
+                        `workoutId` TEXT NOT NULL,
+                        `programDayId` TEXT NOT NULL,
+                        PRIMARY KEY(`revisionId`, `workoutId`),
+                        FOREIGN KEY(`revisionId`) REFERENCES `program_revision`(`revisionId`) ON UPDATE NO ACTION ON DELETE CASCADE ,
+                        FOREIGN KEY(`programDayId`) REFERENCES `program_day`(`programDayId`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                // `programDayId` is a foreign key outside the primary key, so it is indexed — the same
+                // reason `program_workout_slot` indexes its own three. Without it SQLite full-scans
+                // the binding table whenever a `program_day` row is modified, which the cascade does.
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_program_target_program_day_binding_programDayId` " +
+                        "ON `program_target_program_day_binding` (`programDayId`)"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -1119,7 +1251,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_10_11,
                         MIGRATION_11_12,
                         MIGRATION_12_13,
-                        MIGRATION_13_14
+                        MIGRATION_13_14,
+                        MIGRATION_14_15
                     )
                     .build()
                 INSTANCE = instance

@@ -17,6 +17,7 @@ import com.monkfitness.app.data.local.ProgramPauseDao
 import com.monkfitness.app.data.local.ProgramRevisionDao
 import com.monkfitness.app.data.local.ProgramSetLogDao
 import com.monkfitness.app.data.local.ProgramTargetOccurrenceDao
+import com.monkfitness.app.data.local.ProgramTargetScheduleSourceDao
 import com.monkfitness.app.data.local.ProgramWorkoutSlotDao
 import com.monkfitness.app.data.local.WorkoutSessionDao
 import com.monkfitness.app.data.local.PostureProgressDao
@@ -34,6 +35,7 @@ import com.monkfitness.app.data.repository.SqliteProgramPauseDao
 import com.monkfitness.app.data.repository.SqliteProgramRevisionDao
 import com.monkfitness.app.data.repository.SqliteProgramSetLogDao
 import com.monkfitness.app.data.repository.SqliteProgramTargetOccurrenceDao
+import com.monkfitness.app.data.repository.SqliteProgramTargetScheduleSourceDao
 import com.monkfitness.app.data.repository.SqliteProgramWorkoutSlotDao
 import com.monkfitness.app.data.repository.SqliteSessionExerciseDao
 import com.monkfitness.app.data.repository.SqliteSessionSnapshotDao
@@ -102,6 +104,7 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
     private val exercise by lazy { ProgramExerciseDaoFence(SqliteProgramExerciseDao(engine), faults) }
     private val slot by lazy { SqliteProgramWorkoutSlotDao(engine) }
     private val targetOccurrence by lazy { SqliteProgramTargetOccurrenceDao(engine) }
+    private val targetScheduleSource by lazy { SqliteProgramTargetScheduleSourceDao(engine) }
     private val session by lazy { SqliteWorkoutSessionDao(engine) }
     private val snapshot by lazy { SqliteSessionSnapshotDao(engine) }
     private val snapshotExercise by lazy { SqliteSessionSnapshotExerciseDao(engine) }
@@ -130,6 +133,9 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
 
     override fun programTargetOccurrenceDao(): ProgramTargetOccurrenceDao =
         targetOccurrence.also { asked("programTargetOccurrenceDao") }
+
+    override fun programTargetScheduleSourceDao(): ProgramTargetScheduleSourceDao =
+        targetScheduleSource.also { asked("programTargetScheduleSourceDao") }
 
     override fun workoutSessionDao(): WorkoutSessionDao = session.also { asked("workoutSessionDao") }
 
@@ -264,6 +270,7 @@ internal class CompositionRootRig(
         database.migrate(AppDatabase.MIGRATION_11_12)
         database.migrate(AppDatabase.MIGRATION_12_13)
         database.migrate(AppDatabase.MIGRATION_13_14)
+        database.migrate(AppDatabase.MIGRATION_14_15)
     }
 
     val database = SqliteAppDatabase(engine)

@@ -94,6 +94,8 @@ class ProgramMigrationPreservationTest {
         // Target slot semantic identity: nullable, additive, and no legacy backfill.
         database.migrate(AppDatabase.MIGRATION_12_13)
         database.migrate(AppDatabase.MIGRATION_13_14)
+        // Stage 18: the revision-owned explicit target schedule source — two new tables and no backfill.
+        database.migrate(AppDatabase.MIGRATION_14_15)
     }
 
     /** A populated **version-8** database: what a device that ran the target-schema release holds. */
@@ -299,7 +301,9 @@ class ProgramMigrationPreservationTest {
 
         // The target family state is owned by a revision, so the write needs one to exist: the FK is
         // part of what makes the target table the *owned* one the Stage-1 table never was.
-        ProgramGraphInserts.insertCompleteProgram(database, "1", targetOccurrenceRows = true)
+        ProgramGraphInserts.insertCompleteProgram(
+            database, "1", targetOccurrenceRows = true, targetScheduleSourceRows = true
+        )
 
         database.exec(
             "INSERT INTO `program_family_progression_state` (`revisionId`, `familyId`, " +
@@ -449,7 +453,9 @@ class ProgramMigrationPreservationTest {
         // §30 step 15 inverted this claim: it used to be about two independent set logs coexisting.
         // One is retired, so the claim is that there is exactly one — and that it is the target one.
         val database = migratedDatabase()
-        ProgramGraphInserts.insertCompleteProgram(database, "1", targetOccurrenceRows = true)
+        ProgramGraphInserts.insertCompleteProgram(
+            database, "1", targetOccurrenceRows = true, targetScheduleSourceRows = true
+        )
 
         assertFalse(
             "the shipped logging table is dropped, so nothing can write a second set log",
@@ -471,7 +477,9 @@ class ProgramMigrationPreservationTest {
     @Test
     fun aPrescriptionSurvivesTheDatabaseUnchangedAndPerSet() {
         val database = migratedDatabase()
-        ProgramGraphInserts.insertCompleteProgram(database, "1", targetOccurrenceRows = true)
+        ProgramGraphInserts.insertCompleteProgram(
+            database, "1", targetOccurrenceRows = true, targetScheduleSourceRows = true
+        )
         database.exec(
             "INSERT INTO `program_exercise` (`programExerciseId`, `programDayId`, `position`, " +
                 "`exerciseId`, `prescriptionDimension`, `perSetTargets`, `origin`, `isPinned`) " +
@@ -513,7 +521,9 @@ class ProgramMigrationPreservationTest {
     @Test
     fun aRestDaySlotAndAMissedSlotCarryNoPerformanceRows() {
         val database = migratedDatabase()
-        ProgramGraphInserts.insertCompleteProgram(database, "1", targetOccurrenceRows = true)
+        ProgramGraphInserts.insertCompleteProgram(
+            database, "1", targetOccurrenceRows = true, targetScheduleSourceRows = true
+        )
         database.exec(
             "INSERT INTO `program_day` (`programDayId`, `revisionId`, `position`, `type`, `name`) " +
                 "VALUES ('day-rest', 'revision-1', 2, 'REST', NULL)"
@@ -557,7 +567,9 @@ class ProgramMigrationPreservationTest {
     @Test
     fun aCancelledSessionKeepsItsPartialWorkAndDoesNotCompleteItsSlot() {
         val database = migratedDatabase()
-        ProgramGraphInserts.insertCompleteProgram(database, "1", targetOccurrenceRows = true)
+        ProgramGraphInserts.insertCompleteProgram(
+            database, "1", targetOccurrenceRows = true, targetScheduleSourceRows = true
+        )
         database.exec("UPDATE `workout_session` SET status = 'CANCELLED', finishedAt = 1700000004000")
         database.exec("UPDATE `program_workout_slot` SET status = 'MISSED'")
 
@@ -594,6 +606,13 @@ class ProgramMigrationPreservationTest {
         assertEquals(11, AppDatabase.MIGRATION_10_11.endVersion)
         assertEquals(11, AppDatabase.MIGRATION_11_12.startVersion)
         assertEquals(12, AppDatabase.MIGRATION_11_12.endVersion)
+        assertEquals(12, AppDatabase.MIGRATION_12_13.startVersion)
+        assertEquals(13, AppDatabase.MIGRATION_12_13.endVersion)
+        assertEquals(13, AppDatabase.MIGRATION_13_14.startVersion)
+        assertEquals(14, AppDatabase.MIGRATION_13_14.endVersion)
+        // Stage 18's step is the last one, so it is the only one whose end version is the declared one.
+        assertEquals(14, AppDatabase.MIGRATION_14_15.startVersion)
+        assertEquals(15, AppDatabase.MIGRATION_14_15.endVersion)
 
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
@@ -604,7 +623,8 @@ class ProgramMigrationPreservationTest {
             database.migrate(AppDatabase.MIGRATION_10_11)
             database.migrate(AppDatabase.MIGRATION_11_12)
             database.migrate(AppDatabase.MIGRATION_12_13)
-        database.migrate(AppDatabase.MIGRATION_13_14)
+            database.migrate(AppDatabase.MIGRATION_13_14)
+            database.migrate(AppDatabase.MIGRATION_14_15)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }

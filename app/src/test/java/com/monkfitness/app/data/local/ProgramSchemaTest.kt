@@ -12,6 +12,8 @@ import com.monkfitness.app.data.model.ProgramPauseEntity
 import com.monkfitness.app.data.model.ProgramRevisionEntity
 import com.monkfitness.app.data.model.ProgramTargetOccurrenceComponentEntity
 import com.monkfitness.app.data.model.ProgramTargetOccurrenceEntity
+import com.monkfitness.app.data.model.ProgramTargetProgramDayBindingEntity
+import com.monkfitness.app.data.model.ProgramTargetScheduleRuleEntity
 import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
 import com.monkfitness.app.data.model.SessionExerciseEntity
 import com.monkfitness.app.data.model.SessionSnapshotEntity
@@ -132,6 +134,13 @@ class ProgramSchemaTest {
     private fun semanticOccurrenceStatements(): List<String> =
         recordStatements(AppDatabase.MIGRATION_13_14)
 
+    /**
+     * The two exact statements Stage 18's **explicit target schedule source** step (14 -> 15)
+     * executes: the rule table and the binding table, in that order.
+     */
+    private fun targetScheduleSourceStatements(): List<String> =
+        recordStatements(AppDatabase.MIGRATION_14_15)
+
     private fun allAdditiveStatements(): List<String> =
         additiveStatements() + focusStatements() + windowStatements()
 
@@ -163,12 +172,13 @@ class ProgramSchemaTest {
      * The one `CREATE TABLE` statement for [table] — matched by its own name, never as a substring.
      *
      * It is looked up across every step that creates a table, because two of the target tables are
-     * created by `MIGRATION_13_14` rather than by the version-8 step. Each table is still created
+     * created by `MIGRATION_13_14` and two more by Stage 18's `MIGRATION_14_15` rather than by the
+     * version-8 step. Each table is still created
      * exactly once: `single` asserts that here, and each step's own statement list is asserted
      * separately, so a table cannot quietly appear in both.
      */
     private fun statementFor(table: String): String =
-        (migrationStatements() + semanticOccurrenceStatements())
+        (migrationStatements() + semanticOccurrenceStatements() + targetScheduleSourceStatements())
             .single { it.startsWith("CREATE TABLE IF NOT EXISTS `$table` ") }
 
     private fun columnsOf(table: String): List<String> =
@@ -250,6 +260,11 @@ class ProgramSchemaTest {
             ProgramWorkoutSlotEntity::class.java,
             ProgramTargetOccurrenceEntity::class.java,
             ProgramTargetOccurrenceComponentEntity::class.java,
+            // Stage 18: the revision-owned explicit target schedule source. Two entities because the
+            // rules and the explicit workout-to-plan-day bindings are two lists with two identities,
+            // not one row with a nullable half — and neither is a replacement for anything retired.
+            ProgramTargetScheduleRuleEntity::class.java,
+            ProgramTargetProgramDayBindingEntity::class.java,
             WorkoutSessionEntity::class.java,
             SessionSnapshotEntity::class.java,
             SessionSnapshotExerciseEntity::class.java,
@@ -363,8 +378,14 @@ class ProgramSchemaTest {
         )
         assertEquals(14, AppDatabase.MIGRATION_13_14.endVersion)
         assertEquals(
+            "Stage 18's target schedule source step is the next additive step after the semantic one",
+            14,
+            AppDatabase.MIGRATION_14_15.startVersion
+        )
+        assertEquals(15, AppDatabase.MIGRATION_14_15.endVersion)
+        assertEquals(
             "and the declared version is where the chain ends",
-            AppDatabase.MIGRATION_13_14.endVersion,
+            AppDatabase.MIGRATION_14_15.endVersion,
             currentVersion()
         )
     }

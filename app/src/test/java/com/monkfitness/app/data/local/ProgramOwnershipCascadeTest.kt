@@ -30,8 +30,13 @@ class ProgramOwnershipCascadeTest {
         database.migrate(AppDatabase.MIGRATION_11_12)
         database.migrate(AppDatabase.MIGRATION_12_13)
         database.migrate(AppDatabase.MIGRATION_13_14)
-        ProgramGraphInserts.insertCompleteProgram(database, "1", targetOccurrenceRows = true)
-        ProgramGraphInserts.insertCompleteProgram(database, "2", targetOccurrenceRows = true)
+        database.migrate(AppDatabase.MIGRATION_14_15)
+        ProgramGraphInserts.insertCompleteProgram(
+            database, "1", targetOccurrenceRows = true, targetScheduleSourceRows = true
+        )
+        ProgramGraphInserts.insertCompleteProgram(
+            database, "2", targetOccurrenceRows = true, targetScheduleSourceRows = true
+        )
         ProgramGraphInserts.insertAppState(database, selected = "program-1", next = "program-2")
         return database
     }
@@ -48,6 +53,13 @@ class ProgramOwnershipCascadeTest {
         // one-component occurrence, so it could not tell the survivor apart from the deleted row.
         Triple("program_target_occurrence", "occurrenceKey", "strength:1"),
         Triple("program_target_occurrence_component", "ruleId", "rule-strength"),
+        // Stage 18: the explicitly stated target schedule source. Both rows are owned through the
+        // **revision**, and the binding additionally names a plan day — so this is the case that proves
+        // a source dies with its Program and not merely with its Program's slots. The survivor column
+        // is `ruleId`/`workoutId` because `revisionId` is identical on both graphs and so could not
+        // tell the two rows apart.
+        Triple("program_target_schedule_rule", "ruleId", "rule-strength"),
+        Triple("program_target_program_day_binding", "workoutId", "workout-strength"),
         Triple("workout_session", "sessionId", "session-1"),
         Triple("session_snapshot", "sessionId", "session-1"),
         Triple("session_snapshot_exercise", "sessionId", "session-1"),
@@ -90,8 +102,8 @@ class ProgramOwnershipCascadeTest {
         }
         assertEquals(
             "no owned table was wiped wholesale — §30 step 14 added two Program-owned tables to the " +
-                "thirteen §30 step 15 left",
-            15,
+                "thirteen §30 step 15 left, and Stage 18 added two more revision-owned ones",
+            17,
             ProgramSchemaFixture.PROGRAM_OWNED_TABLES.size
         )
     }

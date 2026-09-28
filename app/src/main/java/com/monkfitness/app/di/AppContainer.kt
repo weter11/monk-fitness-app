@@ -14,6 +14,7 @@ import com.monkfitness.app.data.local.ProgramPauseDao
 import com.monkfitness.app.data.local.ProgramRevisionDao
 import com.monkfitness.app.data.local.ProgramSetLogDao
 import com.monkfitness.app.data.local.ProgramTargetOccurrenceDao
+import com.monkfitness.app.data.local.ProgramTargetScheduleSourceDao
 import com.monkfitness.app.data.local.ProgramWorkoutSlotDao
 import com.monkfitness.app.data.local.SessionExerciseDao
 import com.monkfitness.app.data.local.SessionSnapshotDao
@@ -27,6 +28,7 @@ import com.monkfitness.app.data.repository.ProgramProgressRepository
 import com.monkfitness.app.data.repository.ProgramRepository
 import com.monkfitness.app.data.repository.ProgramScheduleRepository
 import com.monkfitness.app.data.repository.TargetScheduleOccurrenceRepository
+import com.monkfitness.app.data.repository.TargetScheduleSourceRepository
 import com.monkfitness.app.data.repository.WorkoutSessionRepository
 import com.monkfitness.app.bootstrap.StandardProgramBootstrap
 import com.monkfitness.app.domain.adaptive.integration.NoDeclaredProgression
@@ -44,6 +46,7 @@ import com.monkfitness.app.domain.usecase.TargetScheduleApplicationService
 import com.monkfitness.app.domain.usecase.TargetScheduleInputAdapter
 import com.monkfitness.app.domain.usecase.TargetScheduleOrchestrator
 import com.monkfitness.app.domain.usecase.TargetScheduleSlotPersister
+import com.monkfitness.app.domain.usecase.TargetScheduleSourceBridge
 import com.monkfitness.app.domain.usecase.SessionRuntime
 import com.monkfitness.app.domain.program.StandardProgram
 import java.time.ZoneId
@@ -310,6 +313,38 @@ class AppContainer(
      */
     val targetScheduleOccurrenceRepository: TargetScheduleOccurrenceRepository =
         TargetScheduleOccurrenceRepository(daos.targetOccurrence)
+
+    /**
+     * A revision's **explicit** target schedule source: the target rules it states and the explicit
+     * `workoutId -> ProgramDayId` bindings beside them (Stage 18).
+     *
+     * It is a repository of its own, beside the legacy contour and never inside it, because it is the
+     * one node that can answer "what target semantics does this revision actually state?" — and the
+     * answer is frequently *nothing*. A repository that also owned the legacy schedule would have to
+     * either conflate the two vocabularies or invent a rule per legacy schedule, and both of those are
+     * the guessing this source exists to remove.
+     *
+     * Its transaction runner is the container's shared one, because a revision's rules and its
+     * bindings are one immutable unit: a source with rules but no bindings cannot present an
+     * occurrence, so the two halves land together or not at all.
+     */
+    val targetScheduleSourceRepository: TargetScheduleSourceRepository = TargetScheduleSourceRepository(
+        sourceDao = daos.targetScheduleSource,
+        programDayDao = daos.day,
+        inTransaction = inTransaction
+    )
+
+    /**
+     * Stage 18's explicit bridge: a revision's persisted target source, and nothing else.
+     *
+     * It is wired beside the target contour and consumed by nobody yet. The orchestrator below stays
+     * a separately callable contour, the legacy Scheduler above stays production scheduling's owner,
+     * and this bridge's only job is to be *available* to the future caller that will use it once
+     * target semantics have an authoring path of their own.
+     */
+    val targetScheduleSourceBridge: TargetScheduleSourceBridge = TargetScheduleSourceBridge(
+        sourceRepository = targetScheduleSourceRepository
+    )
 
     /**
      * Target-stage persistence bridge; it is wired beside, never into, the legacy Scheduler.
@@ -602,6 +637,8 @@ class AppContainer(
         val exercise: ProgramExerciseDao = database.programExerciseDao()
         val slot: ProgramWorkoutSlotDao = database.programWorkoutSlotDao()
         val targetOccurrence: ProgramTargetOccurrenceDao = database.programTargetOccurrenceDao()
+        val targetScheduleSource: ProgramTargetScheduleSourceDao =
+            database.programTargetScheduleSourceDao()
         val session: WorkoutSessionDao = database.workoutSessionDao()
         val snapshot: SessionSnapshotDao = database.sessionSnapshotDao()
         val snapshotExercise: SessionSnapshotExerciseDao = database.sessionSnapshotExerciseDao()

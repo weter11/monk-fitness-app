@@ -53,7 +53,12 @@ class CompositionRootArchitectureTest {
     /** The target tables' accessors, as `AppDatabase` declares them. */
     private val targetAccessors = listOf(
         "programDao", "appStateDao", "programRevisionDao", "programDayDao", "programExerciseDao",
-        "programWorkoutSlotDao", "programTargetOccurrenceDao", "workoutSessionDao", "sessionSnapshotDao",
+        "programWorkoutSlotDao", "programTargetOccurrenceDao",
+        // Stage 18: a revision's explicitly stated target schedule source is taken once, in the
+        // composition root, like every other node — which is what keeps it from becoming a second
+        // reader acquired somewhere convenient.
+        "programTargetScheduleSourceDao",
+        "workoutSessionDao", "sessionSnapshotDao",
         "sessionSnapshotExerciseDao", "sessionExerciseDao", "programSetLogDao", "programPauseDao",
         "programFamilyProgressionStateDao", "programAdaptiveDecisionDao", "adaptiveAdjustmentDao"
     )
@@ -224,10 +229,11 @@ class CompositionRootArchitectureTest {
             "the composition root takes every DAO of the target graph from the one database — one " +
                 "accessor call per target table — plus §16's reset. §30 step 15 changed the count from " +
                 "17 to 16 by removing the two Stage-1 handles (`familyProgressionStateDao`, " +
-                "`adaptiveDecisionHistoryDao`) and adding the reset's own, and §30 step 14 raised it " +
-                "again to 17 by adding the target occurrence's own accessor; nowhere else in " +
-                "production may take one",
-            17,
+                "`adaptiveDecisionHistoryDao`) and adding the reset's own, §30 step 14 raised it " +
+                "again to 17 by adding the target occurrence's own accessor, and Stage 18 raised it " +
+                "to 18 by adding the explicit target schedule source's own accessor; nowhere else " +
+                "in production may take one",
+            18,
             accessor.findAll(codeOf("di/AppContainer.kt")).count()
         )
 
