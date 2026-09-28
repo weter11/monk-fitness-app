@@ -34,6 +34,8 @@ internal object ProgramSchemaFixture {
         "ProgramWorkoutSlotEntity" to "program_workout_slot",
         "ProgramTargetOccurrenceEntity" to "program_target_occurrence",
         "ProgramTargetOccurrenceComponentEntity" to "program_target_occurrence_component",
+        "ProgramTargetScheduleRuleEntity" to "program_target_schedule_rule",
+        "ProgramTargetProgramDayBindingEntity" to "program_target_program_day_binding",
         "WorkoutSessionEntity" to "workout_session",
         "SessionSnapshotEntity" to "session_snapshot",
         "SessionSnapshotExerciseEntity" to "session_snapshot_exercise",
@@ -206,6 +208,26 @@ internal object ProgramSchemaFixture {
             Column("ruleId", TEXT),
             Column("workoutId", TEXT)
         ),
+        // The revision-owned explicit target schedule source. The cadence is a discriminator plus one
+        // payload column per form, so a form with no payload cannot be confused with one whose payload
+        // is zero, and `SESSIONS_PER_WEEK` can never be normalized into an interval or a weekday set
+        // on the way through.
+        "program_target_schedule_rule" to listOf(
+            Column("revisionId", TEXT),
+            Column("ruleId", TEXT),
+            Column("workoutId", TEXT),
+            Column("cadenceType", TEXT),
+            Column("cadenceDays", INTEGER, nullable = true),
+            Column("cadenceSessionsPerWeek", INTEGER, nullable = true),
+            Column("cadenceWeekdays", TEXT, nullable = true),
+            Column("cadenceSourceRuleId", TEXT, nullable = true),
+            Column("anchorDate", TEXT)
+        ),
+        "program_target_program_day_binding" to listOf(
+            Column("revisionId", TEXT),
+            Column("workoutId", TEXT),
+            Column("programDayId", TEXT)
+        ),
         "workout_session" to listOf(
             Column("sessionId", TEXT),
             Column("slotId", TEXT),
@@ -307,6 +329,11 @@ internal object ProgramSchemaFixture {
         "program_workout_slot" to listOf("slotId"),
         "program_target_occurrence" to listOf("programId", "occurrenceKey"),
         "program_target_occurrence_component" to listOf("programId", "occurrenceKey", "position"),
+        // A rule IS the pair (revisionId, ruleId) and a binding IS the pair (revisionId, workoutId):
+        // one revision states a rule once and a workout once, and a stored row can never be re-pointed
+        // at another revision by a write.
+        "program_target_schedule_rule" to listOf("revisionId", "ruleId"),
+        "program_target_program_day_binding" to listOf("revisionId", "workoutId"),
         "workout_session" to listOf("sessionId"),
         "session_snapshot" to listOf("sessionId"),
         "session_snapshot_exercise" to listOf("sessionId", "programExerciseId"),
@@ -357,6 +384,16 @@ internal object ProgramSchemaFixture {
                 parentColumns = listOf("programId", "occurrenceKey"),
                 onDelete = "CASCADE"
             )
+        ),
+        // Both halves of the source belong to the revision that states them and die with it.
+        "program_target_schedule_rule" to listOf(
+            ExpectedForeignKey.single("revisionId", "program_revision", "revisionId", "CASCADE")
+        ),
+        // The binding also dies with the plan day it names. What the schema cannot express — that the
+        // day belongs to *this* revision — is the repository's own refusal.
+        "program_target_program_day_binding" to listOf(
+            ExpectedForeignKey.single("revisionId", "program_revision", "revisionId", "CASCADE"),
+            ExpectedForeignKey.single("programDayId", "program_day", "programDayId", "CASCADE")
         ),
         "workout_session" to listOf(
             ExpectedForeignKey.single("slotId", "program_workout_slot", "slotId", "CASCADE"),
@@ -444,6 +481,18 @@ internal object ProgramSchemaFixture {
             )
         ),
         "program_target_occurrence" to emptyList(),
+        // The rule table declares no index: `(revisionId, ruleId)` is its primary key, so `revisionId`
+        // — the only column it is ever read by — is already a leading key column.
+        "program_target_schedule_rule" to emptyList(),
+        // The binding table's `programDayId` is a foreign key **outside** the primary key, so it needs
+        // its own index, exactly as `program_workout_slot` indexes its three foreign-key columns.
+        "program_target_program_day_binding" to listOf(
+            ExpectedIndex(
+                "index_program_target_program_day_binding_programDayId",
+                listOf("programDayId"),
+                unique = false
+            )
+        ),
         "program_target_occurrence_component" to listOf(
             ExpectedIndex(
                 "index_program_target_occurrence_component_programId_occurrenceKey",
@@ -513,6 +562,7 @@ internal object ProgramSchemaFixture {
         "session_snapshot_exercise" to listOf("prescriptionDimension"),
         "session_exercise" to listOf("prescriptionDimension"),
         "program_family_progression_state" to listOf("adaptationState"),
+        "program_target_schedule_rule" to listOf("cadenceType"),
         "program_adaptive_decision_record" to listOf(
             "targetScope",
             "action",
@@ -690,7 +740,9 @@ internal object ProgramSchemaFixture {
      */
     val LATER_TABLES: List<String> = listOf(
         "program_target_occurrence",
-        "program_target_occurrence_component"
+        "program_target_occurrence_component",
+        "program_target_schedule_rule",
+        "program_target_program_day_binding"
     )
 
     /** The tables the version-7 → version-8 migration creates, in the order it creates them. */
@@ -732,6 +784,26 @@ internal object ProgramSchemaFixture {
         expectedIndexDdl(
             "program_target_occurrence_component",
             INDEXES.getValue("program_target_occurrence_component").single()
+        )
+    )
+
+    /**
+     * Every statement the version-14 → version-15 migration must execute, in order: the two
+     * revision-owned target schedule source tables, and nothing else.
+     *
+     * It is **only** those two statements. The step creates storage and writes no row, so there is no
+     * `UPDATE`, `INSERT`, `DELETE`, `ALTER` or `RENAME` here — and in particular no backfill of the
+     * new tables from `program_revision`'s legacy schedule columns. Those columns say when legacy
+     * slots fall; a target rule also needs a rule identity, a workout identity, an anchor date and a
+     * derived rule's source, so any row manufactured from them would invent four facts, and an
+     * invented row that later reads back as *stored* is worse than an absent one.
+     */
+    val EXPECTED_TARGET_SCHEDULE_SOURCE_STATEMENTS: List<String> = listOf(
+        expectedTableDdl("program_target_schedule_rule"),
+        expectedTableDdl("program_target_program_day_binding"),
+        expectedIndexDdl(
+            "program_target_program_day_binding",
+            INDEXES.getValue("program_target_program_day_binding").single()
         )
     )
 

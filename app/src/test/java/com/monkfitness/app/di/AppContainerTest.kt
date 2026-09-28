@@ -118,6 +118,11 @@ class AppContainerTest {
                     // than part of the schedule repository — a slot row has no component columns, so a
                     // repository owning both would be one whose read-back sometimes has to invent.
                     "targetScheduleOccurrenceRepository" to "TargetScheduleOccurrenceRepository",
+                    // Stage 18: the persisted, revision-owned explicit target schedule source. A
+                    // second target-stage repository, and deliberately not folded into the occurrence
+                    // one: that one stores a slot's resolved occurrence, this one stores the revision's
+                    // stated *configuration*, and they are written and read on different occasions.
+                    "targetScheduleSourceRepository" to "TargetScheduleSourceRepository",
                     "workoutSessionRepository" to "WorkoutSessionRepository",
                     "programProgressRepository" to "ProgramProgressRepository",
                     "appStateRepository" to "AppStateRepository",
@@ -289,7 +294,12 @@ class AppContainerTest {
         try {
             val expected = listOf(
                 "programDao", "appStateDao", "programRevisionDao", "programDayDao", "programExerciseDao",
-                "programWorkoutSlotDao", "programTargetOccurrenceDao", "workoutSessionDao",
+                "programWorkoutSlotDao", "programTargetOccurrenceDao",
+                // Stage 18: a revision's explicit target schedule source is its own node, because a
+                // caller has to be able to ask "what target semantics does this revision state?" and
+                // get an answer that is frequently "none" — which no other node can report.
+                "programTargetScheduleSourceDao",
+                "workoutSessionDao",
                 "sessionSnapshotDao",
                 "sessionSnapshotExerciseDao", "sessionExerciseDao", "programSetLogDao", "programPauseDao",
                 "programFamilyProgressionStateDao", "programAdaptiveDecisionDao", "adaptiveAdjustmentDao",

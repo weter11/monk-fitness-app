@@ -35,7 +35,17 @@ internal object ProgramGraphInserts {
          * exercising a current database pass `true`; a pre-14 caller leaves it `false` and gets a graph
          * that is complete *for its own version*.
          */
-        targetOccurrenceRows: Boolean = false
+        targetOccurrenceRows: Boolean = false,
+        /**
+         * Whether the graph also carries Stage 18's explicitly stated target schedule source.
+         *
+         * The same reason as [targetOccurrenceRows]: the fixture populates databases that have not
+         * reached version 15 yet, and inserting into a table that step has not created would fail for
+         * the wrong reason. It is a *separate* switch rather than a version bump of the first one,
+         * because the two steps are independent — a suite may want the occurrence rows without the
+         * source, or the source without the occurrence.
+         */
+        targetScheduleSourceRows: Boolean = false
     ) {
         val program = "program-$key"
         val revision = "revision-$key"
@@ -86,6 +96,27 @@ internal object ProgramGraphInserts {
                 "INSERT INTO `program_target_occurrence_component` (`programId`, `occurrenceKey`, " +
                     "`position`, `ruleId`, `workoutId`) VALUES ('$program', 'strength:1', 0, " +
                     "'rule-strength', 'pushup')"
+            )
+        }
+        if (targetScheduleSourceRows) {
+            // Stage 18: the revision's explicitly stated target schedule source. Both halves are
+            // inserted here so the ownership graph is exercised end to end: the rule and the binding
+            // are owned by the **revision**, and the binding additionally names a plan day, so this
+            // graph proves a target source dies with its Program exactly as a slot does.
+            //
+            // The cadence is `EVERY_N_DAYS` with an interval, because it is the one form that puts a
+            // payload column next to the discriminator — a graph holding only `DAILY` would not prove
+            // the payload is carried, let alone cascaded. The binding names this revision's own day,
+            // which is what the repository's membership check requires.
+            database.exec(
+                "INSERT INTO `program_target_schedule_rule` (`revisionId`, `ruleId`, `workoutId`, " +
+                    "`cadenceType`, `cadenceDays`, `cadenceSessionsPerWeek`, `cadenceWeekdays`, " +
+                    "`cadenceSourceRuleId`, `anchorDate`) VALUES ('$revision', 'rule-strength', " +
+                    "'workout-strength', 'EVERY_N_DAYS', 3, NULL, NULL, NULL, '2026-09-18')"
+            )
+            database.exec(
+                "INSERT INTO `program_target_program_day_binding` (`revisionId`, `workoutId`, " +
+                    "`programDayId`) VALUES ('$revision', 'workout-strength', '$day')"
             )
         }
         database.exec(

@@ -9,6 +9,7 @@ import com.monkfitness.app.data.local.ProgramDayDao
 import com.monkfitness.app.data.local.ProgramExerciseDao
 import com.monkfitness.app.data.local.ProgramSetLogDao
 import com.monkfitness.app.data.local.ProgramTargetOccurrenceDao
+import com.monkfitness.app.data.local.ProgramTargetScheduleSourceDao
 import com.monkfitness.app.data.local.ProgramWorkoutSlotDao
 import com.monkfitness.app.data.local.SessionExerciseDao
 import com.monkfitness.app.data.local.SessionSnapshotDao
@@ -109,6 +110,11 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
     // rollback claim is measurable at a point other than the last write.
     val targetOccurrenceDao: ProgramTargetOccurrenceDao =
         FailingProgramTargetOccurrenceDao(SqliteProgramTargetOccurrenceDao(database), faults)
+    // Stage 18: a revision's explicit target schedule source. No planted fault here yet — the
+    // repository's own refusals are what its suite measures, and a second fault switch would only add
+    // a way for a rollback claim to be about the wrong statement.
+    val targetScheduleSourceDao: ProgramTargetScheduleSourceDao =
+        SqliteProgramTargetScheduleSourceDao(database)
     val sessionDao = SqliteWorkoutSessionDao(database)
     val snapshotDao: SessionSnapshotDao = FailingSessionSnapshotDao(SqliteSessionSnapshotDao(database), faults)
     val snapshotExerciseDao = SqliteSessionSnapshotExerciseDao(database)
@@ -127,6 +133,9 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
     val programPlanRepository = ProgramPlanRepository(programDao, revisionDao, dayDao, exerciseDao, transaction)
     val programScheduleRepository = ProgramScheduleRepository(slotDao, sessionDao, pauseDao)
     val targetScheduleOccurrenceRepository = TargetScheduleOccurrenceRepository(targetOccurrenceDao)
+    val targetScheduleSourceRepository = TargetScheduleSourceRepository(
+        targetScheduleSourceDao, dayDao, transaction
+    )
     val workoutSessionRepository = WorkoutSessionRepository(
         sessionDao, snapshotDao, snapshotExerciseDao, sessionExerciseDao, setLogDao, slotDao, transaction
     )
@@ -169,6 +178,10 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
 
     fun freshPlanRepository() = ProgramPlanRepository(programDao, revisionDao, dayDao, exerciseDao, transaction)
 
+    fun freshTargetScheduleSourceRepository() = TargetScheduleSourceRepository(
+        targetScheduleSourceDao, dayDao, transaction
+    )
+
     fun freshSessionRepository() = WorkoutSessionRepository(
         sessionDao, snapshotDao, snapshotExerciseDao, sessionExerciseDao, setLogDao, slotDao, transaction
     )
@@ -206,6 +219,9 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
             // §30 step 14: the target occurrence's semantic tables. Stopping short would leave every
             // repository suite below exercising a database the app can no longer produce.
             database.migrate(AppDatabase.MIGRATION_13_14)
+            // Stage 18: the revision-owned explicit target schedule source. Stopping short would leave
+            // every repository suite exercising a database the app can no longer produce.
+            database.migrate(AppDatabase.MIGRATION_14_15)
         }
     }
 }

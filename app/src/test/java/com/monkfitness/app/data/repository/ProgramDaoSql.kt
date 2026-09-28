@@ -80,6 +80,15 @@ internal object ProgramDaoSql {
     /** `ProgramTargetOccurrenceDao.occurrencesOfProgram`. */
     const val PROGRAM_TARGET_OCCURRENCE_DAO_OCCURRENCES_OF_PROGRAM = "SELECT * FROM `program_target_occurrence` WHERE `programId` = :programId ORDER BY `plannedFor` ASC, `occurrenceKey` ASC"
 
+    /**
+     * `ProgramTargetScheduleSourceDao.rulesOfRevision` — keyed on the revision and ordered by the
+     * stored rule identity, so a read is deterministic without any identity being derived.
+     */
+    const val PROGRAM_TARGET_SCHEDULE_SOURCE_DAO_RULES_OF_REVISION = "SELECT * FROM `program_target_schedule_rule` WHERE `revisionId` = :revisionId ORDER BY `ruleId` ASC"
+
+    /** `ProgramTargetScheduleSourceDao.bindingsOfRevision` — keyed on the revision, ordered the same way. */
+    const val PROGRAM_TARGET_SCHEDULE_SOURCE_DAO_BINDINGS_OF_REVISION = "SELECT * FROM `program_target_program_day_binding` WHERE `revisionId` = :revisionId ORDER BY `workoutId` ASC"
+
     /** `WorkoutSessionDao.sessionById`. */
     const val WORKOUT_SESSION_DAO_SESSION_BY_ID = "SELECT * FROM `workout_session` WHERE `sessionId` = :sessionId LIMIT 1"
 
@@ -216,6 +225,8 @@ internal object ProgramDaoSql {
         "ProgramTargetOccurrenceDao.occurrenceOf" to PROGRAM_TARGET_OCCURRENCE_DAO_OCCURRENCE_OF,
         "ProgramTargetOccurrenceDao.componentsOf" to PROGRAM_TARGET_OCCURRENCE_DAO_COMPONENTS_OF,
         "ProgramTargetOccurrenceDao.occurrencesOfProgram" to PROGRAM_TARGET_OCCURRENCE_DAO_OCCURRENCES_OF_PROGRAM,
+        "ProgramTargetScheduleSourceDao.rulesOfRevision" to PROGRAM_TARGET_SCHEDULE_SOURCE_DAO_RULES_OF_REVISION,
+        "ProgramTargetScheduleSourceDao.bindingsOfRevision" to PROGRAM_TARGET_SCHEDULE_SOURCE_DAO_BINDINGS_OF_REVISION,
         "WorkoutSessionDao.sessionById" to WORKOUT_SESSION_DAO_SESSION_BY_ID,
         "WorkoutSessionDao.sessionsOfSlot" to WORKOUT_SESSION_DAO_SESSIONS_OF_SLOT,
         "WorkoutSessionDao.sessionsOfProgram" to WORKOUT_SESSION_DAO_SESSIONS_OF_PROGRAM,

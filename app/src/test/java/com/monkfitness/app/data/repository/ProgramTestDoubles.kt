@@ -11,6 +11,7 @@ import com.monkfitness.app.data.local.ProgramPauseDao
 import com.monkfitness.app.data.local.ProgramRevisionDao
 import com.monkfitness.app.data.local.ProgramSetLogDao
 import com.monkfitness.app.data.local.ProgramTargetOccurrenceDao
+import com.monkfitness.app.data.local.ProgramTargetScheduleSourceDao
 import com.monkfitness.app.data.local.ProgramWorkoutSlotDao
 import com.monkfitness.app.data.local.SessionAttemptRow
 import com.monkfitness.app.data.local.SessionExerciseDao
@@ -29,6 +30,8 @@ import com.monkfitness.app.data.model.ProgramPauseEntity
 import com.monkfitness.app.data.model.ProgramRevisionEntity
 import com.monkfitness.app.data.model.ProgramTargetOccurrenceComponentEntity
 import com.monkfitness.app.data.model.ProgramTargetOccurrenceEntity
+import com.monkfitness.app.data.model.ProgramTargetProgramDayBindingEntity
+import com.monkfitness.app.data.model.ProgramTargetScheduleRuleEntity
 import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
 import com.monkfitness.app.data.model.SessionExerciseEntity
 import com.monkfitness.app.data.model.SessionSnapshotEntity
@@ -83,6 +86,8 @@ internal val TARGET_ENTITY_TABLES: Map<Class<*>, String> = mapOf(
     ProgramWorkoutSlotEntity::class.java to "program_workout_slot",
     ProgramTargetOccurrenceEntity::class.java to "program_target_occurrence",
     ProgramTargetOccurrenceComponentEntity::class.java to "program_target_occurrence_component",
+    ProgramTargetScheduleRuleEntity::class.java to "program_target_schedule_rule",
+    ProgramTargetProgramDayBindingEntity::class.java to "program_target_program_day_binding",
     WorkoutSessionEntity::class.java to "workout_session",
     SessionSnapshotEntity::class.java to "session_snapshot",
     SessionSnapshotExerciseEntity::class.java to "session_snapshot_exercise",
@@ -239,6 +244,29 @@ private fun Map<String, String?>.targetOccurrenceComponentEntity() =
         // measuring its own invention instead of the round trip.
         ruleId = text("ruleId"),
         workoutId = text("workoutId")
+    )
+
+private fun Map<String, String?>.targetScheduleRuleEntity() = ProgramTargetScheduleRuleEntity(
+    revisionId = text("revisionId"),
+    // The rule's own identity, read as stored: it is an opaque token, and nothing in this harness may
+    // derive it from a plan day, a date or the row's position.
+    ruleId = text("ruleId"),
+    workoutId = text("workoutId"),
+    // The cadence is carried through as its raw discriminator plus its raw payload columns. Interpreting
+    // them belongs to the mapper, so the harness measures the round trip rather than its own reading.
+    cadenceType = text("cadenceType"),
+    cadenceDays = this["cadenceDays"]?.toInt(),
+    cadenceSessionsPerWeek = this["cadenceSessionsPerWeek"]?.toInt(),
+    cadenceWeekdays = this["cadenceWeekdays"],
+    cadenceSourceRuleId = this["cadenceSourceRuleId"],
+    anchorDate = text("anchorDate")
+)
+
+private fun Map<String, String?>.targetProgramDayBindingEntity() =
+    ProgramTargetProgramDayBindingEntity(
+        revisionId = text("revisionId"),
+        workoutId = text("workoutId"),
+        programDayId = text("programDayId")
     )
 
 private fun Map<String, String?>.sessionEntity() = WorkoutSessionEntity(
@@ -512,6 +540,30 @@ internal class SqliteProgramTargetOccurrenceDao(private val database: SqliteTest
         ProgramDaoSql.PROGRAM_TARGET_OCCURRENCE_DAO_OCCURRENCES_OF_PROGRAM,
         programId
     ).map { it.targetOccurrenceEntity() }
+}
+
+internal class SqliteProgramTargetScheduleSourceDao(private val database: SqliteTestDatabase) :
+    ProgramTargetScheduleSourceDao {
+
+    override suspend fun insertRules(rules: List<ProgramTargetScheduleRuleEntity>) =
+        rules.forEach { database.insertRow(it) }
+
+    override suspend fun insertBindings(bindings: List<ProgramTargetProgramDayBindingEntity>) =
+        bindings.forEach { database.insertRow(it) }
+
+    override suspend fun rulesOfRevision(
+        revisionId: String
+    ): List<ProgramTargetScheduleRuleEntity> = database.rows(
+        ProgramDaoSql.PROGRAM_TARGET_SCHEDULE_SOURCE_DAO_RULES_OF_REVISION,
+        revisionId
+    ).map { it.targetScheduleRuleEntity() }
+
+    override suspend fun bindingsOfRevision(
+        revisionId: String
+    ): List<ProgramTargetProgramDayBindingEntity> = database.rows(
+        ProgramDaoSql.PROGRAM_TARGET_SCHEDULE_SOURCE_DAO_BINDINGS_OF_REVISION,
+        revisionId
+    ).map { it.targetProgramDayBindingEntity() }
 }
 
 internal class SqliteWorkoutSessionDao(private val database: SqliteTestDatabase) : WorkoutSessionDao {
