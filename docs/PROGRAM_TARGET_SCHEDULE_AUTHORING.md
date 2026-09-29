@@ -294,9 +294,17 @@ target field with its own round-trip. Neither is established here, so the transf
   `theLegacySchedulerIsStillProductionsSchedulingOwner` asserts that `ProgramScheduler.kt`,
   `SlotPlanner.kt` and `ScheduleCalendar.kt` name no target type, no target table and no target source.
 * **`TargetScheduleOrchestrator` remains unconnected to production scheduling.**
-  `productionConsumersStillDoNotRunATargetPass` asserts that the save boundary runs no pass, consumes no
-  bridge, and that no file outside the composition root and the bridge itself constructs the bridge.
-  Stage 18's own gate makes the same statement and is untouched and green.
+  §30 step 20 renamed this test to
+  `theSaveBoundaryStillRunsNoTargetPassAndTheOnlyTargetConsumerIsTheStageTwentyNode` and inverted its
+  last clause: it used to assert that *no* file constructed the bridge, which the first production
+  consumer made false by construction, so the claim is now a one-element **closed consumer list**
+  naming `TargetScheduleProductionConsumer.kt` and nothing else. Everything this stage deferred is
+  still deferred and still asserted — the save boundary runs no pass and consumes no bridge, and the
+  legacy contour is untouched. Stage 18's own gate makes the same statement and is green.
+* **§30 step 20 added the one production caller this stage said did not exist.**
+  `TargetScheduleProductionConsumer` is that caller, and it is separately callable: the gate asserts a
+  **closed list of zero** files outside the composition root that invoke it, and that no file under
+  `ui/` or `viewmodel/` names it, the adapter, the orchestrator, the bridge or the execution bridge.
 
 ## Architecture gates
 
@@ -327,7 +335,11 @@ about reading it:
   `TargetScheduleOrchestrator` is not connected to it.
 * **A UI authoring surface.** This stage adds the *seam*; the editor screen still supplies no authoring,
   because wiring one would be the cutover's neighbour and is not this stage's scope.
-* **Reading a stored source into a running pass.** `TargetScheduleSourceBridge` still returns the facts
-  to nobody; the future caller that composes the other eight `TargetScheduleInput` values does not
-  exist.
+* **Reading a stored source into a running pass.** *Delivered by §30 step 20* — see
+  `docs/PROGRAM_TARGET_PRODUCTION_CONSUMER.md`. `TargetScheduleProductionConsumer` is that caller: it
+  reads this stage's source through the bridge, reads the Program's stored target occurrences, and
+  composes the other eight `TargetScheduleInput` values with the five that remain caller-owned
+  (`window`, `selection`, `sources`, `asOf`, `pauses`). It is a **separately callable** production
+  node, not a cutover: the closed-list gate above proves that nothing above the composition root
+  invokes it.
 * **Transfer.** As above: the authoring value exists, a transferable representation of it does not.

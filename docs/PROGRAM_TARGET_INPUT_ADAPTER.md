@@ -204,6 +204,7 @@ One previous-stage guard was revised rather than relaxed.
 | Guard | Was | Is now |
 | --- | --- | --- |
 | `TargetScheduleArchitectureTest` | `oldSchedulerSourcesRemainOutsideAndStageTwoHasExactlyOneProductionCaller` | `oldSchedulerSourcesRemainOutsideAndStageTwoHasExactlyTwoProductionCallers` |
+| `TargetScheduleArchitectureTest` | `oldSchedulerSourcesRemainOutsideAndStageTwoHasExactlyTwoProductionCallers` | `oldSchedulerSourcesRemainOutsideAndStageTwoHasExactlyThreeProductionCallers` (§30 step 20: the first production consumer's run context is a caller-owned window and resolved-source map, and forwarding them is its contract) |
 
 The pin was already a **closed list**, not an absence, after Stage 12. The Stage 13 adapter genuinely
 has to name Stage 2 types — its input carries a `TargetScheduleWindow` and a `ResolvedScheduleSource`

@@ -660,19 +660,24 @@ class TargetScheduleSourceArchitectureTest {
             legacyConstruction.contains("TargetScheduleSource") || legacyConstruction.contains("targetScheduleSource")
         )
 
-        // And nothing outside the composition root consumes the bridge or the repository yet, which is
-        // what "the orchestrator is still separately callable" means in a test.
+        // And exactly one production source consumes the bridge — the Stage 20 consumer — which is
+        // what "the target contour is a separately callable production path" now means. The scan is
+        // over *naming* the type rather than over constructing it, because Stage 20 revised this
+        // claim rather than relaxing it: a construction-site scan would have read empty and gone on
+        // claiming the bridge was unconsumed while a production consumer held it. The legacy half is
+        // untouched: nothing in the legacy contour names it, so the bridge is still not on the path
+        // the UI trains from.
         val consumers = mainDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .filterNot { it.name == "AppContainer.kt" }
             .filterNot { it.name == "TargetScheduleSourceBridge.kt" }
             .filterNot { it.name == "TargetScheduleSourceRepository.kt" }
-            .filter { it.readText().contains("TargetScheduleSourceBridge(") }
+            .filter { it.readText().contains("TargetScheduleSourceBridge") }
             .map { it.name }
             .toList()
         assertEquals(
-            "the bridge is wired but not yet consumed: cutover is a later phase",
-            emptyList<String>(),
+            "the bridge has exactly one production consumer, the Stage 20 consumer; cutover is a later phase",
+            listOf("TargetScheduleProductionConsumer.kt"),
             consumers
         )
     }
