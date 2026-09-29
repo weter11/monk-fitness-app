@@ -285,6 +285,10 @@ implementation:
 1. **Who invokes the consumer.** The UI, a controller, the save boundary, the import boundary and
    the session runtime all stay on `ProgramScheduler`. A cutover has to choose the call site and say
    what happens to the legacy slots that pass then owns.
+   *(Answered in part by §30 step 21 — see `docs/PROGRAM_TARGET_CONTROLLED_INVOCATION.md`. One
+   application-level caller, `ProgramStartService`, now invokes this from the one lifecycle point
+   that means "the Program is started", with an explicit five-value context policy. A cutover — moving
+   `ProgramScheduler` itself, the session runtime, or the legacy slots it owns — remains undone.)*
 2. **The policy for the five caller-owned values.** A window, a horizon, a composition, an as-of date
    and a source map each need a stated policy — probably an authoring surface, not an inference.
 3. **A target-owned pause adapter**, if persisted `ProgramPause` instants are ever to become

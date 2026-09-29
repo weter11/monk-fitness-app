@@ -915,6 +915,7 @@
     <string name="programs_notice_unarchived">Программа восстановлена</string>
     <string name="programs_notice_deleted">Программа удалена</string>
     <string name="programs_notice_started">Программа начата</string>
+    <string name="programs_notice_target_scheduling_unavailable">Программа начата, но целевое расписание не построено</string>
     <string name="programs_notice_paused">Программа приостановлена</string>
     <string name="programs_notice_resumed">Программа продолжена</string>
     <string name="programs_notice_completed">Программа завершена</string>

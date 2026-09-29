@@ -123,7 +123,7 @@ class TargetScheduleArchitectureTest {
     }
 
     @Test
-    fun oldSchedulerSourcesRemainOutsideAndStageTwoHasExactlyThreeProductionCallers() {
+    fun oldSchedulerSourcesRemainOutsideAndStageTwoHasExactlyFourProductionCallers() {
         // Stage 13 revised this claim rather than relaxing it. The pin is a *closed* list, not an
         // absence, so the list grows only when a named component genuinely has to name a Stage 2
         // type — and the Stage 13 input adapter does: its caller-owned input carries a
@@ -137,6 +137,11 @@ class TargetScheduleArchitectureTest {
         // resolver itself stays uncalled outside the pure target package: Stage 2's date resolution
         // is still the planner's alone, and neither the adapter nor the consumer resolves a source
         // to fill the map it forwards.
+        //
+        // Stage 21 revised it a third time, for the same reason: the one controlled production
+        // invocation is the first component that has to *decide* the window rather than forward it,
+        // so it names the window type to build its own bounded one. It is a closed list growing by
+        // exactly one named file, and a fifth consumer still fails here.
         val otherProduction = File(mainDir, "domain").walkTopDown()
             .filter { it.isFile && it.extension == "kt" && it.parentFile != targetDir }
             .toList()
@@ -155,6 +160,12 @@ class TargetScheduleArchitectureTest {
 
         assertEquals(
             listOf(
+                // §30 step 21: the one controlled production invocation. It decides the window as
+                // target-owned policy (asOf .. asOf+29) rather than forwarding somebody else's, which
+                // is why it is on this list — and why the closed list still names no second resolver
+                // caller: it never resolves a source, so `ResolvedScheduleSource` never has to be
+                // named outside the run context it hands the consumer.
+                "domain/usecase/ProgramStartService.kt",
                 "domain/usecase/TargetScheduleInputAdapter.kt",
                 "domain/usecase/TargetScheduleOrchestrator.kt",
                 // §30 step 20: the first production consumer of the contour. It names the window and

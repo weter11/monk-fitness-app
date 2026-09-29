@@ -410,7 +410,7 @@ class TargetScheduleProductionConsumerArchitectureTest {
     // ---- 10. the wiring ------------------------------------------------------------------------------
 
     @Test
-    fun theCompositionRootWiresTheConsumerOnceAndNothingAboveItCallsTheConsumer() {
+    fun theCompositionRootWiresTheConsumerOnceAndExactlyOneApplicationBoundaryCallsIt() {
         val container = code(containerFile.readText())
 
         assertTrue(
@@ -444,17 +444,29 @@ class TargetScheduleProductionConsumerArchitectureTest {
             wiringOffenders.isEmpty()
         )
 
-        // The cutover half, stated as its own claim: the node exists and nobody calls it.
+        // The caller half, revised rather than relaxed by §30 step 21: the node used to have no
+        // caller at all, and it now has exactly one — the composed Start. The claim is therefore a
+        // **closed one-element list** rather than an absence, because an absence would be false by
+        // construction the moment production reaches this class, and a second caller has to keep
+        // failing here. What the deferral was actually about is kept whole below: no screen, no
+        // view model, the save boundary, the import boundary, the bootstrap and the session runtime
+        // are all still off the target path, and the legacy planner still owns every slot the
+        // application trains from.
         val callers = productionSources()
             .filterNot { (path, _) -> path == "di/AppContainer.kt" }
             .filter { (path, _) -> !path.contains("TargetScheduleProductionConsumer.kt") }
-            .filter { (_, text) -> text.contains("targetScheduleProductionConsumer") }
+            // Keyed on the *type*, not on the container's property name: a caller receives the
+            // consumer as a constructor parameter and calls it, so a scan for `targetSchedule…`
+            // would have read empty on a tree where the composed Start demonstrably holds it —
+            // the §8b failure, one generation on. The consumer's own file and the composition root
+            // are excluded by path, so what remains is the caller list and only the caller list.
+            .filter { (_, text) -> text.contains("TargetScheduleProductionConsumer") }
             .map { (path, _) -> path }
         assertEquals(
-            "the consumer is separately callable and nothing invokes it yet: a screen, a controller, " +
-                "the save boundary, the import boundary, the bootstrap and the session runtime all " +
-                "stay on the legacy path. Cutover is a later stage.",
-            emptyList<String>(),
+            "the consumer has exactly one production caller — §30 step 21's composed Start, which " +
+                "owns the lifecycle transition and the one controlled invocation. A screen, the save " +
+                "boundary, the import boundary, the bootstrap and the session runtime all stay off it.",
+            listOf("domain/usecase/ProgramStartService.kt"),
             callers
         )
     }

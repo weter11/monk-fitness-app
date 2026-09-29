@@ -33,8 +33,10 @@ import com.monkfitness.app.domain.usecase.ProgramExportService
 import com.monkfitness.app.domain.usecase.ProgramImportService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
-import com.monkfitness.app.domain.usecase.ProgramScheduler
 import com.monkfitness.app.domain.usecase.ProgramSaveService
+import com.monkfitness.app.domain.usecase.ProgramScheduler
+import com.monkfitness.app.domain.usecase.ProgramStartResult
+import com.monkfitness.app.domain.usecase.ProgramStartService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -99,7 +101,12 @@ fun interface ExerciseCatalogue {
  * selection of its own, never assumes one changed, and after every mutating call it re-reads the list
  * through [load] — so a screen that renders it renders the service's answer (§3, §21).
  *
- * @param lifecycle the selection, lifecycle, rename, archive and delete owner (§3, §4, §29).
+ * @param lifecycle the selection, lifecycle, rename, archive and delete owner (§3, §4, §29). It is
+ *   *not* asked to start a Program: §30 step 21's [starter] is the operation that owns Start, so the
+ *   target scheduling policy cannot leak into the lifecycle layer.
+ * @param starter §30 step 21's one application-level Start: the lifecycle transition, then — only
+ *   when it succeeded — one controlled target scheduling pass with the run context this stage's
+ *   policy states. The screen reaches target scheduling only through it.
  * @param editor the draft-first editor: opening drafts, validating them, reviewing them, and the §6
  *   revision rule for an edit's own save.
  * @param saver §27's production Save: the creation unit (Program + first Revision + initial Slots,
@@ -120,6 +127,7 @@ fun interface ExerciseCatalogue {
  */
 class ProgramsController(
     private val lifecycle: ProgramLifecycleService,
+    private val starter: ProgramStartService,
     private val editor: ProgramEditorService,
     private val saver: ProgramSaveService,
     private val importer: ProgramImportService,
@@ -294,9 +302,22 @@ class ProgramsController(
         lifecycle.deleteProgram(ProgramId(programId))
     }
 
-    /** §3's *Start*, recording the factual start date inside the service. */
-    suspend fun start(programId: String) = action(ProgramNotice.STARTED) {
-        lifecycle.startProgram(ProgramId(programId))
+    /**
+     * §3's *Start*, recording the factual start date inside the service — and §30 step 21's one
+     * controlled target invocation, run by the application operation this screen is given.
+     *
+     * The screen asks for **one** thing and is told one answer. It never builds a target window, a
+     * composition selection, a resolved-source map, a pause window or an as-of date, and it never
+     * decides whether a target refusal is acceptable: the application boundary owns all of that, and
+     * this function only maps the operation's own vocabulary onto a notice the user can read.
+     *
+     * The notice deliberately distinguishes the two halves. "Started" says the Program started and
+     * its target schedule was planned; the unavailable notice says the Program started and the
+     * target schedule was not, which is a different thing for the user to know and must not be
+     * reported as a lifecycle refusal — the Program really is running.
+     */
+    suspend fun start(programId: String) = startAction {
+        starter.start(ProgramId(programId))
     }
 
     suspend fun pause(programId: String) = action(ProgramNotice.PAUSED) {
@@ -768,6 +789,33 @@ class ProgramsController(
         }
         mutableState.update { it.copy(notice = notice) }
         if (notice is ProgramNotice.Done) refresh()
+        return notice
+    }
+
+    /**
+     * The same publication for the one *composed* operation, whose two halves can disagree.
+     *
+     * It is a separate helper rather than a widened [action] because the mapping is genuinely
+     * different: a start that succeeded while its target scheduling was refused is **not** the
+     * start's success notice, and collapsing it would tell the user a Program was planned when
+     * nothing about it was. The state is refreshed whenever the Program really did start, because
+     * its lifecycle changed whatever the second half reported.
+     */
+    private suspend fun startAction(
+        operation: suspend () -> ProgramStartResult
+    ): ProgramNotice {
+        val result = operation()
+        val notice = when (result) {
+            is ProgramStartResult.Started -> ProgramNotice.STARTED
+            is ProgramStartResult.TargetSchedulingRefused ->
+                ProgramNotice.TARGET_SCHEDULING_UNAVAILABLE
+            is ProgramStartResult.StartRefused -> noticeFor(result.reason)
+            is ProgramStartResult.StartFailed -> ProgramNotice.STORAGE_FAILED
+        }
+        mutableState.update { it.copy(notice = notice) }
+        if (result is ProgramStartResult.Started || result is ProgramStartResult.TargetSchedulingRefused) {
+            refresh()
+        }
         return notice
     }
 
