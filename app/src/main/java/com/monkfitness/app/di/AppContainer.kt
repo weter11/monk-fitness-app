@@ -42,9 +42,12 @@ import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
 import com.monkfitness.app.domain.usecase.ProgramSaveService
+import com.monkfitness.app.domain.usecase.TargetExistingOccurrenceReader
+import com.monkfitness.app.domain.usecase.TargetOccurrenceExecutionReader
 import com.monkfitness.app.domain.usecase.TargetScheduleApplicationService
 import com.monkfitness.app.domain.usecase.TargetScheduleInputAdapter
 import com.monkfitness.app.domain.usecase.TargetScheduleOrchestrator
+import com.monkfitness.app.domain.usecase.TargetScheduleProductionConsumer
 import com.monkfitness.app.domain.usecase.TargetScheduleSlotPersister
 import com.monkfitness.app.domain.usecase.TargetScheduleSourceBridge
 import com.monkfitness.app.domain.usecase.SessionRuntime
@@ -379,6 +382,51 @@ class AppContainer(
      * collaborator it has no use for and must not be able to consult.
      */
     val targetScheduleInputAdapter: TargetScheduleInputAdapter = TargetScheduleInputAdapter()
+
+    /**
+     * §30 step 15's stored-execution read-back, and §30 step 17's bridge from it to the target
+     * scheduling input.
+     *
+     * Both are wired here for the first time because the Stage 20 consumer below is their first
+     * production caller. Neither is reachable from the legacy contour: the read-back reads the
+     * Program's own stored target occurrences and the attempts that reference them, and the bridge
+     * turns that one record into the single value the target planning rules consume.
+     */
+    val targetOccurrenceExecutionReader: TargetOccurrenceExecutionReader = TargetOccurrenceExecutionReader(
+        occurrenceRepository = targetScheduleOccurrenceRepository,
+        scheduleRepository = programScheduleRepository,
+        sessionRepository = workoutSessionRepository
+    )
+
+    val targetExistingOccurrenceReader: TargetExistingOccurrenceReader = TargetExistingOccurrenceReader(
+        executionReader = targetOccurrenceExecutionReader
+    )
+
+    /**
+     * Stage 20 — the first production consumer of the target contour, and a **separately callable**
+     * one.
+     *
+     * A Program plus an explicit run context become one real target pass: the current revision is
+     * read, that revision's explicit source is read through the bridge, the Program's stored target
+     * occurrences are read back through the execution bridge, the input adapter converts, and the
+     * orchestrator plans, classifies, presents and persists. Nothing above this node calls it, which
+     * is the point: the legacy planner below still owns every slot the application trains from, and
+     * the legacy contour is not rewired to reach a target pass. A later cutover stage decides who
+     * invokes this; this stage only makes the path callable from production code.
+     *
+     * It holds no identity generator, no clock, no second planning boundary and no UI state — the
+     * five values storage does not state arrive per call, from whoever runs it.
+     */
+    val targetScheduleProductionConsumer: TargetScheduleProductionConsumer =
+        TargetScheduleProductionConsumer(
+            programRepository = programRepository,
+            planRepository = programPlanRepository,
+            sourceBridge = targetScheduleSourceBridge,
+            occurrenceRepository = targetScheduleOccurrenceRepository,
+            existingOccurrenceReader = targetExistingOccurrenceReader,
+            inputAdapter = targetScheduleInputAdapter,
+            orchestrator = targetScheduleOrchestrator
+        )
 
     /** The idempotent production bootstrap for the product-owned Standard Program. */
     val standardProgramBootstrap: StandardProgramBootstrap = StandardProgramBootstrap(

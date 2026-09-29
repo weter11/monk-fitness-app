@@ -384,16 +384,39 @@ class TargetScheduleInputAdapterArchitectureTest {
     }
 
     @Test
-    fun theAdapterIsNotWiredIntoTheSchedulerRuntimeUiOrAnyRepository() {
+    fun theAdapterHasExactlyOneProductionConsumerAndItIsTheStageTwentyNode() {
+        // Stage 20 inverted this claim rather than relaxing it. While nothing consumed the adapter,
+        // the pin was a *construction-site* absence: the composition root built it and no other
+        // source even named it, which is what "the target contour is separately callable and
+        // unreachable" meant in a test. That is false by construction now — the first production
+        // consumer exists — and a construction-site scan would have gone on reading empty and
+        // claiming so. The pin is therefore a **consumer** list: the files outside the composition
+        // root and the adapter itself that name the type at all, which is exactly one.
+        //
+        // The negative half is what still matters and is kept whole: the consumer is a graph node
+        // nobody above the composition root calls, and the adapter is still not constructed a second
+        // time anywhere.
         val consumers = productionSources()
             .filterNot { (path, _) -> path == "di/AppContainer.kt" || path == "domain/usecase/TargetScheduleInputAdapter.kt" }
-            .filter { (_, text) -> text.contains("TargetScheduleInputAdapter(") }
+            .filter { (_, text) -> text.contains("TargetScheduleInputAdapter") }
             .map { (path, _) -> path }
 
         assertEquals(
-            "the adapter's only construction site is the composition root, and nothing consumes it yet",
-            emptyList<String>(),
+            "the adapter's only production consumer is the Stage 20 consumer, which forwards to it " +
+                "unchanged; a second consumer appearing later still fails here",
+            listOf("domain/usecase/TargetScheduleProductionConsumer.kt"),
             consumers
+        )
+
+        // The legacy-contour half, restated: the consumer exists, and the UI does not reach it.
+        val uiReach = productionSources()
+            .filter { (path, _) -> path.startsWith("ui/") || path.startsWith("viewmodel/") }
+            .filter { (_, text) -> text.contains("TargetScheduleProductionConsumer") || text.contains("TargetScheduleInputAdapter") }
+            .map { (path, _) -> path }
+
+        assertTrue(
+            "no screen and no view model runs a target pass yet: cutover is a later stage, found $uiReach",
+            uiReach.isEmpty()
         )
     }
 

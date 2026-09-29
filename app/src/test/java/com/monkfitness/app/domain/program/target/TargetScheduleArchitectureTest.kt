@@ -123,14 +123,20 @@ class TargetScheduleArchitectureTest {
     }
 
     @Test
-    fun oldSchedulerSourcesRemainOutsideAndStageTwoHasExactlyTwoProductionCallers() {
+    fun oldSchedulerSourcesRemainOutsideAndStageTwoHasExactlyThreeProductionCallers() {
         // Stage 13 revised this claim rather than relaxing it. The pin is a *closed* list, not an
         // absence, so the list grows only when a named component genuinely has to name a Stage 2
         // type — and the Stage 13 input adapter does: its caller-owned input carries a
         // TargetScheduleWindow and a ResolvedScheduleSource map, and forwarding them unchanged is
-        // precisely its contract. A third consumer appearing later still fails here. The resolver
-        // itself stays uncalled outside the pure target package: Stage 2's date resolution is still
-        // the planner's alone, and the adapter does not resolve a source to fill the map it forwards.
+        // precisely its contract.
+        //
+        // Stage 20 revised it again, for the same reason and not by widening it into a prefix: the
+        // new production consumer's *run context* is exactly those two caller-owned values — a
+        // bounded window and a map of explicitly stated resolved sources — and its contract is to
+        // forward them unchanged rather than decide them. A fourth consumer still fails here. The
+        // resolver itself stays uncalled outside the pure target package: Stage 2's date resolution
+        // is still the planner's alone, and neither the adapter nor the consumer resolves a source
+        // to fill the map it forwards.
         val otherProduction = File(mainDir, "domain").walkTopDown()
             .filter { it.isFile && it.extension == "kt" && it.parentFile != targetDir }
             .toList()
@@ -150,7 +156,11 @@ class TargetScheduleArchitectureTest {
         assertEquals(
             listOf(
                 "domain/usecase/TargetScheduleInputAdapter.kt",
-                "domain/usecase/TargetScheduleOrchestrator.kt"
+                "domain/usecase/TargetScheduleOrchestrator.kt",
+                // §30 step 20: the first production consumer of the contour. It names the window and
+                // the resolved-source map because they are caller-owned runtime context it must
+                // forward verbatim — which is why it is on this list and not on the resolver's.
+                "domain/usecase/TargetScheduleProductionConsumer.kt"
             ),
             outsideReferences
         )

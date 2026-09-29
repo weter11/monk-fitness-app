@@ -380,9 +380,17 @@ class TargetScheduleAuthoringArchitectureTest {
     // ---------------------------------------------------------------- 6. no cutover
 
     @Test
-    fun productionConsumersStillDoNotRunATargetPass() {
+    fun theSaveBoundaryStillRunsNoTargetPassAndTheOnlyTargetConsumerIsTheStageTwentyNode() {
         // The authoring path makes a target source *authorable*; it must not make the target contour
-        // *reachable* from production scheduling. §30 step 19 defers the cutover explicitly.
+        // *reachable* from production scheduling. §30 step 19 deferred the cutover explicitly.
+        //
+        // §30 step 20 renamed this claim rather than relaxing it. It used to end with "the bridge is
+        // consumed by nobody", which was a construction-site absence that Stage 20 made false by
+        // construction: the first production consumer holds the bridge, and a scan for `Bridge(` would
+        // have kept reading empty while saying so. The claim that is now true is a **closed consumer
+        // list** — one entry, the Stage 20 consumer — plus the whole negative half below, which is
+        // what the deferral was actually about and which is unchanged: the save boundary, the editor
+        // and the legacy contour still run no target pass.
         val saveService = code(saveServiceFile)
         for (pass in listOf("TargetScheduleOrchestrator", "TargetPlanner", "TargetSchedulePolicy",
             "TargetScheduleApplicationService", "TargetScheduleInputAdapter")) {
@@ -392,7 +400,8 @@ class TargetScheduleAuthoringArchitectureTest {
             )
         }
         assertFalse(
-            "and it does not consume the bridge either: nothing reads a stored source into a pass yet",
+            "and it does not consume the bridge either: the save boundary never reads a stored source " +
+                "into a pass, which is what §30 step 20's separate consumer is for",
             saveService.contains("TargetScheduleSourceBridge")
         )
 
@@ -401,12 +410,12 @@ class TargetScheduleAuthoringArchitectureTest {
             .filterNot { it.name == "AppContainer.kt" }
             .filterNot { it.name == "TargetScheduleSourceBridge.kt" }
             .filterNot { it.name == "TargetScheduleSourceRepository.kt" }
-            .filter { it.readText().contains("TargetScheduleSourceBridge(") }
+            .filter { it.readText().contains("TargetScheduleSourceBridge") }
             .map { it.name }
             .toList()
         assertEquals(
-            "the bridge is wired but still consumed by nobody: the cutover is a later stage",
-            emptyList<String>(),
+            "the bridge's only production consumer is the Stage 20 consumer; the cutover is a later stage",
+            listOf("TargetScheduleProductionConsumer.kt"),
             consumers
         )
     }
