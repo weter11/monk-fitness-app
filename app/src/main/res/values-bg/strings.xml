@@ -917,6 +917,7 @@
     <string name="programs_notice_unarchived">Програмата е възстановена</string>
     <string name="programs_notice_deleted">Програмата е изтрита</string>
     <string name="programs_notice_started">Програмата е стартирана</string>
+    <string name="programs_notice_target_scheduling_unavailable">Програмата е стартирана, но целевото разписание не е изградено</string>
     <string name="programs_notice_paused">Програмата е на пауза</string>
     <string name="programs_notice_resumed">Програмата е подновена</string>
     <string name="programs_notice_completed">Програмата е завършена</string>

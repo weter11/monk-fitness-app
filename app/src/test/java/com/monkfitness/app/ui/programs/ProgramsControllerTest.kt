@@ -366,8 +366,13 @@ class ProgramsControllerTest {
     fun theLifecycleActionsReachTheServiceAndAreReported() = runBlocking {
         val created = rig.createProgramThroughTheUi("Lifecycle")!!
 
+        // Revised (not relaxed) by §30 step 21: Start is now a *composed* operation. The editor's
+        // save states no target authoring, so the controlled invocation has no source to plan from
+        // and reports that as its own notice — the Program still started, which is what the next
+        // two assertions measure. The success notice is asserted by the case below, which does
+        // state an authoring.
         rig.controller.start(created)
-        assertEquals(ProgramNotice.STARTED, rig.state.notice)
+        assertEquals(ProgramNotice.TARGET_SCHEDULING_UNAVAILABLE, rig.state.notice)
         assertEquals(LifecycleStatus.RUNNING, rig.storedProgram(ProgramId(created))!!.lifecycleStatus)
         assertNotNull(
             "starting records the factual start date, inside the service",
@@ -391,6 +396,67 @@ class ProgramsControllerTest {
             rig.state.notice
         )
         assertEquals(LifecycleStatus.COMPLETED, rig.storedProgram(ProgramId(created))!!.lifecycleStatus)
+    }
+
+    // ---------------------------------------------------------------- §30 step 21: the composed Start
+
+    /**
+     * The screen's half of the stage: Start is one application operation, and the target rows it
+     * produces are the application's, not the screen's.
+     *
+     * The Program is created through the editor exactly as above, an explicit target authoring is
+     * stored against its current revision, and Start is tapped. The screen builds no window, no
+     * selection, no source map, no as-of date and no pause window — so the fact that thirty
+     * occurrences exist is a statement about the application boundary's stated policy.
+     */
+    @Test
+    fun aStartWithATargetAuthoringPlansTheTargetScheduleAndSaysSo() = runBlocking {
+        val id = rig.createProgramThroughTheUi("Targeted")!!
+        rig.authorTargetSource(ProgramId(id))
+        val legacyBefore = rig.slotsOf(ProgramId(id)).map { it.slotId to it.status }
+
+        rig.controller.start(id)
+
+        assertEquals(
+            "both halves ran, so the user is told the Program started — not that anything was " +
+                "unavailable",
+            ProgramNotice.STARTED,
+            rig.state.notice
+        )
+        val (occurrences, targetSlots) = rig.targetRowCounts()
+        assertEquals("the target-owned window produced one occurrence per day", 30, occurrences)
+        assertEquals("and one presenting target slot beside each", 30, targetSlots)
+        assertEquals(
+            "the legacy slots the production UI trains from are byte-identical after the start",
+            legacyBefore,
+            rig.slotsOf(ProgramId(id)).filter { it.targetOccurrenceKey == null }
+                .map { it.slotId to it.status }
+        )
+    }
+
+    /**
+     * And the other half of the stage's failure semantics, measured through the screen: a Program
+     * with no target authoring still starts, and the operation says so rather than reporting the
+     * start's own success.
+     */
+    @Test
+    fun aStartWithNoTargetAuthoringStartsTheProgramAndReportsTheTargetRefusal() = runBlocking {
+        val id = rig.createProgramThroughTheUi("Untargeted")!!
+
+        rig.controller.start(id)
+
+        assertEquals(
+            "a revision that states no target semantics is a typed absence, and the user is told " +
+                "the Program started while its target schedule was not planned",
+            ProgramNotice.TARGET_SCHEDULING_UNAVAILABLE,
+            rig.state.notice
+        )
+        assertEquals(
+            "the Program really did start — this is not a lifecycle refusal wearing a target's name",
+            LifecycleStatus.RUNNING,
+            rig.storedProgram(ProgramId(id))!!.lifecycleStatus
+        )
+        assertEquals("and no target row was fabricated", 0 to 0, rig.targetRowCounts())
     }
 
     // ---------------------------------------------------------------- the editor (§7)

@@ -8,6 +8,7 @@ import com.monkfitness.app.domain.usecase.ProgramImportService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
+import com.monkfitness.app.domain.usecase.ProgramStartService
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -144,6 +145,7 @@ class ProgramsArchitectureTest {
         )
         listOf(
             "programGraph.programLifecycleService",
+            "programGraph.programStartService",
             "programGraph.programEditorService",
             "programGraph.programSaveService",
             "programGraph.programImportService",
@@ -194,6 +196,11 @@ class ProgramsArchitectureTest {
                 "never chooses a date and never runs a scheduling pass",
             listOf(
                 ProgramLifecycleService::class.java.name,
+                // Revised (not relaxed) by §30 step 21: Start is no longer the lifecycle service's
+                // operation alone. The state holder is given the *composed* one instead, so the
+                // target scheduling policy is unreachable from a screen — the controller still names
+                // no target type and still decides nothing about windows, compositions or sources.
+                ProgramStartService::class.java.name,
                 ProgramEditorService::class.java.name,
                 ProgramSaveService::class.java.name,
                 ProgramImportService::class.java.name,

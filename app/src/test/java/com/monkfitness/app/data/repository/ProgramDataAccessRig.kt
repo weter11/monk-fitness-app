@@ -196,6 +196,16 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
 
     fun close() = database.close()
 
+    /**
+     * The two target-owned tables this stage can grow, counted on the engine itself.
+     *
+     * The rig's shared `tableCounts()` census is a closed list built from the scheduler fixture's
+     * table names, so a target table is not in it; a stage that creates one counts it here, beside
+     * the shared census, and asserts both.
+     */
+    fun targetRowCounts(): Pair<Int, Int> = database.count("program_target_occurrence") to
+        database.scalar("SELECT COUNT(*) FROM `program_workout_slot` WHERE `targetOccurrenceKey` IS NOT NULL")!!.toInt()
+
     companion object {
 
         /**

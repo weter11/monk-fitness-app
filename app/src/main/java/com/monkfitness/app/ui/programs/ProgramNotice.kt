@@ -92,6 +92,17 @@ sealed interface ProgramNotice {
          */
         val GENERATION_UNAVAILABLE: ProgramNotice = Refused(R.string.programs_generation_unavailable)
 
+        /**
+         * §30 step 21: the Program **started**, and its target schedule was not planned.
+         *
+         * This is not a lifecycle refusal — the Program is running and its factual start date is
+         * recorded — and it is not a success either, because nothing was planned for it. Reporting
+         * the start's own success would tell the user a Program was scheduled when no target row
+         * exists, so the composition's second half gets its own sentence.
+         */
+        val TARGET_SCHEDULING_UNAVAILABLE: ProgramNotice =
+            Invalid(R.string.programs_notice_target_scheduling_unavailable)
+
 
         /** §28's `SYSTEM_FAILURE`: reported, retryable, and never mistaken for a completed operation. */
         val STORAGE_FAILED: ProgramNotice = Failed(R.string.programs_notice_failed)

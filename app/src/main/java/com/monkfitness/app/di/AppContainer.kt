@@ -48,6 +48,7 @@ import com.monkfitness.app.domain.usecase.TargetScheduleApplicationService
 import com.monkfitness.app.domain.usecase.TargetScheduleInputAdapter
 import com.monkfitness.app.domain.usecase.TargetScheduleOrchestrator
 import com.monkfitness.app.domain.usecase.TargetScheduleProductionConsumer
+import com.monkfitness.app.domain.usecase.ProgramStartService
 import com.monkfitness.app.domain.usecase.TargetScheduleSlotPersister
 import com.monkfitness.app.domain.usecase.TargetScheduleSourceBridge
 import com.monkfitness.app.domain.usecase.SessionRuntime
@@ -434,6 +435,27 @@ class AppContainer(
         scheduler = programScheduler,
         clock = clock,
         idGenerator = idGenerator,
+        zone = zone
+    )
+
+    /**
+     * Stage 21 — the one controlled production invocation of the target contour, and the
+     * application operation the UI is given for *Start*.
+     *
+     * It performs §3's `startProgram` and, only if that succeeded, builds the run context the
+     * target stages need and runs the consumer above. That is the whole of it: one lifecycle point,
+     * five stated values, and no second scheduler. The legacy planner below still owns every slot
+     * the application trains from — a target pass writes target rows and touches no legacy slot —
+     * so this node is a first controlled invocation, not a cutover.
+     *
+     * The zone is the composition root's own calendar, the same value every other node that reads a
+     * date is handed, so "the day a Program started" and "the day a pause covered" cannot be read
+     * in two different calendars.
+     */
+    val programStartService: ProgramStartService = ProgramStartService(
+        lifecycle = programLifecycleService,
+        consumer = targetScheduleProductionConsumer,
+        scheduleRepository = programScheduleRepository,
         zone = zone
     )
 

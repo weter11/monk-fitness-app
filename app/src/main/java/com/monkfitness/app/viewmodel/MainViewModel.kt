@@ -398,6 +398,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     //
     // The five things it is given are the composition root's own nodes:
     //   · lifecycle, editor, importer, exporter, progress, scheduler  — the application services (§24)
+    //   · starter                                                  — §30 step 21's composed Start, which
+    //                                                                  owns the one controlled target
+    //                                                                  invocation and is reached only
+    //                                                                  through the state holder
     //   · clock, zone                                                — the two §26 ports "today" is read from
     //   · the catalogue, read through the shipped generator          — the plan editor's exercise choices
     //   · the share target                                           — §11's platform boundary, and the only
@@ -407,6 +411,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The Program screens' state holder, rendered by the Program destinations of the one navigation graph. */
     val programs = ProgramsController(
         lifecycle = programGraph.programLifecycleService,
+        starter = programGraph.programStartService,
         editor = programGraph.programEditorService,
         saver = programGraph.programSaveService,
         importer = programGraph.programImportService,

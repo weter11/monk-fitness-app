@@ -917,6 +917,7 @@
     <string name="programs_notice_unarchived">Program restored</string>
     <string name="programs_notice_deleted">Program deleted</string>
     <string name="programs_notice_started">Program started</string>
+    <string name="programs_notice_target_scheduling_unavailable">Program started, but its target schedule was not planned</string>
     <string name="programs_notice_paused">Program paused</string>
     <string name="programs_notice_resumed">Program resumed</string>
     <string name="programs_notice_completed">Program finished</string>

@@ -5,14 +5,27 @@ import com.monkfitness.app.domain.program.MovableClock
 import com.monkfitness.app.domain.program.Program
 import com.monkfitness.app.domain.program.ProgramDayType
 import com.monkfitness.app.domain.program.ProgramMode
+import com.monkfitness.app.domain.program.ScheduleCadence
 import com.monkfitness.app.domain.program.SequentialIds
 import com.monkfitness.app.domain.program.WorkoutSlot
+import com.monkfitness.app.domain.program.target.TargetProgramDayBinding
 import com.monkfitness.app.domain.program.transfer.ProgramTransferFile
 import com.monkfitness.app.domain.program.transfer.ProgramTransferFixture
 import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramSaveService
+import com.monkfitness.app.domain.usecase.ProgramStartService
 import com.monkfitness.app.domain.usecase.ProgramTransferRig
+import com.monkfitness.app.domain.usecase.TargetExistingOccurrenceReader
+import com.monkfitness.app.domain.usecase.TargetOccurrenceExecutionReader
+import com.monkfitness.app.domain.usecase.TargetScheduleApplicationService
+import com.monkfitness.app.domain.usecase.TargetScheduleDefinition
+import com.monkfitness.app.domain.usecase.TargetScheduleInputAdapter
+import com.monkfitness.app.domain.usecase.TargetScheduleOrchestrator
+import com.monkfitness.app.domain.usecase.TargetScheduleProductionConsumer
+import com.monkfitness.app.domain.usecase.TargetScheduleSlotPersister
+import com.monkfitness.app.domain.usecase.TargetScheduleSource
+import com.monkfitness.app.domain.usecase.TargetScheduleSourceBridge
 
 /**
  * §30 step 14's rig: the Program System's application services over the data-access rig's real SQLite
@@ -99,9 +112,49 @@ internal class ProgramsRig(key: String = "ui") {
         .map { id -> ExerciseOptionUi(exerciseId = id, nameRes = 0, familyId = id, isTimerBased = false) }
         .toMutableList()
 
+    /**
+     * §30 step 21's composed Start, wired as the composition root wires it: the real lifecycle
+     * service, the real target production consumer over the real adapter / orchestrator / persister,
+     * the real pause repository and the rig's own calendar.
+     *
+     * The UI suites reach target scheduling only through this node, exactly as `MainViewModel` wires
+     * it, so a claim such as "a start with no target authoring writes no target row" is measured on
+     * storage through the controller rather than argued from the controller's shape.
+     */
+    val startService = ProgramStartService(
+        lifecycle = transfer.lifecycleService,
+        consumer = TargetScheduleProductionConsumer(
+            programRepository = transfer.programRepository,
+            planRepository = transfer.planRepository,
+            sourceBridge = TargetScheduleSourceBridge(transfer.targetScheduleSourceRepository),
+            occurrenceRepository = transfer.data.targetScheduleOccurrenceRepository,
+            existingOccurrenceReader = TargetExistingOccurrenceReader(
+                TargetOccurrenceExecutionReader(
+                    occurrenceRepository = transfer.data.targetScheduleOccurrenceRepository,
+                    scheduleRepository = transfer.scheduleRepository,
+                    sessionRepository = transfer.sessionRepository
+                )
+            ),
+            inputAdapter = TargetScheduleInputAdapter(),
+            orchestrator = TargetScheduleOrchestrator(
+                TargetScheduleApplicationService(
+                    TargetScheduleSlotPersister(
+                        scheduleRepository = transfer.scheduleRepository,
+                        occurrenceRepository = transfer.data.targetScheduleOccurrenceRepository,
+                        idGenerator = transfer.ids,
+                        inTransaction = transfer.data.transaction
+                    )
+                )
+            )
+        ),
+        scheduleRepository = transfer.scheduleRepository,
+        zone = transfer.zone
+    )
+
     /** The state holder under test, wired as `MainViewModel` wires it. */
     val controller = ProgramsController(
         lifecycle = transfer.lifecycleService,
+        starter = startService,
         editor = editor,
         saver = saveService,
         importer = transfer.importService,
@@ -168,6 +221,37 @@ internal class ProgramsRig(key: String = "ui") {
 
     /** A Program's opportunities, read through the schedule repository. */
     suspend fun slotsOf(programId: ProgramId): List<WorkoutSlot> = transfer.slotsOf(programId)
+
+    /**
+     * Stores an explicit target authoring against [programId]'s current revision — the one fact
+     * §30 step 21's controlled invocation needs before a target pass has anything to plan from.
+     *
+     * The rule is anchored on the rig's own clock in the rig's own calendar, which is exactly the
+     * date `startProgram` will stamp as the factual start, so the authored cadence actually
+     * resolves rather than being silently filtered out by its own anchor.
+     */
+    suspend fun authorTargetSource(programId: ProgramId) {
+        val revision = transfer.planRepository.currentRevision(programId)!!
+        transfer.targetScheduleSourceRepository.store(
+            TargetScheduleSource(
+                revisionId = revision.revisionId,
+                rules = listOf(
+                    TargetScheduleDefinition(
+                        ruleId = "rule-strength",
+                        workoutId = "workout-strength",
+                        cadence = ScheduleCadence.Daily,
+                        anchorDate = transfer.clock.now().atZone(transfer.zone).toLocalDate()
+                    )
+                ),
+                programDayBindings = listOf(
+                    TargetProgramDayBinding("workout-strength", revision.days.first().programDayId)
+                )
+            )
+        )
+    }
+
+    /** The target-owned row counts, read straight off the engine rather than through a cache. */
+    fun targetRowCounts(): Pair<Int, Int> = transfer.data.targetRowCounts()
 
     /** Every table's row count, for the atomicity claims. */
     fun tableCounts(): Map<String, Int> = transfer.tableCounts()

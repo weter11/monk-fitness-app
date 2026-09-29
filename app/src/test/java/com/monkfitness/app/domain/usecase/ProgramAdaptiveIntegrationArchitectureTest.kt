@@ -280,8 +280,12 @@ class ProgramAdaptiveIntegrationArchitectureTest {
                 "request that named no exact start date. Every added hand-over *strengthens* this rule " +
                 "rather than relaxing it — revised, not relaxed — because every layer that turns an " +
                 "instant into a date is still handed the one value the container owns, and a fourth " +
-                "acquiring its own calendar would break the count this assertion measures.",
-            6,
+                "acquiring its own calendar would break the count this assertion measures. Revised a " +
+                "seventh time, and again not relaxed: §30 step 21's composed Start is the seventh " +
+                "hand-over, because it turns the factual start instant into an as-of date and a " +
+                "persisted pause instant into a date window — two more instant-to-date conversions " +
+                "that would each read a different day if the boundary owned its own calendar.",
+            7,
             Regex(Regex.escape("zone = zone")).findAll(container).count()
         )
         assertTrue(
