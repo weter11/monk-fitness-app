@@ -101,6 +101,15 @@ internal class ProgramTransferRig(private val key: String = "t") {
 
     val planRepository get() = data.programPlanRepository
 
+    /**
+     * Stage 18's revision-owned explicit target source, over the same engine the rest of this rig uses.
+     *
+     * The transfer suites do not author one — §30 step 13's import/export deliberately carries no target
+     * field — but the Programs rig builds a `ProgramSaveService` over this rig, and the Save is where a
+     * stated authoring is applied.
+     */
+    val targetScheduleSourceRepository get() = data.targetScheduleSourceRepository
+
     val scheduleRepository get() = data.programScheduleRepository
 
     val appStateRepository get() = data.appStateRepository

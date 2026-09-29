@@ -183,12 +183,13 @@ class ProgramEditorService(
 
         val at = clock.now()
         val programId = ProgramId(idGenerator.newId())
-        val revision = mintRevision(
+        val minted = mintRevision(
             draft = draft,
             programId = programId,
             revisionNumber = ProgramRevision.FIRST_REVISION_NUMBER,
             at = at
         )
+        val revision = minted.revision
         ProgramCreation(
             program = Program(
                 programId = programId,
@@ -203,7 +204,8 @@ class ProgramEditorService(
                 actualStartDate = null,
                 archivedAt = null
             ),
-            revision = revision
+            revision = revision,
+            mintedProgramDays = minted.mintedProgramDays
         )
     }.rejecting()
 
@@ -361,12 +363,13 @@ class ProgramEditorService(
             return ProgramSaveOutcome.FactsSaved(facts, current.revisionId)
         }
 
-        val revision = mintRevision(
+        val minted = mintRevision(
             draft = draft,
             programId = programId,
             revisionNumber = current.revisionNumber + 1,
             at = at
         )
+        val revision = minted.revision
         inTransaction {
             if (factsChanged) programRepository.updateProgram(facts)
             planRepository.saveNewRevision(revision, at)
@@ -374,7 +377,8 @@ class ProgramEditorService(
         return ProgramSaveOutcome.RevisionSaved(
             program = facts.copy(currentRevisionId = revision.revisionId, updatedAt = at),
             revision = revision,
-            createdProgram = false
+            createdProgram = false,
+            mintedProgramDays = minted.mintedProgramDays
         )
     }
 
@@ -407,12 +411,13 @@ class ProgramEditorService(
     private suspend fun createProgramFrom(draft: ProgramEditorDraft): ProgramSaveOutcome {
         val at = clock.now()
         val programId = ProgramId(idGenerator.newId())
-        val revision = mintRevision(
+        val minted = mintRevision(
             draft = draft,
             programId = programId,
             revisionNumber = ProgramRevision.FIRST_REVISION_NUMBER,
             at = at
         )
+        val revision = minted.revision
         val program = Program(
             programId = programId,
             name = draft.name,
@@ -427,11 +432,17 @@ class ProgramEditorService(
             archivedAt = null
         )
         programRepository.createProgram(program, revision)
-        return ProgramSaveOutcome.RevisionSaved(program, revision, createdProgram = true)
+        return ProgramSaveOutcome.RevisionSaved(
+            program = program,
+            revision = revision,
+            createdProgram = true,
+            mintedProgramDays = minted.mintedProgramDays
+        )
     }
 
     /**
-     * The revision a save would persist for [draft]: the draft's plan, **re-identified**.
+     * The revision a save would persist for [draft]: the draft's plan, **re-identified** — together
+     * with the correspondence from each drafted plan-day handle to the identity that handle became.
      *
      * This is the seam the whole stage turns on, and the method states it in one sentence: a save
      * mints a new revision identity, a new identity for every day and a new identity for every plan
@@ -439,7 +450,13 @@ class ProgramEditorService(
      * replaces (a plan day and a plan element are rows of their own — §6, §23), why a copy shares
      * nothing with its source, and why the draft's own handles are never persisted.
      *
-     * The `require` is the second half of that sentence as a guard: if re-identifying a plan ever
+     * The second half of that sentence is why the correspondence is **reported** rather than
+     * re-derived: a caller that stated a `workoutId -> ProgramDayId` binding against a draft handle
+     * cannot know the saved identity in advance, and the editor is the only component that performs
+     * the re-identification. Reporting it here is what lets that binding be authored explicitly
+     * without anything downstream guessing which of the revision's days was meant.
+     *
+     * The `require` is the first half of that sentence as a guard: if re-identifying a plan ever
      * changed its content — a reordered day, a dropped element, a rewritten prescription — the save
      * would fail loudly instead of persisting a plan the user never reviewed.
      */
@@ -448,8 +465,16 @@ class ProgramEditorService(
         programId: ProgramId,
         revisionNumber: Int,
         at: Instant
-    ): ProgramRevision {
+    ): MintedRevision {
         val plan = draft.withRenumberedDays()
+        // A list rather than an `associate`: two draft days that somehow shared a handle would
+        // collapse into one map entry and two revision days would then be minted the same identity —
+        // which the rule table's composite primary key would refuse much later, for the wrong reason.
+        val mintedDays = plan.days.map { day -> day.programDayId to ProgramDayId(idGenerator.newId()) }
+        require(mintedDays.map { it.second }.distinct().size == mintedDays.size) {
+            "saving a draft mints a distinct identity for every plan day"
+        }
+        val mintedByHandle = mintedDays.toMap()
         val revision = ProgramRevision(
             revisionId = RevisionId(idGenerator.newId()),
             programId = programId,
@@ -459,7 +484,7 @@ class ProgramEditorService(
             schedule = plan.schedule,
             days = plan.days.map { day ->
                 day.copy(
-                    programDayId = ProgramDayId(idGenerator.newId()),
+                    programDayId = requireNotNull(mintedByHandle[day.programDayId]),
                     exercises = day.exercises.map { element ->
                         element.copy(programExerciseId = ProgramExerciseId(idGenerator.newId()))
                     }
@@ -472,7 +497,7 @@ class ProgramEditorService(
             "saving a draft re-identifies its plan and changes nothing else: the minted revision and " +
                 "the draft it came from disagree structurally"
         }
-        return revision
+        return MintedRevision(revision, mintedByHandle)
     }
 
     /**
@@ -539,6 +564,19 @@ class ProgramEditorService(
 
 /** The structure a save is measured against, with the ordinal a new revision would carry. */
 private data class BasePlan(val structure: ProgramStructure, val nextRevisionNumber: Int?)
+
+/**
+ * A minted revision and the correspondence that produced its plan-day identities.
+ *
+ * Private to the editor because the editor is the only component that mints them: §6 re-identifies
+ * every plan day on every save, and a caller that wants to state a `workoutId -> ProgramDayId` binding
+ * against the draft it authored needs to learn which identity that handle became. The two travel
+ * together so the correspondence can never be reported for a different revision than the one it minted.
+ */
+private data class MintedRevision(
+    val revision: ProgramRevision,
+    val mintedProgramDays: Map<ProgramDayId, ProgramDayId>
+)
 
 // ---------------------------------------------------------------- the failures the mechanism throws
 

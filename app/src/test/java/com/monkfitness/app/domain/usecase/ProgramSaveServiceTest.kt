@@ -194,6 +194,7 @@ class ProgramSaveServiceTest {
             editor = rig.editor,
             programRepository = rig.programRepository,
             scheduler = explodingScheduler,
+            targetSourceRepository = rig.targetSourceRepository,
             clock = rig.clock,
             zone = rig.zone,
             inTransaction = rig.transaction
@@ -349,13 +350,20 @@ class ProgramSaveServiceTest {
             .parameterTypes
             .map { type -> type.simpleName }
 
+        // Stage 19 revised this claim rather than relaxing it: the explicit target-source repository
+        // joined the list, because §30 step 19's authoring path is applied here — the creation /
+        // revision-save boundary that owns the transaction the source has to share. The absences are
+        // unchanged and still load-bearing: no lifecycle service (a creation cannot move a selection,
+        // §9), no target orchestrator or planner (the contour is still separately callable), and no
+        // bridge (nothing consumes a stored source into a scheduling pass yet).
         assertEquals(
             "the editor (structure), the repository (the creation primitive), the Scheduler " +
-                "(opportunities), the two ports today is read from, and the transaction runner — " +
+                "(opportunities), the target-source repository (the revision's explicit stated " +
+                "semantics), the two ports today is read from, and the transaction runner — " +
                 "and notably no lifecycle service: a creation cannot move a selection (§9)",
             listOf(
                 "ProgramEditorService", "ProgramRepository", "ProgramScheduler",
-                "Clock", "ZoneId", "Function2"
+                "TargetScheduleSourceRepository", "Clock", "ZoneId", "Function2"
             ),
             collaborators
         )

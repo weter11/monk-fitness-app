@@ -65,6 +65,7 @@ internal class ProgramsRig(key: String = "ui") {
         editor = editor,
         programRepository = transfer.programRepository,
         scheduler = transfer.scheduler,
+        targetSourceRepository = transfer.targetScheduleSourceRepository,
         clock = transfer.clock,
         zone = transfer.zone,
         inTransaction = transfer.data.transaction
