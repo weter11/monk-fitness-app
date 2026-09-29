@@ -321,6 +321,71 @@ class ProgramEditorService(
             }
         }.rejecting()
 
+    // ---------------------------------------------------------------- a revision for a non-structural reason (§6)
+
+    /**
+     * A new revision whose **structure is the current one, unchanged** — minted because something
+     * outside the structure changed, and reported to the caller so it can say what it is attaching.
+     *
+     * It carries the same three facts a structural [save] reports — the Program, the new revision and
+     * the draft-handle to saved-identity correspondence — so a caller that attaches a plan-day-named
+     * statement to it re-points that statement through the editor's own correspondence rather than
+     * guessing which of the new revision's days was meant.
+     *
+     * The correspondence is keyed by the **current** revision's plan-day identities, because those
+     * are the handles a caller can honestly hold: it opened its statement against what is stored
+     * now. Nothing about a day's `position`, `name`, date or weekday is consulted, and the days are
+     * re-identified rather than reused (§6: a new revision's days are new rows).
+     *
+     * This is the *minted, unwritten* half of the target-only change, deliberately separate from
+     * [saveTargetScheduleRevision] so the caller can compare the new revision's statement against
+     * what is stored and decline to write anything. It writes no row and moves no pointer.
+     */
+    suspend fun prepareTargetScheduleRevision(
+        programId: ProgramId
+    ): ProgramEditorResult<MintedTargetScheduleRevision> = editorResult {
+        val program = existingProgram(programId)
+        guardedForEdit(program)
+        val current = planRepository.currentRevision(programId)
+            ?: throw RevisionMissing(program.currentRevisionId)
+        val minted = mintRevision(
+            draft = draftOf(program, current),
+            programId = programId,
+            revisionNumber = current.revisionNumber + 1,
+            at = clock.now()
+        )
+        val revision = minted.revision
+        MintedTargetScheduleRevision(
+            program = program.copy(
+                currentRevisionId = revision.revisionId,
+                updatedAt = revision.createdAt
+            ),
+            revision = revision,
+            mintedProgramDays = minted.mintedProgramDays
+        )
+    }.rejecting()
+
+    /**
+     * Writes the revision [prepareTargetScheduleRevision] minted, and nothing else.
+     *
+     * The Program's own facts are untouched: a target-only change alters no name, no description and
+     * no structural content, so there is no facts write here and nothing for a facts-only save to
+     * have done. §6's single writer — [ProgramPlanRepository.saveNewRevision] — is the one this calls,
+     * and it moves `currentRevisionId` in its own transaction, so the revision this supersedes stays
+     * current until that write lands.
+     */
+    suspend fun saveTargetScheduleRevision(
+        minted: MintedTargetScheduleRevision
+    ): ProgramEditorResult<ProgramSaveOutcome> = editorResult {
+        inTransaction { planRepository.saveNewRevision(minted.revision, minted.revision.createdAt) }
+        ProgramSaveOutcome.RevisionSaved(
+            program = minted.program,
+            revision = minted.revision,
+            createdProgram = false,
+            mintedProgramDays = minted.mintedProgramDays
+        )
+    }.rejecting()
+
     // ---------------------------------------------------------------- the mechanism
 
     /**
@@ -574,6 +639,31 @@ private data class BasePlan(val structure: ProgramStructure, val nextRevisionNum
  * together so the correspondence can never be reported for a different revision than the one it minted.
  */
 private data class MintedRevision(
+    val revision: ProgramRevision,
+    val mintedProgramDays: Map<ProgramDayId, ProgramDayId>
+)
+
+/**
+ * A new revision minted for a reason that is **not** a structural change, together with everything a
+ * caller needs to attach a plan-day-named statement to it.
+ *
+ * It is public, unlike the structural [MintedRevision], because a target-only change is performed by
+ * the save boundary rather than by a draft save, and the boundary has to be able to *decline* to
+ * write the revision after comparing the statement it would carry against what is stored. That
+ * comparison needs the minted correspondence before the write, not after.
+ *
+ * The two halves travel together for the same reason [MintedRevision]'s do: the correspondence can
+ * never be reported for a different revision than the one it minted.
+ *
+ * @property program the Program as it will stand once this revision is saved — the *same* Program,
+ *   with `currentRevisionId` and `updatedAt` already describing the revision this mints. A
+ *   target-only change never creates a Program.
+ * @property revision the minted revision, whose structure equals the current one exactly.
+ * @property mintedProgramDays the correspondence from each **current** revision's plan-day identity
+ *   — the handle a caller honestly holds — to the identity that day becomes in [revision].
+ */
+class MintedTargetScheduleRevision(
+    val program: Program,
     val revision: ProgramRevision,
     val mintedProgramDays: Map<ProgramDayId, ProgramDayId>
 )

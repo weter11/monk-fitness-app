@@ -175,4 +175,23 @@ sealed class TargetScheduleAuthoringException(message: String) : IllegalArgument
         "target schedule authoring binding for workout '$workoutId' names drafted plan day " +
             "'${draftedProgramDayId.value}', which the saved revision does not carry"
     )
+
+    /**
+     * A **stored** source's binding names a plan day the draft being saved does not carry.
+     *
+     * This is the read-side counterpart of [ProgramDayNotInTheSavedRevision], and it is what makes
+     * *"carry the previous revision's source forward"* a refusal rather than a repair. A structural
+     * edit that removed the plan day a workout presented leaves a stored binding pointing at a day
+     * the new revision will not have; there is no honest substitute, because which day that workout
+     * should present now is the caller's statement and not a function of the day that disappeared.
+     * Deciding it here would make this boundary a scheduling policy.
+     */
+    data class StoredProgramDayNotInTheDraft(
+        val workoutId: String,
+        val programDayId: ProgramDayId
+    ) : TargetScheduleAuthoringException(
+        "the stored target schedule source binds workout '$workoutId' to plan day " +
+            "'${programDayId.value}', which this draft does not carry, so it cannot be carried " +
+            "forward: replacing or clearing the target source is the only honest continuation"
+    )
 }

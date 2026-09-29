@@ -331,10 +331,18 @@ about reading it:
 
 ## What remains deferred
 
+* **A UI authoring surface.** *Partly delivered by §30 step 22 — see
+  `docs/PROGRAM_TARGET_SCHEDULE_REVISION_SEMANTICS.md`.* The **application contract** an authoring
+  surface needs now exists: an existing Program's target scheduling is stated with an explicit
+  `Keep / Replace / Clear`, a structural edit carries the source forward rather than dropping it, and a
+  target-only change mints a revision on its own path. What is still absent is the UI itself, and the
+  transfer representation, which remains untouched by both stages.
 * **The production cutover.** Unchanged: `ProgramScheduler` schedules production, and
   `TargetScheduleOrchestrator` is not connected to it.
 * **A UI authoring surface.** This stage adds the *seam*; the editor screen still supplies no authoring,
-  because wiring one would be the cutover's neighbour and is not this stage's scope.
+  because wiring one would be the cutover's neighbour and is not this stage's scope. *(The application
+  half of this gap is closed by §30 step 22 — see
+  `docs/PROGRAM_TARGET_SCHEDULE_REVISION_SEMANTICS.md`; the UI half is still open.)*
 * **Reading a stored source into a running pass.** *Delivered by §30 step 20* — see
   `docs/PROGRAM_TARGET_PRODUCTION_CONSUMER.md`. `TargetScheduleProductionConsumer` is that caller: it
   reads this stage's source through the bridge, reads the Program's stored target occurrences, and

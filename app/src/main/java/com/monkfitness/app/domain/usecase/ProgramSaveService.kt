@@ -4,6 +4,7 @@ import com.monkfitness.app.data.repository.ProgramRepository
 import com.monkfitness.app.data.repository.TargetScheduleSourceRepository
 import com.monkfitness.app.di.Clock
 import com.monkfitness.app.domain.common.ProgramDayId
+import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.RevisionId
 import com.monkfitness.app.domain.program.ProgramEditorDraft
 import com.monkfitness.app.domain.program.ProgramEditorResult
@@ -49,43 +50,47 @@ import java.time.ZoneId
  *               — inside ONE transaction, so a failed reconciliation leaves no half-applied save
  * ```
  *
- * ### The explicit target source: what this stage adds, and what it does not decide
+ * ### Target scheduling is revisioned Program behaviour
  *
- * [save] takes an optional [TargetScheduleAuthoring]: values a **caller** states about the target
- * scheduling semantics of the revision this save creates. It is a parameter rather than a draft field
- * on purpose — a draft is Program *structure*, and the structural comparison is what decides whether a
- * save warrants a revision at all (§6), so target semantics on the draft would either make a
- * target-only change mint a revision or make it invisible. It is a dedicated value rather than an
- * extension of the legacy `ProgramSchedule` on purpose — a legacy schedule says when slots fall, and
- * three of a target rule's four facts (its identity, its workout, its anchor) have no counterpart
- * there, so a mapper would have to manufacture them.
+ * Stage 19 made a target source **authorable** and applied it to the revision a save creates. Stage
+ * 22 makes it a *revisioned* behaviour with three explicit cases, and this boundary is where they are
+ * stated:
  *
- * What this layer does with it is exactly three things, and none of them is a decision:
+ * ```text
+ * Target schedule is revisioned Program behaviour.
  *
- *  * **apply it to the revision this save created.** A create, a copy and a structural edit each hand
- *    back the new revision's own identity, and the source is written against *that* revision. The
- *    revision the save replaces is never touched: its stored source is left exactly as it was, and the
- *    DAO has no update or delete path to change it.
- *  * **write it in the same transaction as the revision.** The target source belongs to the same
- *    revision-creation unit, so a refused or failing source write rolls the revision back with it and
- *    leaves neither a partial revision nor an orphaned source. The authoring's own refusals and the
- *    repository's are the same typed refusals Stage 18 already refuses with.
- *  * **do nothing when none was supplied.** An omitted authoring writes no row at all, and the
- *    revision reads as [TargetScheduleSourceRead.Missing] — the truthful reading of every revision
- *    whose author never stated target semantics, and of every revision saved before this existed. It is
- *    never turned into an empty source, and no legacy `ProgramSchedule` is consulted to manufacture one.
+ * Target change:
+ *     Replace / Clear
+ *         → new Revision
  *
- * **No target fact is ever invented here.** The rules, their cadences, their anchor dates, the derived
- * rule's source and the workout-to-plan-day bindings are all forwarded verbatim; the only thing this
- * layer re-points is a drafted plan-day *handle* onto the identity the editor minted for it, through
- * the correspondence the editor itself reports. The planned start date is **not** used as an anchor
- * date: no documented ownership rule in this repository equates the two, so the anchor stays an
- * explicit authoring input. And this layer adds no target-scheduling policy of its own — it holds no
- * cadence vocabulary, decides no date and runs no pass.
+ * No target change:
+ *     Keep
+ *
+ * Structural Program edit:
+ *     target source is carried forward unless explicitly Replace/Clear
+ *
+ * Revision source:
+ *     immutable
+ *     revision-owned
+ * ```
+ *
+ * The two absences a caller can express are therefore **different claims on different legs**, and
+ * each is refused if it is used on the leg it does not belong to:
+ *
+ * | parameter | legal on | `null` means |
+ * | --- | --- | --- |
+ * | `targetSchedule: TargetScheduleAuthoring?` | a **creation** (create / copy) | this Program has never stated target semantics — the revision reads [TargetScheduleSourceRead.Missing] |
+ * | `targetChange: TargetScheduleRevisionChange?` | an **edit** of an existing Program | [TargetScheduleRevisionChange.Keep] — carry the current revision's source forward |
+ *
+ * A creation handed an edit statement is refused with
+ * [TargetScheduleRevisionChangeException.EditChangeOnACreation] and an edit handed a creation
+ * authoring with [TargetScheduleRevisionChangeException.CreationAuthoringOnAnEdit], because a single
+ * `null` that means both *"keep what is there"* and *"there was never anything"* is exactly the
+ * ambiguity that let a structural edit silently drop a Program's target scheduling.
  *
  * ### What this layer decides, and what it does not
  *
- * Exactly one thing is decided here: **which leg runs for which draft, and what "atomic" means for
+ * Exactly one thing is decided here: **which leg runs for which request, and what "atomic" means for
  * it.** Everything else arrives as an answer from the owner of the rule:
  *
  *  * **the planned start date.** [save] takes the date the creation request names, or reads *today*
@@ -97,15 +102,27 @@ import java.time.ZoneId
  *    builds a slot, never assembles a schedule request and never computes a date itself.
  *  * **reconciliation.** [ProgramScheduler.schedule] is the only pass, and it is run *after* the new
  *    revision is stored — the pass reads what is stored, so "after" is not a preference but what
- *    makes the decision see the revision the user just saved. Its rules (which future slots a
- *    revision no longer presents, that a completed attempt is history, that a second pass decides
- *    nothing) stay entirely inside the Scheduler: this class only decides *when* a pass runs, and it
- *    runs exactly once per structural save. A pass that is **refused** (an archived Program, a
- *    Program with no anchor) is an ordinary absence, not a failure — the revision the user saved
- *    stands, and the next pass reconciles; a pass that **fails** throws inside the transaction, so
- *    the save and its reconciliation are applied together or not at all.
+ *    makes the decision see the revision the user just saved. Its rules stay entirely inside the
+ *    Scheduler: this class only decides *when* a pass runs, and it runs exactly once per structural
+ *    save. A **target-only** change runs no pass at all — a target revision change is not a legacy
+ *    schedule change (§13's isolation, in both directions).
+ *  * **whether a target-only change warrants a revision at all.** The two questions are separate
+ *    because a target-only change alters no structure: does the statement differ from what is stored,
+ *    compared field-by-field through the editor's own minted correspondence? If it does not, nothing
+ *    is written. If it does, one new revision of the *same* Program is minted and the statement is
+ *    attached to it.
  *  * **selection is never touched.** Creating a Program selects nothing (§9's opt-in belongs to
  *    import); the lifecycle service — the selection owner — is not even a collaborator here.
+ *
+ * ### No target fact is ever invented here
+ *
+ * The rules, their cadences, their anchor dates, the derived rule's source and the workout-to-plan-day
+ * bindings are all forwarded verbatim; the only thing this layer re-points is a plan-day *handle* onto
+ * the identity the editor minted for it, through the correspondence the editor itself reports. The
+ * planned start date is **not** used as an anchor date: no documented ownership rule in this
+ * repository equates the two, so the anchor stays an explicit authoring input. No plan-day
+ * `position`, `name`, date, weekday or index is ever consulted to decide a binding, no `workoutId` is
+ * derived from a `ProgramDayId`, and no legacy `ProgramSchedule` is read to manufacture a source.
  *
  * ### The refusals of a creation, and why one of them cannot fire
  *
@@ -118,20 +135,21 @@ import java.time.ZoneId
  * [ProgramEditorResult.Failed] with the whole table set untouched — measured by
  * `ProgramSaveServiceTest`, not promised here.
  *
- * @param editor the structure owner: it validates the draft, mints the Program and the first
- *   revision ([ProgramEditorService.prepareCreation]) and performs an edit's own save rule (§6).
+ * @param editor the structure owner and the **single** owner of revision minting: it validates the
+ *   draft, mints the Program and the first revision ([ProgramEditorService.prepareCreation]), performs
+ *   an edit's own save rule (§6), and mints the revision a target-only change warrants.
  * @param programRepository §27's creation primitive — the Program-owned graph and the slots in one
  *   transaction, or nothing at all.
  * @param scheduler §20's timing owner: initial opportunities for a creation, the one reconciliation
- *   pass after an edit. This class decides neither a date nor a slot.
+ *   pass after a structural edit. This class decides neither a date nor a slot.
  * @param clock the clock *today* is read from when the creation request names no exact date (§26).
  * @param zone the calendar that clock's instant is read as a date in — the same one the Scheduler
  *   plans in, so the date this layer defaults to and the date the slots anchor to are the same day.
- * @param inTransaction runs a block in one database transaction: the creation's whole graph, and an
- *   edit with its reconciliation.
- * @param targetSourceRepository the revision-owned explicit target source: where a stated authoring is
- *   written, and where nothing is written when no authoring was stated. It is a repository rather than
- *   a DAO so this layer never learns the storage vocabulary, and it is the only target-stage
+ * @param inTransaction runs a block in one database transaction: the creation's whole graph, an
+ *   edit with its reconciliation, and a target-only change with the revision it mints.
+ * @param targetSourceRepository the revision-owned explicit target source: where a stated source is
+ *   written, and where nothing is written when a statement states none. It is a repository rather
+ *   than a DAO so this layer never learns the storage vocabulary, and it is the only target-stage
  *   collaborator here — the contour is still separately callable and no pass is run.
  */
 class ProgramSaveService(
@@ -154,10 +172,18 @@ class ProgramSaveService(
      *   date is its own fact, moved only through
      *   [ProgramLifecycleService.setPlannedStartDate], never as a side effect of a structural save.
      *   It is also never used as a target rule's anchor date — see the class KDoc.
-     * @param targetSchedule the explicit target scheduling semantics the caller states for the revision
-     *   this save creates, or `null` when it states none. Supplied for a create, a copy or a structural
-     *   edit, it is written against the new revision inside the same transaction; omitted, no target
-     *   row is written and the new revision reads as [TargetScheduleSourceRead.Missing].
+     * @param targetSchedule the explicit target scheduling semantics the caller states for the
+     *   revision this save **creates** a Program for, or `null` when the caller states none.
+     *   Supplied for a create or a copy it is written against the new revision inside the same
+     *   transaction; omitted, no target row is written and the new revision reads as
+     *   [TargetScheduleSourceRead.Missing]. Supplying it for an **edit** is refused with
+     *   [TargetScheduleRevisionChangeException.CreationAuthoringOnAnEdit] — an edit states its target
+     *   scheduling with [targetChange].
+     * @param targetChange what an **edit** says about the revision's target scheduling, or `null`
+     *   for [TargetScheduleRevisionChange.Keep] — the honest default: the current revision's source is
+     *   carried forward onto the new revision, so a structural edit cannot silently drop it. Passing
+     *   it for a creation is refused with
+     *   [TargetScheduleRevisionChangeException.EditChangeOnACreation].
      * @return the save's outcome — [ProgramEditorResult.Rejected] and [ProgramEditorResult.Failed]
      *   mean nothing was written (for a creation: not one row of any of the five tables, and no target
      *   source row either).
@@ -165,12 +191,165 @@ class ProgramSaveService(
     suspend fun save(
         draft: ProgramEditorDraft,
         plannedStartDate: LocalDate? = null,
-        targetSchedule: TargetScheduleAuthoring? = null
-    ): ProgramEditorResult<ProgramSaveOutcome> =
-        if (draft.editsExistingProgram) {
-            saveRevisionWithReconciliation(draft, targetSchedule)
+        targetSchedule: TargetScheduleAuthoring? = null,
+        targetChange: TargetScheduleRevisionChange? = null
+    ): ProgramEditorResult<ProgramSaveOutcome> = if (draft.editsExistingProgram) {
+        saveRevisionWithReconciliation(draft, targetSchedule, targetChange ?: TargetScheduleRevisionChange.Keep)
+    } else {
+        // A creation has no previous revision, so there is nothing to keep and nothing to clear. The
+        // statement is refused before any decision is taken, so the creation never starts.
+        val editChange = targetChange
+        if (editChange != null) {
+            ProgramEditorResult.Failed(
+                TargetScheduleRevisionChangeException.EditChangeOnACreation(editChange)
+            )
         } else {
             createProgram(draft, plannedStartDate ?: today(), targetSchedule)
+        }
+    }
+
+    // ---------------------------------------------------------------- a target-only change (§6, §22)
+
+    /**
+     * Changes only the target scheduling of an existing Program, creating a revision when — and only
+     * when — the statement actually differs from what the current revision states.
+     *
+     * This is the defect Stage 22 exists to fix. A target-only change alters no plan day, so §6's
+     * structural comparison cannot see it: the draft is byte-identical to the current revision, the
+     * editor would answer *nothing to change*, and the user's stated target schedule would be
+     * discarded without a word. So the change is given its own operation here, which asks the editor
+     * to mint a revision whose structure is the current one and then decides whether to keep it.
+     *
+     * The order is the contract, and it is why this is not "save the draft again":
+     *
+     *  1. **read what is stored.** The current revision's source is read *before* anything is minted,
+     *     because the write moves the pointer and there would be nothing to compare against after.
+     *  2. **mint, unwritten.** [ProgramEditorService.prepareTargetScheduleRevision] produces the new
+     *     revision and the correspondence from each current plan-day identity to the identity that day
+     *     becomes. No row is written, so a statement that turns out to be identical costs nothing.
+     *  3. **compare semantics, not identity.** A new revision re-identifies every plan day (§6), so a
+     *     source that states exactly the same rules and the same `workoutId -> plan day` bindings
+     *     never compares equal by value. The comparison is field-by-field through the minted
+     *     correspondence ([statesTheSameTargetSemanticsAs]) and is order-insensitive, because a rule
+     *     identity and a workout identity are each a total key.
+     *  4. **write once, or not at all.** Only a differing statement reaches
+     *     [ProgramEditorService.saveTargetScheduleRevision] and the source write, and both happen
+     *     inside **one** transaction — so a refused or failing source write rolls the new revision
+     *     back with it and the Program keeps the plan it had, with its target source still readable.
+     *
+     * [TargetScheduleRevisionChange.Keep] on this operation means *no target change*, so no revision
+     * is minted: a change that changes nothing is not a change. [TargetScheduleRevisionChange.Clear]
+     * on a Program whose current revision already states no source is the same claim, and is
+     * likewise not a change.
+     *
+     * The previous revision is never written to. There is no update and no delete anywhere in this
+     * path — the repository exposes neither — so a superseded revision's source survives byte-for-byte
+     * by construction rather than by promise.
+     *
+     * @param change the statement about the new revision's target scheduling.
+     * @return [ProgramSaveOutcome.RevisionSaved] when a differing statement was applied,
+     *   [ProgramSaveOutcome.NothingToChange] when it states what is already stored.
+     */
+    suspend fun saveTargetScheduleChange(
+        programId: ProgramId,
+        change: TargetScheduleRevisionChange
+    ): ProgramEditorResult<ProgramSaveOutcome> {
+        val program = programRepository.programById(programId)
+            ?: return ProgramEditorResult.Rejected(
+                com.monkfitness.app.domain.program.ProgramEditorRejection.Refused(
+                    com.monkfitness.app.domain.program.ProgramOperationRefusal.ProgramNotFound(programId)
+                )
+            )
+        val currentRevisionId = program.currentRevisionId
+        val stored = targetSourceRepository.sourceOf(currentRevisionId).storedSourceOrNull()
+
+        // `Keep` states no change, so nothing is minted at all.
+        if (change is TargetScheduleRevisionChange.Keep) {
+            return ProgramEditorResult.Success(
+                ProgramSaveOutcome.NothingToChange(program, currentRevisionId)
+            )
+        }
+        // `Clear` on a revision that states no source is the same claim the storage already makes.
+        if (change is TargetScheduleRevisionChange.Clear && stored == null) {
+            return ProgramEditorResult.Success(
+                ProgramSaveOutcome.NothingToChange(program, currentRevisionId)
+            )
+        }
+
+        val prepared = when (val minted = editor.prepareTargetScheduleRevision(programId)) {
+            is ProgramEditorResult.Success -> minted.value
+            is ProgramEditorResult.Rejected -> return minted
+            is ProgramEditorResult.Failed -> return minted
+        }
+        val newRevisionId = prepared.revision.revisionId
+        val requested = when (change) {
+            is TargetScheduleRevisionChange.Replace -> change.authoring
+            is TargetScheduleRevisionChange.Clear -> null
+            is TargetScheduleRevisionChange.Keep -> null
+        }
+        // A `Replace` that states what is stored already changes nothing, even though the revision it
+        // would attach to is a real new revision: the *semantics* are the claim, and they are equal.
+        // The comparison happens in the space of plan-day handles, before either statement is attached
+        // to an identity — the new revision re-identifies every day, so comparing afterwards would
+        // compare two different identities and never see the equality.
+        if (requested != null && stored != null) {
+            val storedAsAuthoring = stored.asAuthoringOver(prepared.mintedProgramDays.keys)
+            if (storedAsAuthoring.statesTheSameTargetSemanticsAs(requested)) {
+                return ProgramEditorResult.Success(
+                    ProgramSaveOutcome.NothingToChange(program, currentRevisionId)
+                )
+            }
+        }
+        var saved: RevisionSaved? = null
+        return try {
+            inTransaction {
+                val written = when (val outcome = editor.saveTargetScheduleRevision(prepared)) {
+                    is ProgramEditorResult.Success -> outcome.value
+                    // The editor minted this revision itself and refused to write it, which is a
+                    // §28 SYSTEM_FAILURE rather than a rule: nothing below has run and the
+                    // transaction rolls back empty.
+                    is ProgramEditorResult.Rejected ->
+                        throw EditorRefusedItsOwnMintedRevision(outcome.rejection.message)
+                    is ProgramEditorResult.Failed -> throw outcome.cause
+                }
+                if (written !is RevisionSaved) {
+                    throw EditorRefusedItsOwnMintedRevision(
+                        "a target-only change saved ${written::class.simpleName} instead of a revision"
+                    )
+                }
+                if (requested != null) {
+                    targetSourceRepository.store(
+                        requested.asSourceOf(
+                            revisionId = newRevisionId,
+                            mintedProgramDays = prepared.mintedProgramDays
+                        )
+                    )
+                }
+                saved = written
+            }
+            ProgramEditorResult.Success(requireNotNull(saved))
+        } catch (failure: Throwable) {
+            ProgramEditorResult.Failed(failure)
+        }
+    }
+
+    /**
+     * The stored source of one read, or `null` when the revision states none **or** states one this
+     * boundary refuses to read.
+     *
+     * A [TargetScheduleSourceRead.Malformed] read collapses into the same "nothing to compare against"
+     * answer as [TargetScheduleSourceRead.Missing] on purpose, and it is the one place this stage
+     * treats two typed outcomes alike. It is still not a silent repair: a malformed stored source is
+     * never rewritten, never compared for sameness and never turned into an empty source. What
+     * differs is only what a *caller's* statement does next — a statement that would repeat it cannot
+     * be recognised as a repetition, so a revision is minted and the new source is written, leaving
+     * the malformed rows where they are, attached to the revision that stated them.
+     */
+    private fun TargetScheduleSourceRead.storedSourceOrNull(): TargetScheduleSource? =
+        when (this) {
+            is TargetScheduleSourceRead.Source -> source
+            is TargetScheduleSourceRead.Missing,
+            is TargetScheduleSourceRead.Malformed -> null
         }
 
     // ---------------------------------------------------------------- a creation (§27)
@@ -187,6 +366,12 @@ class ProgramSaveService(
      * with a plan but no opportunities, or opportunities but no Program — cannot exist. The stated
      * target source is written **inside that same unit**, so a source that is refused or that fails to
      * write takes the Program and its first revision with it and leaves no orphaned source behind.
+     *
+     * A **copy** states its target source only through the [targetSchedule] parameter, like any other
+     * creation: the copy's plan days are minted fresh at save and the copy shares nothing with its
+     * source (§6, §23), so there is no correspondence from the source Program's bindings to the
+     * copy's days for anything to be inferred from. A copy without a stated authoring therefore has
+     * no target source, and a caller that wants one states it against the copy's own drafted days.
      */
     private suspend fun createProgram(
         draft: ProgramEditorDraft,
@@ -230,8 +415,8 @@ class ProgramSaveService(
     // ---------------------------------------------------------------- an edit (§6, §27)
 
     /**
-     * A structural save of an existing Program: the editor's revision rule, then the Scheduler's
-     * reconciliation pass, inside **one** transaction.
+     * A structural save of an existing Program: the editor's revision rule, the caller's target
+     * statement, then the Scheduler's reconciliation pass, inside **one** transaction.
      *
      * The pass is §27's own second half — *"Save Editor → new Revision + future-slot
      * reconciliation"* — and running it here rather than leaving it to the screen is what makes the
@@ -241,34 +426,72 @@ class ProgramSaveService(
      * pass to find that it did not find before (running one anyway would be a second, quieter
      * decision point for the same rule).
      *
-     * One transaction around both means the pairing §27 states is the database's own: a
+     * One transaction around all of it means the pairing §27 states is the database's own: a
      * reconciliation that fails rolls the revision back with it (the user sees §28's `SYSTEM_FAILURE`
      * and still has the plan they had), and a reconciliation that is *refused* — an archived Program
      * being the reachable case — changes nothing about the save: the refusal is an ordinary absence
      * and the next pass, idempotent by construction, picks the reconciliation up.
      *
-     * The stated target source rides the same unit and the same rule. It is written **against the new
+     * The target statement rides the same unit and the same rule. It is applied **against the new
      * revision** the structural save just created, never against the revision that save replaced — so
-     * the previous revision's stored source survives byte-for-byte, and a save that creates no revision
-     * (a no-op or a facts-only save) states no source at all, because there is no new revision to own
-     * one. A source that is refused or that fails to write rolls the revision back with it, which is
-     * the same all-or-nothing the reconciliation already obeys.
+     * the previous revision's stored source survives byte-for-byte, and a save that creates no
+     * revision (a no-op or a facts-only save) applies no statement at all, because there is no new
+     * revision to own one. A source that is refused or that fails to write rolls the revision back
+     * with it, which is the same all-or-nothing the reconciliation already obeys.
+     *
+     * [TargetScheduleRevisionChange.Keep] reads the **current** revision's stored source — read
+     * before the editor's save, while the pointer still names it — converts it into an authoring over
+     * the draft's own plan days, and lets that authoring be re-pointed onto the new revision through
+     * the minted correspondence. The rules are forwarded verbatim; the bindings are re-identified,
+     * never copied, so no old `ProgramDayId` reaches the new revision's rows. A stored binding whose
+     * plan day the draft no longer carries is refused
+     * ([TargetScheduleAuthoringException.StoredProgramDayNotInTheDraft]) rather than re-pointed at
+     * some other day: which plan day that workout presents now is the caller's statement to make.
      */
     private suspend fun saveRevisionWithReconciliation(
         draft: ProgramEditorDraft,
-        targetSchedule: TargetScheduleAuthoring?
+        targetSchedule: TargetScheduleAuthoring?,
+        targetChange: TargetScheduleRevisionChange
     ): ProgramEditorResult<ProgramSaveOutcome> {
-        var result: ProgramEditorResult<ProgramSaveOutcome>? = null
+        // An edit states its target scheduling exactly once, through `targetChange`. An authoring
+        // handed to an edit instead would be a second implicit vocabulary for the same decision, and
+        // the refusal happens before the transaction opens, so nothing was written either way.
+        if (targetSchedule != null) {
+            return ProgramEditorResult.Failed(
+                TargetScheduleRevisionChangeException.CreationAuthoringOnAnEdit
+            )
+        }
+        val programId = requireNotNull(draft.programId) {
+            "a draft that edits a Program names it (§7)"
+        }
         return try {
+            // Read before the editor's save moves `currentRevisionId`: this is the source `Keep`
+            // carries forward, and after the save it would name the revision this save supersedes.
+            // The conversion is inside the try so its typed refusal is a §28 SYSTEM_FAILURE that
+            // writes nothing, rather than an exception escaping the boundary.
+            val carriedForward = when (targetChange) {
+                is TargetScheduleRevisionChange.Keep ->
+                    (targetSourceRepository.sourceOf(
+                        programRepository.programById(programId)?.currentRevisionId
+                            ?: throw EditorProgramMissing(programId)
+                    ) as? TargetScheduleSourceRead.Source)?.source
+                        ?.asAuthoringOver(draft.days.map { day -> day.programDayId }.toSet())
+                is TargetScheduleRevisionChange.Replace -> targetChange.authoring
+                is TargetScheduleRevisionChange.Clear -> null
+            }
+            var result: ProgramEditorResult<ProgramSaveOutcome>? = null
             inTransaction {
                 result = editor.save(draft)
                 val saved = (result as? ProgramEditorResult.Success)?.value
                 if (saved is RevisionSaved) {
-                    stateTargetSourceFor(
-                        revisionId = saved.revision.revisionId,
-                        mintedProgramDays = saved.mintedProgramDays,
-                        targetSchedule = targetSchedule
-                    )
+                    if (carriedForward != null) {
+                        targetSourceRepository.store(
+                            carriedForward.asSourceOf(
+                                revisionId = saved.revision.revisionId,
+                                mintedProgramDays = saved.mintedProgramDays
+                            )
+                        )
+                    }
                     when (val pass = scheduler.schedule(saved.program.programId)) {
                         // A failed pass is not absorbable (§33): rethrow so the outer transaction
                         // rolls the revision back with it — save and reconciliation, or neither.
@@ -288,7 +511,7 @@ class ProgramSaveService(
     }
 
     /**
-     * The one place a stated target authoring becomes a stored source — or, when none was stated,
+     * The one place a stated creation authoring becomes a stored source — or, when none was stated,
      * becomes nothing at all.
      *
      * `null` is the whole of the absent case: no row is written, no source is constructed, and the
@@ -331,3 +554,16 @@ class ProgramSaveService(
  */
 internal class CreationSchedulingRefused(val reason: ProgramSchedulingRefusal) :
     RuntimeException("the Program being created cannot be scheduled: ${reason.message}")
+
+/**
+ * The editor refused to write a revision it had just minted itself.
+ *
+ * A target-only change prepares the revision through the editor, so the only refusals still reachable
+ * at the write are ones about the Program as it stands — and there is no second chance to get a
+ * different answer, because the reader and the writer are the same transaction. Rather than
+ * translating the refusal into a second vocabulary, the boundary reports it as §28's `SYSTEM_FAILURE`
+ * with this sentence: the transaction rolls back, the Program keeps its previous current revision, and
+ * that revision's target source stays readable.
+ */
+internal class EditorRefusedItsOwnMintedRevision(detail: String) :
+    RuntimeException("the editor refused the revision it minted for a target-only change: $detail")

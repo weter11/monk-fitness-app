@@ -101,14 +101,22 @@ internal class ProgramSaveRig(private val key: String = "s") {
     /** The faults a test plants to prove a failed leg leaves nothing behind. */
     val faults get() = data.faults
 
-    /**
-     * The graph's persistence — reachable so a test can compose a *second* service over the same rows,
+    /** The graph's persistence — reachable so a test can compose a *second* service over the same rows,
      * and so a test can read back the explicit target source a save stated. */
     val programRepository get() = data.programRepository
     val planRepository get() = data.programPlanRepository
     val scheduleRepository get() = data.programScheduleRepository
     val targetSourceRepository get() = data.targetScheduleSourceRepository
     val transaction get() = data.transaction
+
+    /** The session repository, for a test that composes the lifecycle owner itself. */
+    val sessionRepository get() = data.workoutSessionRepository
+
+    /** The target-occurrence repository, for a test that composes the target consumer itself. */
+    val targetOccurrenceRepository get() = data.targetScheduleOccurrenceRepository
+
+    /** The selection state, for a test that composes the lifecycle owner itself. */
+    val appStateRepository get() = data.appStateRepository
 
     /**
      * Leaves the fixture graph's first opportunity as **finished history**: a real session with
@@ -141,13 +149,14 @@ internal class ProgramSaveRig(private val key: String = "s") {
      */
     fun draftOf(
         name: String,
-        schedule: ProgramSchedule = ProgramSchedule.FlexiblePerWeek(3)
+        schedule: ProgramSchedule = ProgramSchedule.FlexiblePerWeek(3),
+        draftDayId: ProgramDayId = ProgramDayId("draft-day-1")
     ): ProgramEditorDraft = ProgramEditorDraft(
         name = name,
         schedule = schedule,
         days = listOf(
             ProgramDay(
-                programDayId = ProgramDayId("draft-day-1"),
+                programDayId = draftDayId,
                 position = 1,
                 type = ProgramDayType.TRAINING,
                 name = "Push day",
