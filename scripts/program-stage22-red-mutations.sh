@@ -235,16 +235,14 @@ CLEAR_DELETE_LOST='                if (requested != null) {
 # 4. A structural edit's `Keep` loses the source. The branch still *reads* the stored source, so the
 #    read is visible to no oracle, and then discards it: the Program that had a target schedule
 #    silently stops having one, which is the defect this stage exists to remove.
-CARRY_LOSS_ANCHOR='                    ) as? TargetScheduleSourceRead.Source)?.source
-                        ?.asAuthoringOver(draft.days.map { day -> day.programDayId }.toSet())'
-CARRY_LOSS_LOST='                    ) as? TargetScheduleSourceRead.Source)?.source
-                        ?.asAuthoringOver(draft.days.map { day -> day.programDayId }.toSet())
-                        ?.let { kept ->
+CARRY_LOSS_ANCHOR='                        is TargetScheduleSourceRead.Missing -> null
+                        is TargetScheduleSourceRead.Malformed ->'
+CARRY_LOSS_LOST='                        is TargetScheduleSourceRead.Missing ->
                             TargetScheduleAuthoring(
                                 rules = emptyList(),
-                                programDayBindings = kept.programDayBindings
+                                programDayBindings = emptyList()
                             )
-                        }'
+                        is TargetScheduleSourceRead.Malformed ->'
 
 # 5. A structural `Replace` writes against the revision the save **replaced**. The revision the draft
 #    was opened from is a real, existing `RevisionId`, so the row type-checks and the write is refused
@@ -299,17 +297,27 @@ DEFAULT_CLEAR_LOST='        saveRevisionWithReconciliation(draft, targetSchedule
 # 11. `Clear` silently becomes `Keep`, on the *other* leg. A target-only clear of a Program that does
 #     state a source mints no revision and reports nothing to change, so the user's stated removal is
 #     dropped. Same pair as row 10, a different place and a different observable: the outcome type.
-CLEAR_BECOMES_KEEP_ANCHOR='        if (change is TargetScheduleRevisionChange.Clear && stored == null) {'
-CLEAR_BECOMES_KEEP_LOST='        if (change is TargetScheduleRevisionChange.Clear) {'
+CLEAR_BECOMES_KEEP_ANCHOR='        if (change is TargetScheduleRevisionChange.Clear &&
+            stored is TargetScheduleSourceRead.Missing
+        ) {
+            return ProgramEditorResult.Success(
+                ProgramSaveOutcome.NothingToChange(program, currentRevisionId)
+            )
+        }'
+CLEAR_BECOMES_KEEP_LOST='        if (change is TargetScheduleRevisionChange.Clear) {
+            return ProgramEditorResult.Success(
+                ProgramSaveOutcome.NothingToChange(program, currentRevisionId)
+            )
+        }'
 
 # 12. An identical `Replace` mints a revision anyway, because the semantic comparison is dropped. The
 #     two sources differ by nothing but the plan-day identity a new revision mints, so an identity
 #     comparison could never see the equality — which is what makes this row worth running.
-COMPARE_DROPPED_ANCHOR='        if (requested != null && stored != null) {
-            val storedAsAuthoring = stored.asAuthoringOver(prepared.mintedProgramDays.keys)
+COMPARE_DROPPED_ANCHOR='        if (requested != null && storedSource != null) {
+            val storedAsAuthoring = storedSource.asAuthoringOver(prepared.mintedProgramDays.keys)
             if (storedAsAuthoring.statesTheSameTargetSemanticsAs(requested)) {'
-COMPARE_DROPPED_LOST='        if (requested != null && stored != null && requested.rules.isEmpty()) {
-            val storedAsAuthoring = stored.asAuthoringOver(prepared.mintedProgramDays.keys)
+COMPARE_DROPPED_LOST='        if (requested != null && storedSource != null && requested.rules.isEmpty()) {
+            val storedAsAuthoring = storedSource.asAuthoringOver(prepared.mintedProgramDays.keys)
             if (storedAsAuthoring.statesTheSameTargetSemanticsAs(requested)) {'
 
 # 13. A structural edit's omission becomes the typed absence, re-introduced through the *read* side:
@@ -359,12 +367,13 @@ ATOMICITY_ESCAPE_LOST2='                if (false) {
 OVERWRITE_OLD_ANCHOR='                saved = written
             }
             ProgramEditorResult.Success(requireNotNull(saved))'
-OVERWRITE_OLD_LOST='                if (requested != null && stored != null) {
+OVERWRITE_OLD_LOST='                val overwritten = storedSource
+                if (requested != null && overwritten != null) {
                     targetSourceRepository.store(
                         TargetScheduleSource(
                             revisionId = currentRevisionId,
                             rules = requested.rules,
-                            programDayBindings = stored.programDayBindings
+                            programDayBindings = overwritten.programDayBindings
                         )
                     )
                 }
@@ -376,16 +385,16 @@ OVERWRITE_OLD_LOST='                if (requested != null && stored != null) {
 #     forbids. Two halves, both needed: the boundary *reads* a legacy schedule (which the gate sees),
 #     and it *reconstructs* a source from one and writes it at the superseded revision (which the
 #     behavioural suite sees, as the previous revision's source no longer reading as it did).
-LEGACY_READ_ANCHOR='        val stored = targetSourceRepository.sourceOf(currentRevisionId).storedSourceOrNull()'
-LEGACY_READ_LOST='        val stored = targetSourceRepository.sourceOf(currentRevisionId).storedSourceOrNull()
+LEGACY_READ_ANCHOR='        val storedSource = (stored as? TargetScheduleSourceRead.Source)?.source'
+LEGACY_READ_LOST='        val storedSource = (stored as? TargetScheduleSourceRead.Source)?.source
         val legacyScheduleRead: com.monkfitness.app.domain.program.ProgramSchedule? =
             com.monkfitness.app.domain.program.ProgramSchedule.FlexiblePerWeek(3)'
 LEGACY_REBUILD_ANCHOR='                if (requested != null) {
                     targetSourceRepository.store(
                         requested.asSourceOf('
-LEGACY_REBUILD_LOST='                val legacyRebuild: com.monkfitness.app.domain.program.ProgramSchedule =
+LEGACY_REBUILD_LOST='                val legacyRebuild: com.monkfitness.app.domain.program.ProgramSchedule? =
                     com.monkfitness.app.domain.program.ProgramSchedule.FlexiblePerWeek(3)
-                if (requested != null && legacyRebuild is com.monkfitness.app.domain.program.ProgramSchedule.FixedWeekdays) {
+                if (requested != null && legacyRebuild != null) {
                     targetSourceRepository.store(
                         TargetScheduleAuthoring(
                             rules = listOf(
@@ -420,6 +429,62 @@ POINTER_REWOUND_LOST='                saved = written
             }
             ProgramEditorResult.Success(requireNotNull(saved))'
 
+# ---- the `Malformed` / `Missing` distinction (the second commit on this stage) --------------
+#
+# A stored source that exists but cannot be read is a THIRD fact. Collapsing it into `null` beside
+# `Missing` was the defect this stage's second commit removes, and it produced two wrong answers: a
+# structural `Keep` minted a new revision stating no source, and an explicit `Clear` was answered
+# `NothingToChange` — telling the caller a Program has no target schedule when it has one the
+# boundary cannot read.
+#
+# These four rows break the distinction in a different shape each, because a collapse can come back in
+# any of them: a cast, an early return, two arms lumped into one, and a refusal that is swallowed.
+
+MALFORMED_KEEP_ANCHOR='                        is TargetScheduleSourceRead.Malformed ->
+                            throw TargetScheduleRevisionChangeException.KeepOverUnreadableStoredSource(
+                                revisionId = stored.revisionId,
+                                reason = stored.reason
+                            )'
+MALFORMED_KEEP_LOST='                        is TargetScheduleSourceRead.Malformed -> null'
+MALFORMED_CLEAR_ANCHOR='        if (change is TargetScheduleRevisionChange.Clear &&
+            stored is TargetScheduleSourceRead.Malformed
+        ) {
+            return ProgramEditorResult.Failed(
+                TargetScheduleRevisionChangeException.ClearOverUnreadableStoredSource(
+                    revisionId = currentRevisionId,
+                    reason = stored.reason
+                )
+            )
+        }'
+MALFORMED_CLEAR_LOST='        if (change is TargetScheduleRevisionChange.Clear &&
+            stored is TargetScheduleSourceRead.Malformed
+        ) {
+            return ProgramEditorResult.Success(
+                ProgramSaveOutcome.NothingToChange(program, currentRevisionId)
+            )
+        }'
+MALFORMED_TO_MISSING_ANCHOR='                        is TargetScheduleSourceRead.Missing -> null
+                        is TargetScheduleSourceRead.Malformed ->
+                            throw TargetScheduleRevisionChangeException.KeepOverUnreadableStoredSource(
+                                revisionId = stored.revisionId,
+                                reason = stored.reason
+                            )'
+MALFORMED_TO_MISSING_LOST='                        is TargetScheduleSourceRead.Missing -> null
+                        is TargetScheduleSourceRead.Malformed -> null'
+MALFORMED_SWALLOW_ANCHOR='            return ProgramEditorResult.Failed(
+                TargetScheduleRevisionChangeException.ClearOverUnreadableStoredSource(
+                    revisionId = currentRevisionId,
+                    reason = stored.reason
+                )
+            )'
+MALFORMED_SWALLOW_LOST='            run {
+                val swallowed = TargetScheduleRevisionChangeException.ClearOverUnreadableStoredSource(
+                    revisionId = currentRevisionId,
+                    reason = stored.reason
+                )
+                swallowed.message
+            }'
+
 echo '== preflight =='
 
 preflight 'a target-only replacement mints no revision' "$SAVE" "$TARGET_WRITE_ANCHOR" "$TARGET_WRITE_LOST"
@@ -441,6 +506,11 @@ preflight 'the old target source is overwritten by the new one' "$SAVE" "$OVERWR
 preflight 'the legacy ProgramSchedule is read for the source' "$SAVE" "$LEGACY_READ_ANCHOR" "$LEGACY_READ_LOST"
 preflight 'the source is reconstructed from the legacy schedule' "$SAVE" "$LEGACY_REBUILD_ANCHOR" "$LEGACY_REBUILD_LOST"
 preflight 'Start reads the previous revision after a target-only change' "$SAVE" "$POINTER_REWOUND_ANCHOR" "$POINTER_REWOUND_LOST"
+
+preflight 'Malformed becomes no source on a structural Keep' "$SAVE" "$MALFORMED_KEEP_ANCHOR" "$MALFORMED_KEEP_LOST"
+preflight 'Malformed becomes no source on a target-only Clear' "$SAVE" "$MALFORMED_CLEAR_ANCHOR" "$MALFORMED_CLEAR_LOST"
+preflight 'Malformed is relabelled Missing' "$SAVE" "$MALFORMED_TO_MISSING_ANCHOR" "$MALFORMED_TO_MISSING_LOST"
+preflight 'the malformed refusal is swallowed' "$SAVE" "$MALFORMED_SWALLOW_ANCHOR" "$MALFORMED_SWALLOW_LOST"
 
 echo 'all mutation anchors verified'
 
@@ -474,6 +544,11 @@ mutate 'the old target source is overwritten by the new one' "$SAVE" "$OVERWRITE
 mutate 'the legacy ProgramSchedule is read for the source' "$SAVE" "$LEGACY_READ_ANCHOR" "$LEGACY_READ_LOST"
 mutate 'the source is reconstructed from the legacy schedule' "$SAVE" "$LEGACY_REBUILD_ANCHOR" "$LEGACY_REBUILD_LOST"
 mutate 'Start reads the previous revision after a target-only change' "$SAVE" "$POINTER_REWOUND_ANCHOR" "$POINTER_REWOUND_LOST"
+
+mutate 'Malformed becomes no source on a structural Keep' "$SAVE" "$MALFORMED_KEEP_ANCHOR" "$MALFORMED_KEEP_LOST"
+mutate 'Malformed becomes no source on a target-only Clear' "$SAVE" "$MALFORMED_CLEAR_ANCHOR" "$MALFORMED_CLEAR_LOST"
+mutate 'Malformed is relabelled Missing' "$SAVE" "$MALFORMED_TO_MISSING_ANCHOR" "$MALFORMED_TO_MISSING_LOST"
+mutate 'the malformed refusal is swallowed' "$SAVE" "$MALFORMED_SWALLOW_ANCHOR" "$MALFORMED_SWALLOW_LOST"
 
 restore
 if md5sum -c "$WORK/before.md5" > "$WORK/md5check.log" 2>&1; then

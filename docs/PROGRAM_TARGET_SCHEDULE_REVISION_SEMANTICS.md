@@ -9,7 +9,7 @@ Base: `d3a96b5` (merge of PR #323, §30 step 21)
 
 ```text
 control GREEN
-caught: 19
+caught: 23
 missed: 0
 not-a-catch: 0
 every mutated source restored byte-identically
@@ -323,7 +323,7 @@ Stage 18's and Stage 21's gates are untouched and green.
 
 ## 15. Architecture gate
 
-`TargetScheduleRevisionArchitectureTest` — eighteen mechanical claims, comments stripped first so a
+`TargetScheduleRevisionArchitectureTest` — twenty mechanical claims, comments stripped first so a
 KDoc may *say* "never infers a binding from a position" without tripping the rule about doing it:
 
 1. target authoring remains outside `ProgramEditorDraft` (and the change vocabulary is not on it either);
@@ -355,6 +355,12 @@ KDoc may *say* "never infers a binding from a position" without tripping the rul
     target type;
 18. Program identity is unchanged across a target-only revision: no new `ProgramId` is minted, and the
     reported Program is the stored one with the pointer moved.
+19. a `Malformed` stored source is never treated as a `Missing` one — no `…OrNull` helper, no `when`
+    that lumps the two arms, no cast that reads "not a `Source`" as "no source";
+20. a `Malformed` stored source is never converted into an empty one or carried as no source —
+    both operations that cannot honestly continue past one raise a *named* refusal carrying the
+    revision and the reason, and no `rules = emptyList()` authoring is constructed anywhere on the
+    revision path.
 
 Plus two gates that keep the previous stage's truth: the authoring value still names no legacy schedule
 vocabulary, `MintedRevision` stayed private while `MintedTargetScheduleRevision` is public, and
@@ -362,7 +368,7 @@ vocabulary, `MintedRevision` stayed private while `MintedTargetScheduleRevision`
 
 ## 16. Integration coverage
 
-`TargetScheduleRevisionSemanticsIntegrationTest` — real SQLite, production repositories, the
+`TargetScheduleRevisionSemanticsIntegrationTest` — twenty-three cases, real SQLite, production repositories, the
 production editor, the production Scheduler, the production save boundary and Stage 21's real Start
 path composed exactly as `AppContainer` composes it. Only the clock, the identity generator and the
 calendar are stated values.
@@ -381,10 +387,17 @@ calendar are stated values.
 | J. Start after a target-only revision | `aStartAfterATargetOnlyRevisionReadsTheNewCurrentRevisionSource` |
 | K. legacy isolation | `aTargetRevisionChangeLeavesTheLegacySlotsExactlyAsTheyWere` |
 | L. cross-Program isolation | `twoProgramsOwnStructurallyIdenticalTargetSourcesIndependently` |
+| A. structural `Keep` + `Malformed` | `aStructuralKeepOverAnUnreadableStoredSourceIsRefusedAndNothingIsWritten` |
+| B. target-only `Clear` + `Malformed` | `aTargetOnlyClearOverAnUnreadableStoredSourceIsRefusedAndNotAnsweredAsNothingToChange` |
+| C. target-only `Replace` + `Malformed` | `aTargetOnlyReplaceOverAnUnreadableStoredSourceWritesTheNewSourceAndLeavesTheOldOneAlone` |
+| D. structural `Keep` + `Missing` | `aStructuralKeepOverARevisionThatStatesNoSourceMintsARevisionThatStatesNone` |
+| E. target-only `Clear` + `Missing` | `aTargetOnlyClearOverARevisionThatStatesNoSourceChangesNothing` |
 
 Plus four contract cases: a creation's omission is still `Missing`; each leg refuses the other's
 vocabulary; a copy without a stated authoring has no target source and guesses no binding; and a `Keep`
-whose stored binding names a plan day the draft no longer carries is refused with the typed reason.
+whose stored binding names a plan day the draft no longer carries is refused with the typed reason —
+and the five `Malformed` / `Missing` cases of §9a, each asserted through a genuinely unreadable
+stored row rather than a mock.
 
 ### No-op cases, explicitly
 
@@ -397,7 +410,7 @@ target Replace, identical     → no new Revision            (G)
 
 ## 17. RED mutation evidence
 
-`scripts/program-stage22-red-mutations.sh` — nineteen rows, with the harness rules this repository has
+`scripts/program-stage22-red-mutations.sh` — twenty-three rows, with the harness rules this repository has
 used since Stage 12: a compile error is never a catch, a comment-only mutation proves nothing, a no-op
 mutation is never a catch, every row is type-correct in the whole tree, and every mutated source is
 restored byte-identically (`md5sum -c` from the repository root). KSP's incremental caches are cleared
@@ -408,7 +421,13 @@ The oracle is the Stage 22 behavioural and architecture suites, Stage 19's two s
 behavioural suite and Stage 18's two suites — so a mutation that changed the authoring contract or the
 immutable-write contract is seen by the pins that own those claims.
 
-**Nineteen rows, not eighteen.** The brief's row 17 is *"legacy `ProgramSchedule` used to reconstruct
+**Twenty-three rows.** The original nineteen are listed above; the second commit adds four for the
+`Malformed` / `Missing` defect, one per shape the collapse can return in — a cast on a structural
+`Keep`, a `Clear` answered as `NothingToChange`, a `when` that relabels the two arms, and a refusal
+that is raised and then swallowed. Each is scored on a different assertion: the outcome type, the
+`currentRevisionId`, the whole-table census, and the target row counts.
+
+**Nineteen of the original rows, not eighteen.** The brief's row 17 is *"legacy `ProgramSchedule` used to reconstruct
 target source"*, and those are two different claims with two different oracles, so it is written as two
 rows: one that only *reads* a legacy schedule (invisible to every behavioural suite — the read changes
 no outcome — so only the gate sees it), and one that *reconstructs* a source from one and writes it at
@@ -436,11 +455,11 @@ These are recorded rather than designed around.
    were not used because §7's `ProgramsController` calls one `save` for both entry points and a second
    entry point would be a second place to forget the `Keep` default. The refusals make the illegal
    combinations loud rather than silent, which is the property that matters.
-2. **`Malformed` and `Missing` collapse to "nothing to compare against"** on the target-only path.
-   This is the one place two typed outcomes are treated alike. It is not a silent repair: a malformed
-   source is never rewritten, never compared for sameness and never turned into an empty source — but a
-   statement that would *repeat* it cannot be recognised as a repetition, so a revision is minted. The
-   alternative was a `Failed` on a read the caller cannot repair.
+2. **A `Replace` over a malformed source mints a revision without commenting on the old data.**
+   Deliberate, and the asymmetry is argued in §9a: the caller states what the new revision says,
+   the unreadable rows stay on the revision that stated them, and refusing would leave no way to
+   recover. What it does *not* do is diagnose the old rows — repairing them is a migration
+   decision, not a save boundary's, and nothing here rewrites or deletes them.
 3. **A `Keep` whose stored binding names a removed plan day refuses the whole structural edit.** The
    caller must state `Replace` or `Clear` instead. Refusing is honest — the alternative is dropping or
    re-pointing a binding, which is a scheduling decision made by a save boundary — but it means a

@@ -261,20 +261,45 @@ class ProgramSaveService(
                 )
             )
         val currentRevisionId = program.currentRevisionId
-        val stored = targetSourceRepository.sourceOf(currentRevisionId).storedSourceOrNull()
+        // The three read outcomes are kept apart here, deliberately. Only `Missing` means "no target
+        // source"; a `Malformed` read is a third fact, and each of the three changes answers it
+        // differently — which is exactly what collapsing them would have hidden.
+        val stored = targetSourceRepository.sourceOf(currentRevisionId)
 
-        // `Keep` states no change, so nothing is minted at all.
+        // `Keep` states no change, so nothing is minted at all. It needs no read: a change that
+        // changes nothing is answered the same way whatever the current revision states.
         if (change is TargetScheduleRevisionChange.Keep) {
             return ProgramEditorResult.Success(
                 ProgramSaveOutcome.NothingToChange(program, currentRevisionId)
             )
         }
-        // `Clear` on a revision that states no source is the same claim the storage already makes.
-        if (change is TargetScheduleRevisionChange.Clear && stored == null) {
+        // `Clear` over a source that **cannot be read** is refused, not answered as "nothing to
+        // change". `NothingToChange` would be the honest answer only if the revision really stated no
+        // target source, and unreadable rows do not say that — they say something this boundary cannot
+        // parse, and superseding them would destroy it without anyone deciding to.
+        if (change is TargetScheduleRevisionChange.Clear &&
+            stored is TargetScheduleSourceRead.Malformed
+        ) {
+            return ProgramEditorResult.Failed(
+                TargetScheduleRevisionChangeException.ClearOverUnreadableStoredSource(
+                    revisionId = currentRevisionId,
+                    reason = stored.reason
+                )
+            )
+        }
+        // `Clear` on a revision that states **no** source is that same claim, already made by the
+        // storage, so there is nothing to change.
+        if (change is TargetScheduleRevisionChange.Clear &&
+            stored is TargetScheduleSourceRead.Missing
+        ) {
             return ProgramEditorResult.Success(
                 ProgramSaveOutcome.NothingToChange(program, currentRevisionId)
             )
         }
+        // A `Replace` over an unreadable source is the one way forward the caller has, so it is not
+        // refused: the new revision states what the caller meant, and the unreadable rows stay exactly
+        // where they are, on the revision that stated them.
+        val storedSource = (stored as? TargetScheduleSourceRead.Source)?.source
 
         val prepared = when (val minted = editor.prepareTargetScheduleRevision(programId)) {
             is ProgramEditorResult.Success -> minted.value
@@ -292,8 +317,8 @@ class ProgramSaveService(
         // The comparison happens in the space of plan-day handles, before either statement is attached
         // to an identity — the new revision re-identifies every day, so comparing afterwards would
         // compare two different identities and never see the equality.
-        if (requested != null && stored != null) {
-            val storedAsAuthoring = stored.asAuthoringOver(prepared.mintedProgramDays.keys)
+        if (requested != null && storedSource != null) {
+            val storedAsAuthoring = storedSource.asAuthoringOver(prepared.mintedProgramDays.keys)
             if (storedAsAuthoring.statesTheSameTargetSemanticsAs(requested)) {
                 return ProgramEditorResult.Success(
                     ProgramSaveOutcome.NothingToChange(program, currentRevisionId)
@@ -332,25 +357,6 @@ class ProgramSaveService(
             ProgramEditorResult.Failed(failure)
         }
     }
-
-    /**
-     * The stored source of one read, or `null` when the revision states none **or** states one this
-     * boundary refuses to read.
-     *
-     * A [TargetScheduleSourceRead.Malformed] read collapses into the same "nothing to compare against"
-     * answer as [TargetScheduleSourceRead.Missing] on purpose, and it is the one place this stage
-     * treats two typed outcomes alike. It is still not a silent repair: a malformed stored source is
-     * never rewritten, never compared for sameness and never turned into an empty source. What
-     * differs is only what a *caller's* statement does next — a statement that would repeat it cannot
-     * be recognised as a repetition, so a revision is minted and the new source is written, leaving
-     * the malformed rows where they are, attached to the revision that stated them.
-     */
-    private fun TargetScheduleSourceRead.storedSourceOrNull(): TargetScheduleSource? =
-        when (this) {
-            is TargetScheduleSourceRead.Source -> source
-            is TargetScheduleSourceRead.Missing,
-            is TargetScheduleSourceRead.Malformed -> null
-        }
 
     // ---------------------------------------------------------------- a creation (§27)
 
@@ -470,12 +476,30 @@ class ProgramSaveService(
             // The conversion is inside the try so its typed refusal is a §28 SYSTEM_FAILURE that
             // writes nothing, rather than an exception escaping the boundary.
             val carriedForward = when (targetChange) {
-                is TargetScheduleRevisionChange.Keep ->
-                    (targetSourceRepository.sourceOf(
+                // `Keep` branches on the read's own three outcomes rather than casting to `Source` and
+                // treating everything else as nothing: a `Malformed` read is refused outright, because
+                // a new revision stating no source would say "this Program has no target schedule" on
+                // the strength of rows nobody can read.
+                is TargetScheduleRevisionChange.Keep -> {
+                    val stored = targetSourceRepository.sourceOf(
                         programRepository.programById(programId)?.currentRevisionId
                             ?: throw EditorProgramMissing(programId)
-                    ) as? TargetScheduleSourceRead.Source)?.source
-                        ?.asAuthoringOver(draft.days.map { day -> day.programDayId }.toSet())
+                    )
+                    when (stored) {
+                        is TargetScheduleSourceRead.Source ->
+                            stored.source.asAuthoringOver(
+                                draft.days.map { day -> day.programDayId }.toSet()
+                            )
+                        // The revision states no target semantics, so the new one states none either:
+                        // there is nothing to carry forward and no claim to invent.
+                        is TargetScheduleSourceRead.Missing -> null
+                        is TargetScheduleSourceRead.Malformed ->
+                            throw TargetScheduleRevisionChangeException.KeepOverUnreadableStoredSource(
+                                revisionId = stored.revisionId,
+                                reason = stored.reason
+                            )
+                    }
+                }
                 is TargetScheduleRevisionChange.Replace -> targetChange.authoring
                 is TargetScheduleRevisionChange.Clear -> null
             }

@@ -575,6 +575,81 @@ class TargetScheduleRevisionArchitectureTest {
         )
     }
 
+    // ---------------------------------------------------------------- 19. Malformed is its own fact
+
+    @Test
+    fun aMalformedStoredSourceIsNeverTreatedAsAMissingOne() {
+        // The defect this claim was added for: the save boundary collapsed `Malformed` into `null`
+        // beside `Missing`, and every caller then read unreadable persisted data as *"this revision
+        // states no target schedule"*. That is how an explicit `Clear` came to be answered as
+        // `NothingToChange` on the strength of rows nobody could parse, and how a structural `Keep`
+        // came to mint a new revision with no source at all.
+        //
+        // The collapse is pinned on three forms, because it can come back in any of them: a helper
+        // that returns `null` for both, a `when` that lumps the two arms together, and a cast that
+        // treats "not a `Source`" as "no source".
+        val save = code(saveServiceFile)
+        for (collapsing in listOf("storedSourceOrNull", "asSourceOrNull", "sourceOrNull", "getOrNull")) {
+            assertFalse(
+                "the boundary holds no `$collapsing` helper: collapsing `Malformed` and `Missing` " +
+                    "into one value is the defect, whatever the helper is called",
+                save.contains(collapsing) || code(changeFile).contains(collapsing)
+            )
+        }
+        assertFalse(
+            "no `when` lumps the two absences into one arm",
+            Regex("Missing,\\s*\\n\\s*Malformed").containsMatchIn(save) ||
+                Regex("Malformed,\\s*\\n\\s*Missing").containsMatchIn(save) ||
+                Regex("is TargetScheduleSourceRead.Missing,\\s*is TargetScheduleSourceRead.Malformed")
+                    .containsMatchIn(save)
+        )
+        assertFalse(
+            "and no branch casts to `Source` and treats everything else as no source — specifically in " +
+                "the `Keep` carry-forward, which is where a cast once turned unreadable rows into " +
+                "'no source'",
+            Regex("as\\? TargetScheduleSourceRead\\.Source\\)\\?\\.source\\s*\n\\s*\\?\\.asAuthoringOver")
+                .containsMatchIn(save)
+        )
+    }
+
+    @Test
+    fun aMalformedStoredSourceIsNeverConvertedIntoAnEmptyOneOrCarriedAsNoSource() {
+        val save = code(saveServiceFile)
+        // `Missing` means the revision states nothing; `Malformed` means it states something
+        // unreadable. The two are answered differently, and each answer is a named refusal rather than
+        // a default, so a caller can tell "there is nothing there" from "there is something I cannot
+        // read".
+        for (refusal in listOf(
+            "KeepOverUnreadableStoredSource", "ClearOverUnreadableStoredSource"
+        )) {
+            assertTrue(
+                "the boundary refuses `$refusal` rather than defaulting, and declares it in the change " +
+                    "vocabulary's own exception type",
+                code(changeFile).contains("data class $refusal") && save.contains(refusal)
+            )
+        }
+        // …and both refusals carry the reason, so the caller is told what could not be read rather
+        // than only that something could not.
+        for (refusal in listOf(
+            "KeepOverUnreadableStoredSource", "ClearOverUnreadableStoredSource"
+        )) {
+            val body = code(changeFile).substringAfter("data class $refusal(").substringBefore(") :")
+            assertTrue(
+                "`$refusal` names both the revision and the reason it could not be read",
+                body.contains("revisionId: RevisionId") && body.contains("reason: String")
+            )
+        }
+        // An empty source is not the answer to either: a revision with no rules cannot produce an
+        // occurrence, so `TargetScheduleAuthoring(rules = emptyList(), …)` must appear nowhere on the
+        // revision path — that is what a `Malformed` → *empty* conversion would have to build.
+        for (source in listOf(saveServiceFile, changeFile)) {
+            assertFalse(
+                "${source.name} never constructs an authoring that states no rule",
+                Regex("TargetScheduleAuthoring\\(\\s*\\n?\\s*rules\\s*=\\s*emptyList\\(\\)").containsMatchIn(code(source))
+            )
+        }
+    }
+
     // ---------------------------------------------------------------- the composition root
 
     @Test

@@ -1,7 +1,7 @@
 package com.monkfitness.app.domain.usecase
 
 import com.monkfitness.app.domain.common.ProgramDayId
-import com.monkfitness.app.domain.program.target.TargetProgramDayBinding
+import com.monkfitness.app.domain.common.RevisionId
 
 /**
  * What a caller states about the **target scheduling semantics** of a Program's revision, when the
@@ -117,6 +117,50 @@ sealed class TargetScheduleRevisionChangeException(message: String) :
     data object CreationAuthoringOnAnEdit : TargetScheduleRevisionChangeException(
         "an edit states its target scheduling with Keep / Replace / Clear, not with a creation " +
             "authoring; the two absences are different claims and are not interchangeable"
+    )
+
+    /**
+     * A structural edit asked to **carry the current revision's source forward**, and that source is
+     * stored but not readable.
+     *
+     * [com.monkfitness.app.domain.usecase.TargetScheduleSourceRead.Malformed] is a third fact, and
+     * the only honest continuation of "keep what this revision states" when what it states cannot be
+     * read is *no continuation at all*. Minting a new revision that states no source would turn
+     * "this revision states something I cannot parse" into "this revision states nothing", which is a
+     * claim the storage never made and the caller never asked for. The save is refused instead: the
+     * Program keeps the revision it had, and the unreadable rows stay exactly where they are.
+     *
+     * The caller has a way forward — state `Replace` with a source they mean, or `Clear` — and both
+     * are explicit. This is the refusal that makes the difference between them and `Keep` visible.
+     */
+    data class KeepOverUnreadableStoredSource(
+        val revisionId: RevisionId,
+        val reason: String
+    ) : TargetScheduleRevisionChangeException(
+        "the target schedule source stored for revision '${revisionId.value}' is not readable, so it " +
+            "cannot be carried forward: $reason. State Replace with the target source you mean, or " +
+            "Clear to state that this Program's next revision has none — the stored source itself is " +
+            "left exactly as it is"
+    )
+
+    /**
+     * An explicit **Clear** over a source that is stored but not readable.
+     *
+     * `Clear` on a revision that states **no** source is that same claim, already made by the storage,
+     * so it changes nothing. `Clear` over a source that exists but cannot be parsed is a different
+     * question entirely: the caller is asking this Program to stop having a target schedule, and the
+     * boundary cannot tell what it currently has. Answering `NothingToChange` would silently read
+     * unreadable persisted data as absence; superseding the revision with one that states no source
+     * would destroy whatever the malformed rows say without anyone deciding to. So the operation is
+     * refused and the current revision stays current.
+     */
+    data class ClearOverUnreadableStoredSource(
+        val revisionId: RevisionId,
+        val reason: String
+    ) : TargetScheduleRevisionChangeException(
+        "the target schedule source stored for revision '${revisionId.value}' is not readable, so it " +
+            "cannot be cleared: $reason. Unreadable persisted data is not the same fact as no target " +
+            "source, and Clear is never answered by treating it as one"
     )
 }
 

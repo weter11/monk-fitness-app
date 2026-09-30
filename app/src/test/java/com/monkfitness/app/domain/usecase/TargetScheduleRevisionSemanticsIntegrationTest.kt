@@ -719,7 +719,183 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
         assertEquals("and its source is still readable", sourceBefore, rig.storedTargetSource(revisionBefore).source())
     }
 
+    // ---------------------------------------------------------------- M. an unreadable stored source is a third fact
+
+    /**
+     * [TargetScheduleSourceRead.Malformed] is neither "this revision states a source" nor "this
+     * revision states none", and these five cases pin that it survives the save boundary as its own
+     * answer. A malformed source is planted the way the repository suite plants one — by corrupting
+     * a stored row behind the repository's back — so the boundary is handed a genuine read outcome
+     * rather than a mocked one.
+     */
+    @Test
+    fun aStructuralKeepOverAnUnreadableStoredSourceIsRefusedAndNothingIsWritten() = runBlocking {
+        val programId = createdProgramWithSource("M1")
+        val revisionBefore = rig.currentRevision(programId)!!.revisionId
+        val malformedBefore = corruptAnchorDateOf(revisionBefore)
+        val countsBefore = rig.tableCounts()
+
+        val result = rig.service.save(editedDraft(programId), targetChange = TargetScheduleRevisionChange.Keep)
+
+        assertTrue(
+            "a source that cannot be read cannot be carried forward, and a new revision stating no " +
+                "source would be a claim the storage never made: $result",
+            result is ProgramEditorResult.Failed
+        )
+        assertTrue(
+            "…and it is the typed refusal, naming the revision and the reason",
+            (result as ProgramEditorResult.Failed).cause
+                is TargetScheduleRevisionChangeException.KeepOverUnreadableStoredSource
+        )
+        assertEquals(
+            "the Program still points at the revision it had",
+            revisionBefore,
+            rig.currentRevision(programId)!!.revisionId
+        )
+        assertEquals("not one row was written", countsBefore, rig.tableCounts())
+        assertEquals(
+            "and the unreadable source is exactly as it was — not rewritten, not deleted, not read as absent",
+            malformedBefore,
+            rig.storedTargetSource(revisionBefore)
+        )
+    }
+
+    @Test
+    fun aTargetOnlyClearOverAnUnreadableStoredSourceIsRefusedAndNotAnsweredAsNothingToChange() = runBlocking {
+        val programId = createdProgramWithSource("M2")
+        val revisionBefore = rig.currentRevision(programId)!!.revisionId
+        val malformedBefore = corruptAnchorDateOf(revisionBefore)
+        val countsBefore = rig.tableCounts()
+
+        val result = rig.service.saveTargetScheduleChange(programId, TargetScheduleRevisionChange.Clear)
+
+        assertTrue(
+            "`NothingToChange` would read unreadable persisted data as absence; the explicit Clear is " +
+                "refused instead: $result",
+            result is ProgramEditorResult.Failed
+        )
+        assertTrue(
+            "…with its own typed refusal, distinct from the `Keep` one",
+            (result as ProgramEditorResult.Failed).cause
+                is TargetScheduleRevisionChangeException.ClearOverUnreadableStoredSource
+        )
+        assertEquals(
+            "the Program still points at the revision it had — no revision was minted",
+            revisionBefore,
+            rig.currentRevision(programId)!!.revisionId
+        )
+        assertEquals("not one row was written", countsBefore, rig.tableCounts())
+        assertEquals("and the unreadable source is untouched", malformedBefore, rig.storedTargetSource(revisionBefore))
+    }
+
+    @Test
+    fun aTargetOnlyReplaceOverAnUnreadableStoredSourceWritesTheNewSourceAndLeavesTheOldOneAlone() = runBlocking {
+        val programId = createdProgramWithSource("M3")
+        val revisionBefore = rig.currentRevision(programId)!!.revisionId
+        val malformedBefore = corruptAnchorDateOf(revisionBefore)
+
+        // `Replace` is the caller's way forward: it states what they mean, so it is not refused, and
+        // the unreadable rows stay on the revision that stated them.
+        val outcome = rig.service.saveTargetScheduleChange(
+            programId,
+            TargetScheduleRevisionChange.Replace(
+                authoring(
+                    rules = listOf(rule("rule-m3", "workout-m3", ScheduleCadence.Daily, ANCHOR)),
+                    bindings = listOf(
+                        TargetScheduleAuthoringBinding("workout-m3", currentDayOne(programId))
+                    )
+                )
+            )
+        ).saved()
+
+        val secondRevision = outcome.revision.revisionId
+        assertNotEquals("a Replace states a change, so a revision is minted", revisionBefore, secondRevision)
+        assertEquals(
+            "the new revision states the requested, valid source",
+            "rule-m3",
+            rig.storedTargetSource(secondRevision).source().rules.single().ruleId
+        )
+        assertEquals(
+            "and the unreadable source is still on the old revision, byte for byte",
+            malformedBefore,
+            rig.storedTargetSource(revisionBefore)
+        )
+        assertEquals(
+            "which is still the source that revision states — nothing was repaired or dropped",
+            revisionBefore,
+            (rig.storedTargetSource(revisionBefore) as TargetScheduleSourceRead.Malformed).revisionId
+        )
+    }
+
+    @Test
+    fun aStructuralKeepOverARevisionThatStatesNoSourceMintsARevisionThatStatesNone() = runBlocking {
+        // A Program created *without* a stated source, so `Keep` has nothing to carry — the case that
+        // must keep working after the `Malformed` refusal, and the one a careless fix would break by
+        // refusing every non-`Source` read.
+        val outcome = rig.service.save(rig.draftOf("No source to keep")).saved()
+        val programId = outcome.program.programId
+        val firstRevision = outcome.revision.revisionId
+        assertEquals(
+            "the starting point really states no source",
+            TargetScheduleSourceRead.Missing(firstRevision),
+            rig.storedTargetSource(firstRevision)
+        )
+
+        val second = rig.service.save(
+            editedDraft(programId),
+            targetChange = TargetScheduleRevisionChange.Keep
+        ).saved()
+
+        assertNotEquals("the structural change mints a revision", firstRevision, second.revision.revisionId)
+        assertEquals(
+            "and it states no target source, because there was none to carry forward",
+            TargetScheduleSourceRead.Missing(second.revision.revisionId),
+            rig.storedTargetSource(second.revision.revisionId)
+        )
+    }
+
+    @Test
+    fun aTargetOnlyClearOverARevisionThatStatesNoSourceChangesNothing() = runBlocking {
+        val outcome = rig.service.save(rig.draftOf("Nothing to clear")).saved()
+        val programId = outcome.program.programId
+        val firstRevision = outcome.revision.revisionId
+        val countsBefore = rig.tableCounts()
+
+        val result = rig.service.saveTargetScheduleChange(programId, TargetScheduleRevisionChange.Clear)
+
+        assertTrue(
+            "the storage already says this revision has no target source, so `Clear` states the same " +
+                "thing: $result",
+            (result as ProgramEditorResult.Success).value is ProgramSaveOutcome.NothingToChange
+        )
+        assertEquals("the Program still points at the revision it had", firstRevision, rig.currentRevision(programId)!!.revisionId)
+        assertEquals("and not one row was written", countsBefore, rig.tableCounts())
+    }
+
     // ---------------------------------------------------------------- the fixtures
+
+    /**
+     * Corrupts the stored source of [revisionId] so it reads back as
+     * [TargetScheduleSourceRead.Malformed], and returns the read as it was left.
+     *
+     * The row is corrupted *behind* the repository rather than through it, exactly as
+     * `TargetScheduleSourceRepositoryTest` does it: the entity's own guards keep a self-contradicting
+     * row unrepresentable at construction, so malformed persisted data can only be reached by writing
+     * to the table directly. The anchor date is the column chosen because it is read as a
+     * [LocalDate] and a token outside the date vocabulary is the mapper's own typed failure.
+     */
+    private suspend fun corruptAnchorDateOf(revisionId: RevisionId): TargetScheduleSourceRead {
+        rig.database.exec(
+            "UPDATE `program_target_schedule_rule` SET `anchorDate` = 'not-a-date' " +
+                "WHERE `revisionId` = '${revisionId.value}'"
+        )
+        val read = rig.storedTargetSource(revisionId)
+        assertTrue(
+            "the planted source really does read as malformed, or the case proves nothing: $read",
+            read is TargetScheduleSourceRead.Malformed
+        )
+        return read
+    }
 
     /**
      * A Program created through the save boundary that states a source on its first revision — the
