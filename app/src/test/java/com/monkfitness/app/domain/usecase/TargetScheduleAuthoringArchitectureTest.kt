@@ -342,15 +342,60 @@ class TargetScheduleAuthoringArchitectureTest {
     }
 
     @Test
-    fun theEditorStillReachesNoTargetStageType() {
-        // The editor reports the plan-day correspondence and nothing else. It is a structural owner,
-        // and a target type appearing in it would be the first step towards target policy in the
-        // editor — which §30 step 19 explicitly does not add.
-        val found = offenders(listOf(editorFile), listOf("TargetSchedule", "TargetProgramDayBinding"))
+    fun theEditorReachesNoTargetSchedulingPolicyAndTheOneTargetNameItHoldsIsItsOwnReturnType() {
+        // Revised, not relaxed — §30 step 22. The claim used to be *"the editor names no target-stage
+        // type at all"*, which was true because target scheduling could not yet change a revision
+        // without a structural edit. That made the absence an accident of what existed rather than a
+        // rule, and step 22 had to change it: a target-only change mints a revision, and §6 gives the
+        // **editor** sole ownership of revision minting, so the editor necessarily names the value it
+        // hands back for that mint.
+        //
+        // What is still forbidden is unchanged and is what the assertion now says: the editor holds no
+        // target *scheduling policy* — no source value, no authoring, no repository, no cadence
+        // vocabulary, no pass, no adapter. The one target name it is allowed is its own return type,
+        // which holds a Program, a revision and a correspondence and nothing about scheduling.
+        val forbidden = listOf(
+            "TargetScheduleSource", "TargetScheduleAuthoring", "TargetScheduleDefinition",
+            "TargetProgramDayBinding", "TargetScheduleRevisionChange", "TargetScheduleSourceRead",
+            "TargetScheduleSourceException", "TargetScheduleSourceRepository",
+            "TargetScheduleOrchestrator", "TargetPlanner", "TargetSchedulePolicy",
+            "TargetOccurrenceComposer", "TargetScheduleResolver", "TargetScheduleInputAdapter",
+            "TargetScheduleSourceBridge", "ScheduleCadence", "anchorDate"
+        )
+        val found = offenders(listOf(editorFile), forbidden)
 
         assertTrue(
-            "the editor names no target-stage type; the authoring seam sits above it, not inside it: $found",
+            "the editor names no target scheduling policy, and holds none: the authoring seam sits " +
+                "above it, not inside it, and the revision it mints for a target-only change carries " +
+                "no scheduling fact of its own. Offenders: $found",
             found.isEmpty()
+        )
+
+        // …and the one target-named type it does return is a structural value: a Program, a revision
+        // and the correspondence. Checked on the *compiled* shape, because a `TargetScheduleSource`
+        // field would be exactly the thing that must not appear and its name would not say so.
+        assertEquals(
+            "the editor's target-only return value holds a Program, a revision and a day " +
+                "correspondence — and no source, no authoring and no binding",
+            listOf("program", "revision", "mintedProgramDays"),
+            MintedTargetScheduleRevision::class.java.declaredFields
+                .filterNot { Modifier.isStatic(it.modifiers) }
+                .map { it.name }
+        )
+        val heldTypes = MintedTargetScheduleRevision::class.java.declaredFields
+            .filterNot { Modifier.isStatic(it.modifiers) }
+            .map { it.genericType.typeName }
+        assertEquals(
+            "…every one of them a domain type: no repository, DAO, entity, clock or generator",
+            emptyList<String>(),
+            heldTypes.filter { type ->
+                listOf(
+                    "com.monkfitness.app.data.",
+                    "com.monkfitness.app.di.",
+                    "androidx.",
+                    "android."
+                ).any { type.startsWith(it) }
+            }
         )
     }
 
@@ -369,12 +414,33 @@ class TargetScheduleAuthoringArchitectureTest {
                 saveService.contains("ProgramTargetScheduleRuleEntity") ||
                 saveService.contains("ProgramTargetProgramDayBindingEntity")
         )
+        // Revised, not relaxed — §30 step 22. The claim used to be a count of **one** `store(` call
+        // site, which said "a second application path cannot appear beside this one unnoticed". Step
+        // 22 added the legs the new contract has — a creation, a structural edit, and a target-only
+        // change — and each needs its own call, so counting *sites* no longer states the claim.
+        //
+        // What the claim actually protects is that every write goes through the same repository and
+        // that no leg can reach a DAO. Both are now asserted directly: the number of `store(` sites
+        // is pinned at the three legs the contract has (so a *fourth* application path is still
+        // refused), and every one of them is a `targetSourceRepository.store(`.
         assertEquals(
-            "and the source is stated in exactly one place, so a second application path cannot appear " +
-                "beside it unnoticed",
-            1,
+            "the target source is written from exactly the three legs this contract has — a " +
+                "creation, a structural edit and a target-only change — and no fourth application " +
+                "path can appear beside them unnoticed",
+            3,
             Regex("targetSourceRepository\\.store\\(").findAll(saveService).count()
         )
+        // …and the repository is the only thing that writes: no insert, no update, no delete, no
+        // savepoint of a target row anywhere on the boundary.
+        for (ownWrite in listOf(
+            "insertRules(", "insertBindings(", "updateTarget", "deleteTarget", "deleteRule",
+            "clearTarget"
+        )) {
+            assertFalse(
+                "the boundary writes no target row by any route but Stage 18's repository ($ownWrite)",
+                saveService.contains(ownWrite)
+            )
+        }
     }
 
     // ---------------------------------------------------------------- 6. no cutover

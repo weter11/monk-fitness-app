@@ -344,6 +344,12 @@ indefinite-horizon maintenance policy
 full target pause lifecycle policy
 ```
 
+*Delivered by §30 step 22 — see `docs/PROGRAM_TARGET_SCHEDULE_REVISION_SEMANTICS.md`. Target schedule is
+now **revisioned Program behaviour**: `Keep / Replace / Clear` with an explicit application path, a
+target-only change that mints a revision, and a `Clear` that leaves the superseded revision's source
+untouched. The five-value context policy above is unchanged; what a Start reads is still the Program's
+*current* revision, and a target-only change moves that pointer.*
+
 Stage 21 is only the **first controlled production invocation**. A Program that states no target
 source still starts, still trains from its legacy slots, and reports that its target schedule was
 not planned.

@@ -233,6 +233,11 @@ class TargetScheduleAuthoringTest {
 
         // The first structural edit states a source, so "the previous revision's source is unchanged"
         // is a comparison against a real stored value rather than against an absence.
+        //
+        // §30 step 22 revised this call, not the claim: an edit states its target scheduling with
+        // `Replace`, because the same parameter now also has to express *Keep* and *Clear*. Passing
+        // a bare authoring here is `CreationAuthoringOnAnEdit` — the two absences are different
+        // claims, and the assertion below is about where the stated source lands, which is unchanged.
         val firstAuthoring = authoringOf(
             rules = listOf(rule("rule-first", "workout-first", ScheduleCadence.Daily, LocalDate.parse("2026-10-05")))
         )
@@ -240,7 +245,9 @@ class TargetScheduleAuthoringTest {
         val firstEdit = rig.editor.editor(firstDraft)
             .addingDay(type = ProgramDayType.REST, name = "Day off")
             .draft
-        val firstOutcome = savedOutcome(rig.service.save(firstEdit, targetSchedule = firstAuthoring))
+        val firstOutcome = savedOutcome(
+            rig.service.save(firstEdit, targetChange = TargetScheduleRevisionChange.Replace(firstAuthoring))
+        )
         val firstRevision = firstOutcome.revision.revisionId
         val storedFirst = rig.storedTargetRules(firstRevision)
         assertEquals("the first revision states its own source", firstAuthoring.rules, storedFirst)
@@ -254,10 +261,15 @@ class TargetScheduleAuthoringTest {
             rules = listOf(
                 rule("rule-second-a", "workout-a", ScheduleCadence.SessionsPerWeek(2), LocalDate.parse("2026-10-12")),
                 rule("rule-second-b", "workout-b", ScheduleCadence.FixedWeekdays(setOf(DayOfWeek.TUESDAY)), LocalDate.parse("2026-10-13"))
+            ),
+            bindings = listOf(
+                TargetScheduleAuthoringBinding("workout-a", secondDraft.days.first().programDayId)
             )
         )
 
-        val secondOutcome = savedOutcome(rig.service.save(secondEdit, targetSchedule = secondAuthoring))
+        val secondOutcome = savedOutcome(
+            rig.service.save(secondEdit, targetChange = TargetScheduleRevisionChange.Replace(secondAuthoring))
+        )
 
         assertNotEquals(
             "a structural edit created a *new* revision, not a second claim on the first",
@@ -309,10 +321,18 @@ class TargetScheduleAuthoringTest {
         val revisionBefore = rig.currentRevision(programId)!!
         val draft = rig.editor.editDraft(programId).let { (it as ProgramEditorResult.Success).value }
 
+        // Revised, not relaxed: §30 step 22 gave an edit an explicit `Keep / Replace / Clear`
+        // vocabulary, and an edit that states `Replace` still creates no revision when the structure
+        // is unchanged — there is no new revision to own a source. The claim is identical; the
+        // parameter is the one the new contract owns it through.
         val result = rig.service.save(
             draft,
-            targetSchedule = authoringOf(
-                rules = listOf(rule("rule-noop", "workout-noop", ScheduleCadence.Daily, LocalDate.parse("2026-10-05")))
+            targetChange = TargetScheduleRevisionChange.Replace(
+                authoringOf(
+                    rules = listOf(
+                        rule("rule-noop", "workout-noop", ScheduleCadence.Daily, LocalDate.parse("2026-10-05"))
+                    )
+                )
             )
         )
 

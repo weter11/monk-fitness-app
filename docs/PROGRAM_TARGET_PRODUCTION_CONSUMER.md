@@ -300,6 +300,10 @@ implementation:
    target pass supersedes an occurrence the legacy planner created.
 6. **The UI authoring surface.** Stage 19 added the seam; the editor still supplies no authoring, and
    a Program can only acquire a target source through the save boundary's `targetSchedule` parameter.
+   *(§30 step 22 answered the *application* half of this: an existing Program now states its target
+   scheduling with `Keep / Replace / Clear`, and a target-only change mints a revision on its own path
+   — see `docs/PROGRAM_TARGET_SCHEDULE_REVISION_SEMANTICS.md`. The UI half, and the five values' own
+   authoring surface, are still open.)*
 
 ## Architecture gaps recorded
 
