@@ -33,7 +33,7 @@ changes no existing production file.
 | `domain/usecase/ExerciseGenerationFacts.kt` | application | the one open seam: `GenerationFocusSource`, and the prescription dimension rule |
 
 ```text
-WorkoutGenerator().getExerciseLibrary()   ← the app's 68-entry catalogue, a private val in the legacy engine
+WorkoutGenerator().getExerciseLibrary()   ← the app's 66-entry catalogue, a private val in the legacy engine
         ↓ catalogueOf(exercises, focusSource)
 ProductionGenerationCatalogue             ← candidates + the exercises nothing classified
         ↓ generationRequest(focus, schedule, duration, availableEquipment, …)
@@ -87,7 +87,7 @@ boundary never:
   the real catalogue to prove the vocabularies really are different.
 
 **The consequence, stated plainly:** with no classification source supplied, the catalogue classifies
-nothing, the boundary yields **zero** candidates and **all 68** exercises unclassified, and
+nothing, the boundary yields **zero** candidates and **all 66** exercises unclassified, and
 `generationRequest` **refuses** rather than assembling a request whose plan would be empty. That is the
 state P24 inherits. It is the honest one — it says the app states no focus classification yet, rather
 than presenting a plan built from a guess.
@@ -161,6 +161,11 @@ xml timestamp range 2026-09-30T19:04:49 .. 19:05:19   wall clock 19:05:19
 16 behavioural + 15 architecture tests, 0F / 0E / 0S
 ```
 
+The behavioural suite reads the **real** shipped catalogue wherever a claim is about the real one
+(`everyShippedExerciseSurvivesTheMappingOfTheRealCatalogue`,
+`theShippedCatalogueCarriesBothPrescriptionDimensionsAndNoThird`), so a claim about the app's actual
+66 exercises is measured rather than asserted about a fixture.
+
 ### Compile / assemble gates
 
 See the final report; all five gates run on the committed bytes.
@@ -226,7 +231,7 @@ Two claims are deliberately **not** expressed as mutations, because no single li
 | preferences and policy reach the request unchanged | `…preferencesAndPolicyReachTheRequestUnchanged` |
 | the mapping is deterministic and order-preserving | `…theMappingIsDeterministicAndPreservesTheCataloguesOwnOrder` |
 | the whole chain reaches `GeneratedPlanner` and plans the produced candidates | `…theWholeChainReachesTheGeneratedPlannerWithTheProducedCandidates` |
-| all 68 shipped exercises survive the mapping of the **real** catalogue | `…everyShippedExerciseSurvivesTheMappingOfTheRealCatalogue` |
+| all 66 shipped exercises survive the mapping of the **real** catalogue | `…everyShippedExerciseSurvivesTheMappingOfTheRealCatalogue` |
 | the real catalogue carries both prescription dimensions and no third | `…theShippedCatalogueCarriesBothPrescriptionDimensionsAndNoThird` |
 | the boundary is in the application layer, and the pure package gained no file | `ProductionGenerationBoundaryArchitectureTest.theBoundaryLivesInTheApplicationLayerAndNotInThePureGeneratedPackage` |
 | no focus is ever substituted for a missing classification | `…noFocusIsEverSubstitutedForAMissingClassification` |
