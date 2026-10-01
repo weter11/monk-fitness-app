@@ -764,7 +764,11 @@
     <string name="programs_create_generated">Créala por mí</string>
     <string name="programs_create_generated_desc">Empieza con una estructura planificada que aún puedes editar.</string>
     <string name="programs_generation_unavailable">La planificación automática aún no está disponible</string>
-    <string name="programs_generation_unavailable_desc">La biblioteca de ejercicios aún no indica qué enfoque de entrenamiento cumple cada ejercicio, así que no se genera ningún plan. Mientras tanto, puedes organizar tú los días y los ejercicios.</string>
+    <string name="programs_notice_generated">Se generó un plan en el borrador. Guárdalo para conservarlo</string>
+    <string name="programs_generation_refused">Ningún ejercicio puede realizar este plan con el equipo disponible. Revisa tu selección de enfoque o tu equipo</string>
+    <string name="programs_generation_failed">No se pudo generar el plan y el borrador no cambió</string>
+    <string name="programs_generation_desc">El plan se construye a partir del enfoque, el horario y el equipo que elegiste. Los ejercicios fijados y los que añadiste se conservan.</string>
+    <string name="programs_editor_regenerate">Hacer el plan de nuevo</string>
     <string name="programs_no_programs">Todavía no hay programas guardados.</string>
     <string name="programs_archived_section">Archivados</string>
     <string name="programs_row_selected">Activo</string>

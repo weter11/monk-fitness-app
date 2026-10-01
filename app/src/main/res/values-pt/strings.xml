@@ -764,7 +764,11 @@
     <string name="programs_create_generated">Montar para mim</string>
     <string name="programs_create_generated_desc">Comece de uma estrutura planejada que você ainda pode editar.</string>
     <string name="programs_generation_unavailable">O planejamento automático ainda não está disponível</string>
-    <string name="programs_generation_unavailable_desc">A biblioteca de exercícios ainda não indica qual foco de treino cada exercício atende, por isso nenhum plano é gerado. Enquanto isso, você pode organizar os dias e os exercícios.</string>
+    <string name="programs_notice_generated">Um plano foi gerado no rascunho. Salve para mantê-lo</string>
+    <string name="programs_generation_refused">Nenhum exercício consegue realizar este plano com o equipamento disponível. Verifique sua escolha de foco ou o equipamento</string>
+    <string name="programs_generation_failed">Não foi possível gerar o plano e o rascunho não mudou</string>
+    <string name="programs_generation_desc">O plano é construído a partir do foco, da agenda e do equipamento que você escolheu. Os exercícios fixados e os que você adicionou são mantidos.</string>
+    <string name="programs_editor_regenerate">Refazer o plano</string>
     <string name="programs_no_programs">Nenhum programa salvo ainda.</string>
     <string name="programs_archived_section">Arquivados</string>
     <string name="programs_row_selected">Ativo</string>

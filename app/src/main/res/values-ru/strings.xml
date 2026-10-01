@@ -761,8 +761,12 @@
     <string name="programs_create_manual_desc">Расставьте дни и упражнения самостоятельно.</string>
     <string name="programs_create_generated">Соберите за меня</string>
     <string name="programs_create_generated_desc">Начните с готовой структуры, которую можно изменить.</string>
+    <string name="programs_notice_generated">План создан в черновике. Сохраните, чтобы оставить его</string>
     <string name="programs_generation_unavailable">Автоматическое планирование пока недоступно</string>
-    <string name="programs_generation_unavailable_desc">Библиотека упражнений пока не сообщает, на какую направленность работает каждое упражнение, поэтому план не создаётся. Пока вы можете расставить дни и упражнения сами.</string>
+    <string name="programs_generation_refused">Ни одно упражнение не может выполнить этот план с имеющимся оборудованием. Проверьте выбор направленности или список оборудования</string>
+    <string name="programs_generation_failed">Не удалось создать план, черновик не изменён</string>
+    <string name="programs_generation_desc">План строится по выбранной направленности, расписанию и оборудованию. Закреплённые упражнения и добавленные вами сохраняются.</string>
+    <string name="programs_editor_regenerate">Составить план заново</string>
     <string name="programs_no_programs">Пока нет сохранённых программ.</string>
     <string name="programs_archived_section">Архив</string>
     <string name="programs_row_selected">Активна</string>

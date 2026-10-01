@@ -79,8 +79,17 @@ import com.monkfitness.app.domain.usecase.ExerciseGenerationFacts.GenerationFocu
  *
  * The consequence is honest rather than convenient: with no classification source supplied, the
  * catalogue classifies nothing and the boundary yields **no** candidates and **all** exercises
- * unclassified. That is the state P24 inherits, and it is the correct one — it says the app states no
- * focus classification yet, rather than presenting a plan built from a guess.
+ * unclassified. That is the state P23 inherited, and it remains the correct answer to *this* class's
+ * question — it says the app states no focus classification, rather than presenting a plan built from
+ * a guess.
+ *
+ * **P24 closed the gap from the other side rather than from this one.** The port is unchanged, the
+ * three refusals above are unchanged, and this file names no focus anywhere: what changed is that
+ * production now has something to hand the port —
+ * [ProductionFocusClassification], an explicit table of what each shipped exercise trains — and
+ * [ProgramGenerationService] is the one caller that reads the catalogue through it. A source that
+ * states nothing still yields no candidates, still refuses at [generationRequest], and is still
+ * reported as [NoExerciseStatesItsFocus] rather than generated around.
  *
  * ### Equipment is forwarded, never filtered
  *

@@ -357,14 +357,26 @@ class ProgramGeneratedArchitectureTest {
     }
 
     @Test
-    fun theCompositionRootIsNotAskedToWireWhatNothingConsumes() {
-        val container = File(mainDir, "di/AppContainer.kt").readText()
+    fun theCompositionRootWiresGenerationOnlyThroughTheApplicationService() {
+        // Comments are stripped before matching, for the same reason the sibling gates do: this file
+        // *describes* the flow in KDoc, and a class name in prose is documentation, not a wiring. The
+        // claim is about what the container *constructs*, so only code may be read.
+        val container = stripComments(File(mainDir, "di/AppContainer.kt").readText())
 
+        // P23 landed this boundary unwired and pinned that as a *cardinality of zero*; §30 step 24
+        // (P24) is the stage that gives it a consumer, so the pin is inverted here rather than
+        // deleted. What must NOT appear is a wiring of the planner or the generated editor *itself*:
+        // the composition root builds the application service, and the pure domain stays behind it.
         assertFalse(
-            "the generated planner has no consumer yet — no ViewModel, no screen — so wiring it into " +
-                "the composition root would be a dependency nothing uses (§26: a graph node exists " +
-                "because something needs it)",
+            "the composition root wires the generation *service*, never the planner or the generated " +
+                "editor: those are reached by the service, so wiring them here would put the pure " +
+                "domain in the graph where a caller could hold it directly",
             container.contains("ProgramGeneratedEditor") || container.contains("GeneratedPlanner")
+        )
+        assertTrue(
+            "and what it does wire is the one application service that owns the pass (§26: a graph " +
+                "node exists because something needs it, and this is what needs it)",
+            container.contains("val programGenerationService: ProgramGenerationService =")
         )
         assertTrue(
             "and the editor the stage's Save path already goes through stays exactly what it was",
@@ -373,22 +385,52 @@ class ProgramGeneratedArchitectureTest {
     }
 
     @Test
-    fun nothingInTheUiReachesGeneration() {
-        val uiReach = File(mainDir, "ui").walkTopDown()
+    fun theUiReachesGenerationOnlyThroughTheApplicationService() {
+        // The inverse of the pin this file carried while generation had no consumer, and the stronger
+        // claim: the UI *does* reach generation now (§30 step 24), and it may do so through exactly
+        // one node — the application service. A screen or a controller that named the planner, the
+        // generated editor or the reconciler would give §7's preservation rules a second home.
+        //
+        // Comments are stripped first, exactly as the sibling gates above do: the flow is *described*
+        // in KDoc, and prose that names a class is documentation, not a dependency.
+        val uiSources = File(mainDir, "ui").walkTopDown()
             .plus(File(mainDir, "viewmodel").walkTopDown())
             .filter { it.isFile && it.extension == "kt" }
-            .filter { it.readText().contains("GeneratedPlanner") || it.readText().contains("ProgramGeneratedEditor") }
-            .map { it.name }
             .toList()
+        val code = uiSources.associate { file ->
+            file.relativeTo(mainDir).path.replace('\\', '/') to stripComments(file.readText())
+        }
+        val direct = code.filterValues { source ->
+            source.contains("GeneratedPlanner") || source.contains("ProgramGeneratedEditor") ||
+                source.contains("PlanReconciler") || source.contains("GenerationRequest")
+        }.keys.toList().sorted()
 
+        assertEquals(
+            "no screen and no controller may name a component of the generated domain. The one " +
+                "production reach is the application service, and the UI reaches it by type only. " +
+                "Found a direct reach: $direct",
+            emptyList<String>(),
+            direct
+        )
         assertTrue(
-            "no ViewModel and no screen reaches the generated planner yet: the UI integration is a " +
-                "later step, and this test is what says so. Found: $uiReach",
-            uiReach.isEmpty()
+            "and the reach that does exist goes through the service, named in the controller",
+            code.getValue("ui/programs/ProgramsController.kt").contains("ProgramGenerationService")
         )
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /**
+     * A source with its comments removed.
+     *
+     * Every rule in this file is a rule about *code*, and the gates that match a bare identifier
+     * (`GeneratedPlanner`, `ProgramGeneratedEditor`) would otherwise fire on a KDoc sentence that
+     * merely explains the flow. The two forms are the same regexes the sibling helpers below use;
+     * they are hoisted into one place so a fourth gate cannot reintroduce a different one.
+     */
+    private fun stripComments(source: String): String = source
+        .replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), "")
+        .replace(Regex("""//[^\n]*"""), "")
 
     /** The code lines of each source, with comments removed: the rules above are rules about code. */
     private fun codeLines(sources: List<String>): List<Pair<String, String>> = sources.flatMap { source ->

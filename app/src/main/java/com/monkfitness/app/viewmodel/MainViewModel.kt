@@ -418,6 +418,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         exporter = programGraph.programExportService,
         progress = programGraph.programProgressService,
         scheduler = programGraph.programScheduler,
+        generation = programGraph.programGenerationService,
+        // §30 step 24: the user's declared equipment, read at the moment of a generation pass and
+        // forwarded verbatim. An empty set means the user declared none — the P24 reading, deliberately
+        // not the legacy "empty means unconstrained" rule, which would offer bar and band exercises to
+        // someone who owns none of either.
+        availableEquipment = { availableEquipment.value },
         catalogue = {
             workoutGenerator.getExerciseLibrary().map { exercise ->
                 ExerciseOptionUi(

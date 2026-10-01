@@ -84,13 +84,34 @@ sealed interface ProgramNotice {
         val DRAFT_REJECTED: ProgramNotice = Invalid(R.string.programs_draft_rejected)
 
         /**
-         * §7's Generated path, reported as unavailable rather than fabricated.
+         * §7's Generated path, when the app still states **no** focus classification for any exercise.
          *
-         * The planner needs a library view that states each exercise's focuses; this app's catalogue does
-         * not carry that classification, and §30 step 12 recorded the same missing artefact on the
-         * adaptive side. The mode is offered and saved; only the automatic plan is deferred.
+         * P24 closed that gap for the shipped catalogue
+         * ([com.monkfitness.app.domain.usecase.ProductionFocusClassification]), so this is no longer
+         * the ordinary answer to Generate — it is the answer for a catalogue that has regressed to
+         * stating nothing, which is exactly the state a user must be told about rather than shown a
+         * plan built from a guess. Kept, not deleted, because a gap that can reopen needs a sentence.
          */
         val GENERATION_UNAVAILABLE: ProgramNotice = Refused(R.string.programs_generation_unavailable)
+
+        /** §7's Generate produced a plan and reconciled it into the draft; nothing was persisted. */
+        val GENERATED: ProgramNotice = Done(R.string.programs_notice_generated)
+
+        /**
+         * §7's Generate was refused for this configuration: nothing in the library can serve it with
+         * the equipment available.
+         *
+         * A [Refused] rather than a [Failed] and rather than a success with an empty plan (§33): the
+         * user's own draft is untouched and the reason is one they can act on — declare the equipment
+         * they own, or choose focuses the library can serve.
+         */
+        val GENERATION_REFUSED: ProgramNotice = Refused(R.string.programs_generation_refused)
+
+        /**
+         * The generation pass itself failed. The draft is unchanged and the user is told so, which is
+         * what §28's `SYSTEM_FAILURE` class is for: never presented as a completed generation.
+         */
+        val GENERATION_FAILED: ProgramNotice = Failed(R.string.programs_generation_failed)
 
         /**
          * §30 step 21: the Program **started**, and its target schedule was not planned.

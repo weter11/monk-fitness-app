@@ -1,5 +1,6 @@
 package com.monkfitness.app.ui.programs
 
+import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.program.MovableClock
 import com.monkfitness.app.domain.program.Program
@@ -11,11 +12,16 @@ import com.monkfitness.app.domain.program.WorkoutSlot
 import com.monkfitness.app.domain.program.target.TargetProgramDayBinding
 import com.monkfitness.app.domain.program.transfer.ProgramTransferFile
 import com.monkfitness.app.domain.program.transfer.ProgramTransferFixture
+import com.monkfitness.app.domain.usecase.ExerciseGenerationFacts
 import com.monkfitness.app.domain.usecase.ProgramEditorService
+import com.monkfitness.app.domain.usecase.ProgramGenerationService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramSaveService
 import com.monkfitness.app.domain.usecase.ProgramStartService
 import com.monkfitness.app.domain.usecase.ProgramTransferRig
+import com.monkfitness.app.domain.usecase.SHIPPED_EXERCISE_CATALOGUE
+import com.monkfitness.app.domain.usecase.ProductionFocusClassification
+import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import com.monkfitness.app.domain.usecase.TargetExistingOccurrenceReader
 import com.monkfitness.app.domain.usecase.TargetOccurrenceExecutionReader
 import com.monkfitness.app.domain.usecase.TargetScheduleApplicationService
@@ -93,6 +99,56 @@ internal class ProgramsRig(key: String = "ui") {
         zone = transfer.zone
     )
 
+    /**
+     * §30 step 24's production Generate/Regenerate, wired over the **real** shipped catalogue and the
+     * **real** production focus classification, exactly as the composition root wires it.
+     *
+     * Deliberately not a fixture: the claim this rig exists to measure is that `Generate` runs a real
+     * generation pass over the app's own exercises, and a fixture catalogue would make the UI suite
+     * prove something about the rig instead. The identity source is the rig's own, so every minted
+     * draft handle is readable in a failure message.
+     */
+    var generation: ProgramGenerationService = generationOver(ProductionFocusClassification)
+
+    /** The service as [source] states the classification, over the real shipped catalogue. */
+    private fun generationOver(
+        source: ExerciseGenerationFacts.GenerationFocusSource
+    ): ProgramGenerationService = ProgramGenerationService(
+        catalogue = SHIPPED_EXERCISE_CATALOGUE,
+        focusSource = source,
+        ids = com.monkfitness.app.domain.program.DraftIdSource { transfer.ids.newId() }
+    )
+
+    /**
+     * Re-wires the controller over a different focus classification.
+     *
+     * The shipped classification classifies every exercise, so a **refusal** is unreachable through
+     * it — which is exactly why the refusal tests state a different one rather than contorting the
+     * production data to fail. Production wiring is untouched: the default is the real table, and
+     * this is the same port a future user-facing Goals & Focus editor would replace.
+     */
+    /**
+     * The catalogue's own bar-or-band exercises — the ones a user who declared no equipment cannot
+     * perform. Read from the real catalogue so a test never restates the data.
+     */
+    fun barOrBandExercises(): Set<String> = WorkoutGenerator().getExerciseLibrary()
+        .filter { exercise -> exercise.requiredEquipment.isNotEmpty() }
+        .map { it.id }
+        .toSet()
+
+    fun withFocusSource(source: ExerciseGenerationFacts.GenerationFocusSource) {
+        generation = generationOver(source)
+        controller = buildController()
+    }
+
+    /**
+     * The equipment the controller states at the moment of a generation pass. Settable, so a test can
+     * state "the user owns a bar" and measure what the plan does with it — and it defaults to the
+     * **empty** set, which is what `SettingsManager.availableEquipmentFlow` defaults to and what P24
+     * reads as *the user declared no equipment* rather than *constrain nothing*.
+     */
+    var declaredEquipment: Set<Equipment> = emptySet()
+
     /** Every file the platform boundary was handed, in order. */
     val shares: MutableList<ProgramTransferFile> = mutableListOf()
 
@@ -152,7 +208,10 @@ internal class ProgramsRig(key: String = "ui") {
     )
 
     /** The state holder under test, wired as `MainViewModel` wires it. */
-    val controller = ProgramsController(
+    var controller: ProgramsController = buildController()
+
+    /** The one construction of the state holder, so a re-wire above is a single implementation. */
+    private fun buildController(): ProgramsController = ProgramsController(
         lifecycle = transfer.lifecycleService,
         starter = startService,
         editor = editor,
@@ -161,6 +220,8 @@ internal class ProgramsRig(key: String = "ui") {
         exporter = transfer.exportService,
         progress = progress,
         scheduler = transfer.scheduler,
+        generation = generation,
+        availableEquipment = { declaredEquipment },
         catalogue = {
             if (catalogueFails) {
                 throw IllegalStateException("planted fault: the exercise catalogue could not be read")

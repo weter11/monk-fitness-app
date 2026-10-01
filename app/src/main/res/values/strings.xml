@@ -763,8 +763,12 @@
     <string name="programs_create_manual_desc">Arrange the days and the exercises yourself.</string>
     <string name="programs_create_generated">Build for me</string>
     <string name="programs_create_generated_desc">Start from a planned structure you can still edit.</string>
+    <string name="programs_notice_generated">A plan was generated into the draft. Save to keep it</string>
     <string name="programs_generation_unavailable">Automatic planning is not available yet</string>
-    <string name="programs_generation_unavailable_desc">The exercise library does not yet state which training focus each exercise serves, so no plan is generated. You can arrange the days and the exercises yourself in the meantime.</string>
+    <string name="programs_generation_refused">No exercise can serve this plan with the equipment available. Check your focus selection or your equipment</string>
+    <string name="programs_generation_failed">The plan could not be generated and the draft is unchanged</string>
+    <string name="programs_generation_desc">The plan is built from the focus, schedule and equipment you chose. Pinned exercises and anything you added yourself are kept.</string>
+    <string name="programs_editor_regenerate">Plan it again</string>
     <string name="programs_no_programs">No programs saved yet.</string>
     <string name="programs_archived_section">Archived</string>
     <string name="programs_row_selected">Active</string>

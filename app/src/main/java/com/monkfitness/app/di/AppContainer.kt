@@ -33,10 +33,14 @@ import com.monkfitness.app.data.repository.WorkoutSessionRepository
 import com.monkfitness.app.bootstrap.StandardProgramBootstrap
 import com.monkfitness.app.domain.adaptive.integration.NoDeclaredProgression
 import com.monkfitness.app.domain.adaptive.integration.NoExerciseFamilyClassification
+import com.monkfitness.app.domain.program.DraftIdSource
+import com.monkfitness.app.domain.usecase.SHIPPED_EXERCISE_CATALOGUE
 import com.monkfitness.app.domain.usecase.ProgramAdaptiveIntegration
 import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramExerciseLibrary
 import com.monkfitness.app.domain.usecase.ProgramExportService
+import com.monkfitness.app.domain.usecase.ProgramGenerationService
+import com.monkfitness.app.domain.usecase.ProductionFocusClassification
 import com.monkfitness.app.domain.usecase.ProgramImportService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
@@ -620,6 +624,45 @@ class AppContainer(
         scheduleRepository = programScheduleRepository,
         sessionRepository = workoutSessionRepository,
         clock = clock
+    )
+
+    // --- §30 step 24: the production generation flow -------------------------------------------------
+
+    /**
+     * **§30 step 24's one application-level Generate/Regenerate** — the node that makes generation
+     * production-callable.
+     *
+     * ```text
+     * shipped catalogue ──▶ ProductionGenerationBoundary (P23) ──┐
+     * exercise → Focus  ──▶ ProductionFocusClassification (P24) ──┼─▶ GenerationRequest
+     * the draft's own focus / schedule / duration ───────────────┘        │
+     * the user's available equipment (forwarded verbatim) ────────────────┤
+     * the composition root's id generator (draft identities, §26) ────────┤
+     *                                                                      ▼
+     *                                              GeneratedPlanner → PlanReconciler
+     *                                                                      ▼
+     *                                                              the next working draft
+     * ```
+     *
+     * It is wired with **no repository, no DAO, no clock and no zone**, and that absence is the
+     * guarantee rather than a promise: `Generate` and `Regenerate` only ever alter a draft (§7), so
+     * the service has nothing to persist and no date to choose — the only route from a generated
+     * draft to storage stays `ProgramSaveService`, and the only place a revision identity is minted
+     * stays the editor. The scheduler is not a collaborator either, so no generation pass can plan a
+     * slot or touch a date (§20).
+     *
+     * The focus classification is a **wired node, not a constant read from the catalogue**: it is the
+     * explicit table of what each shipped exercise trains, and the service reaches it through P23's
+     * `GenerationFocusSource` port. Nothing here maps a category, a body region or a training style
+     * onto a focus — that inference is what P23 refused and what this stage replaces with data.
+     *
+     * This is **wiring, not behaviour**: the container decides which objects the service receives
+     * and nothing about what it does with them.
+     */
+    val programGenerationService: ProgramGenerationService = ProgramGenerationService(
+        catalogue = SHIPPED_EXERCISE_CATALOGUE,
+        focusSource = ProductionFocusClassification,
+        ids = DraftIdSource { idGenerator.newId() }
     )
 
     // --- §30 step 12: the adaptive integration ----------------------------------------------------
