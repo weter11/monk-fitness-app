@@ -761,8 +761,12 @@
     <string name="programs_create_manual_desc">Розставте дні та вправи самостійно.</string>
     <string name="programs_create_generated">Складіть за мене</string>
     <string name="programs_create_generated_desc">Почніть із готової структури, яку можна змінити.</string>
+    <string name="programs_notice_generated">План створено у чернетці. Збережіть, щоб залишити його</string>
     <string name="programs_generation_unavailable">Автоматичне планування поки недоступне</string>
-    <string name="programs_generation_unavailable_desc">Бібліотека вправ поки не повідомляє, на який напрям працює кожна вправа, тому план не створюється. Поки що ви можете розставити дні та вправи самі.</string>
+    <string name="programs_generation_refused">Жодна вправа не може виконати цей план із наявним обладнанням. Перевірте вибір напряму або список обладнання</string>
+    <string name="programs_generation_failed">Не вдалося створити план, чернетку не змінено</string>
+    <string name="programs_generation_desc">План будується за обраним напрямом, розкладом та обладнанням. Закріплені вправи та додані вами зберігаються.</string>
+    <string name="programs_editor_regenerate">Скласти план заново</string>
     <string name="programs_no_programs">Поки немає збережених програм.</string>
     <string name="programs_archived_section">Архів</string>
     <string name="programs_row_selected">Активна</string>

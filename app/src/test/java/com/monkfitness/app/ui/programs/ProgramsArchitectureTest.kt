@@ -4,6 +4,7 @@ import com.monkfitness.app.di.Clock
 import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramSaveService
 import com.monkfitness.app.domain.usecase.ProgramExportService
+import com.monkfitness.app.domain.usecase.ProgramGenerationService
 import com.monkfitness.app.domain.usecase.ProgramImportService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
@@ -188,12 +189,16 @@ class ProgramsArchitectureTest {
         val collaborators = constructor.parameterTypes.map { type -> type.name }
 
         assertEquals(
-            "§24/§26: the seven application services, the two UI ports, and the two ports \"today\" is read " +
-                "from — and nothing else. A repository, a DAO, a clock of its own or a platform type in " +
-                "this list would be a layer reached around. Revised (not relaxed) by the creation " +
-                "remediation: `ProgramSaveService` joins as §27's Save — the controller hands it the " +
-                "draft and the chosen date precisely so the controller itself never builds a slot, " +
-                "never chooses a date and never runs a scheduling pass",
+            "§24/§26: the eight application services, the three UI ports, and the two ports \"today\" is " +
+                "read from — and nothing else. A repository, a DAO, a clock of its own or a platform " +
+                "type in this list would be a layer reached around. Revised (not relaxed) by the " +
+                "creation remediation: `ProgramSaveService` joins as §27's Save — the controller hands " +
+                "it the draft and the chosen date precisely so the controller itself never builds a " +
+                "slot, never chooses a date and never runs a scheduling pass. Revised again (not " +
+                "relaxed) by §30 step 24: `ProgramGenerationService` joins as the one Generate/" +
+                "Regenerate, so §7's preservation rules have one home; and the declared equipment " +
+                "arrives as a port rather than as a settings object, so the UI layer holds no " +
+                "normalisation rule of its own",
             listOf(
                 ProgramLifecycleService::class.java.name,
                 // Revised (not relaxed) by §30 step 21: Start is no longer the lifecycle service's
@@ -207,6 +212,12 @@ class ProgramsArchitectureTest {
                 ProgramExportService::class.java.name,
                 ProgramProgressService::class.java.name,
                 ProgramScheduler::class.java.name,
+                ProgramGenerationService::class.java.name,
+                // The declared-equipment port is a Kotlin `suspend () -> Set<Equipment>`. At JVM
+                // level a suspend function always carries its continuation as an argument, so the
+                // erased type is `Function1` (one argument: the continuation) and **not** `Function0`
+                // or `Function2`. Read off `getParameterTypes()` rather than assumed from the source.
+                kotlin.jvm.functions.Function1::class.java.name,
                 ExerciseCatalogue::class.java.name,
                 ProgramShareTarget::class.java.name,
                 Clock::class.java.name,

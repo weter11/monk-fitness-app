@@ -143,12 +143,15 @@ fun ProgramEditorScreen(
             Text(text = modeLabel(current.mode), style = MaterialTheme.typography.bodyMedium)
             if (current.mode == ProgramMode.GENERATED) {
                 Text(
-                    text = stringResource(R.string.programs_generation_unavailable_desc),
+                    text = stringResource(R.string.programs_generation_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
                 TextButton(onClick = { runAction(scope) { controller.generateDraft() } }) {
                     Text(stringResource(R.string.programs_editor_generate))
+                }
+                TextButton(onClick = { runAction(scope) { controller.regenerateDraft() } }) {
+                    Text(stringResource(R.string.programs_editor_regenerate))
                 }
             }
 

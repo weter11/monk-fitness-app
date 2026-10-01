@@ -442,13 +442,14 @@ class ProductionGenerationBoundaryArchitectureTest {
         assertTrue("no platform or runtime type reaches the boundary's shape: $offenders", offenders.isEmpty())
     }
 
-    // ------------------------------------------------------------------ not wired yet
+    // ------------------------------------------------------------------ the wiring P24 added
 
     @Test
-    fun theBoundaryIsNotWiredAndNotReachedBecauseNothingConsumesItYet() {
-        // P23 provides the boundary; P24 is the stage that gives it a production caller. The claim is
-        // therefore a *cardinality* — exactly this — rather than an absence that a later stage would
-        // silently satisfy.
+    fun theBoundaryIsWiredExactlyOnceThroughTheGenerationService() {
+        // P23 landed the boundary unwired and pinned that as a cardinality of zero, naming P24 as the
+        // stage that would invert it. P24 is that stage, so the pin is inverted here rather than
+        // deleted: the boundary now has **exactly** the consumers the production flow needs, and a
+        // second reader appearing later still fails.
         val consumers = mainDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .filterNot { file -> file.relativeTo(mainDir).path.replace('\\', '/') in OWN_FILES }
@@ -460,30 +461,50 @@ class ProductionGenerationBoundaryArchitectureTest {
             .toList()
 
         assertEquals(
-            "the boundary has no production caller yet: P24 supplies the Generate use case, and a " +
-                "second caller appearing earlier still fails here",
-            emptyList<String>(),
-            consumers
+            "exactly one production file reaches the boundary: the application service that " +
+                "assembles a request from it. The composition root builds that service without " +
+                "naming the boundary itself (it wires the catalogue port instead), and a second " +
+                "caller would be a second generation path.",
+            listOf("domain/usecase/ProgramGenerationService.kt"),
+            consumers.sorted()
         )
 
         val container = File(mainDir, "di/AppContainer.kt").readText()
-        assertFalse(
-            "and the composition root is not asked to wire what nothing consumes (§26)",
-            container.contains("ProductionGenerationBoundary") || container.contains("ExerciseGenerationFacts")
+        assertTrue(
+            "the composition root wires the generation service explicitly (§26): a graph node " +
+                "exists because something needs it",
+            container.contains("val programGenerationService: ProgramGenerationService =")
+        )
+        assertTrue(
+            "and it wires the production catalogue and the explicit classification into it",
+            container.contains("catalogue = SHIPPED_EXERCISE_CATALOGUE") &&
+                container.contains("focusSource = ProductionFocusClassification")
+        )
+        assertTrue(
+            "and the draft identities come from the composition root's own id generator (§26)",
+            container.contains("ids = DraftIdSource { idGenerator.newId() }")
         )
 
-        // The legacy half of the claim stays whole: generation's *absence* from the legacy contour is
-        // unchanged, and the UI still reports generation as unavailable rather than running this.
+        // The legacy half of the P23 claim stays whole: the generator is untouched, and it remains the
+        // app's own exercise source — which is what makes the real-catalogue test meaningful.
         assertTrue(
             "the legacy generator is untouched and remains the app's own exercise source",
             File(mainDir, "domain/usecase/WorkoutGenerator.kt").readText()
                 .contains("fun getExerciseLibrary(")
         )
-        assertTrue(
-            "and no screen runs a generation pass yet",
-            !File(mainDir, "ui/programs/ProgramsController.kt").readText()
-                .contains("ProductionGenerationBoundary")
-        )
+        // The controller reaches the service and nothing below it: it must not name the boundary, the
+        // classification or the planner, or the orchestration would have a second home in the UI.
+        val controller = code(File(mainDir, "ui/programs/ProgramsController.kt").readText())
+        listOf(
+            "ProductionGenerationBoundary", "ProductionFocusClassification", "GeneratedPlanner",
+            "PlanReconciler", "GenerationRequest", "GenerationCandidate", "WorkoutGenerator"
+        ).forEach { token ->
+            assertFalse(
+                "the controller reaches the application service only, never '$token' directly: the " +
+                    "orchestration has one home and it is not the UI layer",
+                controller.contains(token)
+            )
+        }
     }
 
     @Test
@@ -514,9 +535,15 @@ class ProductionGenerationBoundaryArchitectureTest {
 
     // ------------------------------------------------------------------ helpers
 
+    /**
+     * The files this stage owns, excluded from the consumer sweep below because a file that *declares*
+     * a type obviously names it. P24 added the classification beside them, which is why the sweep
+     * excludes three files and not two.
+     */
     private val OWN_FILES = listOf(
         "domain/usecase/ProductionGenerationBoundary.kt",
-        "domain/usecase/ExerciseGenerationFacts.kt"
+        "domain/usecase/ExerciseGenerationFacts.kt",
+        "domain/usecase/ProductionFocusClassification.kt"
     )
 
     private fun occurrences(text: String, needle: String): Int {

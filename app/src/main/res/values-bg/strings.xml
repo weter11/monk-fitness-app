@@ -764,7 +764,11 @@
     <string name="programs_create_generated">Създай вместо мен</string>
     <string name="programs_create_generated_desc">Започнете от планирана структура, която все още можете да редактирате.</string>
     <string name="programs_generation_unavailable">Автоматичното планиране все още не е налично</string>
-    <string name="programs_generation_unavailable_desc">Библиотеката с упражнения все още не посочва на какъв тренировъчен фокус служи всяко упражнение, затова не се генерира план. Междувременно можете сами да подредите дните и упражненията.</string>
+    <string name="programs_notice_generated">Планът е създаден в черновика. Запазете, за да го запазите</string>
+    <string name="programs_generation_refused">Нито едно упражнение не може да изпълни този план с наличното оборудване. Проверете избора на фокус или оборудването</string>
+    <string name="programs_generation_failed">Планът не можа да бъде създаден и черновикът остава непроменен</string>
+    <string name="programs_generation_desc">Планът се изгражда от избрания фокус, график и оборудване. Закрепените упражнения и добавените от вас се запазват.</string>
+    <string name="programs_editor_regenerate">Изгради отново</string>
     <string name="programs_no_programs">Още няма запазени програми.</string>
     <string name="programs_archived_section">Архивирани</string>
     <string name="programs_row_selected">Активна</string>

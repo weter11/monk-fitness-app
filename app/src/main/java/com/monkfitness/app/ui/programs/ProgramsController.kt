@@ -1,6 +1,7 @@
 package com.monkfitness.app.ui.programs
 
 import com.monkfitness.app.R
+import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.di.Clock
 import com.monkfitness.app.domain.common.ProgramDayId
 import com.monkfitness.app.domain.common.ProgramExerciseId
@@ -14,6 +15,7 @@ import com.monkfitness.app.domain.program.ProgramDraftReview
 import com.monkfitness.app.domain.program.ProgramEditorDraft
 import com.monkfitness.app.domain.program.ProgramEditorRejection
 import com.monkfitness.app.domain.program.ProgramEditorResult
+import com.monkfitness.app.domain.program.FocusPlan
 import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.domain.program.Program
 import com.monkfitness.app.domain.program.ProgramOperationRefusal
@@ -30,6 +32,9 @@ import com.monkfitness.app.domain.program.transfer.ProgramTransferResult
 import com.monkfitness.app.domain.progress.ProgressScope
 import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramExportService
+import com.monkfitness.app.domain.usecase.ProgramGenerationRefusal
+import com.monkfitness.app.domain.usecase.ProgramGenerationResult
+import com.monkfitness.app.domain.usecase.ProgramGenerationService
 import com.monkfitness.app.domain.usecase.ProgramImportService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
@@ -118,6 +123,15 @@ fun interface ExerciseCatalogue {
  * @param exporter §5's export half. This object never builds the JSON (§11).
  * @param progress §21's measures and history, read for the Detail screen only.
  * @param scheduler §20's timing. It is asked for a *preview* of the next opportunity, never to write.
+ * @param generation §30 step 24's one application-level Generate/Regenerate: it reads the working
+ *   draft's own configuration, the production catalogue and the classification, builds the request
+ *   and runs the generated editor. This object hands it the draft and publishes what comes back; it
+ *   builds no request, maps no exercise, holds no focus table and reads no storage, so the
+ *   orchestration has exactly one implementation and one place to look for it.
+ * @param availableEquipment the equipment the user has, read at the moment of a generation pass and
+ *   forwarded verbatim. **An empty set means the user declared no equipment** — the P24 reading of
+ *   `SettingsManager.availableEquipmentFlow`, deliberately not the legacy "empty means unconstrained"
+ *   rule. This object applies no rule of its own to it; the request's own usability test does.
  * @param catalogue the app's exercise catalogue, for the plan editor's choices.
  * @param shareTarget the platform boundary a share is handed to.
  * @param clock the clock the two defaults of this layer are read from: today, for the import's default
@@ -134,6 +148,8 @@ class ProgramsController(
     private val exporter: ProgramExportService,
     private val progress: ProgramProgressService,
     private val scheduler: ProgramScheduler,
+    private val generation: ProgramGenerationService,
+    private val availableEquipment: suspend () -> Set<Equipment>,
     private val catalogue: ExerciseCatalogue,
     private val shareTarget: ProgramShareTarget,
     private val clock: Clock,
@@ -404,8 +420,8 @@ class ProgramsController(
      * ```
      *
      * The mode is *content* (§2, §6): it is stored with the draft and becomes the first revision's mode.
-     * Nothing is generated here — see [generateDraft] for what the Generated path can and cannot do in
-     * this stage.
+     * Nothing is generated here — [generateDraft] is the operation that runs a generation pass, and
+     * it is the one the `Build for me` entry path leaves to the user to ask for.
      */
     suspend fun openCreateDraft(mode: ProgramMode) {
         beginEditorFlow()
@@ -488,26 +504,78 @@ class ProgramsController(
     }
 
     /**
-     * §7's **Generate** for a Generated draft.
+     * §7's **Generate** for a Generated draft — a real generation pass.
      *
-     * The Generated Planner is a domain component that plans from a *library view*: a set of candidates
-     * that each state the focuses they train, their family and their prescription dimension
-     * (`GenerationRequest`). This app's catalogue carries no such classification — the only grouping it
-     * has is a family id and a category, and mapping a category onto `PUSH / PULL / LEGS / CORE / …`
-     * would be inventing a training fact the data does not hold. §30 step 12 recorded the same missing
-     * artefact on the adaptive side (`NoExerciseFamilyClassification`).
+     * The Generated Planner plans from a *library view*: candidates that each state the focuses they
+     * train, their family and their prescription dimension. P24 closed the gap P23 recorded — the
+     * production catalogue now states an explicit classification for every shipped exercise
+     * ([com.monkfitness.app.domain.usecase.ProductionFocusClassification]) — so this button runs the
+     * whole chain rather than reporting that generation is unavailable:
      *
-     * So the entry path is offered, the mode is real and saved, and the automatic plan is reported as
-     * **not available yet** rather than generated from a guess. What the caller gets is a notice; what
-     * the user keeps is the draft they can arrange by hand. Recorded as this stage's one architecture
-     * gap in `docs/PROGRAM_UI_NAVIGATION.md`.
+     * ```text
+     * working draft → ProgramGenerationService → GenerationRequest → GeneratedPlanner
+     *              → ProgramGeneratedEditor → PlanReconciler → the next working draft
+     * ```
      *
-     * @return whether a plan was produced. Always `false` in this stage, and never a silent no-op.
+     * The controller's own part is deliberately small: it hands the working draft to the service,
+     * takes the typed result, and publishes it. It builds no `GenerationRequest`, maps no `Exercise`,
+     * reads no DAO, holds no focus table and applies no equipment rule — every one of those belongs
+     * to a layer that owns it, and a screen that wanted any of them would have to reach around this
+     * object, which the architecture suite forbids mechanically.
+     *
+     * **Generation alters only the draft.** No revision is created, no Program is written, no slot
+     * is planned and no date is chosen: `Save` remains the only route to persistence (§6, §7), and
+     * the draft the user already had survives a refusal or a failure untouched. Pinned and
+     * user-authored content is preserved by `PlanReconciler`, so pressing Generate does not discard
+     * what the user put there.
+     *
+     * @return whether a new working draft was produced. A refusal and a failure both return `false`
+     *   with the reason already on the state as the notice, so neither reads as a completed
+     *   generation (§15, §33).
      */
     suspend fun generateDraft(): Boolean {
-        if (workingDraft == null) return false
-        mutableState.update { it.copy(notice = ProgramNotice.GENERATION_UNAVAILABLE) }
-        return false
+        val draft = workingDraft ?: return false
+        val result = try {
+            generation.generate(draft, availableEquipment())
+        } catch (failure: Throwable) {
+            ProgramGenerationResult.Failed(failure)
+        }
+        return when (result) {
+            is ProgramGenerationResult.Generated -> {
+                workingDraft = result.edit.draft
+                // The review describes the draft it was computed from, so a generation clears it too.
+                publishDraft(review = null)
+                mutableState.update { it.copy(notice = ProgramNotice.GENERATED) }
+                true
+            }
+
+            is ProgramGenerationResult.Refused -> {
+                mutableState.update { it.copy(notice = generationNoticeFor(result.reason)) }
+                false
+            }
+
+            is ProgramGenerationResult.Failed -> {
+                mutableState.update { it.copy(notice = ProgramNotice.GENERATION_FAILED) }
+                false
+            }
+        }
+    }
+
+    /**
+     * §7's **Regenerate** — the same pass, asked for again.
+     *
+     * It exists beside [generateDraft] because the domain's decision is that the two are one
+     * reconciliation (§7's precedence has no exception for which button was pressed), and a caller
+     * that has to be told which one it used is a caller that could treat them differently.
+     */
+    suspend fun regenerateDraft(): Boolean = generateDraft()
+
+    /** §7's generation refusals, as the sentence the user reads. */
+    private fun generationNoticeFor(refusal: ProgramGenerationRefusal): ProgramNotice = when (refusal) {
+        is ProgramGenerationRefusal.NoExerciseStatesItsFocus ->
+            ProgramNotice.GENERATION_UNAVAILABLE
+
+        is ProgramGenerationRefusal.NothingPlannable -> ProgramNotice.GENERATION_REFUSED
     }
 
     fun setDraftName(name: String) = editDraft { draft -> editor.editor(draft).renamed(name).draft }
@@ -523,6 +591,17 @@ class ProgramsController(
 
     fun setDraftSchedule(schedule: ProgramSchedule) =
         editDraft { draft -> editor.editor(draft).withSchedule(schedule).draft }
+
+    /**
+     * §7's *Goals & Focus* configuration — the one setting a generation pass reads as its planning
+     * input, which is why it is editable while a Generated draft is open: a user who cannot be served
+     * because the library has no PULL work for their equipment has to be able to say so here.
+     *
+     * It is structural content (§6): a save that changes it and nothing else still creates a
+     * revision, which is the domain editor's own rule and not this method's.
+     */
+    fun setDraftFocus(focus: FocusPlan) =
+        editDraft { draft -> editor.editor(draft).withFocus(focus).draft }
 
     fun addDraftDay(type: ProgramDayType) =
         editDraft { draft -> editor.editor(draft).addingDay(type).draft }
