@@ -165,7 +165,50 @@ RED                scripts/program-stage25-red-mutations.sh
 `:app:lintVitalRelease` fails pre-existing (`res/values/themes.xml` ResourceCycle) and is not stage
 evidence.
 
-## 10. Claim → test
+## 10. RED evidence
+
+`scripts/program-stage25-red-mutations.sh` — ten mutations, one per rule, over
+`GoalsFocusAuthoring.kt`, `ProgramEditorScreen.kt`, `ProgramsController.kt`, `ProgramStructure.kt` and
+`ProgramGenerationService.kt`. The oracle is the P25 behavioural suites and architecture gate, plus
+`ProgramsArchitectureTest`, `ProgramsLocalizationTest`, `FocusPlanTest`, `ProgramGenerationServiceTest`
+and `ProgramGenerationFlowArchitectureTest` — the gates whose claims P25 depends on or touches.
+
+| # | mutation | expected | verdict |
+| --- | --- | --- | --- |
+| 1 | the draft focus change is silently ignored | caught | caught |
+| 2 | the chosen configuration is replaced by `FocusPlan.DEFAULT` | caught | caught |
+| 3 | a focus change stops being structural | caught | caught |
+| 4 | the CUSTOM total validation is bypassed and the sum repaired | caught | caught |
+| 5 | the tap order becomes a hidden priority | caught | caught |
+| 6 | the user focus is not forwarded to generation | caught | caught |
+| 7 | the generation service reaches persistence | caught | caught |
+| 8 | an invalid custom state is accepted (the entry defaults to a stated share) | caught | caught |
+| 9 | the controller bypasses `ProgramDraftEditor.withFocus` | caught | caught |
+| 10 | the screen keeps its own copy of the configuration | caught | caught |
+| — | control: the unmutated tree stays GREEN | not caught | GREEN |
+
+```text
+control GREEN   caught: 10   missed: 0   not-a-catch: 0
+every mutated source restored byte-identically (md5sum -c)
+```
+
+Two rows were rewritten before they counted, both for the same reason — a row that proves nothing is
+worse than a row that fails:
+
+* **Row 8's first version** mutated `remainingPercent()` to special-case an empty entry. For an empty
+  entry `FULL_ALLOCATION - 0` *already* equals `FULL_ALLOCATION`, so the mutant was behaviourally
+  identical and scored MISSED having demonstrated nothing. It was rewritten to make the entry's own
+  **default value** a stated `Custom(PUSH=100%)`, which is the actual defect: a user who opened the
+  CUSTOM editor and typed nothing would be handed a legal configuration for a focus they never chose.
+* **Row 3's first version** targeted the FOCUS comparison in `ProgramGenerationService.kt`; it is
+  declared in `ProgramStructure.kt`, and the anchor was found by the pre-compile probe rather than by a
+  twenty-minute loop. That file is now in the snapshot and restore set.
+
+`scripts/p25-precompile-probe.py` applies each mutation **alone** and compiles it before the loop runs:
+all ten report `COMPILES`, so no row can be charged `NOT A CATCH` for a compile error it never
+apologises for.
+
+## 11. Claim → test
 
 | claim | test |
 | --- | --- |

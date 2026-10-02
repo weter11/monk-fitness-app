@@ -173,20 +173,20 @@ CONTROLLER_IGNORED='    fun setDraftFocus(focus: FocusPlan) {
     }'
 
 # 2. The user's configuration is replaced by §8's DEFAULT before it reaches the draft — the "no hidden
-#    defaults" rule stated as code. A Focused(PUSH, PULL) selection becomes BALANCED, which is the
-#    failure mode the whole stage exists to prevent, and it is invisible on screen: the section renders
-#    whatever the draft holds.
-REPLACE_WITH_DEFAULT_ANCHOR='    fun withPercent(focus: Focus, percent: Int): FocusPercentEntry =
-        copy(percents = percents + (focus to (percent.takeIf { it > 0 } ?: 0)))'
-REPLACE_WITH_DEFAULT='    fun withPercent(focus: Focus, percent: Int): FocusPercentEntry =
-        copy(percents = percents + (focus to (percent.takeIf { it > 0 } ?: 0)), defaulted = true)'
+#    defaults" rule stated as code, at the one place a finished configuration is handed to the
+#    controller. A Focused(PUSH, PULL) selection becomes BALANCED, which is the failure mode the whole
+#    stage exists to prevent, and it is invisible on screen: the section renders whatever the draft
+#    holds. It is the FOCUSED chooser's own confirmation line, so the mutation is real code a
+#    Composable executes — not a token a comment-stripping gate could miss.
+REPLACE_WITH_DEFAULT_ANCHOR='                onFocus(FocusPlan.focused(focuses))'
+REPLACE_WITH_DEFAULT='                onFocus(FocusPlan.DEFAULT)'
 
 # 3. A focus change stops being a structural change: the review and Save no longer see a difference,
 #    so a user who re-plans their goal silently saves nothing. This is the ONE row that mutates the
 #    domain's own structural comparison rather than a UI file, because that comparison is where §6's
 #    rule lives; the row is in the snapshot set so it is restored with everything else.
-STRUCTURAL_ANCHOR='                        ProgramStructureAspect.FOCUS -> focus != base.focus'
-STRUCTURAL_GONE='                        ProgramStructureAspect.FOCUS -> false'
+STRUCTURAL_ANCHOR='    ProgramStructureAspect.FOCUS -> focus != base.focus'
+STRUCTURAL_GONE='    ProgramStructureAspect.FOCUS -> false'
 
 # 4. The CUSTOM sum validation is bypassed: the domain's own refusal is caught and the entry reports a
 #    configuration anyway. The allocation the domain refused is then *repaired* by dividing what is left
@@ -240,15 +240,16 @@ PERSISTENCE='    private val ids: DraftIdSource,
     @Suppress("UNUSED_PARAMETER")
     private val programRepository: com.monkfitness.app.data.repository.ProgramRepository? = null,'
 
-# 8. An invalid custom state is accepted: the dialog reports a configuration the domain refused by
-#    substituting the whole 100% for the first focus when the entry states nothing. A user who opened the
-#    CUSTOM editor and typed nothing would get PUSH=100% written into their draft — a focus they never
-#    chose, from a number they never typed.
-INVALID_ACCEPTED_ANCHOR='    fun remainingPercent(): Int =
-        FocusPlan.FULL_ALLOCATION - statedFocuses().sumOf { focus -> percentOf(focus) }'
-INVALID_ACCEPTED='    fun remainingPercent(): Int =
-        if (statedFocuses().isEmpty()) FocusPlan.FULL_ALLOCATION
-        else FocusPlan.FULL_ALLOCATION - statedFocuses().sumOf { focus -> percentOf(focus) }'
+# 8. An invalid custom state is accepted: the entry a dialog starts from is no longer empty, but already
+#    states the whole 100% for the vocabulary's first focus. A user who opened the CUSTOM editor and typed
+#    nothing would be handed a complete, legal `Custom(PUSH=100%)` — a focus they never chose, from a
+#    number they never typed, produced by the *default value* of the working state rather than by a
+#    visible default the user could correct.
+#    The first version of this row mutated `remainingPercent()` instead, and was correctly scored MISSED:
+#    for an empty entry `FULL_ALLOCATION - 0` already equals `FULL_ALLOCATION`, so the mutant was
+#    behaviourally IDENTICAL and proved nothing (hygiene rule: an equivalent mutant is not evidence).
+INVALID_ACCEPTED_ANCHOR='    val percents: Map<Focus, Int> = emptyMap()'
+INVALID_ACCEPTED='    val percents: Map<Focus, Int> = mapOf(Focus.PUSH to FocusPlan.FULL_ALLOCATION)'
 
 # 9. The controller bypasses the draft editor: the draft's focus field is written directly, so the one
 #    operation §7 makes responsible for the change is skipped. Everything else about the draft still
@@ -275,7 +276,7 @@ done
 echo '== preflight =='
 
 preflight 'the draft focus change is silently ignored' "$CONTROLLER" "$CONTROLLER_ANCHOR" "$CONTROLLER_IGNORED"
-preflight 'the chosen configuration is replaced by FocusPlan.DEFAULT' "$RULES" "$REPLACE_WITH_DEFAULT_ANCHOR" "$REPLACE_WITH_DEFAULT"
+preflight 'the chosen configuration is replaced by FocusPlan.DEFAULT' "$SCREEN" "$REPLACE_WITH_DEFAULT_ANCHOR" "$REPLACE_WITH_DEFAULT"
 preflight 'a focus change stops being structural' "$STRUCTURE" "$STRUCTURAL_ANCHOR" "$STRUCTURAL_GONE"
 preflight 'the CUSTOM total validation is bypassed' "$RULES" "$TOTAL_BYPASS_ANCHOR" "$TOTAL_BYPASS"
 preflight 'the tap order becomes a hidden priority' "$RULES" "$PRIORITY_ANCHOR" "$PRIORITY"
@@ -299,7 +300,7 @@ fi
 echo '== mutations =='
 
 mutate 'the draft focus change is silently ignored' "$CONTROLLER" "$CONTROLLER_ANCHOR" "$CONTROLLER_IGNORED"
-mutate 'the chosen configuration is replaced by FocusPlan.DEFAULT' "$RULES" "$REPLACE_WITH_DEFAULT_ANCHOR" "$REPLACE_WITH_DEFAULT"
+mutate 'the chosen configuration is replaced by FocusPlan.DEFAULT' "$SCREEN" "$REPLACE_WITH_DEFAULT_ANCHOR" "$REPLACE_WITH_DEFAULT"
 mutate 'a focus change stops being structural' "$STRUCTURE" "$STRUCTURAL_ANCHOR" "$STRUCTURAL_GONE"
 mutate 'the CUSTOM total validation is bypassed' "$RULES" "$TOTAL_BYPASS_ANCHOR" "$TOTAL_BYPASS"
 mutate 'the tap order becomes a hidden priority' "$RULES" "$PRIORITY_ANCHOR" "$PRIORITY"

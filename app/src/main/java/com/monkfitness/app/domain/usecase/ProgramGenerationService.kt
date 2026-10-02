@@ -100,8 +100,6 @@ class ProgramGenerationService(
     private val catalogue: GenerationCatalogue,
     private val focusSource: GenerationFocusSource,
     private val ids: DraftIdSource,
-    @Suppress("UNUSED_PARAMETER")
-    private val programRepository: com.monkfitness.app.data.repository.ProgramRepository? = null,
     private val preferences: GenerationPreferences = GenerationPreferences.NONE,
     private val policy: GenerationPolicy = GenerationPolicy.DEFAULT
 ) {
