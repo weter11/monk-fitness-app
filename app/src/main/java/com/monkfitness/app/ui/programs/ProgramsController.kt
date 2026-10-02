@@ -1042,6 +1042,10 @@ class ProgramsController(
                     }
                 )
             },
+            // §7's Goals & Focus: the draft's own configuration, handed over rather than rebuilt. The
+            // screen displays this value and edits it by handing a new one back to `setDraftFocus`,
+            // so there is exactly one copy of it in the UI layer — the draft's.
+            focus = draft.focus,
             isValid = validation.isValid,
             issueRes = validation.issues.map { issue -> issueRes(issue) },
             review = review
