@@ -1,6 +1,7 @@
 package com.monkfitness.app.domain.usecase
 
 import com.monkfitness.app.domain.adaptive.RecoveryContext
+import com.monkfitness.app.domain.common.ProgramDayId
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.ProgramExerciseId
 import com.monkfitness.app.domain.common.RevisionId
@@ -8,8 +9,13 @@ import com.monkfitness.app.domain.common.SessionExerciseId
 import com.monkfitness.app.domain.common.SessionId
 import com.monkfitness.app.domain.common.SetLogId
 import com.monkfitness.app.domain.common.SlotId
+import com.monkfitness.app.domain.program.ExercisePreference
 import com.monkfitness.app.domain.program.Focus
+import com.monkfitness.app.domain.program.ProgramDay
+import com.monkfitness.app.domain.program.ProgramDayType
 import com.monkfitness.app.domain.program.ProgramEditorDraft
+import com.monkfitness.app.domain.program.ProgramExercise
+import com.monkfitness.app.domain.program.ProgramExerciseOrigin
 import com.monkfitness.app.domain.program.generated.GenerationPreferences
 import com.monkfitness.app.domain.prescription.Prescription
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
@@ -466,21 +472,58 @@ class ProgramGenerationContextTest {
         )
     }
 
+    /**
+     * **P27's claim, revised by P28 — not relaxed.**
+     *
+     * P27 asserted that §9's top level stays empty *because no persisted preference existed*. P28 gave the
+     * signal a real owner, so that reason is gone; the claim underneath it is not. A draft full of
+     * user-authored, pinned elements still states what the user **built**, not what they would prefer a
+     * generator to pick, and reading plan content as a wish list remains a different meaning the codebase
+     * does not state.
+     *
+     * So the test is restated against the value that now carries the preference, and it is *stronger* than
+     * before: it plants a draft with pinned and user-authored elements AND an explicitly stated preference,
+     * then asserts the request holds **exactly** the stated preference — the plan's content appears nowhere
+     * in it. An implementation that read plan content would add those ids and fail; one that dropped the
+     * stated preference would fail the other half.
+     */
     @Test
-    fun noUserPreferenceIsInventedFromTheDraftsOwnContent() = runBlocking {
-        // The draft's plan content is not a wish list. A draft full of user-authored, pinned elements
-        // states what the user built, not what they would prefer a generator to pick — reading it as
-        // `userPreferredExerciseIds` would be a different meaning the codebase does not state, and it
-        // would also break `GenerationPreferences`' own invariant the moment an element was also
-        // adaptive-preferred.
+    fun noUserPreferenceIsInventedFromTheDraftsOwnPlanContent() = runBlocking {
+        val draft = draftOf(PROGRAM).copy(
+            name = "Edited",
+            days = listOf(
+                ProgramDay(
+                    programDayId = ProgramDayId("day-1"),
+                    position = 1,
+                    type = ProgramDayType.TRAINING,
+                    name = null,
+                    exercises = listOf(
+                        ProgramExercise(
+                            programExerciseId = ProgramExerciseId("element-1"),
+                            exerciseId = "squats",
+                            prescription = RepPrescription(listOf(10, 10, 10)),
+                            origin = ProgramExerciseOrigin.USER_AUTHORED,
+                            isPinned = true
+                        )
+                    )
+                )
+            ),
+            preferredExercises = ExercisePreference.of("pullups")
+        )
+
         val preferences = ProgramHistoryGenerationContext(
-            RecordingHistory(mapOf(PROGRAM to listOf(session("s1", exercises = listOf(performed("squats"))))))
-        ).preferencesFor(draftOf(PROGRAM).copy(name = "Edited", days = listOf()))
+            RecordingHistory(mapOf(PROGRAM to listOf(session("s1", exercises = listOf(performed("dips"))))))
+        ).preferencesFor(draft)
 
         assertEquals(
-            "no persisted user-authored preference ordering exists, so §9's top level stays empty",
-            emptyList<String>(),
+            "§9's top level is the preference the user stated and nothing else: the draft's pinned and " +
+                "user-authored element is plan content reconciliation preserves (§7), never a rank",
+            listOf("pullups"),
             preferences.userPreferredExerciseIds
+        )
+        assertTrue(
+            "and the plan's own exercise is absent from the preference, not merely ranked lower",
+            "squats" !in preferences.userPreferredExerciseIds
         )
     }
 

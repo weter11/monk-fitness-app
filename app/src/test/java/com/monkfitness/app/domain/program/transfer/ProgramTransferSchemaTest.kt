@@ -107,7 +107,7 @@ class ProgramTransferSchemaTest {
 
     @Test
     fun aMissingFormatVersionIsARequiredFieldFinding() {
-        val issues = schemaIssues(ProgramTransferFixture.edited("\"formatVersion\": 1,", ""))
+        val issues = schemaIssues(ProgramTransferFixture.edited("\"formatVersion\": 2,", ""))
 
         assertTrue(
             "$issues",
@@ -118,20 +118,20 @@ class ProgramTransferSchemaTest {
     @Test
     fun anUnsupportedVersionIsItsOwnAnswerAndNotABagOfSchemaFindings() {
         val failure: UnsupportedDocumentVersion = try {
-            ProgramTransferReader.read(ProgramTransferFixture.edited("\"formatVersion\": 1", "\"formatVersion\": 2"))
+            ProgramTransferReader.read(ProgramTransferFixture.edited("\"formatVersion\": 2", "\"formatVersion\": 9"))
             throw AssertionError("expected the version to be refused")
         } catch (thrown: UnsupportedDocumentVersion) {
             thrown
         }
 
-        assertEquals("the version the file states is reported", 2, failure.found)
+        assertEquals("the version the file states is reported", 9, failure.found)
     }
 
     @Test
     fun aVersionThatIsNotAWholeNumberIsASyntaxFailureBeforeItIsAVersion() {
         assertTrue(
             "a fractional version cannot be compared, so it is refused where it is read",
-            malformed(ProgramTransferFixture.edited("\"formatVersion\": 1", "\"formatVersion\": 1.5"))
+            malformed(ProgramTransferFixture.edited("\"formatVersion\": 2", "\"formatVersion\": 2.5"))
                 .reason.contains("whole")
         )
     }
@@ -251,7 +251,7 @@ class ProgramTransferSchemaTest {
         val issues = schemaIssues(
             ProgramTransferFixture.VALID_DOCUMENT
                 .replace("\"mode\": \"MANUAL\"", "\"mode\": \"SEMI_AUTO\"")
-                .replace("\"formatVersion\": 1,", "\"formatVersion\": 1,\n  \"exportedAt\": 1,")
+                .replace("\"formatVersion\": 2,", "\"formatVersion\": 2,\n  \"exportedAt\": 1,")
                 .replace("\"pinned\": true", "\"pinned\": \"yes\"")
         )
 

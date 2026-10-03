@@ -2,6 +2,7 @@ package com.monkfitness.app.ui.programs
 
 import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.domain.common.ProgramId
+import com.monkfitness.app.domain.program.ExercisePreference
 import com.monkfitness.app.domain.program.MovableClock
 import com.monkfitness.app.domain.program.Program
 import com.monkfitness.app.domain.program.Focus
@@ -368,6 +369,13 @@ internal class ProgramsRig(key: String = "ui") {
      */
     suspend fun storedFocus(programId: ProgramId): FocusPlan? =
         transfer.planRepository.currentRevision(programId)?.focus
+
+    /**
+     * A Program's stored **exercise preference**, read off its current Revision through a fresh
+     * repository — so a test proves what `Save` persisted rather than what the controller still holds.
+     */
+    suspend fun storedPreference(programId: ProgramId): ExercisePreference? =
+        transfer.planRepository.currentRevision(programId)?.preferredExercises
 
     /**
      * Whether every exercise in the draft the last generation pass produced **can serve** one of

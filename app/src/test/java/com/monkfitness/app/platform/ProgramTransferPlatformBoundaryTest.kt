@@ -226,7 +226,7 @@ class ProgramTransferPlatformBoundaryTest {
 
     @Test
     fun theSharePayloadIsTheExportedBytesAndIsAssertableWithoutADevice() {
-        val document = "{\n  \"format\": \"monkfitness.program\",\n  \"formatVersion\": 1\n}\n"
+        val document = "{\n  \"format\": \"monkfitness.program\",\n  \"formatVersion\": 2\n}\n"
         val file = ProgramTransferFile(
             fileName = ProgramTransferFormat.FILE_NAME,
             mimeType = ProgramTransferFormat.MIME_TYPE,

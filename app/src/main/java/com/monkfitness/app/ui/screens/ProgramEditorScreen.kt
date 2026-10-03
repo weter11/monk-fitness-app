@@ -33,7 +33,10 @@ import com.monkfitness.app.domain.program.ProgramDayType
 import com.monkfitness.app.domain.program.ProgramDuration
 import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.domain.program.ProgramSchedule
+import com.monkfitness.app.domain.program.ExercisePreference
 import com.monkfitness.app.ui.programs.ExerciseOptionUi
+import com.monkfitness.app.ui.programs.addablePreferenceOptions
+import com.monkfitness.app.ui.programs.movementEnabled
 import com.monkfitness.app.ui.programs.FocusPercentEntry
 import com.monkfitness.app.ui.programs.ProgramDraftDayUi
 import com.monkfitness.app.ui.programs.ProgramDraftElementUi
@@ -187,6 +190,27 @@ fun ProgramEditorScreen(
             GoalsAndFocusSection(
                 focus = current.focus,
                 onFocus = { focus -> controller.setDraftFocus(focus) }
+            )
+
+            // §30 step 28: the other generation input the user states. It sits directly under Goals &
+            // Focus for the same reason that section does — both say what the next Generate will be built
+            // with, and neither is part of the plan being shown below.
+            ProgramSection(stringResource(R.string.programs_editor_preferred_exercises))
+            PreferredExercisesSection(
+                preference = current.preferredExercises,
+                addableOptions = addablePreferenceOptions(
+                    preferred = current.preferredExercises,
+                    options = state.exerciseOptions
+                ),
+                labelOf = { exerciseId ->
+                    state.exerciseOptions.firstOrNull { option -> option.exerciseId == exerciseId }
+                        ?.let { option -> localizedExerciseName(option) }
+                        ?: exerciseId
+                },
+                onPrefer = { exerciseId -> controller.preferDraftExercise(exerciseId) },
+                onUnprefer = { exerciseId -> controller.unpreferDraftExercise(exerciseId) },
+                onMoveUp = { exerciseId -> controller.promoteDraftPreferredExercise(exerciseId) },
+                onMoveDown = { exerciseId -> controller.demoteDraftPreferredExercise(exerciseId) }
             )
 
             ProgramSection(stringResource(R.string.programs_editor_duration))
@@ -427,6 +451,129 @@ fun ProgramEditorScreen(
         }
     }
 }
+
+/**
+ * §30 step 28's **preferred exercises** — the draft's own [ExercisePreference], shown as a ranking and
+ * edited by handing each change back to the controller.
+ *
+ * ### The section holds no ranking of its own
+ *
+ * [preference] is the draft's value, read from the controller's presentation, and every button here ends
+ * in one controller call. There is no `remember`ed copy of the list and no local index, because a local
+ * copy would be a second source of truth for exactly the fact that matters here: the order the user is
+ * looking at has to be the order the next generation is planned against. Two copies would let the screen
+ * show one ranking while the draft carried another, and the user would have no way to see which one the
+ * generator used.
+ *
+ * ### No order is chosen for the user
+ *
+ * Nothing on this screen ranks anything by itself. A new entry is appended as the **least** preferred
+ * (`ExercisePreference.preferring`), which is the only position a screen can add without inventing a
+ * judgement; the user then moves it with the two buttons. Nothing is pre-selected, no favourites are
+ * suggested, and an empty preference says so in words rather than showing an empty box (§33).
+ *
+ * The two move buttons are **disabled at the ends of the list** rather than clamped, via
+ * [movementEnabled]. A disabled button says "there is nowhere to go"; a tap that did nothing would say
+ * "you moved it" and be wrong.
+ *
+ * ### What the preference cannot do
+ *
+ * The section says in its own description line that generation reaches for these *before anything else*,
+ * and — just as importantly — that it does so **only among the exercises the user's equipment allows**.
+ * That boundary lives in `GenerationRequest.isUsable`, above this ranking (§9's hard execution
+ * constraints), and stating it here is what stops the screen from implying that preferring an exercise
+ * makes it selectable.
+ */
+@Composable
+private fun PreferredExercisesSection(
+    preference: ExercisePreference,
+    addableOptions: List<ExerciseOptionUi>,
+    labelOf: @Composable (String) -> String,
+    onPrefer: (String) -> Unit,
+    onUnprefer: (String) -> Unit,
+    onMoveUp: (String) -> Unit,
+    onMoveDown: (String) -> Unit
+) {
+    var choosing by remember { mutableStateOf(false) }
+
+    Text(
+        text = stringResource(R.string.programs_editor_preferred_exercises_desc),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.secondary
+    )
+
+    if (preference.isEmpty) {
+        // The absence in words. An empty list would read as a section that failed to load (§33).
+        Text(
+            text = stringResource(R.string.programs_editor_preferred_exercises_empty),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary
+        )
+    }
+
+    // The ranking, in the draft's own order — position 1 is the most preferred, and the number shown is
+    // the position itself so the order is legible as an order rather than as a list of names.
+    preference.exerciseIds.forEachIndexed { index, exerciseId ->
+        val position = index + 1
+        val movement = movementEnabled(position, preference.size)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.programs_preferred_position, position, labelOf(exerciseId)),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                enabled = movement.canMoveUp,
+                onClick = { onMoveUp(exerciseId) }
+            ) {
+                Text(stringResource(R.string.programs_preferred_move_up))
+            }
+            TextButton(
+                enabled = movement.canMoveDown,
+                onClick = { onMoveDown(exerciseId) }
+            ) {
+                Text(stringResource(R.string.programs_preferred_move_down))
+            }
+            TextButton(onClick = { onUnprefer(exerciseId) }) {
+                Text(stringResource(R.string.programs_preferred_remove))
+            }
+        }
+    }
+
+    if (addableOptions.isNotEmpty()) {
+        TextButton(onClick = { choosing = true }) {
+            Text(stringResource(R.string.programs_preferred_add))
+        }
+    }
+
+    if (choosing) {
+        ExercisePickerDialog(
+            title = stringResource(R.string.programs_preferred_choose),
+            options = addableOptions,
+            onDismiss = { choosing = false },
+            onPick = { exerciseId ->
+                choosing = false
+                onPrefer(exerciseId)
+            }
+        )
+    }
+}
+
+/**
+ * The catalogue's own localized name for one entry, or the raw id when the catalogue has no name resource
+ * for it.
+ *
+ * The fallback is the same one the plan below uses, and it exists for the same reason: an id the app does
+ * not have a name for must still be *addressable*, because a user who cannot read a row cannot remove it
+ * either. Falling back to the id keeps the row usable instead of hiding an entry the draft holds.
+ */
+@Composable
+private fun localizedExerciseName(option: ExerciseOptionUi): String =
+    if (option.nameRes != 0) stringResource(option.nameRes) else option.exerciseId
 
 /**
  * §7's **Goals & Focus** — the draft's own [FocusPlan], displayed as it is and edited by handing a
@@ -1072,13 +1219,17 @@ private fun Stepper(label: String, value: Int, onChange: (Int) -> Unit) {
 private fun ExercisePickerDialog(
     options: List<ExerciseOptionUi>,
     onDismiss: () -> Unit,
-    onPick: (String) -> Unit
+    onPick: (String) -> Unit,
+    title: String = stringResource(R.string.programs_editor_choose_exercise)
 ) {
     var query by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.programs_editor_choose_exercise)) },
+        // §30 step 28: the same dialog, a different question. "Choose an exercise" would be wrong above a
+        // preference list — the user is not picking what to plan, they are picking what to rank — so the
+        // caller states the sentence rather than the dialog guessing from its contents.
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(

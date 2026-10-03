@@ -75,6 +75,13 @@ import java.time.DayOfWeek
  *   One column and not a table, because a focus configuration is a handful of tokens belonging to
  *   exactly one immutable revision: a second row-shaped entity would model a relation that does not
  *   exist.
+ * @property preferredExerciseIds the user's **exercise preference**, most preferred first (§9's
+ *   *user choice*), as one deterministic `TEXT` value — the exercise ids joined by a separator, **in
+ *   the user's own order**, because for this column the order *is* the meaning and a canonicalised
+ *   sort would destroy it. It is `null` when the user named nothing, and `null` is the honest reading
+ *   of a row written before this column existed: the user stated no preference, which is what
+ *   `ExercisePreference.NONE` says. It is deliberately **not** defaulted to a ranking of the
+ *   catalogue, and not defaulted to `""` either, because both would state a preference nobody chose.
  */
 @Entity(
     tableName = "program_revision",
@@ -100,7 +107,8 @@ data class ProgramRevisionEntity(
     val createdAt: Long,
     val scheduleSessionsPerWeek: Int? = null,
     val focusGoal: String? = null,
-    val focusTargets: String? = null
+    val focusTargets: String? = null,
+    val preferredExerciseIds: String? = null
 ) {
 
     init {

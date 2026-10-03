@@ -98,10 +98,14 @@ internal object ProgramTransferFixture {
      * which is deliberate: the reader must not depend on formatting, and a document whose focus object sits
      * at column zero is one more proof of that.
      */
-    fun document(focus: String = CUSTOM_FOCUS, days: String = PLAN): String = """
+    fun document(
+        focus: String = CUSTOM_FOCUS,
+        days: String = PLAN,
+        preferredExercises: String = NO_PREFERENCE
+    ): String = """
         {
           "format": "monkfitness.program",
-          "formatVersion": 1,
+          "formatVersion": 2,
           "program": {
             "name": "Imported strength",
             "description": "a program that arrived as a file"
@@ -111,10 +115,27 @@ internal object ProgramTransferFixture {
             "duration": { "kind": "FIXED_DAYS", "days": 30 },
             "schedule": { "kind": "FIXED_WEEKDAYS", "weekdays": ["MONDAY", "WEDNESDAY", "FRIDAY"] },
             "focus": $focus,
-            "days": $days
+            "days": $days,
+            "preferredExercises": $preferredExercises
           }
         }
     """.trimIndent()
+
+    /**
+     * §30 step 28: a document that states no preference.
+     *
+     * An explicit `[]` rather than an absent key, because the two are different documents: the writer always
+     * states the field, so "the user preferred nothing" is something the file **says** (§11's one
+     * representation per value). A version-1 file has no such key at all and is refused as an unsupported
+     * version instead, which is why this fixture cannot express one.
+     */
+    const val NO_PREFERENCE: String = "[]"
+
+    /** A stated preference, most preferred first — the order is the meaning and is kept verbatim. */
+    const val PREFERENCE: String = """["pullups", "dips"]"""
+
+    /** The same two exercises in the other order: a different statement, not an equivalent one. */
+    const val REVERSED_PREFERENCE: String = """["dips", "pullups"]"""
 
     /** A document that passes every validation this stage has. */
     val VALID_DOCUMENT: String = document()

@@ -40,6 +40,12 @@ import java.time.Instant
  *   user's percentages for `CUSTOM`. It defaults to `BALANCED`, which is the configuration that
  *   states nothing: a plan built before Goals & Focus existed was built for every focus with no share
  *   stated, and reading it as anything else would put words in the user's mouth.
+ * @property preferredExercises the exercises the user would rather the generator reach for, most
+ *   preferred first (§9's *user choice*). Revision content for the same reason [focus] is: §6's rule is
+ *   that *structural/program-behavior* changes create a new revision, and a stated generation input is
+ *   program behaviour even when not one exercise moved. It defaults to `ExercisePreference.NONE`,
+ *   which is what a revision written before this field existed must mean — the user named nothing —
+ *   rather than an ordering of the catalogue, which no user ever stated.
  */
 data class ProgramRevision(
     val revisionId: RevisionId,
@@ -50,7 +56,8 @@ data class ProgramRevision(
     val schedule: ProgramSchedule,
     val days: List<ProgramDay>,
     val createdAt: Instant,
-    val focus: FocusPlan = FocusPlan.DEFAULT
+    val focus: FocusPlan = FocusPlan.DEFAULT,
+    val preferredExercises: ExercisePreference = ExercisePreference.NONE
 ) {
 
     init {

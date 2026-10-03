@@ -195,7 +195,12 @@ private fun Map<String, String?>.revisionEntity() = ProgramRevisionEntity(
     // tokens beside it. The *meaning* of the tokens belongs to the mapper, so the harness carries
     // them through unchanged rather than interpreting them.
     focusGoal = this["focusGoal"],
-    focusTargets = this["focusTargets"]
+    focusTargets = this["focusTargets"],
+    // §30 step 28's preference column, carried through as the raw stored bytes for the same reason:
+    // the token format and the ORDER belong to the mapper, so this harness neither parses nor sorts it.
+    // Reading it here is what lets a storage suite measure the round trip at all — a harness that left
+    // the column out would report an empty preference for a correctly stored one.
+    preferredExerciseIds = this["preferredExerciseIds"]
 )
 
 private fun Map<String, String?>.dayEntity() = ProgramDayEntity(

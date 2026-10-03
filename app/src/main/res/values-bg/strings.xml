@@ -1112,4 +1112,14 @@
     <string name="nutrition_preview_required_products">Преглед на необходимите продукти</string>
     <string name="nutrition_preview_product_available">Налично</string>
     <string name="nutrition_preview_product_missing">Липсва</string>
+    <string name="programs_editor_preferred_exercises">Предпочитани упражнения</string>
+    <string name="programs_editor_preferred_exercises_desc">Първо най-предпочитаните. Генерацията ги търси най-напред — и само сред упражненията, които екипировката позволява.</string>
+    <string name="programs_editor_preferred_exercises_empty">Няма предпочитани упражнения. Генераторът няма да предпочита нито едно упражнение.</string>
+    <string name="programs_preferred_add">Предпочитай</string>
+    <string name="programs_preferred_remove">Спри да предпочиташ</string>
+    <string name="programs_preferred_move_up">Нагоре</string>
+    <string name="programs_preferred_move_down">Надолу</string>
+    <string name="programs_preferred_choose">Избери упражнение за предпочитане</string>
+    <string name="programs_preferred_position">%1$d. %2$s — по предпочитание</string>
+    <string name="programs_change_preferred_exercises">предпочитани упражнения</string>
 </resources>

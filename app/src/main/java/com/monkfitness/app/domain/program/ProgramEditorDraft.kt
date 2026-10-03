@@ -43,6 +43,12 @@ import com.monkfitness.app.domain.common.RevisionId
  * @property focus the working Goals & Focus configuration (§8, §7's *Goals & Focus* step). It is
  *   structural content (§6), it is what the Generated Planner is built from, and a save that changes
  *   it and nothing else still creates a revision.
+ * @property preferredExercises the exercises the user would rather the generator reach for, most
+ *   preferred first (§9's *user choice*, the first level of its priority order). It is working
+ *   configuration of exactly the same kind as [focus] — a stated input to generation rather than plan
+ *   content — so §6's *program-behavior changes create a new Revision* applies to it identically, and a
+ *   save that changes it and nothing else still creates a revision. `ExercisePreference.NONE` is the
+ *   absence: the user named nothing, which is a fact and never an implicit ranking.
  */
 data class ProgramEditorDraft(
     val programId: ProgramId? = null,
@@ -53,7 +59,8 @@ data class ProgramEditorDraft(
     val duration: ProgramDuration = ProgramDuration.Indefinite,
     val schedule: ProgramSchedule = ProgramSchedule.FlexiblePerWeek(3),
     val days: List<ProgramDay> = emptyList(),
-    val focus: FocusPlan = FocusPlan.DEFAULT
+    val focus: FocusPlan = FocusPlan.DEFAULT,
+    val preferredExercises: ExercisePreference = ExercisePreference.NONE
 ) {
 
     /** Whether saving this draft would create a Program rather than update one. */

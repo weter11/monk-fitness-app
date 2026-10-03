@@ -107,11 +107,11 @@ class TargetScheduleRevisionArchitectureTest {
         // target vocabulary is what must not appear beside it, and the check above is on `target`
         // precisely so the legacy field is not mistaken for a violation.
         assertEquals(
-            "the draft's fields are exactly §6's structure — the legacy `schedule` among them, and no " +
-                "target field beside it",
+            "the draft's fields are exactly §6's structure — the legacy `schedule` and §9's user " +
+                "preference among them, and no target field beside either",
             listOf(
                 "programId", "baseRevisionId", "name", "description", "mode", "duration",
-                "schedule", "days", "focus"
+                "schedule", "days", "focus", "preferredExercises"
             ),
             draftFields
         )

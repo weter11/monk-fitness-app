@@ -105,20 +105,47 @@ data class ProgramTransferDocument(
      * This is the list §5's *exerciseId validation* step asks the Exercise Library about — the
      * document's own references, not a plan's rows — and it is derived rather than stored so that it
      * cannot disagree with the days it was read from.
+     *
+     * §5's validation step asks about every exercise id the document names, so this list is **both**
+     * sources: the plan's own elements and the revision's [RevisionTransfer.preferredExercises].
+     *
+     * The preference's ids belong here because they are references too, and a file that names an exercise
+     * the receiving app does not ship is a file that cannot be honoured — §5's *"Unknown exerciseId is
+     * rejected"* applies to every id in the document, not only to the ones a day already plans. Folding
+     * them in rather than leaving a second list means the importer asks the library **once**, and a
+     * preferred id the app has never heard of cannot slip through the gap between two validated lists.
+     *
+     * They are deduplicated across both sources (hence `distinct()`), so an exercise that is both planned
+     * and preferred is asked about once — being in a plan says nothing about whether the id resolves.
      */
     val referencedExerciseIds: List<String>
-        get() = revision.days
-            .flatMap { day -> day.exercises.map { element -> element.exerciseId } }
+        get() = (revision.days.flatMap { day -> day.exercises.map { element -> element.exerciseId } } +
+            revision.preferredExercises)
             .distinct()
 }
 
-/** One revision's transferable definition: its configuration and its plan (§17). */
+/**
+ * One revision's transferable definition: its configuration and its plan (§17).
+ *
+ * @property preferredExercises the user's **exercise preference**, most preferred first (§9's *user
+ *   choice*), or an empty list when they named nothing. Transferable because §5 lists *Program
+ *   definition/configuration only* and this is configuration of exactly the kind `focus` is — a stated
+ *   input to generation that travels with the plan it will be regenerated from. It is **not** excluded
+ *   the way history, statistics, adaptive state, sessions and in-progress runtime state are: none of
+ *   those is part of what a Program *is*, while this is part of how this Program plans. Carrying it
+ *   means the imported Program reaches for the same exercises in the same order, which is the one thing
+ *   an importer would otherwise silently drop.
+ *
+ *   Like the focus configuration it carries no identity: the import mints a new `programId`, so the
+ *   preference cannot claim to be the exporter's (§5's *"import always creates a new programId"*).
+ */
 data class RevisionTransfer(
     val mode: ProgramMode,
     val duration: DurationTransfer,
     val schedule: ScheduleTransfer,
     val focus: FocusTransfer,
-    val days: List<DayTransfer>
+    val days: List<DayTransfer>,
+    val preferredExercises: List<String> = emptyList()
 )
 
 /**

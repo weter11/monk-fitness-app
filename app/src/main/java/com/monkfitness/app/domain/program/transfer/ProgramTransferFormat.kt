@@ -49,8 +49,15 @@ object ProgramTransferFormat {
      * rather than partially understood. Adding a field is therefore a version bump, which is what keeps
      * "same program in, byte-identical JSON out" a claim about one known format instead of about every
      * format that ever existed.
+     *
+     * Version 2 is §30 step 28: `revision.preferredExercises` joined version 1's revision object, so the
+     * bump is the format's own stated consequence rather than a new policy. A version-1 file is therefore
+     * refused as unsupported, **not** silently read as a program with no preference — the two are
+     * different documents, and treating an older file as today's would be a guess about what its author
+     * meant (§5: *unknown/unsupported version is rejected*). The rejected file's own
+     * `preferredExercises` is absent, not empty, which is exactly why guessing is unavailable here.
      */
-    const val VERSION: Int = 1
+    const val VERSION: Int = 2
 
     /**
      * The name the shared file carries (§5, §11).

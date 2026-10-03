@@ -96,6 +96,8 @@ class ProgramMigrationPreservationTest {
         database.migrate(AppDatabase.MIGRATION_13_14)
         // Stage 18: the revision-owned explicit target schedule source — two new tables and no backfill.
         database.migrate(AppDatabase.MIGRATION_14_15)
+        // §30 step 28: the user's exercise preference — one nullable column, no default, no backfill.
+        database.migrate(AppDatabase.MIGRATION_15_16)
     }
 
     /** A populated **version-8** database: what a device that ran the target-schema release holds. */
@@ -610,9 +612,11 @@ class ProgramMigrationPreservationTest {
         assertEquals(13, AppDatabase.MIGRATION_12_13.endVersion)
         assertEquals(13, AppDatabase.MIGRATION_13_14.startVersion)
         assertEquals(14, AppDatabase.MIGRATION_13_14.endVersion)
-        // Stage 18's step is the last one, so it is the only one whose end version is the declared one.
         assertEquals(14, AppDatabase.MIGRATION_14_15.startVersion)
         assertEquals(15, AppDatabase.MIGRATION_14_15.endVersion)
+        // §30 step 28's step is the last one, so it is the only one whose end version is the declared one.
+        assertEquals(15, AppDatabase.MIGRATION_15_16.startVersion)
+        assertEquals(16, AppDatabase.MIGRATION_15_16.endVersion)
 
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
@@ -625,6 +629,7 @@ class ProgramMigrationPreservationTest {
             database.migrate(AppDatabase.MIGRATION_12_13)
             database.migrate(AppDatabase.MIGRATION_13_14)
             database.migrate(AppDatabase.MIGRATION_14_15)
+            database.migrate(AppDatabase.MIGRATION_15_16)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }
@@ -726,8 +731,9 @@ class ProgramMigrationPreservationTest {
             database.masterSql().filterKeys { it != "program_revision" }
         )
         assertEquals(
-            "the corrected table gains exactly the columns this step adds, appended",
-            ProgramSchemaFixture.columnsNow("program_revision").map { it.name },
+            "the corrected table gains exactly the columns this step adds, appended — and this chain " +
+                "stopped at 10, so it is compared against that step's boundary and not the current version",
+            ProgramSchemaFixture.columnsAfter("MIGRATION_9_10", "program_revision").map { it.name },
             database.columnNames("program_revision")
         )
         assertEquals(
