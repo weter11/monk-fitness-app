@@ -1112,4 +1112,14 @@
     <string name="nutrition_preview_required_products">Vista previa de productos necesarios</string>
     <string name="nutrition_preview_product_available">Disponible</string>
     <string name="nutrition_preview_product_missing">Faltante</string>
+    <string name="programs_editor_preferred_exercises">Ejercicios preferidos</string>
+    <string name="programs_editor_preferred_exercises_desc">Primero los más preferidos. La generación los busca antes que nada y solo entre los ejercicios que tu equipamiento permite.</string>
+    <string name="programs_editor_preferred_exercises_empty">Sin ejercicios preferidos. El generador no favorecerá ningún ejercicio.</string>
+    <string name="programs_preferred_add">Preferir</string>
+    <string name="programs_preferred_remove">Dejar de preferir</string>
+    <string name="programs_preferred_move_up">Subir</string>
+    <string name="programs_preferred_move_down">Bajar</string>
+    <string name="programs_preferred_choose">Elige un ejercicio para preferir</string>
+    <string name="programs_preferred_position">%1$d. %2$s — por preferencia</string>
+    <string name="programs_change_preferred_exercises">ejercicios preferidos</string>
 </resources>

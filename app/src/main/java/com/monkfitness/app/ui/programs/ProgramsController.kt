@@ -15,6 +15,7 @@ import com.monkfitness.app.domain.program.ProgramDraftReview
 import com.monkfitness.app.domain.program.ProgramEditorDraft
 import com.monkfitness.app.domain.program.ProgramEditorRejection
 import com.monkfitness.app.domain.program.ProgramEditorResult
+import com.monkfitness.app.domain.program.ExercisePreference
 import com.monkfitness.app.domain.program.FocusPlan
 import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.domain.program.Program
@@ -834,6 +835,18 @@ class ProgramsController(
 
     fun setDraftName(name: String) = editDraft { draft -> editor.editor(draft).renamed(name).draft }
 
+    /**
+     * The working draft's own **preference**, or `ExercisePreference.NONE` when no editor is open.
+     *
+     * Read from [workingDraft] — the domain value every other edit goes through — rather than from the
+     * published draft-**UI** model, which is a nullable projection. That is what keeps a single copy of the
+     * preference: the UI model is rebuilt from this draft, so reading it here instead would be reading a
+     * round-tripped copy of the thing being edited. The `NONE` stand-in makes every operation below a
+     * no-op while no editor is open, which is also when `editDraft` refuses to write anything at all.
+     */
+    private fun currentPreference(): ExercisePreference =
+        workingDraft?.preferredExercises ?: ExercisePreference.NONE
+
     /** The working mode (§2): changing it is structural, and the editor service records it as content. */
     fun setDraftMode(mode: ProgramMode) = editDraft { draft -> editor.editor(draft).withMode(mode).draft }
 
@@ -856,6 +869,70 @@ class ProgramsController(
      */
     fun setDraftFocus(focus: FocusPlan) =
         editDraft { draft -> editor.editor(draft).withFocus(focus).draft }
+
+    /**
+     * §7's **exercise preference**: the exercises the next generation should reach for, most preferred
+     * first (§9's *user choice*).
+     *
+     * One whole-value operation, like [setDraftFocus] and for the same reason: the three user actions are
+     * add, remove and move, and each of them is a method on [ExercisePreference] whose result is this
+     * method's argument. What the controller does *not* do is decide the order — it hands the value the
+     * authoring rules produced, so there is no second place where a rank could be invented.
+     *
+     * Structural content, like [setDraftFocus]: §6 makes *program-behavior* changes revision-creating,
+     * and a save that reorders the preference and changes nothing else still creates a revision. That
+     * is the domain's rule, stated in `ProgramStructureAspect.PREFERRED_EXERCISES`, not this method's.
+     */
+    fun setDraftPreferredExercises(preference: ExercisePreference) =
+        editDraft { draft -> editor.editor(draft).withPreferredExercises(preference).draft }
+
+    /**
+     * Prefers [exerciseId], as the least preferred entry.
+     *
+     * The add button. It returns **without changing the draft** when the catalogue does not offer that
+     * exercise, so an id the user could not have picked from the screen can never reach the draft — the
+     * check belongs here because this is the layer that holds the catalogue, and the domain value
+     * cannot see it (§5's split applied to a preference).
+     */
+    fun preferDraftExercise(exerciseId: String) {
+        // The catalogue is the one that can say whether this exercise exists at all. Reading the same
+        // `exerciseOptions` the add-an-element path already reads keeps a single vocabulary of offered
+        // ids, so "addable to the plan" and "preferenceable" cannot disagree about what exists.
+        if (mutableState.value.exerciseOptions.none { option -> option.exerciseId == exerciseId }) return
+        setDraftPreferredExercises(currentPreference().preferring(exerciseId))
+    }
+
+    /** Stops preferring [exerciseId], leaving every other entry exactly where it was. */
+    fun unpreferDraftExercise(exerciseId: String) =
+        setDraftPreferredExercises(currentPreference().without(exerciseId))
+
+    /**
+     * Moves the preference on [exerciseId] one place towards the front — "most preferred" is the first
+     * entry, so the first entry is the one with nowhere to move up to.
+     */
+    fun promoteDraftPreferredExercise(exerciseId: String) =
+        moveDraftPreferredExercise(exerciseId, -1)
+
+    /** Moves the preference on [exerciseId] one place towards the end; the last entry has nowhere to go. */
+    fun demoteDraftPreferredExercise(exerciseId: String) =
+        moveDraftPreferredExercise(exerciseId, +1)
+
+    /**
+     * Moves the preference on [exerciseId] by [offset] places, or changes nothing when it would leave
+     * the list.
+     *
+     * The boundary check is [ExercisePreference.moved]'s own — it refuses an out-of-range position — so
+     * the controller never clamps a move into a silent success: an entry that is already first stays
+     * first because the action is a no-op at the end of the list, not because the position was rewritten.
+     */
+    private fun moveDraftPreferredExercise(exerciseId: String, offset: Int) {
+        val current = currentPreference()
+        val position = current.exerciseIds.indexOf(exerciseId)
+        if (position < 0) return
+        val target = position + 1 + offset
+        if (target !in 1..current.exerciseIds.size) return
+        setDraftPreferredExercises(current.moved(exerciseId, target))
+    }
 
     fun addDraftDay(type: ProgramDayType) =
         editDraft { draft -> editor.editor(draft).addingDay(type).draft }
@@ -1308,6 +1385,10 @@ class ProgramsController(
             // screen displays this value and edits it by handing a new one back to `setDraftFocus`,
             // so there is exactly one copy of it in the UI layer — the draft's.
             focus = draft.focus,
+            // §9's *user choice*, held for exactly the same reason: the draft's own ordering, which the
+            // screen shows as a ranking and edits by handing a whole `ExercisePreference` back. The
+            // order it displays is therefore the order the next generation will be planned against.
+            preferredExercises = draft.preferredExercises,
             isValid = validation.isValid,
             issueRes = validation.issues.map { issue -> issueRes(issue) },
             review = review
@@ -1404,6 +1485,7 @@ class ProgramsController(
         ProgramStructureAspect.DURATION -> R.string.programs_change_duration
         ProgramStructureAspect.SCHEDULE -> R.string.programs_change_schedule
         ProgramStructureAspect.FOCUS -> R.string.programs_change_focus
+        ProgramStructureAspect.PREFERRED_EXERCISES -> R.string.programs_change_preferred_exercises
         ProgramStructureAspect.DAYS -> R.string.programs_change_days
         ProgramStructureAspect.EXERCISES -> R.string.programs_change_exercises
         ProgramStructureAspect.PRESCRIPTIONS -> R.string.programs_change_prescriptions

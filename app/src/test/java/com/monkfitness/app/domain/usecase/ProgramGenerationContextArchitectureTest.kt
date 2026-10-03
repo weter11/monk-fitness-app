@@ -192,10 +192,36 @@ class ProgramGenerationContextArchitectureTest {
                 "a zero one. Every `?:` in this file must be a neutral value, never a number: $invented",
             invented.isEmpty()
         )
+        // **Revised by P28, not relaxed.** P27 could assert a literal `return GenerationPreferences.NONE`
+        // at both exits because §9's top level was the one signal nothing could fill, so "neutral" and
+        // "all-defaults" were the same value. P28 gave that signal an owner, so an exit now carries the
+        // user's stated preference — and the *honest* thing to assert is that neither exit ever invents a
+        // value, not that a particular constructor call is spelled out.
+        //
+        // The claim is therefore restated: every exit builds a `GenerationPreferences` from the draft's own
+        // preference plus the facts that were read, and none of them substitutes `NONE` for a preference
+        // the user actually stated. An implementation that dropped the stated preference would fail; one
+        // that fabricated a ranking would trip the `?:` gate above.
+        val code = code(contextFile.readText())
         assertTrue(
-            "and the neutral value is stated explicitly at both exits — a draft with no Program, and a " +
-                "Program with no performed exercise",
-            code(contextFile.readText()).contains("return GenerationPreferences.NONE")
+            "every exit states the preference explicitly rather than falling back to the all-defaults value",
+            code.contains("userPreferredExerciseIds = preferred")
+        )
+        // Three sites, not two: the no-Program exit, the no-performed-exercise exit, and the full one.
+        // All three must state the preference, and the count is asserted so that a **fourth** construction
+        // — a path that forgot it, or a second request assembly — fails here rather than passing.
+        assertEquals(
+            "every GenerationPreferences construction in this file states the preference: the no-Program " +
+                "exit, the no-history exit and the full one, and no fourth path",
+            3,
+            Regex("GenerationPreferences\\(").findAll(code).count()
+        )
+        assertEquals(
+            "and all three carry the draft's own preference, so none of them can drop what the user stated",
+            3,
+            Regex("GenerationPreferences\\(\\s*userPreferredExerciseIds = preferred")
+                .findAll(code)
+                .count()
         )
     }
 

@@ -609,6 +609,7 @@ internal object ProgramSchemaFixture {
      *                  .qualifyingWindowsSinceLastChange
      *                  .recoveryQualifyingWindows
      *                  program_adaptive_decision_record.reason      the rule that answered (§13, §22)
+     * MIGRATION_15_16  program_revision.preferredExerciseIds         the user's exercise preference (§9)
      * ```
      *
      * See `docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md` for the first,
@@ -641,6 +642,12 @@ internal object ProgramSchemaFixture {
             "program_workout_slot" to listOf(
                 Column("targetOccurrenceKey", TEXT, nullable = true)
             )
+        ),
+        // §30 step 28. Nullable and defaulted to nothing, for the same reason the focus columns above are:
+        // `null` is what an upgraded row holds, and it means the user named no preferred exercises — not a
+        // zero and not a ranking. A `DEFAULT` of any kind would write a preference nobody chose.
+        "MIGRATION_15_16" to mapOf(
+            "program_revision" to listOf(Column("preferredExerciseIds", TEXT, nullable = true))
         )
     )
 
@@ -692,6 +699,23 @@ internal object ProgramSchemaFixture {
     /** What a table holds at the **current** version: the version-8 columns plus the added ones. */
     fun columnsNow(table: String): List<Column> =
         COLUMNS.getValue(table) + ADDED_COLUMNS[table].orEmpty()
+
+    /**
+     * What a table holds **after [through]** and only that step — the version-8 columns plus the columns
+     * every step up to and including it appended.
+     *
+     * [columnsNow] is the right expectation for a chain that ran all the way to the current version, and
+     * the wrong one for a chain that deliberately stops: an earlier suite that upgrades a version-9 database
+     * to 10 to check the *goal correction* would otherwise be asked to produce the columns of steps 14, 15
+     * and 16 as well. Comparing such a chain against the cumulative list fails for a reason that has nothing
+     * to do with the step under test, which is the wrong reason to fail.
+     */
+    fun columnsAfter(through: String, table: String): List<Column> {
+        val upTo = ADDITIVE_STEPS.takeWhile { (step, _) -> step != through }.map { it.first } + through
+        return COLUMNS.getValue(table) + upTo.flatMap { step ->
+            ADDITIVE_STEPS.first { it.first == step }.second[table].orEmpty()
+        }
+    }
 
     /** The tables of the target schema that are owned by a Program and cascade with it. */
     val PROGRAM_OWNED_TABLES: List<String> =

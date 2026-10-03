@@ -282,8 +282,9 @@ class ProgramExportServiceTest {
             program.names
         )
         assertEquals(
-            "the revision's configuration: mode, duration, schedule, focus, plan",
-            listOf("mode", "duration", "schedule", "focus", "days"),
+            "the revision's configuration: mode, duration, schedule, focus, §9's user preference " +
+                "and the plan — the preference is configuration, which §2 transfers",
+            listOf("mode", "duration", "schedule", "focus", "days", "preferredExercises"),
             revision.names
         )
         assertEquals(

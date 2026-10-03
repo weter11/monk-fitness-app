@@ -43,13 +43,18 @@ class ProgramRevisionImmutabilityTest {
         // value classes: the JVM signature has to distinguish `ProgramRevision.copy(RevisionId, ...)`
         // from one that takes plain strings, and the compiler does it by decorating the name. That
         // suffix is itself the evidence that a revision stores typed ids unboxed.
+        // Sorted by the **number**, not by name: ten components reach two digits, and `component10`
+        // sorts before `component2` lexicographically. Sorting the strings would make this pass for the
+        // wrong reason — with nine components the two orders coincide, so the sort was silently load-bearing
+        // on the field count and the tenth is what exposed it.
         val components = methods.filter { it.startsWith("component") }
-            .map { it.substringBefore('-') }
+            .map { it.substringBefore('-').removePrefix("component") }
+            .map { it.toInt() }
             .sorted()
         assertEquals(
-            "a data class exposes one component per property — nine of them, the Goals & Focus " +
-                "configuration included (§6, §8)",
-            (1..9).map { "component$it" },
+            "a data class exposes one component per property — ten of them, the Goals & Focus " +
+                "configuration and §9's user preference included (§6, §8, §9)",
+            (1..10).toList(),
             components
         )
         assertTrue(

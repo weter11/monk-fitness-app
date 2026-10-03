@@ -239,6 +239,17 @@ data class ProgramDraftUi(
      * claims to show.
      */
     val focus: com.monkfitness.app.domain.program.FocusPlan,
+    /**
+     * The draft's **exercise preference**, most preferred first (§9's *user choice*).
+     *
+     * The domain's [com.monkfitness.app.domain.program.ExercisePreference] rather than a presentation of
+     * one, for exactly the reason [focus] is: the screen *displays* the ranking and *edits* it by handing
+     * a whole new value back to `ProgramsController`. A copy of the list here would be a second editable
+     * source of truth, and a reordered entry would then be the one thing a user could change without the
+     * next generation ever seeing it.
+     */
+    val preferredExercises: com.monkfitness.app.domain.program.ExercisePreference =
+        com.monkfitness.app.domain.program.ExercisePreference.NONE,
     /** Whether the draft could be saved right now, as `validate` answered it. */
     val isValid: Boolean,
     /** The findings, as message resources, in the domain's own order. */

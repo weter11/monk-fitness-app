@@ -58,7 +58,7 @@ class ProgramImportServiceTest {
         val draft = rig.review(ProgramTransferFixture.VALID_BYTES)
         val document = ProgramTransferReader.read(ProgramTransferFixture.VALID_DOCUMENT)
 
-        assertEquals(1, draft.formatVersion)
+        assertEquals(2, draft.formatVersion)
         assertEquals("Imported strength", draft.name)
         assertEquals("a program that arrived as a file", draft.description)
         assertEquals(ProgramMode.MANUAL, draft.mode)
@@ -131,7 +131,7 @@ class ProgramImportServiceTest {
 
     @Test
     fun aMissingFormatVersionIsARequiredFieldFailure() = runBlocking {
-        val rejection = rig.rejectionOf(ProgramTransferFixture.editedBytes("\"formatVersion\": 1,", ""))
+        val rejection = rig.rejectionOf(ProgramTransferFixture.editedBytes("\"formatVersion\": 2,", ""))
 
         assertTrue(
             "a required field the document does not carry: $rejection",
@@ -143,7 +143,7 @@ class ProgramImportServiceTest {
     @Test
     fun anUnsupportedFormatVersionIsItsOwnAnswer() = runBlocking {
         val rejection = rig.rejectionOf(
-            ProgramTransferFixture.editedBytes("\"formatVersion\": 1", "\"formatVersion\": 7")
+            ProgramTransferFixture.editedBytes("\"formatVersion\": 2", "\"formatVersion\": 7")
         ) as? ProgramTransferRejection.UnsupportedFormatVersion
 
         assertEquals(
@@ -151,7 +151,11 @@ class ProgramImportServiceTest {
             7,
             rejection?.found
         )
-        assertEquals("and the version this app reads is stated with it", 1, rejection?.supported)
+        assertEquals(
+            "and the version this app reads is stated with it",
+            ProgramTransferFormat.VERSION,
+            rejection?.supported
+        )
     }
 
     @Test
@@ -169,8 +173,8 @@ class ProgramImportServiceTest {
     fun aFieldTheFormatDoesNotDefineIsRejected() = runBlocking {
         val rejection = rig.rejectionOf(
             ProgramTransferFixture.editedBytes(
-                "\"formatVersion\": 1,",
-                "\"formatVersion\": 1,\n  \"programId\": \"program-secret\","
+                "\"formatVersion\": 2,",
+                "\"formatVersion\": 2,\n  \"programId\": \"program-secret\","
             )
         )
 

@@ -12,6 +12,7 @@ import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.domain.prescription.RepPrescription
 import com.monkfitness.app.domain.prescription.TimePrescription
 import com.monkfitness.app.domain.program.Focus
+import com.monkfitness.app.domain.program.ExercisePreference
 import com.monkfitness.app.domain.program.FocusAllocation
 import com.monkfitness.app.domain.program.FocusPlan
 import com.monkfitness.app.domain.program.Goal
@@ -112,7 +113,8 @@ internal fun revisionDomain(
             )
         },
         createdAt = storedInstant("program_revision.createdAt", revision.createdAt),
-        focus = focusOf(revision)
+        focus = focusOf(revision),
+        preferredExercises = preferenceOf(revision)
     )
 }
 
@@ -138,7 +140,8 @@ internal fun ProgramRevision.toEntity(): ProgramRevisionEntity = ProgramRevision
     scheduleSessionsPerWeek = (schedule as? ProgramSchedule.FlexiblePerWeek)?.sessionsPerWeek,
     createdAt = storedMilliseconds(createdAt),
     focusGoal = focus.goal.name,
-    focusTargets = focus.storedFocusTargets()
+    focusTargets = focus.storedFocusTargets(),
+    preferredExerciseIds = preferredExercises.storedExerciseIds()
 )
 
 /** The duration one revision row stores. */
@@ -295,6 +298,65 @@ private const val TARGET_SEPARATOR: String = ","
 
 /** The separator between a focus's name and its share in a stored `CUSTOM` target. */
 private const val SHARE_SEPARATOR: String = ":"
+
+/**
+ * The **exercise preference** one revision row stores (§9's *user choice*), or `null` for none.
+ *
+ * ```text
+ * preferredExerciseIds   null        pullups,dips
+ * ```
+ *
+ * The user's order is stored verbatim and read back verbatim. That is the one place in this mapper
+ * where a canonical order would be wrong: [FocusPlan] has a vocabulary order that makes any two
+ * equivalent configurations byte-identical, and a preference has none — `["pullups", "dips"]` and
+ * `["dips", "pullups"]` are different statements, and re-sorting them would silently swap what the
+ * user said they would rather train first. So the round trip is order-preserving by construction, and
+ * [ExercisePreference] is the only thing that decides what that order may be.
+ *
+ * `null` is read as [ExercisePreference.NONE] — the user named nothing — which is both what a row
+ * written before this column existed means and what `Save` writes for a Program that never stated a
+ * preference. It is not read as an empty list token, and above all not as "no preference means every
+ * exercise in catalogue order".
+ *
+ * Reading is strict where the domain is strict: a stored value that names the same exercise twice is
+ * invalid persisted data and fails here, because a preference whose order has two answers at the same
+ * position is not a preference at all. Whether each id names a real shipped exercise is **not** decided
+ * here — this mapper has no catalogue, and inventing the check would be a second vocabulary (§5).
+ */
+private fun preferenceOf(revision: ProgramRevisionEntity): ExercisePreference =
+    ExercisePreference(preferredIdsOf(revision))
+
+/** The stored preference tokens, or no tokens at all when the column is `null`. */
+private fun preferredIdsOf(revision: ProgramRevisionEntity): List<String> {
+    val stored = revision.preferredExerciseIds ?: return emptyList()
+    val ids = stored.split(PREFERENCE_SEPARATOR).map { it.trim() }
+    require(ids.isNotEmpty() && ids.none { it.isEmpty() }) {
+        "revision '${revision.revisionId}' stores preferred exercises that are not a list of exercise " +
+            "ids: '$stored' (§9)"
+    }
+    return ids
+}
+
+/**
+ * The stored form of one preference: its ids joined in the user's own order, or `null` when nothing is
+ * preferred.
+ *
+ * `null` rather than an empty string for the empty case, for the same reason `focusTargets` does it: the
+ * absence is a fact worth storing as itself, and a blank string would have to be re-read as an absence
+ * anyway — one representation per value (§11).
+ */
+private fun ExercisePreference.storedExerciseIds(): String? =
+    exerciseIds.takeIf { it.isNotEmpty() }?.joinToString(PREFERENCE_SEPARATOR)
+
+/**
+ * The separator between two stored preferred exercise ids.
+ *
+ * Distinct from [TARGET_SEPARATOR] because the two columns hold different things and a shared separator
+ * would let a focus token be read as an exercise id. A comma is safe for the same reason the focus
+ * targets' is: an exercise id is a name from the catalogue and contains no comma, which
+ * `PlanMapperTest` pins value for value.
+ */
+private const val PREFERENCE_SEPARATOR: String = ","
 
 /** One stored plan day with its ordered elements. */
 internal fun ProgramDayEntity.toDomain(elements: List<ProgramExercise>): ProgramDay = ProgramDay(

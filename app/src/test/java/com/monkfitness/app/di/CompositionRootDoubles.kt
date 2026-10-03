@@ -271,6 +271,9 @@ internal class CompositionRootRig(
         database.migrate(AppDatabase.MIGRATION_12_13)
         database.migrate(AppDatabase.MIGRATION_13_14)
         database.migrate(AppDatabase.MIGRATION_14_15)
+        // §30 step 28: the user's exercise preference column. Stopping short would leave every
+        // repository suite below exercising a database the app can no longer produce.
+        database.migrate(AppDatabase.MIGRATION_15_16)
     }
 
     val database = SqliteAppDatabase(engine)

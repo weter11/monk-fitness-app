@@ -50,16 +50,21 @@ fun interface GenerationContextSource {
  * GenerationPreferences(recentExerciseIds = …)
  * ```
  *
- * ### Exactly one signal is filled, and that is the honest answer
+ * ### Two signals are filled, and each for its own reason
  *
- * Of the six signals, **`recentExerciseIds` is the only one production can state today**, because it
- * is the only one whose semantic unit is a thing the session graph already records: *an exercise the
- * user actually performed, most recent first*. Every other signal is left at its neutral value, and
- * each omission is a **recorded gap** rather than a hole to paper over:
+ * **`recentExerciseIds`** is filled because its semantic unit is a thing the session graph already
+ * records: *an exercise the user actually performed, most recent first*.
+ *
+ * **`userPreferredExerciseIds`** is filled because §30 step 28 gave it a real owner: the user's own
+ * stated ordering, persisted as revision content and carried on the draft. It needs no read, because
+ * a draft's configuration is stated rather than inferred — which is also why a draft that has never
+ * been saved can still carry one (`Generate` alters only a draft, §7).
+ *
+ * The remaining four are left at their neutral value, and each omission is a **recorded gap** rather
+ * than a hole to paper over:
  *
  * | signal | why it stays neutral |
  * | --- | --- |
- * | `userPreferredExerciseIds` | no persisted, user-authored preference ordering exists. The draft's `USER_AUTHORED` elements are *plan content* that reconciliation preserves, not a ranked wish list, and reading them as one would be a different meaning the codebase does not state. |
  * | `adaptivePreferredExerciseIds` | the stored `FamilyProgressionState.currentExerciseId` is *"the exercise the family is currently on"* — family-scoped and revision-scoped, and no existing contract defines it as an exercise-selection preference for generation. Promoting it would fabricate the preference the field is named for. |
  * | `recentExposureByFocus` | the unit is **focus assignments** the recent context was loaded with. Neither `WorkoutSession`, `SessionExercise`, `EffectiveExercise` nor `ProgramExercise` carries a focus, and a slot's `FocusAssignment` is a generated-plan value that reconciliation does not keep per element. Classifying performed exercises through `ProductionFocusClassification` would be exactly the reconstruction algorithm this stage must not invent — and an exercise that *trains* two focuses is not two assignments. |
  * | `recentLoadByFocus` | the same missing link, one dimension up: there is no focus to attribute a performed set to. A `LoadProfile` is family-scoped and multi-dimensional; summing it, or converting repetitions into a count of sets, would be a cross-dimension conversion. |
@@ -102,12 +107,19 @@ class ProgramHistoryGenerationContext(
 ) : GenerationContextSource {
 
     override suspend fun preferencesFor(draft: ProgramEditorDraft): GenerationPreferences {
-        val programId = draft.programId ?: return GenerationPreferences.NONE
+        // The user's own preference is the draft's, and is forwarded before anything is read: it is
+        // stated configuration exactly as `focus` is, so it needs no storage read to be believed, and a
+        // draft that has not been saved still states it (Generate alters only a draft, §7).
+        val preferred = draft.preferredExercises.exerciseIds
+        val programId = draft.programId ?: return GenerationPreferences(userPreferredExerciseIds = preferred)
         val performed = recentExerciseIdsOf(sessions.sessionsOfProgram(programId))
         return if (performed.isEmpty()) {
-            GenerationPreferences.NONE
+            GenerationPreferences(userPreferredExerciseIds = preferred)
         } else {
-            GenerationPreferences(recentExerciseIds = performed)
+            GenerationPreferences(
+                userPreferredExerciseIds = preferred,
+                recentExerciseIds = performed
+            )
         }
     }
 
