@@ -20,7 +20,9 @@ import com.monkfitness.app.domain.usecase.ProgramGenerationService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramSaveService
 import com.monkfitness.app.domain.usecase.ProgramStartService
+import com.monkfitness.app.domain.usecase.ProductionGenerationBoundary
 import com.monkfitness.app.domain.usecase.ProgramTransferRig
+import com.monkfitness.app.domain.usecase.GenerationCatalogue
 import com.monkfitness.app.domain.usecase.SHIPPED_EXERCISE_CATALOGUE
 import com.monkfitness.app.domain.usecase.ProductionFocusClassification
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
@@ -116,7 +118,12 @@ internal class ProgramsRig(key: String = "ui") {
     private fun generationOver(
         source: ExerciseGenerationFacts.GenerationFocusSource
     ): ProgramGenerationService = ProgramGenerationService(
-        catalogue = SHIPPED_EXERCISE_CATALOGUE,
+        catalogue = GenerationCatalogue { focusSource ->
+            if (generationFails) {
+                throw IllegalStateException("planted fault: the exercise catalogue could not be read")
+            }
+            SHIPPED_EXERCISE_CATALOGUE.catalogueOf(focusSource)
+        },
         focusSource = source,
         ids = com.monkfitness.app.domain.program.DraftIdSource { transfer.ids.newId() }
     )
@@ -137,6 +144,66 @@ internal class ProgramsRig(key: String = "ui") {
         .filter { exercise -> exercise.requiredEquipment.isNotEmpty() }
         .map { it.id }
         .toSet()
+
+    /**
+     * Rebuilds [controller] over the **current** [generation].
+     *
+     * P26 needs to hand the state holder a service that fails (§28's `SYSTEM_FAILURE` class), and a
+     * controller takes its collaborators at construction. Rather than a second construction site — which
+     * `ProgramsArchitectureTest` pins to exactly two files — the test states the service and asks the
+     * rig to rewire, so the graph under test stays the one the composition root builds.
+     */
+    fun rebuiltController(): ProgramsController = buildController()
+
+    /**
+     * The generation service over a **fixture** catalogue rather than the shipped one.
+     *
+     * §30 step 26 needs a pass that reports *two different* planner limitations in one result —
+     * "nothing trains this focus" and "every exercise for it needs equipment you do not have" — and the
+     * shipped catalogue cannot produce that pair: its classification covers every exercise, so the only
+     * reachable limitation is the equipment one. A fixture states the two facts instead of arguing the
+     * production data into failing, which is the same discipline P25's refusal tests used.
+     */
+    fun generationOver(
+        exercises: List<com.monkfitness.app.data.model.Exercise>,
+        source: ExerciseGenerationFacts.GenerationFocusSource
+    ): ProgramGenerationService = ProgramGenerationService(
+        catalogue = GenerationCatalogue { focusSource ->
+            ProductionGenerationBoundary.catalogueOf(exercises, focusSource)
+        },
+        focusSource = source,
+        ids = com.monkfitness.app.domain.program.DraftIdSource { transfer.ids.newId() }
+    )
+
+    /** A catalogue entry the fixture states, in the shape the generation boundary reads. */
+    fun fixtureExercise(
+        id: String,
+        equipment: Set<Equipment> = emptySet()
+    ): com.monkfitness.app.data.model.Exercise = com.monkfitness.app.data.model.Exercise(
+        id = id,
+        familyId = "family_$id",
+        animationId = "anim_$id",
+        nameRes = 0,
+        descriptionRes = 0,
+        techniqueRes = 0,
+        imageRes = null,
+        sets = 3,
+        reps = 10,
+        category = com.monkfitness.app.data.model.ExerciseCategory.STRENGTH,
+        subCategory = com.monkfitness.app.data.model.ExerciseSubCategory.FULL_BODY,
+        requiredEquipment = equipment
+    )
+
+    /**
+     * When set, the generation pass fails at the catalogue read — §28's `SYSTEM_FAILURE` class, on
+     * purpose and without a device.
+     *
+     * It is a flag on the **catalogue port** rather than a second service handed to the state holder,
+     * because the controller takes its collaborators at construction: rebuilding the controller to give
+     * it a failing service would throw away the very working draft a failure test is about. The failure
+     * therefore arrives through the same seam a real one does.
+     */
+    var generationFails: Boolean = false
 
     fun withFocusSource(source: ExerciseGenerationFacts.GenerationFocusSource) {
         generation = generationOver(source)
@@ -310,6 +377,9 @@ internal class ProgramsRig(key: String = "ui") {
     /** How many exercises the last generation pass put into the draft. */
     suspend fun plannedElementCount(): Int =
         state.draft?.days?.sumOf { day -> day.elements.size } ?: 0
+
+    /** How many plan days the last generation pass put into the draft. */
+    suspend fun plannedDayCount(): Int = state.draft?.days?.size ?: 0
 
     /** How many revisions a Program has — the count a rename, select or archive must not change. */
     suspend fun revisionCount(programId: ProgramId): Int = transfer.revisionCount(programId)

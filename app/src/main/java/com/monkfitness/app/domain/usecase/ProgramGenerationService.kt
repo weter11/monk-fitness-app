@@ -129,7 +129,38 @@ class ProgramGenerationService(
     ): ProgramGenerationResult = edit(draft, availableEquipment)
 
     /**
-     * The one pass both buttons run: read the configuration, read the catalogue, assemble the
+     * §7's **Preview**: the same pass, offered for reading rather than for adoption.
+     *
+     * ```text
+     * preview(draft, availableEquipment)  →  the very same edit(…) → the very same GeneratedDraftEdit
+     * ```
+     *
+     * It is deliberately **not** a second pipeline. There is no `previewPlan`, no branch in the
+     * request assembly and no alternative caller of the planner: [preview] hands straight to the same
+     * private [edit] that [generate] and [regenerate] hand to, so a preview cannot be built from a
+     * different configuration, a different catalogue or a different policy than the Generate the user
+     * is being shown a preview of. A *different* planner path would be a second set of generation
+     * semantics that could disagree with the one the button applies, which is precisely what §33's
+     * *"no silent substitution"* is about.
+     *
+     * ### What the caller does with the result is the caller's business
+     *
+     * This class cannot and does not decide whether a preview is applied. It returns a
+     * [ProgramGenerationResult.Generated] holding a prospective [GeneratedDraftEdit] — a value, like
+     * every other operation here — and whether that value becomes the working draft is the caller's
+     * single explicit decision. Nothing here mutates the draft it was given: every operation returns
+     * the next immutable value, so a caller that ignores a preview has changed nothing at all.
+     *
+     * @param availableEquipment the equipment the user has, forwarded into the request unchanged,
+     *   exactly as [generate] forwards it.
+     */
+    fun preview(
+        draft: ProgramEditorDraft,
+        availableEquipment: Set<Equipment>
+    ): ProgramGenerationResult = edit(draft, availableEquipment)
+
+    /**
+     * The one pass all three buttons run: read the configuration, read the catalogue, assemble the
      * request, and hand it to the generated editor.
      *
      * The two refusals are typed values rather than thrown exceptions (§28: an expected state is a

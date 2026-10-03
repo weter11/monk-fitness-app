@@ -39,6 +39,9 @@ import com.monkfitness.app.ui.programs.ProgramDraftDayUi
 import com.monkfitness.app.ui.programs.ProgramDraftElementUi
 import com.monkfitness.app.ui.programs.ProgramDraftEntry
 import com.monkfitness.app.ui.programs.ProgramDraftUi
+import com.monkfitness.app.ui.programs.ProgramGenerationPreviewRes
+import com.monkfitness.app.ui.programs.ProgramGenerationPreviewElementUi
+import com.monkfitness.app.ui.programs.ProgramGenerationPreviewUi
 import com.monkfitness.app.ui.programs.ProgramsController
 import com.monkfitness.app.ui.programs.focusLabelRes
 import com.monkfitness.app.ui.programs.matchesExerciseQuery
@@ -158,9 +161,26 @@ fun ProgramEditorScreen(
                 TextButton(onClick = { runAction(scope) { controller.generateDraft() } }) {
                     Text(stringResource(R.string.programs_editor_generate))
                 }
+                TextButton(onClick = { runAction(scope) { controller.previewDraft() } }) {
+                    Text(stringResource(R.string.programs_editor_preview))
+                }
                 TextButton(onClick = { runAction(scope) { controller.regenerateDraft() } }) {
                     Text(stringResource(R.string.programs_editor_regenerate))
                 }
+            }
+
+            // §30 step 26's Preview. It is rendered from the controller's presentation of a
+            // generation pass that has NOT been applied: no draft, no focus and no schedule is
+            // changed by this section, and the only thing it can do is offer the two explicit
+            // endings — adopt the plan, or close the preview. Every string it shows is a resource
+            // handed down by the controller, and the localized catalogue name is preferred over a
+            // raw exercise id exactly as the plan below does it.
+            state.generationPreview?.let { preview ->
+                GenerationPreviewSection(
+                    preview = preview,
+                    onApply = { controller.useGenerationPreview() },
+                    onDismiss = { controller.dismissGenerationPreview() }
+                )
             }
 
             ProgramSection(stringResource(R.string.programs_editor_goals_focus))
@@ -694,6 +714,224 @@ private fun goalLabelRes(goal: Goal): Int = when (goal) {
     Goal.FOCUSED -> R.string.programs_goal_focused
     Goal.CUSTOM -> R.string.programs_goal_custom
 }
+
+/**
+ * §30 step 26's **Preview** — what a generation pass would produce, and what it would do to the draft
+ * the user already has, shown before anything is adopted.
+ *
+ * The section renders a [ProgramGenerationPreviewUi] and nothing else: it receives no `GeneratedPlan`,
+ * no `GeneratedSlot`, no `ReconciliationReport` and no `GenerationLimitation`, so there is no
+ * generated vocabulary here to make a decision with. What it *can* do is present, in the order the
+ * controller handed over (never re-sorted and never re-ranked — the plan's own order is the answer):
+ *
+ * ```text
+ * N days · N exercises
+ * Day 1  primary focus, secondaries, each exercise with its prescription
+ * …
+ * what happens to your current plan: kept / added / removed / days removed
+ * your own choices are kept: each conflict, with the reason it is kept
+ * what could not be planned: each limitation, as its own sentence
+ * [ Use this plan ]   [ Close preview ]
+ * ```
+ *
+ * A conflict is rendered as a fact to be told, never as an error: the pinned or self-authored
+ * exercise stays, and the preview says so rather than colouring it as a problem the user must fix.
+ * Nothing here pairs a removed exercise with an added one — the reconciliation reports a replacement
+ * as its two halves precisely because the planner states no relation between them, and a screen that
+ * invented one would be asserting something the domain refused to.
+ *
+ * The two actions are the only two a preview can end in. Neither saves: after **Use this plan** the
+ * draft holds the generated plan and the user still presses Save, which is §7's `Generate`/`Preview`
+ * versus `Save` distinction in its most consequential place.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GenerationPreviewSection(
+    preview: ProgramGenerationPreviewUi,
+    onApply: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = stringResource(ProgramGenerationPreviewRes.TITLE),
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                text = stringResource(
+                    ProgramGenerationPreviewRes.SUMMARY,
+                    preview.dayCount,
+                    preview.exerciseCount
+                ),
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            preview.days.forEach { day ->
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = stringResource(
+                            R.string.programs_preview_change_day,
+                            day.position
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = stringResource(
+                            ProgramGenerationPreviewRes.PRIMARY_FOCUS,
+                            stringResource(day.primaryFocusRes)
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    if (day.secondaryFocusRes.isNotEmpty()) {
+                        Text(
+                            text = stringResource(
+                                ProgramGenerationPreviewRes.SECONDARY_FOCUS,
+                                day.secondaryFocusRes.map { res ->
+                                    stringResource(res)
+                                }.joinToString(", ")
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    day.elements.forEach { element ->
+                        Text(
+                            text = previewElementLabel(element),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+
+            if (preview.hasReconciliation) {
+                Text(
+                    text = stringResource(ProgramGenerationPreviewRes.RECONCILIATION),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                ProgramFactRow(
+                    label = stringResource(ProgramGenerationPreviewRes.PRESERVED),
+                    value = preview.preservedCount.toString()
+                )
+                ProgramFactRow(
+                    label = stringResource(ProgramGenerationPreviewRes.ADDED),
+                    value = preview.addedCount.toString()
+                )
+                ProgramFactRow(
+                    label = stringResource(ProgramGenerationPreviewRes.DROPPED),
+                    value = preview.droppedCount.toString()
+                )
+                if (preview.removedDayCount > 0) {
+                    ProgramFactRow(
+                        label = stringResource(ProgramGenerationPreviewRes.DAY_REMOVED),
+                        value = preview.removedDayCount.toString()
+                    )
+                }
+            }
+
+            if (preview.conflicts.isNotEmpty()) {
+                Text(
+                    text = stringResource(ProgramGenerationPreviewRes.CONFLICTS),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                preview.conflicts.forEach { conflict ->
+                    val name = if (conflict.hasLocalizedName) {
+                        stringResource(conflict.nameRes)
+                    } else {
+                        conflict.exerciseId
+                    }
+                    Text(
+                        text = stringResource(
+                            if (conflict.levelRes == ProgramGenerationPreviewRes.LEVEL_PINNED) {
+                                R.string.programs_preview_conflict_pinned
+                            } else {
+                                R.string.programs_preview_conflict_override
+                            },
+                            conflict.dayPosition,
+                            name
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
+
+            if (preview.limitations.isNotEmpty()) {
+                Text(
+                    text = stringResource(ProgramGenerationPreviewRes.LIMITATIONS),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                preview.limitations.forEach { limitation ->
+                    Text(
+                        text = if (limitation.namesAFocus) {
+                            stringResource(
+                                limitation.reasonRes,
+                                stringResource(limitation.focusLabelRes)
+                            )
+                        } else {
+                            stringResource(limitation.reasonRes)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onApply, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(ProgramGenerationPreviewRes.APPLY))
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(ProgramGenerationPreviewRes.DISMISS))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One planned exercise as a Preview line: the catalogue's localized name when it has one, the id only
+ * when it does not, and the prescription in the element's **own** dimension (§10) — repetitions or
+ * seconds, with no formatting invented for the preview.
+ *
+ * Every per-set target is shown, in the prescription's own order, joined with the localized separator.
+ * §10's generated shapes are *unequal* by design (`12 / 10 / 8 / 6` and `30 / 30 / 45`), so a Preview
+ * that printed only the first term would state `4 sets of 12 reps` for a plan that drops to 6 — and it
+ * would overstate the plan in the one direction a reader is least likely to notice. The join is
+ * deliberately un-sorted and un-deduplicated: a repetition prescription is a *progression*, and
+ * collapsing it to its largest term would be as much a misstatement as truncating it.
+ *
+ * The terms are joined with ` / `, which is **notation rather than prose** and is therefore the same
+ * in every locale. Declaring it a string resource would invite a translator to "translate" a slash
+ * and would put a seventh identical value in seven tables; `ProgramsLocalizationTest` also holds the
+ * Program copy to differing from English word for word in Russian and Ukrainian, which a deliberately
+ * universal separator cannot satisfy. It is also the separator §10's own two examples are written with.
+ */
+@Composable
+private fun previewElementLabel(element: ProgramGenerationPreviewElementUi): String {
+    val name = if (element.nameRes != 0) stringResource(element.nameRes) else element.exerciseId
+    val prescription = stringResource(
+        if (element.dimension == PrescriptionDimension.TIME_BASED) {
+            ProgramGenerationPreviewRes.PRESCRIPTION_SECONDS
+        } else {
+            ProgramGenerationPreviewRes.PRESCRIPTION_REPS
+        },
+        element.sets,
+        element.targetsPerSet.joinToString(PER_SET_TARGET_SEPARATOR)
+    )
+    return "$name \\u00b7 $prescription"
+}
+
+/**
+ * Joins the per-set terms of a prescription — `12 / 10 / 8 / 6`, `30 / 30 / 45`.
+ *
+ * §10 writes both of its own prescription examples with exactly this separator, so it is the notation
+ * the blueprint already uses rather than one this stage chose.
+ */
+private const val PER_SET_TARGET_SEPARATOR = " / "
 
 /** One plan day while editing: its heading, its elements and the three things a day accepts. */
 @Composable

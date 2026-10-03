@@ -26,6 +26,10 @@ import com.monkfitness.app.domain.program.ProgramSaveOutcome
 import com.monkfitness.app.domain.program.ProgramSchedule
 import com.monkfitness.app.domain.program.ProgramStructureAspect
 import com.monkfitness.app.domain.program.ProgramDuration
+import com.monkfitness.app.domain.program.generated.ChangeKind
+import com.monkfitness.app.domain.program.generated.GeneratedDraftEdit
+import com.monkfitness.app.domain.program.generated.GenerationLimitation
+import com.monkfitness.app.domain.program.generated.PreservationLevel
 import com.monkfitness.app.domain.program.transfer.ProgramTransferFile
 import com.monkfitness.app.domain.program.transfer.ProgramTransferRejection
 import com.monkfitness.app.domain.program.transfer.ProgramTransferResult
@@ -187,6 +191,41 @@ class ProgramsController(
      * `docs/PROGRAM_UI_NAVIGATION.md`).
      */
     private var draftSeedKey: String? = null
+
+    /**
+     * The prospective result of the last Preview — §30 step 26's *temporary operation result*.
+     *
+     * ### What it is for, and what it is not
+     *
+     * ```text
+     * CURRENT WORKING DRAFT
+     *         │
+     *         ├── Preview ──→ PROSPECTIVE RESULT      ← this field, and nothing else
+     *         │                    │
+     *         │                    └── Apply ──→ CURRENT WORKING DRAFT
+     *         │
+     *         └── Save ──→ PERSISTED PROGRAM / REVISION
+     * ```
+     *
+     * It holds exactly what the service returned — the prospective draft, the plan and the
+     * reconciliation report — because [useGenerationPreview] has to install *that* draft rather than
+     * one it rebuilt. It is deliberately **not** a source of truth: there is no second
+     * `ProgramEditorDraft` in the UI state, no `FocusPlan` of its own, no schedule, no generated
+     * configuration, and nothing here is ever saved, because the only route from the UI layer to
+     * storage remains [saveDraft].
+     *
+     * ### Why it is invalidated rather than compared
+     *
+     * Every operation that changes the working draft clears this field immediately
+     * ([clearGenerationPreview]), and so does opening another editor flow, discarding the draft, and
+     * Generate/Regenerate. The alternative — holding a hash, a timestamp or a revision identity of the
+     * draft a preview was built from and re-deciding staleness against it — would be a *second
+     * identity system* invented for one screen, and every way of getting it wrong (a rebuild that
+     * mints a new identity, a rebase that quietly edits the preview, a conflict type with no owner)
+     * is worse than the honest answer. Clearing is also the only option that cannot leave a user
+     * looking at a plan built for a draft that no longer exists.
+     */
+    private var pendingPreview: GeneratedDraftEdit? = null
 
     // ---------------------------------------------------------------- My Programs (§21)
 
@@ -437,6 +476,8 @@ class ProgramsController(
      */
     private fun beginEditorFlow() {
         draftSeedKey = null
+        // Another editor flow is another draft: a preview built for the previous one has no subject.
+        clearGenerationPreview()
         mutableState.update { it.copy(draftPlannedStartDate = null) }
     }
 
@@ -489,6 +530,7 @@ class ProgramsController(
     fun discardDraft() {
         workingDraft = null
         draftSeedKey = null
+        clearGenerationPreview()
         mutableState.update { it.copy(draft = null, draftPlannedStartDate = null) }
     }
 
@@ -535,6 +577,9 @@ class ProgramsController(
      */
     suspend fun generateDraft(): Boolean {
         val draft = workingDraft ?: return false
+        // Generate is the immediate application of a pass; a preview the user never chose must not
+        // stay on screen beside a plan that was applied without asking.
+        clearGenerationPreview()
         val result = try {
             generation.generate(draft, availableEquipment())
         } catch (failure: Throwable) {
@@ -570,12 +615,221 @@ class ProgramsController(
      */
     suspend fun regenerateDraft(): Boolean = generateDraft()
 
+    /**
+     * §7's **Preview** for a Generated draft — the same generation pass, offered for reading.
+     *
+     * ```text
+     * working draft → ProgramGenerationService.preview → GenerationRequest → GeneratedPlanner
+     *              → ProgramGeneratedEditor → PlanReconciler → a PROSPECTIVE draft, held beside the
+     *                                                        working one and never installed
+     * ```
+     *
+     * ### The invariant this method exists to protect
+     *
+     * ```text
+     * ProgramEditorDraft before  ==  ProgramEditorDraft after
+     * ```
+     *
+     * Nothing here touches [workingDraft]. The service returns the next immutable value and this
+     * object keeps it in [pendingPreview] instead of publishing it as the draft, which is why a Preview
+     * creates no Revision, writes no Program row, plans no Slot and modifies no user content: it never
+     * reaches [saveDraft], and the only state it publishes is [ProgramsUiState.generationPreview], a
+     * presentation that no save path reads.
+     *
+     * Generate and Regenerate keep their existing meaning — *apply the result now* — and clear any
+     * pending preview, so a plan the user has not chosen is never left on screen beside a plan that was
+     * applied without asking.
+     *
+     * A refusal and a failure behave exactly as they do for Generate: the working draft is untouched,
+     * no preview is published, and the reason is on the state as the notice. The absence of a plan is
+     * never turned into an empty preview, and a fake plan is never invented to fill one.
+     *
+     * @return whether a prospective result was produced.
+     */
+    suspend fun previewDraft(): Boolean {
+        val draft = workingDraft ?: return false
+        val result = try {
+            generation.preview(draft, availableEquipment())
+        } catch (failure: Throwable) {
+            ProgramGenerationResult.Failed(failure)
+        }
+        return when (result) {
+            is ProgramGenerationResult.Generated -> {
+                pendingPreview = result.edit
+                mutableState.update {
+                    it.copy(
+                        generationPreview = previewUiOf(result.edit),
+                        notice = ProgramNotice.GENERATION_PREVIEWED
+                    )
+                }
+                true
+            }
+
+            is ProgramGenerationResult.Refused -> {
+                mutableState.update { it.copy(notice = generationNoticeFor(result.reason)) }
+                false
+            }
+
+            is ProgramGenerationResult.Failed -> {
+                mutableState.update { it.copy(notice = ProgramNotice.GENERATION_FAILED) }
+                false
+            }
+        }
+    }
+
+    /**
+     * §7's explicit **Use this plan**: the one place a prospective result becomes the working draft.
+     *
+     * ```text
+     * pending preview → prospective draft → workingDraft → publishDraft() → pending preview = null
+     * ```
+     *
+     * The draft installed is *exactly* the one the preview pass produced, including the identities the
+     * reconciler minted for added days and elements. Rebuilding one here would be a second
+     * reconciliation, and reconciling the same plan twice is not idempotent: the second pass would see
+     * the first pass's additions as the draft's own content and report a different reconciliation.
+     *
+     * Nothing is persisted here either — `Preview`, `Apply` and `Save` are three different operations.
+     * After this the user is looking at a draft that has been generated but not stored, the preview is
+     * gone, the Review is cleared (it described the previous draft), and **Save** is still required.
+     *
+     * @return whether a preview was applied.
+     */
+    fun useGenerationPreview(): Boolean {
+        val preview = pendingPreview ?: return false
+        pendingPreview = null
+        workingDraft = preview.draft
+        // The review and the preview both describe a draft that is no longer the working one.
+        publishDraft(review = null)
+        mutableState.update { it.copy(generationPreview = null) }
+        return true
+    }
+
     /** §7's generation refusals, as the sentence the user reads. */
     private fun generationNoticeFor(refusal: ProgramGenerationRefusal): ProgramNotice = when (refusal) {
         is ProgramGenerationRefusal.NoExerciseStatesItsFocus ->
             ProgramNotice.GENERATION_UNAVAILABLE
 
         is ProgramGenerationRefusal.NothingPlannable -> ProgramNotice.GENERATION_REFUSED
+    }
+
+    /**
+     * Closes a Preview without adopting it.
+     *
+     * The same [clearGenerationPreview] every draft change uses: the prospective result is dropped,
+     * the working draft was never touched, and nothing is persisted. It exists because a user who has
+     * read a preview and does not want it needs a way out that is *not* "apply it" — otherwise the
+     * only visible ending would be the one that changes their draft.
+     */
+    fun dismissGenerationPreview() {
+        clearGenerationPreview()
+    }
+
+    /**
+     * One `GeneratedDraftEdit` as the Preview the screen renders — the whole of §30 step 26's
+     * application-side mapping, and nothing but a mapping.
+     *
+     * It reads the plan **in the plan's own order** and copies no counts of its own: every figure comes
+     * from [GeneratedPlan] or [ReconciliationReport], so the screen has no arithmetic to do and no way
+     * to disagree with the pass that produced the numbers. Exercises are resolved through the same
+     * catalogue mapping the draft's own elements use, which is what keeps a localized name in front of
+     * a raw exercise id.
+     *
+     * A `DROPPED` change is reported as a dropped *element*, and a `DAY_REMOVED` change as a removed
+     * *day*, in the reconciliation's own vocabulary. No dropped element is paired with an added one:
+     * [ReconciliationReport] reports a replacement as two halves precisely because the planner states
+     * no relation between them, and inventing one here would assert something the domain refused to.
+     */
+    private fun previewUiOf(edit: GeneratedDraftEdit): ProgramGenerationPreviewUi {
+        val names = mutableState.value.exerciseOptions.associateBy { option -> option.exerciseId }
+        fun labelOf(exerciseId: String?): Int = exerciseId?.let { id -> names[id]?.nameRes } ?: 0
+
+        return ProgramGenerationPreviewUi(
+            days = edit.plan.slots.map { slot ->
+                ProgramGenerationPreviewDayUi(
+                    position = slot.position,
+                    primaryFocusRes = focusLabelRes(slot.assignment.primary),
+                    secondaryFocusRes = slot.assignment.secondary.map { focus ->
+                        focusLabelRes(focus)
+                    },
+                    elements = slot.elements.map { element ->
+                        ProgramGenerationPreviewElementUi(
+                            exerciseId = element.exerciseId,
+                            nameRes = labelOf(element.exerciseId),
+                            dimension = element.prescription.dimension,
+                            sets = element.prescription.setCount,
+                            // The whole per-set sequence, in the prescription's own order: §10's
+                            // shapes are unequal (12/10/8/6, 30/30/45) and flattening them to the
+                            // first term would understate what the plan actually prescribes.
+                            targetsPerSet = element.prescription.perSetTargets.toList()
+                        )
+                    }
+                )
+            },
+            // §33: a limitation is *reported*, never worked around, so none is dropped here — the
+            // domain's own sentence is developer-facing English and is replaced by a resource pair.
+            limitations = edit.plan.limitations.map { limitation ->
+                when (limitation) {
+                    is GenerationLimitation.UnusableFocus -> ProgramGenerationLimitationUi(
+                        focusLabelRes = focusLabelRes(limitation.focus),
+                        reasonRes = focusUnusableReasonRes(limitation.reason)
+                    )
+
+                    GenerationLimitation.NoPlannableFocus -> ProgramGenerationLimitationUi(
+                        focusLabelRes = 0,
+                        reasonRes = ProgramGenerationPreviewRes.REASON_NO_PLANNABLE_FOCUS
+                    )
+                }
+            },
+            preservedCount = edit.reconciliation.preservedCount,
+            addedCount = edit.reconciliation.addedCount,
+            // A user's own element is never counted as dropped: the reconciler cannot drop one, and
+            // reporting it as removed would tell the user their own work is gone.
+            droppedCount = edit.reconciliation.droppedCount,
+            removedDayCount = edit.reconciliation.removedDayCount,
+            conflicts = edit.reconciliation.conflicts.map { change ->
+                ProgramGenerationPreviewConflictUi(
+                    levelRes = when (change.level) {
+                        PreservationLevel.PINNED -> ProgramGenerationPreviewRes.LEVEL_PINNED
+                        PreservationLevel.USER_OVERRIDE ->
+                            ProgramGenerationPreviewRes.LEVEL_OVERRIDE
+
+                        PreservationLevel.COMPATIBLE, PreservationLevel.GENERATED ->
+                            ProgramGenerationPreviewRes.LEVEL_OVERRIDE
+                    },
+                    dayPosition = change.dayPosition,
+                    exerciseId = change.exerciseId.orEmpty(),
+                    nameRes = labelOf(change.exerciseId)
+                )
+            },
+            changes = edit.reconciliation.changes.map { change ->
+                ProgramGenerationPreviewChangeUi(
+                    kindRes = when (change.kind) {
+                        ChangeKind.PRESERVED -> ProgramGenerationPreviewRes.PRESERVED
+                        ChangeKind.ADDED -> ProgramGenerationPreviewRes.ADDED
+                        ChangeKind.DROPPED -> ProgramGenerationPreviewRes.DROPPED
+                        ChangeKind.DAY_REMOVED -> ProgramGenerationPreviewRes.DAY_REMOVED
+                    },
+                    dayPosition = change.dayPosition,
+                    exerciseId = change.exerciseId,
+                    nameRes = labelOf(change.exerciseId)
+                )
+            }
+        )
+    }
+
+    /**
+     * Drops the pending preview and everything published from it.
+     *
+     * Called from every path that changes the working draft, from opening another editor flow, from
+     * discarding the draft, from Generate/Regenerate, and from [useGenerationPreview] once the
+     * prospective draft has been installed. That list is the whole of §30 step 26's invalidation rule,
+     * and keeping it in one function is what makes it checkable: a new draft-mutating operation that
+     * forgets it is a preview left applicable to a draft that no longer exists.
+     */
+    private fun clearGenerationPreview() {
+        pendingPreview = null
+        mutableState.update { it.copy(generationPreview = null) }
     }
 
     fun setDraftName(name: String) = editDraft { draft -> editor.editor(draft).renamed(name).draft }
@@ -723,8 +977,13 @@ class ProgramsController(
                 val notice = saveNotice(result.value)
                 workingDraft = null
                 draftSeedKey = null
+                clearGenerationPreview()
                 mutableState.update {
-                    it.copy(draft = null, draftPlannedStartDate = null, notice = notice)
+                    it.copy(
+                        draft = null,
+                        draftPlannedStartDate = null,
+                        notice = notice
+                    )
                 }
                 load()
                 result.value !is ProgramSaveOutcome.NothingToChange
@@ -998,6 +1257,9 @@ class ProgramsController(
         val current = workingDraft ?: return
         workingDraft = change(current)
         // The review describes the draft it was computed from, so an edit clears it (§7's Review step).
+        // A pending Preview describes one draft just as exactly, so the same edit invalidates it: the
+        // prospective result was built for a draft that no longer exists and must not stay applicable.
+        clearGenerationPreview()
         publishDraft(review = null)
     }
 
