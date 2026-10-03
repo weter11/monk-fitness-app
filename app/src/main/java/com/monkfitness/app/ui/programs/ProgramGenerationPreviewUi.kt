@@ -112,20 +112,48 @@ data class ProgramGenerationPreviewDayUi(
  * One generated element of one previewed day: which exercise, under which label, and what it
  * prescribes.
  *
+ * ### Why [targetsPerSet] is a list and not a number
+ *
+ * §10's own two prescription shapes are **unequal per set**: repetitions `12 / 10 / 8 / 6` and
+ * durations `30s / 30s / 45s`, and [com.monkfitness.app.domain.program.generated.GenerationPolicy]
+ * uses both verbatim. A generated element therefore does not prescribe one number repeated — it
+ * prescribes a **sequence**, and the shape of that sequence (dropping to 6, rising to 45) is the whole
+ * point of the prescription.
+ *
+ * Carrying a single `targetPerSet` here would show `4 sets × 12 reps` for a plan that actually applies
+ * `12 / 10 / 8 / 6`: a Preview that is *explainable* has to say what the plan does, and a preview that
+ * flattens a descending prescription to its first term misstates it in the direction that makes the
+ * plan look gentler than it is. The list is carried **in the prescription's own order** — this is a
+ * progression, and reordering it would be as much a lie as truncating it.
+ *
  * @property exerciseId the library id. It is carried — it is the domain's own opaque handle and the
  *   catalogue's key — but it is a *fallback* label: [nameRes] is the localized name whenever the
  *   catalogue knows the exercise, and the screen renders the id only when it does not. §14 forbids
  *   showing a raw English identifier when a localized name exists.
  * @property dimension the unit the element is prescribed in. The existing prescription dimension and
  *   nothing invented: this stage defines no new formatting semantics for a prescription.
+ * @property sets how many sets the element prescribes.
+ * @property targetsPerSet what each set prescribes, **in the prescription's own order** — never
+ *   flattened to one number, never sorted, never deduplicated. An empty list is refused by the
+ *   prescription's own constructor (§10), so this is never empty in a real plan.
  */
 data class ProgramGenerationPreviewElementUi(
     val exerciseId: String,
     val nameRes: Int,
     val dimension: PrescriptionDimension,
     val sets: Int,
-    val targetPerSet: Int
-)
+    val targetsPerSet: List<Int>
+) {
+
+    /**
+     * Whether the sets are prescribed unequally — §10's descending or rising shape.
+     *
+     * A caller may use this to render one number plainly when the prescription *is* uniform, but it is
+     * a presentation choice, never a licence to drop the other terms: the full list is always carried.
+     */
+    val isUniformPrescription: Boolean
+        get() = targetsPerSet.distinct().size <= 1
+}
 
 /**
  * One thing the planner could not do, as a sentence the user can read.
@@ -222,11 +250,19 @@ object ProgramGenerationPreviewRes {
     /** §8's *0–2 secondary focuses per slot*, as a line naming them. */
     val SECONDARY_FOCUS: Int = com.monkfitness.app.R.string.programs_preview_secondary_focus
 
-    /** A prescription in repetitions — the existing dimension, no new formatting semantics. */
+    /**
+     * A prescription in repetitions, one term per set.
+     *
+     * A **format** rather than a sentence: it takes the whole per-set list, because §10's
+     * prescriptions are unequal by design (`12 / 10 / 8 / 6`) and one string per *term* would mean
+     * four near-identical sentences in seven locales for a value that is really an ordered list. The
+     * list is joined with the existing separator and shown in the prescription's own order.
+     */
     val PRESCRIPTION_REPS: Int = com.monkfitness.app.R.string.programs_preview_reps
 
-    /** A prescription in seconds — the other existing dimension. */
+    /** The same list in seconds — §10's other dimension (`30 / 30 / 45`). */
     val PRESCRIPTION_SECONDS: Int = com.monkfitness.app.R.string.programs_preview_seconds
+
 
     /** The explicit action that adopts the prospective draft, and nothing else. */
     val APPLY: Int = com.monkfitness.app.R.string.programs_preview_apply

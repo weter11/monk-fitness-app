@@ -758,7 +758,10 @@ class ProgramsController(
                             nameRes = labelOf(element.exerciseId),
                             dimension = element.prescription.dimension,
                             sets = element.prescription.setCount,
-                            targetPerSet = element.prescription.perSetTargets.firstOrNull() ?: 0
+                            // The whole per-set sequence, in the prescription's own order: §10's
+                            // shapes are unequal (12/10/8/6, 30/30/45) and flattening them to the
+                            // first term would understate what the plan actually prescribes.
+                            targetsPerSet = element.prescription.perSetTargets.toList()
                         )
                     }
                 )

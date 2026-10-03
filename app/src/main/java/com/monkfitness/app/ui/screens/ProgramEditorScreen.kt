@@ -896,6 +896,19 @@ private fun GenerationPreviewSection(
  * One planned exercise as a Preview line: the catalogue's localized name when it has one, the id only
  * when it does not, and the prescription in the element's **own** dimension (§10) — repetitions or
  * seconds, with no formatting invented for the preview.
+ *
+ * Every per-set target is shown, in the prescription's own order, joined with the localized separator.
+ * §10's generated shapes are *unequal* by design (`12 / 10 / 8 / 6` and `30 / 30 / 45`), so a Preview
+ * that printed only the first term would state `4 sets of 12 reps` for a plan that drops to 6 — and it
+ * would overstate the plan in the one direction a reader is least likely to notice. The join is
+ * deliberately un-sorted and un-deduplicated: a repetition prescription is a *progression*, and
+ * collapsing it to its largest term would be as much a misstatement as truncating it.
+ *
+ * The terms are joined with ` / `, which is **notation rather than prose** and is therefore the same
+ * in every locale. Declaring it a string resource would invite a translator to "translate" a slash
+ * and would put a seventh identical value in seven tables; `ProgramsLocalizationTest` also holds the
+ * Program copy to differing from English word for word in Russian and Ukrainian, which a deliberately
+ * universal separator cannot satisfy. It is also the separator §10's own two examples are written with.
  */
 @Composable
 private fun previewElementLabel(element: ProgramGenerationPreviewElementUi): String {
@@ -907,10 +920,18 @@ private fun previewElementLabel(element: ProgramGenerationPreviewElementUi): Str
             ProgramGenerationPreviewRes.PRESCRIPTION_REPS
         },
         element.sets,
-        element.targetPerSet
+        element.targetsPerSet.joinToString(PER_SET_TARGET_SEPARATOR)
     )
     return "$name \\u00b7 $prescription"
 }
+
+/**
+ * Joins the per-set terms of a prescription — `12 / 10 / 8 / 6`, `30 / 30 / 45`.
+ *
+ * §10 writes both of its own prescription examples with exactly this separator, so it is the notation
+ * the blueprint already uses rather than one this stage chose.
+ */
+private const val PER_SET_TARGET_SEPARATOR = " / "
 
 /** One plan day while editing: its heading, its elements and the three things a day accepts. */
 @Composable

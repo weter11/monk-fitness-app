@@ -768,7 +768,7 @@
     <string name="programs_preview_title">Pré-visualização do plano</string>
     <string name="programs_preview_summary">%1$d dias · %2$d exercícios</string>
     <string name="programs_preview_reconciliation">O que acontece com o seu plano atual</string>
-    <string name="programs_preview_preserved">Mantido</string>
+<string name="programs_preview_preserved">Mantido</string>
     <string name="programs_preview_change_day">Dia %1$d</string>
     <string name="programs_preview_conflict_pinned">Dia %1$d · %2$s está fixado e mantém-se, embora este plano seja diferente</string>
     <string name="programs_preview_conflict_override">Dia %1$d · %2$s foi adicionado por você e mantém-se, embora este plano seja diferente</string>
@@ -785,8 +785,8 @@
     <string name="programs_preview_reason_no_plannable_focus">Nenhum foco da sua seleção pode ser planejado com os exercícios e o equipamento disponíveis</string>
     <string name="programs_preview_primary_focus">Foco principal: %1$s</string>
     <string name="programs_preview_secondary_focus">Também: %1$s</string>
-    <string name="programs_preview_reps">%1$d séries de %2$d repetições</string>
-    <string name="programs_preview_seconds">%1$d séries de %2$d s</string>
+    <string name="programs_preview_reps">%1$d séries de %2$s repetições</string>
+    <string name="programs_preview_seconds">%1$d séries de %2$s s</string>
     <string name="programs_preview_apply">Usar este plano</string>
     <string name="programs_preview_dismiss">Fechar a pré-visualização</string>
     <string name="programs_editor_preview">Pré-visualizar o plano</string>

@@ -243,6 +243,40 @@ table, and `ProgramGeneratedArchitectureTest`'s existing census plus
 
 ---
 
+## 10b. Unequal prescriptions are carried whole
+
+§10's two generated prescription shapes are **unequal per set**, and `GenerationPolicy` uses both
+verbatim:
+
+```text
+repetitions      12 / 10 / 8 / 6
+durations        30 / 30 / 45
+```
+
+A generated element therefore prescribes a **sequence**, and the shape of that sequence — dropping to 6,
+rising to 45 — *is* the prescription. `ProgramGenerationPreviewElementUi` carries
+`targetsPerSet: List<Int>` and `previewUiOf` forwards `perSetTargets` unchanged, so a Preview states what
+the plan will actually apply.
+
+This was a defect in the first cut of this stage: the field was a single `targetPerSet` taken with
+`perSetTargets.firstOrNull()`, which rendered `4 sets × 12 reps` for a plan that drops to 6. That
+overstates a descending prescription in the one direction a reader is least likely to notice — it makes
+the plan look flatter and gentler than it is — and for a screen whose entire purpose is to be
+*explainable*, it is the wrong answer rather than an incomplete one. `isUniformPrescription` is exposed so
+a caller may render one number plainly when the prescription really is uniform, but it is a presentation
+choice and never a licence to drop the remaining terms.
+
+The per-set terms are joined with ` / `, which is **notation rather than prose** and is identical in
+every locale — it is also the separator §10 writes both of its own examples with. It is deliberately
+*not* a string resource: a translatable slash invites a translator to translate punctuation, and
+`ProgramsLocalizationTest` holds the Russian and Ukrainian Program copy to differing from English word for
+word, which a deliberately universal separator cannot satisfy.
+
+No planner, policy, reconciler, persistence or generation semantics changed. `GenerationPolicy` is read
+by the tests and never written by them.
+
+---
+
 ## 11. Verification
 
 Measured on `feat/program-stage26-generation-preview`, base `081305f` (PR #327):
