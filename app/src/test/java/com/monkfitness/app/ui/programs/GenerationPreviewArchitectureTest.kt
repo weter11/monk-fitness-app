@@ -193,31 +193,46 @@ class GenerationPreviewArchitectureTest {
 
     @Test
     fun theServiceStillDeclaresNoPersistenceCollaborator() {
-        // The synthetic constructor Kotlin emits for the default arguments carries a
-        // DefaultConstructorMarker, not a collaborator; counting it would make the census a claim
-        // about bytecode rather than about the service's dependencies.
-        val collaborators = ProgramGenerationService::class.java.declaredConstructors
-            .filterNot { constructor -> constructor.isSynthetic }
-            .flatMap { constructor -> constructor.parameterTypes.map { type -> type.name } }
-            .distinct()
+            // The synthetic constructor Kotlin emits for the default arguments carries a
+            // DefaultConstructorMarker, not a collaborator; counting it would make the census a claim
+            // about bytecode rather than about the service's dependencies.
+            val collaborators = ProgramGenerationService::class.java.declaredConstructors
+                .filterNot { constructor -> constructor.isSynthetic }
+                .flatMap { constructor -> constructor.parameterTypes.map { type -> type.name } }
+                .distinct()
 
-        assertEquals(
-            "§33 and §6: the only route from a generation pass to storage remains the editor's Save, " +
-                "and Preview must not be able to become a hidden one",
-            emptyList<String>(),
-            collaborators.filter { name -> name.contains("Repository") || name.contains("Dao") }
-        )
-        assertEquals(
-            "and the collaborator list is exactly P24's five — Preview adds a method, not a dependency",
-            listOf(
-                "com.monkfitness.app.domain.program.DraftIdSource",
-                "com.monkfitness.app.domain.program.generated.GenerationPolicy",
-                "com.monkfitness.app.domain.program.generated.GenerationPreferences",
-                "com.monkfitness.app.domain.usecase.ExerciseGenerationFacts\$GenerationFocusSource",
-                "com.monkfitness.app.domain.usecase.GenerationCatalogue"
-            ),
-            collaborators.sorted()
-        )
+            assertEquals(
+                "§33 and §6: the only route from a generation pass to storage remains the editor's Save, " +
+                    "and Preview must not be able to become a hidden one. P27 added a context PORT, which " +
+                    "is how the pass reads history without holding anything that could write — so the ban " +
+                    "is on persistence collaborators, not on 'a new dependency'.",
+                emptyList<String>(),
+                collaborators.filter { name ->
+                    name.contains("Repository") ||
+                        name.contains("Dao") ||
+                        name.contains("AppDatabase") ||
+                        name.contains("Entity") ||
+                        name.contains("Room")
+                }
+            )
+            assertEquals(
+                "and the collaborator list is exactly P27's five — Preview still adds a method, not a " +
+                    "dependency, and the one P27 added is the signal boundary rather than a store",
+                listOf(
+                    "com.monkfitness.app.domain.program.DraftIdSource",
+                    "com.monkfitness.app.domain.program.generated.GenerationPolicy",
+                    "com.monkfitness.app.domain.usecase.ExerciseGenerationFacts\$GenerationFocusSource",
+                    "com.monkfitness.app.domain.usecase.GenerationCatalogue",
+                    "com.monkfitness.app.domain.usecase.GenerationContextSource"
+                ),
+                collaborators.sorted()
+            )
+            assertFalse(
+                "and the narrow history port that sits between the repository and the service is reached by " +
+                    "the COMPOSITION ROOT, never by the service: a pass that held `GenerationSessionHistory` " +
+                    "itself would be holding storage again, one interface down",
+                collaborators.contains("com.monkfitness.app.domain.usecase.GenerationSessionHistory")
+            )
     }
 
     // ---------------------------------------------------------------- the controller owns the mapping
