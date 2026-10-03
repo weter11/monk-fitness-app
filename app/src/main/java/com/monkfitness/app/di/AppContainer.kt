@@ -39,7 +39,9 @@ import com.monkfitness.app.domain.usecase.ProgramAdaptiveIntegration
 import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramExerciseLibrary
 import com.monkfitness.app.domain.usecase.ProgramExportService
+import com.monkfitness.app.domain.usecase.GenerationSessionHistory
 import com.monkfitness.app.domain.usecase.ProgramGenerationService
+import com.monkfitness.app.domain.usecase.ProgramHistoryGenerationContext
 import com.monkfitness.app.domain.usecase.ProductionFocusClassification
 import com.monkfitness.app.domain.usecase.ProgramImportService
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
@@ -662,7 +664,15 @@ class AppContainer(
     val programGenerationService: ProgramGenerationService = ProgramGenerationService(
         catalogue = SHIPPED_EXERCISE_CATALOGUE,
         focusSource = ProductionFocusClassification,
-        ids = DraftIdSource { idGenerator.newId() }
+        ids = DraftIdSource { idGenerator.newId() },
+        // P27: this Program's own performed sessions, and nothing else. The read is the repository's
+        // own — `sessionsOfProgram` is what assembles a complete `WorkoutSession` from its stored
+        // snapshot and occurrence rows — so there is exactly one path to those facts.
+        context = ProgramHistoryGenerationContext(
+            sessions = GenerationSessionHistory { programId ->
+                workoutSessionRepository.sessionsOfProgram(programId)
+            }
+        )
     )
 
     // --- §30 step 12: the adaptive integration ----------------------------------------------------

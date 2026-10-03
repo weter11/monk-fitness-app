@@ -65,24 +65,37 @@ import com.monkfitness.app.domain.usecase.ProductionGenerationBoundary.Productio
  * legacy `isAccessibleWith` rule, which would hand a user who owns nothing a plan full of bar and
  * band exercises.
  *
- * ### Preferences and policy are this stage's stated neutrality
+ * ### The context is read once, by one collaborator, and forwarded unchanged
  *
- * P24 does **not** integrate the Adaptive Engine, so none of §8's soft signals is computed here:
- * [preferences] defaults to [GenerationPreferences.NONE], and `adaptivePreferredExerciseIds`,
- * `recentExerciseIds`, `recentExposureByFocus`, `recentLoadByFocus` and `recovery` are left exactly as
- * that neutral representation states them. The Stage-1 adaptive engine and `PilotProgressionProfiles`
- * are not read, and no hidden adaptive rule was added to compensate — a plan built from the
- * configuration alone is the honest plan this stage can produce. [policy] is likewise the generated
- * domain's own [GenerationPolicy.DEFAULT]: the blueprint's open numbers are that type's declared
- * owner decisions, so naming the default is not this class inventing one.
+ * P27 replaced this class's stated neutrality with a **real read**: [context] answers
+ * `GenerationPreferences.preferencesFor(draft)` and the answer goes into the already-existing
+ * `GenerationRequest.preferences` untouched. Nothing here inspects, filters, re-orders or completes
+ * that value — it is asked **once per pass**, in [edit], and the same answer serves `Generate`,
+ * `Regenerate` and `Preview` because all three hand to the same private pass. A preview is therefore
+ * never planned against one set of facts and applied against another (§33's *"no silent
+ * substitution"*, applied to context rather than to focus).
+ *
+ * The value itself says which of §8's signals production can state today. **`recentExerciseIds` is
+ * filled** from this Program's performed sessions; the other five stay at their neutral values because
+ * no production-owned source states them — not `recentExposureByFocus` from a session count, not
+ * `recentLoadByFocus` from repetitions, not `recovery` from elapsed hours, not an adaptive preference
+ * out of a family's current exercise. `docs/PROGRAM_GENERATION_CONTEXT.md` gives the per-signal table.
+ * [GenerationPreferences.NONE] remains the answer for a draft with no Program and for a Program with no
+ * history, and that is an **explicit neutral absence**, never a fabricated zero.
+ *
+ * [policy] is unchanged and is likewise the generated domain's own [GenerationPolicy.DEFAULT]: the
+ * blueprint's open numbers are that type's declared owner decisions, so naming the default is not this
+ * class inventing one.
  *
  * ### What it never does
  *
  * No repository, no DAO, no Room, no revision, no Program, no slot, no date, no clock, no Compose and
  * no UI type. `Generate` and `Regenerate` **only ever alter a draft** (§7): the only route from here
  * to storage remains `ProgramEditorService.save`, which is also the only place a revision identity is
- * minted. The draft handed in is not mutated — every operation returns the next immutable value, so
- * a caller that ignores the result has changed nothing.
+ * minted. Reading a Program's history through [context] changes none of that — the read belongs to
+ * the context source, and this class still holds nothing that could write. The draft handed in is not
+ * mutated — every operation returns the next immutable value, so a caller that ignores the result has
+ * changed nothing.
  *
  * @param catalogue where the production catalogue is read. A port rather than a direct call so a
  *   test can state a fixture catalogue, and so the legacy `WorkoutGenerator` stays named by
@@ -91,8 +104,10 @@ import com.monkfitness.app.domain.usecase.ProductionGenerationBoundary.Productio
  *   [ProductionFocusClassification] in production.
  * @param ids where the identities of added draft days and elements come from (§26), wired to the
  *   composition root's own id generator.
- * @param preferences the plain signals the request carries. Defaults to [GenerationPreferences.NONE]
- *   because this stage has no production source for them (§5).
+ * @param context where the plain signals come from — P27's [GenerationContextSource],
+ *   [ProgramHistoryGenerationContext] in production. Required rather than defaulted, because a
+ *   defaulted value here is exactly the quiet neutrality P27 replaced: every construction site has to
+ *   say where its facts come from.
  * @param policy the generated domain's own explicit numbers, defaulted to
  *   [GenerationPolicy.DEFAULT].
  */
@@ -100,7 +115,7 @@ class ProgramGenerationService(
     private val catalogue: GenerationCatalogue,
     private val focusSource: GenerationFocusSource,
     private val ids: DraftIdSource,
-    private val preferences: GenerationPreferences = GenerationPreferences.NONE,
+    private val context: GenerationContextSource,
     private val policy: GenerationPolicy = GenerationPolicy.DEFAULT
 ) {
 
@@ -110,7 +125,7 @@ class ProgramGenerationService(
      * @param availableEquipment the equipment the user has, forwarded into the request unchanged. An
      *   empty set means the user declared no equipment (§4 of this stage's brief).
      */
-    fun generate(
+    suspend fun generate(
         draft: ProgramEditorDraft,
         availableEquipment: Set<Equipment>
     ): ProgramGenerationResult = edit(draft, availableEquipment)
@@ -123,7 +138,7 @@ class ProgramGenerationService(
      * a generate that kept content a regenerate would have replaced, would make the meaning of a pin
      * depend on which button the user reached for.
      */
-    fun regenerate(
+    suspend fun regenerate(
         draft: ProgramEditorDraft,
         availableEquipment: Set<Equipment>
     ): ProgramGenerationResult = edit(draft, availableEquipment)
@@ -154,14 +169,14 @@ class ProgramGenerationService(
      * @param availableEquipment the equipment the user has, forwarded into the request unchanged,
      *   exactly as [generate] forwards it.
      */
-    fun preview(
+    suspend fun preview(
         draft: ProgramEditorDraft,
         availableEquipment: Set<Equipment>
     ): ProgramGenerationResult = edit(draft, availableEquipment)
 
     /**
-     * The one pass all three buttons run: read the configuration, read the catalogue, assemble the
-     * request, and hand it to the generated editor.
+     * The one pass all three buttons run: read the configuration, read the catalogue, read the
+     * context, assemble the request, and hand it to the generated editor.
      *
      * The two refusals are typed values rather than thrown exceptions (§28: an expected state is a
      * result), and each is decided **before** the value that would otherwise throw it, so the caller
@@ -172,10 +187,18 @@ class ProgramGenerationService(
      *    plan would be a plan of nothing, which §33 forbids presenting as a success — and the draft
      *    the user already has is kept, because losing it is the worse answer.
      *
+     * ### The context is read exactly here, exactly once
+     *
+     * [context] is asked once, inside the `try`, and the value is passed down as an argument rather
+     * than re-read by [planned]. That is the whole of the snapshot-consistency rule: there is no second
+     * read, no second request-assembly path, and nothing downstream of here can observe a different set
+     * of facts than the request was built from. It is read *after* the catalogue check, so a pass that
+     * can plan nothing does not go looking for history it will not use.
+     *
      * Anything else that throws is [ProgramGenerationResult.Failed], surfaced with its cause rather
      * than absorbed into an empty draft (§33).
      */
-    private fun edit(
+    private suspend fun edit(
         draft: ProgramEditorDraft,
         availableEquipment: Set<Equipment>
     ): ProgramGenerationResult = try {
@@ -187,7 +210,7 @@ class ProgramGenerationService(
                 )
             )
         } else {
-            planned(draft, availableEquipment, classified)
+            planned(draft, availableEquipment, classified, context.preferencesFor(draft))
         }
     } catch (failure: Throwable) {
         ProgramGenerationResult.Failed(failure)
@@ -197,7 +220,8 @@ class ProgramGenerationService(
     private fun planned(
         draft: ProgramEditorDraft,
         availableEquipment: Set<Equipment>,
-        classified: ProductionGenerationCatalogue
+        classified: ProductionGenerationCatalogue,
+        preferences: GenerationPreferences
     ): ProgramGenerationResult {
         val request = ProductionGenerationBoundary.generationRequest(
             catalogue = classified,

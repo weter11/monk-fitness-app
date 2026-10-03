@@ -23,6 +23,8 @@ import com.monkfitness.app.domain.usecase.ProgramStartService
 import com.monkfitness.app.domain.usecase.ProductionGenerationBoundary
 import com.monkfitness.app.domain.usecase.ProgramTransferRig
 import com.monkfitness.app.domain.usecase.GenerationCatalogue
+import com.monkfitness.app.domain.usecase.GenerationSessionHistory
+import com.monkfitness.app.domain.usecase.ProgramHistoryGenerationContext
 import com.monkfitness.app.domain.usecase.SHIPPED_EXERCISE_CATALOGUE
 import com.monkfitness.app.domain.usecase.ProductionFocusClassification
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
@@ -125,7 +127,20 @@ internal class ProgramsRig(key: String = "ui") {
             SHIPPED_EXERCISE_CATALOGUE.catalogueOf(focusSource)
         },
         focusSource = source,
-        ids = com.monkfitness.app.domain.program.DraftIdSource { transfer.ids.newId() }
+        ids = com.monkfitness.app.domain.program.DraftIdSource { transfer.ids.newId() },
+        context = productionContext()
+    )
+
+    /**
+     * P27's production context, wired over the rig's **real** session repository.
+     *
+     * Deliberately not a stated value: the claim the UI suites make about Generate and Preview is a
+     * claim about the production graph, and a context source that answered from a fixture would prove
+     * something about the rig instead. The read is `sessionsOfProgram` — the one path that assembles a
+     * complete `WorkoutSession` — so the store-a-session-then-generate flow is measured end to end.
+     */
+    private fun productionContext(): ProgramHistoryGenerationContext = ProgramHistoryGenerationContext(
+        sessions = GenerationSessionHistory { programId -> transfer.sessionRepository.sessionsOfProgram(programId) }
     )
 
     /**
@@ -172,7 +187,8 @@ internal class ProgramsRig(key: String = "ui") {
             ProductionGenerationBoundary.catalogueOf(exercises, focusSource)
         },
         focusSource = source,
-        ids = com.monkfitness.app.domain.program.DraftIdSource { transfer.ids.newId() }
+        ids = com.monkfitness.app.domain.program.DraftIdSource { transfer.ids.newId() },
+        context = productionContext()
     )
 
     /** A catalogue entry the fixture states, in the shape the generation boundary reads. */

@@ -6,6 +6,7 @@ import com.monkfitness.app.domain.program.generated.ReconciliationReport
 import com.monkfitness.app.domain.usecase.ProgramGenerationResult.Generated
 import com.monkfitness.app.domain.usecase.ProgramGenerationResult.Refused
 import java.io.File
+import kotlinx.coroutines.runBlocking
 import java.lang.reflect.Modifier
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -227,26 +228,51 @@ class ProgramGenerationFlowArchitectureTest {
     }
 
     @Test
-    fun theServiceStatesTheNeutralPreferencesRatherThanDefaultingThemQuietly() {
-        val constructor = ProgramGenerationService::class.java.declaredConstructors
-            .first { !it.isSynthetic }
-        val declaration = code(serviceFile.readText())
+    fun theServiceReadsItsContextThroughOneRequiredCollaboratorAndNeverBuildsIt() = runBlocking {
+            val constructor = ProgramGenerationService::class.java.declaredConstructors
+                .first { !it.isSynthetic }
+            val declaration = code(serviceFile.readText())
+            val body = code(serviceFile.readText())
 
-        assertEquals(
-            "the service takes exactly the five things the flow needs — a catalogue, a focus source, " +
-                "an id source and the two stated values — and no more. A sixth collaborator would be " +
-                "one more thing a generation pass could reach.",
-            5,
-            constructor.parameterCount
-        )
-        assertTrue(
-            "preferences and policy are the only optional ones, because the generated domain " +
-                "declares the neutral value for each and this stage has no production source for " +
-                "them (§5). Everything the pass *must* be told is required, so a caller cannot " +
-                "silently omit the catalogue or the id source: $declaration",
-            declaration.contains("preferences: GenerationPreferences = GenerationPreferences.NONE") &&
-                declaration.contains("policy: GenerationPolicy = GenerationPolicy.DEFAULT")
-        )
+            assertEquals(
+                "the service takes exactly the five things the flow needs — a catalogue, a focus source, " +
+                    "an id source, the context and the policy — and no more. A sixth collaborator would be " +
+                    "one more thing a generation pass could reach.",
+                5,
+                constructor.parameterCount
+            )
+            assertEquals(
+                "and the context is the generated domain's own signal boundary, not a repository: the " +
+                    "service is handed a *port* that answers preferences, so the only thing it can learn " +
+                    "about history is what the source chose to state",
+                listOf(
+                    "com.monkfitness.app.domain.usecase.ExerciseGenerationFacts\$GenerationFocusSource",
+                    "com.monkfitness.app.domain.usecase.GenerationCatalogue",
+                    "com.monkfitness.app.domain.usecase.GenerationContextSource",
+                    "com.monkfitness.app.domain.program.DraftIdSource",
+                    "com.monkfitness.app.domain.program.generated.GenerationPolicy"
+                ).sorted(),
+                constructor.parameterTypes.map { it.name }.sorted()
+            )
+            assertTrue(
+                "the context is REQUIRED — P27 deliberately removed the defaulted " +
+                    "`preferences: GenerationPreferences = GenerationPreferences.NONE`, because a service " +
+                    "constructed without one would silently plan against no facts, which is the quiet " +
+                    "neutrality this stage replaced rather than endorsed: $declaration",
+                declaration.contains("private val context: GenerationContextSource") &&
+                    !declaration.contains("context: GenerationContextSource =")
+            )
+            assertFalse(
+                "and the service no longer holds a `GenerationPreferences` value at all — it is not handed " +
+                    "one and it does not construct one, so there is no path by which the service authors a " +
+                    "signal of its own",
+                Regex("(?<![A-Za-z0-9_])GenerationPreferences\\s*\\(").containsMatchIn(body)
+            )
+            assertTrue(
+                "the only place the signal vocabulary is named is the request assembly, where the value " +
+                    "the context source returned is forwarded unchanged",
+                body.contains("planned(draft, availableEquipment, classified, context.preferencesFor(draft))")
+            )
     }
 
     // ------------------------------------------------------------------ the shape of the result
@@ -429,31 +455,60 @@ class ProgramGenerationFlowArchitectureTest {
 
     @Test
     fun theServiceSpeaksInTheDomainsOwnDraftValues() {
-        val methods = ProgramGenerationService::class.java.declaredMethods.associateBy { it.name }
-        listOf("generate", "regenerate").forEach { name ->
-            val parameters = methods.getValue(name).parameterTypes.toList()
-            assertEquals(
-                "§7's two entry points are (draft, availableEquipment) and nothing else: a " +
-                    "generation pass takes the user's own draft, not a configuration someone else " +
-                    "assembled for it",
-                listOf(ProgramEditorDraft::class.java, Set::class.java),
-                parameters
-            )
-        }
-        assertEquals(
-            "and both return the typed result, never a boolean (§28: the UI must tell three cases " +
-                "apart, and a Boolean collapses two of them)",
-            ProgramGenerationResult::class.java,
-            methods.getValue("generate").returnType
-        )
-        assertEquals(
-            "while the success case carries the editor's own three-part edit",
-            Generated::class.java.declaredFields.single { it.name == "edit" }.type,
-            com.monkfitness.app.domain.program.generated.GeneratedDraftEdit::class.java
-        )
-        assertTrue(
-            "and the refusal case is present in the shape, not only in a branch",
-            Refused::class.java.declaredFields.any { it.name == "reason" }
-        )
+                // The methods are `suspend` as of P27 — the context read is a repository read, so the pass
+                // owns a coroutine. A `suspend fun` compiles to a JVM method carrying an extra trailing
+                // `Continuation` parameter, so the *declared* parameter types now read
+                // `(ProgramEditorDraft, Set, Continuation)`. The claim being pinned is the CALLER's
+                // arguments, so the continuation is filtered out rather than the check being relaxed: the
+                // draft type and the equipment set are still asserted exactly, by equality.
+                val methods = ProgramGenerationService::class.java.declaredMethods.associateBy { it.name }
+                listOf("generate", "regenerate", "preview").forEach { name ->
+                    val declared = methods.getValue(name)
+                    val callerArguments = declared.parameterTypes
+                        .filterNot { type -> type == kotlin.coroutines.Continuation::class.java }
+
+                    assertEquals(
+                        "§7's entry points take the user's own draft and the equipment they declared, and " +
+                            "nothing else: a generation pass takes the working draft, not a configuration " +
+                            "someone else assembled for it",
+                        listOf(ProgramEditorDraft::class.java, Set::class.java),
+                        callerArguments
+                    )
+                    assertTrue(
+                        "and '$name' is a suspending pass, because the context read is a storage read — a " +
+                            "non-suspending entry could only have got its facts from somewhere else",
+                        declared.parameterTypes.contains(kotlin.coroutines.Continuation::class.java)
+                    )
+                }
+                assertEquals(
+                    "and the typed result comes back, never a boolean (§28: the UI must tell three " +
+                        "cases apart, and a Boolean collapses two of them). A `suspend fun` erases its " +
+                        "return type to `Object` on the JVM, so the claim is made on the DECLARED " +
+                        "Kotlin type in the source — which is where a `Boolean` would have to appear.",
+                    true,
+                    Regex("""\): ProgramGenerationResult = edit\(draft, availableEquipment\)""")
+                        .findAll(
+                            File("src/main/java/com/monkfitness/app/domain/usecase/ProgramGenerationService.kt")
+                                .let { file -> if (file.isFile) file else File("app/$file") }
+                                .readText()
+                        )
+                        .count() == 3
+                )
+                assertFalse(
+                    "and no entry point returns a Boolean or Unit",
+                    File("src/main/java/com/monkfitness/app/domain/usecase/ProgramGenerationService.kt")
+                        .let { file -> if (file.isFile) file else File("app/$file") }
+                        .readText()
+                        .contains("): Boolean = edit(")
+                )
+                assertEquals(
+                    "while the success case carries the editor's own three-part edit",
+                    Generated::class.java.declaredFields.single { it.name == "edit" }.type,
+                    com.monkfitness.app.domain.program.generated.GeneratedDraftEdit::class.java
+                )
+                assertTrue(
+                    "and the refusal case is present in the shape, not only in a branch",
+                    Refused::class.java.declaredFields.any { it.name == "reason" }
+                )
     }
 }
