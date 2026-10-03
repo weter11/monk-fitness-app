@@ -98,6 +98,14 @@ sealed interface ProgramNotice {
         val GENERATED: ProgramNotice = Done(R.string.programs_notice_generated)
 
         /**
+         * §30 step 26: a **Preview** was produced and is on screen. Nothing about the draft has
+         * changed, so the sentence says so rather than repeating `GENERATED` — a user who reads
+         * *"a plan was generated into the draft"* next to a draft that is untouched has been told
+         * something false, and §33's whole subject is not telling them that.
+         */
+        val GENERATION_PREVIEWED: ProgramNotice = Done(R.string.programs_notice_previewed)
+
+        /**
          * §7's Generate was refused for this configuration: nothing in the library can serve it with
          * the equipment available.
          *

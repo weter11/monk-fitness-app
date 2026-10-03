@@ -323,6 +323,16 @@ data class ProgramsUiState(
     val importReview: ProgramImportReviewUi? = null,
     /** The catalogue the plan editor offers, read once per editor session. */
     val exerciseOptions: List<ExerciseOptionUi> = emptyList(),
+    /**
+     * §7's **Preview** of a generation pass, presented — `null` when there is none.
+     *
+     * It is a *temporary operation result*, not a second source of truth and not a second draft: the
+     * working draft is [draft] and nothing here can be edited, saved or persisted. It is `null` before
+     * the user asks for a Preview, `null` again the moment they use it, and `null` again after any
+     * change to the draft it was built from — a preview describes one draft, so a preview of a draft
+     * that no longer exists is exactly the answer §33 forbids presenting.
+     */
+    val generationPreview: ProgramGenerationPreviewUi? = null,
     /** The last operation's outcome. The screens show it and clear it. */
     val notice: ProgramNotice? = null
 ) {
