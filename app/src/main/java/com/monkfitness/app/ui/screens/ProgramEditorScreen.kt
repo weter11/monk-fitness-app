@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -18,23 +19,30 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.annotation.StringRes
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
+import com.monkfitness.app.domain.program.Focus
+import com.monkfitness.app.domain.program.FocusPlan
+import com.monkfitness.app.domain.program.Goal
 import com.monkfitness.app.domain.program.ProgramDayType
 import com.monkfitness.app.domain.program.ProgramDuration
 import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.domain.program.ProgramSchedule
 import com.monkfitness.app.ui.programs.ExerciseOptionUi
+import com.monkfitness.app.ui.programs.FocusPercentEntry
 import com.monkfitness.app.ui.programs.ProgramDraftDayUi
 import com.monkfitness.app.ui.programs.ProgramDraftElementUi
 import com.monkfitness.app.ui.programs.ProgramDraftEntry
 import com.monkfitness.app.ui.programs.ProgramDraftUi
 import com.monkfitness.app.ui.programs.ProgramsController
+import com.monkfitness.app.ui.programs.focusLabelRes
 import com.monkfitness.app.ui.programs.matchesExerciseQuery
+import com.monkfitness.app.ui.programs.toggledFocus
 
 /**
  * The Program Editor — §7's `Basics / Schedule / Plan / Review` over the target editor, draft-first.
@@ -154,6 +162,12 @@ fun ProgramEditorScreen(
                     Text(stringResource(R.string.programs_editor_regenerate))
                 }
             }
+
+            ProgramSection(stringResource(R.string.programs_editor_goals_focus))
+            GoalsAndFocusSection(
+                focus = current.focus,
+                onFocus = { focus -> controller.setDraftFocus(focus) }
+            )
 
             ProgramSection(stringResource(R.string.programs_editor_duration))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -394,6 +408,293 @@ fun ProgramEditorScreen(
     }
 }
 
+/**
+ * §7's **Goals & Focus** — the draft's own [FocusPlan], displayed as it is and edited by handing a
+ * new one back.
+ *
+ * The section keeps no configuration of its own: [focus] is the draft's value, read from the
+ * controller's presentation, and every choice here ends in one call to `ProgramsController.setDraftFocus`.
+ * There is no second copy that could be edited and disagree with the draft the next generation reads.
+ *
+ * Which of the three forms is shown follows from the value itself — a `BALANCED` draft shows no
+ * focuses and no percentages, a `FOCUSED` draft shows the named ones, a `CUSTOM` draft shows the
+ * shares — so the section cannot present a configuration the draft is not in.
+ *
+ * Both choosable goals are settled by a dialog the user confirms, because each of them needs something
+ * only the user can state: which focuses to train, or what share each of them gets. Tapping a goal chip
+ * therefore *asks*, and the draft changes only on the confirmation — no focus, no percentage and no
+ * share is ever chosen here on the user's behalf.
+ *
+ * For a `GENERATED` draft this section is what says what the next generation pass will be built for,
+ * which is why it sits above the plan rather than after it.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GoalsAndFocusSection(
+    focus: FocusPlan,
+    onFocus: (FocusPlan) -> Unit
+) {
+    var choosingFocuses by remember { mutableStateOf(false) }
+    var editingShares by remember { mutableStateOf(false) }
+
+    Text(
+        text = stringResource(
+            R.string.programs_editor_goal_label,
+            stringResource(goalLabelRes(focus.goal))
+        ),
+        style = MaterialTheme.typography.bodyMedium
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(
+            selected = focus.goal == Goal.BALANCED,
+            onClick = { onFocus(FocusPlan.Balanced) },
+            label = { Text(stringResource(R.string.programs_goal_balanced)) }
+        )
+        FilterChip(
+            selected = focus.goal == Goal.FOCUSED,
+            onClick = { choosingFocuses = true },
+            label = { Text(stringResource(R.string.programs_goal_focused)) }
+        )
+        FilterChip(
+            selected = focus.goal == Goal.CUSTOM,
+            onClick = { editingShares = true },
+            label = { Text(stringResource(R.string.programs_goal_custom)) }
+        )
+    }
+
+    when (val current = focus) {
+        is FocusPlan.Balanced -> Text(
+            text = stringResource(R.string.programs_editor_focus_balanced_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.secondary
+        )
+
+        is FocusPlan.Focused -> {
+            Text(
+                text = stringResource(R.string.programs_editor_focus_focused_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Focus.entries.forEach { focus ->
+                    val chosen = focus in current.focuses
+                    FilterChip(
+                        selected = chosen,
+                        // Removing the last named focus would leave a FOCUSED plan naming nothing, which
+                        // is the BALANCED configuration rather than a third form; the domain refuses to
+                        // build it, so the control refuses to offer it.
+                        enabled = chosen || current.focuses.size > 1,
+                        onClick = { toggledFocus(current, focus)?.let(onFocus) },
+                        label = { Text(stringResource(focusLabelRes(focus))) }
+                    )
+                }
+            }
+            if (current.focuses.size == 1) {
+                Text(
+                    text = stringResource(R.string.programs_editor_focus_focused_keep_one),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+            TextButton(onClick = { choosingFocuses = true }) {
+                Text(stringResource(R.string.programs_editor_focus_choose))
+            }
+        }
+
+        is FocusPlan.Custom -> {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = stringResource(R.string.programs_editor_focus_custom_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                current.allocations.forEach { allocation ->
+                    ProgramFactRow(
+                        label = stringResource(focusLabelRes(allocation.focus)),
+                        value = stringResource(
+                            R.string.programs_editor_focus_share,
+                            allocation.percent
+                        )
+                    )
+                }
+                TextButton(onClick = { editingShares = true }) {
+                    Text(stringResource(R.string.programs_editor_focus_edit))
+                }
+            }
+        }
+    }
+
+    if (choosingFocuses) {
+        FocusPickerDialog(
+            initial = (focus as? FocusPlan.Focused)?.focuses.orEmpty(),
+            onDismiss = { choosingFocuses = false },
+            onDone = { focuses ->
+                choosingFocuses = false
+                // §8's canonical semantics decide the resulting configuration, not the order the user
+                // happened to tap in.
+                onFocus(FocusPlan.focused(focuses))
+            }
+        )
+    }
+
+    // The shares being typed are the dialog's own working state — deliberately not the draft's, because
+    // an allocation that does not add up to 100% cannot be a `FocusPlan` at all. `Done` is offered only
+    // once the domain accepts the numbers, so nothing unfinished ever reaches the draft.
+    if (editingShares) {
+        FocusSharesDialog(
+            initial = sharesFrom(focus),
+            onDismiss = { editingShares = false },
+            onDone = { plan ->
+                editingShares = false
+                onFocus(plan)
+            }
+        )
+    }
+}
+
+/**
+ * The share dialog's starting numbers: the draft's own CUSTOM shares when it already is one, and every
+ * focus unallocated otherwise.
+ *
+ * An unallocated focus is `0`, which is not a share the domain accepts — it is the *absence* of one, and
+ * the honest state of a CUSTOM allocation the user has not typed yet. Nothing is pre-filled on their
+ * behalf: there is no even split, no 100% for the first focus, no half each.
+ */
+private fun sharesFrom(focus: FocusPlan): FocusPercentEntry {
+    val stated = (focus as? FocusPlan.Custom)?.allocations.orEmpty()
+    return Focus.entries.fold(FocusPercentEntry()) { entry, focus ->
+        entry.withPercent(focus, stated.firstOrNull { it.focus == focus }?.percent ?: 0)
+    }
+}
+
+/**
+ * §7's FOCUSED chooser: any number of the seven focuses, named by the user.
+ *
+ * `Done` stays disabled while none is chosen, because a FOCUSED plan that names no focus is the
+ * BALANCED configuration — a different form, not an empty FOCUSED one. The chips are listed in the
+ * vocabulary's own order and the result goes through [FocusPlan.focused], so the order they were
+ * tapped in cannot survive as a hidden priority.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FocusPickerDialog(
+    initial: List<Focus>,
+    onDismiss: () -> Unit,
+    onDone: (List<Focus>) -> Unit
+) {
+    var chosen by remember { mutableStateOf(initial.toSet()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.programs_editor_focus_pick_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = stringResource(R.string.programs_editor_focus_focused_desc),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Focus.entries.forEach { focus ->
+                        FilterChip(
+                            selected = focus in chosen,
+                            onClick = { chosen = if (focus in chosen) chosen - focus else chosen + focus },
+                            label = { Text(stringResource(focusLabelRes(focus))) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onDone(chosen.toList()) }, enabled = chosen.isNotEmpty()) {
+                Text(stringResource(R.string.ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+/**
+ * §7's CUSTOM editor: one whole percent per focus, and what is still unassigned.
+ *
+ * The shares are the user's own numbers. Nothing here completes an allocation, redistributes a
+ * percentage or picks a focus: `Done` hands the typed numbers to [FocusPercentEntry.toFocusPlan],
+ * which goes through `FocusPlan.custom`, and a sum the domain refuses leaves the draft untouched.
+ */
+@Composable
+private fun FocusSharesDialog(
+    initial: FocusPercentEntry,
+    onDismiss: () -> Unit,
+    onDone: (FocusPlan) -> Unit
+) {
+    var entry by remember { mutableStateOf(initial) }
+    val finished = entry.toFocusPlan()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.programs_editor_focus_custom_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Focus.entries.forEach { focus ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(focusLabelRes(focus)),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = entry.percentOf(focus).takeIf { it > 0 }?.toString() ?: "",
+                            onValueChange = { typed ->
+                                entry = entry.withPercent(
+                                    focus,
+                                    typed.filter { it.isDigit() }.toIntOrNull() ?: 0
+                                )
+                            },
+                            singleLine = true,
+                            modifier = Modifier.width(PERCENT_FIELD_WIDTH)
+                        )
+                    }
+                }
+                Text(
+                    text = stringResource(
+                        R.string.programs_editor_focus_remaining,
+                        entry.remainingPercent()
+                    ),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { finished?.let(onDone) }, enabled = finished != null) {
+                Text(stringResource(R.string.programs_editor_focus_custom_done))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+/** §7's three goals, named in the domain's own vocabulary (§8). */
+@StringRes
+private fun goalLabelRes(goal: Goal): Int = when (goal) {
+    Goal.BALANCED -> R.string.programs_goal_balanced
+    Goal.FOCUSED -> R.string.programs_goal_focused
+    Goal.CUSTOM -> R.string.programs_goal_custom
+}
+
 /** One plan day while editing: its heading, its elements and the three things a day accepts. */
 @Composable
 private fun DraftDayCard(
@@ -603,6 +904,9 @@ private const val DURATION_DAYS_56 = 56
 
 /** The weekly frequencies the editor offers. */
 private val SCHEDULE_OPTIONS = listOf(2, 3, 4, 5, 6)
+
+/** The share dialog's percent field, wide enough for three digits and the field's own padding. */
+private val PERCENT_FIELD_WIDTH = 88.dp
 
 /** The picker's own height, so the dialog stays on screen. */
 private val PICKER_HEIGHT = 240.dp

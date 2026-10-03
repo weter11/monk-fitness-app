@@ -4,6 +4,8 @@ import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.program.MovableClock
 import com.monkfitness.app.domain.program.Program
+import com.monkfitness.app.domain.program.Focus
+import com.monkfitness.app.domain.program.FocusPlan
 import com.monkfitness.app.domain.program.ProgramDayType
 import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.domain.program.ScheduleCadence
@@ -276,6 +278,38 @@ internal class ProgramsRig(key: String = "ui") {
 
     /** The selection, read from the state row itself. */
     suspend fun selectedProgramId(): ProgramId? = transfer.selection()?.selectedProgramId
+
+    /**
+     * A Program's stored Goals & Focus configuration, read off its **current Revision** through a fresh
+     * repository read — so a test proves what Save persisted rather than what the controller still holds.
+     */
+    suspend fun storedFocus(programId: ProgramId): FocusPlan? =
+        transfer.planRepository.currentRevision(programId)?.focus
+
+    /**
+     * Whether every exercise in the draft the last generation pass produced **can serve** one of
+     * [eligible] — the claim the planner's own candidate filter makes, read back through the
+     * **production** classification.
+     *
+     * It is deliberately not "the union of the exercises' focuses equals the user's selection": an
+     * exercise states every focus it trains, so a mobility drill selected for MOBILITY may also state
+     * CORE and POSTURE. What must hold is that no planned exercise is one that serves *none* of the
+     * focuses the user chose — which is what a configuration that was silently replaced would produce.
+     */
+    suspend fun everyPlannedExerciseServes(eligible: Set<Focus>): Boolean {
+        val draft = state.draft ?: return false
+        val classification = ProductionFocusClassification
+        return draft.days
+            .flatMap { day -> day.elements }
+            .all { element ->
+                val focuses = classification.focusesOf(element.exerciseId).orEmpty()
+                focuses.any { focus -> focus in eligible }
+            }
+    }
+
+    /** How many exercises the last generation pass put into the draft. */
+    suspend fun plannedElementCount(): Int =
+        state.draft?.days?.sumOf { day -> day.elements.size } ?: 0
 
     /** How many revisions a Program has — the count a rename, select or archive must not change. */
     suspend fun revisionCount(programId: ProgramId): Int = transfer.revisionCount(programId)

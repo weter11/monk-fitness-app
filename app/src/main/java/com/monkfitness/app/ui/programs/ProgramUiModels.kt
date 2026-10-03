@@ -229,6 +229,16 @@ data class ProgramDraftUi(
     val duration: ProgramDuration,
     val schedule: ProgramSchedule,
     val days: List<ProgramDraftDayUi>,
+    /**
+     * The draft's Goals & Focus configuration — §7's own value, handed over unchanged.
+     *
+     * It is the domain's [com.monkfitness.app.domain.program.FocusPlan] rather than a presentation of
+     * one, for the same reason `mode`, `duration` and `schedule` above are: the screen *displays* the
+     * configuration and *edits* it by handing back a new one to `ProgramsController`, so a second
+     * editable copy here would be a second source of truth that could disagree with the draft it
+     * claims to show.
+     */
+    val focus: com.monkfitness.app.domain.program.FocusPlan,
     /** Whether the draft could be saved right now, as `validate` answered it. */
     val isValid: Boolean,
     /** The findings, as message resources, in the domain's own order. */
