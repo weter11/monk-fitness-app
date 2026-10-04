@@ -280,7 +280,7 @@ run_mutation "missing-authorised-rung" \
   "$DEFINITIONS" \
   '            ProgramProgressionVariant(2, "decline_pushups", RepPrescription(listOf(7, 7, 7)))
         )' \
-  '        )' 
+  '        )'
 
 # --- 6. extra unauthorised family -----------------------------------------------------------------------
 run_mutation "extra-unauthorised-family" \
@@ -343,14 +343,14 @@ run_mutation "bootstrap-seeds-plank" \
   "the bootstrap seeds plank, the family P32 deliberately left undeclared" \
   "$BOOTSTRAP" \
   'ProductionProgressionRelationDefinitions.definitions.forEach { definition ->' \
-  'ProductionProgressionRelationDefinitions.definitions.plus(listOf(ProductionProgressionRelationDefinitions.pushups.copy(familyId = "plank", variants = listOf(ProductionProgressionRelationDefinitions.pushups.variants.first())))).forEach { definition ->' 
+  'ProductionProgressionRelationDefinitions.definitions.plus(listOf(ProductionProgressionRelationDefinitions.pushups.copy(familyId = "plank", variants = listOf(ProductionProgressionRelationDefinitions.pushups.variants.first())))).forEach { definition ->'
 
 # --- 14. bootstrap seeds glute_bridge -------------------------------------------------------------------
 run_mutation "bootstrap-seeds-glute-bridge" \
   "the bootstrap seeds glute_bridge, the second deliberately undeclared family" \
   "$BOOTSTRAP" \
   'ProductionProgressionRelationDefinitions.definitions.forEach { definition ->' \
-  'ProductionProgressionRelationDefinitions.definitions.plus(listOf(ProductionProgressionRelationDefinitions.lunges.copy(familyId = "glute_bridge", variants = listOf(ProductionProgressionRelationDefinitions.lunges.variants.first())))).forEach { definition ->' 
+  'ProductionProgressionRelationDefinitions.definitions.plus(listOf(ProductionProgressionRelationDefinitions.lunges.copy(familyId = "glute_bridge", variants = listOf(ProductionProgressionRelationDefinitions.lunges.variants.first())))).forEach { definition ->'
 
 # --- 15. provider bypasses the repository ---------------------------------------------------------------
 run_mutation "provider-bypasses-repository" \
@@ -414,9 +414,9 @@ run_mutation "legacy-pilot-consulted" \
   "the content source consults the retired Stage-1 pilot profiles" \
   "$DEFINITIONS" \
   '    val definitions: List<ProgramProgressionRelation> = listOf(pushups, squats, lunges, pullups)' \
-  '    private val pilotAll = PilotProgressionProfiles.all()
+  '    val pilotLadder: ProgramProgressionRelation = PilotProgressionProfiles.profiles["pushups"]!!
 
-    val definitions: List<ProgramProgressionRelation> = listOf(pushups, squats, lunges, pullups).plus(pilotAll)' 
+    val definitions: List<ProgramProgressionRelation> = listOf(pushups, squats, lunges, pullups, pilotLadder)' 
 
 # --- 22. a disabled target bypasses availability -------------------------------------------------------
 run_mutation "disabled-target-bypasses-availability" \
@@ -436,8 +436,16 @@ run_mutation "disabled-target-bypasses-availability" \
 run_mutation "user-content-becomes-adaptable" \
   "a user-authored element is treated as adaptable by the integration's target choice" \
   "$ADAPTIVE_TARGET" \
-  '                ownership = element.ownership' \
-  '                ownership = ProgramElementOwnership.AUTOMATIC' 
+  '    get() = when {
+        isPinned -> ProgramElementOwnership.PINNED
+        origin == ProgramExerciseOrigin.USER_AUTHORED -> ProgramElementOwnership.USER_AUTHORED
+        else -> ProgramElementOwnership.AUTOMATIC
+    }' \
+  '    get() = when {
+        isPinned -> ProgramElementOwnership.AUTOMATIC
+        origin == ProgramExerciseOrigin.USER_AUTHORED -> ProgramElementOwnership.AUTOMATIC
+        else -> ProgramElementOwnership.AUTOMATIC
+    }' 
 
 # ----------------------------------------------------------------------------------------------- control
 

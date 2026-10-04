@@ -9,6 +9,7 @@ import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveEngine
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveReason
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig
 import com.monkfitness.app.domain.adaptive.engine.ProgramElementOwnership
+import com.monkfitness.app.domain.adaptive.integration.ownership
 import com.monkfitness.app.domain.adaptive.integration.ProgressionRelationProvider
 import com.monkfitness.app.domain.program.ProgramExerciseOrigin
 import com.monkfitness.app.domain.product.ProductionProgressionRelationDefinitions
@@ -461,6 +462,54 @@ class ProductionAdaptiveProgressionContentTest {
             assertEquals("a $label element is not adapted, even with a real ladder in hand", AdaptiveAction.HOLD, result.decision.action)
             assertNull("and $label content is presented no change at all", result.adjustment)
         }
+    }
+
+    /**
+     **The plan element's ownership is derived from the plan's own two facts, in order.**
+     *
+     * P32 activated a real ladder, and with a ladder reachable the question *"is this element the user's
+     * own?"* stops being academic: it is what decides whether the new relation is ever consulted for an
+     * element. This test pins the **derivation** itself, so a mutation that collapsed
+     * `USER_AUTHORED`/`PINNED` into `AUTOMATIC` — making user content adaptable — fails here even though
+     * every engine-level ownership test would still pass, because the engine reads the ownership it is
+     * given.
+     *
+     * `isPinned` outranks `origin`: a generated element the user pinned is `PINNED`, and only an
+     * unpinned user-authored element is `USER_AUTHORED`.
+     */
+    @Test
+    fun theOwnershipDerivationStillReadsThePlansOwnTwoFacts() {
+        val automatic = com.monkfitness.app.domain.program.ProgramExercise(
+            programExerciseId = com.monkfitness.app.domain.common.ProgramExerciseId("pe-own-1"),
+            exerciseId = "pushups",
+            prescription = com.monkfitness.app.domain.prescription.RepPrescription(listOf(8, 8, 8)),
+            origin = ProgramExerciseOrigin.GENERATED
+        )
+        val userAuthored = automatic.copy(
+            programExerciseId = com.monkfitness.app.domain.common.ProgramExerciseId("pe-own-2"),
+            origin = ProgramExerciseOrigin.USER_AUTHORED
+        )
+        val pinned = userAuthored.copy(
+            programExerciseId = com.monkfitness.app.domain.common.ProgramExerciseId("pe-own-3"),
+            origin = ProgramExerciseOrigin.GENERATED,
+            isPinned = true
+        )
+
+        assertEquals(
+            "generated, unpinned content is the app's own and may be adapted",
+            ProgramElementOwnership.AUTOMATIC,
+            automatic.ownership
+        )
+        assertEquals(
+            "content the user authored is not adapted at all",
+            ProgramElementOwnership.USER_AUTHORED,
+            userAuthored.ownership
+        )
+        assertEquals(
+            "and a pinned element outranks its origin — pinning is the stronger statement",
+            ProgramElementOwnership.PINNED,
+            pinned.ownership
+        )
     }
 
     /**
