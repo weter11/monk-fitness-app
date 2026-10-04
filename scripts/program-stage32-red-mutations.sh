@@ -278,9 +278,9 @@ run_mutation "wrong-exercise-id" \
 run_mutation "missing-authorised-rung" \
   "the pushups ladder loses its ceiling rung" \
   "$DEFINITIONS" \
-  ',
-                ProgramProgressionVariant(2, "decline_pushups", RepPrescription(listOf(7, 7, 7)))' \
-  ''
+  '            ProgramProgressionVariant(2, "decline_pushups", RepPrescription(listOf(7, 7, 7)))
+        )' \
+  '        )' 
 
 # --- 6. extra unauthorised family -----------------------------------------------------------------------
 run_mutation "extra-unauthorised-family" \
@@ -343,14 +343,14 @@ run_mutation "bootstrap-seeds-plank" \
   "the bootstrap seeds plank, the family P32 deliberately left undeclared" \
   "$BOOTSTRAP" \
   'ProductionProgressionRelationDefinitions.definitions.forEach { definition ->' \
-  'ProductionProgressionRelationDefinitions.definitions.plus(listOf(com.monkfitness.app.domain.adaptive.engine.ProgramProgressionRelation("plank", listOf(com.monkfitness.app.domain.adaptive.engine.ProgramProgressionVariant(0, "plank", TimePrescription(listOf(30))))))).forEach { definition ->'
+  'ProductionProgressionRelationDefinitions.definitions.plus(listOf(ProductionProgressionRelationDefinitions.pushups.copy(familyId = "plank", variants = listOf(ProductionProgressionRelationDefinitions.pushups.variants.first())))).forEach { definition ->' 
 
 # --- 14. bootstrap seeds glute_bridge -------------------------------------------------------------------
 run_mutation "bootstrap-seeds-glute-bridge" \
   "the bootstrap seeds glute_bridge, the second deliberately undeclared family" \
   "$BOOTSTRAP" \
   'ProductionProgressionRelationDefinitions.definitions.forEach { definition ->' \
-  'ProductionProgressionRelationDefinitions.definitions.plus(listOf(com.monkfitness.app.domain.adaptive.engine.ProgramProgressionRelation("glute_bridge", listOf(com.monkfitness.app.domain.adaptive.engine.ProgramProgressionVariant(0, "glute_bridge", RepPrescription(listOf(15))))))).forEach { definition ->'
+  'ProductionProgressionRelationDefinitions.definitions.plus(listOf(ProductionProgressionRelationDefinitions.lunges.copy(familyId = "glute_bridge", variants = listOf(ProductionProgressionRelationDefinitions.lunges.variants.first())))).forEach { definition ->' 
 
 # --- 15. provider bypasses the repository ---------------------------------------------------------------
 run_mutation "provider-bypasses-repository" \
@@ -413,10 +413,10 @@ run_mutation "current-state-used-as-ladder" \
 run_mutation "legacy-pilot-consulted" \
   "the content source consults the retired Stage-1 pilot profiles" \
   "$DEFINITIONS" \
-  '        val definitions: List<ProgramProgressionRelation>' \
-  '        private val pilot = com.monkfitness.app.adaptive.PilotProgressionProfiles.all()
+  '    val definitions: List<ProgramProgressionRelation> = listOf(pushups, squats, lunges, pullups)' \
+  '    private val pilotAll = PilotProgressionProfiles.all()
 
-        val definitions: List<ProgramProgressionRelation>'
+    val definitions: List<ProgramProgressionRelation> = listOf(pushups, squats, lunges, pullups).plus(pilotAll)' 
 
 # --- 22. a disabled target bypasses availability -------------------------------------------------------
 run_mutation "disabled-target-bypasses-availability" \
@@ -436,9 +436,8 @@ run_mutation "disabled-target-bypasses-availability" \
 run_mutation "user-content-becomes-adaptable" \
   "a user-authored element is treated as adaptable by the integration's target choice" \
   "$ADAPTIVE_TARGET" \
-  '        val familyId = element.familyOf(classification, plan) ?: continue' \
-  '        val familyId = element.familyOf(classification, plan) ?: continue
-        if (element.presentation.programExerciseId.value.isEmpty()) continue'
+  '                ownership = element.ownership' \
+  '                ownership = ProgramElementOwnership.AUTOMATIC' 
 
 # ----------------------------------------------------------------------------------------------- control
 
