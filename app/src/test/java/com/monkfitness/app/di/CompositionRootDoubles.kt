@@ -19,6 +19,7 @@ import com.monkfitness.app.data.local.ProgramSetLogDao
 import com.monkfitness.app.data.local.ProgramTargetOccurrenceDao
 import com.monkfitness.app.data.local.ProgramTargetScheduleSourceDao
 import com.monkfitness.app.data.local.ProgramWorkoutSlotDao
+import com.monkfitness.app.data.local.ProgressionRelationVariantDao
 import com.monkfitness.app.data.local.WorkoutSessionDao
 import com.monkfitness.app.data.local.PostureProgressDao
 import com.monkfitness.app.data.local.SessionExerciseDao
@@ -37,6 +38,7 @@ import com.monkfitness.app.data.repository.SqliteProgramSetLogDao
 import com.monkfitness.app.data.repository.SqliteProgramTargetOccurrenceDao
 import com.monkfitness.app.data.repository.SqliteProgramTargetScheduleSourceDao
 import com.monkfitness.app.data.repository.SqliteProgramWorkoutSlotDao
+import com.monkfitness.app.data.repository.SqliteProgressionRelationVariantDao
 import com.monkfitness.app.data.repository.SqliteSessionExerciseDao
 import com.monkfitness.app.data.repository.SqliteSessionSnapshotDao
 import com.monkfitness.app.data.repository.SqliteSessionSnapshotExerciseDao
@@ -114,6 +116,10 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
     private val familyState by lazy { SqliteProgramFamilyProgressionStateDao(engine) }
     private val decision by lazy { SqliteProgramAdaptiveDecisionDao(engine) }
     private val adjustment by lazy { SqliteAdaptiveAdjustmentDao(engine) }
+    // P31's ladder catalogue. The accessor must be implemented whatever the container does with it —
+    // `AppDatabase`'s accessors are abstract — and it is answered over the same real engine so a suite
+    // that reaches it is reading a real table rather than a stub.
+    private val relationVariant by lazy { SqliteProgressionRelationVariantDao(engine) }
 
     // --- the shipped Stage-1 tables, on the same engine (§30 step 15 retires them) ----------
 
@@ -164,6 +170,9 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
      * Settings → Full reset's statements, on the same engine. The composition root constructs the
      * reset's repository eagerly, so this accessor is asked on every container test.
      */
+    override fun progressionRelationVariantDao(): ProgressionRelationVariantDao =
+        relationVariant.also { asked("progressionRelationVariantDao") }
+
     override fun maintenanceDao(): MaintenanceDao = maintenance.also { asked("maintenanceDao") }
 
     /**
@@ -277,6 +286,7 @@ internal class CompositionRootRig(
         // P29: the element's historical focus and the snapshot's frozen copy. Stopping short
         // would leave this suite exercising a database the app can no longer produce.
         database.migrate(AppDatabase.MIGRATION_16_17)
+        database.migrate(AppDatabase.MIGRATION_17_18)
     }
 
     val database = SqliteAppDatabase(engine)

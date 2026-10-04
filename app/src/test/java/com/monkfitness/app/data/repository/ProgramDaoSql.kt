@@ -152,6 +152,17 @@ internal object ProgramDaoSql {
     /** `ProgramFamilyProgressionStateDao.stateOf`. */
     const val PROGRAM_FAMILY_PROGRESSION_STATE_DAO_STATE_OF = "SELECT * FROM `program_family_progression_state` WHERE `revisionId` = :revisionId AND `familyId` = :familyId LIMIT 1"
 
+    // ---- P31: the progression relation catalogue -------------------------------------------------
+
+    /** `ProgressionRelationVariantDao.variantsOfFamily`. */
+    const val PROGRESSION_RELATION_VARIANT_DAO_VARIANTS_OF_FAMILY = "SELECT * FROM `progression_relation_variant` WHERE `familyId` = :familyId ORDER BY `level` ASC, `exerciseId` ASC"
+
+    /** `ProgressionRelationVariantDao.deleteVariantsOfFamily`. */
+    const val PROGRESSION_RELATION_VARIANT_DAO_DELETE_VARIANTS_OF_FAMILY = "DELETE FROM `progression_relation_variant` WHERE `familyId` = :familyId"
+
+    /** `ProgressionRelationVariantDao.declaredFamilyIds`. */
+    const val PROGRESSION_RELATION_VARIANT_DAO_DECLARED_FAMILY_IDS = "SELECT DISTINCT `familyId` FROM `progression_relation_variant` ORDER BY `familyId` ASC"
+
     /** `ProgramAdaptiveDecisionDao.decisionById`. */
     const val PROGRAM_ADAPTIVE_DECISION_DAO_DECISION_BY_ID = "SELECT * FROM `program_adaptive_decision_record` WHERE `decisionId` = :decisionId LIMIT 1"
 
@@ -200,6 +211,10 @@ internal object ProgramDaoSql {
     val WRITES: Map<String, String> = mapOf(
         "ProgramDao.updateProgram" to PROGRAM_DAO_UPDATE_PROGRAM,
         "WorkoutSessionDao.insertSessionIfSlotIsNotOccupied" to WORKOUT_SESSION_DAO_INSERT_IF_SLOT_NOT_OCCUPIED,
+        // P31: replacing a family's ladder drops its own rows. It is scoped to one family on purpose —
+        // a table-wide delete would destroy every other family's declared ladder, which is the one
+        // thing a per-family catalogue must never do.
+        "ProgressionRelationVariantDao.deleteVariantsOfFamily" to PROGRESSION_RELATION_VARIANT_DAO_DELETE_VARIANTS_OF_FAMILY,
     )
 
     /** The statement each target DAO method carries, keyed `<Dao>.<method>`. */
@@ -257,5 +272,12 @@ internal object ProgramDaoSql {
         "AdaptiveAdjustmentDao.adjustmentsOfSlot" to ADAPTIVE_ADJUSTMENT_DAO_ADJUSTMENTS_OF_SLOT,
         "AdaptiveAdjustmentDao.adjustmentsOfProgram" to ADAPTIVE_ADJUSTMENT_DAO_ADJUSTMENTS_OF_PROGRAM,
         "AdaptiveAdjustmentDao.adjustmentsOfRevision" to ADAPTIVE_ADJUSTMENT_DAO_ADJUSTMENTS_OF_REVISION,
+        // P31: the ladder catalogue's reads. The delete is a write, so it is listed here and in [WRITES].
+        "ProgressionRelationVariantDao.variantsOfFamily" to PROGRESSION_RELATION_VARIANT_DAO_VARIANTS_OF_FAMILY,
+        "ProgressionRelationVariantDao.declaredFamilyIds" to PROGRESSION_RELATION_VARIANT_DAO_DECLARED_FAMILY_IDS,
+        // The delete is a `@Query`, so the architecture test's "every @Query is executed by the suites"
+        // rule finds it in the DAO's source — it therefore has to be in [ALL] as well as in [WRITES],
+        // exactly as `ProgramDao.deleteProgram` is.
+        "ProgressionRelationVariantDao.deleteVariantsOfFamily" to PROGRESSION_RELATION_VARIANT_DAO_DELETE_VARIANTS_OF_FAMILY,
     )
 }

@@ -101,6 +101,9 @@ class ProgramMigrationPreservationTest {
         // P29: the element's historical focus and the snapshot's frozen copy. Stopping short
         // would leave this suite exercising a database the app can no longer produce.
         database.migrate(AppDatabase.MIGRATION_16_17)
+        // P31: the app-owned progression relation catalogue — one new table, no seed, no backfill.
+        // Stopping short would leave this suite exercising a database the app can no longer produce.
+        database.migrate(AppDatabase.MIGRATION_17_18)
     }
 
     /** A populated **version-8** database: what a device that ran the target-schema release holds. */
@@ -620,6 +623,9 @@ class ProgramMigrationPreservationTest {
         // §30 step 28's step is the last one, so it is the only one whose end version is the declared one.
         assertEquals(15, AppDatabase.MIGRATION_15_16.startVersion)
         assertEquals(16, AppDatabase.MIGRATION_15_16.endVersion)
+        // P31's step is the last one, so it is the only one whose end version is the declared one.
+        assertEquals(17, AppDatabase.MIGRATION_17_18.startVersion)
+        assertEquals(18, AppDatabase.MIGRATION_17_18.endVersion)
 
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
@@ -636,6 +642,7 @@ class ProgramMigrationPreservationTest {
         // P29: the element's historical focus and the snapshot's frozen copy. Stopping short
         // would leave this suite exercising a database the app can no longer produce.
         database.migrate(AppDatabase.MIGRATION_16_17)
+        database.migrate(AppDatabase.MIGRATION_17_18)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }

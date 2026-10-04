@@ -25,6 +25,7 @@ import com.monkfitness.app.data.model.ProgramTargetOccurrenceEntity
 import com.monkfitness.app.data.model.ProgramTargetProgramDayBindingEntity
 import com.monkfitness.app.data.model.ProgramTargetScheduleRuleEntity
 import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
+import com.monkfitness.app.data.model.ProgressionRelationVariantEntity
 import com.monkfitness.app.data.model.SessionExerciseEntity
 import com.monkfitness.app.data.model.SessionSnapshotEntity
 import com.monkfitness.app.data.model.SessionSnapshotExerciseEntity
@@ -66,6 +67,13 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         // contract — the same reasoning §30 step 14 used for an occurrence's ordered components.
         ProgramTargetScheduleRuleEntity::class,
         ProgramTargetProgramDayBindingEntity::class,
+        // P31: the app-owned **progression relation catalogue** — the persisted definition of each
+        // family's declared ladder. It is deliberately NOT revision-owned: a relation is keyed by
+        // `familyId` alone and its levels are ordinals inside that one family, never comparable across
+        // families, so scoping it to a Program or a revision would restate one ladder per plan and
+        // invite exactly the cross-family comparison §15 forbids. No index is declared either — the
+        // `(familyId, exerciseId)` primary key's leading column is the only column it is read by.
+        ProgressionRelationVariantEntity::class,
         WorkoutSessionEntity::class,
         SessionSnapshotEntity::class,
         SessionSnapshotExerciseEntity::class,
@@ -76,7 +84,7 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         AdaptiveDecisionRecordEntity::class,
         AdaptiveAdjustmentEntity::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = false
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
@@ -117,6 +125,16 @@ abstract class AppDatabase : RoomDatabase() {
      * `workoutId -> ProgramDayId` bindings, read and written as one immutable unit.
      */
     abstract fun programTargetScheduleSourceDao(): ProgramTargetScheduleSourceDao
+
+    /**
+     * The app-owned progression relation catalogue: the variants each family declares, at the positions
+     * it declares them (P31).
+     *
+     * A separate accessor from the adaptive DAO on purpose — see
+     * [com.monkfitness.app.data.repository.ProgressionRelationRepository] for why a ladder is a
+     * definition and not adaptive history.
+     */
+    abstract fun progressionRelationVariantDao(): ProgressionRelationVariantDao
 
     abstract fun workoutSessionDao(): WorkoutSessionDao
 
@@ -1297,6 +1315,53 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Version 17 -> version 18: the app-owned **progression relation catalogue** (§15).
+         *
+         * One table and nothing else — no column is added, altered or dropped, and no existing Program
+         * or adaptive table is touched. A ladder is a *definition* this app authors, not a fact derived
+         * from rows a device already holds, so there is nothing in an upgraded database to convert:
+         *
+         *  * `program_exercise` holds what one revision's plan prescribes, not what a family may progress
+         *    to. Deriving a ladder from it would invent a ladder from one plan's snapshot, and a plan may
+         *    legitimately contain a single rung of a family (or none).
+         *  * `program_family_progression_state` holds where a family *currently* is inside one revision.
+         *    That is history, not a definition: a current position is one rung, and reading it as a
+         *    hierarchy would fabricate the other rungs (§15 forbids reaching for it).
+         *  * `program_adaptive_decision_record` holds what was decided once. A decision is not a ladder.
+         *
+         * So this step creates the storage and **seeds nothing**: an upgraded device declares no ladder
+         * for any family, and production therefore keeps reporting
+         * `NO_DECLARED_PROGRESSION_RELATION` — which is the honest state, not a regression. A
+         * `DEFAULT`-laden insert or an `INSERT ... SELECT` backfill here would write a claim about what
+         * a family trains that no author ever made.
+         *
+         * `level` is an `INTEGER` rather than a name because the domain's rule is arithmetic — a family's
+         * positions must be contiguous — and contiguity is only checkable over numbers. The
+         * `(familyId, exerciseId)` primary key makes "one exercise is one position in its family's
+         * ladder" a table constraint rather than a caller convention. No index is declared: `familyId`
+         * is the key's leading column and the only column the table is ever read by.
+         *
+         * Visible to the unit tests on purpose, like every step before it: the statement is the
+         * deployable proof of the change and the schema suites compare it token for token.
+         */
+        internal val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `progression_relation_variant` (
+                        `familyId` TEXT NOT NULL,
+                        `level` INTEGER NOT NULL,
+                        `exerciseId` TEXT NOT NULL,
+                        `prescriptionDimension` TEXT NOT NULL,
+                        `perSetTargets` TEXT NOT NULL,
+                        PRIMARY KEY(`familyId`, `exerciseId`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -1320,7 +1385,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_13_14,
                         MIGRATION_14_15,
                         MIGRATION_15_16,
-                        MIGRATION_16_17
+                        MIGRATION_16_17,
+                        MIGRATION_17_18
                     )
                     .build()
                 INSTANCE = instance

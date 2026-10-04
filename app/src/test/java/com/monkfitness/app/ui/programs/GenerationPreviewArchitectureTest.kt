@@ -481,27 +481,49 @@ class GenerationPreviewArchitectureTest {
 
     // ---------------------------------------------------------------- persistence
 
+    /** Every production source declaring a Room entity, as repository-relative paths, sorted. */
+    private fun entitiesFiles(): List<String> = mainSourceRoot.walkTopDown()
+        .filter { file -> file.isFile && file.extension == "kt" }
+        .filter { file -> "@Entity" in code(file.readText()) }
+        .map { file -> file.relativeTo(mainSourceRoot).path.replace('\\', '/') }
+        .sorted()
+        .toList()
+
     @Test
     fun thePreviewAddedNoEntityAndNoDao() {
-        val entities = mainSourceRoot.walkTopDown()
-            .filter { file -> file.isFile && file.extension == "kt" }
-            .filter { file -> "@Entity" in code(file.readText()) }
-            .count()
+        val entities = entitiesFiles().size
         val daos = mainSourceRoot.walkTopDown()
             .filter { file -> file.isFile && file.extension == "kt" }
             .filter { file -> "@Dao" in code(file.readText()) }
             .count()
 
+        // **Revised, not relaxed, by P31.** These are ABSOLUTE censuses of the whole main source set,
+        // so any later stage that legitimately adds storage moves them. P31 added exactly one entity and
+        // one DAO — the progression relation catalogue — and neither belongs to a Preview or to a Focus
+        // configuration, so the *claim* this test carries is unchanged and is now stated positively:
+        // neither stage added a table, and the one table P31 did add is named here so a future reader can
+        // see exactly what moved the number rather than having to diff it.
+        //
+        // The count is KEPT, not replaced by a membership list: dropping it would let the schema grow
+        // silently, which is the failure this gate exists to catch.
         assertEquals(
             "§30 step 26 adds no table: a Preview is a temporary operation result and persists nothing, " +
-                "so a new entity here would be a second place a pending value was written",
-            24,
+                "so a new entity here would be a second place a pending value was written. The count " +
+                "moved 24 -> 25 only because P31 added the progression relation catalogue, which is " +
+                "global family storage and has nothing to do with a Preview",
+            25,
             entities
         )
         assertEquals(
-            "and no new DAO — a preview is never read back from storage",
-            20,
+            "and no new DAO — a preview is never read back from storage. The count moved 20 -> 21 only " +
+                "because P31 added the catalogue's own DAO beside its own entity",
+            21,
             daos
+        )
+        assertFalse(
+            "and the one entity P31 added is the family-level ladder catalogue, not anything this stage " +
+                "owns: a preview that persisted a ladder would be a second place a plan was stored",
+            entitiesFiles().any { it.contains("Preview") }
         )
     }
 

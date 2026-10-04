@@ -149,6 +149,12 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
     )
     val programProgressRepository = ProgramProgressRepository(slotDao, sessionDao, setLogDao)
 
+    // P31: the app-owned progression relation catalogue — its own DAO and its own repository, wired
+    // exactly as `AppContainer` will wire it and deliberately NOT folded into
+    // `programAdaptiveRepository`, because a ladder is a definition and not adaptive history.
+    val relationVariantDao = SqliteProgressionRelationVariantDao(database)
+    val progressionRelationRepository = ProgressionRelationRepository(relationVariantDao, transaction)
+
     /** The graph this rig was created for: a Program, its first revision and its initial slots. */
     val graph: ProgramGraph = ProgramGraphFixture.graph(key)
 
@@ -193,6 +199,16 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
     fun freshAdaptiveRepository() = ProgramAdaptiveRepository(
         familyStateDao, decisionDao, adjustmentDao, now = { now }, inTransaction = transaction
     )
+
+    /**
+     * P31: the ladder catalogue read through a freshly built repository.
+     *
+     * It exists because this repository holds no state of its own, so a value that survives a rebuild
+     * is a value that came from storage — which is the only way to tell a genuine round trip from a
+     * value that merely never left the object that was written.
+     */
+    fun freshProgressionRelationRepository() =
+        ProgressionRelationRepository(SqliteProgressionRelationVariantDao(database), transaction)
 
     fun close() = database.close()
 
@@ -244,6 +260,7 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
             // and `insertRow`'s column check compares the entity's fields against the live schema, so a
             // rig at version 16 would fail 455 tests with one honest message.
             database.migrate(AppDatabase.MIGRATION_16_17)
+            database.migrate(AppDatabase.MIGRATION_17_18)
         }
     }
 }

@@ -180,14 +180,15 @@ class AdaptivePersistenceSchemaTest {
             "the database version moves with the schema: 13 is Phase 8's additive target-occurrence " +
                 "identity seam, 14 is §30 step 14's target-occurrence semantic payload, 15 is " +
                 "Stage 18's explicit target schedule source, 16 is §30 step 28's exercise " +
-                "preference column and 17 is P29's historical focus",
-            source.contains("version = 17")
+                "preference column, 17 is P29's historical focus and 18 is P31's persisted " +
+                "progression relation catalogue",
+            source.contains("version = 18")
         )
         assertTrue(
             "and the step that reaches it is declared, and registered in the builder's chain right " +
                 "after the step it follows",
-            source.contains("MIGRATION_16_17 = object : Migration(16, 17)") &&
-                Regex("MIGRATION_15_16,\\s*MIGRATION_16_17").containsMatchIn(source)
+            source.contains("MIGRATION_17_18 = object : Migration(17, 18)") &&
+                Regex("MIGRATION_16_17,\\s*MIGRATION_17_18").containsMatchIn(source)
         )
 
         val registered = Regex("entities = \\[(.*?)]", RegexOption.DOT_MATCHES_ALL)
@@ -196,7 +197,7 @@ class AdaptivePersistenceSchemaTest {
             .let { Regex("(\\w+)::class").findAll(it).map { match -> match.groupValues[1] }.toList() }
 
         assertEquals(
-            "the five retained global entities and the nineteen target ones — and **nothing that stood " +
+            "the five retained global entities and the twenty target ones — and **nothing that stood " +
                 "in for a retired table**. `UserProgress`, `SetLog`, `ProgramDayState`, " +
                 "`FamilyProgressionState` and `AdaptiveDecisionRecord` are gone from the declaration " +
                 "because `MIGRATION_11_12` drops them, not because a replacement was added",
@@ -224,6 +225,10 @@ class AdaptivePersistenceSchemaTest {
                 // anything retired.
                 "ProgramTargetScheduleRuleEntity",
                 "ProgramTargetProgramDayBindingEntity",
+                // P31: the app-owned progression relation catalogue — new storage for a family's
+                // declared ladder, declared immediately after the target schedule source it sits beside
+                // as a *definition* rather than a revision's own state.
+                "ProgressionRelationVariantEntity",
                 "WorkoutSessionEntity",
                 "SessionSnapshotEntity",
                 "SessionSnapshotExerciseEntity",

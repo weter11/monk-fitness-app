@@ -13,6 +13,7 @@ import com.monkfitness.app.data.model.ProgramRevisionEntity
 import com.monkfitness.app.data.model.ProgramTargetOccurrenceComponentEntity
 import com.monkfitness.app.data.model.ProgramTargetOccurrenceEntity
 import com.monkfitness.app.data.model.ProgramTargetProgramDayBindingEntity
+import com.monkfitness.app.data.model.ProgressionRelationVariantEntity
 import com.monkfitness.app.data.model.ProgramTargetScheduleRuleEntity
 import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
 import com.monkfitness.app.data.model.SessionExerciseEntity
@@ -155,6 +156,13 @@ class ProgramSchemaTest {
     private fun historicalFocusStatements(): List<String> =
         recordStatements(AppDatabase.MIGRATION_16_17)
 
+    /**
+     * The one exact statement P31's **progression relation catalogue** step (17 -> 18) executes: the
+     * single ladder-variant table, with no seed and no backfill of any existing table.
+     */
+    private fun progressionRelationStatements(): List<String> =
+        recordStatements(AppDatabase.MIGRATION_17_18)
+
     private fun allAdditiveStatements(): List<String> =
         additiveStatements() + focusStatements() + windowStatements()
 
@@ -192,7 +200,10 @@ class ProgramSchemaTest {
      * separately, so a table cannot quietly appear in both.
      */
     private fun statementFor(table: String): String =
-        (migrationStatements() + semanticOccurrenceStatements() + targetScheduleSourceStatements())
+        (
+            migrationStatements() + semanticOccurrenceStatements() + targetScheduleSourceStatements() +
+                progressionRelationStatements()
+            )
             .single { it.startsWith("CREATE TABLE IF NOT EXISTS `$table` ") }
 
     private fun columnsOf(table: String): List<String> =
@@ -279,6 +290,10 @@ class ProgramSchemaTest {
             // not one row with a nullable half — and neither is a replacement for anything retired.
             ProgramTargetScheduleRuleEntity::class.java,
             ProgramTargetProgramDayBindingEntity::class.java,
+            // P31: the app-owned progression relation catalogue. One entity because one row IS one
+            // declared rung — a ladder is a set of rows, not a serialized blob — and it is declared
+            // here as a target table even though no Program or revision owns it.
+            ProgressionRelationVariantEntity::class.java,
             WorkoutSessionEntity::class.java,
             SessionSnapshotEntity::class.java,
             SessionSnapshotExerciseEntity::class.java,
@@ -410,8 +425,14 @@ class ProgramSchemaTest {
         )
         assertEquals(17, AppDatabase.MIGRATION_16_17.endVersion)
         assertEquals(
+            "P31's progression relation catalogue step is the next one after the focus step",
+            17,
+            AppDatabase.MIGRATION_17_18.startVersion
+        )
+        assertEquals(18, AppDatabase.MIGRATION_17_18.endVersion)
+        assertEquals(
             "and the declared version is where the chain ends",
-            AppDatabase.MIGRATION_16_17.endVersion,
+            AppDatabase.MIGRATION_17_18.endVersion,
             currentVersion()
         )
     }
@@ -1412,6 +1433,8 @@ class ProgramSchemaTest {
         // P29: the historical focus columns, so the chain lands on the declared version and this
         // comparison is against the current contract rather than a truncated one.
         upgraded.migrate(AppDatabase.MIGRATION_16_17)
+        // P31: the ladder catalogue's table, so the chain lands on the declared version.
+        upgraded.migrate(AppDatabase.MIGRATION_17_18)
 
         assertEquals(
             "the revision table the chain leaves behind is the one the contract describes: the " +
@@ -1902,11 +1925,33 @@ class ProgramSchemaTest {
             table != "program" && table !in ProgramSchemaFixture.PROGRAM_OWNED_TABLES
         }
 
+        // **Revised, not relaxed, by P31.** The old claim was `exactly ["app_state"]`, and it held
+        // because every target table was somebody's child. P31 adds the one table that is deliberately
+        // nobody's child, so the claim becomes two *named* exceptions rather than one — which is a
+        // stronger statement about the new table, not a weaker one about the old rule: it still says
+        // every remaining target table is destroyed with the Program that owns it, and it now says
+        // exactly which two do not and why.
+        //
+        // `progression_relation_variant` survives Program deletion because a ladder is a property of a
+        // *family*, not of a plan. Cascading it would mean deleting every Program silently erased the
+        // app's declared progression ladders, and the next program to train that family would find
+        // them gone — which is the cross-plan coupling the domain's family-level scoping exists to
+        // prevent. A reviewer should read this exception as the schema stating P31's scope rule, not
+        // as a table that escaped the ownership model.
         assertEquals(
-            "every target table except the Program and the global single-row AppState is destroyed " +
-                "with the Program that owns it",
-            listOf("app_state"),
+            "every target table is destroyed with the Program that owns it, except the Program itself, " +
+                "the global single-row AppState, and P31's family-level progression ladder catalogue — " +
+                "which is nobody's child precisely because a ladder belongs to a family rather than to " +
+                "a plan",
+            listOf("app_state", "progression_relation_variant"),
             notProgramOwned
+        )
+        assertEquals(
+            "and the ladder catalogue declares no foreign key at all, which is the schema's own " +
+                "statement that it is global rather than revision-owned: a key could only have pointed " +
+                "at a Program or a revision",
+            emptyList<List<String>>(),
+            ProgramSchemaFixture.FOREIGN_KEYS.getValue("progression_relation_variant")
         )
         assertEquals(
             "the Program itself owns no parent",

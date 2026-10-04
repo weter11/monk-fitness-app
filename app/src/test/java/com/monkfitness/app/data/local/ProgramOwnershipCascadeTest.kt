@@ -37,6 +37,7 @@ class ProgramOwnershipCascadeTest {
         // P29: the element's historical focus and the snapshot's frozen copy. Stopping short
         // would leave this suite exercising a database the app can no longer produce.
         database.migrate(AppDatabase.MIGRATION_16_17)
+        database.migrate(AppDatabase.MIGRATION_17_18)
         ProgramGraphInserts.insertCompleteProgram(
             database, "1", targetOccurrenceRows = true, targetScheduleSourceRows = true
         )
@@ -88,11 +89,21 @@ class ProgramOwnershipCascadeTest {
 
         database.exec("DELETE FROM `program` WHERE `programId` = 'program-2'")
 
+        // **Revised, not relaxed, by P31.** The old arithmetic was `TABLES.size - 1` — one global
+        // survivor, `app_state`. The ladder catalogue is a *second* deliberate survivor: it is nobody's
+        // child, so deleting a Program must not touch it. Naming both exceptions here is what keeps
+        // the count honest — it would still fail if the delete started wiping a third table.
         assertEquals(
             "every table of the contract was exercised by the delete, except the global AppState row " +
-                "which is not a child of any program",
-            ProgramSchemaFixture.TABLES.size - 1,
+                "and P31's family-level ladder catalogue — neither is a child of any program",
+            ProgramSchemaFixture.TABLES.size - 2,
             survivingIdentity.size
+        )
+        assertEquals(
+            "and the ladder catalogue is untouched by the Program delete, because a ladder belongs to " +
+                "a family rather than to a plan",
+            0,
+            database.count("progression_relation_variant")
         )
         for ((table, column, survivor) in survivingIdentity) {
             assertEquals(

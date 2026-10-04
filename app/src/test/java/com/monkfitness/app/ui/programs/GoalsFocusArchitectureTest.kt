@@ -288,16 +288,30 @@ class GoalsFocusArchitectureTest {
             .sorted()
             .toList()
 
+        // **Revised, not relaxed, by P31.** Both numbers are absolute censuses of the whole main source
+        // set, so a later stage that legitimately adds storage moves them. P31 added exactly one entity
+        // and one DAO — the progression relation catalogue — and neither stores a Focus configuration, so
+        // this stage's claim is unchanged and is now stated positively as well as by count. The count is
+        // KEPT: replacing it with a membership list would let the schema grow silently, which is the
+        // failure this gate exists to catch.
         assertEquals(
             "§6 already stores the configuration on the Program Revision, so P25 adds no table of its " +
-                "own — a new entity here would be a second place the same fact is written",
-            24,
+                "own — a new entity here would be a second place the same fact is written. The count " +
+                "moved 24 -> 25 only because P31 added the progression relation catalogue, which is " +
+                "global family storage and stores no focus",
+            25,
             entities.size
         )
         assertEquals(
-            "and no new DAO: the configuration is reached through the revision's own reader",
-            20,
+            "and no new DAO: the configuration is reached through the revision's own reader. The count " +
+                "moved 20 -> 21 only because P31 added the catalogue's own DAO beside its own entity",
+            21,
             daos.size
+        )
+        assertTrue(
+            "and no entity on this list is a focus entity: P31's addition is the ladder catalogue, " +
+                "which is a family definition and not a second place the focus configuration is written",
+            entities.none { it.contains("Focus", ignoreCase = true) }
         )
     }
 
