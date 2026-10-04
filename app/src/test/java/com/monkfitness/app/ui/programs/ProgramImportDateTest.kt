@@ -316,7 +316,15 @@ class ProgramImportDateTest {
 
     @Test
     fun theTransferFormatCarriesNoDateAndWasNotChangedByThisStage() = runBlocking {
-        assertEquals("the format's version is unchanged by this stage", 1, ProgramTransferFormat.VERSION)
+        // §30 step 28 DID bump the format's version — it added `revision.preferredExercises`. This stage's
+        // claim is narrower and is the one that matters: the bump did not carry a date with it. The version
+        // is asserted as a fact of the format rather than as "unchanged", because that is now false and a
+        // test pinning it would have failed for a change that did not touch anything this suite is about.
+        assertEquals(
+            "the format states no date, and its version moved only for §30 step 28's preference field",
+            2,
+            ProgramTransferFormat.VERSION
+        )
         val document = ProgramTransferFixture.VALID_DOCUMENT
         assertFalse(
             "the chosen date is not a field of the transfer document: it is the import request's fact",

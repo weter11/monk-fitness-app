@@ -141,6 +141,13 @@ class ProgramSchemaTest {
     private fun targetScheduleSourceStatements(): List<String> =
         recordStatements(AppDatabase.MIGRATION_14_15)
 
+    /**
+     * The one exact statement §30 step 28's **exercise preference** step (15 -> 16) executes: the single
+     * nullable column, with no default and no backfill.
+     */
+    private fun preferenceStatements(): List<String> =
+        recordStatements(AppDatabase.MIGRATION_15_16)
+
     private fun allAdditiveStatements(): List<String> =
         additiveStatements() + focusStatements() + windowStatements()
 
@@ -384,9 +391,44 @@ class ProgramSchemaTest {
         )
         assertEquals(15, AppDatabase.MIGRATION_14_15.endVersion)
         assertEquals(
+            "§30 step 28's exercise preference step is the next additive step after that one",
+            15,
+            AppDatabase.MIGRATION_15_16.startVersion
+        )
+        assertEquals(16, AppDatabase.MIGRATION_15_16.endVersion)
+        assertEquals(
             "and the declared version is where the chain ends",
-            AppDatabase.MIGRATION_14_15.endVersion,
+            AppDatabase.MIGRATION_15_16.endVersion,
             currentVersion()
+        )
+    }
+
+    // ---- the user's exercise preference (§30 step 28) --------------------------------------------
+
+    /**
+     * The step adds exactly one nullable column to `program_revision`, with **no `DEFAULT`**.
+     *
+     * The absence of a default is the whole claim, so it is asserted over the statement text rather than
+     * left implied: a `DEFAULT ''` would make every existing row claim a preference, and a `DEFAULT` of
+     * any kind would write a ranking no user ever stated. `null` is what an upgraded row gets, and `null`
+     * means `ExercisePreference.NONE` — the user named nothing (§9).
+     */
+    @Test
+    fun thePreferenceMigrationAddsOneNullableColumnAndNoDefault() {
+        val statements = preferenceStatements()
+
+        assertEquals(
+            "15 -> 16 executes exactly one statement: the single column on the revision that owns it",
+            1,
+            statements.size
+        )
+        assertEquals(
+            "ALTER TABLE `program_revision` ADD COLUMN `preferredExerciseIds` TEXT",
+            ProgramSchemaFixture.normalized(statements.single())
+        )
+        assertFalse(
+            "a default would write a preference no user stated (§9 — missing is not a zero, and not a rank)",
+            statements.single().contains("DEFAULT", ignoreCase = true)
         )
     }
 
@@ -1269,15 +1311,26 @@ class ProgramSchemaTest {
         // `everyTargetEntityDeclaresItsColumnsInTheStoredOrder` compares the entity against — so
         // "a fresh install and an upgrade agree" is pinned by the two sides being the same statement,
         // not by executing the same chain twice.
+        // The whole chain, to the current version. This test's claim is that the table a device ends up
+        // with **is** the DDL the entity emits, so it may not stop partway: comparing a 9 -> 10 chain
+        // against the current contract would fail for the uninteresting reason that the later steps never
+        // ran, and would pass for the wrong reason if the contract were also truncated to match.
         val upgraded = SqliteTestDatabase.inMemory()
         upgraded.execAll(LegacyV7Schema.TABLE_STATEMENTS)
         upgraded.migrate(AppDatabase.MIGRATION_7_8)
         upgraded.migrate(AppDatabase.MIGRATION_8_9)
         upgraded.migrate(AppDatabase.MIGRATION_9_10)
+        upgraded.migrate(AppDatabase.MIGRATION_10_11)
+        upgraded.migrate(AppDatabase.MIGRATION_11_12)
+        upgraded.migrate(AppDatabase.MIGRATION_12_13)
+        upgraded.migrate(AppDatabase.MIGRATION_13_14)
+        upgraded.migrate(AppDatabase.MIGRATION_14_15)
+        upgraded.migrate(AppDatabase.MIGRATION_15_16)
 
         assertEquals(
             "the revision table the chain leaves behind is the one the contract describes: the " +
-                "version-8 columns in declaration order, then the appended ones",
+                "version-8 columns in declaration order, then every appended one, §9's exercise " +
+                "preference last",
             ProgramSchemaFixture.normalized(
                 ProgramSchemaFixture.expectedCurrentTableDdl("program_revision")
             ).replace("IF NOT EXISTS ", ""),
@@ -1823,7 +1876,8 @@ class ProgramSchemaTest {
     @Test
     fun everyDeclaredColumnIsStoredInTheStatementThatIntroducesIt() {
         val added = ProgramSchemaFixture.normalized(
-            (allAdditiveStatements() + targetOccurrenceStatements()).joinToString(" ")
+            (allAdditiveStatements() + targetOccurrenceStatements() + preferenceStatements())
+                .joinToString(" ")
         )
         // §30 step 14 creates its two tables outright rather than appending columns, so their columns
         // are checked against their own `CREATE TABLE` — which is what [statementFor] returns for them.

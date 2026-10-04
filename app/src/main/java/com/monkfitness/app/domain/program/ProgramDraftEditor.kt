@@ -73,6 +73,24 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
      */
     fun withFocus(focus: FocusPlan): ProgramDraftEditor = next(draft.copy(focus = focus))
 
+    /**
+     * The working **exercise preference**: the exercises generation should reach for, most preferred
+     * first (§9's *user choice*).
+     *
+     * Whole-value, like [withFocus] and for the same reason: an [ExercisePreference] cannot exist in an
+     * invalid state — a duplicate or a blank name is refused by its own constructor — so the editor has
+     * nothing left to validate and no reason to grow three near-identical operations that would each
+     * have to re-implement the ordering rules. The three *user actions* — add, remove, move — live on
+     * [ExercisePreference] as [ExercisePreference.preferring], [ExercisePreference.without] and
+     * [ExercisePreference.moved], and this is the single place a changed value reaches the draft.
+     *
+     * It is structural content for the reason [withFocus] is: §6 makes *program-behavior* changes
+     * revision-creating, so a save that reorders the preference and changes nothing else still creates
+     * a revision.
+     */
+    fun withPreferredExercises(preference: ExercisePreference): ProgramDraftEditor =
+        next(draft.copy(preferredExercises = preference))
+
     // ---------------------------------------------------------------- days
 
     /**

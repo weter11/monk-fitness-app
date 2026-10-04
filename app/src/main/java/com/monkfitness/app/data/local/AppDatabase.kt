@@ -76,7 +76,7 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         AdaptiveDecisionRecordEntity::class,
         AdaptiveAdjustmentEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = false
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
@@ -1231,6 +1231,31 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * §30 step 28: the user's **exercise preference** becomes revision content.
+         *
+         * One nullable column and nothing else — no table, because a preference is a handful of ids
+         * belonging to exactly one immutable revision, which is the same reasoning
+         * `focusGoal`/`focusTargets` gave for a focus configuration. There is deliberately **no
+         * `DEFAULT`**: a default would write a ranking on every existing row, and no user ever stated
+         * one. `null` is what an upgraded row gets, and `null` means exactly what
+         * `ExercisePreference.NONE` means — the user named nothing.
+         *
+         * Nullable rather than an empty string so the absence is stored as itself; a blank string would
+         * have to be re-read as an absence anyway, and one representation per value is the format's own
+         * determinism rule (§11).
+         *
+         * Visible to the unit tests on purpose, like every step before it: the statements are the
+         * deployable proof of the change and the schema suites compare them token for token.
+         */
+        internal val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE `program_revision` ADD COLUMN `preferredExerciseIds` TEXT"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -1252,7 +1277,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_11_12,
                         MIGRATION_12_13,
                         MIGRATION_13_14,
-                        MIGRATION_14_15
+                        MIGRATION_14_15,
+                        MIGRATION_15_16
                     )
                     .build()
                 INSTANCE = instance

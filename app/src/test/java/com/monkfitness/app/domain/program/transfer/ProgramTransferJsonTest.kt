@@ -216,11 +216,12 @@ class ProgramTransferJsonTest {
 
         assertEquals(
             "the document is written field by field, in the format's own order and indentation, with " +
-                "one trailing newline — and the day's absent name is an absent field, never a null",
+                "one trailing newline — the day's absent name is an absent field, never a null, and the " +
+                "user's absent preference is a stated empty array (§30 step 28)",
             """
             {
               "format": "monkfitness.program",
-              "formatVersion": 1,
+              "formatVersion": 2,
               "program": {
                 "name": "Push day",
                 "description": "a description"
@@ -268,7 +269,8 @@ class ProgramTransferJsonTest {
                     "type": "REST",
                     "exercises": []
                   }
-                ]
+                ],
+                "preferredExercises": []
               }
             }
             """.trimIndent() + "\n",
@@ -343,7 +345,11 @@ class ProgramTransferJsonTest {
     @Test
     fun theFormatConstantsAreTheOnesTheFormatIsReadAndWrittenWith() {
         assertEquals("monkfitness.program", ProgramTransferFormat.MARKER)
-        assertEquals(1, ProgramTransferFormat.VERSION)
+        assertEquals(
+            "§30 step 28 added a field, which the format's own rule makes a version bump",
+            2,
+            ProgramTransferFormat.VERSION
+        )
         assertEquals("MonkFitnessProgram.mfp.json", ProgramTransferFormat.FILE_NAME)
         assertEquals("application/json", ProgramTransferFormat.MIME_TYPE)
         assertEquals("the file is named for the format, never for a Program", -1, ProgramTransferFormat.FILE_NAME.indexOf("program-"))

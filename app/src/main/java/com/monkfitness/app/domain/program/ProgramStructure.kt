@@ -24,6 +24,7 @@ import com.monkfitness.app.domain.prescription.Prescription
  * ```text
  * mode, duration, schedule      the revision's own configuration
  * focus                         the Goals & Focus configuration the plan is built for
+ * preferred exercises           the exercises generation is asked to reach for, in order
  * days, in order                each day's type and name
  * plan elements, in order       each element's exercise, per-set prescription, authorship, pin
  * ```
@@ -43,7 +44,8 @@ data class ProgramStructure(
     val duration: ProgramDuration,
     val schedule: ProgramSchedule,
     val days: List<StructuredDay>,
-    val focus: FocusPlan = FocusPlan.DEFAULT
+    val focus: FocusPlan = FocusPlan.DEFAULT,
+    val preferredExercises: ExercisePreference = ExercisePreference.NONE
 ) {
 
     /** The names of this structure's days, in order. */
@@ -66,13 +68,15 @@ data class ProgramStructure(
             duration: ProgramDuration,
             schedule: ProgramSchedule,
             days: List<ProgramDay>,
-            focus: FocusPlan = FocusPlan.DEFAULT
+            focus: FocusPlan = FocusPlan.DEFAULT,
+            preferredExercises: ExercisePreference = ExercisePreference.NONE
         ): ProgramStructure = ProgramStructure(
             mode = mode,
             duration = duration,
             schedule = schedule,
             days = days.map { StructuredDay.of(it) },
-            focus = focus
+            focus = focus,
+            preferredExercises = preferredExercises
         )
     }
 }
@@ -128,11 +132,11 @@ data class StructuredExercise(
 
 /** The structure of the plan a saved revision describes. */
 val ProgramRevision.structure: ProgramStructure
-    get() = ProgramStructure.of(mode, duration, schedule, days, focus)
+    get() = ProgramStructure.of(mode, duration, schedule, days, focus, preferredExercises)
 
 /** The structure of the plan a draft is currently holding — what `Save` would persist (§7). */
 val ProgramEditorDraft.structure: ProgramStructure
-    get() = ProgramStructure.of(mode, duration, schedule, days, focus)
+    get() = ProgramStructure.of(mode, duration, schedule, days, focus, preferredExercises)
 
 /**
  * A dimension of the structure that can differ between two plans.
@@ -166,6 +170,20 @@ enum class ProgramStructureAspect {
      */
     FOCUS,
 
+    /**
+     * The exercises the user would rather the generator reach for, most preferred first (§9's
+     * *user choice*).
+     *
+     * It belongs here beside [FOCUS] rather than under [EXERCISES] because it is **configuration, not
+     * plan content**: the plan says which exercises this Program currently has, and this says which
+     * ones a future generation should reach for. Changing it changes what the Program is *built with*
+     * without changing what it currently plans — which is exactly the reason [FOCUS] is structural, and
+     * exactly why the two must not be folded together: a regenerated plan that honours a new
+     * preference produces different [EXERCISES] too, and a review that reported only one of them would
+     * under-report the change.
+     */
+    PREFERRED_EXERCISES,
+
     /** The days themselves — how many, in what order, of which type, under which names. */
     DAYS,
 
@@ -197,6 +215,7 @@ private fun ProgramStructure.differsFrom(
     ProgramStructureAspect.DURATION -> duration != base.duration
     ProgramStructureAspect.SCHEDULE -> schedule != base.schedule
     ProgramStructureAspect.FOCUS -> focus != base.focus
+    ProgramStructureAspect.PREFERRED_EXERCISES -> preferredExercises != base.preferredExercises
     ProgramStructureAspect.DAYS -> dayLabels != base.dayLabels
     ProgramStructureAspect.EXERCISES -> selection != base.selection
     ProgramStructureAspect.PRESCRIPTIONS -> prescriptions != base.prescriptions

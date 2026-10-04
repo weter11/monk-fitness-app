@@ -59,7 +59,7 @@ internal object ProgramTransferReader {
 
     private val DOCUMENT_FIELDS = listOf("format", "formatVersion", "program", "revision")
     private val PROGRAM_FIELDS = listOf("name", "description")
-    private val REVISION_FIELDS = listOf("mode", "duration", "schedule", "focus", "days")
+    private val REVISION_FIELDS = listOf("mode", "duration", "schedule", "focus", "days", "preferredExercises")
     private val DURATION_FIELDS = listOf("kind", "days")
     private val SCHEDULE_FIELDS = listOf("kind", "weekdays", "sessionsPerWeek")
     private val FOCUS_FIELDS = listOf("goal", "focuses", "allocations")
@@ -180,24 +180,92 @@ internal object ProgramTransferReader {
         val days = fieldOf(record, REVISION, "days")
             .then { value -> arrayOf(value, "$REVISION.days") }
             .then { elements -> dayList(elements) }
+        // §30 step 28. Required, not optional: the writer always writes it, empty included, so "the user
+        // named nothing" is a stated `[]` and not an absent key (§11's one representation per value).
+        // Reading it as optional would mean an absent field and an empty list are the same document, and
+        // they are not — one is a file that did not say, the other is a file that said "nothing".
+        val preferred = fieldOf(record, REVISION, "preferredExercises")
+            .then { value -> arrayOf(value, "$REVISION.preferredExercises") }
+            .then { elements -> preferredIdList(elements) }
 
         val issues = unknownFields(record, REVISION, REVISION_FIELDS) + mode.issues +
-            duration.issues + schedule.issues + focus.issues + days.issues
+            duration.issues + schedule.issues + focus.issues + days.issues + preferred.issues
         val revision = if (
             mode.value != null && duration.value != null && schedule.value != null &&
-            focus.value != null && days.value != null
+            focus.value != null && days.value != null && preferred.value != null
         ) {
             RevisionTransfer(
                 mode = mode.value,
                 duration = duration.value,
                 schedule = schedule.value,
                 focus = focus.value,
-                days = days.value
+                days = days.value,
+                preferredExercises = preferred.value
             )
         } else {
             null
         }
         return Read(revision, issues)
+    }
+
+    /**
+     * The user's exercise preference, in the user's own order (§9's *user choice*).
+     *
+     * A **schema** read, and it reads exactly three things: that every element is text, that no element is
+     * blank, and that no exercise is named twice. Nothing here decides whether an id names a real shipped
+     * exercise — that is §5's separate *exerciseId validation* step and it belongs to
+     * [ProgramTransferValidation], which holds the library. Duplication is refused here rather than there
+     * because a preference is an *order*, and two entries claiming the same position make the order mean
+     * two things at once; that is a property of the shape, not of any catalogue.
+     *
+     * The order is preserved exactly. No sorting, no de-duplicating-in-order, no canonicalisation: an
+     * array in a document is already the order, and any of those operations would silently re-rank what
+     * the user stated.
+     */
+    private fun preferredIdList(elements: List<JsonValue>): Read<List<String>> {
+        val path = "$REVISION.preferredExercises"
+        val ids = elements.mapIndexed { index, element ->
+            val elementPath = "$path[$index]"
+            if (element is JsonValue.JsonString) {
+                Read.of(element.value)
+            } else {
+                Read.failed(
+                    ProgramTransferIssue.WrongType(elementPath, "a text value", kindOf(element))
+                )
+            }
+        }
+        val read = collect(ids)
+        val values = read.value
+        val blank = if (values == null) {
+            emptyList()
+        } else {
+            values.filter { id -> id.isBlank() }
+        }
+        val repeated = if (values == null) {
+            emptySet()
+        } else {
+            values.groupingBy { id -> id }.eachCount().filterValues { count -> count > 1 }.keys
+        }
+        // `InvalidDefinition` and not a new issue type: a preference the domain's own `ExercisePreference`
+        // refuses to hold is precisely what that issue already says, and a second issue class for the same
+        // sentence would be two vocabularies for one finding.
+        val extra = if (blank.isEmpty() && repeated.isEmpty()) {
+            emptyList()
+        } else {
+            listOf(
+                ProgramTransferIssue.InvalidDefinition(
+                    path,
+                    buildString {
+                        if (blank.isNotEmpty()) append("a preferred exercise id is blank: $blank")
+                        if (repeated.isNotEmpty()) {
+                            if (isNotEmpty()) append("; ")
+                            append("an exercise is preferred more than once: $repeated (§9)")
+                        }
+                    }
+                )
+            )
+        }
+        return Read(values, read.issues + extra)
     }
 
     private fun durationFields(record: JsonValue.JsonObject): Read<DurationTransfer> {

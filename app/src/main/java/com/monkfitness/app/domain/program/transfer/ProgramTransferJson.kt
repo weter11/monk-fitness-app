@@ -67,7 +67,15 @@ object ProgramTransferJson {
             "duration" to duration(depth + 1, revision.duration),
             "schedule" to schedule(depth + 1, revision.schedule),
             "focus" to focus(depth + 1, revision.focus),
-            "days" to array(depth + 1, revision.days.map { day -> day(depth + 2, it = day) })
+            "days" to array(depth + 1, revision.days.map { day -> day(depth + 2, it = day) }),
+            // §30 step 28: the user's exercise preference, in the user's own order. Written as an
+            // inline array of ids rather than a joined string, because the ORDER of this array is the
+            // meaning and an array is what says "this is an order" without a comment — and it is always
+            // written, empty included, so that "no preference" is a stated `[]` rather than an absent key
+            // (one representation per value, §11).
+            "preferredExercises" to inlineArray(
+                revision.preferredExercises.map { exerciseId -> quoted(exerciseId) }
+            )
         )
     )
 

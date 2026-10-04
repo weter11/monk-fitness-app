@@ -1105,4 +1105,14 @@
     <string name="nutrition_preview_required_products">Перегляд потрібних продуктів</string>
     <string name="nutrition_preview_product_available">Є</string>
     <string name="nutrition_preview_product_missing">Немає</string>
+    <string name="programs_editor_preferred_exercises">Бажані вправи</string>
+    <string name="programs_editor_preferred_exercises_desc">Спершу найбажаніше. Генератор звертається до них насамперед — і лише серед вправ, доступних вам за інвентарем.</string>
+    <string name="programs_editor_preferred_exercises_empty">Бажаних вправ немає. Генератор не виділятиме жодної вправи.</string>
+    <string name="programs_preferred_add">Надавати перевагу</string>
+    <string name="programs_preferred_remove">Більше не віддавати перевагу</string>
+    <string name="programs_preferred_move_up">Вище</string>
+    <string name="programs_preferred_move_down">Нижче</string>
+    <string name="programs_preferred_choose">Виберіть вправу, якій віддаєте перевагу</string>
+    <string name="programs_preferred_position">%1$d. %2$s — за бажаністю</string>
+    <string name="programs_change_preferred_exercises">бажані вправи</string>
 </resources>

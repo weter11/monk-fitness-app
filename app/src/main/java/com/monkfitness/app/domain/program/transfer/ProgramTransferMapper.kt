@@ -8,6 +8,7 @@ import com.monkfitness.app.domain.prescription.Prescription
 import com.monkfitness.app.domain.prescription.RepPrescription
 import com.monkfitness.app.domain.prescription.TimePrescription
 import com.monkfitness.app.domain.program.DraftIdSource
+import com.monkfitness.app.domain.program.ExercisePreference
 import com.monkfitness.app.domain.program.FocusPlan
 import com.monkfitness.app.domain.program.Program
 import com.monkfitness.app.domain.program.ProgramDay
@@ -94,7 +95,11 @@ object ProgramTransferMapper {
                             )
                         }
                     )
-                }
+                },
+                // §30 step 28: the user's preference, carried verbatim in the user's own order. Not
+                // re-sorted and not filtered against the plan — a preferred exercise the exported plan
+                // happens not to use today is still the exercise the user asked for first.
+                preferredExercises = revision.preferredExercises.exerciseIds
             )
         )
 
@@ -136,7 +141,8 @@ object ProgramTransferMapper {
                     }
                 )
             },
-            focus = focusOf(document.revision.focus)
+            focus = focusOf(document.revision.focus),
+            preferredExercises = ExercisePreference(document.revision.preferredExercises)
         )
 
     /**
@@ -176,7 +182,8 @@ object ProgramTransferMapper {
                 )
             },
             createdAt = at,
-            focus = renumbered.focus
+            focus = renumbered.focus,
+            preferredExercises = renumbered.preferredExercises
         )
         require(revision.structure == renumbered.structure) {
             "re-identifying a plan changes nothing else about it: the minted revision and the draft it " +

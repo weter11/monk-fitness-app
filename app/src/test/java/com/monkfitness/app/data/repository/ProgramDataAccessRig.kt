@@ -236,6 +236,9 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
             // Stage 18: the revision-owned explicit target schedule source. Stopping short would leave
             // every repository suite exercising a database the app can no longer produce.
             database.migrate(AppDatabase.MIGRATION_14_15)
+            // §30 step 28: the user's exercise preference column. Stopping short would leave every
+            // repository suite below exercising a database the app can no longer produce.
+            database.migrate(AppDatabase.MIGRATION_15_16)
         }
     }
 }

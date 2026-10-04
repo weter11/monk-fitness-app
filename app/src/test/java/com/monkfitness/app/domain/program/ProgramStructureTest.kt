@@ -88,9 +88,11 @@ class ProgramStructureTest {
     fun theVocabularyIsEveryStructuralDimensionOfSectionSix() {
         assertEquals(
             "§6's list of what creates a revision, grouped as the editor presents it — goals/focus " +
-                "included, because §6 lists them among the configuration facts that create one",
+                "included, because §6 lists them among the configuration facts that create one, and " +
+                "§9's user preference beside them for the same reason (§6's program-behavior clause)",
             listOf(
-                "MODE", "DURATION", "SCHEDULE", "FOCUS", "DAYS", "EXERCISES", "PRESCRIPTIONS", "PINNING"
+                "MODE", "DURATION", "SCHEDULE", "FOCUS", "PREFERRED_EXERCISES", "DAYS", "EXERCISES",
+                "PRESCRIPTIONS", "PINNING"
             ),
             ProgramStructureAspect.entries.map { it.name }
         )
