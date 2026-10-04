@@ -67,6 +67,12 @@ fun interface ProgressionRelationProvider {
  * worth stating once: a reader of the composition root sees that the app has no exercise→family
  * catalogue on this path today, and a future one replaces one object instead of hunting for the place
  * that invented a default.
+ *
+ * **No production path wires this any more.** P30 supplies
+ * [com.monkfitness.app.domain.usecase.CatalogExerciseFamilyClassification], which reads the family each
+ * shipped catalogue exercise already states. This value remains the honest answer for a caller that
+ * genuinely has no classification — a test, or an app that ships no catalogue — and it is what makes
+ * [AdaptiveInputGap.NO_FAMILY_CLASSIFICATION] still reachable rather than dead vocabulary.
  */
 val NoExerciseFamilyClassification: ExerciseFamilyClassification =
     ExerciseFamilyClassification { null }

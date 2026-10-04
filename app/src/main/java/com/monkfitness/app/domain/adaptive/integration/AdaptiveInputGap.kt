@@ -75,12 +75,18 @@ enum class AdaptiveInputGap {
     /**
      * No element of the target opportunity belongs to a family the caller classifies.
      *
-     * The app stores **no exercise→family catalogue** for the target path
-     * ([ExerciseFamilyClassification]), so this is what production reports today. It is deliberately a
-     * *different* gap from [NO_DECLARED_PROGRESSION_RELATION]: *"we do not know which family this
-     * exercise belongs to"* and *"we know the family and declare no ladder for it"* are fixed by
-     * different artefacts, and a single "cannot adapt" would hide which one is missing. Nothing is
+     * *"We do not know which family this exercise belongs to"* and *"we know the family and declare no
+     * ladder for it"* are fixed by **different artefacts**, and a single "cannot adapt" would hide which
+     * one is missing — so this gap stays distinct from [NO_DECLARED_PROGRESSION_RELATION]. Nothing is
      * inferred from an exercise id or a name to bridge either one (§9, §10).
+     *
+     * **Production stopped reporting this in P30.** The app's shipped catalogue states a family for every
+     * exercise it holds, and [com.monkfitness.app.domain.usecase.CatalogExerciseFamilyClassification]
+     * reads that fact, so a production pass now reaches the *later* gap instead. This member remains
+     * reachable and is exercised by a suite that supplies a classification knowing nothing: it is the
+     * honest answer for a caller with no catalogue, and deleting it would leave
+     * [NO_DECLARED_PROGRESSION_RELATION] as the only way an adaptive pass could report "not enough is
+     * known", which is precisely the conflation this vocabulary exists to prevent.
      */
     NO_FAMILY_CLASSIFICATION,
 

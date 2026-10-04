@@ -288,13 +288,31 @@ class ProductionGenerationBoundaryArchitectureTest {
             "the sweep must actually cover the production tree — a renamed package makes the covered " +
                 "set empty, the offender list empty too, and the claim green without having looked at " +
                 "anything (found ${readers.size})",
-            readers.size >= 4
+            // Raised from 4 by P30 with the reader list below, in the same pass, because the two numbers
+            // are the same claim: this many readers are *expected*, so fewer means the sweep is broken.
+            readers.size >= 5
         )
+        // P30 **extended** this list rather than relaxing it, and the extension is the point. The new
+        // reader is `CatalogExerciseFamilyClassification`, and it is allowed here for one stated reason:
+        // §9's exercise→family membership is a fact the catalogue *already states per exercise*, so the
+        // only honest way to answer it is to read that field — and the alternative would have been a
+        // second exercise list, which is a far larger sin than a fifth reader of the first one.
+        //
+        // It is not a second *owner*: this reader holds a projection of `familyId` and nothing else (no
+        // `Exercise`, no name, no equipment, no animation id), which is the same discipline
+        // `ProgramExerciseLibrary` holds its ids under, and `ProgramExerciseFamilyClassificationTest`
+        // asserts it. A sixth reader would still be a second owner, and this gate would say so.
+        //
+        // The entry is placed where `sorted()` puts it — `Catalog…` before `Production…` — because these
+        // assertions compare against `readers.sorted()`, so an entry appended at the end fails with a diff
+        // that reads like a missing file when the file is present.
         assertEquals(
             "the shipped catalogue is read by the legacy engine, the settings read-back, the " +
-                "§5 membership adapter, MainViewModel's option list — and, new in P23, by the " +
-                "generation boundary. A sixth reader is a second owner of the catalogue.",
+                "§5 membership adapter, MainViewModel's option list, the P23 generation boundary — " +
+                "and, new in P30, by the §9 exercise→family classification. A seventh reader is a " +
+                "second owner of the catalogue.",
             listOf(
+                "domain/usecase/CatalogExerciseFamilyClassification.kt",
                 "domain/usecase/ProductionGenerationBoundary.kt",
                 "domain/usecase/ProgramExerciseLibrary.kt",
                 "domain/usecase/WorkoutGenerator.kt",

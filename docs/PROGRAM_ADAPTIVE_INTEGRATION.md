@@ -287,7 +287,7 @@ is the application's, not the engine's: the engine holds no repository, no DAO a
 
 ## 8. The capability boundary (what production does *not* do yet)
 
-This stage wires two ports and **declares both empty**, and that is the honest state of the target tree
+This stage wired two ports and **declared both empty**, which was the honest state of the target tree
 rather than a placeholder:
 
 ```text
@@ -295,20 +295,32 @@ ProgressionRelationProvider      → NoDeclaredProgression             no family
 ExerciseFamilyClassification     → NoExerciseFamilyClassification    no exercise→family map is persisted
 ```
 
-Neither fact exists anywhere in §23's schema. The only ladders the repository has ever held are the
-Stage-1 pilot's (`PilotProgressionProfiles`), which §30 step 11 forbids this generation to reach for and
-which are scoped to the legacy program's own axis. So **in production, no family is adapted today**: every
-pass stops at `NO_DECLARED_PROGRESSION_RELATION` (or `NO_FAMILY_CLASSIFICATION` when the day's elements
-are unclassified), nothing is written, and **nothing is fabricated to make a family look adaptable** —
-no ladder is invented, no difficulty order is inferred from exercise ids, no family is inferred from a
-name, and no default relation exists.
+**P30 closed the second of those two, and only the second.** The composition root now wires
+`CatalogExerciseFamilyClassification` — the app's shipped catalogue read for the family each exercise
+already states — so a production pass names the family it is about before it refuses. The ladder is
+**still** undeclared, so the outcome is unchanged in substance: every pass still stops at
+`NO_DECLARED_PROGRESSION_RELATION`, nothing is written, and **nothing is fabricated to make a family look
+adaptable**. `NO_FAMILY_CLASSIFICATION` is no longer what production reports, but it stays in the
+vocabulary and stays reachable for a caller that genuinely has no catalogue; deleting it would collapse
+*"we do not know the family"* into *"we know it and declare no ladder"*, which is the conflation the
+two-member vocabulary exists to prevent. The audit that established the catalogue's `familyId` **is** the
+engine's family identity — and therefore why this was a closure rather than a new classification source —
+is recorded in `docs/PROGRAM_ADAPTIVE_FAMILY_CLASSIFICATION.md` §2.
 
-Two artefacts have to arrive, and the ports are where they arrive:
+The ladder is still absent, and the only ladders the repository has ever held are the Stage-1 pilot's
+(`PilotProgressionProfiles`), which §30 step 11 forbids this generation to reach for and which are scoped
+to the legacy program's own axis.
+
+What remains to arrive is therefore **one** artefact, plus §9's separate selection fact:
 
 ```text
 1. a persisted family ladder: which variants exist, at which positions, prescribing what;
-2. a persisted exercise→family catalogue, and §9's set of exercises the user's own configuration enables.
+2. §9's set of the exercises the user's own configuration enables (`availableExerciseIds`) — unchanged.
 ```
+
+A stored `FamilyProgressionState.currentExerciseId` is **not** a substitute for (1): it is family-scoped
+progression bookkeeping, and P30 neither reads it as a ladder nor lets it stand in for the relation that
+does not exist.
 
 Three further boundaries are stated rather than implied:
 
