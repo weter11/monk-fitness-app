@@ -138,7 +138,6 @@ PREFLIGHT=(
   "$PROVIDER|relations.relationOf(familyId)"
   "$PORT|fun interface ProgressionRelationProvider"
   "$CONTAINER|relations = storedProgressionRelationProvider"
-  "$CONTAINER|relations = NoDeclaredProgression"
   "$APPLICATION|container.builtInProgressionCatalogueBootstrap.bootstrap()"
   "$ADAPTIVE_TARGET|val relation = relations.relationOf(familyId) ?: continue"
 )
