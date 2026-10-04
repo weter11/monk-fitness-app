@@ -34,19 +34,30 @@ class ProgramDataAccessArchitectureTest {
         "WorkoutSessionDao",
         "SessionSnapshotDao", "SessionSnapshotExerciseDao",
         "SessionExerciseDao", "ProgramSetLogDao", "ProgramPauseDao", "ProgramFamilyProgressionStateDao",
-        "ProgramAdaptiveDecisionDao", "AdaptiveAdjustmentDao"
+        "ProgramAdaptiveDecisionDao", "AdaptiveAdjustmentDao",
+        // P31: the ladder catalogue's own DAO. It is a target DAO like every other here, and it is
+        // listed because the rule below compares *every* `@Query` a target DAO declares against the
+        // statement the repository suites execute — a DAO missing from this list would take its queries
+        // out of that comparison entirely.
+        "ProgressionRelationVariantDao"
     )
 
     private val targetMappers = listOf(
         "StoredValues", "ProgramMappers", "PlanMappers", "ScheduleMappers", "SessionMappers",
-        "AdaptiveMappers", "AppStateMappers", "TargetOccurrenceMappers", "TargetScheduleSourceMappers"
+        "AdaptiveMappers", "AppStateMappers", "TargetOccurrenceMappers", "TargetScheduleSourceMappers",
+        // P31: the ladder rows ⇄ `ProgramProgressionRelation`. Listed for the same reason: a mapper
+        // missing here would be exempt from the round-trip and vocabulary checks its peers carry.
+        "ProgressionRelationMappers"
     )
 
     private val targetRepositories = listOf(
         "ProgramRepository", "ProgramPlanRepository", "ProgramScheduleRepository",
         "TargetScheduleOccurrenceRepository", "TargetScheduleSourceRepository",
         "WorkoutSessionRepository", "ProgramAdaptiveRepository",
-        "ProgramProgressRepository", "AppStateRepository"
+        "ProgramProgressRepository", "AppStateRepository",
+        // P31: the relation catalogue's own repository — deliberately NOT folded into
+        // `ProgramAdaptiveRepository`, which is why it is named separately here as well.
+        "ProgressionRelationRepository"
     )
 
     private fun dao(name: String) = File(appRoot, "data/local/$name.kt")
@@ -234,12 +245,23 @@ class ProgramDataAccessArchitectureTest {
         declared.forEach { (key, sql) ->
             assertEquals("$key is exercised from its own DAO's literal", sql, ProgramDaoSql.ALL[key])
         }
+        // **Revised, not relaxed, by P31.** The list stays an exact closed set; it gains the ladder
+        // catalogue's per-family delete, and the shape of that third statement is asserted below. The
+        // rule it enforces is unchanged — a statement that rewrites or removes a whole table has no
+        // place in this layer — and P31's delete is scoped to one family precisely so it keeps holding.
         assertEquals(
-            "the hand-written writes are the two statements no entity generates: the Program row's " +
-                "update, and the conditional insert §19's occupancy rule is carried by. §30 step 8 " +
-                "revised this rule rather than relaxing it — the list stays exact, and the shape of both " +
-                "statements is asserted below",
-            listOf("ProgramDao.updateProgram", "WorkoutSessionDao.insertSessionIfSlotIsNotOccupied"),
+            "the hand-written writes are the statements no entity generates: the Program row's update, " +
+                "the conditional insert §19's occupancy rule is carried by, and P31's per-family ladder " +
+                "delete. §30 step 8 revised this rule rather than relaxing it, and so did P31 — the list " +
+                "stays exact, and the shape of every statement is asserted below",
+            // Sorted, because the comparison is against `keys.sorted()` — and placed where `sorted()`
+            // puts it rather than where it was written, for the same reason the schema fixture's lists
+            // are placed there: an entry in the wrong position reads as a missing entry.
+            listOf(
+                "ProgramDao.updateProgram",
+                "ProgressionRelationVariantDao.deleteVariantsOfFamily",
+                "WorkoutSessionDao.insertSessionIfSlotIsNotOccupied"
+            ),
             ProgramDaoSql.WRITES.keys.sorted()
         )
     }
@@ -309,6 +331,28 @@ class ProgramDataAccessArchitectureTest {
                 "executed — read on the same connection, inside the same transaction",
             "SELECT changes()",
             ProgramDaoSql.ALL.getValue("WorkoutSessionDao.changedRowCount")
+        )
+
+        // The third hand-written write, added by P31: replacing a family's declared ladder. It is
+        // asserted for the two properties that make it safe — it names its own table, and it is scoped
+        // to one family rather than to the whole catalogue. A table-wide delete here would silently
+        // destroy every *other* family's declared ladder, which is the one mistake a per-family
+        // catalogue cannot make.
+        val ladderDelete =
+            ProgramDaoSql.WRITES.getValue("ProgressionRelationVariantDao.deleteVariantsOfFamily")
+
+        assertTrue(
+            "P31's ladder delete removes rows from the ladder table itself: $ladderDelete",
+            ladderDelete.startsWith("DELETE FROM `progression_relation_variant`")
+        )
+        assertTrue(
+            "and it is scoped to exactly one family, never the whole catalogue: $ladderDelete",
+            ladderDelete.endsWith(" WHERE `familyId` = :familyId")
+        )
+        assertTrue(
+            "and it mentions no Program, revision or slot column — a ladder catalogue is family-scoped, " +
+                "so a delete that could reference a plan would be a scope leak: $ladderDelete",
+            !ladderDelete.contains("programId") && !ladderDelete.contains("revisionId")
         )
     }
 
@@ -387,18 +431,24 @@ class ProgramDataAccessArchitectureTest {
     }
 
     @Test
-    fun theHarnessRegistersTheNineteenTargetTablesAndNothingElse() {
+    // **Revised, not relaxed, by P31**: the closed list gains the ladder catalogue's one table. The
+    // rule is unchanged — the map must be the target schema and nothing wider — and the new entry is
+    // what makes it true again, because a table the harness did not know would have its columns
+    // inserted blind.
+    fun theHarnessRegistersTheTwentyTargetTablesAndNothingElse() {
         assertEquals(
             "the harness's entity-to-table map is the target schema, not a wider one — §30 step 14 " +
-                "added the two target-occurrence tables and Stage 18 added the two target-schedule " +
-                "source tables, and the map has to know them so the harness inserts their real fields " +
-                "rather than dropping or misplacing a column",
+                "added the two target-occurrence tables, Stage 18 added the two target-schedule " +
+                "source tables, and P31 added the one progression-relation catalogue table; the map " +
+                "has to know each so the harness inserts their real fields rather than dropping or " +
+                "misplacing a column",
             listOf(
                 "adaptive_adjustment", "app_state", "program", "program_adaptive_decision_record",
                 "program_day", "program_exercise", "program_family_progression_state", "program_pause",
                 "program_revision", "program_set_log", "program_target_occurrence",
                 "program_target_occurrence_component", "program_target_program_day_binding",
                 "program_target_schedule_rule", "program_workout_slot",
+                "progression_relation_variant",
                 "session_exercise", "session_snapshot", "session_snapshot_exercise", "workout_session"
             ),
             TARGET_ENTITY_TABLES.values.sorted()

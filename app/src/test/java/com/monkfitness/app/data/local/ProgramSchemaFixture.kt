@@ -36,6 +36,10 @@ internal object ProgramSchemaFixture {
         "ProgramTargetOccurrenceComponentEntity" to "program_target_occurrence_component",
         "ProgramTargetScheduleRuleEntity" to "program_target_schedule_rule",
         "ProgramTargetProgramDayBindingEntity" to "program_target_program_day_binding",
+        // P31: the app-owned progression relation catalogue. Declared here because it is a real target
+        // table with its own entity — but it is **not** revision-owned and carries no Program or
+        // revision column, which is the schema's own statement that a ladder belongs to a family.
+        "ProgressionRelationVariantEntity" to "progression_relation_variant",
         "WorkoutSessionEntity" to "workout_session",
         "SessionSnapshotEntity" to "session_snapshot",
         "SessionSnapshotExerciseEntity" to "session_snapshot_exercise",
@@ -228,6 +232,18 @@ internal object ProgramSchemaFixture {
             Column("workoutId", TEXT),
             Column("programDayId", TEXT)
         ),
+        // P31's ladder catalogue. One normalized child row per variant: no serialized ladder blob, no
+        // current state, no adaptive outcome, no policy, no timestamp, no ranking and no difficulty
+        // score — this is configuration, and every one of those is adaptive history. `perSetTargets`
+        // is `TEXT` for the same reason `program_exercise.perSetTargets` is: it is the schema's
+        // existing lossless converter over an ordered per-set list, not a scalar.
+        "progression_relation_variant" to listOf(
+            Column("familyId", TEXT),
+            Column("level", INTEGER),
+            Column("exerciseId", TEXT),
+            Column("prescriptionDimension", TEXT),
+            Column("perSetTargets", TEXT)
+        ),
         "workout_session" to listOf(
             Column("sessionId", TEXT),
             Column("slotId", TEXT),
@@ -334,6 +350,11 @@ internal object ProgramSchemaFixture {
         // at another revision by a write.
         "program_target_schedule_rule" to listOf("revisionId", "ruleId"),
         "program_target_program_day_binding" to listOf("revisionId", "workoutId"),
+        // P31: one variant IS the pair (familyId, exerciseId). This is what makes "one exercise is one
+        // position in its family's ladder" a database constraint rather than a caller convention — and
+        // it is deliberately NOT (familyId, level), because two variants at one level are a legitimate
+        // declaration and a uniqueness constraint there would refuse §15's own shape.
+        "progression_relation_variant" to listOf("familyId", "exerciseId"),
         "workout_session" to listOf("sessionId"),
         "session_snapshot" to listOf("sessionId"),
         "session_snapshot_exercise" to listOf("sessionId", "programExerciseId"),
@@ -389,6 +410,11 @@ internal object ProgramSchemaFixture {
         "program_target_schedule_rule" to listOf(
             ExpectedForeignKey.single("revisionId", "program_revision", "revisionId", "CASCADE")
         ),
+        // P31's catalogue declares NO foreign key at all, and that absence is the schema-level statement
+        // that a ladder is global rather than revision-owned. There is no family catalogue table in this
+        // schema either — `familyId` is opaque and copied verbatim — so a foreign key could only have
+        // pointed at a Program or a revision, which is exactly the scope this table refuses.
+        "progression_relation_variant" to emptyList(),
         // The binding also dies with the plan day it names. What the schema cannot express — that the
         // day belongs to *this* revision — is the repository's own refusal.
         "program_target_program_day_binding" to listOf(
@@ -500,6 +526,10 @@ internal object ProgramSchemaFixture {
                 unique = false
             )
         ),
+        // P31 declares no index: `familyId` is the `(familyId, exerciseId)` primary key's leading
+        // column and the only column the catalogue is ever read by, exactly as
+        // `program_target_schedule_rule` declares none.
+        "progression_relation_variant" to emptyList(),
         "workout_session" to listOf(
             ExpectedIndex("index_workout_session_slotId", listOf("slotId"), unique = false),
             ExpectedIndex(
@@ -571,7 +601,10 @@ internal object ProgramSchemaFixture {
             "confidence",
             "recovery"
         ),
-        "adaptive_adjustment" to listOf("beforePrescriptionDimension", "afterPrescriptionDimension")
+        "adaptive_adjustment" to listOf("beforePrescriptionDimension", "afterPrescriptionDimension"),
+        // P31: the ladder variant's dimension is the same existing vocabulary, spelled as its own enum
+        // name so a renumbered enum cannot silently re-point a stored rung onto a different unit.
+        "progression_relation_variant" to listOf("prescriptionDimension")
     )
 
     /**
@@ -584,7 +617,11 @@ internal object ProgramSchemaFixture {
         "session_snapshot" to listOf("appliedAdjustmentIds"),
         "session_snapshot_exercise" to listOf("perSetTargets"),
         "session_exercise" to listOf("perSetTargets"),
-        "adaptive_adjustment" to listOf("beforePerSetTargets", "afterPerSetTargets")
+        "adaptive_adjustment" to listOf("beforePerSetTargets", "afterPerSetTargets"),
+        // P31: the ladder variant's per-set list, through the SAME existing lossless converter the plan
+        // element uses. Registering it here is what makes "this column holds a converted ordered
+        // collection, and therefore must not be flattened to a scalar" a checked claim rather than prose.
+        "progression_relation_variant" to listOf("perSetTargets")
     )
 
     /**
@@ -781,7 +818,10 @@ internal object ProgramSchemaFixture {
         "program_target_occurrence",
         "program_target_occurrence_component",
         "program_target_schedule_rule",
-        "program_target_program_day_binding"
+        "program_target_program_day_binding",
+        // P31: created by MIGRATION_17_18, so `MIGRATION_7_8`'s own statement list does not claim it,
+        // and EXPECTED_PROGRESSION_RELATION_STATEMENTS below is that step's contract instead.
+        "progression_relation_variant"
     )
 
     /** The tables the version-7 → version-8 migration creates, in the order it creates them. */
@@ -844,6 +884,20 @@ internal object ProgramSchemaFixture {
             "program_target_program_day_binding",
             INDEXES.getValue("program_target_program_day_binding").single()
         )
+    )
+
+    /**
+     * Every statement the version-17 → version-18 migration must execute, and it is **exactly one**.
+     *
+     * The step creates the ladder catalogue's single table and nothing else: no `ALTER`, no
+     * `INSERT ... SELECT` backfill, no seed of any family. That absence is the load-bearing part of
+     * this list rather than an omission — a ladder is a definition this app authors, and manufacturing
+     * one from `program_exercise` or `program_family_progression_state` would write a claim about what
+     * a family trains that no author ever made. So an upgraded device declares no ladder, production
+     * keeps reporting `NO_DECLARED_PROGRESSION_RELATION`, and the count below stays `1`.
+     */
+    val EXPECTED_PROGRESSION_RELATION_STATEMENTS: List<String> = listOf(
+        expectedTableDdl("progression_relation_variant")
     )
 
     /** Whitespace-collapsed SQL, so a multi-line statement and Room's single-line one compare equal. */

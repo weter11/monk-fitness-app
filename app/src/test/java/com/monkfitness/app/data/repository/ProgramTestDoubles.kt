@@ -7,6 +7,7 @@ import com.monkfitness.app.data.local.ProgramDao
 import com.monkfitness.app.data.local.ProgramDayDao
 import com.monkfitness.app.data.local.ProgramExerciseDao
 import com.monkfitness.app.data.local.ProgramFamilyProgressionStateDao
+import com.monkfitness.app.data.local.ProgressionRelationVariantDao
 import com.monkfitness.app.data.local.ProgramPauseDao
 import com.monkfitness.app.data.local.ProgramRevisionDao
 import com.monkfitness.app.data.local.ProgramSetLogDao
@@ -33,6 +34,7 @@ import com.monkfitness.app.data.model.ProgramTargetOccurrenceEntity
 import com.monkfitness.app.data.model.ProgramTargetProgramDayBindingEntity
 import com.monkfitness.app.data.model.ProgramTargetScheduleRuleEntity
 import com.monkfitness.app.data.model.ProgramWorkoutSlotEntity
+import com.monkfitness.app.data.model.ProgressionRelationVariantEntity
 import com.monkfitness.app.data.model.SessionExerciseEntity
 import com.monkfitness.app.data.model.SessionSnapshotEntity
 import com.monkfitness.app.data.model.SessionSnapshotExerciseEntity
@@ -96,7 +98,11 @@ internal val TARGET_ENTITY_TABLES: Map<Class<*>, String> = mapOf(
     ProgramPauseEntity::class.java to "program_pause",
     FamilyProgressionStateEntity::class.java to "program_family_progression_state",
     AdaptiveDecisionRecordEntity::class.java to "program_adaptive_decision_record",
-    AdaptiveAdjustmentEntity::class.java to "adaptive_adjustment"
+    AdaptiveAdjustmentEntity::class.java to "adaptive_adjustment",
+    // P31: the ladder catalogue. Registered here because the harness asserts that this entity's declared
+    // fields are exactly the columns the table stores — which is what makes "the persisted row shape is
+    // the entity" a mechanical check on the new table too, rather than a claim.
+    ProgressionRelationVariantEntity::class.java to "progression_relation_variant"
 )
 
 /**
@@ -373,6 +379,22 @@ private fun Map<String, String?>.familyStateEntity() = FamilyProgressionStateEnt
     precedingRecoveryQualifyingWindows = this["precedingRecoveryQualifyingWindows"]?.toInt(),
     qualifyingWindowsSinceLastChange = this["qualifyingWindowsSinceLastChange"]?.toInt(),
     recoveryQualifyingWindows = this["recoveryQualifyingWindows"]?.toInt()
+)
+
+/**
+ * One stored ladder rung, read field for field as the entity declares it.
+ *
+ * `prescriptionDimension` is carried through as the raw stored token and `perSetTargets` as the raw
+ * comma-joined targets, because interpreting them is the **mapper's** job — this harness must not
+ * decide what a dimension token means or normalise a target list, or a mapper that dropped an element
+ * would still round-trip through it.
+ */
+private fun Map<String, String?>.relationVariantEntity() = ProgressionRelationVariantEntity(
+    familyId = text("familyId"),
+    level = number("level"),
+    exerciseId = text("exerciseId"),
+    prescriptionDimension = text("prescriptionDimension"),
+    perSetTargets = targets("perSetTargets")
 )
 
 private fun Map<String, String?>.decisionEntity() = AdaptiveDecisionRecordEntity(
@@ -748,6 +770,38 @@ internal class SqliteProgramFamilyProgressionStateDao(private val database: Sqli
     override suspend fun stateOf(revisionId: String, familyId: String): FamilyProgressionStateEntity? =
         database.rows(ProgramDaoSql.PROGRAM_FAMILY_PROGRESSION_STATE_DAO_STATE_OF, revisionId, familyId)
             .firstOrNull()?.familyStateEntity()
+}
+
+/**
+ * P31's ladder catalogue DAO, on the real engine.
+ *
+ * The read delegates to [ProgramDaoSql] rather than restating a statement here, which is what keeps the
+ * harness and the DAO's own `@Query` literals comparable token for token — the architecture test
+ * asserts they are the same strings.
+ */
+internal class SqliteProgressionRelationVariantDao(private val database: SqliteTestDatabase) :
+    ProgressionRelationVariantDao {
+
+    override suspend fun insertVariants(variants: List<ProgressionRelationVariantEntity>) {
+        variants.forEach { variant -> database.insertRow(variant) }
+    }
+
+    override suspend fun variantsOfFamily(
+        familyId: String
+    ): List<ProgressionRelationVariantEntity> =
+        database.rows(ProgramDaoSql.PROGRESSION_RELATION_VARIANT_DAO_VARIANTS_OF_FAMILY, familyId)
+            .map { it.relationVariantEntity() }
+
+    override suspend fun deleteVariantsOfFamily(familyId: String) {
+        database.exec(
+            ProgramDaoSql.PROGRESSION_RELATION_VARIANT_DAO_DELETE_VARIANTS_OF_FAMILY,
+            familyId
+        )
+    }
+
+    override suspend fun declaredFamilyIds(): List<String> =
+        database.strings(ProgramDaoSql.PROGRESSION_RELATION_VARIANT_DAO_DECLARED_FAMILY_IDS)
+            .map { requireNotNull(it) }
 }
 
 internal class SqliteProgramAdaptiveDecisionDao(private val database: SqliteTestDatabase) :
