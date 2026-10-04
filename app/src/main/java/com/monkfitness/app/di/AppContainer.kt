@@ -32,9 +32,9 @@ import com.monkfitness.app.data.repository.TargetScheduleSourceRepository
 import com.monkfitness.app.data.repository.WorkoutSessionRepository
 import com.monkfitness.app.bootstrap.StandardProgramBootstrap
 import com.monkfitness.app.domain.adaptive.integration.NoDeclaredProgression
-import com.monkfitness.app.domain.adaptive.integration.NoExerciseFamilyClassification
 import com.monkfitness.app.domain.program.DraftIdSource
 import com.monkfitness.app.domain.usecase.SHIPPED_EXERCISE_CATALOGUE
+import com.monkfitness.app.domain.usecase.CatalogExerciseFamilyClassification
 import com.monkfitness.app.domain.usecase.ProgramAdaptiveIntegration
 import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramExerciseLibrary
@@ -675,7 +675,26 @@ class AppContainer(
         )
     )
 
-    // --- §30 step 12: the adaptive integration ----------------------------------------------------
+    // --- P30: §9's exercise→family classification, and §30 step 12 over it ----------------------
+
+    /**
+     * P30's exercise→family classification — the shipped catalogue read for the family each exercise
+     * already states.
+     *
+     * It is a **graph node rather than a constant**, for the same reason P24's
+     * [ProductionFocusClassification] is wired in: the fact is the catalogue's, and the container
+     * decides which object the integration receives without deciding anything about it. Its
+     * construction is deliberately placed **outside** every other node's container slice — several
+     * architecture gates read this file with `substringAfter("val <node>").substringBefore("val <node>")`,
+     * so a node dropped between two of those boundaries would silently widen a neighbour's scan, and the
+     * failure would name a forbidden token this wiring never meant to police.
+     *
+     * Nothing here is a progression ladder. This closes one of the two facts §30 step 12 recorded as
+     * missing — the family membership — and leaves the other absent, so `relations` below still reports
+     * every family as undeclared.
+     */
+    val catalogExerciseFamilyClassification: CatalogExerciseFamilyClassification =
+        CatalogExerciseFamilyClassification()
 
     /**
      * The adaptive integration — §30 step 12, over the repositories and the engine above.
@@ -688,24 +707,25 @@ class AppContainer(
      * transaction — which is why the same [inTransaction] runner and the same
      * [programAdaptiveRepository] are on both sides of it.
      *
-     * ### The two collaborators that are deliberately empty
+     * ### The two collaborators, and the one that is still deliberately empty
      *
-     * [relations] and [classification] are wired to their explicit *"nothing is declared"* values, and
-     * that is the honest state of the target tree rather than a placeholder to be filled in later:
+     * P30 closed one of the two facts that were missing here, and the KDoc above it was revised rather
+     * than deleted. What the container now wires is:
      *
      * ```text
-     * no persisted family ladder      → NoDeclaredProgression          (§15's progression relations)
-     * no persisted exercise→family map → NoExerciseFamilyClassification (§9's family membership)
+     * no persisted family ladder      → NoDeclaredProgression   (§15's progression relations) — STILL
+     * exercise → family, from the     → CatalogExerciseFamilyClassification (§9's family membership) — P30
+     *   shipped catalogue's own fact
      * ```
      *
-     * Neither fact exists anywhere in §23's schema; the only ladders the repository holds are the Stage-1
-     * pilot's, which §30 step 11 forbids this generation to reach for and which are scoped to the legacy
-     * program's own axis. With no ladder declared, every adaptive pass in production ends in the engine's
-     * bounded `PROGRESSION_UNAVAILABLE` hold ([com.monkfitness.app.domain.adaptive.integration
-     * .AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION] when the day presents no exposed family either)
-     * — **no family is adapted, and nothing is fabricated to make one look adaptable**. §30 step 12's
-     * document names both artefacts and what supplying them means; a caller that has them (a test, or a
-     * later stage that persists them) constructs this class with its own provider.
+     * The classification is **read off the app's existing catalogue**, not invented: every shipped
+     * exercise states its own family, and `docs/PROGRAM_ADAPTIVE_FAMILY_CLASSIFICATION.md` §2 records the
+     * audit that establishes that fact is the engine's own family identity. So a production pass can
+     * now name the family it is about — and still **adapts nothing**, because the ladder is still
+     * undeclared. The result is the engine's bounded `PROGRESSION_UNAVAILABLE` hold, or
+     * [com.monkfitness.app.domain.adaptive.integration.AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION]
+     * when the day presents no exposed family either. One gap closed is not a second one filled, and
+     * nothing here is fabricated to make a family look adaptable.
      *
      * ### What the container decides, and what it does not
      *
@@ -723,7 +743,7 @@ class AppContainer(
         sessionRepository = workoutSessionRepository,
         adaptiveRepository = programAdaptiveRepository,
         relations = NoDeclaredProgression,
-        classification = NoExerciseFamilyClassification,
+        classification = catalogExerciseFamilyClassification,
         clock = clock,
         idGenerator = idGenerator,
         zone = zone

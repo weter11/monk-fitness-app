@@ -503,6 +503,20 @@ Planner / Exercise Selector / GeneratedPlanner change · no new `GenerationPrefe
 semantics · no new Program lifecycle model · no scheduler change · no session-runtime change beyond the
 existing snapshot boundary · no legacy removal · no UI change · no export/import field.
 
+### Still true after P30
+
+**P30** (`docs/PROGRAM_ADAPTIVE_FAMILY_CLASSIFICATION.md`) later supplied §9's exercise→family
+classification on the *adaptive* side, by reading the family each shipped catalogue exercise already
+states. That closes one gap **one layer above this one** and therefore changes nothing recorded here:
+
+* `adaptivePreferredExerciseIds` is **still** `emptyList()`, and the reason §3 gives is unchanged — a
+  family membership is not a ranking, and knowing *which family* an exercise is in says nothing about
+  whether the user's own configuration prefers it. P30 read a catalogue field; it did not read a
+  preference, and it added no ranking to bridge the difference.
+* `recovery` is **still** `RecoveryContext.UNKNOWN`. `RecoveryContext` comes from the adaptive stage's
+  per-window, per-family judgement, and that judgement cannot run in production while the ladder is
+  undeclared — which is still true after P30.
+
 ---
 
 ## 15. Verification

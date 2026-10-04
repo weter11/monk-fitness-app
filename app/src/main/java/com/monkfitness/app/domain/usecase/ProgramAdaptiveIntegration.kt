@@ -110,12 +110,18 @@ import java.time.ZoneId
  *
  * It runs no policy of its own, applies no threshold of its own, invents no ladder, fabricates no
  * judgement, creates no row, moves no date, creates no slot, creates or rewrites no revision and mutates
- * no session. Two facts production does not have are recorded rather than hidden: the target schema
- * stores neither a family ladder nor an exercise→family catalogue, so the composition root wires
- * `NoDeclaredProgression` and `NoExerciseFamilyClassification` and **no family is adapted in production
- * today** — every pass stops at [AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION] instead of
- * fabricating a progression. `docs/PROGRAM_ADAPTIVE_INTEGRATION.md` names both artefacts; the suites
- * drive the whole flow with a ladder and a classification supplied.
+ * no session. One fact production does not have is recorded rather than hidden: the target schema stores
+ * no family ladder, so the composition root wires `NoDeclaredProgression` and **no family is adapted in
+ * production today** — every pass stops at [AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION] instead of
+ * fabricating a progression.
+ *
+ * The *other* fact §30 step 12 recorded as missing — an exercise→family catalogue — **P30 supplied**, from
+ * the app's own shipped catalogue rather than from new storage. Supplying it moved production one gap
+ * later, from `NO_FAMILY_CLASSIFICATION` to `NO_DECLARED_PROGRESSION_RELATION`, and nothing further: a pass
+ * can now name the family it is about and still declines to adapt it, because the ladder is still
+ * undeclared. `docs/PROGRAM_ADAPTIVE_FAMILY_CLASSIFICATION.md` records the audit that established the
+ * catalogue's `Exercise.familyId` *is* this engine's family identity; the suites drive the whole flow with
+ * a ladder supplied on top of it.
  *
  * @param planRepository the revision mechanism, read for the revision the completed Session names — the
  *   revision its target opportunity must belong to. Read, never written (§6).
