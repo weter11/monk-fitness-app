@@ -5,6 +5,7 @@ import com.monkfitness.app.domain.common.ProgramExerciseId
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.RevisionId
 import com.monkfitness.app.domain.common.SlotId
+import com.monkfitness.app.domain.program.Focus
 import com.monkfitness.app.domain.prescription.Prescription
 import java.time.Instant
 import java.time.LocalDate
@@ -16,15 +17,25 @@ import java.time.LocalDate
  * *built* — there is no pin and no origin here, because presentation is not authoring. What is left is
  * what the session screen needs: which plan element this is, which exercise, and what to ask for.
  *
+ * [focus] is the plan element's own recorded focus, copied through presentation unchanged — including
+ * through an adaptive adjustment that swaps the exercise or the prescription for this occurrence. An
+ * adjustment changes *what* is shown, not *which focus the element was planned for*, so the assignment
+ * survives a superseding adjustment exactly as the prescription's origin does not matter here.
+ *
+ * It is `null` when the plan element recorded none (§19: an element the generator never assigned, or
+ * one written before the field existed), and `null` means absence rather than a default focus.
+ *
  * @property programExerciseId the plan element this presentation comes from.
  * @property exerciseId the library key to present.
  * @property prescription what to ask for, per set — the revision's prescription, or the one an
  *   adaptive adjustment put in its place.
+ * @property focus the focus of the slot assignment this element serves, as the plan recorded it.
  */
 data class EffectiveExercise(
     val programExerciseId: ProgramExerciseId,
     val exerciseId: String,
-    val prescription: Prescription
+    val prescription: Prescription,
+    val focus: Focus? = null
 ) {
 
     init {

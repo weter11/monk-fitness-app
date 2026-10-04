@@ -1,6 +1,7 @@
 package com.monkfitness.app.domain.usecase
 
 import com.monkfitness.app.domain.common.ProgramId
+import com.monkfitness.app.domain.program.Focus
 import com.monkfitness.app.domain.program.ProgramEditorDraft
 import com.monkfitness.app.domain.program.generated.GenerationPreferences
 import com.monkfitness.app.domain.workout.WorkoutSession
@@ -47,28 +48,48 @@ fun interface GenerationContextSource {
  *          ↓  WorkoutSessionRepository.sessionsOfProgram — the whole assembled WorkoutSession graph
  * performed occurrences (results.isNotEmpty())
  *          ↓  most recent session first, presentation order inside a session, first sighting kept
- * GenerationPreferences(recentExerciseIds = …)
+ * recentExerciseIds
+ *          ↓  paired with the focus the session's OWN snapshot recorded (§19)
+ * recentExposureByFocus   = performed occurrences, counted per recorded focus
+ * recentLoadByFocus       = confirmed sets, summed per recorded focus
  * ```
  *
- * ### Two signals are filled, and each for its own reason
+ * ### The focus-keyed signals, and where their fact actually lived
+ *
+ * P27 left `recentExposureByFocus` and `recentLoadByFocus` neutral and said why: no object on the way
+ * from a plan to a performed set carried a focus. P29's audit found that statement was **correct but
+ * incomplete** — the fact existed and was being *discarded*. `GeneratedElement.focus` is real, the
+ * Focus Planner assigns it, and `GeneratedSlot` asserts that a slot's elements are exactly its
+ * assignment's focuses in order; `PlanReconciler` then dropped it when it materialised an element into a
+ * `ProgramExercise`. From that point on no honest read of historical focus was possible, which is why
+ * reconstructing one from the exercise catalogue was the only alternative and was correctly refused.
+ *
+ * So the fix is a **copy**, not an inference, and the two signals read the value off the session's own
+ * snapshot — the immutable record of what was presented (§19). They do not read the current revision,
+ * do not classify an exercise, and do not invent a focus where none was recorded. See
+ * `docs/PROGRAM_GENERATION_ADAPTIVE_HISTORY.md`.
+ *
+ * ### Three signals are filled, and each for its own reason
  *
  * **`recentExerciseIds`** is filled because its semantic unit is a thing the session graph already
  * records: *an exercise the user actually performed, most recent first*.
+ *
+ * **`recentExposureByFocus`** and **`recentLoadByFocus`** are filled because P29 gave their unit a real
+ * owner: the focus assignment an occurrence was **presented under**, recorded at snapshot creation.
  *
  * **`userPreferredExerciseIds`** is filled because §30 step 28 gave it a real owner: the user's own
  * stated ordering, persisted as revision content and carried on the draft. It needs no read, because
  * a draft's configuration is stated rather than inferred — which is also why a draft that has never
  * been saved can still carry one (`Generate` alters only a draft, §7).
  *
- * The remaining four are left at their neutral value, and each omission is a **recorded gap** rather
+ * The remaining two are left at their neutral value, and each omission is a **recorded gap** rather
  * than a hole to paper over:
  *
  * | signal | why it stays neutral |
  * | --- | --- |
- * | `adaptivePreferredExerciseIds` | the stored `FamilyProgressionState.currentExerciseId` is *"the exercise the family is currently on"* — family-scoped and revision-scoped, and no existing contract defines it as an exercise-selection preference for generation. Promoting it would fabricate the preference the field is named for. |
- * | `recentExposureByFocus` | the unit is **focus assignments** the recent context was loaded with. Neither `WorkoutSession`, `SessionExercise`, `EffectiveExercise` nor `ProgramExercise` carries a focus, and a slot's `FocusAssignment` is a generated-plan value that reconciliation does not keep per element. Classifying performed exercises through `ProductionFocusClassification` would be exactly the reconstruction algorithm this stage must not invent — and an exercise that *trains* two focuses is not two assignments. |
- * | `recentLoadByFocus` | the same missing link, one dimension up: there is no focus to attribute a performed set to. A `LoadProfile` is family-scoped and multi-dimensional; summing it, or converting repetitions into a count of sets, would be a cross-dimension conversion. |
- * | `recovery` | `RecoveryContext` is produced by the adaptive stage's own `AdaptiveJudgementRule` for *one decision window of one family*, and that rule itself receives `UNKNOWN` as its documented absence. There is no production-owned recovery context for a generation request, so there is none to read. |
+ * | `adaptivePreferredExerciseIds` | the stored `FamilyProgressionState.currentExerciseId` is *"the exercise the family is currently on"* — family-scoped and revision-scoped, and no existing contract defines it as an exercise-selection preference for generation. Promoting it would fabricate the preference the field is named for, and adding a ranking heuristic would invent §9's precedence rather than read it. |
+ * | `recovery` | `RecoveryContext` is produced by the adaptive stage's own `AdaptiveJudgementRule` for *one decision window of one family*, and that rule itself receives `UNKNOWN` as its documented absence. There is no production-owned recovery context for a generation request, so there is none to read — and elapsed time, time since the last workout or `currentExerciseId` would each be a substitute measurement, not the fact. |
+ *
  *
  * ### What counts as a performed occurrence
  *
@@ -112,15 +133,16 @@ class ProgramHistoryGenerationContext(
         // draft that has not been saved still states it (Generate alters only a draft, §7).
         val preferred = draft.preferredExercises.exerciseIds
         val programId = draft.programId ?: return GenerationPreferences(userPreferredExerciseIds = preferred)
-        val performed = recentExerciseIdsOf(sessions.sessionsOfProgram(programId))
-        return if (performed.isEmpty()) {
-            GenerationPreferences(userPreferredExerciseIds = preferred)
-        } else {
-            GenerationPreferences(
-                userPreferredExerciseIds = preferred,
-                recentExerciseIds = performed
-            )
-        }
+        val history = sessions.sessionsOfProgram(programId)
+        val performed = recentExerciseIdsOf(history)
+        val exposure = recentExposureByFocusOf(history)
+        val load = recentLoadByFocusOf(history)
+        return GenerationPreferences(
+            userPreferredExerciseIds = preferred,
+            recentExerciseIds = performed,
+            recentExposureByFocus = exposure,
+            recentLoadByFocus = load
+        )
     }
 
     /**
@@ -138,6 +160,76 @@ class ProgramHistoryGenerationContext(
         .filter { occurrence -> occurrence.results.isNotEmpty() }
         .map { occurrence -> occurrence.exerciseId }
         .distinct()
+
+    /**
+     * `recentExposureByFocus`: **focus assignments that were actually executed**, per focus.
+     *
+     * The unit is §8's own: one element of one slot's `FocusAssignment`, counted once because the
+     * occurrence that presented it has at least one confirmed set. So the counter is *per performed
+     * occurrence*, and a workout that trained three focuses contributes to three entries — which is
+     * exactly why this is not a count of workouts, and why deriving it from the session count would be
+     * a different measurement wearing this name.
+     *
+     * The focus is the one **recorded on the session's own snapshot** (§19). Nothing here reads the
+     * current revision, and nothing classifies an exercise: `ProductionFocusClassification` is
+     * deliberately unreachable from this file, because classifying a performed exercise by catalogue
+     * membership would reconstruct a history nobody recorded, and an exercise that *trains* two
+     * focuses is not two assignments.
+     *
+     * A performed occurrence with **no recorded focus contributes nothing at all** — not a zero. §12
+     * and `ExposureObservation`'s own invariant: absence produces no observation rather than a zero one.
+     */
+    private fun recentExposureByFocusOf(sessions: List<WorkoutSession>): Map<Focus, Int> =
+        sessions.asReversed()
+            .flatMap { session -> performedOccurrencesWithRecordedFocus(session) }
+            .groupingBy { entry -> entry.first }
+            .eachCount()
+
+    /**
+     * `recentLoadByFocus`: the **confirmed sets** performed, attributed to each recorded focus.
+     *
+     * The unit is a **set** — `SetResult` rows, which is what §19 stores and what §10 prescribes. So a
+     * partially executed occurrence contributes exactly the sets it confirmed, repetitions are never
+     * converted into a count of sets, seconds are never converted into a count of sets, and no scalar
+     * load score is computed or compared: a `LoadProfile` is family-scoped and multi-dimensional, and
+     * collapsing it to one number per focus would be a cross-dimension conversion rather than a
+     * measurement.
+     *
+     * As with exposure, an occurrence whose snapshot recorded no focus stays **absent** — an absent
+     * focus is not a focus that was trained zero times.
+     */
+    private fun recentLoadByFocusOf(sessions: List<WorkoutSession>): Map<Focus, Int> =
+        sessions.asReversed()
+            .flatMap { session -> performedOccurrencesWithRecordedFocus(session) }
+            .groupingBy { entry -> entry.first }
+            .fold(0) { total, entry -> total + entry.second }
+
+    /**
+     * The performed occurrences of one session paired with the focus its **own snapshot** recorded.
+     *
+     * One pass serves both signals because the two share this pairing exactly: an occurrence with fewer
+     * than one confirmed set is not exposure and contributes no load, so filtering once cannot make the
+     * two disagree. The occurrence is joined to the snapshot element by its plan element identity — the
+     * same identity §19 uses to say *what was presented* — and never by exercise id, which is not a
+     * presentation identity (§9 allows the same exercise twice in one day).
+     *
+     * A snapshot element with `focus == null` is **dropped**, not defaulted: that is the row that means
+     * *no focus was recorded*, and it is what a manual program, a user-authored element or a pre-P29
+     * workout produces.
+     */
+    private fun performedOccurrencesWithRecordedFocus(
+        session: WorkoutSession
+    ): List<Pair<Focus, Int>> {
+        val focusByElement = session.snapshot.workout.exercises
+            .mapNotNull { element -> element.focus?.let { focus -> element.programExerciseId to focus } }
+            .toMap()
+        return session.exercises
+            .filter { occurrence -> occurrence.results.isNotEmpty() }
+            .mapNotNull { occurrence ->
+                focusByElement[occurrence.programExerciseId]
+                    ?.let { focus -> focus to occurrence.results.size }
+            }
+    }
 }
 
 /**

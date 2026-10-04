@@ -274,6 +274,9 @@ internal class CompositionRootRig(
         // §30 step 28: the user's exercise preference column. Stopping short would leave every
         // repository suite below exercising a database the app can no longer produce.
         database.migrate(AppDatabase.MIGRATION_15_16)
+        // P29: the element's historical focus and the snapshot's frozen copy. Stopping short
+        // would leave this suite exercising a database the app can no longer produce.
+        database.migrate(AppDatabase.MIGRATION_16_17)
     }
 
     val database = SqliteAppDatabase(engine)

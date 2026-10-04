@@ -25,6 +25,10 @@ import androidx.room.Index
  * @property exerciseId the library key that was presented.
  * @property prescriptionDimension the dimension the presented prescription was written in (token column).
  * @property perSetTargets the presented target of every set, in set order.
+ * @property focus the focus this element represented **when the session began**, stored by name; `null`
+ *   when the plan recorded no assignment for it. Copied for the same reason the prescription is: an
+ *   adjusted element keeps the focus of the assignment it serves, and a row written before this column
+ *   existed means *no focus was recorded*, never a default.
  */
 @Entity(
     tableName = "session_snapshot_exercise",
@@ -45,5 +49,6 @@ data class SessionSnapshotExerciseEntity(
     val position: Int,
     val exerciseId: String,
     val prescriptionDimension: String,
-    val perSetTargets: List<Int>
+    val perSetTargets: List<Int>,
+    val focus: String? = null
 )

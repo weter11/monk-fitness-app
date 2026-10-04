@@ -1,5 +1,17 @@
 # P27 — Production Generation Context
 
+> **Updated by P29** (§30 step 29, PR: `feat/program-stage29-adaptive-history`).
+> P27 filled **one** of the six signals below. P28 added a second
+> (`userPreferredExerciseIds`) and P29 a third and fourth
+> (`recentExposureByFocus`, `recentLoadByFocus`). The two focus-keyed rows marked **no** in §3 are now
+> **yes**, and the reason they were empty was itself wrong in an instructive way — P27 concluded that no
+> object on the path from a plan to a performed set carried a focus, when in fact the focus existed and
+> was being discarded one step into that path. See §3 and
+> `docs/PROGRAM_GENERATION_ADAPTIVE_HISTORY.md`.
+>
+> The two rows still marked **no** — `adaptivePreferredExerciseIds` and `recovery` — remain no, and §3
+> now says why that is the answer rather than a gap to be closed.
+
 §30 step 27. Base `ecb3702` (the P26 merge). Branch `feat/program-stage27-generation-context`.
 
 ```text
@@ -65,21 +77,21 @@ silently plan against nothing. The collaborator *count* is unchanged at five.
 | signal | owner / source | exact semantic unit | scope | present? | reason |
 | --- | --- | --- | --- | --- | --- |
 | `userPreferredExerciseIds` | **none** | exercises **the user** asked for, most preferred first | — | **no** | No persisted, user-authored preference ordering exists. The draft's `USER_AUTHORED` / pinned elements are *plan content* that reconciliation preserves (§7), not a ranked wish list; reading them as a preference would be a different meaning the codebase does not state — and would break `GenerationPreferences`' own "preferred once" invariant the moment an element was also adaptive-preferred. |
-| `adaptivePreferredExerciseIds` | `ProgramAdaptiveRepository.familyStates(revisionId)` — **not read** | exercises the adaptive layer would prefer, most preferred first | — | **no** | The stored `FamilyProgressionState.currentExerciseId` means *"the exercise id the family is currently on"*, and is family-scoped **and** revision-scoped (§23). No existing contract makes it an exercise-selection preference for generation, so promoting it would fabricate the preference the field is named for. `AdaptiveDecision` / `AdaptiveAdjustment` carry no preference either. |
+| `adaptivePreferredExerciseIds` | `ProgramAdaptiveRepository.familyStates(revisionId)` — **not read** | exercises the adaptive layer would prefer, most preferred first | — | **no** (unchanged by P29) | The stored `FamilyProgressionState.currentExerciseId` means *"the exercise id the family is currently on"*, and is family-scoped **and** revision-scoped (§23). No existing contract makes it an exercise-selection preference for generation, so promoting it would fabricate the preference the field is named for. `AdaptiveDecision` / `AdaptiveAdjustment` carry no preference either. **P29 filled two signals and deliberately left this one alone**: a filled signal proves the pipeline works, not that the unfilled ones have owners, and no ranking heuristic was added to bridge the gap. |
 | `recentExerciseIds` | `WorkoutSessionRepository.sessionsOfProgram(programId)` → `SessionExercise.exerciseId` where `results.isNotEmpty()` | the exercises **actually performed**, most recent first | `ProgramId` | **YES** | The only signal whose semantic unit the session graph already records. §19's snapshot guarantee means the value comes from the session's own stored rows, not from a live plan. |
-| `recentExposureByFocus` | **none** | **focus assignments** the recent context was loaded with — the unit the Focus Planner itself allocates (§8) | — | **no** | Not a count of workouts, slots or exercises. No link exists: `WorkoutSession`, `SessionExercise`, `EffectiveExercise` and `ProgramExercise` carry **no focus field**, and a slot's `FocusAssignment` is a generated-plan value that reconciliation does not keep per element. Classifying performed exercises through `ProductionFocusClassification` would be exactly the reconstruction algorithm P27 must not invent — and an exercise that *trains* two focuses is not two assignments. |
-| `recentLoadByFocus` | **none** | **recent performed sets, by focus** (§8 / §17) | — | **no** | The same missing link one dimension up: there is no focus to attribute a performed set to. A `LoadProfile` is family-scoped and multi-dimensional (sets / repetitions / seconds side by side, never summed); converting it to a scalar, adding repetitions to seconds, or attributing sets to a focus would each be a cross-dimension conversion. |
+| `recentExposureByFocus` | session snapshot's own recorded focus (`session_snapshot_exercise.focus`, copied from `program_exercise.focus`) — **P29** | **focus assignments** that were actually executed, counted per occurrence with ≥1 confirmed set — the unit the Focus Planner itself allocates (§8) | `ProgramId` | **YES** (P29) | **Revised — P27's stated reason was correct but incomplete.** The focus did exist: `GeneratedElement.focus` is assigned by the Focus Planner and asserted by `GeneratedSlot`, and `PlanReconciler` dropped it when materialising an element into a `ProgramExercise`. P29 preserves that one line, stores it, freezes it in the §19 snapshot, and reads it from there. Not a count of workouts, slots or exercises; classification through `ProductionFocusClassification` remains structurally forbidden. |
+| `recentLoadByFocus` | the same recorded focus, paired with each occurrence's confirmed sets — **P29** | **confirmed `SetResult` rows, per recorded focus** (§8 / §17) | `ProgramId` | **YES** (P29) | The missing link above, once it existed. Only **sets** are aggregated: repetitions are never summed (4×12 is 4, not 48), seconds are never summed (2 timed sets is 2, not 105), and no scalar `LoadProfile` is computed or compared. Partial execution contributes exactly its confirmed sets; an occurrence with no recorded focus stays **absent**, never `0`. |
 | `recovery` | `AdaptiveJudgementRule` — **not reachable** | the recovery **context** generation is planned in (§14's vocabulary) | — | **no** | `RecoveryContext` is produced by the adaptive stage's own judgement rule for **one decision window of one family**, and that rule itself receives `UNKNOWN` as its documented absence (`ProgramAdaptiveIntegration:293`). There is no production-owned recovery context for a generation request, so there is none to read. |
 
 ### What "neutral" means here, precisely
 
 ```text
-userPreferredExerciseIds    = emptyList()
-adaptivePreferredExerciseIds = emptyList()
-recentExerciseIds           = <filled from this Program's performed history>
-recentExposureByFocus       = emptyMap()
-recentLoadByFocus           = emptyMap()
-recovery                    = RecoveryContext.UNKNOWN
+userPreferredExerciseIds     = emptyList()   ← the stated ones are P28's
+adaptivePreferredExerciseIds = emptyList()   ← still neutral, and §3 says why
+recentExerciseIds            = <filled from this Program's performed history>
+recentExposureByFocus        = <filled per recorded focus>   ← P29
+recentLoadByFocus            = <filled per recorded focus>   ← P29
+recovery                     = RecoveryContext.UNKNOWN
 ```
 
 **`missing ≠ zero`.** No focus appears in either map with a `0` entry, because `0` is a claim that the
@@ -187,12 +199,15 @@ is now pinned by a test so that filling it later is a deliberate revision.
 2. **No adaptive generation preference.** `currentExerciseId` is family-scoped progression state, not a
    selection preference. Filling this needs an explicit domain contract stating that a stored adaptive
    value *is* a generation preference — a decision, not a derivation.
-3. **No focus exposure.** Requires a stored link between a performed occurrence and the focus assignment
-   it was loaded with. Neither `program_exercise` nor `session_exercise` nor `session_snapshot_exercise`
-   carries a focus. Filling this needs a schema decision (persist the focus on the element), which P27
-   explicitly does not make.
-4. **No focus load.** Same missing link; and once the link exists, only *sets* may be aggregated per
-   focus — never repetitions, seconds, or a collapsed `LoadProfile` scalar.
+3. ~~**No focus exposure.**~~ — **CLOSED by P29.** The schema decision P27 declined to make is the one
+   P29 made: a nullable `focus` on `program_exercise` and on `session_snapshot_exercise`
+   (`MIGRATION_16_17`, no `DEFAULT`), fed by preserving `GeneratedElement.focus` in `PlanReconciler`. The
+   reason it was closable is that the missing link was a **discarded** fact rather than a missing one —
+   see `docs/PROGRAM_GENERATION_ADAPTIVE_HISTORY.md` §2. Signal unit, performed rule and absence
+   semantics are stated there and in P29's §6.
+4. ~~**No focus load.**~~ — **CLOSED by P29**, with the constraint P27 named honoured: only *sets* are
+   aggregated per focus. Repetitions are never summed into a count of sets, seconds are never summed into
+   a count of sets, and no `LoadProfile` scalar is computed or compared.
 5. **No recovery context for generation.** `RecoveryContext` belongs to the adaptive stage's per-window,
    per-family judgement. A generation-scoped recovery context would be new recovery semantics, which is
    outside P27's scope boundary.
@@ -211,6 +226,13 @@ minimal wiring that passes the existing context source · no automatic recommend
 ---
 
 ## 10. Verification
+
+> **P29 addendum.** The figures below are P27's, measured on its own branch. On
+> `feat/program-stage29-adaptive-history` (base `37fef75`) the suite is **315 classes / 3129 tests /
+> 0 failures / 0 errors / 0 skipped**, of which 56 are P29's own. §3's two focus-keyed rows are filled
+> from the recorded historical focus; the two remaining `no` rows are unchanged and now carry the
+> reasoning P29 settled. P29's own claim→test map and RED rows are in
+> `docs/PROGRAM_GENERATION_ADAPTIVE_HISTORY.md` §12–13.
 
 Measured on `feat/program-stage27-generation-context`, base `ecb3702`:
 

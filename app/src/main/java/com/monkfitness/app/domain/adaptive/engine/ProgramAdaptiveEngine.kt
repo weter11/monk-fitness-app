@@ -510,7 +510,8 @@ object ProgramAdaptiveEngine {
     ): EffectiveExercise = EffectiveExercise(
         programExerciseId = presentation.programExerciseId,
         exerciseId = variant.exerciseId,
-        prescription = variant.prescription
+        prescription = variant.prescription,
+        focus = presentation.focus
     )
 
     /**

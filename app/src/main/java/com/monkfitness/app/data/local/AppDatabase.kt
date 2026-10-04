@@ -76,7 +76,7 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         AdaptiveDecisionRecordEntity::class,
         AdaptiveAdjustmentEntity::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = false
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
@@ -1256,6 +1256,47 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Version 16 → version 17: a plan element's **historical focus** becomes a stored fact, and
+         * §19's snapshot carries it.
+         *
+         * Two nullable columns and nothing else — no table, no repository, no new ownership. The same
+         * reasoning `preferredExerciseIds` gave for §30 step 28 applies: a focus assignment belongs to
+         * exactly the element that represents it, so it belongs on that element's row.
+         *
+         *  * `program_exercise.focus` — the focus the Focus Planner assigned this element when it was
+         *    generated. `PlanReconciler` used to drop `GeneratedElement.focus` here, which is why §27
+         *    could not honestly fill `recentExposureByFocus`: the fact existed transiently and then
+         *    nowhere.
+         *  * `session_snapshot_exercise.focus` — a **copy** of that value, frozen at session start for
+         *    the same reason the prescription is copied: a later revision, a regeneration or a
+         *    superseding adjustment must not re-explain which focus a workout that already happened was
+         *    presented for.
+         *
+         * There is deliberately **no default focus**. A default would write a claim — that this element
+         * trains something — on every pre-existing row, including manual programs and user-authored
+         * elements the generator never assigned. `null` is what an upgraded row gets, and `null` means
+         * exactly what it means in the domain: *no focus was ever recorded*. That absence is then read
+         * as absence by generation context, never as a zero.
+         *
+         * Both columns are nullable rather than empty strings so the absence is stored as itself; a blank
+         * token would have to be re-read as an absence anyway, and one representation per value is the
+         * format's own determinism rule (§11).
+         *
+         * Visible to the unit tests on purpose, like every step before it: the statements are the
+         * deployable proof of the change and the schema suites compare them token for token.
+         */
+        internal val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE `program_exercise` ADD COLUMN `focus` TEXT"
+                )
+                database.execSQL(
+                    "ALTER TABLE `session_snapshot_exercise` ADD COLUMN `focus` TEXT"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -1278,7 +1319,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_12_13,
                         MIGRATION_13_14,
                         MIGRATION_14_15,
-                        MIGRATION_15_16
+                        MIGRATION_15_16,
+                        MIGRATION_16_17
                     )
                     .build()
                 INSTANCE = instance

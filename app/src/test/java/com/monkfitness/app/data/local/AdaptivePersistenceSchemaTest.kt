@@ -174,20 +174,20 @@ class AdaptivePersistenceSchemaTest {
         // The version is the last step of the chain, and the chain is what a device runs. Phase 8
         // added the target-occurrence identity seam at 13; §30 step 14 added the target occurrence's
         // semantic tables at 14; Stage 18 added the revision-owned explicit target schedule source at
-        // 15; §30 step 28 added the user's exercise preference column at 16, so 16 is what the schema
-        // declares.
+        // 15; §30 step 28 added the user's exercise preference column at 16; P29 added the historical
+        // focus columns at 17, so 17 is what the schema declares.
         assertTrue(
             "the database version moves with the schema: 13 is Phase 8's additive target-occurrence " +
                 "identity seam, 14 is §30 step 14's target-occurrence semantic payload, 15 is " +
-                "Stage 18's explicit target schedule source and 16 is §30 step 28's exercise " +
-                "preference column",
-            source.contains("version = 16")
+                "Stage 18's explicit target schedule source, 16 is §30 step 28's exercise " +
+                "preference column and 17 is P29's historical focus",
+            source.contains("version = 17")
         )
         assertTrue(
             "and the step that reaches it is declared, and registered in the builder's chain right " +
                 "after the step it follows",
-            source.contains("MIGRATION_15_16 = object : Migration(15, 16)") &&
-                Regex("MIGRATION_14_15,\\s*MIGRATION_15_16").containsMatchIn(source)
+            source.contains("MIGRATION_16_17 = object : Migration(16, 17)") &&
+                Regex("MIGRATION_15_16,\\s*MIGRATION_16_17").containsMatchIn(source)
         )
 
         val registered = Regex("entities = \\[(.*?)]", RegexOption.DOT_MATCHES_ALL)

@@ -386,7 +386,10 @@ internal fun ProgramExerciseEntity.toDomain(): ProgramExercise = ProgramExercise
         "program_exercise '$programExerciseId'"
     ),
     origin = storedToken(origin, ProgramExerciseOrigin.entries, "program_exercise.origin"),
-    isPinned = isPinned
+    isPinned = isPinned,
+    focus = focus?.let { token ->
+        storedToken(token, Focus.entries, "program_exercise.focus")
+    }
 )
 
 /** One plan element's row, owned by [programDayId] and holding place [position] in that day. */
@@ -399,7 +402,8 @@ internal fun ProgramExercise.toEntity(programDayId: ProgramDayId, position: Int)
         prescriptionDimension = prescription.dimension.name,
         perSetTargets = prescription.perSetTargets,
         origin = origin.name,
-        isPinned = isPinned
+        isPinned = isPinned,
+        focus = focus?.name
     )
 
 /**

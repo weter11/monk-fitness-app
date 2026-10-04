@@ -98,6 +98,9 @@ class ProgramMigrationPreservationTest {
         database.migrate(AppDatabase.MIGRATION_14_15)
         // §30 step 28: the user's exercise preference — one nullable column, no default, no backfill.
         database.migrate(AppDatabase.MIGRATION_15_16)
+        // P29: the element's historical focus and the snapshot's frozen copy. Stopping short
+        // would leave this suite exercising a database the app can no longer produce.
+        database.migrate(AppDatabase.MIGRATION_16_17)
     }
 
     /** A populated **version-8** database: what a device that ran the target-schema release holds. */
@@ -630,6 +633,9 @@ class ProgramMigrationPreservationTest {
             database.migrate(AppDatabase.MIGRATION_13_14)
             database.migrate(AppDatabase.MIGRATION_14_15)
             database.migrate(AppDatabase.MIGRATION_15_16)
+        // P29: the element's historical focus and the snapshot's frozen copy. Stopping short
+        // would leave this suite exercising a database the app can no longer produce.
+        database.migrate(AppDatabase.MIGRATION_16_17)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }

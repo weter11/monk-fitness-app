@@ -610,6 +610,8 @@ internal object ProgramSchemaFixture {
      *                  .recoveryQualifyingWindows
      *                  program_adaptive_decision_record.reason      the rule that answered (§13, §22)
      * MIGRATION_15_16  program_revision.preferredExerciseIds         the user's exercise preference (§9)
+     * MIGRATION_16_17  program_exercise.focus                        the focus a generated element was
+     *                  session_snapshot_exercise.focus               assigned (§8), and its frozen copy (§19)
      * ```
      *
      * See `docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md` for the first,
@@ -648,6 +650,19 @@ internal object ProgramSchemaFixture {
         // zero and not a ranking. A `DEFAULT` of any kind would write a preference nobody chose.
         "MIGRATION_15_16" to mapOf(
             "program_revision" to listOf(Column("preferredExerciseIds", TEXT, nullable = true))
+        ),
+        // P29. The focus an element was **presented under**, stored in two places for two different
+        // reasons, and both nullable with no default — `null` means *no focus was ever recorded*, which
+        // is what every pre-P29 row, every manual program and every user-authored element holds. A
+        // default would write a training claim nobody made.
+        //
+        // `program_exercise.focus` exists because `PlanReconciler` used to drop `GeneratedElement.focus`
+        // when it materialised an element, so the fact existed only transiently. `session_snapshot_exercise.focus`
+        // is a **copy** frozen at session start, for §19's reason: a later revision or a regeneration must
+        // not re-explain which focus a workout that already happened was presented for.
+        "MIGRATION_16_17" to mapOf(
+            "program_exercise" to listOf(Column("focus", TEXT, nullable = true)),
+            "session_snapshot_exercise" to listOf(Column("focus", TEXT, nullable = true))
         )
     )
 

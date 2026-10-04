@@ -239,6 +239,11 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
             // §30 step 28: the user's exercise preference column. Stopping short would leave every
             // repository suite below exercising a database the app can no longer produce.
             database.migrate(AppDatabase.MIGRATION_15_16)
+            // P29: the element's historical focus and the snapshot's frozen copy. Stopping short would
+            // leave every repository suite below exercising a database the app can no longer produce —
+            // and `insertRow`'s column check compares the entity's fields against the live schema, so a
+            // rig at version 16 would fail 455 tests with one honest message.
+            database.migrate(AppDatabase.MIGRATION_16_17)
         }
     }
 }

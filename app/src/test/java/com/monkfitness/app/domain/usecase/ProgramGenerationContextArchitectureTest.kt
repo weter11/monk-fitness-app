@@ -114,21 +114,56 @@ class ProgramGenerationContextArchitectureTest {
 
     @Test
     fun theContextSourceStatesNoRecoveryAndNoFocusDerivedSignal() {
-        // The remaining four fabrications, as tokens. `RecoveryContext.FAVORABLE` / `.CAUTIOUS` are the
-        // two values a source must never manufacture; `Focus` is banned outright because a focus-keyed map
-        // is exactly what cannot be filled honestly today (§14's vocabulary is reused for recovery, and
-        // `Focus` appearing in this file at all would mean a focus-keyed number is being built).
+        // REVISED by P29, narrowed rather than dropped. P27 banned the token `Focus` outright, because
+        // at that stage a focus-keyed map was precisely what could not be filled honestly. P29 gave
+        // those two maps a real owner, so `Focus` is now legitimately named here — and the ban that
+        // actually protected them is kept in full, in its stronger form: the source may **read** a
+        // focus the snapshot recorded, and may do nothing else with it.
+        //
+        // What survives unchanged:
+        //  * recovery stays `UNKNOWN` — §14's `FAVORABLE` and `CAUTIOUS` are decisions of the adaptive
+        //    stage's own judgement rule, not facts a generation context may manufacture;
+        //  * no cross-dimension number is built — repetitions and seconds are never summed into a count
+        //    of sets, and no scalar load score is computed.
         val forbidden = listOf(
-            "FAVORABLE", "CAUTIOUS", "Focus", "focusCounts", "totalTarget", "completedReps",
+            "FAVORABLE", "CAUTIOUS", "focusCounts", "totalTarget", "completedReps",
             "durationSeconds", "volume", "intensity", "density"
         )
         val offenders = codeLines(contextFile).filter { line -> forbidden.any { token -> line.contains(token) } }
 
         assertTrue(
-            "recovery stays UNKNOWN and no focus-keyed or cross-dimension number is computed here. " +
-                "§14's FAVORABLE and CAUTIOUS are decisions of the adaptive stage's own judgement rule, " +
-                "and a count of sets or a load total is a derivation this stage must not invent: $offenders",
+            "recovery stays UNKNOWN and no cross-dimension number is computed here. §14's FAVORABLE and " +
+                "CAUTIOUS are decisions of the adaptive stage's own judgement rule, and a load total is a " +
+                "derivation this stage must not invent: $offenders",
             offenders.isEmpty()
+        )
+        // The *reconstruction* ban, which is the claim P29 exists to make permanent. P29 made historical
+        // focus readable, which is exactly the circumstance in which a future edit might reach for the
+        // catalogue instead of the snapshot — and that would produce a plausible, wrong answer.
+        val reconstructors = listOf(
+            "ProductionFocusClassification", "ExerciseMetadata", "exerciseMetadata", "catalog",
+            "catalogue", "trains(", "eligibleFocuses", "focusOf(", "classify", "Classif"
+        )
+        val reoffenders = codeLines(contextFile).filter { line ->
+            reconstructors.any { token -> line.contains(token) }
+        }
+        assertTrue(
+            "a performed occurrence's focus is READ from the session's own snapshot and never " +
+                "reconstructed. Classifying an exercise by what the catalogue says it trains is the " +
+                "reconstruction algorithm P27 refused and P29 made unnecessary: an exercise that trains " +
+                "two focuses is not two assignments, and no assignment was recorded for a manual " +
+                "program: $reoffenders",
+            reoffenders.isEmpty()
+        )
+        // And the absence claim, in the form that matters now that the maps are filled: an element with
+        // no recorded focus is dropped rather than defaulted, so no `?: 0` and no `getOrDefault`.
+        val defaulted = codeLines(contextFile).filter { line ->
+            Regex("""(getOrDefault|getOrElse|\?:)\s*0""").containsMatchIn(line)
+        }
+        assertTrue(
+            "§12 and `ExposureObservation`'s own invariant: absence produces no observation rather than " +
+                "a zero one, so a focus nobody recorded must never appear with a 0: $defaulted",
+            defaulted.isEmpty()
         )
     }
 
@@ -192,37 +227,53 @@ class ProgramGenerationContextArchitectureTest {
                 "a zero one. Every `?:` in this file must be a neutral value, never a number: $invented",
             invented.isEmpty()
         )
-        // **Revised by P28, not relaxed.** P27 could assert a literal `return GenerationPreferences.NONE`
+        // **Revised by P29, not relaxed.** P28 could assert a literal `return GenerationPreferences.NONE`
         // at both exits because §9's top level was the one signal nothing could fill, so "neutral" and
         // "all-defaults" were the same value. P28 gave that signal an owner, so an exit now carries the
-        // user's stated preference — and the *honest* thing to assert is that neither exit ever invents a
-        // value, not that a particular constructor call is spelled out.
+        // user's stated preference. P29 then removed the *second* exit entirely: the "no performed
+        // exercise" branch existed only because `recentExerciseIds` needed an empty-list answer, and an
+        // empty map is already the honest answer for two more signals — so a branch that returned
+        // all-defaults was a branch that had to be re-argued every time a signal gained an owner.
         //
-        // The claim is therefore restated: every exit builds a `GenerationPreferences` from the draft's own
-        // preference plus the facts that were read, and none of them substitutes `NONE` for a preference
-        // the user actually stated. An implementation that dropped the stated preference would fail; one
-        // that fabricated a ranking would trip the `?:` gate above.
+        // The claim is therefore restated and made *stronger*, not weaker: the file constructs
+        // `GenerationPreferences` exactly **twice** — the no-Program exit and the single full one — both
+        // state the draft's own preference, and the full one states all four read signals. An
+        // implementation that dropped the preference fails; one that fabricated a ranking trips the
+        // reconstruction ban above; one that added a fifth construction, or a second request-assembly
+        // path, fails here.
         val code = code(contextFile.readText())
         assertTrue(
             "every exit states the preference explicitly rather than falling back to the all-defaults value",
             code.contains("userPreferredExerciseIds = preferred")
         )
-        // Three sites, not two: the no-Program exit, the no-performed-exercise exit, and the full one.
-        // All three must state the preference, and the count is asserted so that a **fourth** construction
-        // — a path that forgot it, or a second request assembly — fails here rather than passing.
         assertEquals(
-            "every GenerationPreferences construction in this file states the preference: the no-Program " +
-                "exit, the no-history exit and the full one, and no fourth path",
-            3,
+            "exactly two constructions in this file: the no-Program exit, and the single full one that " +
+                "states every signal the read produced. A third would be a path that had to be re-argued " +
+                "the next time a signal gained an owner",
+            2,
             Regex("GenerationPreferences\\(").findAll(code).count()
         )
         assertEquals(
-            "and all three carry the draft's own preference, so none of them can drop what the user stated",
-            3,
+            "and both carry the draft's own preference, so neither can drop what the user stated",
+            2,
             Regex("GenerationPreferences\\(\\s*userPreferredExerciseIds = preferred")
                 .findAll(code)
                 .count()
         )
+        // The four read signals are named on the single full construction. Asserted as *field* names so
+        // the claim survives a reformat, and exhaustively, so a fifth read signal added here without
+        // revising this test fails rather than passing quietly.
+        listOf(
+            "recentExerciseIds",
+            "recentExposureByFocus",
+            "recentLoadByFocus"
+        ).forEach { field ->
+            assertTrue(
+                "the full construction states `$field` from the history that was read — the signal has " +
+                    "an owner now, and an owner that is not forwarded is not an owner",
+                code.contains("            $field =")
+            )
+        }
     }
 
     // ------------------------------------------------------------------ one read, one pass, one path

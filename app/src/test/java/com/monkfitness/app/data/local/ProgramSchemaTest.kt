@@ -148,6 +148,13 @@ class ProgramSchemaTest {
     private fun preferenceStatements(): List<String> =
         recordStatements(AppDatabase.MIGRATION_15_16)
 
+    /**
+     * The two exact statements P29's **historical focus** step (16 -> 17) executes, in order: the plan
+     * element's own focus, and the copy the session snapshot freezes. Both nullable, no default.
+     */
+    private fun historicalFocusStatements(): List<String> =
+        recordStatements(AppDatabase.MIGRATION_16_17)
+
     private fun allAdditiveStatements(): List<String> =
         additiveStatements() + focusStatements() + windowStatements()
 
@@ -397,9 +404,85 @@ class ProgramSchemaTest {
         )
         assertEquals(16, AppDatabase.MIGRATION_15_16.endVersion)
         assertEquals(
+            "P29's historical-focus step is the next additive step after the preference one",
+            16,
+            AppDatabase.MIGRATION_16_17.startVersion
+        )
+        assertEquals(17, AppDatabase.MIGRATION_16_17.endVersion)
+        assertEquals(
             "and the declared version is where the chain ends",
-            AppDatabase.MIGRATION_15_16.endVersion,
+            AppDatabase.MIGRATION_16_17.endVersion,
             currentVersion()
+        )
+    }
+
+    // ---- P29: the historical focus of an element, and of a session snapshot (§8, §19) ---------------
+
+    /**
+     * The step adds exactly **two** nullable columns — the plan element's focus and the snapshot's frozen
+     * copy — with **no `DEFAULT`** on either.
+     *
+     * The absence of a default is the whole claim, and it is asserted over the statement text rather than
+     * left implied: a default focus would make every pre-existing row claim that its element trains
+     * something, which is a claim the Focus Planner never made for a manual program, a user-authored
+     * element or an old workout. `null` is what an upgraded row gets, and `null` means *no focus was
+     * recorded* — which generation then reads as absence, never as a zero.
+     *
+     * The second column is the load-bearing one: it is why a later revision cannot re-label a session that
+     * already happened.
+     */
+    @Test
+    fun theHistoricalFocusMigrationAddsTwoNullableColumnsAndNoDefault() {
+        val statements = historicalFocusStatements()
+
+        assertEquals(
+            "16 -> 17 executes exactly two statements: the plan element's focus, and the copy the " +
+                "session snapshot freezes at start",
+            2,
+            statements.size
+        )
+        assertEquals(
+            "the first is the column the reconciler now preserves, on the element that owns the " +
+                "assignment",
+            "ALTER TABLE `program_exercise` ADD COLUMN `focus` TEXT",
+            ProgramSchemaFixture.normalized(statements.first())
+        )
+        assertEquals(
+            "the second is the historical copy, on the row §19 already writes",
+            "ALTER TABLE `session_snapshot_exercise` ADD COLUMN `focus` TEXT",
+            ProgramSchemaFixture.normalized(statements.last())
+        )
+        assertTrue(
+            "a default would write a training claim nobody made: §33's no-silent-substitution applies to " +
+                "stored history exactly as it does to a plan",
+            statements.none { it.contains("DEFAULT", ignoreCase = true) }
+        )
+    }
+
+    @Test
+    fun theHistoricalFocusColumnsAreNullableAndNeverBackfilled() {
+        assertEquals(
+            "both columns are nullable, so absence is representable as itself rather than as a token",
+            listOf(true, true),
+            ProgramSchemaFixture.columnsAddedBy("MIGRATION_16_17", "program_exercise")
+                .plus(ProgramSchemaFixture.columnsAddedBy("MIGRATION_16_17", "session_snapshot_exercise"))
+                .map { it.nullable }
+        )
+        assertEquals(
+            "and both are plain text tokens, holding a `Focus` by name rather than by ordinal — so a " +
+                "renamed enum value is detected on read rather than silently re-pointing stored history",
+            listOf("TEXT", "TEXT"),
+            ProgramSchemaFixture.columnsAddedBy("MIGRATION_16_17", "program_exercise")
+                .plus(ProgramSchemaFixture.columnsAddedBy("MIGRATION_16_17", "session_snapshot_exercise"))
+                .map { it.type }
+        )
+        assertTrue(
+            "and no statement writes a row, because a backfill is exactly the fabrication the stage " +
+                "forbids: it would stamp a focus onto history nobody recorded",
+            historicalFocusStatements().none { statement ->
+                Regex("\\b(INSERT|UPDATE|CREATE TABLE|DROP)\\b", RegexOption.IGNORE_CASE)
+                    .containsMatchIn(statement)
+            }
         )
     }
 
@@ -1326,6 +1409,9 @@ class ProgramSchemaTest {
         upgraded.migrate(AppDatabase.MIGRATION_13_14)
         upgraded.migrate(AppDatabase.MIGRATION_14_15)
         upgraded.migrate(AppDatabase.MIGRATION_15_16)
+        // P29: the historical focus columns, so the chain lands on the declared version and this
+        // comparison is against the current contract rather than a truncated one.
+        upgraded.migrate(AppDatabase.MIGRATION_16_17)
 
         assertEquals(
             "the revision table the chain leaves behind is the one the contract describes: the " +
@@ -1875,9 +1961,12 @@ class ProgramSchemaTest {
 
     @Test
     fun everyDeclaredColumnIsStoredInTheStatementThatIntroducesIt() {
+        // P29's step joins this list: the claim is that *every* column an entity declares is introduced
+        // by exactly one statement, and a step the list does not mention would let its columns escape
+        // the check entirely — the list is the set of steps being audited, not a sample of them.
         val added = ProgramSchemaFixture.normalized(
-            (allAdditiveStatements() + targetOccurrenceStatements() + preferenceStatements())
-                .joinToString(" ")
+            (allAdditiveStatements() + targetOccurrenceStatements() + preferenceStatements() +
+                historicalFocusStatements()).joinToString(" ")
         )
         // §30 step 14 creates its two tables outright rather than appending columns, so their columns
         // are checked against their own `CREATE TABLE` — which is what [statementFor] returns for them.
