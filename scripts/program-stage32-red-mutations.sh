@@ -117,12 +117,14 @@ PY
 # checksum file written for the *repo* copy, not for the pristine one in the baseline directory. Checking
 # the baseline directory against its own checksum would pass no matter what happened to the tree.
 restore() {
-  local file="$1"
-  local name
-  name="$(basename "$file")"
-  cp "$BASELINE_DIR/$name" "$file"
-  if ! ( cd "$(dirname "$file")" && md5sum -c --status "$BASELINE_DIR/$name.md5" ); then
-    red "RESTORE FAILED for $file — the repo copy does not match its recorded checksum"
+  local target="$1"
+  local base
+  base="$(basename "$target")"
+  cp "$BASELINE_DIR/$base" "$target"
+  # Verified against the **repo** copy: the checksum file names the same basename, and the check runs
+  # from the file's own directory, so a restore that silently produced different bytes fails here.
+  if ! ( cd "$(dirname "$target")" && md5sum -c --status "$BASELINE_DIR/$base.md5" ); then
+    red "RESTORE FAILED for $target — the repo copy does not match its recorded checksum"
     exit 1
   fi
 }
@@ -201,6 +203,11 @@ run_mutation() {
   local id="$1" what="$2" file="$3" from="$4" to="$5"
 
   restore_all
+  # Debug: the anchors are single-quoted at the call site, so `$from` must arrive verbatim. Echoing them
+  # makes a mangled argument visible instead of surfacing only as "anchor occurs 0 times".
+  if [[ "${P32_DEBUG:-0}" == "1" ]]; then
+    printf 'DEBUG %s\n  file=[%s]\n  from=[%s]\n  to  =[%s]\n' "$id" "$file" "$from" "$to"
+  fi
   if ! mutate "$file" "$from" "$to"; then
     red "MUTATION '$id' could not be applied: anchor missing or ambiguous"
     MISSED=$((MISSED + 1))
@@ -223,9 +230,14 @@ run_mutation() {
   restore "$file"
 }
 
+# Every loop variable here is `local`. Without it the loop's `file` leaks into the caller — and because
+# `run_mutation` reads its own `$3` *after* calling this, every mutation ended up targeting the last file
+# in the list (AdaptiveTargetSlot.kt) instead of its own. That is why all 23 anchors reported "occurs 0
+# times" while each anchor was verifiably present in its intended file.
 restore_all() {
-  for file in "$DEFINITIONS" "$BOOTSTRAP" "$PROVIDER" "$PORT" "$CONTAINER" "$APPLICATION" "$ADAPTIVE_TARGET"; do
-    restore "$file"
+  local source
+  for source in "$DEFINITIONS" "$BOOTSTRAP" "$PROVIDER" "$PORT" "$CONTAINER" "$APPLICATION" "$ADAPTIVE_TARGET"; do
+    restore "$source"
   done
 }
 
