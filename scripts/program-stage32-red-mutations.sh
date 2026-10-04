@@ -113,11 +113,18 @@ open(path, "w").write(text.replace(old, new))
 PY
 }
 
+# Restore one source to its exact original bytes, then **prove** it: `md5sum -c` is run against a
+# checksum file written for the *repo* copy, not for the pristine one in the baseline directory. Checking
+# the baseline directory against its own checksum would pass no matter what happened to the tree.
 restore() {
   local file="$1"
-  cp "$BASELINE_DIR/$(basename "$file")" "$file"
-  ( cd "$BASELINE_DIR" && md5sum -c --status "$(basename "$file").md5" ) \
-    || { red "RESTORE FAILED for $file"; exit 1; }
+  local name
+  name="$(basename "$file")"
+  cp "$BASELINE_DIR/$name" "$file"
+  if ! ( cd "$(dirname "$file")" && md5sum -c --status "$BASELINE_DIR/$name.md5" ); then
+    red "RESTORE FAILED for $file — the repo copy does not match its recorded checksum"
+    exit 1
+  fi
 }
 
 # ----------------------------------------------------------------------------------------------- preflight
@@ -265,7 +272,7 @@ run_mutation "missing-authorised-rung" \
 
 # --- 6. extra unauthorised family -----------------------------------------------------------------------
 run_mutation "extra-unauthorised-family" \
-  "a fifth family — `plank` — is given a ladder it was deliberately denied" \
+  "a fifth family — plank — is given a ladder it was deliberately denied" \
   "$DEFINITIONS" \
   '    val definitions: List<ProgramProgressionRelation> = listOf(pushups, squats, lunges, pullups)' \
   '    val plank: ProgramProgressionRelation = ProgramProgressionRelation(
@@ -321,14 +328,14 @@ run_mutation "bootstrap-seeds-unauthorised-family" \
 
 # --- 13. bootstrap seeds plank --------------------------------------------------------------------------
 run_mutation "bootstrap-seeds-plank" \
-  "the bootstrap seeds `plank`, the family P32 deliberately left undeclared" \
+  "the bootstrap seeds plank, the family P32 deliberately left undeclared" \
   "$BOOTSTRAP" \
   'ProductionProgressionRelationDefinitions.definitions.forEach { definition ->' \
   'ProductionProgressionRelationDefinitions.definitions.plus(listOf(com.monkfitness.app.domain.adaptive.engine.ProgramProgressionRelation("plank", listOf(com.monkfitness.app.domain.adaptive.engine.ProgramProgressionVariant(0, "plank", TimePrescription(listOf(30))))))).forEach { definition ->'
 
 # --- 14. bootstrap seeds glute_bridge -------------------------------------------------------------------
 run_mutation "bootstrap-seeds-glute-bridge" \
-  "the bootstrap seeds `glute_bridge`, the second deliberately undeclared family" \
+  "the bootstrap seeds glute_bridge, the second deliberately undeclared family" \
   "$BOOTSTRAP" \
   'ProductionProgressionRelationDefinitions.definitions.forEach { definition ->' \
   'ProductionProgressionRelationDefinitions.definitions.plus(listOf(com.monkfitness.app.domain.adaptive.engine.ProgramProgressionRelation("glute_bridge", listOf(com.monkfitness.app.domain.adaptive.engine.ProgramProgressionVariant(0, "glute_bridge", RepPrescription(listOf(15))))))).forEach { definition ->'
@@ -350,14 +357,14 @@ run_mutation "provider-reads-static-source" \
 
 # --- 17. production still wires the empty source -------------------------------------------------------
 run_mutation "production-wires-no-declared-progression" \
-  "production goes back to wiring `NoDeclaredProgression`" \
+  "production goes back to wiring NoDeclaredProgression" \
   "$CONTAINER" \
   'relations = storedProgressionRelationProvider,' \
   'relations = NoDeclaredProgression,'
 
 # --- 18. provider reintroduces runBlocking --------------------------------------------------------------
 run_mutation "provider-reintroduces-runblocking" \
-  "the provider bridges its read with `runBlocking` again" \
+  "the provider bridges its read with runBlocking again" \
   "$PROVIDER" \
   '    override suspend fun relationOf(familyId: String): ProgramProgressionRelation? =
         relations.relationOf(familyId)' \
