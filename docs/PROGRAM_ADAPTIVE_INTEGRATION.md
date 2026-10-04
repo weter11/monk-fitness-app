@@ -292,6 +292,11 @@ rather than a placeholder:
 
 ```text
 ProgressionRelationProvider      → NoDeclaredProgression             no family ladder is persisted
+
+> **P32 update.** As of P32 the progression-relation provider is **no longer**
+> `NoDeclaredProgression`: production wires `StoredProgressionRelationProvider` over a bootstrapped
+> catalogue of four authored ladders, and the port is `suspend`. The exercise→family classification line
+> below was already superseded by P30. See `docs/PROGRAM_ADAPTIVE_PROGRESSION_CONTENT.md`.
 ExerciseFamilyClassification     → NoExerciseFamilyClassification    no exercise→family map is persisted
 ```
 

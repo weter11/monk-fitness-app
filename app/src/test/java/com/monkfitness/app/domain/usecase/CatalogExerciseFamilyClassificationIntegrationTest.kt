@@ -25,7 +25,21 @@ import org.junit.Test
  */
 class CatalogExerciseFamilyClassificationIntegrationTest {
 
-    private val rig = CatalogAdaptiveIntegrationRig.of()
+    /**
+     * The rig, with the ladder source **explicitly emptied**.
+     *
+     * This whole class measures the *empty-catalogue* claims P30 established: that classification is
+     * reached before the relation refusal, that the refusal is the typed one, and that nothing is
+     * written. P32 changed the rig's default to the **production** stored provider, so under the new
+     * default these passes no longer refuse at all — they reach the engine with a real `pushups` ladder
+     * and return its own bounded `AWAITING_CONFIRMATION` hold.
+     *
+     * That is not a regression, it is the stage working. So the empty case is now **stated rather than
+     * assumed**: `.withoutLadder()` is what these assertions require, and it is the honest way to keep a
+     * P30 claim alive after P32 changed the default underneath it. P32's own positive assertions live in
+     * `ProductionAdaptiveProgressionContentTest`, over the same rig with the production provider.
+     */
+    private val rig = CatalogAdaptiveIntegrationRig.of().withoutLadder()
 
     @After
     fun close() = rig.close()
@@ -193,7 +207,11 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
      */
     @Test
     fun programAHistoryNeverEntersProgramB() = runBlocking {
-        val first = CatalogAdaptiveIntegrationRig.of()
+        // Both rigs take the empty ladder explicitly, for the same reason the class-level rig does: the
+        // claim here is about *Program scope*, and it is measured on the empty-catalogue refusal. Under
+        // the production provider neither pass would refuse, so the two Programs would be compared on a
+        // decision rather than on the typed gap this test is about.
+        val first = CatalogAdaptiveIntegrationRig.of().withoutLadder()
         try {
             first.createSingleFamilyGraph()
             val trigger = first.seedHistoryAndTrigger()
@@ -211,7 +229,7 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
             first.close()
         }
 
-        val second = CatalogAdaptiveIntegrationRig.secondProgram()
+        val second = CatalogAdaptiveIntegrationRig.secondProgram().withoutLadder()
         try {
             second.createSingleFamilyGraph()
             val trigger = second.seedHistoryAndTrigger()

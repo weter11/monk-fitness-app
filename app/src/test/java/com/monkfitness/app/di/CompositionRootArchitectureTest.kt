@@ -60,7 +60,12 @@ class CompositionRootArchitectureTest {
         "programTargetScheduleSourceDao",
         "workoutSessionDao", "sessionSnapshotDao",
         "sessionSnapshotExerciseDao", "sessionExerciseDao", "programSetLogDao", "programPauseDao",
-        "programFamilyProgressionStateDao", "programAdaptiveDecisionDao", "adaptiveAdjustmentDao"
+        "programFamilyProgressionStateDao", "programAdaptiveDecisionDao", "adaptiveAdjustmentDao",
+        // P32: the progression relation catalogue's DAO joins the graph now that P32 wires a provider
+        // over it. Listed here so the "taken once, in the composition root, nowhere else" rule below
+        // applies to it exactly as it applies to every other node — which is the invariant that
+        // actually matters, and the count alone would not catch a second acquisition site.
+        "progressionRelationVariantDao"
     )
 
     private fun relative(file: File): String = file.relativeTo(appRoot).path.replace('\\', '/')
@@ -230,10 +235,13 @@ class CompositionRootArchitectureTest {
                 "accessor call per target table — plus §16's reset. §30 step 15 changed the count from " +
                 "17 to 16 by removing the two Stage-1 handles (`familyProgressionStateDao`, " +
                 "`adaptiveDecisionHistoryDao`) and adding the reset's own, §30 step 14 raised it " +
-                "again to 17 by adding the target occurrence's own accessor, and Stage 18 raised it " +
-                "to 18 by adding the explicit target schedule source's own accessor; nowhere else " +
+                "again to 17 by adding the target occurrence's own accessor, Stage 18 raised it " +
+                "to 18 by adding the explicit target schedule source's own accessor, and P32 raised " +
+                "it to 19 by taking the progression relation catalogue's own accessor — which P31 " +
+                "created and deliberately left unread until a stage had content to serve through it. " +
+                "No accessor's count may fall without its own gate changing: nowhere else " +
                 "in production may take one",
-            18,
+            19,
             accessor.findAll(codeOf("di/AppContainer.kt")).count()
         )
 

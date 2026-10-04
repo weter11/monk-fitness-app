@@ -413,13 +413,20 @@ class CatalogExerciseFamilyClassificationArchitectureTest {
     // ------------------------------------------------------------------ the integration's own wiring
 
     /**
-     * The integration reaches classification **before** it can refuse for want of a relation, and it
-     * still refuses: the container wires a real classification and the empty ladder together, so
-     * production reports the *later* gap. Asserted on the wiring, because the ordering itself lives in
-     * `adaptiveTargetElementOf` and this pins that the production wiring feeds it a classification.
+     * The integration reaches classification **before** it can refuse for want of a relation, and it is
+     * still wired with a real classification. Asserted on the wiring, because the ordering itself lives
+     * in `adaptiveTargetElementOf` and this pins that the production wiring feeds it a classification.
+     *
+     * **The second half of this gate inverted in P32, and that is the whole point of it being here.**
+     * P30 asserted production wired the *empty* ladder source, because P30 authored no ladder. P32
+     * authors four and serves them from the persisted catalogue, so asserting `NoDeclaredProgression`
+     * here would now forbid the stage's central deliverable. It is therefore **replaced, not deleted**:
+     * the classification assertion is untouched, and the ladder assertion is inverted to require the
+     * stored provider and to forbid the empty one — a strictly stronger claim than P30's, because the
+     * empty source can no longer pass.
      */
     @Test
-    fun theIntegrationIsWiredWithAClassificationAndWithNoProgressionLadder() {
+    fun theIntegrationIsWiredWithAClassificationAndWithTheStoredProgressionProvider() {
         val container = code(containerFile.readText())
         val wiring = container.substringAfter("val programAdaptiveIntegration")
             .substringBefore("val maintenanceRepository")
@@ -430,7 +437,13 @@ class CatalogExerciseFamilyClassificationArchitectureTest {
                 .containsMatchIn(wiring)
         )
         assertTrue(
-            "and still hands it the ladder source that declares nothing — P30 fills no ladder",
+            "and P32 hands it the stored progression provider, over the persisted catalogue",
+            Regex("""relations\s*=\s*storedProgressionRelationProvider""").containsMatchIn(wiring)
+        )
+        assertFalse(
+            "and production no longer wires the empty ladder source at all — the four authored " +
+                "ladders are what it serves now, so `NoDeclaredProgression` must not survive here as a " +
+                "second answer to the same wiring",
             Regex("""relations\s*=\s*NoDeclaredProgression""").containsMatchIn(wiring)
         )
         assertFalse(

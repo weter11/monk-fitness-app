@@ -13,7 +13,8 @@ import com.monkfitness.app.domain.adaptive.IntensityLoad
 import com.monkfitness.app.domain.adaptive.LoadProfile
 import com.monkfitness.app.domain.adaptive.RecoveryContext
 import com.monkfitness.app.domain.adaptive.VolumeLoad
-import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveElement
+import kotlinx.coroutines.runBlocking
+import com.monkfitness.app.domain.adaptive.integration.AdaptiveTargetElement
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptivePolicy
 import com.monkfitness.app.domain.adaptive.engine.ProgramElementOwnership
 import com.monkfitness.app.domain.adaptive.engine.ProgramProgressionRelation
@@ -158,7 +159,7 @@ class AdaptiveTargetSelectionTest {
 
     /** The element is the first of the day that the ladder can resolve for an exposed family. */
     @Test
-    fun theElementIsTheFirstExposedFamilyTheLadderCanResolve() {
+    fun theElementIsTheFirstExposedFamilyTheLadderCanResolve() = runBlocking {
         val choice = adaptiveTargetElementOf(
             presented = presented("plan-1" to "pushup", "plan-2" to "pike_pushup"),
             plan = day("plan-1" to "pushup", "plan-2" to "pike_pushup"),
@@ -184,7 +185,7 @@ class AdaptiveTargetSelectionTest {
      * separately.
      */
     @Test
-    fun aDayNoClassificationKnowsIsItsOwnGap() {
+    fun aDayNoClassificationKnowsIsItsOwnGap() = runBlocking {
         assertEquals(
             AdaptiveTargetElement.NoFamilyIsClassified,
             adaptiveTargetElementOf(
@@ -199,7 +200,7 @@ class AdaptiveTargetSelectionTest {
 
     /** A known family with no declared ladder is a different gap, and never a fabricated step. */
     @Test
-    fun aKnownFamilyWithNoDeclaredLadderIsItsOwnGap() {
+    fun aKnownFamilyWithNoDeclaredLadderIsItsOwnGap() = runBlocking {
         assertEquals(
             AdaptiveTargetElement.NoDeclaredRelation,
             adaptiveTargetElementOf(
@@ -214,7 +215,7 @@ class AdaptiveTargetSelectionTest {
 
     /** A day that trains other families is not adapted now — the family's own window opens later. */
     @Test
-    fun aDayThatTrainsNoExposedFamilyIsItsOwnGap() {
+    fun aDayThatTrainsNoExposedFamilyIsItsOwnGap() = runBlocking {
         assertEquals(
             "a classified family the completion did not expose is not a subject: adapting it would " +
                 "pick an element the completion says nothing about",
