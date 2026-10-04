@@ -145,6 +145,21 @@ private fun Map<String, String?>.text(column: String): String = requireNotNull(t
     "the row has no '$column': $this"
 }
 
+/**
+ * A **nullable** text column, read as absence rather than as a failure.
+ *
+ * P29 adds the harness this needs, and it is deliberately stricter than `text` in the direction that
+ * matters: `text` refuses a missing column (so a mapper that forgot one fails loudly), and this one
+ * refuses only a *present but non-null* reading of a column that is declared nullable — it cannot tell
+ * the two apart from a row map, which is why the distinction is in the KDoc and the mapper's own
+ * obligation rather than in the engine.
+ *
+ * The failure this helper exists to prevent is the quiet one: a row mapper that omits a nullable column
+ * does not fail, it defaults. That would make every storage suite report "no focus was ever recorded"
+ * for a session that recorded one — the stage would look green while proving nothing at all.
+ */
+private fun Map<String, String?>.nullableText(column: String): String? = this[column]
+
 private fun Map<String, String?>.number(column: String): Int = text(column).toInt()
 
 private fun Map<String, String?>.millis(column: String): Long = text(column).toLong()
@@ -211,6 +226,9 @@ private fun Map<String, String?>.dayEntity() = ProgramDayEntity(
     name = this["name"]
 )
 
+// P29: `focus` is read as a nullable token, exactly as the column is stored — see the note on
+// `nullableText` for why omitting a nullable column here is the quietest possible way to make a stage
+// look green while proving nothing.
 private fun Map<String, String?>.exerciseEntity() = ProgramExerciseEntity(
     programExerciseId = text("programExerciseId"),
     programDayId = text("programDayId"),
@@ -219,7 +237,8 @@ private fun Map<String, String?>.exerciseEntity() = ProgramExerciseEntity(
     prescriptionDimension = text("prescriptionDimension"),
     perSetTargets = targets("perSetTargets"),
     origin = text("origin"),
-    isPinned = flag("isPinned")
+    isPinned = flag("isPinned"),
+    focus = nullableText("focus")
 )
 
 private fun Map<String, String?>.slotEntity() = ProgramWorkoutSlotEntity(
@@ -292,13 +311,18 @@ private fun Map<String, String?>.snapshotEntity() = SessionSnapshotEntity(
     appliedAdjustmentIds = identifiers("appliedAdjustmentIds")
 )
 
+// P29: `focus` is read as a nullable token, exactly as the column is stored. Omitting it here would not
+// fail loudly — it would silently default to `null`, so every storage suite would report "no focus was
+// ever recorded" for a session that recorded one, and the whole stage would look green while proving
+// nothing. That is why the harness binds and reads every declared field in `insertRow` too.
 private fun Map<String, String?>.snapshotExerciseEntity() = SessionSnapshotExerciseEntity(
     sessionId = text("sessionId"),
     programExerciseId = text("programExerciseId"),
     position = number("position"),
     exerciseId = text("exerciseId"),
     prescriptionDimension = text("prescriptionDimension"),
-    perSetTargets = targets("perSetTargets")
+    perSetTargets = targets("perSetTargets"),
+    focus = nullableText("focus")
 )
 
 private fun Map<String, String?>.sessionExerciseEntity() = SessionExerciseEntity(

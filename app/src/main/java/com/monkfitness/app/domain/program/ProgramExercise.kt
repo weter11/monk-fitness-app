@@ -37,19 +37,41 @@ enum class ProgramExerciseOrigin {
  * not touch exercise metadata (§10), and a manual program's prescription is free of generator
  * ranges.
  *
+ * ### The focus this element was generated for
+ *
+ * [focus] is the `FocusAssignment` element this occurrence **represents** in the generated plan it came
+ * from (§8): the planner plans one element per assigned focus, in the assignment's own order, so the
+ * focus is a fact the plan already holds about the element rather than a classification this model
+ * infers. It is stored because reconciliation used to drop it, which left no honest way to say later
+ * which focus a *performed* exercise had been presented for.
+ *
+ * It is **nullable**, and that is the honest reading rather than a convenience default:
+ *
+ *  * a **generated** element states one — the planner assigned it;
+ *  * a **user-authored** or **pinned** element states `null`, because the generator never said;
+ *  * a row written before the field existed states `null`, and so does any manual program.
+ *
+ * No `DEFAULT` focus exists anywhere in this model. A default would invent a claim — that the element
+ * trains something — that no assignment ever made, and §33's *no silent substitution* applies to stored
+ * history exactly as it applies to a plan. `null` means *no focus was recorded*, which is a different
+ * statement from *this element trains PUSH*.
+ *
  * @property programExerciseId identity of this occurrence.
  * @property exerciseId the library key of the exercise performed here.
  * @property prescription what the element asks for, per set.
  * @property origin whether the generator or the user produced it.
  * @property isPinned whether the element is exempt from automatic change. Unpinning does not change
  *   the value — it only makes the element eligible for a future regenerate pass (§7).
+ * @property focus the focus of the slot assignment this element serves when the generator produced it,
+ *   and `null` when no assignment was ever recorded for it.
  */
 data class ProgramExercise(
     val programExerciseId: ProgramExerciseId,
     val exerciseId: String,
     val prescription: Prescription,
     val origin: ProgramExerciseOrigin,
-    val isPinned: Boolean = false
+    val isPinned: Boolean = false,
+    val focus: Focus? = null
 ) {
 
     init {

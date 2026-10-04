@@ -396,13 +396,29 @@ object PlanReconciler {
         else -> PreservationLevel.USER_OVERRIDE
     }
 
-    /** The plan element as a draft element, with an identity of its own and the generator's origin. */
+    /**
+     * The plan element as a draft element, with an identity of its own and the generator's origin.
+     *
+     * [GeneratedElement.focus] is carried across here, and this line is the **only** semantic
+     * responsibility P29 adds to the pure generated package. The focus is not something this file
+     * derives or classifies: the Focus Planner already assigned it to this element, and
+     * `GeneratedSlot` already asserts that the slot's elements are exactly its assignment's focuses in
+     * order. Materialising the element into a draft simply threw that existing fact away, and §19's
+     * snapshot then had no focus to freeze — which is why no honest read of *historical* focus existed
+     * until this copy was made.
+     *
+     * No persistence, no repository and no inference is introduced: the value is read off the element
+     * being converted and written onto the domain element beside it. `ProgramExercise.focus` is
+     * nullable, and a preserved element keeps whatever it already stated rather than being relabelled
+     * from the current plan — reconciliation must not rewrite history either.
+     */
     private fun GeneratedElement.asGeneratedElement(ids: DraftIdSource): ProgramExercise = ProgramExercise(
         programExerciseId = ProgramExerciseId(ids.newId()),
         exerciseId = exerciseId,
         prescription = prescription,
         origin = ProgramExerciseOrigin.GENERATED,
-        isPinned = false
+        isPinned = false,
+        focus = focus
     )
 
     /**

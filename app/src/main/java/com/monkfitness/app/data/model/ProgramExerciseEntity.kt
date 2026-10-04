@@ -35,6 +35,10 @@ import androidx.room.PrimaryKey
  * @property origin `GENERATED` when the generator produced it and `USER_AUTHORED` when the user did
  *   (token column) — the two facts regeneration reconciles on, next to the pin.
  * @property isPinned whether the occurrence is exempt from automatic change.
+ * @property focus the focus of the slot assignment this element serves, stored by name; `null` when
+ *   the generator never assigned one (a user-authored element, a manual program, or a row written
+ *   before this column existed). One representation per value, so absence is stored as `NULL` and
+ *   never as an empty or default token.
  */
 @Entity(
     tableName = "program_exercise",
@@ -56,5 +60,6 @@ data class ProgramExerciseEntity(
     val prescriptionDimension: String,
     val perSetTargets: List<Int>,
     val origin: String,
-    val isPinned: Boolean = false
+    val isPinned: Boolean = false,
+    val focus: String? = null
 )

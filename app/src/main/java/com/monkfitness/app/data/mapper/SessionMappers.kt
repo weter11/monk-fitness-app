@@ -13,6 +13,7 @@ import com.monkfitness.app.domain.common.SessionExerciseId
 import com.monkfitness.app.domain.common.SessionId
 import com.monkfitness.app.domain.common.SetLogId
 import com.monkfitness.app.domain.common.SlotId
+import com.monkfitness.app.domain.program.Focus
 import com.monkfitness.app.domain.workout.EffectiveExercise
 import com.monkfitness.app.domain.workout.EffectiveWorkout
 import com.monkfitness.app.domain.workout.SessionExercise
@@ -117,7 +118,14 @@ internal fun snapshotDomain(
                     element.prescriptionDimension,
                     element.perSetTargets,
                     "session_snapshot_exercise '${element.sessionId}/${element.programExerciseId}'"
-                )
+                ),
+                focus = element.focus?.let { token ->
+                    storedToken(
+                        token,
+                        Focus.entries,
+                        "session_snapshot_exercise '${element.sessionId}/${element.programExerciseId}'.focus"
+                    )
+                }
             )
         },
         appliedAdjustmentIds = snapshot.appliedAdjustmentIds.map { AdjustmentId(it) }
@@ -176,7 +184,8 @@ internal fun WorkoutSession.toSnapshotExerciseEntities(): List<SessionSnapshotEx
             position = index + 1,
             exerciseId = element.exerciseId,
             prescriptionDimension = element.prescription.dimension.name,
-            perSetTargets = element.prescription.perSetTargets
+            perSetTargets = element.prescription.perSetTargets,
+            focus = element.focus?.name
         )
     }
 

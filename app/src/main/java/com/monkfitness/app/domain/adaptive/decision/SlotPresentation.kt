@@ -110,8 +110,18 @@ fun presentedWorkout(
 
     val byElement = standing.associateBy { it.after.programExerciseId }
     val presented = day.exercises.map { element ->
-        byElement[element.programExerciseId]?.after
-            ?: EffectiveExercise(element.programExerciseId, element.exerciseId, element.prescription)
+        // The **day's** element is the authority for the focus, even when an adjustment supplies the
+        // exercise or the prescription: an adjustment says what will be shown, never which focus of the
+        // slot's assignment this occurrence serves. The adjustment's stored `after` carries no focus of
+        // its own, so reading it here would silently turn an adjusted element into an element with no
+        // recorded focus — and §19 would then freeze that absence into the snapshot forever.
+        val adjusted = byElement[element.programExerciseId]?.after
+        EffectiveExercise(
+            programExerciseId = element.programExerciseId,
+            exerciseId = adjusted?.exerciseId ?: element.exerciseId,
+            prescription = adjusted?.prescription ?: element.prescription,
+            focus = element.focus
+        )
     }
     return EffectiveWorkout(
         slotId = slot.slotId,
