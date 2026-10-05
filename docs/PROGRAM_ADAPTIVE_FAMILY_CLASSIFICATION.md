@@ -15,6 +15,10 @@ no persisted family ladder      → NoDeclaredProgression          (§15's progr
 no persisted exercise→family map → NoExerciseFamilyClassification (§9's family membership)
 ```
 
+> **Superseded in part by P32.** The first line above was true of P30 and remains true as a description of
+> *this* stage; production no longer wires `NoDeclaredProgression`, and now serves four authored ladders
+> from the persisted catalogue. See `docs/PROGRAM_ADAPTIVE_PROGRESSION_CONTENT.md`.
+
 Both statements were true **of the target schema** (`§23`) and false **of the app**. Every exercise the
 app ships already states its own family as a field. P30 supplies the classification by reading that
 field, which moves production **one gap later**:
@@ -144,7 +148,7 @@ projection of `familyId` and nothing else, which the behavioural suite asserts.
 
 | | |
 | --- | --- |
-| no progression ladder | `relations = NoDeclaredProgression` is unchanged; P30 fills no ladder |
+| no progression ladder | `relations = NoDeclaredProgression` is unchanged **in P30**; P32 later wires the stored provider over four authored ladders |
 | no static or default ladder | and none is defined anywhere for a future wiring to pick up by accident |
 | no `PilotProgressionProfiles` | the Stage-1 pilot is not consulted (§30 step 11) |
 | no new table / DAO / repository / migration | §23's entity set is unchanged |

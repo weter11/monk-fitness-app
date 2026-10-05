@@ -59,6 +59,14 @@ class MonkFitnessApplication : Application() {
         super.onCreate()
 
         val settingsManager = SettingsManager(this)
+        // P32: the built-in progression catalogue. Seeded here, at application start, and **before any
+        // adaptive pass can run** — an adaptive pass is only reachable once a Session completes, which is
+        // a user action well after start-up. The ordering does not rest on this being fast: the provider
+        // itself never seeds, so a consumer reading early would see an honestly empty catalogue rather
+        // than a race. See `docs/PROGRAM_ADAPTIVE_PROGRESSION_CONTENT.md`.
+        MainScope().launch {
+            container.builtInProgressionCatalogueBootstrap.bootstrap()
+        }
         MainScope().launch {
             container.standardProgramBootstrap.bootstrap()
         }

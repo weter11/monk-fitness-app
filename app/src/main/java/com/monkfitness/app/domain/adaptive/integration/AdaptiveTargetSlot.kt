@@ -124,7 +124,7 @@ fun adaptiveTargetSlotOf(
  * @param classification the caller's exercise-to-family classification.
  * @param relations the ladder source (§10).
  */
-fun adaptiveTargetElementOf(
+suspend fun adaptiveTargetElementOf(
     presented: List<PresentedElement>,
     plan: ProgramDay,
     exposedFamilies: Set<String>,

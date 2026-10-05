@@ -127,6 +127,11 @@ class AppContainerTest {
                     "programProgressRepository" to "ProgramProgressRepository",
                     "appStateRepository" to "AppStateRepository",
                     "programAdaptiveRepository" to "ProgramAdaptiveRepository",
+                    // P32: the app-owned progression relation catalogue. A separate repository rather
+                    // than a method on `programAdaptiveRepository`, because a ladder is a global
+                    // definition and adaptive history is per-revision state — P31 owns that separation
+                    // and P32 only starts using it.
+                    "progressionRelationRepository" to "ProgressionRelationRepository",
                     "maintenanceRepository" to "MaintenanceRepository"
                 ),
                 constructed
@@ -138,13 +143,14 @@ class AppContainerTest {
                 rig.container.programRepository, rig.container.programPlanRepository,
                 rig.container.programScheduleRepository, rig.container.workoutSessionRepository,
                 rig.container.programProgressRepository, rig.container.appStateRepository,
-                rig.container.programAdaptiveRepository, rig.container.maintenanceRepository
+                rig.container.programAdaptiveRepository,
+                rig.container.progressionRelationRepository, rig.container.maintenanceRepository
             )
             repositories.forEach { assertNotNull("a repository the container declares is null", it) }
             assertEquals(
                 "each repository is its own object: one instance of a class cannot be wired to two " +
                     "different sets of collaborators",
-                8,
+                9,
                 repositories.map { System.identityHashCode(it) }.distinct().size
             )
         } finally {
@@ -306,7 +312,11 @@ class AppContainerTest {
                 // §30 step 15: the two Stage-1 handles are gone and §16's one global maintenance
                 // operation takes its own. It is a graph node because the reset's transaction runner
                 // belongs to the composition root (§26), not because a Program path reaches it.
-                "maintenanceDao"
+                "maintenanceDao",
+                // P32: the progression relation catalogue's own DAO. It is taken here because the
+                // catalogue is now live in production — P31 created the table and wired nothing, so the
+                // accessor existed without a graph node reading it.
+                "progressionRelationVariantDao"
             )
 
             assertEquals(

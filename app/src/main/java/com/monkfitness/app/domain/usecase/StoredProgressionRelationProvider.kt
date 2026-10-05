@@ -3,7 +3,6 @@ package com.monkfitness.app.domain.usecase
 import com.monkfitness.app.data.repository.ProgressionRelationRepository
 import com.monkfitness.app.domain.adaptive.engine.ProgramProgressionRelation
 import com.monkfitness.app.domain.adaptive.integration.ProgressionRelationProvider
-import kotlinx.coroutines.runBlocking
 
 /**
  * P31's **production `ProgressionRelationProvider`**: a read-only projection of the app-owned
@@ -33,22 +32,28 @@ import kotlinx.coroutines.runBlocking
  *    scoped to the legacy program's own axis;
  *  * **no recovery, no ranking, no scoring** — a ladder is a definition, and none of those is one.
  *
- * ### Why it is allowed to block on the read
+ * ### Why it does not block
  *
- * The port's `relationOf` is not `suspend`, so this class bridges the gap with [runBlocking] rather
- * than by changing the port the engine resolves against. That is the lesser of two evils *for this
- * stage*, and it is recorded rather than hidden: the alternative — a port that could be `suspend` — is
- * a change to the domain interface the adaptive engine and its tests already depend on, which P31 does
- * not own. The bridge performs **one indexed primary-key lookup** per call and no I/O beyond it, so the
- * block is bounded by a single row read; the port's shape can be revisited when the caller is an
- * integration that is already suspending.
+ * P31 recorded this as an explicit gap: the port's `relationOf` was not `suspend`, so this class
+ * bridged the suspending repository read with `runBlocking`. **P32 closes that gap.** Its production
+ * caller — `ProgramAdaptiveIntegration`, itself suspending end to end — is able to await the read, so
+ * the port is now `suspend` and this class simply delegates. There is no blocking bridge anywhere in the
+ * progression-relation provider path.
  *
- * ### It is not wired into production yet, on purpose
+ * The gap was worth closing here rather than in P31 because the answer comes from **storage**: a port
+ * that cannot express a database read forces its implementation to hide one behind a blocking call,
+ * and the honest signature is the one the cost actually has.
  *
- * The catalogue is created empty by the migration and this stage authors **no ladder content at all**,
- * so wiring this in place of `NoDeclaredProgression` would change no observable behaviour while adding
- * a node to the composition root. `AppContainer` therefore keeps `NoDeclaredProgression`, and production
- * still reports `NO_DECLARED_PROGRESSION_RELATION` — see §6 of `docs/PROGRAM_ADAPTIVE_PROGRESSION_RELATIONS.md`.
+ * ### It is the production ladder source
+ *
+ * P31 wired nothing here, because P31's catalogue was empty and a provider over an empty table would
+ * have been a graph node changing no observable behaviour. P32 seeds the built-in catalogue, so
+ * `AppContainer` wires **this** provider in place of `NoDeclaredProgression` and the ladder is real.
+ *
+ * Its source is the **persisted catalogue and nothing else**. The four authored ladders live in
+ * `ProductionProgressionRelationDefinitions` and reach production only through the rows this reads: a
+ * static read here would mean the shipped content and the stored content could disagree, and the stored
+ * catalogue would stop being authoritative.
  */
 class StoredProgressionRelationProvider(
     private val relations: ProgressionRelationRepository
@@ -61,7 +66,6 @@ class StoredProgressionRelationProvider(
      * stage is that a *missing* storage boundary and a *stored* one are now distinguishable, and only
      * the stored one can ever produce a relation.
      */
-    override fun relationOf(familyId: String): ProgramProgressionRelation? = runBlocking {
+    override suspend fun relationOf(familyId: String): ProgramProgressionRelation? =
         relations.relationOf(familyId)
-    }
 }

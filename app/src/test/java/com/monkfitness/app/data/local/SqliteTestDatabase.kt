@@ -156,6 +156,36 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
     /** The number of rows a query returns. */
     fun count(table: String): Int = scalar("SELECT COUNT(*) FROM `$table`")!!.toInt()
 
+    /**
+     * The number of rows of [table] whose row text [contains] [needle].
+     *
+     * A **test-harness** convenience, added by P32 for the claims that are about which rows exist rather
+     * than what they say — "the seeded catalogue holds four `lunges` rows and thirteen others", "no row
+     * mentions `plank`". Those are assertions over a *set* of rows, and without this they would each need
+     * a bespoke `SELECT ... WHERE` written inline, which is a place for a subtly wrong predicate to hide.
+     *
+     * It deliberately matches the **rendered row text** rather than a named column: the point is "no row
+     * mentions this family anywhere", which is stronger than "the `familyId` column does not equal it",
+     * and it is what makes a leaked exercise id in the wrong family visible.
+     */
+    fun count(table: String, contains: (String) -> Boolean): Int =
+        rows("SELECT * FROM `$table`")
+            .count { row -> row.values.any { it != null && contains(it) } }
+
+    /**
+     * The number of `progression_relation_variant` rows belonging to [familyId].
+     *
+     * Scoped to the **`familyId` column** rather than to the whole row text. Row-text matching cannot
+     * answer "how many rows does this family hold", because an exercise id can legitimately contain a
+     * family id as a substring — and `pullups` is both a family and a member of `pullups`, so a text
+     * match conflates the family with its own rung. Where the broader `count(table) { }` form is the
+     * right tool it is a deliberate *"no row mentions this anywhere"* claim; this one is the precise
+     * per-family count.
+     */
+    fun countFamilyRows(familyId: String): Int =
+        rows("SELECT `familyId` FROM `progression_relation_variant`")
+            .count { it["familyId"] == familyId }
+
     /** `sqlite_master`'s DDL for every table and index, keyed by name. */
     fun masterSql(): Map<String, String> {
         val result = mutableMapOf<String, String>()

@@ -32,6 +32,10 @@ import com.monkfitness.app.data.repository.TargetScheduleSourceRepository
 import com.monkfitness.app.data.repository.WorkoutSessionRepository
 import com.monkfitness.app.bootstrap.StandardProgramBootstrap
 import com.monkfitness.app.domain.adaptive.integration.NoDeclaredProgression
+import com.monkfitness.app.data.local.ProgressionRelationVariantDao
+import com.monkfitness.app.data.repository.ProgressionRelationRepository
+import com.monkfitness.app.domain.usecase.StoredProgressionRelationProvider
+import com.monkfitness.app.bootstrap.BuiltInProgressionCatalogueBootstrap
 import com.monkfitness.app.domain.program.DraftIdSource
 import com.monkfitness.app.domain.usecase.SHIPPED_EXERCISE_CATALOGUE
 import com.monkfitness.app.domain.usecase.CatalogExerciseFamilyClassification
@@ -435,6 +439,48 @@ class AppContainer(
             orchestrator = targetScheduleOrchestrator
         )
 
+    // --- P32: §15's progression relations, authored, persisted and served ---------------------------
+
+    /**
+     * The app-owned **progression relation catalogue** — P31's repository, over the one table that
+     * stores each family's declared ladder.
+     *
+     * It is a **graph node rather than an inline construction** for the same reason every other
+     * repository here is: the container decides which objects the adaptive path receives without
+     * deciding anything about them. This is the sole persistence collaborator of the production ladder
+     * provider below, and it is the same repository the bootstrap writes through.
+     */
+    val progressionRelationRepository: ProgressionRelationRepository = ProgressionRelationRepository(
+        daos.progressionRelationVariant, inTransaction
+    )
+
+    /**
+     * P32's **production `ProgressionRelationProvider`** — the stored catalogue, read.
+     *
+     * ```text
+     * familyId ──▶ ProgressionRelationRepository ──▶ validated ProgramProgressionRelation?
+     * ```
+     *
+     * It holds exactly one collaborator and reads nothing else: not the authored definitions, not the
+     * shipped exercise catalogue, not adaptive history. The four ladders in
+     * [com.monkfitness.app.domain.product.ProductionProgressionRelationDefinitions] reach production
+     * **through the rows** this reads, because the persisted catalogue — not a static constant — is the
+     * authoritative statement of what this app's families declare.
+     */
+    val storedProgressionRelationProvider: StoredProgressionRelationProvider =
+        StoredProgressionRelationProvider(progressionRelationRepository)
+
+    /**
+     * P32's built-in catalogue bootstrap — the one boundary that puts the four authored ladders into
+     * storage, from `Application.onCreate`.
+     *
+     * It is a separate node rather than something the provider does on first read, so no consumer can
+     * observe the catalogue before it is complete, and a deleted ladder is never silently restored by a
+     * read or an adaptive evaluation.
+     */
+    val builtInProgressionCatalogueBootstrap: BuiltInProgressionCatalogueBootstrap =
+        BuiltInProgressionCatalogueBootstrap(progressionRelationRepository)
+
     /** The idempotent production bootstrap for the product-owned Standard Program. */
     val standardProgramBootstrap: StandardProgramBootstrap = StandardProgramBootstrap(
         programRepository = programRepository,
@@ -689,9 +735,10 @@ class AppContainer(
      * so a node dropped between two of those boundaries would silently widen a neighbour's scan, and the
      * failure would name a forbidden token this wiring never meant to police.
      *
-     * Nothing here is a progression ladder. This closes one of the two facts §30 step 12 recorded as
-     * missing — the family membership — and leaves the other absent, so `relations` below still reports
-     * every family as undeclared.
+     * Nothing here is a progression ladder. This closed one of the two facts §30 step 12 recorded as
+     * missing — the family membership — and left the other absent; **P32 closed the second** by seeding
+     * and serving a real ladder, so the wiring below now feeds the integration a stored relation rather
+     * than an empty source.
      */
     val catalogExerciseFamilyClassification: CatalogExerciseFamilyClassification =
         CatalogExerciseFamilyClassification()
@@ -709,23 +756,31 @@ class AppContainer(
      *
      * ### The two collaborators, and the one that is still deliberately empty
      *
-     * P30 closed one of the two facts that were missing here, and the KDoc above it was revised rather
-     * than deleted. What the container now wires is:
+     * P30 closed one of the two facts that were missing here; **P32 closed the second**. The KDoc above
+     * it was revised rather than deleted, so what the container wires is now:
      *
      * ```text
-     * no persisted family ladder      → NoDeclaredProgression   (§15's progression relations) — STILL
+     * persisted family ladder        → storedProgressionRelationProvider (§15's progression relations) — P32
      * exercise → family, from the     → CatalogExerciseFamilyClassification (§9's family membership) — P30
      *   shipped catalogue's own fact
      * ```
      *
      * The classification is **read off the app's existing catalogue**, not invented: every shipped
      * exercise states its own family, and `docs/PROGRAM_ADAPTIVE_FAMILY_CLASSIFICATION.md` §2 records the
-     * audit that establishes that fact is the engine's own family identity. So a production pass can
-     * now name the family it is about — and still **adapts nothing**, because the ladder is still
-     * undeclared. The result is the engine's bounded `PROGRESSION_UNAVAILABLE` hold, or
-     * [com.monkfitness.app.domain.adaptive.integration.AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION]
-     * when the day presents no exposed family either. One gap closed is not a second one filled, and
-     * nothing here is fabricated to make a family look adaptable.
+     * audit that establishes that fact is the engine's own family identity.
+     *
+     * The ladder is **authored, persisted and then served**: the four families in
+     * [com.monkfitness.app.domain.product.ProductionProgressionRelationDefinitions] are seeded at
+     * application start by [builtInProgressionCatalogueBootstrap], stored through P31's table, and read
+     * back here. A production pass over one of those four families now reaches the engine with a real
+     * declared relation and can return a real adjustment.
+     *
+     * The other 24 families are **still undeclared by decision**, not by omission — `plank` and
+     * `glute_bridge` cannot be authored under the domain's one-exercise-one-position invariant — so a
+     * pass over them still reports
+     * [com.monkfitness.app.domain.adaptive.integration.AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION].
+     * Absence is still answered `null`, and no family is made adaptable to make coverage look complete.
+     * See `docs/PROGRAM_ADAPTIVE_PROGRESSION_CONTENT.md`.
      *
      * ### What the container decides, and what it does not
      *
@@ -742,7 +797,7 @@ class AppContainer(
         scheduleRepository = programScheduleRepository,
         sessionRepository = workoutSessionRepository,
         adaptiveRepository = programAdaptiveRepository,
-        relations = NoDeclaredProgression,
+        relations = storedProgressionRelationProvider,
         classification = catalogExerciseFamilyClassification,
         clock = clock,
         idGenerator = idGenerator,
@@ -796,6 +851,8 @@ class AppContainer(
         val familyState: ProgramFamilyProgressionStateDao = database.programFamilyProgressionStateDao()
         val decision: ProgramAdaptiveDecisionDao = database.programAdaptiveDecisionDao()
         val adjustment: AdaptiveAdjustmentDao = database.adaptiveAdjustmentDao()
+        val progressionRelationVariant: ProgressionRelationVariantDao =
+            database.progressionRelationVariantDao()
     }
 
     companion object {

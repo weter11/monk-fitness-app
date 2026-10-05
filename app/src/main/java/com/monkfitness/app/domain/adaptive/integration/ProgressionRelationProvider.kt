@@ -55,8 +55,24 @@ fun interface ExerciseFamilyClassification {
  */
 fun interface ProgressionRelationProvider {
 
-    /** The declared ladder of [familyId], or `null` when this provider declares none for it. */
-    fun relationOf(familyId: String): ProgramProgressionRelation?
+    /**
+     * The declared ladder of [familyId], or `null` when this provider declares none for it.
+     *
+     * ### Why this is `suspend`
+     *
+     * P31 declared it synchronous and the production provider bridged the gap with `runBlocking`. That
+     * bridge was a recorded architectural gap, and P32 closes it because the production caller is
+     * already suspending: the answer comes from a **persisted** catalogue, so the read is a suspending
+     * database access, and a port that cannot express that forces every implementation to lie about
+     * what it does. `suspend` says the truth and keeps the blocking bridge out of the provider path
+     * entirely.
+     *
+     * It is the *only* domain port in this package whose read is suspending, and deliberately so: this
+     * is the one whose production source is storage. The classification beside it is an in-memory read
+     * of the shipped catalogue and stays synchronous, because making it `suspend` would change an
+     * interface for no reason.
+     */
+    suspend fun relationOf(familyId: String): ProgramProgressionRelation?
 }
 
 /**

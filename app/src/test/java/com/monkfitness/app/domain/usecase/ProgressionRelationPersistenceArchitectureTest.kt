@@ -360,6 +360,18 @@ class ProgressionRelationPersistenceArchitectureTest {
      * **The provider reads only the repository.** Its one collaborator, and the absence of every other
      * source a ladder could plausibly be invented from.
      */
+    /**
+     * **Inverted by P32, deliberately.** P31 asserted this exact import set, including
+     * `kotlinx.coroutines.runBlocking`, because the port was synchronous and the provider had to bridge
+     * the suspending repository read with a blocking call.
+     *
+     * P32 made `ProgressionRelationProvider.relationOf` `suspend`, so the bridge is not merely unused —
+     * it is the defect the stage removed. The assertion is therefore **replaced, not deleted**: the
+     * provider still imports exactly the relation type, the port and the one repository, and the
+     * blocking bridge is now *forbidden* by name. Pinning the removal as an exact import set means a
+     * re-introduced `runBlocking` fails this gate whether or not it is called, and any *other* added
+     * import — a static definitions object, a catalogue, a legacy pilot type — fails it too.
+     */
     @Test
     fun theProviderImportsNoLadderSourceOtherThanTheRepository() {
         val imports = provider.readLines()
@@ -368,15 +380,48 @@ class ProgressionRelationPersistenceArchitectureTest {
             .map { it.removePrefix("import ") }
 
         assertEquals(
-            "the provider imports the engine's relation type, the port, the one repository, and the " +
-                "coroutine bridge its non-suspending port requires — and nothing else",
+            "the provider imports the engine's relation type, the port and the one repository — " +
+                "and nothing else; P32 made the port suspending, so the coroutine bridge P31 required " +
+                "is gone rather than merely unused",
             listOf(
                 "com.monkfitness.app.data.repository.ProgressionRelationRepository",
                 "com.monkfitness.app.domain.adaptive.engine.ProgramProgressionRelation",
-                "com.monkfitness.app.domain.adaptive.integration.ProgressionRelationProvider",
-                "kotlinx.coroutines.runBlocking"
+                "com.monkfitness.app.domain.adaptive.integration.ProgressionRelationProvider"
             ).sorted(),
             imports.sorted()
+        )
+    }
+
+    /**
+     * **No blocking bridge anywhere in the progression-relation provider path.**
+     *
+     * The import gate above pins the provider's own imports; this one is the behavioural claim the
+     * import list cannot make on its own — that no `runBlocking` survives in the port, the provider or
+     * the function that reads a relation for the integration. P31 recorded the bridge as a gap it did
+     * not own; P32 owns it, and this is the gate that says so.
+     */
+    @Test
+    fun theProgressionRelationProviderPathContainsNoBlockingBridge() {
+        val path = listOf(
+            file("domain/adaptive/integration/ProgressionRelationProvider.kt"),
+            file("domain/adaptive/integration/AdaptiveTargetSlot.kt"),
+            provider
+        )
+
+        val offenders = path
+            .filter { it.isFile }
+            // Scanned on CODE with the comments stripped, not on raw text: both files *discuss*
+            // `runBlocking` in their KDoc — the port because it records what it replaced, the provider
+            // because it records the gap it closed — and a text scan would fail this gate on its own
+            // explanation of itself.
+            .filter { code(it).contains("runBlocking") }
+            .map { it.name }
+
+        assertTrue(
+            "no production file on the progression-relation provider path bridges a suspending read " +
+                "with `runBlocking` — the port is suspending, so a block here can only be a leftover " +
+                "or a new bridge somewhere else: $offenders",
+            offenders.isEmpty()
         )
     }
 
@@ -602,29 +647,41 @@ class ProgressionRelationPersistenceArchitectureTest {
     }
 
     /**
-     * **The provider is not wired into production yet — on purpose.**
+     * **Inverted by P32 — the stage's central deliverable.**
      *
-     * P31 keeps `NoDeclaredProgression` in `AppContainer`, because the catalogue is empty and wiring a
-     * provider over it would add a graph node while changing no observable behaviour. The gate is
-     * mechanical in both directions: the provider must not be constructed, and the production wiring
-     * must still be the empty ladder source.
+     * P31 asserted the *empty* production state: `NoDeclaredProgression` wired, the provider and the
+     * repository not wired at all, because P31 authored no ladder content. P32 authors four ladders,
+     * seeds them and serves them, so every one of those assertions is now false **by design** and would
+     * forbid the very thing this stage was asked to deliver.
+     *
+     * It is therefore **replaced, not deleted**, and replaced with strictly stronger claims: the
+     * stored provider must be constructed, it must be the value the integration receives, the empty
+     * source must be gone from the production wiring, and the repository must be reachable. A test
+     * that merely deleted these lines would leave the wiring unpinned in both directions, which is the
+     * one outcome a stage gate must never allow.
+     *
+     * The DAO assertion below is **unchanged**: P31 created the table and P32 does not touch it.
      */
     @Test
-    fun productionStillWiresTheEmptyLadderSourceAndNotThisProvider() {
+    fun productionWiresTheStoredProgressionProviderAndNotTheEmptyLadderSource() {
         val body = code(container)
 
         assertTrue(
-            "production still wires the ladder source that declares nothing — P31 authors no ladder",
+            "P32 wires the production stored provider in place of the empty ladder source",
+            Regex("""relations\s*=\s*storedProgressionRelationProvider""").containsMatchIn(body)
+        )
+        assertFalse(
+            "and production no longer wires `NoDeclaredProgression` — a second answer to the same " +
+                "wiring would let the catalogue be served or ignored by wiring order alone",
             Regex("""relations\s*=\s*NoDeclaredProgression""").containsMatchIn(body)
         )
-        assertFalse(
-            "and the P31 provider is deliberately not wired yet: the catalogue is empty, so a node " +
-                "reading it would change nothing observable",
+        assertTrue(
+            "and the provider is constructed by the composition root, so it is a real graph node",
             names(body, "StoredProgressionRelationProvider")
         )
-        assertFalse(
-            "and the catalogue repository is not wired either — an unwired provider's collaborator " +
-                "would be a repository nothing could reach",
+        assertTrue(
+            "and its one collaborator — the catalogue repository — is wired too, since an unwired " +
+                "repository would leave the provider with nothing to read",
             names(body, "ProgressionRelationRepository")
         )
         assertTrue(
