@@ -1,6 +1,9 @@
 package com.monkfitness.app.ui.screens
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,11 +11,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -29,6 +34,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,48 +45,29 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.platform.VibrationFeedback
-import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.ui.programs.ProgramSessionController
 import com.monkfitness.app.ui.programs.ProgramSessionNotice
+import com.monkfitness.app.ui.programs.ProgramSessionUiState
 import com.monkfitness.app.ui.programs.SessionExerciseUi
 import com.monkfitness.app.ui.programs.SessionStage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** How long the rest between two sets of one occurrence lasts. The same minute the app always used. */
+/** A temporary UI rest affordance; rest duration is not a session or prescription fact. */
 private const val REST_SECONDS = 60
 
-/**
- * **The workout session screen** — the one production workout runtime (§30 step 15, §19, §27).
- *
- * It exists to replace the retired day-based `WorkoutScreen`, and it is deliberately thin: **every**
- * operation it offers is a call on [ProgramSessionController], which calls `SessionRuntime`. The screen
- * starts nothing, counts nothing, decides nothing about completion and writes nothing:
- *
- * ```text
- * opening the route   controller.open(slotId)   → start, or restore what is already in progress
- * Confirm set         controller.confirmSet(…)  → one appended set row, position from the stored rows
- * Finish              controller.finish()       → session + opportunity + adaptive, one transaction
- * Cancel              controller.cancel()       → CANCELLED; the opportunity is left as it was
- * Back                controller.back()         → nothing at all: leaving is not a fact about the workout
- * ```
- *
- * The attempt's identity is the **slot** it is opened for, and its persisted identity is the session the
- * runtime returns. Nothing here reconstructs a day from a calendar: a session is restored by what is
- * stored, which is what makes "close the app mid-workout and come back" work without a second model.
- *
- * The rest countdown between two sets is the screen's own affordance (and the only state it owns): it
- * decides nothing about the workout, and every set the user confirms is confirmed explicitly.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProgramSessionScreen(
@@ -94,28 +81,53 @@ fun ProgramSessionScreen(
 
     val state by controller.state.collectAsState()
     val context = LocalContext.current
+    val view = LocalView.current
     val scope = rememberCoroutineScope()
 
-    // The screen the workout is running on stays on: the affordance the navigation host used to apply
-    // from the shipped step machine's state, now owned by the only screen that knows a workout is running.
-    val view = LocalView.current
-    LaunchedEffect(state.isPresenting) { view.keepScreenOn = state.isPresenting }
+    DisposableEffect(view, state.isPresenting) {
+        view.keepScreenOn = state.isPresenting
+        onDispose { view.keepScreenOn = false }
+    }
 
     var restSecondsLeft by remember { mutableIntStateOf(0) }
     var showFinishDialog by remember { mutableStateOf(false) }
     var showCancelDialog by remember { mutableStateOf(false) }
     var showNotice by remember { mutableStateOf(false) }
-    var actualValue by remember(state.currentExercise) { mutableStateOf(state.currentExercise?.nextTarget?.toString().orEmpty()) }
-    var actualInputInvalid by remember { mutableStateOf(false) }
+
+    val current = state.currentExercise
+    var actualValue by remember(current?.sessionExerciseId, current?.completedSets) {
+        mutableStateOf(current?.initialActualValue().orEmpty())
+    }
+    var actualInputInvalid by remember(current?.sessionExerciseId, current?.completedSets) {
+        mutableStateOf(false)
+    }
+    var timerRemaining by remember(current?.sessionExerciseId, current?.completedSets, current?.nextTarget) {
+        mutableIntStateOf(current?.nextTarget ?: 0)
+    }
+    var timerRunning by remember(current?.sessionExerciseId, current?.completedSets) {
+        mutableStateOf(false)
+    }
 
     val notice = state.notice
     LaunchedEffect(notice) { showNotice = notice != null }
 
-    restSecondsLeft.coerceAtLeast(0).takeIf { it > 0 }?.let { remaining ->
-        LaunchedEffect(remaining, state.confirmedSetCount) {
+    LaunchedEffect(restSecondsLeft, state.confirmedSetCount, current?.sessionExerciseId) {
+        if (restSecondsLeft > 0) {
             delay(1_000)
-            restSecondsLeft = remaining - 1
-            if (remaining - 1 == 0 && vibrationEnabled) VibrationFeedback.buzz(context)
+            restSecondsLeft = (restSecondsLeft - 1).coerceAtLeast(0)
+            if (restSecondsLeft == 0 && vibrationEnabled) VibrationFeedback.buzz(context)
+        }
+    }
+
+    LaunchedEffect(timerRunning, timerRemaining, current?.sessionExerciseId, current?.completedSets) {
+        if (timerRunning && timerRemaining > 0) {
+            delay(1_000)
+            timerRemaining = (timerRemaining - 1).coerceAtLeast(0)
+            actualValue = ((current?.nextTarget ?: 0) - timerRemaining).coerceAtLeast(0).toString()
+            if (timerRemaining == 0) {
+                timerRunning = false
+                if (vibrationEnabled) VibrationFeedback.buzz(context)
+            }
         }
     }
 
@@ -139,12 +151,10 @@ fun ProgramSessionScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            controller.back()
-                            onBack()
-                        }
-                    ) {
+                    IconButton(onClick = {
+                        controller.back()
+                        onBack()
+                    }) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.previous)
@@ -158,7 +168,9 @@ fun ProgramSessionScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             when (state.stage) {
                 SessionStage.LOADING -> Text(
@@ -174,128 +186,46 @@ fun ProgramSessionScreen(
                     color = MaterialTheme.colorScheme.error
                 )
 
-                SessionStage.CANCELLED -> Text(
-                    text = stringResource(R.string.programs_session_result_cancelled),
-                    style = MaterialTheme.typography.headlineSmall
-                )
-
-                SessionStage.COMPLETED -> Column {
+                SessionStage.CANCELLED -> {
                     Text(
-                        text = stringResource(R.string.programs_session_result_completed),
-                        style = MaterialTheme.typography.headlineSmall,
+                        text = stringResource(R.string.programs_session_result_cancelled),
+                        style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(
-                            R.string.programs_session_sets_progress,
-                            state.confirmedSetCount,
-                            state.prescribedSetCount
-                        ),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    state.notice?.let { completedNotice ->
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = stringResource(completedNotice.messageRes),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
+                    Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.ok))
                     }
                 }
 
+                SessionStage.COMPLETED -> CompletedWorkout(state = state, onDone = onBack)
+
                 SessionStage.PRESENTING -> {
-                    Text(
-                        text = stringResource(
-                            R.string.programs_session_sets_progress,
-                            state.confirmedSetCount,
-                            state.prescribedSetCount
-                        ),
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LinearProgressIndicator(
-                        progress = {
-                            if (state.prescribedSetCount == 0) {
-                                0f
-                            } else {
-                                state.confirmedSetCount.toFloat() / state.prescribedSetCount.toFloat()
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(12.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    WorkoutProgress(state = state)
 
-                    LazyColumn(modifier = Modifier.weight(1f)) {
-                        items(state.exercises, key = { exercise -> exercise.sessionExerciseId }) { exercise ->
-                            SessionExerciseRow(
-                                exercise = exercise,
-                                onExerciseClick = onExerciseClick
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    if (restSecondsLeft > 0) {
-                        Text(
-                            text = stringResource(R.string.programs_session_rest, restSecondsLeft),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary
+                    if (restSecondsLeft > 0 && current != null) {
+                        RestScreen(
+                            exercise = current,
+                            secondsLeft = restSecondsLeft,
+                            onSkipRest = { restSecondsLeft = 0 }
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = { restSecondsLeft = 0 },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(text = stringResource(R.string.programs_session_skip_rest))
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    state.currentExercise?.let { current ->
-                        OutlinedTextField(
-                            value = actualValue,
-                            onValueChange = { value ->
+                    } else if (current != null) {
+                        CurrentExercise(
+                            exercise = current,
+                            actualValue = actualValue,
+                            actualInputInvalid = actualInputInvalid,
+                            timerRemaining = timerRemaining,
+                            timerRunning = timerRunning,
+                            onExerciseClick = onExerciseClick,
+                            onActualValueChange = { value ->
                                 actualValue = value.filter(Char::isDigit)
                                 actualInputInvalid = false
                             },
-                            label = {
-                                Text(
-                                    stringResource(
-                                        when (current.dimension) {
-                                            PrescriptionDimension.TIME_BASED -> R.string.programs_session_actual_seconds
-                                            else -> R.string.programs_session_actual_reps
-                                        }
-                                    )
-                                )
-                            },
-                            singleLine = true,
-                            isError = actualInputInvalid,
-                            supportingText = if (actualInputInvalid) {
-                                { Text(stringResource(R.string.programs_session_actual_invalid)) }
-                            } else {
-                                null
-                            },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        MonkButton(
-                            text = stringResource(R.string.programs_session_confirm_set),
-                            onClick = {
+                            onConfirm = {
                                 scope.launch {
                                     val stored = controller.confirmActualSet(actualValue)
                                     actualInputInvalid = !stored
                                     if (stored) {
-                                        actualValue = state.currentExercise
-                                            ?.takeIf { it.sessionExerciseId != current.sessionExerciseId }
-                                            ?.nextTarget
-                                            ?.toString()
-                                            .orEmpty()
-                                        restSecondsLeft = if (current.completedSets + 1 < current.setCount) {
+                                        restSecondsLeft = if (controller.state.value.currentExercise != null) {
                                             REST_SECONDS
                                         } else {
                                             0
@@ -304,11 +234,36 @@ fun ProgramSessionScreen(
                                     }
                                 }
                             },
-                            enabled = restSecondsLeft == 0
+                            onTimerToggle = {
+                                if (timerRunning) {
+                                    timerRunning = false
+                                } else if (timerRemaining > 0) {
+                                    timerRunning = true
+                                }
+                            },
+                            onTimerReset = {
+                                timerRemaining = current.nextTarget
+                                timerRunning = false
+                                actualValue = "0"
+                                actualInputInvalid = false
+                            }
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.programs_session_completed),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    if (restSecondsLeft == 0) {
+                        ExerciseNavigation(
+                            state = state,
+                            onPrevious = { controller.moveExerciseFocus(-1) },
+                            onNext = { controller.moveExerciseFocus(1) }
+                        )
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -317,7 +272,7 @@ fun ProgramSessionScreen(
                             onClick = { showCancelDialog = true },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text(text = stringResource(R.string.programs_session_cancel))
+                            Text(stringResource(R.string.programs_session_cancel))
                         }
                         Button(
                             onClick = {
@@ -329,7 +284,7 @@ fun ProgramSessionScreen(
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text(text = stringResource(R.string.programs_session_finish))
+                            Text(stringResource(R.string.programs_session_finish))
                         }
                     }
                 }
@@ -406,58 +361,342 @@ fun ProgramSessionScreen(
     }
 }
 
-/** One occurrence: its name, its set progress and its next target. */
 @Composable
-private fun SessionExerciseRow(
-    exercise: SessionExerciseUi,
-    onExerciseClick: (String) -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (exercise.isCurrent) {
-                MaterialTheme.colorScheme.secondaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
+private fun WorkoutProgress(state: ProgramSessionUiState) {
+    val progress = if (state.prescribedSetCount == 0) {
+        0f
+    } else {
+        (state.confirmedSetCount.toFloat() / state.prescribedSetCount.toFloat()).coerceIn(0f, 1f)
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(
+                R.string.programs_session_sets_progress,
+                state.confirmedSetCount,
+                state.prescribedSetCount
+            ),
+            style = MaterialTheme.typography.labelLarge
         )
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+        )
+    }
+}
+
+@Composable
+private fun CurrentExercise(
+    exercise: SessionExerciseUi,
+    actualValue: String,
+    actualInputInvalid: Boolean,
+    timerRemaining: Int,
+    timerRunning: Boolean,
+    onExerciseClick: (String) -> Unit,
+    onActualValueChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onTimerToggle: () -> Unit,
+    onTimerReset: () -> Unit
+) {
+    val exerciseName = exercise.displayName()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(190.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(exercise.imageRes ?: R.drawable.ic_exercise_placeholder),
+                    contentDescription = exerciseName,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
+
             Text(
-                text = if (exercise.nameRes == 0) {
-                    exercise.exerciseId
-                } else {
-                    stringResource(exercise.nameRes)
-                },
-                style = MaterialTheme.typography.titleMedium,
+                text = exerciseName,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            if (exercise.descriptionRes != 0) {
+                Text(
+                    text = stringResource(exercise.descriptionRes),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            TextButton(
+                onClick = { onExerciseClick(exercise.exerciseId) },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                Text(stringResource(R.string.programs_session_exercise_details))
+            }
+
             Text(
                 text = stringResource(
                     R.string.programs_session_set_of,
-                    exercise.completedSets.coerceAtMost(exercise.setCount),
+                    exercise.completedSets.coerceAtMost(exercise.setCount) + if (exercise.isFinished) 0 else 1,
                     exercise.setCount
                 ),
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.secondary
             )
-            if (!exercise.isFinished) {
-                Text(
-                    text = when (exercise.dimension) {
+
+            when {
+                exercise.isSkipped -> Text(
+                    text = stringResource(R.string.programs_session_exercise_skipped),
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                exercise.isFinished -> Text(
+                    text = stringResource(R.string.programs_session_completed),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                else -> {
+                    val target = when (exercise.dimension) {
                         PrescriptionDimension.TIME_BASED ->
                             stringResource(R.string.programs_session_seconds_target, exercise.nextTarget)
 
                         else -> stringResource(R.string.programs_session_reps_target, exercise.nextTarget)
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            TextButton(onClick = { onExerciseClick(exercise.exerciseId) }) {
-                Text(text = stringResource(R.string.programs_session_exercise_details))
+                    }
+                    Text(
+                        text = stringResource(R.string.programs_session_target_label),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = target,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    if (exercise.dimension == PrescriptionDimension.TIME_BASED) {
+                        TimeSetTimer(
+                            secondsLeft = timerRemaining,
+                            timerRunning = timerRunning,
+                            actualValue = actualValue,
+                            onToggle = onTimerToggle,
+                            onReset = onTimerReset
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = actualValue,
+                        onValueChange = onActualValueChange,
+                        label = {
+                            Text(
+                                stringResource(
+                                    if (exercise.dimension == PrescriptionDimension.TIME_BASED) {
+                                        R.string.programs_session_actual_seconds
+                                    } else {
+                                        R.string.programs_session_actual_reps
+                                    }
+                                )
+                            )
+                        },
+                        singleLine = true,
+                        isError = actualInputInvalid,
+                        supportingText = if (actualInputInvalid) {
+                            { Text(stringResource(R.string.programs_session_actual_invalid)) }
+                        } else {
+                            null
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        textStyle = MaterialTheme.typography.headlineMedium,
+                        enabled = !timerRunning,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Button(
+                        onClick = onConfirm,
+                        enabled = !timerRunning && actualValue.toIntOrNull()?.let { value -> value > 0 } == true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                    ) {
+                        Text(stringResource(R.string.programs_session_confirm_set))
+                    }
+                }
             }
         }
     }
 }
+
+@Composable
+private fun TimeSetTimer(
+    secondsLeft: Int,
+    timerRunning: Boolean,
+    actualValue: String,
+    onToggle: () -> Unit,
+    onReset: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "%02d:%02d".format(secondsLeft / 60, secondsLeft % 60),
+            style = MaterialTheme.typography.displayMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        if (secondsLeft == 0 && actualValue.toIntOrNull()?.let { it > 0 } == true) {
+            Text(
+                text = stringResource(R.string.programs_session_timer_complete),
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(
+                onClick = onToggle,
+                enabled = timerRunning || secondsLeft > 0
+            ) {
+                Text(
+                    stringResource(
+                        if (timerRunning) R.string.timer_pause else R.string.timer_start
+                    )
+                )
+            }
+            TextButton(
+                onClick = onReset,
+                enabled = !timerRunning
+            ) {
+                Text(stringResource(R.string.timer_reset))
+            }
+        }
+    }
+}
+
+@Composable
+private fun RestScreen(
+    exercise: SessionExerciseUi,
+    secondsLeft: Int,
+    onSkipRest: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(300.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = stringResource(R.string.programs_session_rest, secondsLeft),
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = stringResource(R.string.programs_session_next_exercise, exercise.displayName()),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            OutlinedButton(onClick = onSkipRest) {
+                Text(stringResource(R.string.programs_session_skip_rest))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExerciseNavigation(
+    state: ProgramSessionUiState,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit
+) {
+    val currentIndex = state.exercises.indexOfFirst { exercise -> exercise.isCurrent }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        OutlinedButton(
+            onClick = onPrevious,
+            enabled = currentIndex > 0,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(stringResource(R.string.previous))
+        }
+        OutlinedButton(
+            onClick = onNext,
+            enabled = currentIndex >= 0 && currentIndex < state.exercises.lastIndex,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(stringResource(R.string.next))
+        }
+    }
+}
+
+@Composable
+private fun CompletedWorkout(state: ProgramSessionUiState, onDone: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.CheckCircle,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = stringResource(R.string.programs_session_result_completed),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = stringResource(
+                R.string.programs_session_sets_progress,
+                state.confirmedSetCount,
+                state.prescribedSetCount
+            ),
+            style = MaterialTheme.typography.bodyLarge
+        )
+        state.notice?.let { completedNotice ->
+            Text(
+                text = stringResource(completedNotice.messageRes),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
+        }
+        Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.ok))
+        }
+    }
+}
+
+@Composable
+private fun SessionExerciseUi.displayName(): String =
+    if (nameRes == 0) exerciseId else stringResource(nameRes)
+
+private fun SessionExerciseUi.initialActualValue(): String =
+    when (dimension) {
+        PrescriptionDimension.TIME_BASED -> "0"
+        else -> nextTarget.takeIf { target -> target > 0 }?.toString().orEmpty()
+    }
