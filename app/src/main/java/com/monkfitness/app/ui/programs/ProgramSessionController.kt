@@ -222,8 +222,10 @@ class ProgramSessionController(
     /** The attempt being presented. Held because every operation after `open` is about *this* attempt. */
     private var session: WorkoutSession? = null
 
-    /** Names resolved once from the catalogue, because the catalogue is a compile-time list. */
+    /** Display metadata resolved once from the catalogue, because the catalogue is a compile-time list. */
     private var optionByExerciseId: Map<String, ExerciseOptionUi>? = null
+
+    /** Temporary screen focus; the session and set facts remain solely in the runtime's stored rows. */
     private var focusedSessionExerciseId: String? = null
 
     // ---------------------------------------------------------------- opening
@@ -398,7 +400,9 @@ class ProgramSessionController(
     /** Moves presentation focus to the adjacent stored occurrence without changing session facts. */
     fun moveExerciseFocus(direction: Int) {
         if (direction != -1 && direction != 1) return
-        val exercises = mutableState.value.exercises
+        val currentState = mutableState.value
+        if (!currentState.isPresenting) return
+        val exercises = currentState.exercises
         val currentIndex = exercises.indexOfFirst { exercise -> exercise.isCurrent }
         val targetIndex = currentIndex + direction
         if (currentIndex < 0 || targetIndex !in exercises.indices) return
@@ -497,27 +501,27 @@ class ProgramSessionController(
                 notice = null
             )
         }
-
-        private fun occurrenceForPresentation(session: WorkoutSession): SessionOccurrence? {
-            val focusedId = focusedSessionExerciseId
-            val focused = focusedId?.let { id ->
-                session.exercises.firstOrNull { exercise -> exercise.sessionExerciseId.value == id }
-            }
-            if (focused != null && !focused.skipped &&
-                focused.results.size < focused.prescription.setCount
-            ) {
-                return occurrenceOf(focused)
-            }
-            return occurrenceToPerform(session)
-        }
-
-        private fun occurrenceOf(exercise: com.monkfitness.app.domain.workout.SessionExercise) =
-            SessionOccurrence(
-                sessionExerciseId = exercise.sessionExerciseId.value,
-                exerciseId = exercise.exerciseId,
-                dimension = exercise.prescription.dimension
-            )
     }
+
+    private fun occurrenceForPresentation(session: WorkoutSession): SessionOccurrence? {
+        val focusedId = focusedSessionExerciseId
+        val focused = focusedId?.let { id ->
+            session.exercises.firstOrNull { exercise -> exercise.sessionExerciseId.value == id }
+        }
+        if (focused != null && !focused.skipped &&
+            focused.results.size < focused.prescription.setCount
+        ) {
+            return occurrenceOf(focused)
+        }
+        return occurrenceToPerform(session)
+    }
+
+    private fun occurrenceOf(exercise: com.monkfitness.app.domain.workout.SessionExercise) =
+        SessionOccurrence(
+            sessionExerciseId = exercise.sessionExerciseId.value,
+            exerciseId = exercise.exerciseId,
+            dimension = exercise.prescription.dimension
+        )
 
     /** The Program's name, or `null` when the lifecycle layer cannot read it. A label, never a rule. */
     private suspend fun programNameOf(session: WorkoutSession): String? =

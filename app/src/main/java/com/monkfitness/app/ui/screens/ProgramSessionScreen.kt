@@ -93,6 +93,7 @@ fun ProgramSessionScreen(
     var showFinishDialog by remember { mutableStateOf(false) }
     var showCancelDialog by remember { mutableStateOf(false) }
     var showNotice by remember { mutableStateOf(false) }
+    var confirmPending by remember { mutableStateOf(false) }
 
     val current = state.currentExercise
     var actualValue by remember(current?.sessionExerciseId, current?.completedSets) {
@@ -215,22 +216,31 @@ fun ProgramSessionScreen(
                             actualInputInvalid = actualInputInvalid,
                             timerRemaining = timerRemaining,
                             timerRunning = timerRunning,
+                            confirmPending = confirmPending,
                             onExerciseClick = onExerciseClick,
                             onActualValueChange = { value ->
                                 actualValue = value.filter(Char::isDigit)
                                 actualInputInvalid = false
                             },
                             onConfirm = {
-                                scope.launch {
-                                    val stored = controller.confirmActualSet(actualValue)
-                                    actualInputInvalid = !stored
-                                    if (stored) {
-                                        restSecondsLeft = if (controller.state.value.currentExercise != null) {
-                                            REST_SECONDS
-                                        } else {
-                                            0
+                                if (!confirmPending) {
+                                    confirmPending = true
+                                    scope.launch {
+                                        try {
+                                            val stored = controller.confirmActualSet(actualValue)
+                                            actualInputInvalid = !stored
+                                            if (stored) {
+                                                restSecondsLeft =
+                                                    if (controller.state.value.currentExercise != null) {
+                                                        REST_SECONDS
+                                                    } else {
+                                                        0
+                                                    }
+                                                if (vibrationEnabled) VibrationFeedback.buzz(context)
+                                            }
+                                        } finally {
+                                            confirmPending = false
                                         }
-                                        if (vibrationEnabled) VibrationFeedback.buzz(context)
                                     }
                                 }
                             },
@@ -393,6 +403,7 @@ private fun CurrentExercise(
     actualInputInvalid: Boolean,
     timerRemaining: Int,
     timerRunning: Boolean,
+    confirmPending: Boolean,
     onExerciseClick: (String) -> Unit,
     onActualValueChange: (String) -> Unit,
     onConfirm: () -> Unit,
@@ -403,7 +414,7 @@ private fun CurrentExercise(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(
             modifier = Modifier
@@ -448,15 +459,17 @@ private fun CurrentExercise(
                 Text(stringResource(R.string.programs_session_exercise_details))
             }
 
-            Text(
-                text = stringResource(
-                    R.string.programs_session_set_of,
-                    exercise.completedSets.coerceAtMost(exercise.setCount) + if (exercise.isFinished) 0 else 1,
-                    exercise.setCount
-                ),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.secondary
-            )
+            if (!exercise.isSkipped) {
+                Text(
+                    text = stringResource(
+                        R.string.programs_session_sets_progress,
+                        exercise.completedSets.coerceAtMost(exercise.setCount),
+                        exercise.setCount
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
 
             when {
                 exercise.isSkipped -> Text(
@@ -493,6 +506,7 @@ private fun CurrentExercise(
                         TimeSetTimer(
                             secondsLeft = timerRemaining,
                             timerRunning = timerRunning,
+                            controlsEnabled = !confirmPending,
                             actualValue = actualValue,
                             onToggle = onTimerToggle,
                             onReset = onTimerReset
@@ -522,12 +536,13 @@ private fun CurrentExercise(
                         },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         textStyle = MaterialTheme.typography.headlineMedium,
-                        enabled = !timerRunning,
+                        enabled = !timerRunning && !confirmPending,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Button(
                         onClick = onConfirm,
-                        enabled = !timerRunning && actualValue.toIntOrNull()?.let { value -> value > 0 } == true,
+                        enabled = !timerRunning && !confirmPending &&
+                            actualValue.toIntOrNull()?.let { value -> value > 0 } == true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
@@ -544,6 +559,7 @@ private fun CurrentExercise(
 private fun TimeSetTimer(
     secondsLeft: Int,
     timerRunning: Boolean,
+    controlsEnabled: Boolean,
     actualValue: String,
     onToggle: () -> Unit,
     onReset: () -> Unit
@@ -568,7 +584,7 @@ private fun TimeSetTimer(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(
                 onClick = onToggle,
-                enabled = timerRunning || secondsLeft > 0
+                enabled = controlsEnabled && (timerRunning || secondsLeft > 0)
             ) {
                 Text(
                     stringResource(
@@ -578,7 +594,7 @@ private fun TimeSetTimer(
             }
             TextButton(
                 onClick = onReset,
-                enabled = !timerRunning
+                enabled = controlsEnabled && !timerRunning
             ) {
                 Text(stringResource(R.string.timer_reset))
             }

@@ -1,5 +1,6 @@
 package com.monkfitness.app.architecture
 
+import com.monkfitness.app.R
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationOutcome
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationResult
 import com.monkfitness.app.domain.adaptive.integration.NoDeclaredProgression
@@ -7,6 +8,7 @@ import com.monkfitness.app.domain.adaptive.integration.NoExerciseFamilyClassific
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.domain.program.ProgramDayType
+import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.domain.program.ProgramSchedulingResult
 import com.monkfitness.app.domain.program.SlotStatus
 import com.monkfitness.app.domain.program.transfer.ProgramTransferResult
@@ -59,6 +61,14 @@ class ProgramTargetAcceptanceTest {
         val rig = ProgramsRig("acceptance")
         try {
             val database = rig.database
+            val pushupsOption = rig.catalogueOptions.indexOfFirst { option ->
+                option.exerciseId == ProgramsRig.FIRST_EXERCISE
+            }
+            assertTrue("the catalogue includes the push-up fixture", pushupsOption >= 0)
+            rig.catalogueOptions[pushupsOption] = rig.catalogueOptions[pushupsOption].copy(
+                descriptionRes = R.string.ex_pushups_desc,
+                imageRes = R.drawable.push_up
+            )
             val runtime = SessionRuntime(
                 planRepository = rig.transfer.planRepository,
                 scheduleRepository = rig.transfer.scheduleRepository,
@@ -93,7 +103,15 @@ class ProgramTargetAcceptanceTest {
             )
 
             // ---- 1. Create a Program — as §27's whole unit ------------------------------------------
-            val createdId = rig.createProgramThroughTheUi("Acceptance Program")
+            rig.controller.openCreateDraft(ProgramMode.MANUAL)
+            rig.controller.setDraftName("Acceptance Program")
+            rig.controller.addDraftDay(ProgramDayType.TRAINING)
+            val trainingDayId = rig.state.draft?.days?.firstOrNull()?.programDayId
+            assertNotNull("the draft has its training day", trainingDayId)
+            rig.controller.addDraftElement(trainingDayId!!, ProgramsRig.FIRST_EXERCISE)
+            rig.controller.addDraftElement(trainingDayId, "squats")
+            rig.controller.saveDraft()
+            val createdId = rig.state.rows.firstOrNull { row -> row.name == "Acceptance Program" }?.programId
             assertNotNull("the Save stored a Program", createdId)
             val id = ProgramId(createdId!!)
             assertEquals("a creation mints exactly one revision", 1, rig.revisionCount(id))
@@ -148,12 +166,36 @@ class ProgramTargetAcceptanceTest {
             // ---- 4. Confirm every set of every occurrence, through the screen's own operations -------
             val firstOccurrence = session.state.value.currentExercise
             assertNotNull("a set is ready for confirmation", firstOccurrence)
+            assertEquals("the image comes from the catalogue", R.drawable.push_up, firstOccurrence?.imageRes)
+            assertEquals(
+                "the description comes from the catalogue",
+                R.string.ex_pushups_desc,
+                firstOccurrence?.descriptionRes
+            )
             val invalidWasStored = session.confirmActualSet("-1")
             assertFalse("a negative actual result is rejected", invalidWasStored)
             assertEquals(
                 "invalid input is not silently replaced with the prescribed target",
                 0,
                 database.count("program_set_log")
+            )
+
+            val secondOccurrence = session.state.value.exercises[1]
+            session.moveExerciseFocus(1)
+            assertEquals(
+                "Next changes presentation focus, not the stored set count",
+                secondOccurrence.sessionExerciseId,
+                session.state.value.currentExercise?.sessionExerciseId
+            )
+            assertEquals(0, database.count("program_set_log"))
+            assertTrue("the selected exercise can be confirmed through the runtime", session.confirmActualSet(
+                secondOccurrence.nextTarget.toString()
+            ))
+            session.moveExerciseFocus(-1)
+            assertEquals(
+                "Previous returns focus without changing the session",
+                firstOccurrence?.sessionExerciseId,
+                session.state.value.currentExercise?.sessionExerciseId
             )
 
             var confirmedWithDifferentActual = false
