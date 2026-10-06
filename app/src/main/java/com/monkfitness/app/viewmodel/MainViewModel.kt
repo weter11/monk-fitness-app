@@ -160,6 +160,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     ExerciseOptionUi(
                         exerciseId = exercise.id,
                         nameRes = exercise.nameRes,
+                        descriptionRes = exercise.descriptionRes,
+                        imageRes = exercise.imageRes,
                         familyId = exercise.familyId,
                         isTimerBased = exercise.isTimerBased
                     )
@@ -429,6 +431,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 ExerciseOptionUi(
                     exerciseId = exercise.id,
                     nameRes = exercise.nameRes,
+                    descriptionRes = exercise.descriptionRes,
+                    imageRes = exercise.imageRes,
                     familyId = exercise.familyId,
                     isTimerBased = exercise.isTimerBased
                 )

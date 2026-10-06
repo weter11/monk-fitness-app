@@ -68,6 +68,10 @@ data class ExerciseOptionUi(
     val exerciseId: String,
     /** The localized display name, or `0` when the id is not in the catalogue. */
     val nameRes: Int,
+    /** The catalogue's exercise description, or `0` when it has none. */
+    val descriptionRes: Int = 0,
+    /** The catalogue's exercise image, or `null` when it has none. */
+    val imageRes: Int? = null,
     /** The catalogue's own family id, carried for grouping rather than for a plan decision. */
     val familyId: String,
     /** Whether the catalogue records this exercise as timed, which decides its prescription dimension. */

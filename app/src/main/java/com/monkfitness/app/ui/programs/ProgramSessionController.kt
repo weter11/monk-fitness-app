@@ -33,6 +33,10 @@ data class SessionExerciseUi(
     val exerciseId: String,
     /** The localized display name, or `0` when the catalogue does not know the id. */
     val nameRes: Int,
+    /** The catalogue description, or `0` when the catalogue does not know the id. */
+    val descriptionRes: Int,
+    /** The catalogue image, or `null` when the catalogue does not know the id. */
+    val imageRes: Int?,
     /** How many sets the prescription composes. */
     val setCount: Int,
     /** How many were confirmed. */
@@ -42,7 +46,9 @@ data class SessionExerciseUi(
     /** The unit of the next set's target. */
     val dimension: PrescriptionDimension,
     /** The prescribed target of the next set, or `0` when the occurrence is finished. */
-    val nextTarget: Int
+    val nextTarget: Int,
+    /** Whether the user explicitly skipped this occurrence. */
+    val isSkipped: Boolean
 ) {
 
     /** Whether every set of this occurrence was confirmed. */
@@ -217,7 +223,8 @@ class ProgramSessionController(
     private var session: WorkoutSession? = null
 
     /** Names resolved once from the catalogue, because the catalogue is a compile-time list. */
-    private var nameByExerciseId: Map<String, Int>? = null
+    private var optionByExerciseId: Map<String, ExerciseOptionUi>? = null
+    private var focusedSessionExerciseId: String? = null
 
     // ---------------------------------------------------------------- opening
 
@@ -230,6 +237,7 @@ class ProgramSessionController(
      */
     suspend fun open(slotId: String) {
         session = null
+        focusedSessionExerciseId = null
         mutableState.value = ProgramSessionUiState(stage = SessionStage.LOADING, slotId = slotId)
         when (val started = runtime.startSession(SlotId(slotId))) {
             is SessionRuntimeResult.Success -> present(started.value)
@@ -283,16 +291,29 @@ class ProgramSessionController(
         val value = rawValue.trim().toIntOrNull() ?: return false
         if (value <= 0) return false
         val current = currentAttempt() ?: return false
-        val occurrence = occurrenceToPerform(current) ?: return false
+        val selected = mutableState.value.currentExercise ?: return false
+        if (selected.isFinished || selected.isSkipped) return false
+        val occurrence = current.exercises.firstOrNull { exercise ->
+            exercise.sessionExerciseId.value == selected.sessionExerciseId
+        } ?: return false
         return confirmSetInternal(
-            completedReps = if (occurrence.dimension == PrescriptionDimension.TIME_BASED) 0 else value,
-            durationSeconds = if (occurrence.dimension == PrescriptionDimension.TIME_BASED) value else 0
+            completedReps = if (occurrence.prescription.dimension == PrescriptionDimension.TIME_BASED) 0 else value,
+            durationSeconds = if (occurrence.prescription.dimension == PrescriptionDimension.TIME_BASED) value else 0,
+            sessionExerciseId = occurrence.sessionExerciseId.value
         )
     }
 
-    private suspend fun confirmSetInternal(completedReps: Int, durationSeconds: Int): Boolean {
+    private suspend fun confirmSetInternal(
+        completedReps: Int,
+        durationSeconds: Int,
+        sessionExerciseId: String? = mutableState.value.currentExercise?.sessionExerciseId
+    ): Boolean {
         val current = currentAttempt() ?: return false
-        val occurrence = occurrenceToPerform(current) ?: return false
+        val occurrence = current.exercises.firstOrNull { exercise ->
+            exercise.sessionExerciseId.value == sessionExerciseId &&
+                !exercise.skipped &&
+                exercise.results.size < exercise.prescription.setCount
+        } ?: return false
         return when (
             val confirmed = runtime.confirmSet(
                 sessionId = current.sessionId,
@@ -374,6 +395,27 @@ class ProgramSessionController(
         mutableState.update { state -> state.copy(notice = null) }
     }
 
+    /** Moves presentation focus to the adjacent stored occurrence without changing session facts. */
+    fun moveExerciseFocus(direction: Int) {
+        if (direction != -1 && direction != 1) return
+        val exercises = mutableState.value.exercises
+        val currentIndex = exercises.indexOfFirst { exercise -> exercise.isCurrent }
+        val targetIndex = currentIndex + direction
+        if (currentIndex < 0 || targetIndex !in exercises.indices) return
+
+        val target = exercises[targetIndex]
+        focusedSessionExerciseId = target.sessionExerciseId
+        mutableState.update { state ->
+            val focused = state.exercises.map { exercise ->
+                exercise.copy(isCurrent = exercise.sessionExerciseId == target.sessionExerciseId)
+            }
+            state.copy(
+                exercises = focused,
+                currentExercise = focused.firstOrNull { exercise -> exercise.isCurrent }
+            )
+        }
+    }
+
     /**
      * Leaving the screen. It is deliberately **not** an operation: no call is made, nothing is written,
      * and the attempt stays `IN_PROGRESS`, so the next open restores it (§19).
@@ -418,24 +460,29 @@ class ProgramSessionController(
     private suspend fun present(session: WorkoutSession) {
         this.session = session
         val workout = session.snapshot.workout
-        val current = occurrenceToPerform(session)
-        val names = names()
+        val current = occurrenceForPresentation(session)
+        focusedSessionExerciseId = current?.sessionExerciseId
+        val options = options()
 
         val exercises = session.exercises.map { exercise ->
             val nextSetNumber = exercise.results.size + 1
+            val option = options[exercise.exerciseId]
             SessionExerciseUi(
                 sessionExerciseId = exercise.sessionExerciseId.value,
                 exerciseId = exercise.exerciseId,
-                nameRes = names[exercise.exerciseId] ?: 0,
+                nameRes = option?.nameRes ?: 0,
+                descriptionRes = option?.descriptionRes ?: 0,
+                imageRes = option?.imageRes,
                 setCount = exercise.prescription.setCount,
                 completedSets = exercise.results.size,
                 isCurrent = exercise.sessionExerciseId.value == current?.sessionExerciseId,
                 dimension = exercise.prescription.dimension,
-                nextTarget = if (nextSetNumber <= exercise.prescription.setCount) {
+                nextTarget = if (!exercise.skipped && nextSetNumber <= exercise.prescription.setCount) {
                     exercise.prescription.targetForSet(nextSetNumber)
                 } else {
                     0
-                }
+                },
+                isSkipped = exercise.skipped
             )
         }
 
@@ -450,6 +497,26 @@ class ProgramSessionController(
                 notice = null
             )
         }
+
+        private fun occurrenceForPresentation(session: WorkoutSession): SessionOccurrence? {
+            val focusedId = focusedSessionExerciseId
+            val focused = focusedId?.let { id ->
+                session.exercises.firstOrNull { exercise -> exercise.sessionExerciseId.value == id }
+            }
+            if (focused != null && !focused.skipped &&
+                focused.results.size < focused.prescription.setCount
+            ) {
+                return occurrenceOf(focused)
+            }
+            return occurrenceToPerform(session)
+        }
+
+        private fun occurrenceOf(exercise: com.monkfitness.app.domain.workout.SessionExercise) =
+            SessionOccurrence(
+                sessionExerciseId = exercise.sessionExerciseId.value,
+                exerciseId = exercise.exerciseId,
+                dimension = exercise.prescription.dimension
+            )
     }
 
     /** The Program's name, or `null` when the lifecycle layer cannot read it. A label, never a rule. */
@@ -479,14 +546,14 @@ class ProgramSessionController(
      * plan stores (§10), and a name this app cannot resolve is rendered from its id rather than turning
      * the workout into an unavailable one.
      */
-    private suspend fun names(): Map<String, Int> {
-        nameByExerciseId?.let { cached -> return cached }
+    private suspend fun options(): Map<String, ExerciseOptionUi> {
+        optionByExerciseId?.let { cached -> return cached }
         val loaded = try {
-            catalogue.options().associate { option -> option.exerciseId to option.nameRes }
+            catalogue.options().associateBy { option -> option.exerciseId }
         } catch (failure: Throwable) {
             emptyMap()
         }
-        nameByExerciseId = loaded
+        optionByExerciseId = loaded
         return loaded
     }
 }
