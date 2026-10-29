@@ -1,6 +1,6 @@
 # Architecture v2 — Definitive Implementation Specification
 
-**Status:** FROZEN (see `ARCHITECTURE_FREEZE.md`). This document is the single source of truth for engine responsibility. Philosophy: **pose = intent, engine = geometry, validation = observer.**
+**Status:** FROZEN (see `HISTORICAL/ARCHITECTURE_FREEZE.md`). This document is the single source of truth for engine responsibility. Philosophy: **pose = intent, engine = geometry, validation = observer.**
 
 ---
 

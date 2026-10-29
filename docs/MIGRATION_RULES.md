@@ -93,7 +93,7 @@ After declaring intent + targets + contacts, a pose calls the bake/finalize pipe
 
 - **Reviews:** any diff containing A1–A10 patterns is rejected outright.
 - **New poses** must pass B1–B8 by construction.
-- **Engine changes** must preserve the Frozen invariants (ARCHITECTURE_FREEZE.md §2) and the per-component contracts (API_CONTRACTS.md).
+- **Engine changes** must preserve the Frozen invariants (`HISTORICAL/ARCHITECTURE_FREEZE.md` §2) and the per-component contracts (`API_CONTRACTS.md`).
 - The validator's diagnostic instruments (Middle Split, Deep Overhead Squat, Dead Hang, Pike Sit) remain honest meters; never retuned to hide an engine defect.
 
 ---
