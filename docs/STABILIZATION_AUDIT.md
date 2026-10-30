@@ -23,7 +23,7 @@ Verify every production exercise for:
 Each finding is classified as **bug**, **tuning**, **cleanup**, or **expected behavior**, and
 prioritized by severity (P0 HIGH → P1 MEDIUM → P2 LOW).
 
-The architectural-rules background (which the findings must respect) is in `ARCHITECTURE_FREEZE.md`,
+The architectural-rules background (which the findings must respect) is in `HISTORICAL/ARCHITECTURE_FREEZE.md`,
 `BIOMECHANICS.md`, and `MIGRATION_RULES.md`.
 
 ---

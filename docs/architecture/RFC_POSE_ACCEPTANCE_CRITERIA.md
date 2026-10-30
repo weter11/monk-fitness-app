@@ -247,7 +247,7 @@ Oscillation across re-runs (a fix in one domain re-breaking another) is a
 to paper over instability.
 
 This rule binds both the single-pose and family workflows defined by
-`RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`: acceptance always requires one
+`../HISTORICAL/RFC_MONKENGINE_POSE_DEVELOPMENT_PROTOCOL.md`: acceptance always requires one
 full passing cycle, never a single green stage.
 
 ---

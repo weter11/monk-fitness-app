@@ -98,7 +98,7 @@ anti-pattern enshrined in an audit doc (`docs/HISTORICAL/MIDDLE_SPLIT_DIAGNOSTIC
 honestly whether the runtime passes or fails.
 
 ### 1.8 Frozen Architecture v2
-`ARCHITECTURE_FREEZE.md` freezes the architecture. New work is written against it, not around it.
+`HISTORICAL/ARCHITECTURE_FREEZE.md` freezes the Architecture v2 engine-responsibility model. New work is written against it, not around it.
 "Backward compatibility with previous authoring patterns is not a design goal" (BASELINE §5.4). This
 is liberating and terrifying: you are allowed to delete old constructions. Most engineers are
 terrified of deleting and so they preserve fossils. Don't.
