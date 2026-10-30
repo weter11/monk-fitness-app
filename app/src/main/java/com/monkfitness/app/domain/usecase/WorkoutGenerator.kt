@@ -15,6 +15,31 @@ import com.monkfitness.app.poses.PoseRegistry
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
+/**
+ * A training day whose routine could not be built, named by what made it impossible.
+ *
+ * Generation used to answer every failure with an empty list, which made "the programme has no
+ * exercises for today" indistinguishable from a defect and left the screen with nothing to show and
+ * nothing to say. A rest day is still legitimately empty — that is a fact about the programme, and the
+ * caller recognises it by [type] being [WorkoutType.REST] — but no other day may end up empty.
+ *
+ * @param day the programme day (1..56) that was asked for.
+ * @param type the workout type that was being built.
+ * @param eligibleExerciseCount how many exercises the session's configuration left available.
+ * @param reason what specifically could not be satisfied.
+ */
+class WorkoutGenerationException(
+    val day: Int,
+    val type: WorkoutType,
+    val eligibleExerciseCount: Int,
+    reason: String,
+    cause: Throwable? = null
+) : IllegalStateException(
+    "Cannot generate ${type.name} workout for day $day " +
+        "(eligible exercises: $eligibleExerciseCount): $reason",
+    cause
+)
+
 class WorkoutGenerator {
 
     private data class WorkoutSelectionRule(
@@ -355,6 +380,14 @@ class WorkoutGenerator {
         )
     }
 
+    /**
+     * The exercises of one day's routine.
+     *
+     * A rest day returns an empty list and is the only type allowed to: the caller tells it apart by
+     * [WorkoutType.REST]. Every other type that cannot be built throws [WorkoutGenerationException]
+     * naming the day, the type and how many exercises were eligible, so a configuration that makes a
+     * day unbuildable is reported where it happens instead of surfacing as an empty workout.
+     */
     private fun getExercisesForType(
         type: WorkoutType,
         phase: Int,
@@ -364,6 +397,21 @@ class WorkoutGenerator {
         availableEquipment: Set<Equipment>,
         constraints: SelectionConstraints = SelectionConstraints()
     ): List<Exercise> {
+        // Rest is a fact about the programme, not a failure to build it.
+        if (type == WorkoutType.REST) return emptyList()
+
+        val eligible = getEligibleExercises(constraints)
+        if (eligible.isEmpty()) {
+            throw WorkoutGenerationException(
+                day = daySeed,
+                type = type,
+                eligibleExerciseCount = 0,
+                reason = "the session's configuration leaves no eligible exercise " +
+                    "(allowed=${constraints.allowedExerciseIds?.size ?: "unconstrained"}, " +
+                    "disabledFamilies=${constraints.disabledFamilies.size})"
+            )
+        }
+
         val isHyperlordosisActive = ExerciseSubCategory.HYPERLORDOSIS in focusAreas
         return try {
             val selectionRules = when (type) {
@@ -437,8 +485,17 @@ class WorkoutGenerator {
                 random = Random(daySeed * 10_000 + type.ordinal),
                 constraints = constraints
             )
-        } catch (_: Exception) {
-            emptyList()
+        } catch (cause: WorkoutGenerationException) {
+            // Already named where it was raised: do not re-wrap and lose the specific reason.
+            throw cause
+        } catch (cause: Exception) {
+            throw WorkoutGenerationException(
+                day = daySeed,
+                type = type,
+                eligibleExerciseCount = eligible.size,
+                reason = cause.message ?: cause::class.simpleName ?: "unknown failure",
+                cause = cause
+            )
         }
     }
 
