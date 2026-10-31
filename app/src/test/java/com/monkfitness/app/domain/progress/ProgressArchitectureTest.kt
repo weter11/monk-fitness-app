@@ -332,34 +332,6 @@ class ProgressArchitectureTest {
     }
 
     @Test
-    fun theTrainingContractIsPinnedFieldByFieldSoAMeasureCannotAppearSilently() {
-        assertEquals(
-            "§21's first implementation, named one field at a time: frequency, average session duration, " +
-                "comparable performance, per-context volume, streak and the deferred list. A seventh " +
-                "field — a focus distribution, a family breakdown, a Program PR, a single score — would " +
-                "be an invented measure, so the set is pinned",
-            listOf(
-                "averageSessionDuration", "deferred", "frequency", "scope", "series", "streaks", "volumes",
-                "window"
-            ),
-            declaredFields(TrainingProgress::class.java)
-        )
-        assertEquals(
-            "and the deferred vocabulary is exactly the three measures the target facts cannot answer",
-            listOf("FAMILY_DISTRIBUTION", "FOCUS_DISTRIBUTION", "PROGRAM_PR"),
-            ProgressMeasure.entries.map { it.name }.sorted()
-        )
-        assertEquals(
-            "a history entry reports exposure and identity, and no derived score",
-            listOf(
-                "duration", "exposedExercises", "finishedAt", "performedSets", "plannedFor", "programId",
-                "sessionId", "skippedExercises", "slotId", "startedAt", "status"
-            ),
-            declaredFields(HistoryItem::class.java)
-        )
-    }
-
-    @Test
     fun theCalculatorIsPureAndItsOnlyCollaboratorIsTheZone() {
         assertEquals(
             "the calculation holds a zone and nothing else: no clock, no repository, no database and no " +

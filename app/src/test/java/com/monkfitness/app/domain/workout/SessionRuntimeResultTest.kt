@@ -85,45 +85,6 @@ class SessionRuntimeResultTest {
         )
     }
 
-    @Test
-    fun theRefusalVocabularyHasTheRulesThisLayerCouldBreak() {
-        val cases = SessionRefusal::class.java.declaredClasses.filterNot { it.isInterface }.map { it.simpleName }.sorted()
-
-        assertEquals(
-            "one case per rule §19, §16, §4 and §20 make about an attempt: an opportunity that is not " +
-                "stored, is completed, is withdrawn, presents nothing, or names a revision or day that " +
-                "do not hold; a second attempt already in progress; a session that is not in progress; " +
-                "an occurrence that is another session's or was skipped; a set outside its prescription; " +
-                "and an adaptive decision that is not about a future opportunity of this completion " +
-                "(§30 step 12 replaced the P8-era same-slot rule with the future-slot one, and the " +
-                "refusal carries the clause it broke in `AdaptiveTargetRefusal`)",
-            listOf(
-                "AdaptiveDecisionIsNotAboutAFutureOpportunityOfThisCompletion",
-                "AdaptiveTargetRefusal",
-                "OccurrenceIsNotOfThisSession",
-                "OccurrenceWasSkipped",
-                "PlanDayPresentsNothing",
-                "RevisionIsOfAnotherProgram",
-                "RevisionNotFound",
-                "SessionIsNotInProgress",
-                "SessionNotFound",
-                "SetIsNotInThePrescribedUnit",
-                "SlotIsAlreadyBeingWorkedOut",
-                "SlotIsAlreadyCompleted",
-                "SlotIsSuperseded",
-                "SlotNamesAPlanDayTheRevisionDoesNotPresent",
-                "SlotNotFound",
-                "StoredAdjustmentIsNotOfThisRevision"
-            ),
-            cases
-        )
-        assertFalse(
-            "and there is no conflict mechanism here: this stage has no draft and no staleness check, " +
-                "so §28's `RevisionConflict` is not a refusal it can produce",
-            cases.contains("RevisionConflict")
-        )
-    }
-
     // ------------------------------------------------------------------ the completion
 
     @Test

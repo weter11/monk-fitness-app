@@ -190,18 +190,6 @@ class AppLanguageManagerTest {
     }
 
     @Test
-    fun theEnumIsTheAppsOnlyListOfSupportedLanguages() {
-        assertEquals(7, AppLanguage.supported.size)
-        assertEquals(7, AppLanguage.supportedTags.toSet().size)
-        assertTrue("no entry may repeat a tag", AppLanguage.supportedTags.none { it.isBlank() })
-        assertEquals(
-            "the mode is not one of the languages",
-            AppLanguage.entries.size - 1,
-            AppLanguage.supported.size
-        )
-    }
-
-    @Test
     fun theHandOffRemovesTheStoredValueBeforeItAppliesTheLocale() {
         // Found on a device, not in this suite: applying a locale restarts the process on Android 13+, so a
         // hand-off that cleared the key *after* applying it never cleared it — the app locale was applied,

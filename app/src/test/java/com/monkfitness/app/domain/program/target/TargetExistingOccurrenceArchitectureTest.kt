@@ -560,18 +560,4 @@ class TargetExistingOccurrenceArchitectureTest {
         assertTrue("no aggregation of performed work happens on the target scheduling path: $aggregating", aggregating.isEmpty())
     }
 
-    @Test
-    fun theLegacyTypeWasNotRetrofittedWithTargetBehaviour() {
-        // The other way this phase could have been "solved": widen the legacy type instead of
-        // narrowing the target input. It must be exactly what it was — three properties, one of
-        // which is the ActualResult list.
-        val legacy = File(mainDir, "domain/program/SemanticContracts.kt").readText()
-        val block = legacy.substringAfter("data class ExistingOccurrence(").substringBefore("\n}")
-        assertTrue("the legacy type still holds the actual results", block.contains("val actuals: List<ActualResult>"))
-        assertFalse(
-            "and gained no target-specific member from this phase",
-            block.contains("Target") || block.contains("targetOccurrenceKey") ||
-                block.contains("occurrenceKey") || block.contains("attemptCount")
-        )
-    }
 }

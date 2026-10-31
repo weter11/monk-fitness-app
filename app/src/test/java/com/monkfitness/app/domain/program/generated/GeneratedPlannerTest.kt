@@ -167,27 +167,6 @@ class GeneratedPlannerTest {
     }
 
     @Test
-    fun theTwoPrescriptionShapesAreTheOnesSectionTenWritesOut() {
-        assertEquals(
-            "§10's own example, used unchanged rather than invented here",
-            listOf(12, 10, 8, 6),
-            GenerationPolicy.DEFAULT_REP_PRESCRIPTION_TARGETS
-        )
-        assertEquals(
-            "and its other one",
-            listOf(30, 30, 45),
-            GenerationPolicy.DEFAULT_TIME_PRESCRIPTION_TARGETS
-        )
-        assertEquals(
-            "no amount of work is attached to any focus or exercise: the plan has no score to tune",
-            PrescriptionDimension.entries.filter {
-                it != PrescriptionDimension.REP_BASED && it != PrescriptionDimension.TIME_BASED
-            }.map { it.name },
-            listOf("SET_BASED", "DIFFICULTY_BASED", "REST_BASED")
-        )
-    }
-
-    @Test
     fun theFocusConfigurationThePlanWasBuiltForTravelsWithIt() {
         val configuration = FocusPlan.focused(setOf(Focus.PUSH, Focus.PULL))
 

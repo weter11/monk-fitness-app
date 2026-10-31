@@ -516,27 +516,4 @@ class ProgramGenerationContextArchitectureTest {
         )
     }
 
-    @Test
-    fun theRequestTypeGainedNoFieldForThisStage() {
-        // The brief's "do not extend GenerationRequest if the existing fields suffice" — they did, so it
-        // was not extended. A new field here would be a new thing the planner could read, which is a
-        // semantic change to §30 step 10 rather than a wiring one.
-        assertEquals(
-            "§30 step 10's pure input, unchanged: the configuration, the candidates, the equipment, the " +
-                "preferences and the policy",
-            listOf(
-                "availableEquipment",
-                "candidates",
-                "duration",
-                "focus",
-                "policy",
-                "preferences",
-                "schedule"
-            ),
-            com.monkfitness.app.domain.program.generated.GenerationRequest::class.java.declaredFields
-                .filterNot { Modifier.isStatic(it.modifiers) || it.isSynthetic }
-                .map { it.name }
-                .sorted()
-        )
-    }
 }

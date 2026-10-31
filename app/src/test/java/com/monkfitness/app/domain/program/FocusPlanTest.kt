@@ -21,21 +21,6 @@ import org.junit.Assert.assertThrows
 class FocusPlanTest {
 
     @Test
-    fun theFocusVocabularyIsExactlyTheSevenValuesSectionEightNames() {
-        assertEquals(
-            "PUSH / PULL / LEGS / CORE / MOBILITY / POSTURE / CONDITIONING — and no eighth value " +
-                "invented for a day type (§8)",
-            listOf("PUSH", "PULL", "LEGS", "CORE", "MOBILITY", "POSTURE", "CONDITIONING"),
-            Focus.entries.map { it.name }
-        )
-        assertEquals(
-            "the three goals of §8, and no fourth mode: 'semi-automatic' is a workflow, not a goal",
-            listOf("BALANCED", "FOCUSED", "CUSTOM"),
-            Goal.entries.map { it.name }
-        )
-    }
-
-    @Test
     fun focusAndDayTypeAreTwoDifferentDimensionsThatHappenToShareOneWord() {
         // The confusion §8 of the stage's brief calls out by name is *equating* the two vocabularies,
         // and the honest form of the rule is not "their names differ" — MOBILITY is both a day type

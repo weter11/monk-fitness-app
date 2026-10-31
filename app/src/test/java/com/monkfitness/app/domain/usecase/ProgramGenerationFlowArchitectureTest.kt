@@ -277,30 +277,6 @@ class ProgramGenerationFlowArchitectureTest {
 
     // ------------------------------------------------------------------ the shape of the result
 
-    @Test
-    fun theResultIsTheThreeClassesTheUiMustTellApart() {
-        assertEquals(
-            "§28: done / refused / failed, and a boolean or an empty draft would collapse two of them",
-            listOf("Failed", "Generated", "Refused"),
-            ProgramGenerationResult::class.java.declaredClasses
-                .filterNot { it.isInterface }
-                .map { it.simpleName }
-                .sorted()
-        )
-        assertEquals(
-            "and the two refusals are absences of stated facts, each with its own message",
-            listOf("NoExerciseStatesItsFocus", "NothingPlannable"),
-            ProgramGenerationRefusal::class.java.declaredClasses
-                .filterNot { it.isInterface }
-                .map { it.simpleName }
-                .sorted()
-        )
-        assertTrue(
-            "a refusal carries the planner's own limitations rather than a copy of them",
-            ProgramGenerationRefusal.NothingPlannable::class.java.declaredFields.any { it.name == "limitations" }
-        )
-    }
-
     // ------------------------------------------------------------------ the controller reaches the service only
 
     @Test

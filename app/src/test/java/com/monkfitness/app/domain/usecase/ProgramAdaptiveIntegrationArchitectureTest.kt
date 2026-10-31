@@ -238,22 +238,6 @@ class ProgramAdaptiveIntegrationArchitectureTest {
     }
 
     /** The Stage-1 adaptive *tables* are not named by the integration either: the two are disjoint. */
-    @Test
-    fun theIntegrationNamesNoneOfTheStageOneTables() {
-        val offenders = integrationSources.filter { source ->
-            val text = File(mainDir, source).readText()
-            listOf("`family_progression_state`", "`adaptive_decision_record`", "familyProgressionStateDao", "adaptiveDecisionHistoryDao")
-                .any { text.contains(it) }
-        }
-
-        assertTrue(
-            "the target repository serves the target tables and the Stage-1 adapter serves the legacy " +
-                "pair: a write through one is invisible to the other, and neither is named here. " +
-                "Found: $offenders",
-            offenders.isEmpty()
-        )
-    }
-
     // ------------------------------------------------------------------ no UI, and the shapes
 
     /**

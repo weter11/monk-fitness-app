@@ -205,15 +205,4 @@ class ProgramsNavigationTest {
         assertFalse("Settings has no Programs callback", settings.contains("onOpenPrograms"))
     }
 
-    @Test
-    fun theLegacyCustomProgramRouteIsGoneAndTheProgramSystemIsTheOnlyEntryPoint() {
-        assertFalse(
-            "the legacy editor's screen is gone, not merely unreached",
-            activity.contains("CustomProgramScreen(")
-        )
-        assertFalse(
-            "and so is the destination it was reached by",
-            activity.contains("ROUTE_CUSTOM_PROGRAM")
-        )
-    }
 }

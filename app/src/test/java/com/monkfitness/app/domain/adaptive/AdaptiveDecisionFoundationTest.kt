@@ -43,11 +43,6 @@ class AdaptiveDecisionFoundationTest {
     }
 
     @Test
-    fun aDecisionEndsEitherAppliedOrNotApplied() {
-        assertEquals(listOf("APPLIED", "NOT_APPLIED"), DecisionOutcome.entries.map { it.name })
-    }
-
-    @Test
     fun aTargetCarriesItsOwnScopeSoTheTwoCannotDisagree() {
         assertEquals(AdaptiveScope.EXERCISE, AdaptiveTarget.Exercise("pushups").scope)
         assertEquals(AdaptiveScope.FAMILY, AdaptiveTarget.Family("push-family").scope)

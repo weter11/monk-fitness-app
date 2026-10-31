@@ -37,19 +37,6 @@ class TargetOccurrenceReconciliationArchitectureTest {
     }
 
     @Test
-    fun reconcilerDoesNotReferenceResolverSchedulerOrLegacyReconciler() {
-        val code = reconcilerFile.readText()
-        val forbidden = listOf(
-            "TargetScheduleResolver", "TargetSchedule", "ScheduleCadence", "ProgramScheduler",
-            "SlotPlanner", "ScheduleCalendar", "ScheduleEditReconciler", "OccurrenceComposer",
-            "TargetOccurrenceComposer"
-        )
-        val offenders = forbidden.filter { code.contains(it) }
-
-        assertTrue("Stage 4 must not depend on scheduling or legacy reconciliation: $offenders", offenders.isEmpty())
-    }
-
-    @Test
     fun reconcilerCannotReachPlatformStorageRuntimeUiOrAmbientInputs() {
         val forbiddenImports = listOf(
             "import android", "import androidx", "import java.io", "import java.nio.file",

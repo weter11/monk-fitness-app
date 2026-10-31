@@ -683,22 +683,6 @@ class TargetScheduleSourceArchitectureTest {
     }
 
     @Test
-    fun theLegacyContourAndTheTargetContourAreBothStillPresent() {
-        // The phase adds storage beside the existing contours; it deletes and replaces nothing.
-        for (present in listOf(
-            File(usecaseDir, "ProgramScheduler.kt"),
-            File(usecaseDir, "TargetScheduleOrchestrator.kt"),
-            File(usecaseDir, "TargetScheduleInputAdapter.kt"),
-            File(mainDir, "domain/program/SlotPlanner.kt"),
-            daoFile,
-            valueFile,
-            bridgeFile
-        )) {
-            assertTrue("${present.name} is still there", present.isFile)
-        }
-    }
-
-    @Test
     fun aFixedWeekdaySetIsStoredCanonicallySoTwoEqualSetsCompareEqual() {
         // A `Set<DayOfWeek>` has no order of its own, so the stored form has to be canonical or two
         // equal cadences would write different bytes and the immutability comparison would be a

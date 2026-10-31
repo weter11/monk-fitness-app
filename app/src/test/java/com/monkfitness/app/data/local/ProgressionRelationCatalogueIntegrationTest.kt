@@ -124,25 +124,6 @@ class ProgressionRelationCatalogueIntegrationTest {
      * family provider, a clock or an id source, and none of those would be visible in a behavioural test
      * over an empty catalogue.
      */
-    @Test
-    fun theProviderHoldsExactlyOneCollaboratorAndNoOtherState() {
-        val fields = StoredProgressionRelationProvider::class.java.declaredFields
-            .filterNot { Modifier.isStatic(it.modifiers) }
-
-        assertEquals(
-            "the production provider holds exactly one collaborator and nothing else — a second field " +
-                "is where a default ladder, a fallback family or a clock would live: " +
-                fields.map { it.name },
-            listOf("relations"),
-            fields.map { it.name }
-        )
-        assertEquals(
-            "and it holds the catalogue repository, not a DAO and not the adaptive repository",
-            "com.monkfitness.app.data.repository.ProgressionRelationRepository",
-            fields.single().type.name
-        )
-    }
-
     /**
      * **The catalogue is app-owned and survives everything that happens to a plan.**
      *

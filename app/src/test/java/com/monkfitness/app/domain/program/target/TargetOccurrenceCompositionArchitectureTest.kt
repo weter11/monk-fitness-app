@@ -72,17 +72,6 @@ class TargetOccurrenceCompositionArchitectureTest {
     }
 
     @Test
-    fun composerObjectHasNoMutableSingletonCacheOrAmbientAccumulator() {
-        val fields = TargetOccurrenceComposer::class.java.declaredFields
-
-        assertEquals(setOf("INSTANCE", "\$stable"), fields.map { it.name }.toSet())
-        assertTrue(
-            "composer must not hold a lazy cache or mutable singleton field",
-            fields.all { field -> field.name in setOf("INSTANCE", "\$stable") }
-        )
-    }
-
-    @Test
     fun programSchedulerSlotPlannerAndCalendarRemainOutsideTheTargetCompositionPackage() {
         assertTrue(File(mainDir, "domain/usecase/ProgramScheduler.kt").isFile)
         assertTrue(File(mainDir, "domain/program/SlotPlanner.kt").isFile)

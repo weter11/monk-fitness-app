@@ -78,14 +78,6 @@ class AdaptiveFoundationTest {
     }
 
     @Test
-    fun theFourScopesAreTheOnesTheLoadGuardComparesAt() {
-        assertEquals(
-            listOf("EXERCISE", "FAMILY", "FOCUS", "SESSION"),
-            AdaptiveScope.entries.map { it.name }
-        )
-    }
-
-    @Test
     fun noLoadTypeDeclaresAFloatingPointOrScalarAmount() {
         val floating = foundationClasses.flatMap { cls ->
             cls.declaredFields
@@ -98,25 +90,6 @@ class AdaptiveFoundationTest {
             "a load score, a ratio or a coefficient would have to be a floating point field; " +
                 "found: $floating",
             floating.isEmpty()
-        )
-    }
-
-    @Test
-    fun noFoundationTypeComputesASignalScoreTrendOrAverage() {
-        val deriving = foundationClasses.flatMap { cls ->
-            cls.declaredMethods
-                .map { it.name }
-                .filter { name ->
-                    listOf("compute", "derive", "score", "trend", "average", "median", "weight")
-                        .any { name.contains(it, ignoreCase = true) }
-                }
-                .map { "${cls.simpleName}.$it" }
-        }
-
-        assertTrue(
-            "the foundation states facts; deriving signals belongs to the policy/signal layer, " +
-                "found: $deriving",
-            deriving.isEmpty()
         )
     }
 

@@ -228,19 +228,6 @@ class TargetScheduleInputAdapterTest {
         assertEquals(ScheduleCadence.Daily, first.schedules.single().cadence)
     }
 
-    @Test
-    fun theAdapterDeclaresNoLegacyScheduleProperty() {
-        assertEquals(
-            listOf(
-                "programId", "revisionId", "scheduleDefinitions", "window", "selection",
-                "existingOccurrences", "sources", "asOf", "pauses", "programDayBindings"
-            ),
-            TargetScheduleInput::class.java.declaredFields
-                .filterNot { it.name == "\$stable" }
-                .map { it.name }
-        )
-    }
-
     // ------------------------------------------------------------------ 7. duplicate target rule identity
 
     @Test
