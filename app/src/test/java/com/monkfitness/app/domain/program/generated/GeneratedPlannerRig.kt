@@ -67,14 +67,20 @@ internal object GeneratedPlannerRig {
         familyId: String,
         focuses: Set<Focus>,
         dimension: PrescriptionDimension = PrescriptionDimension.REP_BASED,
-        equipment: RigEquipment = RigEquipment.NONE
+        equipment: RigEquipment = RigEquipment.NONE,
+        repRange: IntRange? = null,
+        timeRange: IntRange? = null,
+        sets: Int = 0
     ): GenerationCandidate<RigEquipment> = GenerationCandidate(
         metadata = ExerciseMetadata(
             id = id,
             familyId = familyId,
             trainingDomain = com.monkfitness.app.domain.adaptive.TrainingDomain.STRENGTH,
             bodyRegion = com.monkfitness.app.domain.adaptive.BodyRegion.FULL_BODY,
-            requiredEquipment = if (equipment == RigEquipment.NONE) emptySet() else setOf(equipment)
+            requiredEquipment = if (equipment == RigEquipment.NONE) emptySet() else setOf(equipment),
+            repRange = repRange,
+            timeRange = timeRange,
+            sets = sets
         ),
         focuses = focuses,
         dimension = dimension

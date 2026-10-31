@@ -6,6 +6,7 @@ import com.monkfitness.app.domain.adaptive.AdaptiveState
 import com.monkfitness.app.domain.adaptive.ConfidenceLevel
 import com.monkfitness.app.domain.adaptive.DensityLoad
 import com.monkfitness.app.domain.adaptive.EvidenceLevel
+import com.monkfitness.app.domain.adaptive.ExerciseRange
 import com.monkfitness.app.domain.adaptive.ExposureLevel
 import com.monkfitness.app.domain.adaptive.ExposureLoad
 import com.monkfitness.app.domain.adaptive.ExposureObservation
@@ -259,6 +260,7 @@ object ProgramAdaptiveRig {
             SAME_LEVEL_ALTERNATIVE to FAMILY
         ),
         supersedesAdjustmentId: AdjustmentId? = null,
+        range: ExerciseRange? = null,
         policy: ProgramAdaptivePolicy = ProgramAdaptivePolicy.V1,
         decisionId: DecisionId = DECISION_ID,
         adjustmentId: AdjustmentId = ADJUSTMENT_ID,
@@ -274,6 +276,7 @@ object ProgramAdaptiveRig {
         availableExerciseIds = availableExerciseIds,
         familyOfExercise = familyOfExercise,
         supersedesAdjustmentId = supersedesAdjustmentId,
+        range = range,
         policy = policy
     )
 

@@ -2,6 +2,7 @@ package com.monkfitness.app.domain.adaptive.engine
 
 import com.monkfitness.app.domain.adaptive.AdaptiveScope
 import com.monkfitness.app.domain.adaptive.AdaptiveState
+import com.monkfitness.app.domain.adaptive.ExerciseRange
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.ADJUSTMENT_ID
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.DECISION_ID
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.EASIER
@@ -75,6 +76,60 @@ class ProgramAdaptiveEngineTest {
     }
 
     @Test
+    fun aProgressionRaisesTheAmountInsideTheRangeBeforeItChangesTheVariant() {
+        val result = engine.decide(
+            request(
+                snapshot = snapshot(exposures = improvement()),
+                window = window(level = 2),
+                range = ExerciseRange(repRange = 6..15)
+            )
+        )
+
+        assertEquals(AdaptiveAction.PROGRESS, result.decision.action)
+        assertEquals(AdaptiveScope.EXERCISE, result.decision.target.scope)
+        val adjustment = result.adjustment!!
+        assertEquals(
+            "the exercise is kept: a harder variant is the answer only once its own range is used up",
+            PRESENTED, adjustment.after.exerciseId
+        )
+        assertTrue(
+            "and every set asks for more of it: ${adjustment.before.prescription.perSetTargets} -> " +
+                adjustment.after.prescription.perSetTargets,
+            adjustment.after.prescription.perSetTargets.sum() >
+                adjustment.before.prescription.perSetTargets.sum()
+        )
+        assertTrue(
+            "a step inside the exercise's own authored span is not an excessive increase",
+            result.guard is ProgramGuardVerdict.Approved
+        )
+    }
+
+    @Test
+    fun aRegressionLowersTheAmountInsideTheRangeBeforeItChangesTheVariant() {
+        val result = engine.decide(
+            request(
+                snapshot = snapshot(exposures = decline()),
+                window = window(level = 2),
+                range = ExerciseRange(repRange = 6..15)
+            )
+        )
+
+        assertEquals(AdaptiveAction.REGRESS, result.decision.action)
+        val adjustment = result.adjustment!!
+        assertEquals(PRESENTED, adjustment.after.exerciseId)
+        assertTrue(
+            "the same exercise asks for less: ${adjustment.before.prescription.perSetTargets} -> " +
+                adjustment.after.prescription.perSetTargets,
+            adjustment.after.prescription.perSetTargets.sum() <
+                adjustment.before.prescription.perSetTargets.sum()
+        )
+        assertTrue(
+            "and it stays inside the range's floor",
+            adjustment.after.prescription.perSetTargets.all { amount -> amount >= 6 }
+        )
+    }
+
+    @Test
     fun theCeilingStopsTheProgressionAndSaysSo() {
         val result = engine.decide(
             request(snapshot = snapshot(exposures = improvement()), window = window(level = 3))
@@ -142,7 +197,7 @@ class ProgramAdaptiveEngineTest {
             request(
                 snapshot = snapshot(exposures = plateau()),
                 element = element(exerciseId = "mystery_press"),
-                window = window(level = 2)
+                window = window(level = 2, qualifyingWindowsSinceLastChange = 0)
             )
         )
 
@@ -164,7 +219,7 @@ class ProgramAdaptiveEngineTest {
                 snapshot = snapshot(exposures = plateau()),
                 element = element(exerciseId = SAME_LEVEL_ALTERNATIVE),
                 relation = relation(sameLevelAlternatives = true),
-                window = window(level = 2),
+                window = window(level = 2, qualifyingWindowsSinceLastChange = 0),
                 availableExerciseIds = setOf(EASIER, PRESENTED, HARDER)
             )
         )
@@ -275,8 +330,13 @@ class ProgramAdaptiveEngineTest {
     // ------------------------------------------------------------------ HOLD and the vocabulary
 
     @Test
-    fun aStableWindowHoldsAndProducesNoAdjustment() {
-        val result = engine.decide(request(snapshot = snapshot(exposures = plateau())))
+    fun aWindowHeldByTheCooldownProducesNoAdjustment() {
+        val result = engine.decide(
+            request(
+                snapshot = snapshot(exposures = plateau()),
+                window = window(qualifyingWindowsSinceLastChange = 0)
+            )
+        )
 
         assertEquals(AdaptiveAction.HOLD, result.decision.action)
         assertEquals(DecisionOutcome.NOT_APPLIED, result.decision.outcome)

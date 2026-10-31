@@ -768,15 +768,6 @@ class ProgramAdaptiveIntegration(
 // The window's facts about *when*. Stated here, read by the return rule.
 
 /**
- * How many sessions must exist before an interval between sessions can be called *usual*.
- *
- * Three sessions are two intervals, the fewest that can say anything about a habit: one interval is a single
- * gap and calling it "usual" would turn one coincidence into a baseline. Below this the fact is absent
- * (`null`) rather than estimated, and the policy decides what to do about an absent habit.
- */
-private const val SESSIONS_BEFORE_AN_INTERVAL_IS_USUAL = 3
-
-/**
  * The gap facts of one pass: when the family was last trained, the stretch before this window, and how often
  * the user trains.
  *
@@ -797,7 +788,14 @@ internal fun programGapFactsOf(
 ): ProgramGapFacts = ProgramGapFacts(
     lastConfirmedSetOn = lastConfirmedSetOn(sessions, completion, familyOf, familyId, zone),
     daysAway = daysAwayFromFamily(sessions, completion, familyOf, familyId, statedOn, zone),
-    usualInterval = usualIntervalOf(sessions, completion, familyOf, familyId, policy.usualIntervalSessions)
+    usualInterval = usualIntervalOf(
+        sessions,
+        completion,
+        familyOf,
+        familyId,
+        sessionsToConsider = policy.usualIntervalSessions,
+        minimumSessions = policy.sessionsBeforeAnIntervalIsUsual
+    )
 )
 
 /**
@@ -860,7 +858,7 @@ internal fun daysAwayFromFamily(
  *
  * The completing session is excluded for [daysAwayFromFamily]'s reason: the stretch that led to it **is** the
  * gap, and counting it would let the absence define the habit it interrupted. Seconds are the unit (no floating
- * point in this layer), and fewer than [SESSIONS_BEFORE_AN_INTERVAL_IS_USUAL] sessions is `null`, not a guess —
+ * point in this layer), and fewer than [minimumSessions] sessions is `null`, not a guess —
  * what to do about an absent habit is the policy's decision.
  */
 internal fun usualIntervalOf(
@@ -868,7 +866,8 @@ internal fun usualIntervalOf(
     completion: SessionId,
     familyOf: (String) -> String?,
     familyId: String,
-    sessionsToConsider: Int
+    sessionsToConsider: Int,
+    minimumSessions: Int
 ): Duration? {
     val starts = sessions
         .filter { session -> session.sessionId != completion && session.status != SessionStatus.IN_PROGRESS }
@@ -881,7 +880,7 @@ internal fun usualIntervalOf(
         .distinct()
         .sorted()
         .takeLast(sessionsToConsider.coerceAtLeast(1))
-    if (starts.size < SESSIONS_BEFORE_AN_INTERVAL_IS_USUAL) return null
+    if (starts.size < minimumSessions) return null
 
     val intervals = starts.zipWithNext { earlier, later -> Duration.between(earlier, later) }.sorted()
     val middle = intervals.size / 2

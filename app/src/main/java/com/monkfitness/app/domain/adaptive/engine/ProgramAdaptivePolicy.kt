@@ -154,6 +154,27 @@ data class ProgramAdaptivePolicy(
     val regressConfirmingWindows: Int = 2,
     val recoveryEntryConfirmingWindows: Int = 1,
 
+    /**
+     * How many repetitions (or seconds) of an exercise's **own range width** one earned step moves, as a
+     * fraction. A step is written in the exercise's own unit and is bounded by the range, so this is a share
+     * rather than a count: a 6..15 exercise moves by a quarter of its span, a 30..60 s hold by the same share
+     * of its own. The floor of one unit keeps a narrow range usable.
+     */
+    val rangeStepNumerator: Int = 1,
+    val rangeStepDenominator: Int = 4,
+
+    /**
+     * How many comparable sessions must exist before a confidence above `LOW` may be stated. Two sessions are
+     * the first history there is: one occasion is not a pattern.
+     */
+    val confidenceMinimumDistinctSessions: Int = 2,
+
+    /**
+     * How many of the user's own sessions must exist before an interval between them can be called *usual*.
+     * Three sessions are two intervals, the fewest that can say anything about a habit.
+     */
+    val sessionsBeforeAnIntervalIsUsual: Int = 3,
+
     val recoveryProlongedWindows: Int = 2,
 
     val recoveryExitQualifyingWindows: Int = 2,
@@ -289,12 +310,36 @@ data class ProgramAdaptivePolicy(
     }
 
     private fun progressConditionsMet(evidence: ProgramAdaptiveEvidence): Boolean =
-        positiveDirection(evidence) &&
+        progressionEarned(evidence) &&
             evidence.evidence == EvidenceLevel.STRONG &&
             evidence.confidence != ConfidenceLevel.LOW &&
             evidence.recovery == RecoveryContext.FAVORABLE &&
             evidence.signals.consistency != ProgramConsistency.LOW &&
             !evidence.signals.recentIsAboveBaseline
+
+    /**
+     * Whether the window earned a heavier prescription.
+     *
+     * Two readings earn it, and both are *recent*: the family improved on itself, or it completed every
+     * set it was asked for. Without the second, a user who meets the prescription every session would hold
+     * at the same load for ever — completeness is the ordinary good result, not a plateau.
+     */
+    private fun progressionEarned(evidence: ProgramAdaptiveEvidence): Boolean =
+        positiveDirection(evidence) || completedAsPrescribed(evidence)
+
+    /**
+     * The recent end completed every set it was given.
+     *
+     * Read from the counts, not from a share and not from a stored "full" tally: the two counts are what
+     * the window actually measured, and "completed at least what was asked" cannot be rounded into either
+     * direction by how the reading was assembled.
+     */
+    private fun completedAsPrescribed(evidence: ProgramAdaptiveEvidence): Boolean {
+        val newer = evidence.signals.newerHalf ?: return false
+        return evidence.signals.exposure.exposures >= progressMinimumExposures &&
+            newer.prescribedSets > 0 &&
+            newer.completedSets >= newer.prescribedSets
+    }
 
     private fun regressConditionsMet(evidence: ProgramAdaptiveEvidence): Boolean =
         negativeDirection(evidence) &&
@@ -373,6 +418,17 @@ data class ProgramAdaptivePolicy(
         val reduction = width * returnGapReductionNumerator * intervals /
             (returnGapReductionDenominator.toLong() * returnGapFullReductionIntervals)
         return performed.map { amount -> (amount - reduction).toInt() }
+    }
+
+    /**
+     * One within-range step of [range], in the exercise's own unit.
+     *
+     * A share of the width rather than a fixed count, because the span is the only thing the adaptive layer
+     * knows about an exercise's scale; the floor of one unit is what keeps a one-rep-wide span usable.
+     */
+    fun rangeStepWithin(range: IntRange): Int {
+        val width = (range.last - range.first).coerceAtLeast(0)
+        return (width * rangeStepNumerator / rangeStepDenominator).coerceAtLeast(1)
     }
 
     private fun progressionGateReason(evidence: ProgramAdaptiveEvidence): ProgramAdaptiveReason = when {
@@ -463,6 +519,17 @@ data class ProgramAdaptivePolicy(
         }
         require(usualIntervalFallbackDays >= 1) {
             "a fallback usual interval is at least one day, was $usualIntervalFallbackDays"
+        }
+        require(rangeStepNumerator >= 0 && rangeStepDenominator >= 1) {
+            "a within-range step is a non-negative share of the range width, was " +
+                "$rangeStepNumerator/$rangeStepDenominator"
+        }
+        require(confidenceMinimumDistinctSessions >= 1) {
+            "a confidence needs at least one session behind it, was $confidenceMinimumDistinctSessions"
+        }
+        require(sessionsBeforeAnIntervalIsUsual >= 2) {
+            "an interval needs two sessions, so a habit needs at least two, was " +
+                "$sessionsBeforeAnIntervalIsUsual"
         }
         require(returnGapUsualIntervalMultiple >= 1) {
             "a return is longer than at least one usual interval, was $returnGapUsualIntervalMultiple"
