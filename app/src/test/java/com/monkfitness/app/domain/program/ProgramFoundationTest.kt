@@ -36,8 +36,6 @@ class ProgramFoundationTest {
     private val createdAt: Instant = Instant.parse("2026-09-18T09:00:00Z")
     private val laterAt: Instant = Instant.parse("2026-09-18T11:00:00Z")
 
-    // ------------------------------------------------------------------ vocabularies
-
     @Test
     fun programModeHasExactlyTwoValues() {
         assertEquals(listOf("MANUAL", "GENERATED"), ProgramMode.entries.map { it.name })
@@ -83,8 +81,6 @@ class ProgramFoundationTest {
         assertFalse(ProgramSource.IMPORTED.isBuiltIn)
     }
 
-    // ------------------------------------------------------------------ the Program is not the plan
-
     @Test
     fun aProgramOwnsLifecycleAndProvenanceButNotItsPlanModeOrSelection() {
         assertEquals(
@@ -113,7 +109,7 @@ class ProgramFoundationTest {
         )
 
         // No date, no cycle number, no session date, no mode, no selection: a revision describes
-        // structure, and identity is its revisionId (§1, §23).
+        // structure, and identity is its revisionId.
         val forbidden = listOf(
             "cycleNumber", "sessionDate", "date", "selected", "isSelected", "active",
             "progress", "completedAt", "startedAt"
@@ -126,8 +122,6 @@ class ProgramFoundationTest {
             it.contains("select", ignoreCase = true) || it == "isActive"
         })
     }
-
-    // ------------------------------------------------------------------ Program invariants
 
     @Test
     fun aProgramIsAlwaysCreatedWithARevisionAndItsStampsAreOrdered() {
@@ -185,8 +179,6 @@ class ProgramFoundationTest {
         assertTrue(archived.isArchived)
     }
 
-    // ------------------------------------------------------------------ the revision is a result
-
     @Test
     fun aSavedRevisionAlwaysCarriesAPlan() {
         assertRejects("a revision with no days") { revision(days = emptyList()) }
@@ -236,8 +228,6 @@ class ProgramFoundationTest {
         assertEquals(original.revisionId, renamedRev.revisionId)
     }
 
-    // ------------------------------------------------------------------ days and their elements
-
     @Test
     fun eachOccurrenceOfAnExerciseIsItsOwnElement() {
         val repeated = ProgramDay(
@@ -250,7 +240,7 @@ class ProgramFoundationTest {
             )
         )
 
-        // The same exercise twice is legal; the two occurrences are separately addressable (§9).
+        // The same exercise twice is legal; the two occurrences are separately addressable.
         assertEquals(listOf("pushups", "pushups"), repeated.plannedExerciseIds)
         assertEquals(2, repeated.exercises.map { it.programExerciseId }.toSet().size)
 
@@ -298,8 +288,6 @@ class ProgramFoundationTest {
         assertRejects("a day at position 0") { unnamed.copy(position = 0) }
     }
 
-    // ------------------------------------------------------------------ duration and schedule
-
     @Test
     fun aDurationIsEitherAFixedNumberOfDaysOrIndefinite() {
         assertEquals(28, (ProgramDuration.FixedDays(28) as ProgramDuration.FixedDays).days)
@@ -322,8 +310,6 @@ class ProgramFoundationTest {
         assertRejects("a frequency of zero sessions") { ProgramSchedule.FlexiblePerWeek(0) }
         assertRejects("a frequency of eight sessions") { ProgramSchedule.FlexiblePerWeek(8) }
     }
-
-    // ------------------------------------------------------------------ slots and pauses
 
     @Test
     fun onlyACompletedSlotHappenedAndItNamesTheSessionThatCompletedIt() {
@@ -382,8 +368,6 @@ class ProgramFoundationTest {
             open.copy(endedAt = createdAt.minusSeconds(1))
         }
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun program(
         lifecycleStatus: LifecycleStatus = LifecycleStatus.NOT_STARTED,

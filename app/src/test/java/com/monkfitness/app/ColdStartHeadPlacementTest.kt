@@ -8,28 +8,26 @@ import org.junit.Test
 import kotlin.math.*
 
 /**
- * B-7 regression gate — the **first frame a cold pipeline publishes** must carry the same head as the
- * frame the same pose publishes once its own state has settled at the same progress.
+ * The first frame a cold pipeline publishes must carry the same head as the frame the same pose
+ * publishes once its own state has settled at the same progress.
  *
- * Why the first frame is the interesting one (P11 whole-system audit §B-7, `docs/AUDIT_P11_WHOLE_SYSTEM.md`):
- * `BasePose.buildGaze` records the head intent as an **absolute world point**
- * (`neckWorld + gazeDir * 100`) and the Finalizer resolves the head direction as
+ * Why the first frame is the interesting one: `BasePose.buildGaze` records the head intent as an
+ * absolute world point (`neckWorld + gazeDir * 100`) and the Finalizer resolves the head direction as
  * `normalize(target − neck.worldPosition)`. Because the pose nodes are reused across builds, reading
- * `neck.worldPosition` before the pose's authoring-FK pass used the *previous* build's tree state — and
- * on a builder's **first** build that state is the template's zero transform, so the target landed 100
+ * `neck.worldPosition` before the pose's authoring-FK pass used the PREVIOUS build's tree state — and
+ * on a builder's first build that state is the template's zero transform, so the target landed 100
  * units from the world origin instead of 100 units along the gaze from the neck. The published
  * consequence was a first frame whose head pointed up to 180° away from the authored gaze (42.73 units
  * off for the kneeling push-up, 71.80° of direction error), snapping into place on the second frame —
  * which the `ExerciseValidator` reports as `POSITION_DISCONTINUITY` / `VELOCITY_DISCONTINUITY` ERRORs on
  * frames 1–2 of every cold run.
  *
- * What this test does **not** do: it never warms a pipeline up to hide the defect. Every measurement is
- * taken on the frames the production pipeline publishes (`SkeletonPipeline.produceFrame`), snapshotted
- * by value because `produceFrame` publishes a reused buffer (T-7 in the same audit).
+ * This test never warms a pipeline up to hide the defect. Every measurement is taken on the frames the
+ * production pipeline publishes, snapshotted by value because `produceFrame` publishes a reused buffer.
  *
  * Scope: the head/neck chain and the inter-frame continuity of that chain. It deliberately says nothing
  * about the arm chain on the first frame — the cold-frame limb realization is a separate, recorded
- * finding (`B-8`) and must not be smuggled in here.
+ * finding and must not be smuggled in here.
  */
 class ColdStartHeadPlacementTest {
 
@@ -79,9 +77,6 @@ class ColdStartHeadPlacementTest {
         acos((a.x * b.x + a.y * b.y + a.z * b.z).coerceIn(-1f, 1f).toDouble())
     ).toFloat()
 
-    // -------------------------------------------------------------------------------------------
-    // 1. The cold first frame realizes the same head as the settled frame at the same progress.
-    // -------------------------------------------------------------------------------------------
     @Test
     fun firstFrameHeadMatchesTheSettledFrame() {
         val rows = mutableListOf<String>()
@@ -104,10 +99,6 @@ class ColdStartHeadPlacementTest {
         )
     }
 
-    // -------------------------------------------------------------------------------------------
-    // 2. No pop at the start of a cold sweep: frame 0 → 1 (and 1 → 2) stay inside the engine's own
-    //    inter-frame bound, so the first frame is not a transient outlier.
-    // -------------------------------------------------------------------------------------------
     @Test
     fun firstFramesAreContinuousInAColdSweep() {
         val rows = mutableListOf<String>()
@@ -142,18 +133,15 @@ class ColdStartHeadPlacementTest {
         )
     }
 
-    // -------------------------------------------------------------------------------------------
-    // 3. Every later frame stays converged (the fix must not merely move the transient): sampling
-    //    the cold trajectory at the rep's key progresses must reproduce the settled frame published
-    //    at the SAME progress, and the neck→head bone length is untouched at every frame.
+    // Every later frame stays converged (the fix must not merely move the transient): sampling the
+    // cold trajectory at the rep's key progresses must reproduce the settled frame published at the
+    // SAME progress, and the neck→head bone length is untouched at every frame.
     //
-    //    Tolerances: the head DIRECTION is the gaze intent's own output and must be
-    //    history-independent (≤1°). The head POSITION is downstream of the engine's documented
-    //    inter-frame smoothing (RFC §4.5/§5 R10 — behaviour is a function of the current frame plus
-    //    the supplied history), so mid-rep frames legitimately differ from an independently settled
-    //    run at the same progress by a sub-unit amount; the bound is 1.0 unit, while the cold FIRST
-    //    frame (p=0, measured by [firstFrameHeadMatchesTheSettledFrame]) is held to 0.5.
-    // -------------------------------------------------------------------------------------------
+    // Tolerances: the head DIRECTION is the gaze intent's own output and must be history-independent
+    // (≤1°). The head POSITION is downstream of the engine's documented inter-frame smoothing
+    // (behaviour is a function of the current frame plus the supplied history), so mid-rep frames
+    // legitimately differ from an independently settled run at the same progress by a sub-unit
+    // amount; the bound is 1.0 unit, while the cold FIRST frame (p=0) is held to 0.5.
     @Test
     fun laterFramesStayConvergedAndBoneLengthIsPreserved() {
         val rows = mutableListOf<String>()
@@ -189,9 +177,6 @@ class ColdStartHeadPlacementTest {
         )
     }
 
-    // -------------------------------------------------------------------------------------------
-    // 4. The engine's own validator no longer reports the cold-start head errors.
-    // -------------------------------------------------------------------------------------------
     @Test
     fun validatorReportsNoColdStartHeadErrors() {
         val validator = ExerciseValidator(

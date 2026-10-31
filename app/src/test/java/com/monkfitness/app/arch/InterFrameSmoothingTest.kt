@@ -14,30 +14,25 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Phase 5 (R10) — Inter-Frame Smoothing consumed as Pipeline-owned Frame History
- * (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md §P5 test plan; RFC §5 R10, §4.5, §4.2).
+ * Inter-Frame Smoothing consumed as Pipeline-owned Frame History.
  *
  * Fixture: a minimal posture-driven authored frame (STANDING intent — the solver enters and
  * pins the seeded Y exactly; with zero contacts the relaxation loop never moves X, so the
  * published root isolates the smoothing math). The authoring X jitters frame to frame; each
- * frame's root is eased 25% of the way from the newly authored position toward the root the
- * PREVIOUS frame produced (ConstraintSolver SMOOTH_GAIN = 0.25 → `out = a + (prev − a)·0.25`),
- * with the previous root supplied from the pipeline's frame chain.
+ * frame's root is eased 25% from the newly authored position toward the root the PREVIOUS
+ * frame produced (SMOOTH_GAIN = 0.25 → `out = a + (prev − a)·0.25`), with the previous root
+ * supplied from the pipeline's frame chain.
  *
- * Proven contracts (plan test (a) + (b), Risk 3 adjudication):
+ * Pinned contracts:
  *  1. Sequential playback through one pipeline keeps smoothing (frame N eases toward N−1).
- *  2. Identity-independence: the smoothing result depends on the supplied frame history and
- *     inputs, NOT on which [SkeletonPose] instance authored the frame — impossible under the
- *     deleted WeakHashMap cache (a second instance's first frame would solve strict).
- *  3. Interleaved multi-instance replay shares the ONE rolling history. This is the intended
- *     R10 replacement for per-instance memories (RFC §5 R10 forbids them; plan Risk 3 names
- *     this the deliberate semantic change, not a regression).
- *  4. [SkeletonPipeline.resetHistory] semantics unchanged from pre-P5: it clears the dynamics
- *     pose chain, NOT the smoothing root (the deleted solver cache likewise persisted across
- *     resetHistory — there was no API to clear it; the plan pins "resetHistory() unchanged").
- *  5. The solver alone, called directly, is a pure function of (inputs, supplied history):
- *     repeated solves on fresh carriers with the same explicit history agree, and the second
- *     solve on a DIFFERENT carrier is not eased toward the first carrier's result.
+ *  2. Identity-independence: the result depends on the supplied history and inputs, NOT on
+ *     which [SkeletonPose] instance authored the frame — impossible under a per-instance
+ *     identity-keyed cache (a second instance's first frame would solve strict).
+ *  3. Interleaved multi-instance replay shares the ONE rolling history: the intended
+ *     replacement for per-instance memories, a deliberate semantic change, not a regression.
+ *  4. [SkeletonPipeline.resetHistory] clears the dynamics pose chain, NOT the smoothing root
+ *     (the old solver cache likewise persisted across it — there was no API to clear it).
+ *  5. The solver alone, called directly, is a pure function of (inputs, supplied history).
  */
 class InterFrameSmoothingTest {
 
@@ -64,12 +59,11 @@ class InterFrameSmoothingTest {
 
     @Test
     fun debugTripwireFiresWhenTheCommitCaptureIsDropped() {
-        // Fault injection (P1 RuntimeContextSnapshotTest pattern): the plan's enforcement is a
-        // debug `check` distinguishing "first frame" from "forgot to wire". The check cannot be
-        // reached through the public API while the capture exists, so the fault is injected by
-        // simulating a dropped commit-time capture — null the smoothing root AFTER a solving
-        // frame armed it, then produce the next solving frame: the pipeline must throw with an
-        // R10 violation instead of silently continuing unsmoothed.
+        // Fault injection: the enforcement is a debug `check` distinguishing "first frame" from
+        // "forgot to wire", unreachable through the public API while the capture exists. So the
+        // fault is simulated — null the smoothing root AFTER a solving frame armed it, then
+        // produce the next solving frame: the pipeline must throw an R10 violation instead of
+        // silently continuing unsmoothed.
         val pipeline = SkeletonPipeline(definition)
         val fixture = FrameFixture()
         publishedX(pipeline.produceFrame(fixture.authorRoot(100f)).pose)
@@ -109,7 +103,7 @@ class InterFrameSmoothingTest {
         assertEquals("frame 3 eased toward frame 2", eased(300f, published[1]), published[2], 1e-4f)
         assertEquals(268.75f, published[2], 1e-4f)
         // Anti-vacuity: the easing demonstrably ran (frame 2 is neither authored nor frame 1)
-        // and the solver demonstrably executed (STANDING pinned Y; UNI-6 recorded motion).
+        // and the solver demonstrably executed (STANDING pinned Y; motion recorded).
         assertNotEquals("easing had no effect", 200f, published[1], 1e-3f)
         val finalFrame = last!!
         val standY = definition.shinLength + definition.thighLength + 25f
@@ -119,12 +113,11 @@ class InterFrameSmoothingTest {
 
     @Test
     fun smoothingIsIdentityIndependentAcrossPoseInstances() {
-        // Plan test (b): distinct SkeletonPose instances, identical inputs + identical supplied
-        // history ⇒ identical outputs. Sequence 1 authors BOTH frames through the SAME pose
-        // instance; sequence 2 authors them through TWO instances. Under the deleted
-        // identity-keyed cache the sequences diverged (a fresh instance has no cache entry →
-        // its first solve is strict: frame 2 would be 200, not 175). With Frame History they
-        // agree exactly — smoothing is a property of the pipeline's chain, never of identity.
+        // Distinct SkeletonPose instances, identical inputs + identical supplied history ⇒
+        // identical outputs. Sequence 1 authors BOTH frames through the SAME pose, sequence 2
+        // through TWO. Under an identity-keyed cache they diverged (a fresh instance has no
+        // entry → its first solve is strict: frame 2 would be 200, not 175). With Frame History
+        // they agree: smoothing is a property of the pipeline's chain, never of identity.
         val shared = SkeletonPipeline(definition)
         val a = FrameFixture()
         val sameInstance = listOf(
@@ -148,11 +141,10 @@ class InterFrameSmoothingTest {
 
     @Test
     fun interleavedReplaySharesOneRollingHistory() {
-        // Risk 3 — the intended semantic replacement. A→B→A interleaved: pose A's third frame
-        // eases toward the PREVIOUS frame produced (B's), because the pipeline owns ONE rolling
-        // history. Under the deleted identity cache A would have eased toward its own last root
-        // (100 → stays 100) and B's first frame would have solved strict (1000). Both of those
-        // per-instance behaviors are architecturally forbidden and are asserted absent here.
+        // A→B→A interleaved: pose A's third frame eases toward the PREVIOUS frame produced
+        // (B's), because the pipeline owns ONE rolling history. Under an identity cache A would
+        // have eased toward its own last root (100 → stays 100) and B's first frame would have
+        // solved strict (1000); both per-instance behaviors are forbidden, asserted absent here.
         val pipeline = SkeletonPipeline(definition)
         val poseA = FrameFixture()
         val poseB = FrameFixture()
@@ -174,11 +166,9 @@ class InterFrameSmoothingTest {
 
     @Test
     fun freshPipelineInstanceStartsWithAnEmptyHistoryWindow() {
-        // Frame History is per-pipeline (R14: no shared/global pipeline ⇒ no shared/global
-        // temporal state). If the smoothing root lived in a static/global cache instead of the
-        // pipeline's frame chain, a SECOND pipeline would ease its first frame toward the
-        // first pipeline's last root. Under the deleted solver cache it did exactly that
-        // (WeakHashMap lived on the ConstraintSolver singleton — this test fails red there).
+        // Frame History is per-pipeline (no shared/global pipeline ⇒ no shared/global temporal
+        // state). A static cache would make a SECOND pipeline ease its first frame toward the
+        // first pipeline's last root — which the old singleton WeakHashMap did.
         val authored = listOf(100f, 200f)
         val shared = FrameFixture()
         val first = SkeletonPipeline(definition)
@@ -198,10 +188,9 @@ class InterFrameSmoothingTest {
 
     @Test
     fun resetHistoryKeepsPreP5Semantics() {
-        // Plan §P5: "resetHistory() unchanged" — it clears the dynamics pose chain (previous/
-        // prePrevious), not the smoothing root (the deleted solver cache was likewise never
-        // cleared by resetHistory; there was no API for it). This test pins the unchanged
-        // behavior so P5 does not silently alter the restart/seek contract.
+        // resetHistory() clears the dynamics pose chain (previous/prePrevious), not the
+        // smoothing root (the old solver cache was likewise never cleared — no API for it).
+        // Pinned so the restart/seek contract cannot silently change.
         val pipeline = SkeletonPipeline(definition)
         val fixture = FrameFixture()
         publishedX(pipeline.produceFrame(fixture.authorRoot(100f)).pose)
@@ -216,10 +205,9 @@ class InterFrameSmoothingTest {
 
     @Test
     fun directSolverIsPureFunctionOfInputsPlusSuppliedHistory() {
-        // The solver alone (no pipeline): two fresh carriers, identical authored inputs,
-        // identical EXPLICIT history argument ⇒ identical output, and the explicit history is
-        // observably consumed. Under the deleted cache the second solve (fresh instance, no
-        // cache entry) would solve strict (200) — this assertion distinguishes the trees.
+        // The solver alone (no pipeline): two fresh carriers, identical authored inputs and
+        // identical EXPLICIT history ⇒ identical output, with the history observably consumed.
+        // Under an identity cache the second solve would be strict (200).
         fun solvedRoot(authoredX: Float, history: Vector3?): Float {
             val fixture = FrameFixture()
             fixture.authorRoot(authoredX)

@@ -19,19 +19,6 @@ import com.monkfitness.app.domain.usecase.WorkoutGenerator
 /**
  * The editor suite's rig: the data-access rig's real SQLite engine and production DAOs, plus the
  * [ProgramEditorService] built over them exactly as [com.monkfitness.app.di.AppContainer] builds it.
- *
- * Everything an editor test needs to state is reachable from here:
- *
- *  * [service] — the behaviour under test, constructed with a [MovableClock] and a [SequentialIds]
- *    generator so every timestamp and every minted identity in a test is a value the test chose;
- *  * [graph] and [createStandardProgram] — the two Programs the editor is exercised on: a user
- *    Program with a real three-day plan, and the built-in Program §4 refuses to edit in place;
- *  * [tableCounts] — the row count of **every** table, which is how "this save wrote nothing at all"
- *    is measured rather than argued;
- *  * [library] — the app's own exercise library, read through the generator's public API, so "the
- *    editor never mutates exercise metadata" (§10) is decided by the library itself and not by a copy
- *    of it made in the test.
- *
  * The clock and the id generator are shared with the service on purpose: the rig moves the clock to
  * state *when* a save happened, and its ids are readable in a failure message (`editor-001`).
  */
@@ -79,11 +66,11 @@ internal class ProgramEditorRig(key: String = "a") {
     suspend fun createGraph() = data.createGraph()
 
     /**
-     * Creates the built-in Standard Program: the fixture plan, the built-in source, the stable §4
-     * identity, and its own revision/day/element identities (two Programs may not share plan rows).
+     * Creates the built-in Standard Program: the fixture plan, the built-in source, its stable identity,
+     * and its own revision/day/element identities (two Programs may not share plan rows).
      *
-     * Production seeds this in a later stage (§30 steps 6–10) with the app's own content; the rig
-     * seeds the smallest Program that makes §4's rules measurable.
+     * Production seeds this later with the app's own content; the rig seeds the smallest Program that
+     * makes the "a built-in Program is not edited in place" rules measurable.
      */
     suspend fun createStandardProgram() {
         val standard = graph.program.copy(
@@ -147,25 +134,23 @@ internal class ProgramEditorRig(key: String = "a") {
      */
     fun tableCounts(): Map<String, Int> = TABLES.associateWith { table -> database.count(table) }
 
-    /** The app's own exercise library, as the generator defines it (§10's metadata the editor must not touch). */
+    /** The app's own exercise library, as the generator defines it — the metadata the editor must not touch. */
     fun library(): List<Exercise> = WorkoutGenerator().getExerciseLibrary()
 
-    /** Closes the engine. */
     fun close() = data.close()
 
     private companion object {
 
         /**
-         * Every table the migrated database holds.
+         * Every table the migrated database holds: the Program System's fifteen target tables and the
+         * five retained global ones.
          *
-         * The Program System's fifteen target tables and the five retained global ones.
-         *
-         * The census used to include the shipped program's tables, because a careless editor integration
-         * could quietly leave a mark in one of them. §30 step 15 removed them, so the claim is about the
-         * whole schema that exists — and the retained tables are where a mark could still land.
+         * The census has to cover the whole schema that exists, because a careless editor integration
+         * could quietly leave a mark in any of it — and the retained tables are where a mark could
+         * still land.
          */
         val TABLES: List<String> = listOf(
-            // the Program System target schema (§23)
+            // the Program System target schema
             "program",
             "app_state",
             "program_revision",
@@ -181,8 +166,8 @@ internal class ProgramEditorRig(key: String = "a") {
             "program_family_progression_state",
             "program_adaptive_decision_record",
             "adaptive_adjustment",
-            // the retained global tables the app still holds (§30 step 15 dropped the shipped
-            // program's five, and those are the ones this census used to reach)
+            // the retained global tables the app still holds — where this census's "wrote nothing"
+            // claim still has something to cover
             "posture_session_progress",
             "body_weight_log",
             "meal_cycles",

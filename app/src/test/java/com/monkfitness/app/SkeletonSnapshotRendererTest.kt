@@ -10,7 +10,6 @@ class SkeletonSnapshotRendererTest {
 
     @Test
     fun testExerciseSnapshotDataClass() {
-        // Test that properties are correctly set on ExerciseSnapshot
         val mockBitmap = try {
             Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         } catch (e: Throwable) {

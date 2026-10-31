@@ -8,25 +8,23 @@ import kotlin.math.sqrt
  * Shared sweep harness for the animation-coverage poses (`PoseBuilder`-authored exercises driven by
  * `PoseRegistry`).
  *
- * Why this exists next to [MotionProbe]: the coverage tests need more than one travel number. They
- * assert the exercise's own biomechanics — which joints must NOT move (planted contacts, stance
- * width), which must, the interior angles of the loaded limbs, and the ground invariant — and all of
- * those must be read off the **published frame** (the engine's own output), never the raw `build()`
- * result (a posed limb that is IK-baked late carries the previous frame's world until the Finalizer
- * re-runs FK; see the reasoning in `monk-pose-qa`).
+ * The coverage tests need more than one travel number: they assert which joints must NOT move
+ * (planted contacts, stance width), which must, the interior angles of the loaded limbs, and the
+ * ground invariant — all read off the **published frame**, never the raw `build()` result (a posed
+ * limb IK-baked late carries the previous frame's world until the Finalizer re-runs FK).
  *
  * `SkeletonPipeline.produceFrame(...)` returns a **reused mutable buffer**, so every sample is copied
  * BY VALUE ([SkeletonPose.copyFrom] + a [Vector3] copy per joint) inside the single pass. Storing the
- * returned references would alias every sample to the last frame and silently report zero travel —
- * the T-7 defect class. [distinctFrameCount] exists so a test can prove the samples are distinct.
+ * returned references would alias every sample to the last frame and silently report zero travel.
+ * [distinctFrameCount] exists so a test can prove the samples are distinct.
  */
 object PoseFrameSweep {
 
     /**
      * One published frame, copied out of the engine's reused buffer.
      *
-     * [supportedPoints] is the Support Declaration the frame carries (R8/B-5 — the resolved Frame
-     * Context the renderer's own entry point publishes). It is read off the published pose, so a test
+     * [supportedPoints] is the Support Declaration the frame carries (the resolved Frame Context
+     * the renderer's own entry point publishes). It is read off the published pose, so a test
      * can assert that a pose's declaration really reaches the frame the hero draws, instead of only
      * comparing the metadata to a literal.
      */
@@ -51,8 +49,8 @@ object PoseFrameSweep {
      *
      * The pipeline is entered exactly the way `SkeletonRenderer` enters it in the app
      * (`pipeline.produceFrame(pose, environment, supportedPoints)` — the renderer's own call, with the
-     * pose's declared environment and support), NOT through the bare-pose overload: since R8/B-5 a
-     * bare pose carries no declaration source, so the declaration-driven derivations (the planted-foot
+     * pose's declared environment and support), NOT through the bare-pose overload: a bare pose
+     * carries no declaration source, so the declaration-driven derivations (the planted-foot
      * heading/flattening among them) silently do nothing and the test would measure geometry the
      * athlete never sees.
      *
@@ -96,7 +94,7 @@ object PoseFrameSweep {
 
     /**
      * How many DISTINCT published frames the sweep observed, by CONTENT (the pipeline hands back one
-     * reused buffer, so object identity is constant by design — the T-7 aliasing signature is "N
+     * reused buffer, so object identity is constant by design — the aliasing signature is "N
      * samples that are byte-identical", not "N samples of the same object"). Must equal the sample
      * count: a sweep whose samples repeat one frame cannot witness travel, and every motion
      * assertion built on it would be vacuous.
@@ -148,8 +146,8 @@ object PoseFrameSweep {
     }
 
     /**
-     * B-4 semantics: the joints a declared support point resolves to, on the canonical
-     * `SupportPoint -> Joint` map. Used to assert a declared contact is really the contact.
+     * The joints a declared support point resolves to, on the canonical `SupportPoint -> Joint`
+     * map. Used to assert a declared contact is really the contact.
      */
     fun jointsFor(point: SupportPoint): List<Joint> = SupportMath.jointsFor(point)
 }

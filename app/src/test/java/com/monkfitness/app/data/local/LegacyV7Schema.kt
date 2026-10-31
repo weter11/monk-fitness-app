@@ -2,17 +2,14 @@ package com.monkfitness.app.data.local
 
 /**
  * The statements SQLite actually holds for the version-7 database, verbatim from the SQL Room
- * generates for the eight legacy entities and the two Stage-1 adaptive ones
- * (`AppDatabase_Impl.createAllTables` in the generated source).
+ * generates (`AppDatabase_Impl.createAllTables` in the generated source).
  *
- * A migration test needs a database to migrate *from*. Building the version-7 half from Room's own
- * DDL — rather than from the migrations that led to it — keeps the fixture honest: it is what a
- * device that has been running the shipped build carries, so whatever survives the upgrade in the
- * test is what survives on that device.
+ * Building the version-7 half from Room's own DDL rather than from the migrations that led to it keeps
+ * the fixture honest: it is what a device running the shipped build carries, so whatever survives the
+ * upgrade in the test is what survives on that device.
  */
 internal object LegacyV7Schema {
 
-    /** The ten tables the version-7 database contains, as Room creates them. */
     val TABLE_STATEMENTS: List<String> = listOf(
         "CREATE TABLE IF NOT EXISTS `user_progress` (`cycleNumber` INTEGER NOT NULL, `day` INTEGER NOT NULL, `isCompleted` INTEGER NOT NULL, `completionDate` INTEGER NOT NULL, `workoutType` TEXT NOT NULL, PRIMARY KEY(`cycleNumber`, `day`))",
         "CREATE TABLE IF NOT EXISTS `posture_session_progress` (`cycleNumber` INTEGER NOT NULL, `day` INTEGER NOT NULL, `isCompleted` INTEGER NOT NULL, `completionDate` INTEGER NOT NULL, `focusArea` TEXT NOT NULL, PRIMARY KEY(`cycleNumber`, `day`))",
@@ -33,9 +30,8 @@ internal object LegacyV7Schema {
     )
 
     /**
-     * The ten tables of the version-7 database. `room_master_table` is Room's own bookkeeping table
-     * and is deliberately absent: it is not one of the database's entities, and Room rewrites its
-     * identity hash after a successful upgrade.
+     * The ten tables of the version-7 database. `room_master_table` is deliberately absent: it is not
+     * an entity, and Room rewrites its identity hash after a successful upgrade.
      */
     val TABLES: List<String> = listOf(
         "user_progress",
@@ -50,7 +46,7 @@ internal object LegacyV7Schema {
         "adaptive_decision_record"
     )
 
-    /** The two Stage-1 adaptive tables, which PR 2 must leave exactly as they are. */
+    /** The two Stage-1 adaptive tables, which the target migration must leave exactly as they are. */
     val STAGE_ONE_ADAPTIVE_TABLES: List<String> =
         listOf("family_progression_state", "adaptive_decision_record")
 

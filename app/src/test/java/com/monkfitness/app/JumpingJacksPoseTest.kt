@@ -14,23 +14,17 @@ import kotlin.math.sqrt
 /**
  * Jumping Jacks (`jumping_jack_standard`) — the exercise's own biomechanics on the PUBLISHED frame.
  *
- * ## Stated intent (the only in-repo statements of it)
+ * There is no BPS and no exercise copy: `WorkoutGenerator` passes `R.string.ex_jumping_jacks` as
+ * every field, so the catalog entry is the title and the one illustration that shows it — a two-frame
+ * open/close cycle whose *closed* frame has the hands at the hips with the toes together and whose
+ * *open* frame has the hands overhead (`0.19`, above the head at `0.20`) with the toes wide apart.
+ * The authored pose is that pair of shapes plus the *jump* that connects them.
  *
- * **There is no BPS and no exercise copy**: `WorkoutGenerator` passes `R.string.ex_jumping_jacks` as
- * every field, so the catalog entry is the title (`"Jumping Jacks"` / `"Джампинг Джек"` / `"Стрибки"`)
- * and the one illustration that shows it (`ExerciseSkeletonData`) — a **two-frame open/close cycle**
- * whose *closed* frame has the hands at the hips with the toes together and whose *open* frame has the
- * hands overhead (`0.19`, above the head at `0.20`) with the toes wide apart. The authored pose is that
- * pair of shapes plus the *jump* that connects them, which is the one thing the name states and the
- * illustration cannot show.
- *
- * The assertions below therefore measure, on the published frame: **two extremes that are the
- * illustration's own shapes** (hands at the hips / hands above the head, feet together / feet wide), the
- * **coordinated arrival** at those extremes (the arms and the legs are driven by one signal, so they
- * open and close together and reach the extreme at the touch-down), the **two flights** (the feet really
- * leave the floor, twice, with the legs tucking under the rising body), and the **absorbed landing**
- * (the pelvis sinks and the knees flex *after* the feet arrive, with the toes pointed through the flight
- * and flat on landing).
+ * The assertions measure: the two extremes as the illustration's own shapes, the coordinated arrival
+ * at them (arms and legs driven by one signal, so they open and close together and reach the extreme
+ * at the touch-down), the two flights (the feet leave the floor, twice, with the legs tucking under
+ * the rising body), and the absorbed landing (the pelvis sinks and the knees flex *after* the feet
+ * arrive, toes pointed through the flight and flat on landing).
  *
  * Every reading is taken through [PoseFrameSweep] (the pipeline entered exactly as `SkeletonRenderer`
  * enters it), never on a raw `build()` result.
@@ -66,8 +60,8 @@ class JumpingJacksPoseTest {
     fun theSweepSamplesTheCyclesOwnDistinctFrames() {
         // The drill is symmetric about its two hops (an opening half and a closing half that pass
         // through the SAME shapes: p = ⅛ ≡ ⅞, ¼ ≡ ¾, ⅜ ≡ ⅝, and the seam p = 0 ≡ 1), so the rhythm's own
-        // frame count is 7 of the 9 samples. A sweep that collapsed to ONE frame would be the T-7
-        // aliasing signature and every travel assertion below would be vacuous.
+        // frame count is 7 of the 9 samples. A sweep that collapsed to ONE frame would be the aliasing
+        // signature and every travel assertion below would be vacuous.
         assertEquals(
             "the published frames of the cycle changed — re-measure the rhythm",
             7, PoseFrameSweep.distinctFrameCount(frames())
@@ -374,7 +368,7 @@ class JumpingJacksPoseTest {
         assertTrue("$joint is ${fmt(clearance)} u below the floor", clearance >= -0.05f)
     }
 
-    /** The declared base of support is the one the published frame carries (R8/B-5, the hero's model). */
+    /** The declared base of support must be the one the published frame carries. */
     @Test
     fun theDeclaredSupportReachesThePublishedFrame() {
         val f = frames()

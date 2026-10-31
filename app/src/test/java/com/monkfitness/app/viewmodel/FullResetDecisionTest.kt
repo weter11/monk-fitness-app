@@ -9,22 +9,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The C3 "Full Reset" failure decision table — Room tables and DataStore preferences cannot share a
- * transaction, so the two phases fail differently and the outcome must say which one happened:
+ * The "Full Reset" failure decision: Room tables and DataStore preferences cannot share a transaction, so
+ * the two phases fail differently and the outcome must say which one happened.
  *
- * | Room clear | Preference clear | Outcome                                            |
- * |------------|------------------|----------------------------------------------------|
- * | ok         | ok               | Success                                            |
- * | failed     | (not reached)    | Failure — nothing was erased, everything intact    |
- * | ok         | failed           | Failure — the partial state is NAMED, not hidden   |
+ * The regression this suite exists for is the partial one — Room cleared, preference clear failed: an
+ * earlier revision swallowed that failure and reported Success while the database was empty and the
+ * preferences still held the old start date and cycle number, so the user would believe a half-done reset
+ * had finished.
  *
- * The third row is the regression this suite exists for: an earlier revision swallowed the
- * preference-clear failure and reported Success while the database was empty and the preferences
- * still held the old start date and cycle number. The user would believe a finished reset that was
- * half done.
- *
- * [runFullReset] is extracted from `MainViewModel` (an `AndroidViewModel`; the project has no
- * Robolectric harness and CI is JVM-only) so the decision table is directly testable.
+ * [runFullReset] is extracted from `MainViewModel` (an `AndroidViewModel`; the project has no Robolectric
+ * harness and CI is JVM-only) so the decision table is directly testable.
  */
 class FullResetDecisionTest {
 

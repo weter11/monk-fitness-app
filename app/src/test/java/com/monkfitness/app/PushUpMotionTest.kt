@@ -8,12 +8,11 @@ import org.junit.Test
 /**
  * Motion-range contract for the push-up family.
  *
- * The ExerciseValidator only checks per-frame biomechanical *validity* (bone lengths,
- * joint ROM, contacts, alignment) — a perfectly valid STATIC pose passes it. A push-up
- * that never moves would therefore pass the validator with 0 errors yet animate nothing.
- * This test asserts the behavioural contract the validator cannot see: the body must
- * actually travel through the rep. It would have caught the static-body regression
- * (feet-pivot chest delta 0.00, knee-pivot chest delta ~4u) directly.
+ * The ExerciseValidator only checks per-frame biomechanical *validity* (bone lengths, joint ROM,
+ * contacts, alignment) — a perfectly valid STATIC pose passes it. A push-up that never moves would
+ * therefore pass the validator with 0 errors yet animate nothing. This test asserts the behavioural
+ * contract the validator cannot see: the body must actually travel through the rep. It would have
+ * caught the static-body regression (feet-pivot chest delta 0.00, knee-pivot chest delta ~4u) directly.
  */
 class PushUpMotionTest {
 

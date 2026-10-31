@@ -14,27 +14,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §30 step 9's boundaries, pinned mechanically instead of by convention.
- *
- * The Progress layer is where the app finally *describes* what the user did, and every temptation it has
- * is one import away: the DAO "just to count rows", the Room entity "because the query already returns it",
- * `LocalDate.now()` "because a streak needs today", `ProgramDayType` "because a distribution needs
- * categories", the legacy family tables "because a family distribution needs families", a scalar volume
- * "because a screen wants one number", and the UI "because the shape is finally here". §21, §12, §17, §24,
- * §25 and §30 forbid every one of them. So the rules are asserted against the sources, the compiled shape
- * and the composition root:
+ * The Progress layer's boundaries, pinned mechanically instead of by convention: every temptation
+ * here is one import away — the DAO "just to count rows", the Room entity "because the query already
+ * returns it", `LocalDate.now()` "because a streak needs today", a scalar volume "because a screen
+ * wants one number" — so the rules are asserted against the sources, the compiled shape and the
+ * composition root:
  *
  *  * the progress package is pure Kotlin over `java.time` and the domain: no Room, no Android, no data
  *    layer, no UI, no clock;
- *  * the use case runs above the repositories: it reaches no DAO, no entity, no mapper and no Android type,
- *    and it **writes nothing at all** — no insert, no update, no transaction, no id generator;
+ *  * the use case runs above the repositories: it reaches no DAO, no entity, no mapper and no Android
+ *    type, and it **writes nothing at all** — no insert, no update, no transaction, no id generator;
  *  * no source here names the legacy generation's vocabulary or a later stage's (families, focuses,
- *    `ProgramDayType`), and the reason strings that explain their absence are not mistaken for their use;
+ *    `ProgramDayType`), and the reason strings that explain their absence are not mistaken for their
+ *    use;
  *  * the aggregate is structurally not an entity: it has no identity to carry;
  *  * the calendar derives its counts, so it cannot contradict the history it describes;
- *  * the §21 measure list is pinned field by field, so a "focus distribution" cannot appear silently;
- *  * and nothing above the composition root reaches the layer yet — §30 step 9 lands the contract, and
- *    wiring a screen is a later step.
+ *  * the measure list is pinned field by field, so a "focus distribution" cannot appear silently;
+ *  * and nothing above the composition root reaches the layer yet: wiring a screen is a later step.
  */
 class ProgressArchitectureTest {
 
@@ -53,8 +49,6 @@ class ProgressArchitectureTest {
 
     private val allSources: List<String> = progressSources.map { "domain/progress/$it" } + serviceSource
 
-    // ------------------------------------------------------------------ the scan sees the layer
-
     @Test
     fun theScanSeesEveryProgressSource() {
         assertTrue(
@@ -71,8 +65,6 @@ class ProgressArchitectureTest {
         }
         assertTrue("and the use case must exist", file(serviceSource).isFile)
     }
-
-    // ------------------------------------------------------------------ layering
 
     @Test
     fun theProgressPackageIsPureKotlinOverTheDomainAndTime() {
@@ -134,8 +126,6 @@ class ProgressArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ it reads and never writes
-
     @Test
     fun noProgressSourceWritesAnythingAtAll() {
         val writes = listOf(
@@ -186,19 +176,17 @@ class ProgressArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ vocabulary that must not appear
-
     @Test
     fun noProgressSourceUsesTheLegacyOrLaterStageVocabulary() {
         val forbidden = listOf(
-            // the family generation §30 step 15 retires
+            // the retired family generation
             "FamilyProgressionState", "family_progression_state", "familyProgressionStates",
             "FamilyProgression", "familyId", "family",
-            // the focus planner §30 step 10 owns
+            // the focus planner's vocabulary
             "FocusPlanner", "Focus", "focus", "ProgramDayType", "secondaryFocus", "primaryFocus",
             // the shipped legacy progress tables
             "ProgressDao", "UserProgress", "ProgramDayState", "cycleNumber", "legacyRevision",
-            // the adaptive engine §30 steps 11–12 own
+            // the adaptive engine's vocabulary
             "AdaptivePolicy", "AdaptiveProgramEngine", "ProgressionResolver", "AdaptiveDecision",
             "adaptive_decision_record", "adaptive_adjustment"
         )
@@ -232,8 +220,6 @@ class ProgressArchitectureTest {
             code.none { it.contains("FocusPlanner") }
         )
     }
-
-    // ------------------------------------------------------------------ no invented measures
 
     @Test
     fun noProgressSourceDerivesAUniversalScalarOrACoefficient() {
@@ -281,8 +267,6 @@ class ProgressArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ the aggregate is not an entity
-
     @Test
     fun theAggregateIsStructurallyNotAnEntity() {
         assertEquals(
@@ -312,8 +296,6 @@ class ProgressArchitectureTest {
             ProgressScope.OfProgram::class.java.declaredMethods.any { it.name.startsWith("getProgramId") }
         )
     }
-
-    // ------------------------------------------------------------------ the shapes are pinned
 
     @Test
     fun theCalendarDerivesItsCountsSoItCannotContradictTheHistoryItDescribes() {
@@ -351,18 +333,10 @@ class ProgressArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ nothing builds it above the root
-
     /**
-     * Revised, not relaxed, by §30 step 14.
-     *
-     * §30 step 9 completed the domain/use-case/data contracts and pinned that by asserting that no UI source
-     * named the layer or its vocabulary at all. §30 step 14's Program Detail shows §21's two measures and the
-     * recent attempts, which is exactly what the Progress layer computes — so the UI reads it, through the
-     * state holder, and computes nothing itself.
-     *
-     * The claim the rule always meant: nothing above the composition root **constructs** the layer or reaches
-     * for its calculator, and the UI **does** read through the one node it is handed.
+     * The claim this rule always meant: nothing above the composition root **constructs** the layer or
+     * reaches for its calculator, and the UI **does** read it through the state holder it is handed —
+     * computing nothing itself.
      */
     @Test
     fun nothingAboveTheCompositionRootConstructsTheProgressLayerAndTheUiOnlyReadsIt() {
@@ -431,8 +405,6 @@ class ProgressArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ helpers
-
     private fun file(relativePath: String): File = File(appRoot, relativePath)
 
     /** A source's text with comments removed — the rules below are rules about code and about prose. */
@@ -441,12 +413,12 @@ class ProgressArchitectureTest {
         .replace(Regex("//[^\n]*"), "")
 
     /**
-     * A source's **identifiers and declarations**: comments, KDoc, string literals and character literals
-     * removed, one entry per non-empty line.
+     * A source's **identifiers and declarations**: comments, KDoc, string literals and character
+     * literals removed, one entry per non-empty line.
      *
-     * The distinction matters here more than in any other guard in this repository: this layer's whole
-     * point is that it does *not* read families, focuses or `ProgramDayType`, and it says so in the KDoc and
-     * in the messages it ships — a scan that read those would fail on the explanation of the rule it is
+     * The distinction matters more here than in any other guard: this layer's whole point is that it
+     * does *not* read families, focuses or `ProgramDayType`, and it says so in the KDoc and in the
+     * messages it ships — a scan that read those would fail on the explanation of the rule it is
      * checking, and a scan that skipped messages would prove nothing. What must never name a legacy or
      * future vocabulary is the *code*.
      */

@@ -13,13 +13,10 @@ import kotlin.math.sqrt
 /**
  * Parallel-Bar Dip (`dip_parallel_bar`) — the exercise's own biomechanics on the PUBLISHED frame.
  *
- * Stated intent (the only in-repo specification for this exercise; no BPS exists for it) —
- * `ex_dips_steps`: §1 "Grip parallel bars and lift yourself up with locked arms", §2 "Lower your body
- * by bending elbows until they are at a 90-degree angle", §3 "Keep your torso slightly leaned forward
- * for chest emphasis or upright for triceps", §4 "Push back up to the starting position";
- * `ex_dips_tech` "Keep your shoulders down and away from your ears. Ensure elbows don't flare out too
- * much. Control the descent to protect the shoulder joint."; `ex_dips_mistakes` "Flaring elbows,
- * excessive swinging, and dipping too deep (below 90 degrees) which can strain shoulders."
+ * The copy is the only in-repo specification (no BPS): grip parallel bars with locked arms, lower by
+ * bending the elbows to a 90-degree angle and never deeper, torso slightly leaned forward for chest
+ * emphasis, then press back up — shoulders down and away from the ears, elbows not flaring out,
+ * descent controlled to protect the shoulder.
  */
 class DipsPoseTest {
 

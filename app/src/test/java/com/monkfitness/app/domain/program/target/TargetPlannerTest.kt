@@ -107,8 +107,8 @@ class TargetPlannerTest {
             result.reconciliation.preserved
         )
         assertTrue(result.reconciliation.superseded.isEmpty())
-        // Phase 17 revised this assertion rather than relaxing it: `actuals` is no longer part of a
-        // target scheduling input at all, so what is preserved is identity/payload plus execution.
+        // `actuals` is no longer part of a target scheduling input at all, so what is preserved is
+        // identity/payload plus execution.
         assertEquals(
             OccurrenceExecution.CANCELLED,
             result.reconciliation.preserved.first().execution

@@ -17,9 +17,9 @@ import org.junit.Test
 /**
  * `WorkoutSessionRepository` against a real SQLite engine.
  *
- * The central claim of §19 is asserted the only way it can be believed: a session is persisted, the
- * **live plan is rewritten underneath it** (the presented element re-pointed and re-prescribed, and a
- * new revision saved), and the session still describes what it captured.
+ * The central claim is asserted the only way it can be believed: a session is persisted, the **live plan
+ * is rewritten underneath it** (the presented element re-pointed and re-prescribed, a new revision
+ * saved), and the session still describes what it captured.
  */
 class WorkoutSessionRepositoryTest {
 
@@ -35,14 +35,12 @@ class WorkoutSessionRepositoryTest {
         return rig.freshSessionRepository().sessionById(SessionId("session-a"))!!
     }
 
-    // ---- the snapshot guarantee (§19) --------------------------------------------------------------
-
     @Test
     fun theSessionKeepsItsCapturedPresentationWhenTheLivePlanIsRewritten() = runBlocking {
         val stored = startAndLoad()
 
-        // The plan the session was started under is rewritten: the element it presented is re-pointed to
-        // another exercise and its prescription replaced, and a whole new revision is saved on top.
+        // The plan the session started under is rewritten: the element it presented is re-pointed to
+        // another exercise with its prescription replaced, and a whole new revision is saved on top.
         rig.database.exec(
             "UPDATE `program_exercise` SET `exerciseId` = 'diamond_pushup', " +
                 "`perSetTargets` = '99,99,99,99' WHERE `programExerciseId` = 'plan-ex-a-1'"
@@ -118,8 +116,6 @@ class WorkoutSessionRepositoryTest {
             rig.database.scalar("SELECT `programExerciseId` FROM `session_snapshot_exercise` WHERE `sessionId` = 'session-a' AND `position` = 1")
         )
     }
-
-    // ---- sets ------------------------------------------------------------------------------------
 
     @Test
     fun confirmedSetsAreRowsInProgramSetLogAndComeBackInSetOrder() = runBlocking {
@@ -201,8 +197,6 @@ class WorkoutSessionRepositoryTest {
         )
     }
 
-    // ---- several attempts ------------------------------------------------------------------------
-
     @Test
     fun twoAttemptsAtOneSlotAreLegalAndBothLoadOnceTheFirstHasEnded() = runBlocking {
         rig.createGraph()
@@ -238,10 +232,9 @@ class WorkoutSessionRepositoryTest {
     /**
      * The rule counts *unfinished* attempts, not attempts in the same state as the row being written.
      *
-     * Storing a finished attempt (a restored one, an imported one, a fixture's) is not what §19 forbids,
-     * and such a row does **not** hold the opportunity: what the write refuses is a second attempt while
-     * one is running. A finished attempt can therefore be stored, a new attempt can be started beside it,
-     * and only then is a third attempt refused.
+     * Storing a finished attempt (restored, imported, a fixture's) is not forbidden, and such a row does
+     * **not** hold the opportunity: what the write refuses is a second attempt while one is running. A
+     * finished attempt can be stored, a new one started beside it, and only then is a third refused.
      */
     @Test
     fun aFinishedAttemptIsStoredAndDoesNotHoldTheOpportunity() = runBlocking {
@@ -290,12 +283,10 @@ class WorkoutSessionRepositoryTest {
         }
     )
 
-    // ---- the occupancy rule, decided by the write (§19) ------------------------------------------
-
     /**
-     * §19's *"no more than one session per slot is `IN_PROGRESS`"*, proved where it is enforced.
+     * *"No more than one session per slot is `IN_PROGRESS`"*, proved where it is enforced.
      *
-     * This test calls the repository **directly**, with no use case above it: it is the persistence
+     * The repository is called **directly**, with no use case above it: this is the persistence
      * boundary's own proof. The second start is refused because the statement that stores a session
      * stores nothing when the slot already holds an attempt in the same status — not because something
      * read the table first and decided otherwise.
@@ -370,8 +361,6 @@ class WorkoutSessionRepositoryTest {
     private fun sessionTableCounts(): List<Int> =
         listOf("workout_session", "session_snapshot", "session_snapshot_exercise", "session_exercise", "program_set_log")
             .map { rig.database.count(it) }
-
-    // ---- transactions ----------------------------------------------------------------------------
 
     @Test
     fun startingASessionIsAtomic() = runBlocking {

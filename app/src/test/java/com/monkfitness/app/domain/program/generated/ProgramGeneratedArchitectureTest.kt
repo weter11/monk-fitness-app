@@ -13,28 +13,26 @@ import java.io.File
 import java.lang.reflect.Modifier
 
 /**
- * §30 step 10's boundaries, pinned mechanically instead of by convention.
+ * The Generated Planner's boundaries, pinned mechanically instead of by convention.
  *
- * The Generated Planner is the first layer of the Program System that *decides what a program
- * contains*, and every temptation it has is one import away: a random source "to make the plans
- * varied", a clock "to know how far into the program we are", a repository "to read what the user
- * did lately", a scheduler "to place the plan on the calendar", the legacy `WorkoutGenerator` "since
- * it already builds workouts", a dose of adaptive policy "because the signals are right there". §25,
- * §26, §33 and §30's own stage order forbid every one of them, and the rules are asserted against the
+ * This is the first layer of the Program System that *decides what a program contains*, and every
+ * temptation it has is one import away: a random source "to make the plans varied", a clock "to know
+ * how far into the program we are", a repository "to read what the user did lately", a scheduler "to
+ * place the plan on the calendar", the legacy `WorkoutGenerator` "since it already builds workouts", a
+ * dose of adaptive policy "because the signals are right there". So the rules are asserted against the
  * sources and the compiled shape:
  *
  *  * the generated planner's sources reach no DAO, no Room type, no Android type, no UI type and no
  *    ambient time source;
  *  * no uncontrolled random source appears anywhere in it — not `Random`, not `shuffled`, not
- *    `Math.random` — because §9 makes determinism an architectural invariant rather than a style;
+ *    `Math.random` — because determinism is an architectural invariant rather than a style;
  *  * the legacy `WorkoutGenerator`, the app's presentation resources and the exercise catalogue are
  *    absent, so generation cannot quietly become the legacy engine;
- *  * the adaptive layer appears only as the *plain input values* §30 step 10 allows (a recovery
- *    context, a set of caller-supplied counts) and never as a policy, an engine, a resolver or a
- *    repository;
- *  * the decision is pure: its compiled shape may only mention the domain, `kotlin.` and `java.`,
- *    and the planner and the focus planner declare no state at all — a plan is a function of its
- *    request, which is what makes the same inputs produce the same plan;
+ *  * the adaptive layer appears only as *plain input values* (a recovery context, a set of
+ *    caller-supplied counts) and never as a policy, an engine, a resolver or a repository;
+ *  * the decision is pure: its compiled shape may only mention the domain, `kotlin.` and `java.`, and
+ *    the planner and the focus planner declare no state at all — a plan is a function of its request,
+ *    which is what makes the same inputs produce the same plan;
  *  * the Scheduler is not invoked and its boundary is not crossed: no date, no slot, no session, no
  *    revision and no repository is expressible in the request or the plan.
  */
@@ -59,8 +57,6 @@ class ProgramGeneratedArchitectureTest {
     private val vocabularySource = "domain/program/FocusPlan.kt"
 
     private val allSources = generatedSources + vocabularySource
-
-    // ------------------------------------------------------------------ layering
 
     @Test
     fun theGeneratedPlannerReachesNoDaoNoRoomAndNoUi() {
@@ -102,8 +98,6 @@ class ProgramGeneratedArchitectureTest {
             offenders.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ determinism (§9)
 
     @Test
     fun noSourceOfTheGeneratedPlannerReadsAnUncontrolledRandomOrAmbientTimeSource() {
@@ -156,8 +150,6 @@ class ProgramGeneratedArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ the adaptive boundary
-
     @Test
     fun theAdaptiveLayerAppearsOnlyAsPlainInputValues() {
         val forbidden = listOf(
@@ -176,8 +168,8 @@ class ProgramGeneratedArchitectureTest {
             offenders.isEmpty()
         )
 
-        // The one adaptive *value* the planner is allowed to read is §14's own recovery vocabulary,
-        // and it is read as the input it is: the type is named once, in the request's preferences.
+        // The one adaptive *value* the planner is allowed to read is the recovery vocabulary, and it is
+        // read as the input it is: the type is named once, in the request's preferences.
         val recoveryReferences = codeLines(allSources).filter { (_, line) -> line.contains("RecoveryContext") }
         assertTrue(
             "§14's recovery context is the one adaptive value in the boundary, and it is read as a " +
@@ -190,8 +182,6 @@ class ProgramGeneratedArchitectureTest {
             RecoveryContext.entries.map { it.name }
         )
     }
-
-    // ------------------------------------------------------------------ the scheduler boundary
 
     @Test
     fun theSchedulerIsNeverInvokedAndItsBoundaryIsNeverCrossed() {
@@ -238,8 +228,6 @@ class ProgramGeneratedArchitectureTest {
             !scheduler.contains("GeneratedPlanner") && !scheduler.contains("GeneratedPlan")
         )
     }
-
-    // ------------------------------------------------------------------ the pure half
 
     @Test
     fun thePureHalfOfThePlannerSeesNothingButKotlinJavaAndTheDomain() {
@@ -363,10 +351,8 @@ class ProgramGeneratedArchitectureTest {
         // claim is about what the container *constructs*, so only code may be read.
         val container = stripComments(File(mainDir, "di/AppContainer.kt").readText())
 
-        // P23 landed this boundary unwired and pinned that as a *cardinality of zero*; §30 step 24
-        // (P24) is the stage that gives it a consumer, so the pin is inverted here rather than
-        // deleted. What must NOT appear is a wiring of the planner or the generated editor *itself*:
-        // the composition root builds the application service, and the pure domain stays behind it.
+        // What must NOT appear is a wiring of the planner or the generated editor *itself*: the
+        // composition root builds the application service, and the pure domain stays behind it.
         assertFalse(
             "the composition root wires the generation *service*, never the planner or the generated " +
                 "editor: those are reached by the service, so wiring them here would put the pure " +
@@ -386,10 +372,9 @@ class ProgramGeneratedArchitectureTest {
 
     @Test
     fun theUiReachesGenerationOnlyThroughTheApplicationService() {
-        // The inverse of the pin this file carried while generation had no consumer, and the stronger
-        // claim: the UI *does* reach generation now (§30 step 24), and it may do so through exactly
-        // one node — the application service. A screen or a controller that named the planner, the
-        // generated editor or the reconciler would give §7's preservation rules a second home.
+        // The UI *does* reach generation, and it may do so through exactly one node — the application
+        // service. A screen or a controller that named the planner, the generated editor or the
+        // reconciler would give the preservation rules a second home.
         //
         // Comments are stripped first, exactly as the sibling gates above do: the flow is *described*
         // in KDoc, and prose that names a class is documentation, not a dependency.
@@ -417,8 +402,6 @@ class ProgramGeneratedArchitectureTest {
             code.getValue("ui/programs/ProgramsController.kt").contains("ProgramGenerationService")
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     /**
      * A source with its comments removed.

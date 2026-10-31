@@ -10,26 +10,19 @@ import org.junit.Test
 import java.io.File
 
 /**
- * P25's architecture gate: **§7's Goals & Focus is an authoring surface over one existing value**, and
- * the ways that could go wrong are all ways a *second source of truth* appears.
+ * The architecture gate: **Goals & Focus is an authoring surface over one existing value**, and the
+ * ways that could go wrong are all ways a *second source of truth* appears.
  *
- * A focus editor is unusually easy to build wrong, because every failure below still produces a screen
- * that looks finished:
- *
- * ```text
- * a second copy of the configuration   the UI holds an editable FocusPlan of its own
- * business calculation in the screen   percentages summed, shared or completed in a Composable
- * a hidden default                     choosing a focus or a share the user never stated
- * a hidden priority                    the tap order surviving as a rank
- * a second validation                  the UI deciding what §8's constructor refuses
- * UI → generated domain                the screen reaching the planner instead of the service
- * UI → storage                         the screen reaching a DAO, a repository or the scheduler
- * new persistence                      a new entity or DAO for a value that already has one
- * ```
+ * A focus editor is unusually easy to build wrong, because every failure still produces a screen that
+ * looks finished: a second copy of the configuration held by the UI; percentages summed, shared or
+ * completed in a Composable; a focus or share the user never stated; the tap order surviving as a rank;
+ * the UI deciding what the domain's own constructor refuses; the screen reaching the planner instead of
+ * the service, or a DAO, a repository or the scheduler; a new entity or DAO for a value that already has
+ * one.
  *
  * Each is asserted against the **source** (comments stripped, whole tokens) or against the compiled
- * shape, because this project has no Compose test harness (§17) and the screen's behaviour is measured
- * in [ProgramsGoalsFocusTest] instead.
+ * shape, because this project has no Compose test harness and the screen's behaviour is measured in
+ * [ProgramsGoalsFocusTest] instead.
  */
 class GoalsFocusArchitectureTest {
 
@@ -67,8 +60,6 @@ class GoalsFocusArchitectureTest {
         }
         assertEquals("$because — found: $offenders", emptyList<String>(), offenders)
     }
-
-    // ---------------------------------------------------------------- one source of truth
 
     @Test
     fun theDraftsConfigurationIsTheOnlyOneTheUiHolds() {
@@ -135,8 +126,6 @@ class GoalsFocusArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- no business calculation in the screen
-
     @Test
     fun theScreenComputesNoSharesAndDecidesNoConfiguration() {
         assertNoToken(
@@ -190,8 +179,6 @@ class GoalsFocusArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- no hidden defaults
-
     @Test
     fun noFocusIsChosenForTheUserWhenTheGoalIsSwitched() {
         val screen = codeOf(editorScreen)
@@ -227,8 +214,6 @@ class GoalsFocusArchitectureTest {
             "priorit" in code(editorScreen.readText()).lowercase()
         )
     }
-
-    // ---------------------------------------------------------------- the layer the screen may reach
 
     @Test
     fun theScreenReachesNoGeneratedDomainDirectly() {
@@ -271,8 +256,6 @@ class GoalsFocusArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- persistence
-
     @Test
     fun theFocusConfigurationAddedNoEntityAndNoDao() {
         val entities = mainSourceRoot.walkTopDown()
@@ -288,12 +271,11 @@ class GoalsFocusArchitectureTest {
             .sorted()
             .toList()
 
-        // **Revised, not relaxed, by P31.** Both numbers are absolute censuses of the whole main source
-        // set, so a later stage that legitimately adds storage moves them. P31 added exactly one entity
-        // and one DAO — the progression relation catalogue — and neither stores a Focus configuration, so
-        // this stage's claim is unchanged and is now stated positively as well as by count. The count is
-        // KEPT: replacing it with a membership list would let the schema grow silently, which is the
-        // failure this gate exists to catch.
+        // Both numbers are absolute censuses of the whole main source set, so a later stage that
+        // legitimately adds storage moves them: the catalogue's entity and DAO store no Focus
+        // configuration, so this stage's claim is unchanged and stated positively as well as by count.
+        // The count is KEPT: replacing it with a membership list would let the schema grow silently,
+        // which is the failure this gate exists to catch.
         assertEquals(
             "§6 already stores the configuration on the Program Revision, so P25 adds no table of its " +
                 "own — a new entity here would be a second place the same fact is written. The count " +

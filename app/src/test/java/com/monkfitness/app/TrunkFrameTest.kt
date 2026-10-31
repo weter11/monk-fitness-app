@@ -7,11 +7,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * PR-09 — Full 3-DOF trunk frame (twist + side-bend) on the modern rotation-driven path.
+ * Full 3-DOF trunk frame (twist + side-bend) on the modern rotation-driven path.
  *
- * Verifies the new chest-orientation helpers produce real 3-D local rotations, and that the
- * twist/rotation-family poses (modern path) render a chest whose world frame carries a thoracic
- * twist (and is therefore a genuine 3-D orientation, not a single-axis Z lean).
+ * Verifies the chest-orientation composition produces real 3-D local rotations, and that the
+ * twist/rotation-family poses (modern path) render a chest whose world frame carries a thoracic twist
+ * (and is therefore a genuine 3-D orientation, not a single-axis Z lean).
  */
 class TrunkFrameTest {
 
@@ -33,8 +33,8 @@ class TrunkFrameTest {
             node.localRotation.set(1f, 0f, 0f, s)
             declareJointIntent(Joint.CHEST, JointRotation(Vector3(1f, 0f, 0f), s))
         }
-        // B4a — buildChestOrientation was purged (0 callers); inline its lean+twist+side-bend
-        // composition here so the helper's semantics stay asserted.
+        // buildChestOrientation was purged (0 callers); inline its lean+twist+side-bend composition
+        // here so the helper's semantics stay asserted.
         fun orient(node: SkeletonNode, l: Float, t: Float, s: Float) {
             val z = JointRotation(Vector3(0f, 0f, 1f), l)
             val y = JointRotation(Vector3(0f, 1f, 0f), t)

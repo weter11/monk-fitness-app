@@ -22,11 +22,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §18's tie-breaking rule, as a gate: *"All tie-breaking is deterministic"*, and the stage's brief makes
- * it a hard one — equal domain inputs, equal results, whatever order the caller's collections arrived in.
+ * Tie-breaking is deterministic: equal domain inputs, equal results, whatever order the caller's
+ * collections arrived in.
  *
- * Determinism here is not a property of one sorting call. It is enforced at three levels, and the suite
- * exercises all three:
+ * That is not a property of one sorting call. It is enforced at three levels, and the suite exercises
+ * all three:
  *
  *  * **at construction**, where the values that could otherwise differ by order (a relation's variants,
  *    an intensity profile's per-family entries) are canonical, and an out-of-order one is refused

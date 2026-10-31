@@ -8,36 +8,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P29's ownership boundary, pinned mechanically.
+ * The ownership boundary of `domain/program/generated`, pinned mechanically: the package is frozen
+ * except `PlanReconciler.kt`, whose one semantic responsibility is to preserve `GeneratedElement.focus`
+ * when creating a `ProgramExercise`.
  *
- * P29 is the first stage since Stage 10 to change anything inside `domain/program/generated`, so this
- * suite exists for one reason above all: to keep that change **narrow and named**. Every earlier stage
- * could assert *"the generated package is untouched"*; P29 cannot, because it legitimately is not. What
- * it asserts instead is strictly stronger in the way that matters:
+ * A blanket "the generated package may change" permission is the failure mode this suite prevents,
+ * because from inside the package it is indistinguishable from a second generation semantic. So the
+ * claims are **cardinality and identity**, not absence: the same eight files, the only changed content in
+ * `PlanReconciler.kt`, and inside it the only semantic line the `focus = focus` copy.
  *
- * ```text
- * domain/program/generated — every file
- *     frozen except:
- *         PlanReconciler.kt
- *             exactly one semantic responsibility:
- *             preserve GeneratedElement.focus when creating ProgramExercise
- * ```
- *
- * A blanket *"the generated package may change"* permission is the failure mode this suite is built to
- * prevent, because it is indistinguishable — from inside the package — from a second generation semantic.
- * So the claims are stated as **cardinality and identity**, not as absence:
- *
- *  * the package still holds exactly the **eight** files Stage 10 established (no file added, none removed);
- *  * the *only* file whose content differs from `main` is `PlanReconciler.kt`;
- *  * and inside that one file, the *only* semantic line is the `focus = focus` copy.
- *
- * ### What the behavioural suites cannot see
- *
- * `AdaptiveFocusAttributionTest` proves the focus survives reconciliation. It cannot prove that the
- * reconciliation does not *also* now classify, persist, or reach for a repository — a change that would
- * keep every behavioural test green. Hence the structural claims below: the pure package imports nothing
- * from the application, data or DI layers; nothing outside `PlanReconciler` copies a generated focus; and
- * the context source still holds exactly one collaborator, which is the read port.
+ * Behavioural tests cannot see the difference: `AdaptiveFocusAttributionTest` proves the focus survives
+ * reconciliation but not that reconciliation refrains from *also* classifying, persisting or reaching for
+ * a repository. Hence the structural claims — the pure package imports nothing from the application, data
+ * or DI layers; nothing outside `PlanReconciler` copies a generated focus; and the context source still
+ * holds exactly one collaborator, the read port.
  */
 class AdaptiveHistoryArchitectureTest {
 
@@ -56,13 +40,11 @@ class AdaptiveHistoryArchitectureTest {
     private fun codeLines(file: File): List<String> = code(file.readText())
         .lines().map { it.trim() }.filter { it.isNotEmpty() }
 
-    // ------------------------------------------------------------------ the generated package: one narrow exception
-
     @Test
     fun theGeneratedPackageStillHoldsExactlyItsEightFiles() {
-        // The closed list is **not** relaxed. Stage 10 established eight files and P29 added none: a new
-        // file here would be a new place to put a semantic, and the whole value of the exception below is
-        // that it names one existing function rather than opening a surface.
+        // The closed list is **not** relaxed: a new file here is a new place to put a semantic, and the
+        // value of the exception below is that it names one existing function rather than opening a
+        // surface.
         assertEquals(
             "the pure package is exactly the eight files Stage 10 established, and P29 added none — the " +
                 "one approved change is a line inside an existing function, not a new file that could " +
@@ -84,8 +66,8 @@ class AdaptiveHistoryArchitectureTest {
 
     @Test
     fun theGeneratedPackageReachesNoPersistenceAndNoApplicationLayer() {
-        // Unchanged from Stage 10 and §30 step 10, and re-asserted because this is the property a focus
-        // copy could most plausibly erode: "copy the value" and "store the value" differ by one import.
+        // Re-asserted because this is the property a focus copy could most plausibly erode: "copy the
+        // value" and "store the value" differ by one import.
         val imports = generatedDir.listFiles { file -> file.isFile && file.extension == "kt" }
             .orEmpty().flatMap { file -> codeLines(file) }.filter { it.startsWith("import ") }
 
@@ -108,17 +90,13 @@ class AdaptiveHistoryArchitectureTest {
 
     @Test
     fun theOnlyFileThatMaterialisesAGeneratedElementIsTheReconciler() {
-        // The positive half of the exception, stated so it cannot be widened quietly.
-        //
         // A `GeneratedElement` is a plan value with no identity, and exactly one thing turns it into a
-        // stored element: `PlanReconciler`'s `asGeneratedElement`. Anything else that did so would be a
-        // *second* rule for what an element is — and a second rule is how a reconstruction gets in under
-        // a name that looks like preservation.
+        // stored element. Anything else that did so would be a *second* rule for what an element is — and
+        // that is how a reconstruction gets in under a name that looks like preservation.
         //
-        // The token is `GeneratedElement(` rather than `GeneratedElement.focus`, because the copy itself
-        // is written as an unqualified `focus = focus` inside the extension function on that type. A
-        // search for the qualified name would find nothing at all — and an assertion that passes because
-        // it searches for something no correct implementation writes is worse than no assertion.
+        // The token is `GeneratedElement(` rather than `GeneratedElement.focus`, because the copy is an
+        // unqualified `focus = focus` inside the extension function on that type. An assertion that passes
+        // because it searches for something no correct implementation writes is worse than none.
         val sites = mainDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .filter { file -> code(file.readText()).contains("GeneratedElement(") }
@@ -132,8 +110,7 @@ class AdaptiveHistoryArchitectureTest {
                 "`PlanReconciler` — a second materialisation would be a second definition of what an " +
                 "element is, and therefore a second definition of what an element's focus is",
             // `GeneratedPlan.kt` appears because it *declares* `GeneratedElement`; it constructs none.
-            // All three are inside the pure package, which is the claim that matters, and only
-            // `PlanReconciler` converts one into a stored element.
+            // Only `PlanReconciler` converts one into a stored element.
             listOf(
                 "domain/program/generated/GeneratedPlan.kt",
                 "domain/program/generated/GeneratedPlanner.kt",
@@ -155,33 +132,26 @@ class AdaptiveHistoryArchitectureTest {
 
     @Test
     fun theSevenOtherGeneratedFilesAreUnchangedFromStage10() {
-        // This is the gate that makes rows 17 and 18 of the RED suite catchable, and it is the strongest
-        // available form of "frozen": the exact bytes of the other seven files, compared against the
-        // digests recorded when the package was established.
+        // A file-list assertion is not enough: it proves the package still *has* eight files, which a
+        // mutation editing the body of `GeneratedPlan.kt` leaves untouched. Content has to be pinned, not
+        // membership.
         //
-        // A file-list assertion is not enough. It proves the package still *has* eight files, which a
-        // mutation editing the body of `GeneratedPlan.kt` leaves completely untouched — so RED row 18 (a
-        // `require` disabled inside `GeneratedSlot`) would have passed every gate the suite had. Content
-        // is what has to be pinned, not membership.
-        //
-        // `PlanReconciler.kt` is deliberately absent from this list: it is the one file P29 changed, and
-        // its change is pinned separately and in much more detail by
-        // `theReconcilersOnlyNewSemanticLineIsTheFocusCopy` — a line count, not a hash, because a hash
+        // Structural rather than digest-based, because a digest recorded in a test goes stale the first
+        // time a legitimate change needs it, and a stale digest is a gate nobody reads. `PlanReconciler`
+        // is absent from this list deliberately: its change is pinned separately by
+        // `theReconcilersOnlyNewSemanticLineIsTheFocusCopy`, a line count rather than a hash, since a hash
         // cannot express "one semantic line changed and the rest is documentation".
-        // The gate is structural rather than digest-based: each of the seven must carry the semantic
-        // statements Stage 10 declared. A digest recorded in a test would go stale the first time a
-        // legitimate change needed it, and a stale digest is a gate nobody reads.
         //
-        // `GeneratedSlot`'s own assertion is the contract that makes a focus mean *anything*: without it,
-        // "this element is the PUSH element" is an unchecked claim. It is pinned by its text, which is
-        // what catches RED row 18 — a disabled `require` that every other gate in this class survives.
+        // `GeneratedSlot`'s own assertion is what makes a focus mean *anything*: without it, "this element
+        // is the PUSH element" is an unchecked claim. Pinned by text, which is what catches a disabled
+        // `require` that every other gate in this class survives.
         assertTrue(
             "§8's own contract is still enforced: a slot plans exactly one element per assigned focus, in " +
                 "the assignment's order. Disabling this `require` is RED row 18, and it would leave every " +
                 "other gate in this class green",
-            // "Present" is not enough — RED row 18 wraps it in `if (false)`, so the guard has to assert
-            // the assertion is **live**. The `init` block is taken verbatim, so `if (false)` inside it
-            // is still visible here and is the whole reason this check is not a plain `contains`.
+            // "Present" is not enough — the mutation wraps it in `if (false)`, so the guard asserts the
+            // assertion is **live**. The `init` block is taken verbatim, so `if (false)` inside it stays
+            // visible, which is why this is not a plain `contains`.
             generationSlotInitIsGuarded()
         )
         assertEquals(
@@ -202,13 +172,12 @@ class AdaptiveHistoryArchitectureTest {
 
     @Test
     fun theReconcilersOnlyNewSemanticLineIsTheFocusCopy() {
-        // The narrowest possible statement of the approved exception: inside the one file that changed,
-        // the assignment `focus = focus` appears exactly once, on the `ProgramExercise` construction, and
-        // it reads the element's own property rather than anything derived.
+        // The narrowest statement of the approved exception: `focus = focus` appears exactly once, on the
+        // `ProgramExercise` construction, reading the element's own property rather than anything derived.
         //
-        // This is the gate that would catch a well-meaning future edit — "while I'm here, let this also
-        // infer the focus for user-authored elements" — because such an edit would either name
-        // `GeneratedElement.focus` twice or produce its value from something other than the property.
+        // This catches the well-meaning "while I'm here, let this also infer the focus for user-authored
+        // elements": such an edit either names the property twice or derives the value from something
+        // else.
         val body = code(reconciler.readText())
         val copies = Regex("""focus\s*=\s*focus\b""").findAll(body).count()
         assertEquals(
@@ -227,12 +196,11 @@ class AdaptiveHistoryArchitectureTest {
             code(reconciler.readText()).contains("ProductionFocusClassification") ||
                 code(reconciler.readText()).contains("focusesOf(")
         )
-        // The line must be a **bare copy**, not a copy with a fallback. `focus ?: Focus.entries.first()`
-        // still contains the token `focus = focus`, so an occurrence count cannot see it — which is RED
-        // row 17, and it is the single most plausible way to "helpfully" widen this stage's exception: an
-        // elvis operator here looks like defensive null handling rather than like an invented training
-        // claim, and it would stamp every generated element that recorded no focus with the first focus in
-        // the vocabulary.
+        // A **bare copy**, not a copy with a fallback. `focus ?: Focus.entries.first()` still contains the
+        // token `focus = focus`, so an occurrence count cannot see it — and it is the most plausible way
+        // to "helpfully" widen the exception: an elvis operator looks like defensive null handling rather
+        // than an invented training claim, and would stamp every element that recorded no focus with the
+        // first focus in the vocabulary.
         val copyLine = code(reconciler.readText())
             .lines()
             .map { it.trim() }
@@ -251,8 +219,8 @@ class AdaptiveHistoryArchitectureTest {
 
     @Test
     fun thePlannerAndTheSelectorAreUnchanged() {
-        // §30 step 10's own units, named individually so a change to any one of them fails here rather
-        // than hiding behind "the generated package was allowed to change".
+        // Each unit named individually so a change to any one fails here rather than hiding behind "the
+        // generated package was allowed to change".
         listOf(
             "GeneratedPlanner" to "the plan itself",
             "FocusPlanner" to "§8's exposure allocation",
@@ -305,14 +273,11 @@ class AdaptiveHistoryArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ the context boundary is unchanged
-
     @Test
     fun theContextSourceStillHoldsExactlyOneCollaboratorAndItIsTheReadPort() {
-        // Unchanged from P27 and re-asserted because the stage's most tempting shortcut was to hand the
-        // source the plan repository "just to resolve the focus". It must not: the focus is already in
-        // the snapshot the one read returns, and a second collaborator would be a second place a
-        // historical fact could come from.
+        // The most tempting shortcut was to hand the source the plan repository "just to resolve the
+        // focus". It must not: the focus is already in the snapshot the one read returns, and a second
+        // collaborator would be a second place a historical fact could come from.
         assertEquals(
             "the source is handed one thing — the history read",
             listOf("sessions"),
@@ -337,18 +302,13 @@ class AdaptiveHistoryArchitectureTest {
 
     @Test
     fun theContextSourceNeverFillsTheTwoSignalsThatStayNeutral() {
-        // The two fields P29 deliberately leaves neutral, asserted as **writes** rather than as field
-        // names.
+        // The two fields deliberately left neutral, asserted as **writes** rather than field names: a
+        // behavioural test on the resulting values, and a gate on the six declared fields, both miss a
+        // source that *fills* one of them from something plausible — an adaptive preference read from a
+        // family ladder produces a real, non-empty, entirely fabricated ranking on any history at all.
         //
-        // The behavioural suite asserts the resulting values are neutral, and P27's gate asserted that
-        // `GenerationPreferences` still declares six fields — neither of which notices a source that
-        // *fills* one of them from something plausible. That is RED row 14: an adaptive preference read
-        // from a family ladder, which produces a real, non-empty, entirely fabricated ranking on any
-        // history at all.
-        //
-        // `adaptivePreferredExerciseIds` is the field with a plausible persisted source sitting right
-        // next to it (`FamilyProgressionState.currentExerciseId`), so its ban is the load-bearing one.
-        // `recovery` has the same shape and is banned by the FAVORABLE/CAUTIOUS token gate above.
+        // `adaptivePreferredExerciseIds` is the load-bearing ban: a plausible persisted source sits right
+        // next to it (`FamilyProgressionState.currentExerciseId`). `recovery` has the same shape.
         val construction = code(contextFile.readText())
         listOf("adaptivePreferredExerciseIds =", "recovery =").forEach { assignment ->
             val offenders = codeLines(contextFile).filter { line -> line.contains(assignment) }
@@ -389,11 +349,10 @@ class AdaptiveHistoryArchitectureTest {
 
     @Test
     fun theContextSourceNamesNoAdaptiveStateAtAll() {
-        // The named prohibition of the brief, in its strongest available form, and **unchanged** by P29:
-        // filling two signals must not open the door to `currentExerciseId`, a decision record or a load
-        // profile. The behavioural suite asserts the empty list; this asserts that no such type is even
-        // named, so a future edit cannot add the read and leave that assertion passing on a fixture that
-        // happens to have no adaptive rows.
+        // Filling two signals must not open the door to `currentExerciseId`, a decision record or a load
+        // profile. The behavioural suite asserts the empty list; this asserts no such type is even named,
+        // so a future edit cannot add the read and leave that assertion passing on a fixture that happens
+        // to have no adaptive rows.
         val forbidden = listOf(
             "FamilyProgressionState", "currentExerciseId", "AdaptiveDecision", "AdaptiveAdjustment",
             "AdaptiveInputSnapshot", "ExposureObservation", "LoadProfile", "ProgramAdaptiveIntegration",
@@ -411,10 +370,10 @@ class AdaptiveHistoryArchitectureTest {
 
     @Test
     fun theContextSourceNeverReconstructsAFocusFromTheCatalogue() {
-        // P29's central prohibition, and the one most at risk now that the signal is fillable. A
-        // reconstruction answers "what does this exercise train?" and names the result as "which focus
-        // was this occurrence assigned?" — a different question, with a plausible-looking answer for every
-        // occurrence, including the many whose focus was never recorded at all.
+        // The one most at risk now that the signal is fillable. A reconstruction answers "what does this
+        // exercise train?" and names the result "which focus was this occurrence assigned?" — a different
+        // question, with a plausible-looking answer for every occurrence, including those whose focus was
+        // never recorded at all.
         val forbidden = listOf(
             "ProductionFocusClassification", "GenerationCandidate", "GenerationFocusSource",
             "focusesOf(", "eligibleFocuses", "focusCounts", "ExerciseGenerator", "WorkoutGenerator"
@@ -429,13 +388,10 @@ class AdaptiveHistoryArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ the service, and the one-read invariant
-
     @Test
     fun theServiceGainedNoCollaboratorAndReachesNoStorage() {
-        // P27's `context` collaborator was the last one added. P29 needed no new dependency — the focus
-        // arrives through the context the service already reads — so the count is unchanged, and a sixth
-        // collaborator would be one more thing a generation pass could reach.
+        // The focus arrives through the context the service already reads, so the count is unchanged — and
+        // a sixth collaborator would be one more thing a generation pass could reach.
         assertEquals(
             "still exactly five: a catalogue, a focus source, an id source, the context and the policy",
             5,
@@ -456,8 +412,8 @@ class AdaptiveHistoryArchitectureTest {
 
     @Test
     fun theServiceStillReadsTheContextExactlyOnceInsideTheSharedPass() {
-        // The P27 invariant P29 must not erode: one generation operation → one context snapshot → one
-        // `GenerationRequest`. Filling two more signals from that snapshot must not tempt a second read.
+        // One generation operation → one context snapshot → one `GenerationRequest`. Filling more signals
+        // from that snapshot must not tempt a second read.
         val body = code(serviceFile.readText())
         assertEquals(
             "the context is read once per operation — Generate, Regenerate and Preview all hand to the " +
@@ -487,13 +443,10 @@ class AdaptiveHistoryArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ persistence ownership
-
     @Test
     fun theHistoricalFocusIsStoredInTwoPlacesAndNoOthers() {
-        // Exactly two columns carry it, and each for a stated reason: the element that owns the
-        // assignment, and the snapshot that freezes it. A third would be a second copy that could
-        // disagree with the first.
+        // Exactly two columns carry it, each for a reason: the element that owns the assignment, and the
+        // snapshot that freezes it. A third would be a second copy that could disagree with the first.
         val carriers = mutableListOf<String>()
         File(mainDir, "data/model").listFiles { file -> file.isFile && file.extension == "kt" }
             .orEmpty()
@@ -510,8 +463,8 @@ class AdaptiveHistoryArchitectureTest {
     @Test
     fun theNullableFocusHasNoDefaultAnywhereInTheDataLayer() {
         // A default focus would stamp a training claim onto every pre-existing row, including manual
-        // programs and elements the generator never assigned. The absence must be stored as absence, and
-        // read back as absence, all the way to the generation context.
+        // programs and elements the generator never assigned. Absence must be stored and read back as
+        // absence, all the way to the generation context.
         val offenders = File(mainDir, "data").walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .flatMap { file -> codeLines(file).map { file.relativeTo(mainDir).path to it } }
@@ -533,19 +486,17 @@ class AdaptiveHistoryArchitectureTest {
 
     @Test
     fun theSessionSnapshotIsStillTheOnlyProducerOfTheHistoricalPresentation() {
-        // §19's one boundary. P29 did not add a second snapshot construction path and did not add
-        // post-hoc repair after creation: the focus is captured when the presentation is composed, from
-        // the value the plan already carried, and never written afterwards.
+        // The focus is captured when the presentation is composed, from the value the plan already
+        // carried, and never written afterwards — no post-hoc repair.
         //
-        // The mapper is excluded on purpose, and not as a convenience: it *rebuilds* a snapshot from
-        // stored rows, which is the read direction of the same single boundary rather than a second
-        // production of one. What must not exist is a second place that **creates** a presentation —
-        // that would be a second answer to "what was shown", and §19's whole guarantee rests on there
-        // being one.
+        // The mapper is excluded on purpose: it *rebuilds* a snapshot from stored rows, the read direction
+        // of the same single boundary rather than a second production of one. What must not exist is a
+        // second place that **creates** a presentation, because that is a second answer to "what was
+        // shown".
         //
-        // `domain/workout/WorkoutSessionSnapshot.kt` is excluded because it is the type's own
-        // declaration and its KDoc names the type — a *declaration* is not a construction site, and
-        // counting one would make the gate assert something about prose rather than about behaviour.
+        // `domain/workout/WorkoutSessionSnapshot.kt` is excluded because it is the type's own declaration
+        // and its KDoc names the type; a declaration is not a construction site, and counting it would
+        // make the gate assert something about prose rather than behaviour.
         val producers = constructionSites()
             .filterNot { it == "domain/workout/WorkoutSessionSnapshot.kt" }
             .filterNot { it.startsWith("data/mapper") }
@@ -556,8 +507,8 @@ class AdaptiveHistoryArchitectureTest {
             listOf("domain/usecase/SessionRuntime.kt"),
             producers
         )
-        // The read direction rebuilds a snapshot from the very rows that one site wrote, and that is the
-        // same boundary read backwards rather than a second production of one.
+        // The read direction rebuilds a snapshot from the very rows that one site wrote: the same
+        // boundary read backwards.
         assertEquals(
             "and the only other place one is built is the mapper's read, which is the same boundary " +
                 "traversed backwards",
@@ -569,25 +520,17 @@ class AdaptiveHistoryArchitectureTest {
     }
 
     /**
-     * Whether `GeneratedSlot`'s own `init` still enforces its element-per-focus contract **live**.
+     * Whether `GeneratedSlot`'s own `init` still enforces its element-per-focus contract **live** — not
+     * merely present, and not necessarily first. The block also validates `position`, so requiring an
+     * order made the gate fail for harmless reasons and again the next time anyone added a validation
+     * before it; a gate must fail for the breach it guards and nothing else, or people work around it.
      *
-     * The claim is *"live"*, deliberately not *"first"*. An earlier version of this predicate required
-     * the focus `require` to be the first statement in the block, which was wrong twice over: the block
-     * also validates `position`, so requiring a particular order made the gate fail for a harmless reason
-     * — and, worse, it would have failed again the next time anyone added a validation before it. An
-     * architecture gate has to fail for the breach it is guarding and for nothing else, or it becomes a
-     * gate people learn to work around.
+     * So: the statement is present, and it is **executable** — the `require(` itself, with no
+     * `if (false)` or other short-circuit in front of it. That is what makes a disabled guard catchable,
+     * since `if (false) require(...)` keeps every character of the assertion.
      *
-     * So this asks the two questions that actually matter about the statement:
-     *
-     *  1. it is present in the block at all, and
-     *  2. it is **executable** — the line is the `require(` itself, with no `if (false)` (or any other
-     *     short-circuit) in front of it.
-     *
-     * (2) is what makes RED row 18 catchable: `if (false) require(...)` keeps every character of the
-     * assertion, so a plain `contains` would pass. The block is taken by brace depth rather than by a
-     * non-greedy regex, because a non-greedy `init { ... }` stops at the first inner `}` — the closing
-     * brace of the *previous* assertion's message — and would inspect a fragment.
+     * The block is taken by brace depth rather than a non-greedy regex: a non-greedy `init { ... }` stops
+     * at the first inner `}` — the close of a previous assertion's message — and inspects a fragment.
      */
     private fun generationSlotInitIsGuarded(): Boolean {
         val body = code(File(generatedDir, "GeneratedPlan.kt").readText())
@@ -620,8 +563,8 @@ class AdaptiveHistoryArchitectureTest {
 
         val index = statements.indexOfFirst { it.startsWith(contract) }
         if (index < 0) {
-            // Present but not as a live statement: the only way that happens is something in front of it
-            // that does not execute, which is exactly the mutation this gate exists to catch.
+            // Present but not live: something in front of it does not execute, which is exactly the
+            // mutation this gate exists to catch.
             return false
         }
         return true

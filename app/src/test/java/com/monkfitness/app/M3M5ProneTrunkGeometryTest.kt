@@ -9,76 +9,60 @@ import kotlin.math.atan2
 import kotlin.math.sqrt
 
 /**
- * **M3 + M5 — the prone trunk family's geometry** (`docs/STABILIZATION_AUDIT.md` §3 P1 M3/M4/M5).
+ * M3 + M5 — the prone trunk family's geometry, gated on the PUBLISHED frames of the production entry
+ * point playback uses (`SkeletonPipeline.produceFrame(pose, ctx)`, the metadata-derived overload),
+ * sampled at `progress` 0, 0.25, 0.5, 0.75, 1.0 after the pipeline is warmed past its documented
+ * cold-start fixed point. Every number below was measured on `main` @ `2bb4525` with this exact harness.
  *
- * The three prone spine/trunk poses — `ProneCobraStretchPose`, `SupermanPose`,
- * `ReverseSnowAngelPose` — author a **whole-body** trunk motion where the BPS specifies a
- * **spine-articulated** one, and one of them (Superman) is authored on the wrong body basis
- * entirely. This file gates the corrected invariants on the **published frames** of the production
- * entry point playback uses (`SkeletonPipeline.produceFrame(pose, ctx)`, the metadata-derived
- * overload), sampled at `progress` 0, 0.25, 0.5, 0.75, 1.0 after the pipeline is warmed (the
- * documented cold-start fixed point). Every number quoted below was measured on `main` @ `2bb4525`
- * with this exact harness.
+ * The three prone spine/trunk poses — `ProneCobraStretchPose`, `SupermanPose`, `ReverseSnowAngelPose` —
+ * author a **whole-body** trunk motion where the BPS specifies a **spine-articulated** one, and one of
+ * them (Superman) is authored on the wrong body basis entirely:
  *
- * ## Measured on the pre-fix tree (published frames)
+ *  * `ProneCobraStretchPose`: pelvis world rotation `1.5700 → 0.9000` (Δ `0.6700` rad = `38.4°`) — the
+ *    extension rides the ROOT; chest `localRotation` `0.0000` at every frame; trunk chain complete.
+ *  * `SupermanPose`: **SUPINE** basis (`facing.y = +1.0000`, ventral axis `+Y`), pelvis
+ *    `1.5708 → 1.3708` (Δ `0.2000` rad) — the arch rides the ROOT; chest `localRotation` `0.0000`
+ *    everywhere. It renders lying on its back while BPS §1/§3/§8 specify a prone, face-down exercise
+ *    whose floor fulcrum is the **anterior** body ("The contact surface is the front of the body
+ *    (anterior), unlike supine exercises"). At the rest phase the head sits **24.5 units below the
+ *    pose's own declared ground** and 12 joints (head, neck, both hands/wrists/palms/knuckles/
+ *    fingertips) are under it — the legacy `(−1, +0.3, 0)` gaze is a world-space direction written into
+ *    a rolled body's local frame. `CoreMotionTest`'s travel contract and `EnvironmentPenetrationTest`
+ *    both stay green through it (`facing.y > 0` is invisible to a travel threshold, and no support is
+ *    declared).
+ *  * `ReverseSnowAngelPose`: prone (`facing.y = −0.9975`), pelvis `1.5000` constant, chest
+ *    `localRotation` `0.0000` — no spine segment exists — and **`LUMBAR` missing from the tree**,
+ *    published at the world origin `(0,0,0)` (`|LUMBAR − PELVIS| = 18.03`) together with
+ *    `CLAVICLE_A/P`, `SCAPULA_A/P`, `WRIST_A/P`.
  *
- * | pose | basis (facing axis `rot·X`) | pelvis world rotation across the rep | chest `localRotation` | trunk chain |
- * |---|---|---|---|---|
- * | `ProneCobraStretchPose` | prone (`facing.y = −1.0000` flat, `−0.7833` at the arch) | **1.5700 → 0.9000** (Δ `0.6700` rad = `38.4°` — the extension rides the ROOT) | `0.0000` at every frame | complete |
- * | `SupermanPose` | **SUPINE** (`facing.y = +1.0000`; ventral axis `+Y`) | **1.5708 → 1.3708** (Δ `0.2000` rad — the arch rides the ROOT) | `0.0000` at every frame | complete |
- * | `ReverseSnowAngelPose` | prone (`facing.y = −0.9975`) | `1.5000` constant | `0.0000` at every frame — no spine segment exists | **`LUMBAR` missing from the tree**, published at the world origin `(0,0,0)` (`|LUMBAR − PELVIS| = 18.03`), with `CLAVICLE_A/P`, `SCAPULA_A/P`, `WRIST_A/P` |
+ * `chest.localRotation.angle == 0.0000` in all three poses at every sampled frame: the trunk is a single
+ * rigid segment. `buildSpineCurve`'s two-segment (`PELVIS → LUMBAR → CHEST`) model exists precisely so a
+ * pose can express "thoracic extends while the lower back stays"; none of the three uses it, so the BPS
+ * §5 statements ("Thoracic: gently extended as the chest lifts — the upper back is the prime mover";
+ * "the extension is smooth along the spine, not a hinge at one segment") have no representation at all.
+ * The pelvis — the floor fulcrum — is the hinge instead: for the cobra and Superman its own frame rotates
+ * through the rep, and at the top of the cobra rep its trunk base is `0.6226` (`38.4°`) out of the floor
+ * plane while Superman's ventral axis is `+0.9801` (it points at the sky).
  *
- * The measured consequences of the same authoring error:
+ * Asserted: [everyProneFamilyPosePublishesAProneBasis] (the body's ventral axis faces the floor,
+ * `facing.y < 0`; the trunk's head-ward axis is the family's `+X`; the head is on the `+X` side of the
+ * pelvis and the feet on the other); [thePelvisCarriesTheLayoutOnlyAndNotTheRepsExtension] (the pelvis's
+ * published world rotation and position are **constant across the rep** — the layout, not the
+ * articulation — its ventral axis faces the floor and its trunk base is horizontal);
+ * [theDynamicProneRepsArticulateTheirExtensionOnTheSpine] /
+ * [theMaintainedProneExtensionIsHeldOnTheSpine] (the extension is **distributed**: the trunk segment lifts
+ * the chest off the floor AND the chest node carries the thoracic share above that trunk line, at all
+ * times for the isometric hold); [theRepsAuthoredDepthIsNotRetuned] (the correction moves the *ownership*
+ * of the authored rotation, not its amount); [theCorrectedPosesRespectTheFloorTheirBpsDeclares] (the
+ * grounded chain stays on the declared floor line, the chest lifts off it, and Superman's arms hover
+ * above it instead of passing through it); [thePublishedTrunkChainIsComplete] (a real
+ * `PELVIS → LUMBAR → CHEST` chain, not a phantom joint at the world origin);
+ * [sampledFramesAreDistinctPublishedSnapshots] (anti-vacuity).
  *
- *  * **Superman renders lying on its back** while `docs/Biomechanical Pose Specification (BPS)/Superman (Prone).md`
- *    §1/§3 specify a prone, face-down exercise whose floor fulcrum is the **anterior** body
- *    (§8: "The contact surface is the front of the body (anterior), unlike supine exercises").
- *    At the rest phase the head sits **24.5 units below the pose's own declared ground** and
- *    12 joints (head, neck, both hands/wrists/palms/knuckles/fingertips) are under it — the
- *    legacy `(−1, +0.3, 0)` gaze is a world-space direction written into a rolled body's local
- *    frame. `CoreMotionTest`'s travel contract and `EnvironmentPenetrationTest` both stay green
- *    through it (`facing.y > 0` is invisible to a travel threshold, and no support is declared).
- *  * **`chest.localRotation.angle == 0.0000` in all three poses at every sampled frame**: the
- *    trunk is a single rigid segment. `buildSpineCurve`'s two-segment
- *    (`PELVIS → LUMBAR → CHEST`) model exists precisely so a pose can express "thoracic extends
- *    while the lower back stays"; none of the three uses it, so the BPS §5 statements
- *    ("Thoracic: gently extended as the chest lifts — the upper back is the prime mover";
- *    "the extension is smooth along the spine, not a hinge at one segment") have no
- *    representation at all.
- *  * **The pelvis — the floor fulcrum — is the hinge.** For the cobra and Superman the pelvis's
- *    own frame rotates through the rep, which is the same class of error the
- *    `ThoracicExtensionPose` (S3) repair corrected for an upright body.
- *
- * ## The invariants this file asserts
- *
- *  1. [everyProneFamilyPosePublishesAProneBasis] — the body's ventral axis faces the floor
- *     (`facing.y < 0`), the trunk's head-ward axis is the family's `+X`, the head is on the `+X`
- *     side of the pelvis and the feet on the other side. BPS §3/§8 for all three poses.
- *  2. [thePelvisCarriesTheLayoutOnlyAndNotTheRepsExtension] — the pelvis's published world rotation
- *     and position are **constant across the rep** (the layout, not the articulation), its ventral
- *     axis faces the floor and its trunk base is horizontal. BPS §5 ("the pelvis remains neutral and
- *     stays on the floor; the extension originates from the paraspinals, not from tilting the
- *     pelvis"), §7 and §12 ("Lifting the pelvis/hips off the floor").
- *  3. [theDynamicProneRepsArticulateTheirExtensionOnTheSpine] /
- *     [theMaintainedProneExtensionIsHeldOnTheSpine] — the extension is **distributed**: the trunk
- *     segment lifts the chest off the floor (dynamic reps) **and** the chest node carries the
- *     thoracic share above that trunk line, at all times for the isometric hold. BPS §5/§11/§13.
- *  4. [theRepsAuthoredDepthIsNotRetuned] — the correction moves the *ownership* of the authored
- *     rotation, it does not change its amount (the pre-fix root span is preserved as the trunk
- *     segment's span).
- *  5. [theCorrectedPosesRespectTheFloorTheirBpsDeclares] — the grounded chain stays on the declared
- *     floor line (the pelvis is the fulcrum), the chest lifts off it, and in the Superman the arms
- *     hover above it instead of passing through it (BPS §8/§9).
- *  6. [thePublishedTrunkChainIsComplete] — the published frame carries a real `PELVIS → LUMBAR →
- *     CHEST` trunk chain (the engine's own two-segment spine model, `Joint.LUMBAR`), not a
- *     phantom joint at the world origin.
- *  7. [sampledFramesAreDistinctPublishedSnapshots] — anti-vacuity: distinct by-value published
- *     frames that really move.
- *
- * The declaration half of the audit's M5 row (`exerciseFamily`/`bodyOrientation`/support) is
- * deliberately **not** asserted here: those fields have no production consumer, the repository has
- * no canonical family vocabulary for this group, and the declaration channel for the contact-bearing
- * families is owned by separate tracker items (M8/M9/M10). See `docs/STABILIZATION_AUDIT.md`.
+ * The declaration half of the audit's M5 row (`exerciseFamily`/`bodyOrientation`/support) is deliberately
+ * **not** asserted here: those fields have no production consumer, the repository has no canonical
+ * family vocabulary for this group, and the declaration channel for the contact-bearing families is
+ * owned by separate tracker items (M8/M9/M10).
  */
 class M3M5ProneTrunkGeometryTest {
 
@@ -115,10 +99,10 @@ class M3M5ProneTrunkGeometryTest {
     )
 
     /**
-     * The pose's published frames at the sampled progress points, captured **by value** (the
-     * pipeline publishes the Finalizer's reused buffer — see T-7) after warming the pipeline past
-     * its documented cold-start fixed point. Measured: for these three poses the cold and settled
-     * frames are identical, so warming is a harness property, not a confound.
+     * The pose's published frames at the sampled progress points, captured **by value** (the pipeline
+     * publishes the Finalizer's reused buffer) after warming the pipeline past its documented cold-start
+     * fixed point. Measured: for these three poses the cold and settled frames are identical, so warming
+     * is a harness property, not a confound.
      */
     private fun frames(name: String): Map<Float, SkeletonPose> {
         val pipeline = SkeletonPipeline(def)
@@ -132,10 +116,8 @@ class M3M5ProneTrunkGeometryTest {
         return out
     }
 
-    // ---------------------------------------------------------------------------------------------
     // Measurement primitives — all read from the PUBLISHED frame (never from raw build() output,
     // whose late-baked limb world positions are one frame stale).
-    // ---------------------------------------------------------------------------------------------
 
     /** The body basis: `spine` = rot·Y (trunk, head-ward), `lateral` = rot·Z, `facing` = rot·X. */
     private fun basis(pose: SkeletonPose): Triple<Vector3, Vector3, Vector3> {
@@ -180,9 +162,7 @@ class M3M5ProneTrunkGeometryTest {
     private fun trunkLength(pose: SkeletonPose) =
         dist(pose.getJoint(Joint.CHEST), pose.getJoint(Joint.PELVIS))
 
-    // ---------------------------------------------------------------------------------------------
-    // 1. The prone basis
-    // ---------------------------------------------------------------------------------------------
+
 
     /**
      * BPS §3 (all three): "Prone on the floor … the body's facing (ventral) side is the contact
@@ -223,9 +203,7 @@ class M3M5ProneTrunkGeometryTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // 2. The pelvis is the floor fulcrum, not the hinge
-    // ---------------------------------------------------------------------------------------------
+
 
     /**
      * BPS §5/§7/§12 (all three): the pelvis stays grounded and NEUTRAL — the extension originates
@@ -275,9 +253,7 @@ class M3M5ProneTrunkGeometryTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // 3. The extension is owned by the spine
-    // ---------------------------------------------------------------------------------------------
+
 
     /**
      * BPS §5 ("Thoracic: gently extended as the chest lifts — the upper back is the prime mover";
@@ -366,9 +342,7 @@ class M3M5ProneTrunkGeometryTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // 4. The authored depth is preserved
-    // ---------------------------------------------------------------------------------------------
+
 
     /**
      * This correction moves the OWNERSHIP of the authored trunk rotation (root → spine), it does
@@ -398,9 +372,7 @@ class M3M5ProneTrunkGeometryTest {
         }
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // 5. The declared floor
-    // ---------------------------------------------------------------------------------------------
+
 
     /**
      * The BPS's own floor contract, per pose:
@@ -472,9 +444,7 @@ class M3M5ProneTrunkGeometryTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // 6. The published trunk chain is complete
-    // ---------------------------------------------------------------------------------------------
+
 
     /**
      * The engine's skeleton model is a **two-segment** trunk —
@@ -517,9 +487,7 @@ class M3M5ProneTrunkGeometryTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // 7. Anti-vacuity
-    // ---------------------------------------------------------------------------------------------
+
 
     /** The frames measured are distinct published snapshots that really move (never the aliased buffer). */
     @Test
@@ -535,9 +503,7 @@ class M3M5ProneTrunkGeometryTest {
         }
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // 8. Blast radius
-    // ---------------------------------------------------------------------------------------------
+
 
     /**
      * The correction is confined to the three poses it owns: every OTHER production pose class
@@ -599,331 +565,22 @@ class M3M5ProneTrunkGeometryTest {
     private companion object {
         /**
          * Digest of the **48** production pose classes outside the corrected prone family (every joint,
-         * every sampled frame). Measured **equal on the pre-fix tree `2bb4525` and on the corrected
-         * tree** — i.e. the M3/M5 change is confined to the three poses it owns. Computed with the
-         * repository's existing corpus-digest recipe (fresh pipeline + builder per class, progress
-         * 0/0.25/0.5/0.75/1.0, every `Joint.entries` XYZ as raw float bits); validated against the two
-         * older pinned digests before being used here.
+         * every sampled frame). Measured **equal on the pre-fix tree and on the corrected tree** — the
+         * M3/M5 change is confined to the three poses it owns. Computed with the repository's existing
+         * corpus-digest recipe (fresh pipeline + builder per class, progress 0/0.25/0.5/0.75/1.0, every
+         * `Joint.entries` XYZ as raw float bits); validated against the two older pinned digests before
+         * being used here.
          *
-         * **Re-baselined by the M6/M7 swing/burpee correction** (`fix/m6-m7-swing-burpee-geometry`, off
-         * `fc65695`): this corpus is "every pose except the three prone-family poses", so it includes the
-         * two poses that correction owns. Observed RED on the previous value `-517042293001259057` before
-         * the re-baseline. Attribution is direct, not inferred: the whole-corpus dump (51 classes × 5
-         * progress × every joint XYZ, `8415` rows, full float bits) differs in exactly `268` rows, all of
-         * them `KettlebellSwingPose` + `BurpeePose`; the other 49 classes are byte-identical, which
-         * `M6M7SwingBurpeeGeometryTest.UNAFFECTED_CORPUS_DIGEST` (`-2275091341366878044`) gates directly.
+         * The direct, non-inferred version of the same claim is the whole-corpus dump (51 classes × 5
+         * progress × every joint XYZ = `8415` rows, full float bits), which differs in exactly **377 rows
+         * — all of them `SupermanPose` (153), `ReverseSnowAngelPose` (143) and `ProneCobraStretchPose`
+         * (81)**; the other 48 classes do not move a single float.
          *
-         * **Re-baselined by the M8/M9/M10 support-declaration pass**
-         * (`fix/m8-m9-m10-support-declaration`): that pass owns the declaration of 17 poses (the 7
-         * upper/dynamic poses, the stretch family and the core/hip poses) and the authored-frame
-         * correction of 5 standing poses, all of which are inside this "every pose except the prone
-         * family" corpus. Observed RED on the pre-fix value `-517042293001259057`, and again on the M6/M7
-         * value `-5490451701131484798` after the pass was rebased onto the M6/M7 merge (this pass
-         * originally branched off `fc65695`), before the re-baseline below. The pass's own blast-radius
-         * guard (`M8M9M10SupportDeclarationTest.UNAFFECTED_CORPUS_DIGEST`) excludes its 17 classes and is
-         * measured equal on the pre-fix and post-fix trees.
-         *
-         * **Re-baselined by the M13 hamstring forward-reach correction** (`fix/m13-hamstring-reach`,
-         * off `0301563`): this corpus is "every production pose except the three prone classes the M3/M5 pass owns", so it includes `HamstringStretchPose`, the one class that
-         * correction owns. Observed RED on the pre-fix value `5434130474548470574` before the re-baseline (this
-         * live run measured `5051896512474775952` below); the five scope digests were re-run with the pose file
-         * stashed and all 50 of their tests were GREEN, so the delta is attributable to M13 and not
-         * to a drifted base. Attribution is direct, not inferred from this digest: the whole-corpus
-         * dump (49 registry poses × 5 progress × every joint XYZ, `245` pose-frames) differs in
-         * exactly `1` frame — `hamstring_stretch_hold` at `p=0.0`, 12 arm-chain joints, max `0.8930`
-         * u at `FINGERTIPS_A` — with the other `244` frames (including the subject's `p ≥ 0.05`)
-         * byte-identical and `supportedPoints`/`maxIkClampAmount` unchanged everywhere. M13's own
-         * blast-radius guard is `HamstringForwardReachTest.UNAFFECTED_CORPUS_DIGEST`.
-         *
-         * **Re-baselined by the M11/M12 limb-realization migration**
-         * (`fix/m11-m12-limb-realization-migration`, off `a8d07cf`): the corpus means "every production
-         * pose class except the three this pass corrects", so it contains `LatStretchPose` (M11 — the
-         * canonical authored hierarchy replaces the hand-rolled tree, publishing `LUMBAR`/`CLAVICLE_*`/
-         * `SCAPULA_*` instead of the world origin) and `CatCowPose` (M12 — the four-point support
-         * declaration and the reachable-by-construction leg targets). Observed RED on the previous value
-         * before this re-baseline. Attribution is direct, not inferred: the whole-corpus dump (`50`
-         * classes × `5` samples × every joint, `8415` rows, `git stash` round-trip on the two pose files)
-         * differs in exactly `95` xyz rows — `70` in `CatCowPose`, `25` in `LatStretchPose` — and the
-         * other `48` classes are byte-identical. That pass's own blast-radius guard is
-         * `M11M12LimbRealizationMigrationTest.UNAFFECTED_CORPUS_DIGEST`.
-                  *
-         * **Re-baselined by the M15 wall/forearm contact-plane correction**
-         * (`fix/m15-wallslides-wall-geometry`, off `4203fff`): this corpus contains `WallSlidesPose`, the
-         * pose M15 corrects — its arm chain is now authored in the wall prop's own contact plane, its
-         * elbow is placed on that plane, and the wall prop itself spans the athlete instead of stopping
-         * below the pelvis. Observed RED on the previous value `-6653724965262809122` before the re-baseline (this live
-         * run measured `-8408967521599715408`). Attribution is direct, not inferred: the whole-corpus dump (`51`
-         * classes × `9` samples × every joint XYZ, plus every `maxIkClampAmount` /
-         * `boneLengthsVerified` / `supportedPoints` stamp, the environment props and the declared limb
-         * targets — `16524` rows — over a `git stash` round-trip on the corrected pose file with
-         * `md5sum -c` on restore) differs in exactly `126` rows, ALL of them inside `WallSlidesPose`:
-         * the two arm chains' `ELBOW_*`/`HAND_*`/`WRIST_*`/`PALM_*`/`KNUCKLES_*`/`FINGERTIPS_*`
-         * (`12` joints × `9` samples = `108`) plus the `9` `TARGETS` and `9` `ENV` rows — with the other
-         * `50` classes byte-identical and the reachability stamp unchanged
-         * (`maxIkClampAmount` `0.047028` on both trees). M15's own blast-radius guard is
-         * `M15WallSlidesWallGeometryTest.UNAFFECTED_CORPUS_DIGEST`.
-         * **Re-baselined by the B2 runner's-lunge back-knee correction**
-         * (`fix/b2-wgs-back-knee-plane`, off `2fb6079`): this corpus contains
-         * `DynamicWorldsGreatestStretchPose`, the pose B2 corrects. Its back leg's stance is now the
-         * extension the pose's own KDoc declares — the ankle authored one full chain reach behind the
-         * hip, at the definition's own floor-contact height, with the knee's bend side derived from the
-         * hip→ankle chord — so the realized `KNEE_B` sits `+13.162892` ABOVE the mat instead of the
-         * `−46.105583` BELOW it that T2 pinned.
-         * Observed RED on the previous value `-8408967521599715408` before the re-baseline (this live run measured
-         * `-967624648643503611`). Attribution is direct, not inferred: the whole-corpus dump (`51` classes × `5`
-         * samples × every joint XYZ = `8415` rows, taken in a pristine `origin/main` @ `2fb6079`
-         * worktree and on this tree, then diffed) differs in exactly `20` rows, ALL of them inside
-         * `DynamicWorldsGreatestStretchPose` (`KNEE_B`/`ANKLE_B`/`HEEL_B`/`TOE_B` × the `5` samples,
-         * max `82.2520` u at `HEEL_B`), with the other `50` classes byte-identical and the pose's
-         * reachability stamp unchanged (`maxIkClampAmount` `21.640945` / `13.396454` / `7.5872955` at
-         * p = 0 / 0.25 / 0.5 on BOTH trees — that clamp is the pose's support arm, and B2 does not
-         * touch the arms). B2's own blast-radius guard is `WorldsGreatestStretchBackKneePlaneTest`.
-         *
-        * **Re-baselined by the B1 diamond push-up elbow-plane correction**
-        * (`fix/b1-diamond-pushup-elbow-plane`, off `2fb6079` — the T2 merge): this corpus means "every
-        * production pose class except the ones this pass corrects", so it contains `DiamondPushUpPose`,
-        * whose elbow pole is re-authored onto the trunk's own long axis. The inherited Z-dominant pole
-        * shape is correct for a grip whose hands sit at or outside the shoulder line; the diamond grip is
-        * `0.1` (the hands come to the fused base `4.6` from the midline against the shoulder joint's
-        * `46`), so the pole's perpendicular residual collapsed onto the chord's downward basis vector and
-        * realized the elbow `19.91` u BELOW the pose's own declared plane at the bottom of the rep
-        * (measured `p = 0.5`; the pose is a pinned, attributed open item in the T2 invariant, whose entry
-        * this correction removes in the same change). Observed RED on the previous value `-8408967521599715408` before
-        * the re-baseline (this live run measured `-5602313885035838638`). Attribution is direct, not
-        * inferred
-        * whole-corpus dump (`51` classes x `5` samples x every joint XYZ, `8415` rows, a `git stash`
-        * round-trip on the corrected pose file with `md5sum -c` on restore) differs in exactly `60` rows,
-        * ALL of them inside `DiamondPushUpPose` — `ELBOW_A`/`ELBOW_P` at all five samples
-        * (`19.96 ... 46.79` u) plus the derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS` pair
-        * (<= `8e-6` u float drift at four samples, and `5.29` / `10.57` / `19.38` u at `p = 0.5`, where
-        * the engine's planted-hand flattening now fires because the elbow is above the hand) — with the
-        * other `50` classes byte-identical. B1's own regression is `DiamondPushUpElbowClearanceTest`.
-         *
-         * **Re-measured by the B1 integration** (this branch merges `fix/b1-diamond-pushup-elbow-plane`
-         * @ `29ee54b`, off `2fb6079`, onto the B2 merge `f8f8b24`): this corpus contains BOTH corrected
-         * poses, so neither pass's committed value was valid on the merged tree. Observed RED on the
-         * B2-merged value `-967624648643503611` before this re-baseline (this live run, with B1 integrated,
-         * measured `1839028987920373159`). The digest's move from the B2-merged value is B1's own delta
-         * (`DiamondPushUpPose`'s `ELBOW_A`/`ELBOW_P` plus the derived hand chain — `60` rows of the
-         * whole-corpus dump, per B1's own record); from the pre-B2 value it is the union of B2's `20`
-         * rows and B1's `60`.
-         *
-         * **Re-baselined by the B3 side-plank support-leg correction** (`fix/b3-sideplank-knee-plane`,
-         * rebased onto the B2 merge `f8f8b24`, with B1 integrated): this corpus contains
-         * `IsometricSidePlankPose`, the pose B3 corrects — the support leg's residual knee bend is
-         * authored out of the mat now (the bend plane's pole `(0, -1, 0)` → `(0, 1, 0)`), so the pose
-         * publishes `KNEE_B` above its own declared plane instead of `25.8897` below it. Observed RED on
-         * the B1-integrated value `1839028987920373159` before this re-baseline (this live run measured `-1423510146238240711`).
-         * Attribution is direct, not inferred: the whole-corpus dump (`51` classes × `5` samples × every
-         * joint XYZ, `8415` rows, over a `git stash` round-trip on the corrected pose file with
-         * `md5sum -c` on restore) differs from the pre-B3 tree in exactly `5` xyz rows — all `5` samples
-         * of `IsometricSidePlankPose`'s `KNEE_B` — while B1's `60` `DiamondPushUpPose` rows and B2's `20`
-         * `DynamicWorldsGreatestStretchPose` rows are untouched by this pass. B3's own gate is
-         * `IsometricSidePlankKneePlaneTest`.
-         * **Re-baselined by the B4 supine elbow-plane correction**
-         * (`fix/b4-glute-bridge-pelvic-tilt-elbow-plane`, off `ba3928b` — the B1+B2+B3 tree): this corpus
-         * contains `GluteBridgePose` and `PelvicTiltPose`, the two supine poses B4 corrects. Their arms' bend
-         * side is re-authored onto the poses' own lateral axis: the family's `(0, -1, ∓1)` pole spent its `-Y`
-         * component on the horizontal shoulder→hand chord's DOWNWARD basis vector (measured
-         * `phat_y = -0.6995 … -0.7079` against `h = 58.48 … 60.74`), realizing `ELBOW_A/P` `28.6 … 33.4` u
-         * below each pose's own declared mat at EVERY phase. Both poses' elbows now lie in the floor plane
-         * (`+7.1 … +12.8` u) and the engine's planted-hand flattening fires with them. Observed RED on the
-         * previous value `-1423510146238240711` before the re-baseline (this live run measured `8113583905073315959`). Attribution is direct,
-         * not inferred: the whole-corpus dump (`51` classes × `5` samples × every joint XYZ, `8415` rows, over a
-         * `git stash` round-trip on the two corrected pose files with `md5sum -c` on restore) differs in
-         * exactly `116` rows, ALL of them inside those two poses (`GluteBridgePose` `56`, `PelvicTiltPose` `60`
-         * — the two `ELBOW_*` plus each arm's derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS` chain, max
-         * `43.0165` u at `GluteBridgePose` `ELBOW_A` `p = 1.0`), with the other `49` classes byte-identical and
-         * every pose's stamps
-         * unchanged (`maxIkClampAmount` reads identically on both trees — it folds the LEGS' own
-         * min-reach clamp — with `boneLengthsVerified = true` and `straightIntentDropped = false`
-         * everywhere). B4's own gate is `SupineArmElbowPlaneTest`.
-         *
-         * **Re-baselined by the B4 trunk correction** (`fix/b4-pelvic-tilt-trunk-ground-plane`, off the
-         * B4-elbow merge `7012ccb`): this corpus contains `PelvicTiltPose`, whose rigid trunk is
-         * re-authored out of the mat (the tilt's DIRECTION — the pose was carrying
-         * `CHEST`/`SHOULDER_A/P`/`NECK_END`/`HEAD_POS` `120/138·sin(0.12)` below a pelvis whose resting
-         * layer is `14`). Observed RED on the previous value `8113583905073315959` before the
-         * re-baseline (this live run measured `2834864332422035085`). Attribution is direct, not
-         * inferred: the whole-corpus dump (`51` classes × `5` samples × every joint XYZ, `8415` rows,
-         * over a `git stash` round-trip on the corrected pose file with `md5sum -c` on restore) differs
-         * in exactly `56` rows, ALL of them inside `PelvicTiltPose` (its trunk chain plus the arm joints
-         * that hang off the moved shoulder, max `33.0581` u at `HEAD_POS` `p = 1.0`; the pose's legs,
-         * pelvis and the world-origin joints are unchanged, and the whole `p = 0.0` sample is
-         * byte-identical because the authored tilt is zero at rest), with the other `50` classes
-         * byte-identical. The trunk's own gate is `PelvicTiltTrunkPlaneTest`.
-         *
-         *
-         * **Re-baselined by the first reach-band cleanup batch** (`fix/reach-band-batch1-airsquat-squat`,
-         * off the C2 merge `d6f4f7f`): this corpus contains `AirSquatPose` and `SquatPose`, whose
-         * authored limb targets are now projected onto their own chains' reachable annulus (R2/R4) — the
-         * standing-phase ankle was authored as a locked-out leg (`210.288` against the engine's `0.98`
-         * extension cap at `205.800`) and the counterbalance reach never left a `9.2 … 15.9` unit radius
-         * against the arm chain's `minReach = 40.134`, so the solver relocated the realized
-         * end-effector along the authored ray (`4.488 … 30.934` u) and the publishable geometry WAS the
-         * projection. Observed RED on the previous value `2834864332422035085` before the re-baseline (this live run
-         * measured `6978338595624143531`). Attribution is direct, not inferred: a whole-corpus dump (`51` classes ×
-         * `5` samples × every joint XYZ plus every stamp, the declared limb targets, the supported
-         * points and the environment, `255` rows) diffed between this branch and a `git worktree` of
-         * `origin/main` @ `d6f4f7f` differs in exactly `152` rows — `76` in each of the two poses, ALL
-         * of them limb-chain joints (`KNEE_*` max `0.0495` u, `ANKLE_*`/`HEEL_*`/`TOE_*` `0.0205` u, the
-         * derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS` chain `<= 0.0056` u, `ELBOW_*`
-         * `<= 0.0006` u) — with the other `49` classes byte-identical, every `support` and `env` row
-         * byte-identical, and the two poses' reachability stamp dropping from `30.93442 / 30.00000 /
-         * 24.24812` to exactly `0.000000` (the relocation this batch removes). The batch's own gate is
-         * `SquatReachBandAuthoringTest`; the three pose files stashed on the base tree re-run this guard
-         * GREEN on the pre-baseline value (measured in the same session).
-          *
-          * **Re-baselined by the second reach-band cleanup batch** (`fix/reach-band-batch2-deepsquat-jump-cossack`,
-          * off the first reach-band batch's merge `ef9400f`): this corpus is "every production pose class
-          * except the classes this correction owns", so it includes the batch's two corrected poses
-          * (`DeepSquatHoldPose`, `JumpSquatPose`). Observed RED on the pre-baseline value `6978338595624143531`
-          * before the re-baseline (this live run measured `6655628533102093923` below). Attribution is direct, not
-          * inferred
-          * from this digest: the whole-corpus dump (`51` classes × `14` phases × every `Joint.entries` XYZ ×
-          * both frame conditions — `47,124` rows, full float bits) measured on a worktree of `origin/main` @
-          * `ef9400f` and on this branch differs in exactly `584` rows — `224` in `DeepSquatHoldPose`, `360` in
-          * `JumpSquatPose` — ALL of them limb-chain joints (`KNEE_*` max `0.0484` u, `ANKLE_*`/`HEEL_*`/`TOE_*`
-          * `0.0206` u, the derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS` chain `0.0053` u, `ELBOW_*`
-          * `0.0006` u), with the other `49` classes byte-identical — `CossackSquatPose` included, which this
-          * batch deliberately does NOT change — and every pelvis/spine/girdle/head joint byte-identical, i.e.
-          * the batch is target-side only (a root-side "fix" would have moved the holds' depths). The batch's
-          * own gate is `ReachBandBatch2AuthoringTest`.
-          *
-          * **Re-baselined by the third reach-band cleanup batch**
-          * (`fix/reach-band-batch3-halfkneel-hamstring-cobra`, off the #254 merge `cf8a14f`): this corpus is
-          * "every production pose class except the classes this correction owns", so it contains
-          * `HalfKneelingStretchPose` and `HamstringStretchPose` — the batch's poses. Their authored limb targets sat outside their own
-          * chains' reachable annulus and are now projected onto it (R2/R4). Observed RED on the pre-baseline value `6655628533102093923` before the re-baseline
-          * (this live run measured `1787803362589852341`). Attribution is direct, not inferred: the whole-corpus A/B (`51`
-          * classes × `15` phases × every `Joint.entries` XYZ × both frame conditions — `60,660` rows, full
-          * float bits) measured on a worktree of `origin/main` @ `cf8a14f` and on this branch differs in
-          * exactly `828` rows — `450` in `HalfKneelingStretchPose`, `180` in `HamstringStretchPose`, `198` in
-          * `ProneCobraStretchPose`, ALL of them limb-chain joints (the arm chain's `ELBOW_*` max `0.0356` u,
-          * the derived `HAND`/`WRIST`/`PALM`/`KNUCKLES`/`FINGERTIPS` chain `0.0206` u, the tucked leg's
-          * `TOE_B`/`HEEL_B`/`ANKLE_B` `0.0059` u and `KNEE_B` `0.0002` u), with the other `48` production
-          * classes byte-identical — `CouchStretchPose` included, which shares this site's authoring helper
-          * and is deliberately NOT re-scoped — and every pelvis/spine/girdle/head joint of the three
-          * byte-identical too, i.e. the batch is target-side only (a root-side "fix" would have moved their
-          * stances). The batch's own gate is `ReachBandBatch3AuthoringTest`.
-          *
-          * **Re-baselined by the fourth (final) reach-band cleanup batch**
-          * (`fix/reach-band-batch4-remaining-candidates`, off the #255 merge `ca011ad`): this corpus is "every
-          * production pose class except the classes each correction owns", so it contains the batch's five poses
-          * (`CouchStretchPose`, `QuadrupedThoracicRotationsPose`, `GluteBridgePose`, `PelvicTiltPose`,
-          * `ThoracicExtensionPose`). Their authored limb targets sat outside their own chains' reachable annulus and
-          * are now projected onto it (R2/R4). Observed RED on the pre-baseline value `1787803362589852341` before this re-baseline
-          * (the live run measured `3584683981286548246`). Attribution is direct, not inferred: the whole-corpus A/B (`51` classes ×
-          * `16` frames — a fresh pipeline's cold first frame plus `15` phases of an advancing pipeline — × every
-          * `Joint.entries` XYZ AND every joint rotation, full float bits, `58,464` rows) measured on a worktree of
-          * `origin/main` @ `ca011ad` and on this branch differs in exactly `852` rows — `240` in
-          * `ThoracicExtensionPose`, `197` in `CouchStretchPose`, `176` in `PelvicTiltPose`, `146` in
-          * `GluteBridgePose`, `93` in `QuadrupedThoracicRotationsPose` — i.e. `652` published joint rows, `128`
-          * declared-target rows and `72` state rows whose ONLY moving field is the reachability stamp. Every differing
-          * joint belongs to the pose's own corrected limb chain (arms: `ELBOW_*`/`HAND_*`/`WRIST_*`/`PALM_*`/
-          * `KNUCKLES_*`/`FINGERTIPS_*`; legs: `KNEE_*`/`ANKLE_*`/`HEEL_*`/`TOE_*`), max published move `0.0324` u
-          * (`QuadrupedThoracicRotationsPose`), and the other `46` production classes are byte-identical — every joint
-          * ROTATION byte-identical everywhere, every pelvis/spine/girdle/head joint of the five unchanged, and every
-          * support set, ground level, environment prop and state flag identical, i.e. the batch is target-side only.
-          * The batch's own gate is `ReachBandBatch4AuthoringTest`.
-          * **Re-baselined by the canonical-`SkeletonFactory` pose batch**
-          * (`fix/canonical-skeletonfactory-pose-batch`, off the #256 merge `4a32d84`): the ten remaining
-          * hand-rolled pose trees (`ArmCirclesPose`, `BurpeePose`, `FacePullPose`, `GluteBridgePose`,
-          * `HipCarsPose`, `KettlebellSwingPose`, `MountainClimberPose`, `PelvicTiltPose`,
-          * `ScapularRetractionPose`, `WallSlidesPose`) adopt `SkeletonFactory.createStandardSkeleton()` (the
-          * M11 residue class — the last poses whose five canonical joints published at the world origin), and
-          * all ten of them are inside this corpus. Observed RED on the previous value `<3584683981286548246>` before
-          * this re-baseline (the live run measured `5910892914285978486`). Attribution is direct, not inferred: the
-          * whole-corpus A/B (`51` classes × `16` frames — a fresh pipeline's cold first frame plus `15` advancing
-          * phases of a long-lived pipeline — × every `Joint.entries` position AND rotation as FULL FLOAT BITS,
-          * plus the published state/stamps, the declared limb targets, the built authoring intents, the support
-          * declarations and the environment metadata — `32,403` rows) measured on the pristine base tree
-          * (`4a32d84`) and on this tree differs in exactly `800` rows — `80` in each of the ten poses, ALL of
-          * them the five canonical joints (`LUMBAR`, `CLAVICLE_A/P`, `SCAPULA_A/P`) × `16` frames, each moving
-          * from the world origin to its authored pass-through transform — with every other joint position and
-          * rotation, every declared limb target, every stamp, every support set and every environment row
-          * byte-identical. The batch's own gate is `CanonicalSkeletonFactoryPoseBatchTest`.
-         *
-          * **Re-baselined by the animation-coverage phase, batch 1** (`feat/animation-coverage-01`, based on
-          * `7df32c0`): this corpus is "every production pose class except its own corrected pose", so the four pose
-          * classes the batch ADDED (`HorseStancePose`, `WallSitPose`, `AnkleMobilityPose`, `CalfStretchPose`) entered
-          * it. Attribution measured, not inferred: the per-pose digest probe (this guard's own hashing recipe, a fresh
-          * pipeline per pose) run on the pristine `origin/main` worktree and on this branch reported **all 51
-          * pre-existing pose classes byte-identical** — `0` differing digests, `4` added, `0` removed — on both the
-          * `4a32d84` and the rebased `7df32c0` base, so the observed RED was corpus membership, not geometry drift.
-          * Pre-rebaseline measurement: `5910892914285978486`.
-         *
-         * **Re-baselined by the animation-coverage phase, batch 2** (`feat/animation-coverage-02`, based on the
-          * #258 merge `6887738`): this corpus is "every production pose class except its own corrected pose", so the
-          * four pose classes the batch ADDED (`RowsPose`, `DipsPose`, `BandPullApartPose`, `YTRaisesPose`) entered it
-          * (the family base `BaseBarSupportPose` is filtered out of every corpus by the `Base*` rule). Attribution
-          * measured, not inferred: the per-pose digest probe (this guard's own hashing recipe, a fresh pipeline per
-          * pose) run on the pristine `origin/main` worktree (`6887738`) and on this branch reported **all `55`
-          * pre-existing pose classes byte-identical** — `0` differing digests, `4` added, `0` removed — so the
-          * observed RED was corpus membership, not geometry drift. Pre-rebaseline measurement: `-3703981788595110599`.
-         *
-         * **Re-baselined by the animation-coverage phase, batch 3** (`feat/animation-coverage-03`, based on the
-         * #259 merge `139daf9`): this corpus is "every production pose class except its own corrected pose", so
-         * the four pose classes the batch ADDED (`HipCirclesPose`, `LegSwingsPose`, `NinetyNinetyHipsPose`,
-         * `PiriformisStretchPose`) entered it. Attribution measured, not inferred: the per-pose digest probe
-         * (this guard's own hashing recipe, a fresh pipeline per pose) run on the pristine `origin/main` worktree
-         * (`139daf9`) and on this branch reported **all `59` pre-existing pose classes byte-identical** — `0`
-         * differing digests, `4` added, `0` removed — so the observed RED was corpus membership, not geometry
-         * drift. Pre-rebaseline measurement: `2590577445452061467`.
-                  *
-         * **Re-baselined by the animation-coverage phase, batch 4** (`feat/animation-coverage-04`, based on the
-         * #260 merge `7fed307`): this corpus is "every production pose class except its own corrected pose", so
-         * the two pose classes the batch ADDED (`ChinTuckPose`, `NeckCirclesPose` — the cervical-mobility pair)
-         * entered it. Attribution measured, not inferred: the per-pose digest probe (this guard's own hashing
-         * recipe, a fresh pipeline per pose) run on the pristine `origin/main` worktree (`7fed307`) and on this
-         * branch reported **all `63` pre-existing pose classes byte-identical** — `0` differing digests, `2`
-         * added, `0` removed — so the observed RED was corpus membership, not geometry drift. Pre-rebaseline
-         * measurement: `6938707527830955053`.
-         *
-         * **Re-baselined by the animation-coverage phase, batch 5** (`feat/animation-coverage-05`, based on the
-         * #261 merge `b0e4edd` — the phase's TAIL): this corpus is "every production pose class except its own
-         * corrected pose", so the three pose classes the batch ADDED (`ShoulderCarsPose`, `JumpingJacksPose`,
-         * `ChildPose` — a standing one-arm shoulder CAR, the ballistic jack and the kneeling fold: the three
-         * exercises no family grouping carried) entered it. Attribution measured, not inferred: the per-pose
-         * digest probe (this guard's own hashing recipe, a fresh pipeline per pose) run on the pristine
-         * `origin/main` worktree (`b0e4edd`) and on this branch reported **all `65` pre-existing pose classes
-         * byte-identical** — `0` differing digests, `3` added, `0` removed — so the observed RED was corpus
-         * membership, not geometry drift. Pre-rebaseline measurement: `4676415585897278686`.
-         * **Re-baselined by the animation-logic correction batch 1**
-         * (`fix/animation-logic-b1-spine-articulation`, off the #262 merge `9cf4c32`):
-         * this corpus contains BOTH poses the batch corrects (`CatCowPose` — the spinal wave the correction
-         * authors — and `PelvicTiltPose` — the same arc split between the pelvis and the low back), so the intended geometry moves the constant. Attribution
-         * measured, not inferred: the batch's whole-corpus A/B (every production pose class × `5`
-         * progress samples × every joint XYZ = `11,220` rows, run in a pristine `origin/main`
-         * worktree (`9cf4c32`) and on this branch) differs in exactly `183` rows, ALL of them inside
-         * the two corrected poses (`155` in `CatCowPose` — the authored spinal wave, worst
-         * `14.3655` u at `CHEST`/`SHOULDER_*`/`CLAVICLE_*`/`SCAPULA_*` — and `28` in
-         * `PelvicTiltPose` — its leg chain, worst `1.526e-05` u), with the other `66` pose classes
-         * byte-identical. Pre-rebaseline measurement: `8336975858828664756`.
-         *
-         * **Re-baselined again by the same batch's strict-envelope landing** (owner decision: the
-         * pose's Cat-side amplitude `0.12` rad → `asin(5/120) ≈ 0.0417` rad, so the correction
-         * re-attributes the pre-fix motion instead of increasing the exercise's range). `CatCowPose`'s
-         * published geometry moved again with it — its chest's worst deviation from the pre-fix tree is
-         * now `5.0000` u (the rep's own end-to-end `5` u envelope, mirrored at both ends) against
-         * `14.3655` u under the first amplitude — so this digest moves with the pose. The same
-         * whole-corpus A/B (`68` classes × `5` samples × `33` joints = `11,220` rows, pristine
-         * `origin/main` @ `9cf4c32` vs the final tree) still differs in exactly `183` rows, ALL inside
-         * the two corrected poses (`155` `CatCowPose`, `28` `PelvicTiltPose`), the other `66` classes
-         * byte-identical. Pre-rebaseline measurement: `4757165752247531121`.
-         * **Re-baselined by the animation-logic correction batch 2**
-         * (`fix/animation-logic-b2-scapular-articulation`, off the #263 merge `ae8c063`): this corpus
-         * is "every production pose class except the classes the correction owns", so it contains BOTH
-         * poses that batch corrects (`StaticForearmPlankPose`, `IsometricSidePlankPose`). Attribution
-         * is measured, not inferred: the batch's whole-corpus A/B (`68` classes × `5` progress samples
-         * × every `Joint.entries` XYZ = `11,220` rows, run in a pristine `origin/main` worktree
-         * (`ae8c063`) and on this branch) differs in exactly `63` rows — `42` in
-         * `StaticForearmPlankPose`, `21` in `IsometricSidePlankPose`, every one of them arm-chain
-         * geometry (`SHOULDER_*`/`ELBOW_*`/`HAND_*`/`WRIST_*`/`PALM_*`/`KNUCKLES_*`/`FINGERTIPS_*`,
-         * worst `0.9258` u) — with the other `66` pose classes byte-identical on every joint position,
-         * every joint rotation and every stamp, and no support set, ground level or clamp moving.
-         * Pre-rebaseline measurement: `-1109423721946295407`.
-*/
+         * Corpus-sensitive by construction: it is "every pose except the three prone-family poses", so it
+         * contains the poses each later correction owns and any such correction moves the value. A RED
+         * here is either membership or a leak outside the prone family — attribute it from a whole-corpus
+         * dump diffed against a pristine `origin/main` worktree, never by pasting the new number in.
+         */
         const val UNAFFECTED_CORPUS_DIGEST = -8467533830602935354L
     }
 }

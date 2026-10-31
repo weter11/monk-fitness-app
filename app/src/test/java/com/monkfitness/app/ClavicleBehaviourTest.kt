@@ -5,11 +5,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * UNI-7 — the clavicle was a dead node: CHEST -> CLAVICLE -> SCAPULA -> SHOULDER existed but
- * no code ever rotated the clavicle, so all girdle motion was carried by the scapula. This
- * test proves the clavicle now has a real, driven degree of freedom:
- *  1. [SkeletonMath.buildClavicularRotation] produces a genuine (non-identity) rotation for
- *     non-zero activation and is a no-op at zero activation.
+ * The clavicle was a dead node: CHEST -> CLAVICLE -> SCAPULA -> SHOULDER existed but no code ever
+ * rotated the clavicle, so all girdle motion was carried by the scapula. This test proves the clavicle
+ * now has a real, driven degree of freedom:
+ *  1. [SkeletonMath.buildClavicularRotation] produces a genuine (non-identity) rotation for non-zero
+ *     activation and is a no-op at zero activation.
  *  2. Applying a clavicular elevation to the clavicle node actually moves the shoulder (glenoid)
  *     through FK — i.e. the node is no longer a rigid pass-through.
  */

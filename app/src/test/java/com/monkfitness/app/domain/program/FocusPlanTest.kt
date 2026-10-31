@@ -10,22 +10,19 @@ import org.junit.Test
 import org.junit.Assert.assertThrows
 
 /**
- * §8's goals and focus vocabulary, pinned as a value algebra.
- *
- * This suite is deliberately small and total: the vocabulary is seven focuses and three goals and
- * nothing else, and the only rule §8 states about a configuration is that custom percentages sum to
- * 100%. Everything asserted here is therefore either *the vocabulary itself* (a fifth focus or a
- * fourth goal would be a different product decision, not a refactoring) or *a state the domain
- * refuses to represent*.
+ * The goals and focus vocabulary, pinned as a value algebra: the vocabulary is seven focuses and three
+ * goals and nothing else, and the only rule about a configuration is that custom percentages sum to
+ * 100%. Everything asserted here is therefore either *the vocabulary itself* (a fifth focus or a fourth
+ * goal would be a different product decision, not a refactoring) or *a state the domain refuses to
+ * represent*.
  */
 class FocusPlanTest {
 
     @Test
     fun focusAndDayTypeAreTwoDifferentDimensionsThatHappenToShareOneWord() {
-        // The confusion §8 of the stage's brief calls out by name is *equating* the two vocabularies,
-        // and the honest form of the rule is not "their names differ" — MOBILITY is both a day type
-        // and a focus — but "they are different dimensions, of different sizes, and nothing states a
-        // correspondence between them".
+        // The confusion to avoid is *equating* the two vocabularies, and the honest form of the rule is
+        // not "their names differ" — MOBILITY is both a day type and a focus — but "they are different
+        // dimensions, of different sizes, and nothing states a correspondence between them".
         val focuses = Focus.entries.map { it.name }.toSet()
         val dayTypes = ProgramDayType.entries.map { it.name }.toSet()
 

@@ -4,9 +4,9 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * Motion-range contract for the CORE / dynamic-body family (PDP §5 [7], PAC §3/§4).
- * These poses drive a real rep (curl-up, hip raise, mountain climber, burpee, swing); a static
- * version would pass the validator yet animate nothing.
+ * Motion-range contract for the CORE / dynamic-body family.
+ * These poses drive a real rep (curl-up, hip raise, mountain climber, burpee, swing); a static version
+ * would pass the validator yet animate nothing.
  */
 class CoreMotionTest {
 

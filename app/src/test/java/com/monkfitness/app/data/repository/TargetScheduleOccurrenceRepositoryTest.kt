@@ -18,15 +18,11 @@ import java.time.LocalDate
 /**
  * `TargetScheduleOccurrenceRepository`: a target occurrence's semantic payload, stored and read back.
  *
- * The claims under test are all about **fidelity and refusal**, and they are measured against a real
- * SQLite engine through the DAOs' own SQL rather than against a mock's bookkeeping:
- *
- *  * what goes in comes back out — key, planned date, every component field, and the component order;
- *  * a repeated identical write writes nothing, and a repeated *different* write is refused rather
- *    than applied;
- *  * membership is `(programId, occurrenceKey)`, so two Programs may share a key and one Program may
- *    not hold one twice;
- *  * the key's own text is never a source of anything.
+ * The claims are about **fidelity and refusal**, measured against a real SQLite engine through the DAOs'
+ * own SQL: what goes in comes back out — key, planned date, every component field and the component
+ * order; an identical repeat writes nothing while a different one is refused rather than applied;
+ * membership is `(programId, occurrenceKey)`, so two Programs may share a key and one may not hold one
+ * twice; and the key's own text is never a source of anything.
  */
 class TargetScheduleOccurrenceRepositoryTest {
 
@@ -71,8 +67,8 @@ class TargetScheduleOccurrenceRepositoryTest {
     @Test
     fun multipleComponentsKeepThePresentedOrder() = runBlocking {
         rig.createGraph()
-        // Deliberately not alphabetical: an implementation that sorted on write or on read would
-        // return a different order, and that is the whole point of storing `position`.
+        // Deliberately not alphabetical: an implementation that sorted on write or on read would return
+        // a different order, which is the whole point of storing `position`.
         val occurrence = occurrence(
             "combined:2026-10-05",
             DAY,
@@ -267,8 +263,8 @@ class TargetScheduleOccurrenceRepositoryTest {
         rig.createGraph()
         val repository = rig.targetScheduleOccurrenceRepository
         // Every part of this key *could* be mistaken for a rule id, a workout id and a date, and the
-        // components deliberately match none of them. If any part of the key were parsed into the
-        // payload, the read-back below would not equal what was stored.
+        // components deliberately match none of them: parsed into the payload anywhere, the read-back
+        // would not equal what was stored.
         val key = "2026-10-05:rule-appears-in-key:workout-also-in-key"
         val occurrence = occurrence(key, DAY, OccurrenceComponent("rule-stored", "workout-stored"))
 
@@ -315,8 +311,8 @@ class TargetScheduleOccurrenceRepositoryTest {
         val stored = occurrence("strength:2026-10-05", DAY, OccurrenceComponent("rule-a", "workout-a"))
         repository.store(PersistedTargetOccurrence(programId, stored))
 
-        // Each of these is what a reconstructing read-back would have to invent, offered as a rewrite
-        // of the stored payload. Every one is refused, and the stored payload survives all of them.
+        // Each is what a reconstructing read-back would have to invent, offered as a rewrite of the
+        // stored payload. Every one is refused and the stored payload survives all of them.
         val invented = listOf(
             OccurrenceComponent("legacy", "legacy"),
             OccurrenceComponent(ProgramGraphFixture.dayId("target-occurrence", 1), "workout-a"),
@@ -350,8 +346,8 @@ class TargetScheduleOccurrenceRepositoryTest {
         val stored = occurrence("strength:2026-10-05", DAY, OccurrenceComponent("rule-a", "workout-a"))
         repository.store(PersistedTargetOccurrence(programId, stored))
 
-        // Writing the same payload under the other Program is a *separate* record, not a move: the
-        // pair is the identity, so the first Program's record is untouched and still readable.
+        // The same payload under the other Program is a *separate* record, not a move: the pair is the
+        // identity, so the first Program's record is untouched and still readable.
         repository.store(PersistedTargetOccurrence(other.program.programId, stored))
 
         assertEquals(
@@ -383,8 +379,8 @@ class TargetScheduleOccurrenceRepositoryTest {
         rig.createGraph()
         val repository = rig.targetScheduleOccurrenceRepository
 
-        // The rig's own graph holds three slots written before this stage, every one of them with a
-        // NULL `targetOccurrenceKey`. Reading the target path for one must simply find nothing.
+        // The rig's graph holds three slots written before this stage, each with a NULL
+        // `targetOccurrenceKey`. Reading the target path for one must simply find nothing.
         val legacySlots = rig.programScheduleRepository.slotsOfProgram(programId)
         assertTrue(
             "the fixture graph is the legacy case: slots with no target identity",
@@ -397,10 +393,8 @@ class TargetScheduleOccurrenceRepositoryTest {
         val stored = occurrence("strength:2026-10-05", DAY, OccurrenceComponent("rule-a", "workout-a"))
         repository.store(PersistedTargetOccurrence(programId, stored))
 
-        // The occurrence was written through the *occurrence repository*, which owns no slot: storing
-        // an occurrence must not create, replace or retire a slot, and a legacy slot must be none of
-        // its business. The count is therefore unchanged — the earlier "+ 1" reading was wrong about
-        // what this path does, not a rounding error.
+        // The occurrence is written through the *occurrence repository*, which owns no slot: storing one
+        // must not create, replace or retire a slot, so the slot count is unchanged.
         val after = rig.programScheduleRepository.slotsOfProgram(programId)
         assertEquals(
             "every legacy row is still there, with the same NULL target key it always had",

@@ -5,32 +5,16 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
-import java.lang.reflect.Modifier
 
 /**
- * The twelve mechanical boundaries of §30 step 17, checked against the sources themselves.
+ * The mechanical boundaries of the target-occurrence refactor, checked against the sources themselves.
  *
- * A boundary refactor is only finished when the thing it removed *cannot come back by accident*, and
- * an assertion about one file does not survive a second caller: a new target component can import
- * the legacy type tomorrow and every file-local gate stays green. So the gates below sweep the
- * **whole** production tree, not the migrated files, and the ones about ownership are written as
- * closed lists and cardinalities that a later addition fails rather than a claim about the present
- * that a later change quietly falsifies.
- *
- * ```text
- *  1. no target scheduling source imports or names ExistingOccurrence
- *  2. the target-specific value lives in the target domain package
- *  3. it is exactly PlannedOccurrence + OccurrenceExecution
- *  4. no repository / DAO / Room dependency
- *  5. no clock, randomness or IdGenerator
- *  6. no session, work or performance state
- *  7. reconciliation still owns occurrence membership identity
- *  8. the policy remains the sole owner of temporal classification
- *  9. the execution policy remains the sole owner of execution interpretation
- * 10. no second adapter invents execution precedence
- * 11. the legacy scheduler remains isolated
- * 12. ActualResult remains absent from the target scheduling path
- * ```
+ * A boundary refactor is only finished when the thing it removed *cannot come back by accident*, and an
+ * assertion about one file does not survive a second caller: a new target component can import the
+ * legacy type tomorrow and every file-local gate stays green. So the gates below sweep the **whole**
+ * production tree, not the migrated files, and the ones about ownership are written as closed lists and
+ * cardinalities that a later addition fails rather than a claim about the present that a later change
+ * quietly falsifies.
  */
 class TargetExistingOccurrenceArchitectureTest {
 
@@ -40,7 +24,7 @@ class TargetExistingOccurrenceArchitectureTest {
     private val targetDir = File(mainDir, "domain/program/target")
     private val valueFile = File(targetDir, "TargetExistingOccurrence.kt")
 
-    /** The Phase 15/16 -> Phase 17 bridge: the one place a stored occurrence becomes a scheduling input. */
+    /** The bridge: the one place a stored occurrence becomes a scheduling input. */
     private val bridgeFile = File(mainDir, "domain/usecase/TargetExistingOccurrenceReader.kt")
 
     private val legacyNames = listOf(
@@ -83,8 +67,6 @@ class TargetExistingOccurrenceArchitectureTest {
                 .map { "${relative(source)}: $it" }
         }
     }
-
-    // ---- 1. the legacy type is gone from the target contour ----------------------------------------
 
     @Test
     fun noTargetSchedulingSourceImportsOrNamesTheLegacyExistingOccurrence() {
@@ -152,8 +134,6 @@ class TargetExistingOccurrenceArchitectureTest {
         }
     }
 
-    // ---- 2./3. the value's home and its exact shape ------------------------------------------------
-
     @Test
     fun theTargetSpecificValueLivesInTheTargetDomainPackageAndHoldsOnlyPayloadAndExecution() {
         assertTrue(
@@ -191,8 +171,6 @@ class TargetExistingOccurrenceArchitectureTest {
             properties
         )
     }
-
-    // ---- 4./5./6. purity ---------------------------------------------------------------------------
 
     @Test
     fun theTargetSpecificValueHasNoRepositoryDaoOrRoomDependency() {
@@ -268,8 +246,6 @@ class TargetExistingOccurrenceArchitectureTest {
         assertTrue("the value may only reach JVM and pure domain types: $offenders", offenders.isEmpty())
     }
 
-    // ---- 7. membership identity stays with the reconciler -------------------------------------------
-
     @Test
     fun targetReconciliationStillOwnsOccurrenceMembershipIdentity() {
         val reconciler = code(File(targetDir, "TargetOccurrenceReconciler.kt"))
@@ -299,8 +275,6 @@ class TargetExistingOccurrenceArchitectureTest {
         assertTrue("the value exposes the key it forwards", value.contains("val occurrenceKey: String get() = occurrence.occurrenceKey"))
     }
 
-    // ---- 8. temporal classification stays with the policy ------------------------------------------
-
     @Test
     fun targetPolicyRemainsTheSoleOwnerOfTemporalClassification() {
         val policyFile = File(targetDir, "TargetSchedulePolicy.kt")
@@ -325,8 +299,6 @@ class TargetExistingOccurrenceArchitectureTest {
         assertTrue("and reads the pause windows it owns", policy.contains("pauses: List<ProgramPauseWindow>"))
     }
 
-    // ---- 9./10. execution interpretation stays with the Phase 16 policy -----------------------------
-
     @Test
     fun targetExecutionPolicyRemainsTheSoleOwnerOfExecutionInterpretation() {
         val policyFile = File(targetDir, "TargetOccurrenceExecutionPolicy.kt")
@@ -337,15 +309,12 @@ class TargetExistingOccurrenceArchitectureTest {
             policy.contains("fun decide(record: TargetOccurrenceExecutionRecord)")
         )
 
-        // Every place in the tree that turns stored attempt statuses into an execution must be this
-        // one. `SessionStatus.COMPLETED`/`IN_PROGRESS`/`CANCELLED` read against an attempt list is
-        // the shape of a second precedence, so it is scanned for across the whole main tree.
-        // The sweep is over the **target contour** — the pure target package and the target use cases
-        // — not the whole tree. A `WorkoutSession` invariant, a `SessionRuntime` write and a Compose
-        // label all legitimately name a `SessionStatus`, and none of them is turning a stored
-        // *occurrence* attempt into that occurrence's execution. The claim is about a second
-        // occurrence-execution precedence, so the sweep is a second occurrence-execution precedence
-        // could appear in.
+        // Every place in the tree that turns stored attempt statuses into an execution must be this one.
+        // `SessionStatus.COMPLETED`/`IN_PROGRESS`/`CANCELLED` read against an attempt list is the shape
+        // of a second precedence, so it is scanned for across the **target contour** — the pure target
+        // package and the target use cases — not the whole tree. A `WorkoutSession` invariant, a
+        // `SessionRuntime` write and a Compose label all legitimately name a `SessionStatus`, and none of
+        // them is turning a stored *occurrence* attempt into that occurrence's execution.
         val policyVerdicts = listOf("SessionStatus.COMPLETED", "SessionStatus.IN_PROGRESS", "SessionStatus.CANCELLED")
         val targetContour = productionSources().filter { file ->
             val path = relative(file)
@@ -366,7 +335,7 @@ class TargetExistingOccurrenceArchitectureTest {
 
     @Test
     fun noSecondAdapterInventsExecutionPrecedence() {
-        // The bridge from Phase 15/16 to the target input must *call* the policy, not restate it.
+        // The bridge from storage to the target input must *call* the policy, not restate it.
         assertTrue("the bridge exists", bridgeFile.isFile)
         val bridge = code(bridgeFile)
 
@@ -389,7 +358,7 @@ class TargetExistingOccurrenceArchitectureTest {
                 bridge.contains(forbidden)
             )
         }
-        // And it holds no repository of its own: storage is the Phase 15 reader's contract.
+        // And it holds no repository of its own: storage is the reader's contract.
         val declared = Regex("private val (\\w+): (\\w+)").findAll(bridge)
             .map { it.groupValues[1] to it.groupValues[2] }.toList()
         assertEquals(
@@ -420,7 +389,7 @@ class TargetExistingOccurrenceArchitectureTest {
             "and the caller's payload is never forwarded into the value: ${returnLine.value}",
             Regex("TargetExistingOccurrence\\(\\s*occurrence\\s*,").containsMatchIn(bridge)
         )
-        // The execution is the Phase 16 decision, and only that.
+        // The execution is the policy's decision, and only that.
         assertTrue(
             "the execution still comes only from the policy's decision",
             arguments.contains("decision")
@@ -482,8 +451,6 @@ class TargetExistingOccurrenceArchitectureTest {
         }
     }
 
-    // ---- 11. the legacy contour stays isolated ------------------------------------------------------
-
     @Test
     fun theLegacySchedulerRemainsIsolated() {
         val legacy = legacyNames.map { name ->
@@ -522,8 +489,6 @@ class TargetExistingOccurrenceArchitectureTest {
                 .contains("data class ExistingOccurrence(")
         )
     }
-
-    // ---- 12. ActualResult stays out ------------------------------------------------------------------
 
     @Test
     fun actualResultRemainsAbsentFromTheTargetSchedulingPath() {

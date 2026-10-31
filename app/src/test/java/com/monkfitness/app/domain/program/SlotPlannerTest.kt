@@ -20,13 +20,13 @@ import java.time.LocalDate
 /**
  * The scheduling decision, decided without a database, a clock or a device.
  *
- * [SlotPlanner] is a pure function — a [ScheduleRequest] in, a [SlotPlan] out — so everything §20 rules
- * on can be stated as arithmetic over dates: which dates a revision trains on, which of them still need
- * an opportunity, what happens to an opportunity whose date passed, and what a revision change does to
- * the ones still ahead. The dates below are written out in full rather than computed from the
- * production code: a suite that re-derives its expectations would agree with the Scheduler about its own
- * algorithm, and the point is to agree about the **calendar** — the fixture's anchor `2026-09-14` is a
- * Monday, and every expectation below is a date a reader can check by hand.
+ * [SlotPlanner] is a pure function — a [ScheduleRequest] in, a [SlotPlan] out — so everything the
+ * scheduling rules decide can be stated as arithmetic over dates: which dates a revision trains on,
+ * which of them still need an opportunity, what happens to an opportunity whose date passed, and what a
+ * revision change does to the ones still ahead. The dates below are written out in full rather than
+ * computed from the production code: a suite that re-derived its expectations would agree with the
+ * Scheduler about its own algorithm, and the point is to agree about the **calendar** — the fixture's
+ * anchor `2026-09-14` is a Monday, and every expectation below is a date a reader can check by hand.
  */
 class SlotPlannerTest {
 
@@ -42,8 +42,6 @@ class SlotPlannerTest {
             return SlotId("$tag-${minted.toString().padStart(3, '0')}")
         }
     }
-
-    // ------------------------------------------------------------------ generation (§20)
 
     @Test
     fun aFixedWeeklyRevisionIsPlannedOnTheDaysTheUserNamedAndOnNoOthers() {
@@ -267,8 +265,6 @@ class SlotPlannerTest {
         assertEquals(once.create, twice.create)
     }
 
-    // ------------------------------------------------------------------ missed opportunities (§12, §20)
-
     @Test
     fun anOpportunityBehindTheUserIsMissedAndTodaysIsNot() {
         val plan = SlotPlanner.plan(
@@ -356,8 +352,6 @@ class SlotPlannerTest {
                 plan.createdDates.none { it.toString() == "2026-09-16" }
         )
     }
-
-    // ------------------------------------------------------------------ pauses (§3, §20)
 
     @Test
     fun anOpportunityThatPassedInsideAPauseIsSupersededAndNotMissed() {
@@ -461,8 +455,6 @@ class SlotPlannerTest {
             plan.onlyWindow.dayCount == PLANNING_HORIZON_DAYS
         )
     }
-
-    // ------------------------------------------------------------------ revision changes (§20, §27)
 
     @Test
     fun aDayTheRevisionNoLongerTrainsOnSupersedesTheOpportunityStillAhead() {
@@ -686,8 +678,6 @@ class SlotPlannerTest {
         )
     }
 
-    // ------------------------------------------------------------------ a pause renumbers nothing (audit)
-
     @Test
     fun aPauseDoesNotRenumberThePlanForTheDatesThatFollowIt() {
         val planned = SlotPlanner.plan(
@@ -806,15 +796,13 @@ class SlotPlannerTest {
         )
     }
 
-    // ------------------------------------------------------------------ settled semantics (locked)
-
     /**
-     * **Settled semantics #1 — a superseded date is never re-planned.**
+     * A superseded date is never re-planned.
      *
      * One date holds one opportunity, ever: the row that records *what happened* to an opportunity is
      * the durable fact, so a date the revision stopped presenting keeps its superseded slot and the
-     * Scheduler adds nothing for it, however many passes run afterwards. The alternative (re-planning a
-     * superseded date) is the rejected reading recorded in `docs/PROGRAM_SCHEDULER.md` §5.
+     * Scheduler adds nothing for it, however many passes run afterwards. Re-planning a superseded date
+     * would destroy that record.
      */
     @Test
     fun aSupersededDateIsNeverReplanned() {
@@ -845,7 +833,7 @@ class SlotPlannerTest {
     }
 
     /**
-     * **Settled semantics #2 — a pause preserves the opportunities inside it and renumbers nothing.**
+     * A pause preserves the opportunities inside it and renumbers nothing.
      *
      * Both halves in one place, on a pause that has not started yet: the opportunities planned inside
      * the interval before it was added are left exactly as they are (a pause is a fact about now, not a
@@ -894,8 +882,6 @@ class SlotPlannerTest {
             plan.create.first().programDayId.value
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     /** The plan of a request that produced one, failing loudly when the pass had no window. */
     private fun SlotPlan.asScheduled(): SlotPlan {

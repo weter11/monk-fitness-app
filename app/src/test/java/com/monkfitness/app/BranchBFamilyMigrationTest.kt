@@ -8,18 +8,14 @@ import org.junit.Test
 import kotlin.math.abs
 
 /**
- * Branch B — B4 (Pose migration, family-by-family).
+ * Pose migration, family-by-family, from raw node-writing authoring to declarative intent: each
+ * trunk/hip/girdle/extremity pose records its authored rotation as a `jointIntents` carrier (via
+ * `declareJointIntent` / `IntentBuilder.joint`) while still setting the local node during `build()` so
+ * build-time FK keeps working. The [SkeletonPoseFinalizer] then consumes the carrier and re-derives the
+ * node rotation, idempotently.
  *
- * B4 is the per-family migration from raw node-writing authoring to declarative intent: each
- * trunk/hip/girdle/extremity pose records its authored rotation as a `jointIntents` carrier
- * (via `declareJointIntent` / `IntentBuilder.joint`) while still setting the local node during
- * `build()` so build-time FK keeps working. The [SkeletonPoseFinalizer] then consumes the carrier
- * (B2) and re-derives the node rotation, idempotently.
- *
- * (Phase B flag collapse) FINALIZER_CONSUMES_INTENT was collapsed to its true branch and removed,
- * so consumption is now unconditional. This suite locks in the B4 contract for the migrated
- * families: every migrated family records a `jointIntents` entry, and the rendered frame is finite
- * and deterministic.
+ * Consumption is unconditional. This suite locks in the contract for the migrated families: every
+ * migrated family records a `jointIntents` entry, and the rendered frame is finite and deterministic.
  */
 class BranchBFamilyMigrationTest {
 

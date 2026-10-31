@@ -9,14 +9,13 @@ import java.io.File
 import java.lang.reflect.Modifier
 
 /**
- * §30 step 6's boundaries, pinned mechanically instead of by convention.
+ * The editor's boundaries, pinned mechanically instead of by convention.
  *
  * The editor is the first layer of the Program System that could reach for *anything*: it runs above
  * the repositories, it writes Programs, and the temptations are all one import away — a DAO "just to
  * check a row", a generator to fill an empty day, a library lookup to validate an exercise, a slot
- * write to keep the schedule in step, a ViewModel to tie it together. §25, §26 and §33 forbid every
- * one of them, and the blueprint's own §27/§30 order assigns each to a later stage, so the rules are
- * asserted against the sources and the compiled shape:
+ * write to keep the schedule in step, a ViewModel to tie it together. So the rules are asserted
+ * against the sources and the compiled shape:
  *
  *  * no DAO, no Room, no Android and no UI type may appear in the editor at all;
  *  * no scheduler, no generator and no exercise-library port may appear as a collaborator — the
@@ -46,8 +45,6 @@ class ProgramEditorArchitectureTest {
     private val useCaseSource = "domain/usecase/ProgramEditorService.kt"
 
     private val allSources = domainSources + useCaseSource
-
-    // ------------------------------------------------------------------ layering
 
     @Test
     fun theEditorReachesNoDaoNoRoomAndNoUi() {
@@ -88,8 +85,6 @@ class ProgramEditorArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ what the editor may not have
-
     @Test
     fun theEditorIsWiredWithoutASchedulerAGeneratorOrALibrary() {
         val collaborators = ProgramEditorService::class.java.declaredConstructors
@@ -125,7 +120,7 @@ class ProgramEditorArchitectureTest {
         val libraryType = Regex("""(?<![A-Za-z])Exercise\(""")
         val offenders = codeLines(allSources).mapNotNull { (source, line) ->
             when {
-                // An exercise is an opaque id to this layer (§10): it is never resolved.
+                // An exercise is an opaque id to this layer: it is never resolved.
                 libraryType.containsMatchIn(line) -> "$source: $line"
                 line.contains("ExerciseSkeletonData") -> "$source: $line"
                 Regex("""\bEquipment\b""").containsMatchIn(line) -> "$source: $line"
@@ -140,8 +135,6 @@ class ProgramEditorArchitectureTest {
             offenders.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ the pure half
 
     @Test
     fun thePureHalfOfTheEditorSeesNothingButKotlinJavaAndTheDomain() {
@@ -221,17 +214,10 @@ class ProgramEditorArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ the wiring
-
     /**
-     * Revised, not relaxed, by §30 step 14.
-     *
-     * §30 step 6 landed the editor without an affordance and pinned that by asserting that no UI source
-     * named `ProgramEditorService` at all. §30 step 14 is the stage that wires it (§7's *"do not route users
-     * into the legacy editor merely because it already exists"*), so the claim the rule always meant is
-     * stated instead: the composition root constructs the editor **once**, and no UI source **constructs
-     * one** — the screens reach it through the state holder the view model hands them. A second construction
-     * is what the original assertion was protecting against, and it is still refused.
+     * The claim this rule always meant: the composition root constructs the editor **once**, and no UI
+     * source **constructs one** — the screens reach it through the state holder the view model hands
+     * them. A second construction is what it protects against, and it is still refused.
      */
     @Test
     fun theCompositionRootWiresTheEditorAndNothingAboveItConstructsOne() {
@@ -268,8 +254,6 @@ class ProgramEditorArchitectureTest {
             consumers.isNotEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     /** The code lines of each source, with comments removed: the rules above are rules about code. */
     private fun codeLines(sources: List<String>): List<Pair<String, String>> = sources.flatMap { source ->

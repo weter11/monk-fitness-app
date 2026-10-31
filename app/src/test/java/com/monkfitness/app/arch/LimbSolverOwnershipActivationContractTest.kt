@@ -31,37 +31,31 @@ import java.io.File
 import kotlin.math.abs
 
 /**
- * P12 WP-A — the activation contract, RED on the pre-P12 baseline.
- *
- * Each test states a property that **FUTURE R5 ACTIVATION STATE** (plan §12.0 state 3) requires
- * and the current code does NOT provide. They fail because the architectural state is absent:
+ * The activation contract: the properties the activated ownership state requires.
  *
  *  A. [authoringRealizationGatedWhenStageActive] — with the engine stage active, the authoring
  *     bake must still REGISTER limb intent but must NOT perform a second runtime limb
- *     realization (no stamp folds, no node writes from the bake). Today the bake realizes
- *     unconditionally: flag-ON double-solves. (§12.7a)
- *  B. [bakeRealizationCountsIntoTheSolverWindowCounter] — the strengthened single-active-solver
- *     counter must be incremented at BOTH Phase-1 realization sites (bake branch + stage) so a
- *     double solve is observable as `count != 1` even when the outputs coincide. Today only
- *     `IkStage` increments, so the authoring solver is invisible to the instrument. (§12.7b)
+ *     realization (no stamp folds, no node writes from the bake); realizing unconditionally
+ *     double-solves.
+ *  B. [bakeRealizationCountsIntoTheSolverWindowCounter] — the single-active-solver counter must be
+ *     incremented at BOTH realization sites (bake branch + stage) so a double solve is observable
+ *     as `count != 1` even when the outputs coincide; otherwise the authoring solver is invisible
+ *     to the instrument.
  *  C. [losslessStraightConstraintDecode] / [losslessBoneLengthDecode] — `IkStage` must realize a
- *     limb EXACTLY as the authoring bake declared it (per-bake constraint + bone lengths), not
- *     by recovering `definition.*IKConstraint` and lengths through the joint-name (`isArm`)
- *     heuristic. Today the decode diverges whenever the authored context differs from the
- *     definition defaults — parity that depends on coincidence. (§12.3 B-3, §12.4)
+ *     limb EXACTLY as the authoring bake declared it (per-bake constraint + bone lengths), not by
+ *     recovering `definition.*IKConstraint` and lengths through the joint-name (`isArm`)
+ *     heuristic: that decode diverges whenever the authored context differs from the definition
+ *     defaults — parity that depends on coincidence.
  *  D. [bypassFamilyLimbsAreRegisteredAsIntent] — every runtime limb must reach the activated
  *     stage through `limbTargets`. The direct-`solveIK` bypass family registers nothing, so its
- *     limbs exist in neither registered implementation. (§12.6 B-2)
- *  E. [hipFlexorFamilyDoesNotConsumeSolveResultsForAuthoring] — authoring must not derive
- *     declared intent from the Active Limb Solver's result (hip-flexor chain reads the solved
- *     knee world position inside build). (§12.5 B-1)
- *  F. [noUnauthorizedDirectSolveInProductionPoses] — static ownership audit: `solveIK(` may
- *     exist only inside the registered implementations (solver math, the authoring bakes, the
- *     engine stage) and the sanctioned Phase-2 Contact Re-Solve. Production pose files calling
- *     it directly is the bypass family this phase eliminates. (§12.6/§16 sweep)
- *
- * RED evidence is recorded per test in the P12 PR; every property turns green in its work
- * package (WP-B/D/E/G) and stays green through the final flag flip (WP-I).
+ *     limbs exist in neither registered implementation.
+ *  E. [hipFlexorFamilyDoesNotConsumeSolveResultsForAuthoring] — authoring must not derive declared
+ *     intent from the Active Limb Solver's result (the hip-flexor chain reads the solved knee
+ *     world position inside build).
+ *  F. [noUnauthorizedDirectSolveInProductionPoses] — static ownership audit: `solveIK(` may exist
+ *     only inside the registered implementations (solver math, the authoring bakes, the engine
+ *     stage) and the sanctioned Contact Re-Solve. Production pose files calling it directly are
+ *     the bypass family.
  */
 class LimbSolverOwnershipActivationContractTest {
 
@@ -75,14 +69,12 @@ class LimbSolverOwnershipActivationContractTest {
 
     /**
      * Runs [block] in the **authoring configuration** (`IK_STAGE_ACTIVE = false`), restoring the
-     * previous configuration afterwards.
-     *
-     * P12 WP-I: the deployed default is now the ACTIVATED configuration, so a reference that must be
-     * produced BY the authoring bake has to name its configuration explicitly (§12.7a: the bake
-     * realizes only while the stage is disabled). This is not a weakening — the decode comparisons
-     * below are comparisons against the authoring implementation's realization of the same declared
-     * context, and R5 keeps both configurations supported (the activated side is driven explicitly by
-     * [runStage]). The state-agnostic registration assertions stay unconditional.
+     * previous one. The deployed default is the ACTIVATED configuration, so a reference that must be
+     * produced BY the authoring bake has to name its configuration explicitly (the bake realizes
+     * only while the stage is disabled). Not a weakening: the decode comparisons are against the
+     * authoring implementation's realization of the same declared context, both configurations stay
+     * supported (the activated side is driven explicitly by [runStage]), and the registration
+     * assertions stay unconditional.
      */
     private fun <T> inAuthoringConfiguration(block: () -> T): T {
         val original = IK_STAGE_ACTIVE
@@ -94,14 +86,11 @@ class LimbSolverOwnershipActivationContractTest {
         }
     }
 
-    // ------------------------------------------------------------- A — realization gate (§12.7a)
-
     @Test
     fun authoringRealizationGatedWhenStageActive() {
-        // An unreachable straight target: the clamped solve produces a NON-ZERO Clamp Stamp.
-        // Under state 3 the bake (authoring) only registers the WorldTarget; the Stamp must be
-        // produced by the realized path, so immediately after the bake — stage active — the
-        // carrier may NOT carry a realization reading yet.
+        // An unreachable straight target: the clamped solve produces a NON-ZERO Clamp Stamp. Under
+        // the active stage the bake only registers the WorldTarget, and the stamp belongs to the
+        // realized path — so immediately after the bake the carrier may NOT carry that reading.
         val pose = SkeletonPose()
         val nodes = SkeletonFactory.createStandardSkeleton()
         nodes.roots.forEach { it.updateWorldTransforms(Vector3(), JointRotation()) }
@@ -126,15 +115,13 @@ class LimbSolverOwnershipActivationContractTest {
         )
     }
 
-    // ---------------------------------------------------- B — strengthened counter site (§12.7b)
-
     @Test
     fun bakeRealizationCountsIntoTheSolverWindowCounter() {
-        // While the stage is DISABLED the bake IS the Active Limb Solver, so its realization
-        // must leave execution evidence on the same carrier counter the pipeline's R5 window
-        // check reads — otherwise a bake+stage double solve is invisible to the instrument even
-        // though both implementations wrote geometry this frame (output equality cannot prove
-        // it; only per-implementation execution evidence can — §12.7 enforcement honesty).
+        // While the stage is DISABLED the bake IS the Active Limb Solver, so its realization must
+        // leave execution evidence on the same carrier counter the pipeline's window check reads —
+        // otherwise a bake+stage double solve is invisible even though both implementations wrote
+        // geometry this frame (output equality cannot prove it; only per-implementation execution
+        // evidence can).
         val pose = SkeletonPose()
         val nodes = SkeletonFactory.createStandardSkeleton()
         nodes.roots.forEach { it.updateWorldTransforms(Vector3(), JointRotation()) }
@@ -152,11 +139,9 @@ class LimbSolverOwnershipActivationContractTest {
         )
     }
 
-    // ----------------------------------------------------------- C — lossless decode (B-3)
-
     private fun runStage(pose: SkeletonPose, definition: SkeletonDefinition) {
-        // Drive the gate directly: the stage reads the flag in `apply`; the strengthened
-        // per-frame pipeline check belongs to the WP-G enforcement tests, not this contract.
+        // Drive the gate directly: the stage reads the flag in `apply`; the per-frame pipeline
+        // check belongs to the enforcement tests, not this contract.
         val original = IK_STAGE_ACTIVE
         try {
             IK_STAGE_ACTIVE = true
@@ -181,12 +166,11 @@ class LimbSolverOwnershipActivationContractTest {
 
     @Test
     fun losslessStraightConstraintDecode() {
-        // Authored context: a straight reference limb at FULL reach under the validation
-        // family's opted-in FULL-EXTENSION constraint (MiddleSplit/DeadHang/PikeSit pattern).
-        // The bake realizes it perfectly straight (extended cap = 1.0·(L1+L2)); an
-        // `isArm`-heuristic decode recovers `definition.legIKConstraint` (0.98 cap) and pulls
-        // the limb ~2% short. Lossless activation means the stage must reproduce the DECLARED
-        // solve exactly — the Limb Target has to carry the constraint (plan §12.4).
+        // Authored context: a straight reference limb at FULL reach under the validation family's
+        // opted-in FULL-EXTENSION constraint. The bake realizes it perfectly straight (extended cap
+        // = 1.0·(L1+L2)); an `isArm`-heuristic decode recovers `definition.legIKConstraint` (0.98
+        // cap) and pulls the limb ~2% short. Lossless activation means the stage must reproduce the
+        // DECLARED solve exactly — the Limb Target has to carry the constraint.
         val root = Vector3(0f, 50f, 0f)
         val reach = def.thighLength + def.shinLength
         val fullTarget = Vector3(root.x + reach, root.y, root.z)
@@ -216,9 +200,9 @@ class LimbSolverOwnershipActivationContractTest {
         runStage(actual, def)
         snapshot(aNodes, actual)
 
-        // The decode is lossless only because the declared constraint is honored: an
-        // undeclared Limb Target must fail fast under the active stage, NEVER silently
-        // recover definition defaults (that recovery was the B-3 heuristic).
+        // The decode is lossless only because the declared constraint is honored: an undeclared
+        // Limb Target must fail fast under the active stage, NEVER silently recover definition
+        // defaults (that recovery was the heuristic).
         val undeclared = SkeletonPose()
         val uNodes = hipTree(root)
         undeclared.limbTargets.add(
@@ -303,15 +287,12 @@ class LimbSolverOwnershipActivationContractTest {
         )
     }
 
-    // ------------------------------------------------ D — bypass family registration (B-2)
-
     @Test
     fun bypassFamilyLimbsAreRegisteredAsIntent() {
-        // LatStretchPose + DeadBugPose solve four limbs each via direct `solveIK` (the §12.6
-        // family). Under the activation contract every runtime limb must reach `IkStage` through
-        // the Limb Target carrier, so a built bypass pose must carry its declared limbs — today
-        // it carries none, which is exactly why flag-ON leaves those limbs solved in no
-        // registered implementation (state-"nothing" for the B-2 family).
+        // LatStretchPose + DeadBugPose solve four limbs each via direct `solveIK`. Under the
+        // activation contract every runtime limb must reach `IkStage` through the Limb Target
+        // carrier, so a built bypass pose must carry its declared limbs — otherwise flag-ON leaves
+        // them solved in no registered implementation.
         for ((name, builder) in listOf<Pair<String, PoseBuilder>>(
             "LatStretch" to LatStretchPose(),
             "DeadBug" to DeadBugPose()
@@ -328,11 +309,11 @@ class LimbSolverOwnershipActivationContractTest {
 
     @Test
     fun worldBuiltPosesUseAuthoredHierarchyNotPositionReconstruction() {
-        // §12.6 hierarchy audit (WP-D): the four world-position-built bypass poses must reach
-        // the pipeline through the authored-hierarchy idiom — a built pose carries the
-        // SkeletonFactory tree (knee/ankle authored as node LOCALS), and NO production pose
-        // file may call the legacy `fromJointPositions` reconstruction (solve-result world
-        // positions embedded into initial Settled Geometry — the B-1-shaped breakage).
+        // Hierarchy audit: the four world-position-built bypass poses must reach the pipeline
+        // through the authored-hierarchy idiom — a built pose carries the SkeletonFactory tree
+        // (knee/ankle authored as node LOCALS) — and NO production pose file may call the legacy
+        // `fromJointPositions` reconstruction (solve-result world positions embedded into initial
+        // Settled Geometry, the same breakage shape as reading a solved knee during authoring).
         val files = listOf(
             "poses/DeadBugPose.kt",
             "poses/LegRaisePose.kt",
@@ -355,13 +336,11 @@ class LimbSolverOwnershipActivationContractTest {
                 "the bypass family depended on):\n" + offenders.joinToString("\n"),
             emptyList<String>(), offenders
         )
-        // Behavioral half: each converted pose's built carrier must declare its four limbs with a
-        // complete realization context, and the ACTIVE implementation must place them on the
-        // authored hierarchy. P12 WP-I: with the deployed default activated, the authoring bake
-        // registers without realizing (§12.7a), so the realized knee offset is observed on the
-        // PUBLISHED frame of the production path — the same claim ("the limb is realized on the
-        // authored tree, at the declared bone length, not reconstructed from solved positions"),
-        // measured on the configuration that now owns realization.
+        // Behavioral half: each converted pose must declare its four limbs with a complete
+        // realization context, and the ACTIVE implementation must place them on the authored
+        // hierarchy. With the deployed default activated the authoring bake registers without
+        // realizing, so the realized knee offset is observed on the PUBLISHED frame — the same
+        // claim measured on the configuration that owns realization.
         for ((name, builder) in listOf<Pair<String, PoseBuilder>>(
             "DeadBug" to DeadBugPose(),
             "LegRaise" to LegRaisePose(),
@@ -398,16 +377,14 @@ class LimbSolverOwnershipActivationContractTest {
         return null
     }
 
-    // --------------------------------------------- E — hip-flexor authoring consumers (B-1)
-
     @Test
     fun hipFlexorFamilyDoesNotConsumeSolveResultsForAuthoring() {
-        // B-1 blocker: `BaseHipFlexorPose.solveFrontLeg` handed the bake's IKResult to the
-        // variants, which derived the arm targets from the SOLVED KNEE world position inside
-        // build. Under activation the stage realizes the leg later, so the solved knee is not
-        // an authoring input at that point. The sanctioned shape (§12.4b): intent may be
-        // composed from a `planLimbPlacement` result (planning solve: no registration, no node
-        // writes, no stamps) — NEVER from the return value of a `bakeIkLimb` call.
+        // `BaseHipFlexorPose.solveFrontLeg` used to hand the bake's IKResult to the variants, which
+        // derived arm targets from the SOLVED KNEE world position inside build. Under activation
+        // the stage realizes the leg later, so the solved knee is not an authoring input then.
+        // The sanctioned shape: intent may be composed from a `planLimbPlacement` result (planning
+        // solve: no registration, no node writes, no stamps) — NEVER from the return value of a
+        // `bakeIkLimb` call.
         val files = listOf(
             "poses/BaseHipFlexorPose.kt",
             "poses/CouchStretchPose.kt",
@@ -433,14 +410,11 @@ class LimbSolverOwnershipActivationContractTest {
         )
     }
 
-    // ------------------------------------------- F — static solveIK ownership audit (§12.6)
-
     @Test
     fun noUnauthorizedDirectSolveInProductionPoses() {
-        // Registered Phase-1 limb-solver implementations + the solver math itself + the
-        // sanctioned Phase-2 Contact Re-Solve + the §12.4b planning-solve primitive are the ONLY
-        // production files allowed to invoke `solveIK(`. Production POSE files calling it
-        // directly are the B-2 bypass family.
+        // Registered limb-solver implementations + the solver math itself + the sanctioned
+        // Contact Re-Solve + the planning-solve primitive are the ONLY production files allowed to
+        // invoke `solveIK(`. Production POSE files calling it directly are the bypass family.
         val allowed = setOf(
             "SkeletonMath.kt",        // the math itself
             "BasePose.kt",            // authoring bake (registered implementations) + planLimbPlacement (§12.4b)
@@ -468,8 +442,6 @@ class LimbSolverOwnershipActivationContractTest {
             emptyList<String>(), offenders
         )
     }
-
-    // ---------------------------------------------------- helpers
 
     private fun productionJavaRoot(): String {
         var dir = File(System.getProperty("user.dir"))

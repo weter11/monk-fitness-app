@@ -18,16 +18,13 @@ import java.lang.reflect.Modifier
 /**
  * `program_workout_slot` ⇄ `WorkoutSlot` and `program_pause` ⇄ `ProgramPause`.
  *
- * Two things are pinned here beyond the round trip: that a slot row has **no** column that could hold
- * an amount of work (§12), and that the attempts a slot reports are the sessions of that slot rather
- * than a second copy of the link.
+ * Beyond the round trip: a slot row has **no** column that could hold an amount of work, and the
+ * attempts a slot reports are the sessions of that slot rather than a second copy of the link.
  */
 class ScheduleMapperTest {
 
-    /**
-     * The class's own fields: statics (the companion's constants) and the synthetic members Kotlin adds
-     * are not part of what a row stores.
-     */
+    /** The class's own fields: statics (the companion's constants) and Kotlin's synthetic members are
+     * not part of what a row stores. */
     private fun declaredFieldsOf(type: Class<*>) = type.declaredFields
         .filterNot { Modifier.isStatic(it.modifiers) || it.name.startsWith("$") }
         .map { it.name }

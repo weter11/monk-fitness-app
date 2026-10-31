@@ -6,26 +6,25 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * Phase 2 (F2/F7/F9) — ConstraintSolver owns the root/pelvis transform.
+ * ConstraintSolver owns the root/pelvis transform.
  *
- * (Phase B flag collapse) SOLVER_OWNS_POSTURE was collapsed to its true branch and the flag
- * removed, so posture ownership is now unconditional. These tests assert the resulting
- * engine-owned posture behaviour directly.
+ * Posture ownership is unconditional (the ownership flag was collapsed to its true branch and
+ * removed), and these tests assert the resulting engine-owned behaviour directly:
  *  - the solver seeds the root pelvis height from the pose's declared [PostureIntent];
  *  - contact conflicts are resolved by `contactPrecedence` (weighted root step);
- *  - the solved root is carried into the next frame's Inter-Frame Smoothing — as of Phase 5
- *    (R10) this temporal state is owned by the SkeletonPipeline's Frame History and supplied
- *    to each solve explicitly; the solver itself persists nothing (see
- *    [com.monkfitness.app.arch.InterFrameSmoothingTest] for the smoothing contract).
+ *  - the solved root is carried into the next frame's inter-frame smoothing — that temporal state is
+ *    owned by the SkeletonPipeline's Frame History and supplied to each solve explicitly, so the
+ *    solver itself persists nothing (see [com.monkfitness.app.arch.InterFrameSmoothingTest] for the
+ *    smoothing contract).
  */
 class ConstraintSolverPhase2Test {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
     private val context = PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)
 
-    // Route through the pipeline (the production path) so the ordered Solver → Finalizer
-    // chain runs. The Finalizer no longer calls the Solver itself (M2), so a direct
-    // `pipeline.produceFrame(build()).pose` would silently skip the posture solve this suite exists to test.
+    // Route through the pipeline (the production path) so the ordered Solver → Finalizer chain runs.
+    // The Finalizer no longer calls the Solver itself, so a direct `pipeline.produceFrame(build()).pose`
+    // would silently skip the posture solve this suite exists to test.
     private fun finalized(pose: BaseValidationPose): SkeletonPose {
         return SkeletonPipeline(def).produceFrame(pose, context).pose
     }

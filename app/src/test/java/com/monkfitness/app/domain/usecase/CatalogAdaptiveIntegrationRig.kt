@@ -38,31 +38,15 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 
 /**
- * P30's integration rig: [ProgramAdaptiveIntegrationRig] rebuilt on the **shipped catalogue's own
- * exercise ids**, wired with the **production** [CatalogExerciseFamilyClassification] and **no ladder**.
+ * The integration rig rebuilt on the **shipped catalogue's own exercise ids**, wired with the
+ * **production** [CatalogExerciseFamilyClassification] and the production stored ladder provider.
  *
- * ### Why this rig exists rather than a new case in the old one
- *
- * §30 step 12's rig classifies `pushup` / `pike_pushup` / `decline_pushup` and declares the family
- * `push-family`. The shipped catalogue holds `pushups` / `pike_pushups` / `decline_pushups` and declares
- * the family `pushups`. Those id spaces **do not intersect**, and nothing before P30 noticed because
- * nothing before P30 ever asked the catalogue a question about a stored session.
- *
- * That is exactly the trap P23 documented: dozens of suites are built on the older fixture, and "fixing"
- * it would break them all. So the old rig is left alone and this one is written on catalogue ids — which
- * is the only way to prove the claim P30 makes, since a pass driven by ids the production classification
- * does not hold would classify nothing and stop one gap earlier than production does.
- *
- * ### What it wires, and the one thing it deliberately does not
- *
- * ```text
- * classification = CatalogExerciseFamilyClassification()   the production source
- * relations      = NoDeclaredProgression                   the production empty ladder
- * ```
- *
- * That pairing **is** production's wiring. It is what makes the central assertion of this stage
- * measurable: a pass that can now name the family it is about, and still refuses to adapt it because no
- * ladder is declared for that family.
+ * The older rig classifies `pushup` / `pike_pushup` / `decline_pushup` and declares `push-family`; the
+ * shipped catalogue holds `pushups` / `pike_pushups` / `decline_pushups` and declares `pushups`. Those id
+ * spaces **do not intersect**, and dozens of suites are built on the older fixture, so "fixing" it would
+ * break them all — the old rig is left alone and this one is written on catalogue ids. A pass driven by
+ * ids the production classification does not hold would classify nothing and stop one gap earlier than
+ * production does.
  */
 internal class CatalogAdaptiveIntegrationRig private constructor(
     val programTag: String
@@ -77,15 +61,13 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
     val ids = SequentialIds("p30-$programTag")
 
     /**
-     * The **production** ladder source: the persisted catalogue, read through the real provider.
-     *
-     * P30 left this as `noLadder()` because P30 authored no content. **P32 replaces it with the stored
-     * provider over a bootstrapped database** — not a fixture ladder, and not a parallel rig — so every
-     * adaptive assertion in this package now runs against production's own wiring: the shipped
-     * classification, the seeded built-in catalogue, the real repository and the real provider.
+     * The **production** ladder source: the persisted catalogue, read through the real provider over a
+     * bootstrapped database — not a fixture ladder, and not a parallel rig. So every adaptive assertion in
+     * this package runs against production's own wiring: the shipped classification, the seeded built-in
+     * catalogue, the real repository and the real provider.
      *
      * A test that wants the *empty* catalogue states it explicitly with [withoutLadder]; nothing reaches
-     * here by accident any more, because the default is now the production path.
+     * here by accident, because the default is the production path.
      */
     var relations: ProgressionRelationProvider = productionProvider()
 
@@ -98,11 +80,9 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
         BuiltInProgressionCatalogueBootstrap(data.progressionRelationRepository).bootstrap()
 
     /**
-     * The **empty** catalogue, for the tests whose claim is that an undeclared family still refuses.
-     *
-     * It is an explicit opt-out rather than the default, because the default is now production's stored
-     * provider — and a test that wants "no ladder" must now say so, which is the difference between a
-     * test that measures production and one that happens to pass against it.
+     * The **empty** catalogue, for the tests whose claim is that an undeclared family still refuses. An
+     * explicit opt-out, so "no ladder" is stated rather than inherited — the difference between a test
+     * that measures production and one that happens to pass against it.
      */
     fun withoutLadder(): CatalogAdaptiveIntegrationRig = apply {
         relations = ProgramAdaptiveIntegrationRig.noLadder()
@@ -141,25 +121,21 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
     private val otherDay = ProgramDayId("day-p30-$programTag-2")
 
     /**
-     * The default two-day graph: the past opportunities present the push day, the future ones the leg
-     * day. This is the graph the *gap distinction* is measured on.
+     * The default two-day graph: past opportunities present the push day, future ones the leg day — the
+     * graph the *gap distinction* is measured on.
      */
     suspend fun createGraph() {
-        // The bootstrap runs where the graph is created, so the production provider has the built-in
-        // catalogue in place before any adaptive pass can read it — the test-side mirror of
-        // `Application.onCreate`. Every rig reaches production wiring through this path.
+        // The bootstrap runs where the graph is created, so the provider has the built-in catalogue in
+        // place before any adaptive pass reads it — the test-side mirror of `Application.onCreate`.
         seedBuiltInProgressionCatalogue()
         data.programRepository.createProgram(program(), programRevision(), slots())
     }
 
     /**
-     * A one-day graph in which **every** opportunity — past and future — presents the push day.
-     *
-     * This is the graph the central assertion is measured on, and it is a different shape from
-     * [createGraph] on purpose. The claim *"with classification and no ladder the pass reports
-     * `NO_DECLARED_PROGRESSION_RELATION`"* is only meaningful when the target opportunity actually
-     * presents the family the completion exposed; on a graph where it does not, that gap is unreachable
-     * and the assertion would be measuring a different refusal.
+     * A one-day graph in which **every** opportunity — past and future — presents the push day, unlike
+     * [createGraph] on purpose: the relation gap is only reachable when the target opportunity presents
+     * the family the completion exposed. On a graph where it does not, that gap is unreachable and the
+     * assertion measures a different refusal.
      */
     suspend fun createSingleFamilyGraph() {
         seedBuiltInProgressionCatalogue()
@@ -167,44 +143,33 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
     }
 
     /**
-     * The catalogue repository itself — the one writer production has for ladder content.
-     *
-     * Exposed so a test can **replace** a stored ladder and observe that the provider's answer follows
-     * storage. That is the behavioural proof that the provider reads the persisted catalogue rather than
-     * a static definitions object: with a static source, rewriting the stored rows would change nothing.
+     * The catalogue repository itself — the one writer production has for ladder content. Exposed so a
+     * test can **replace** a stored ladder and observe the provider's answer follow storage: with a static
+     * definitions object, rewriting the stored rows would change nothing.
      */
     fun progressionCatalogueForTest() = data.progressionRelationRepository
 
     /**
-     * Seeds enough history for the engine's **existing** confirmation window to be satisfied, so a pass
-     * can reach a real progression instead of its `AWAITING_CONFIRMATION` hold.
+     * Runs [qualifyingWindows] **complete** adaptive cycles, so production's own family state records
+     * that many progress-qualifying windows and a later pass can reach the engine's `SUSTAINED_POSITIVE`
+     * instead of its `AWAITING_CONFIRMATION` hold.
      *
-     * The policy asks for two progress-qualifying windows (`progressConfirmingWindows = 2`), and P32
-     * changed nothing about that. This therefore replays the rig's ordinary history shape **twice over**,
-     * letting each pass record a qualifying window, and only then takes the pass whose result is
-     * Runs [qualifyingWindows] **complete** adaptive cycles, each ending with its trigger session
-     * cancelled, so production's own family state records that many progress-qualifying windows.
+     * The policy requires two progress-qualifying windows, and a window is only counted once a pass has
+     * *run and recorded* it — seeding extra completed sessions is not enough. Driving the real
+     * `seedHistoryAndTrigger` -> `adaptAfter` cycle is what makes the progression a fact a pass
+     * established rather than a family state hand-written to let the engine believe it.
      *
-     * The policy requires two progress-qualifying windows (`progressConfirmingWindows = 2`) and **P32
-     * changed nothing about that**. A window is only counted once a pass has *run and recorded* it, so
-     * seeding extra completed sessions is not enough: this drives the real `seedHistoryAndTrigger` ->
-     * `adaptAfter` cycle once per window, which is what lets a later pass reach the engine's own
-     * `SUSTAINED_POSITIVE` instead of its `AWAITING_CONFIRMATION` hold. Reaching a real progression is
-     * the stage's central claim, so it is worth driving the real cycle rather than hand-writing a family
-     * state that would let the engine believe something no pass ever established.
-     *
-     * The trigger is left **IN_PROGRESS** by [seedHistoryAndTrigger] because §19 allows only one
-     * in-progress session per slot, so each cycle cancels its own before the next begins on the same
-     * slot; reusing a slot without cancelling is refused by production's own rule, not by this rig.
+     * The trigger is left **IN_PROGRESS** by [seedHistoryAndTrigger] because only one in-progress session
+     * per slot is allowed, so each cycle cancels its own before the next begins on the same slot;
+     * reusing a slot without cancelling is refused by production's own rule, not by this rig.
      *
      * @return the trigger session id of the **last** cycle, for the asserted pass to run after.
      */
     suspend fun seedProgressQualifyingHistory(qualifyingWindows: Int = 2): SessionId {
         val windows = qualifyingWindows.coerceAtLeast(1)
-        // The **last** cycle's trigger is deliberately left IN_PROGRESS, because it is the session an
-        // asserted pass runs against: §19 refuses a pass on a cancelled session, so cancelling the final
-        // trigger would report `SESSION_WAS_CANCELLED` and measure the wrong thing entirely. Only the
-        // earlier cycles are cancelled, so each can release the slot for the next.
+        // The **last** cycle's trigger is left IN_PROGRESS: it is the session the asserted pass runs
+        // against, and a pass on a cancelled session reports `SESSION_WAS_CANCELLED` instead. Only the
+        // earlier cycles are cancelled, so each releases the slot for the next.
         repeat(windows - 1) {
             val trigger = seedHistoryAndTrigger()
             integration().adaptAfter(trigger.sessionId)
@@ -240,13 +205,10 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
     )
 
     /**
-     * One training day presenting three **real catalogue exercises of the catalogue's `pushups` family**.
-     *
-     * `pushups`, `pushups_wide` and `decline_pushups` are three distinct ids the shipped catalogue states
-     * as members of one family, so a pass over this day has a classified element that also presents an
-     * exposed family — which is the state in which the integration must refuse for want of a *relation*
-     * rather than for want of a *classification*. Getting that state wrong reports a gap that production
-     * would never report.
+     * Three **real catalogue exercises of the catalogue's `pushups` family**, so a pass over this day has
+     * a classified element that also presents an exposed family — the state in which the integration must
+     * refuse for want of a *relation* rather than a *classification*. Getting that state wrong reports a
+     * gap production would never report.
      */
     fun pushDay(): ProgramDay = ProgramDay(
         programDayId = day,
@@ -278,13 +240,10 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
     }
 
     /**
-     * A second day presenting a family the push day never presents.
-     *
-     * It exists so the two gaps can be told apart on the **same** plan: the completion trains
-     * `pushups` and the next opportunity presents only `squats`, which is
-     * `NO_EXPOSED_FAMILY_IN_THE_TARGET_SLOT`. Putting both families in one day would not do it — the
-     * completion would then have exposed the very family the target presents, and the pass would reach
-     * the *relation* gap for the wrong reason.
+     * A second day presenting a family the push day never presents, so the two gaps can be told apart on
+     * the **same** plan: the completion trains `pushups` and the next opportunity presents only `squats`,
+     * which is `NO_EXPOSED_FAMILY_IN_THE_TARGET_SLOT`. Both families in one day would not do it — the
+     * completion would have exposed the very family the target presents.
      */
     fun otherFamilyDay(): ProgramDay = ProgramDay(
         programDayId = otherDay,
@@ -304,14 +263,13 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
     )
 
     /**
-     * Six opportunities: the four **past** ones present the push day (so the history and the trigger
-     * completion are about `pushups`), and the two **future** ones present the leg day (so the adaptive
-     * target presents a family the completion did not expose).
+     * Six opportunities: the four **past** ones present the push day (so the history and the trigger are
+     * about `pushups`), the two **future** ones the leg day (so the target presents a family the
+     * completion did not expose).
      *
-     * The split is what makes the central assertion falsifiable. If every slot presented the push day,
-     * the pass would find the exposed family presented and report `NO_DECLARED_PROGRESSION_RELATION` —
-     * the *expected* result — whether or not the classification worked, so the assertion would pass for
-     * the wrong reason.
+     * The split makes the central assertion falsifiable: if every slot presented the push day, the pass
+     * would report `NO_DECLARED_PROGRESSION_RELATION` whether or not the classification worked, and the
+     * assertion would pass for the wrong reason.
      */
     fun slots(): List<WorkoutSlot> = SLOT_DATES.mapIndexed { index, date ->
         WorkoutSlot(
@@ -368,12 +326,10 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
         }
         return when (end) {
             SessionEnd.CANCELLED -> value(runtime.cancelSession(session.sessionId))
-            // `finishSession` carries the completion rather than the Session, so the re-read below is
-            // what returns a `WorkoutSession` on this path.
             SessionEnd.COMPLETED -> {
                 value(runtime.finishSession(session.sessionId))
-                // The completion is not the Session, so the stored rows are re-read through a fresh
-                // repository — the same read §30 step 12's own rig uses for this path.
+                // `finishSession` carries the completion, not the Session, so the stored rows are
+                // re-read through a fresh repository.
                 data.freshSessionRepository().sessionById(session.sessionId)
                     ?: throw AssertionError("session '${session.sessionId.value}' was just completed")
             }
@@ -451,7 +407,7 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
             "program"
         )
 
-        /** The rig over Program A — the one whose push day presents the family its completion exposed. */
+        /** The rig over Program A — whose push day presents the family its completion exposed. */
         fun of(): CatalogAdaptiveIntegrationRig = CatalogAdaptiveIntegrationRig("a")
 
         /** A second, independent Program with its own database, id space and history. */

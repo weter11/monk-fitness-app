@@ -29,13 +29,10 @@ import com.monkfitness.app.domain.workout.EffectiveExercise
 import java.time.Instant
 
 /**
- * The fixtures the target adaptive stage's suites are written against.
- *
- * It carries no test method of its own: it is the shape of the inputs, written once, so that every suite
- * states its claim in terms of the same window, the same family and the same plan element. The numbers
- * below are the *ordinary* case — a family with two levels, an element the plan generated, full
- * attendance and a favourable context — and every suite that needs an unusual one says so by naming the
- * parameter it changes.
+ * The fixtures the target adaptive stage's suites are written against — no test method of its own, so
+ * every suite states its claim in terms of the same window, family and plan element. The defaults are
+ * the *ordinary* case (a family with two levels, an element the plan generated, full attendance, a
+ * favourable context) and a suite that needs an unusual one names the parameter it changes.
  *
  * The two ladders it builds are exercise-id references and prescriptions, which is exactly what a
  * progression relation is: data the caller supplies. Nothing here is read from the exercise library,
@@ -65,8 +62,6 @@ object ProgramAdaptiveRig {
     const val SAME_LEVEL_ALTERNATIVE: String = "pushups_military"
 
     val EVERY_EXERCISE: Set<String> = setOf(PRESENTED, EASIER, HARDER, SAME_LEVEL_ALTERNATIVE)
-
-    // ------------------------------------------------------------------ the plan element
 
     /** A repetition-based presentation of one plan element. */
     fun presentation(
@@ -101,8 +96,6 @@ object ProgramAdaptiveRig {
         familyId = familyId,
         ownership = ownership
     )
-
-    // ------------------------------------------------------------------ the window's facts
 
     /**
      * One observed occurrence. [index] gives it its own occurrence identity and its own place in the
@@ -192,16 +185,14 @@ object ProgramAdaptiveRig {
         )
     )
 
-    // ------------------------------------------------------------------ the family's hierarchy
-
     /**
      * The family's declared ladder: `pushups_knee` 3×8, `pushups` 3×10, and a third level that is
      * `pushups_wide` at [topReps] repetitions — which is how a suite asks for a step the load guard
      * should refuse, without inventing a second relation.
      *
      * With [sameLevelAlternatives] the middle level declares two variants at the same position, which is
-     * the only shape in which §15's *variant* change is bounded: a move that is neither harder nor
-     * easier, and that the relation itself names.
+     * the only shape in which a *variant* change is bounded: a move that is neither harder nor easier,
+     * and that the relation itself names.
      */
     fun relation(
         familyId: String = FAMILY,
@@ -244,8 +235,6 @@ object ProgramAdaptiveRig {
         restChangeRequested = restChangeRequested
     )
 
-    // ------------------------------------------------------------------ the request
-
     fun request(
         snapshot: AdaptiveInputSnapshot = snapshot(),
         element: ProgramAdaptiveElement = element(),
@@ -276,8 +265,6 @@ object ProgramAdaptiveRig {
         supersedesAdjustmentId = supersedesAdjustmentId,
         policy = policy
     )
-
-    // ------------------------------------------------------------------ signals and evidence
 
     /**
      * Signals built directly, for the policy and signal suites: the counts are stated rather than

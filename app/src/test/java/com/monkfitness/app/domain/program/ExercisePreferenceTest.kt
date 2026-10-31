@@ -7,23 +7,17 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 /**
- * §30 step 28's [ExercisePreference] — the value itself, and the three operations a user performs on it.
- *
- * ### What makes this suite worth writing
+ * [ExercisePreference] — the value itself, and the three operations a user performs on it.
  *
  * A `List<String>` would pass almost every test a user-facing ranking could be given, and fail the ones
- * that matter. "Most preferred first" is only a fact if the order is preserved; "no duplicates" is only a
- * fact if the type refuses them; "no preference is not a default ranking" is only a fact if the type can
- * *express* an empty one without it being read as something else. Each of those is a refusal a bare list
- * has no way to make, so each is asserted here as a refusal rather than as a value.
+ * that matter: "most preferred first" is only a fact if the order is preserved, "no duplicates" only if
+ * the type refuses them, "no preference is not a default ranking" only if the type can *express* an
+ * empty one without it being read as something else. Each is asserted here as a refusal.
  *
- * Every test names the failure mode it rules out, because the failure modes are all silent: a duplicated
- * entry, a reordered list or an absent preference produces a screen that looks finished and a plan that is
- * quietly not what the user asked for.
+ * The failure modes are all silent: a duplicated entry, a reordered list or an absent preference
+ * produces a screen that looks finished and a plan that is quietly not what the user asked for.
  */
 class ExercisePreferenceTest {
-
-    // ------------------------------------------------------------------ the order is the value
 
     @Test
     fun theUsersOrderIsTheValueAndNothingReordersIt() {
@@ -109,8 +103,6 @@ class ExercisePreferenceTest {
         )
     }
 
-    // ------------------------------------------------------------------ refusals
-
     @Test
     fun theSameExerciseCannotBePreferredTwice() {
         // Two paths, because there are two ways in: the constructor a caller reaches directly, and the
@@ -172,8 +164,6 @@ class ExercisePreferenceTest {
             )
         }
     }
-
-    // ------------------------------------------------------------------ absence
 
     @Test
     fun noPreferenceIsEmptyAndNeverAnImplicitRanking() {

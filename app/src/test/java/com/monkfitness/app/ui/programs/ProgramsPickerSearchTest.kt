@@ -5,13 +5,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The picker's search rule (P3 `UI-04`): what one option must contain to answer a query.
+ * The picker's search rule: what one option must contain to answer a query.
  *
  * The defect was that the filter ran on the identifier alone while the row displayed the localized
  * label — so in `es`, `Flexion` matched nothing a Spanish reader could see. The rule now takes both
- * names of the same option and matches either, case-insensitively; this suite states the contract,
- * and `ProgramsArchitectureTest.thePickerSearchesLocalizedNameAndIdAndExplainsAnEmptyResult` pins
- * that the screen actually feeds it both.
+ * names of the same option and matches either, case-insensitively; this suite states the contract, and
+ * `ProgramsArchitectureTest.thePickerSearchesLocalizedNameAndIdAndExplainsAnEmptyResult` pins that the
+ * screen actually feeds it both.
  */
 class ProgramsPickerSearchTest {
 

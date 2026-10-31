@@ -1,13 +1,12 @@
 package com.monkfitness.app.domain.usecase
 
-import com.monkfitness.app.domain.program.target.TargetScheduleDecision
 import com.monkfitness.app.domain.program.target.TargetSlotMaterializer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** Mechanical boundary for Phase 10 target schedule slot persistence. */
+/** Mechanical boundary for target schedule slot persistence. */
 class TargetScheduleSlotPersisterArchitectureTest {
     private val mainDir = File("src/main/java/com/monkfitness/app").let { dir ->
         if (dir.isDirectory) dir else File("app/$dir")
@@ -49,9 +48,9 @@ class TargetScheduleSlotPersisterArchitectureTest {
         val forbidden = listOf(
             "androidx.room", "AppDatabase", "ProgramWorkoutSlotDao", "ProgramWorkoutSlotEntity",
             "Sqlite", "Room", "insertSlots", "updateOutcome", "recordSlotOutcome",
-            // §30 step 14: the boundary may name the occurrence *repository*, never the DAO, the
-            // entities or Room itself — a slot's payload and an occurrence's payload are two
-            // repositories, and the boundary that joins them is still not storage code.
+            // The boundary may name the occurrence *repository*, never the DAO, the entities or
+            // Room itself — a slot's payload and an occurrence's payload are two repositories,
+            // and the boundary that joins them is still not storage code.
             "ProgramTargetOccurrenceDao", "ProgramTargetOccurrenceEntity",
             "ProgramTargetOccurrenceComponentEntity"
         )
@@ -91,8 +90,8 @@ class TargetScheduleSlotPersisterArchitectureTest {
             "TargetPlanner", "TargetSchedulePolicy", "TargetScheduleResolver",
             "TargetOccurrenceComposer", "TargetOccurrenceReconciler", "TargetOccurrencePresenter",
             "SlotPlanner", "ScheduleCalendar", "ProgramScheduler",
-            // §30 step 14: the boundary stores and reads occurrences; it never *decides* one, and
-            // the reconciler is exactly the stage that would.
+            // The boundary stores and reads occurrences; it never *decides* one, and the
+            // reconciler is exactly the stage that would.
             "TargetOccurrenceReconciler", "hasSamePayloadAs"
         )
         val offenders = codeLines(persisterFile).filter { line -> forbidden.any { token -> line.contains(token) } }
@@ -108,10 +107,8 @@ class TargetScheduleSlotPersisterArchitectureTest {
             TargetSlotPersistenceException::class.java,
             TargetScheduleSlotPersister::class.java
         )
-        // §30 step 14 extended this list explicitly rather than dropping it: the boundary now holds a
-        // second repository port and a transaction runner, and both are named here so a *third*
-        // collaborator is still a failure rather than a silence. The regression at the bottom of this
-        // class is what proves the list is closed rather than merely permissive.
+        // Every collaborator is named explicitly, so a *third* one is a failure rather than a
+        // silence; the regression below proves the list is closed, not merely permissive.
         val allowedCollaborators = listOf(
             "com.monkfitness.app.data.repository.ProgramScheduleRepository",
             "com.monkfitness.app.data.repository.TargetScheduleOccurrenceRepository",
@@ -134,13 +131,8 @@ class TargetScheduleSlotPersisterArchitectureTest {
     }
 
     /**
-     * The regression that keeps the extended collaborator list a **closed** list.
-     *
-     * §30 step 14 had to widen [integrationInputKeepsTheDecisionAndPresentationAsValues]'s allow-list
-     * by exactly two entries — the target occurrence repository and the transaction runner. Widening a
-     * closed list is only safe if a third entry still fails, so this builds the same boundary with one
-     * extra, unlisted collaborator and asserts that the rule rejects it. Without this, "extended" and
-     * "opened" would be indistinguishable.
+     * Keeps the collaborator allow-list a **closed** list: one extra, unlisted collaborator must
+     * still be rejected, otherwise "extended" and "opened" are indistinguishable.
      */
     @Test
     fun aThirdCollaboratorIsStillRefusedByTheClosedList() {

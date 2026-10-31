@@ -8,51 +8,31 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §9's **priority order**, measured on the selector that already implements it — with §30 step 28's
- * **real** user preference as the input, so the order is proved end to end rather than asserted about
- * the code that reads it.
+ * The selector's **priority order**, measured on the selector that already implements it, with the
+ * **real** user preference as the input: user choice > hard execution constraints > adaptive preference
+ * > progression need > recency/diversity > deterministic tie-break.
  *
- * ```text
- * user choice
- * >
- * hard execution constraints
- * >
- * adaptive preference
- * >
- * progression need
- * >
- * recency/diversity
- * >
- * deterministic tie-break
- * ```
- *
- * ### What this suite does NOT do
- *
- * It does not restate or re-derive the ranking. `ExerciseSelector` is untouched by P28 and this suite
- * calls it exactly as P10 wrote it, so a failure here means **the input reached the selector wrongly** —
- * which is P28's only possible contribution — rather than that the algorithm is wrong. Every test drives
- * `ExerciseSelector.ranked` directly and reads the order it returns.
- *
- * ### Why each level is stated as its own test
+ * It does not restate or re-derive the ranking. `ExerciseSelector` is untouched and this suite calls it
+ * exactly as it was written, so a failure here means **the input reached the selector wrongly** rather
+ * than that the algorithm is wrong. Every test drives `ExerciseSelector.ranked` directly and reads the
+ * order it returns.
  *
  * The order is only meaningful if a *lower* level cannot outrank a *higher* one, and that claim is
- * falsifiable per pair: construct two candidates where one wins on level N and the other on level N+1, and
- * assert level N decides. A single "the order is correct" test would pass for any permutation that happened
- * to satisfy the one fixture it used; these are built so that swapping any two comparisons fails at least
- * one of them.
+ * falsifiable per pair: construct two candidates where one wins on level N and the other on level N+1,
+ * and assert level N decides. A single "the order is correct" test would pass for any permutation that
+ * happened to satisfy the one fixture it used; these are built so that swapping any two comparisons
+ * fails at least one of them.
  *
- * The two levels P10 recorded as **deliberate absences** — *progression need* (the Adaptive Engine's own
- * result, §30 step 11) and nothing at all — are asserted as absences here for the same reason P10 recorded
- * them: the level must stay empty rather than be filled with an invented stand-in.
+ * The two levels recorded as **deliberate absences** — *progression need* and nothing at all — are
+ * asserted as absences here for the same reason: the level must stay empty rather than be filled with
+ * an invented stand-in.
  */
 class ExercisePreferencePlannerPrecedenceTest {
-
-    // ------------------------------------------------------------------ 1. user choice, and its order
 
     @Test
     fun theUsersFirstPreferenceIsTheOneTheSelectorPicksFirst() {
         // `pull-row` and `pull-up` are both PULL and both usable with full equipment, so nothing else in
-        // §9's order separates them — only the preference does. Without a preference the deterministic
+        // the order separates them — only the preference does. Without a preference the deterministic
         // tie-break alone would put `pull-row` first (its id sorts lower), which is exactly the plan this
         // assertion rules out.
         val request = GeneratedPlannerRig.request(
@@ -92,9 +72,8 @@ class ExercisePreferencePlannerPrecedenceTest {
 
     @Test
     fun aSecondOperationOverAnUnchangedPreferenceSeesTheSameOrder() {
-        // The preference is not consumed by being read once: a preview and the generate the user is shown
-        // it must rank identically, or the two buttons would plan differently (§33's *no silent
-        // substitution*, applied to §9's order).
+        // The preference is not consumed by being read once: a preview and the generate the user is
+        // shown it must rank identically, or the two buttons would plan differently.
         val preferences = GeneratedPlannerRig.preferences(
             userPreferred = ExercisePreference.of("pull-up", "pull-row").exerciseIds
         )
@@ -106,11 +85,9 @@ class ExercisePreferencePlannerPrecedenceTest {
         assertEquals("two rankings over one unchanged request are the same ranking", first, second)
     }
 
-    // ------------------------------------------------------------------ 2. hard constraints outrank the preference
-
     @Test
     fun aPreferredExerciseTheEquipmentForbidsIsNeverSelected() {
-        // §9's order states *user choice > hard execution constraints*, and the selector honours that by
+        // The order states *user choice > hard execution constraints*, and the selector honours that by
         // applying the constraint FIRST: `usableCandidatesFor` removes everything the equipment cannot
         // support, and only the survivors are ranked at all. `pull-up` needs a bar the user does not
         // declare here, so preferring it cannot make it selectable — which is the whole meaning of *"hard
@@ -161,9 +138,9 @@ class ExercisePreferencePlannerPrecedenceTest {
 
     @Test
     fun aPreferredExerciseInAnUnimplementedPrescriptionDimensionIsNeverSelected() {
-        // The other hard constraint: `core-weighted-plank` is prescribed in a dimension §10 names and does
-        // not implement, so it is unusable whatever the user prefers. A preference cannot make an
-        // unprescribable exercise prescribable.
+        // The other hard constraint: `core-weighted-plank` is prescribed in a dimension the architecture
+        // names and does not implement, so it is unusable whatever the user prefers. A preference cannot
+        // make an unprescribable exercise prescribable.
         val request = GeneratedPlannerRig.request(
             preferences = GeneratedPlannerRig.preferences(
                 userPreferred = ExercisePreference.of("core-weighted-plank").exerciseIds
@@ -179,13 +156,10 @@ class ExercisePreferencePlannerPrecedenceTest {
         )
     }
 
-    // ------------------------------------------------------------------ 3. the preference outranks the adaptive one
-
     @Test
     fun theUsersPreferenceOutranksAnAdaptivePreferenceForTheOtherExercise() {
-        // §9's third level. `GenerationPreferences` states the two lists separately, so "the user outranks
-        // the adaptive layer" is a fact of the input rather than an assumption — and the input is exactly
-        // what P28 now produces for the first list.
+        // The third level. `GenerationPreferences` states the two lists separately, so "the user outranks
+        // the adaptive layer" is a fact of the input rather than an assumption.
         val request = GeneratedPlannerRig.request(
             preferences = GeneratedPlannerRig.preferences(
                 userPreferred = listOf("pull-row"),
@@ -207,8 +181,8 @@ class ExercisePreferencePlannerPrecedenceTest {
     fun anAdaptivePreferenceStillRanksTheExercisesTheUserDidNotName() {
         // The level is *below* the user's, not removed by it: among candidates the user did not name, the
         // adaptive preference decides. Without this, the previous test would also pass if the adaptive list
-        // had been dropped entirely — the two together are what pin the *relative* order of §9's first
-        // and third levels.
+        // had been dropped entirely — the two together are what pin the *relative* order of the first and
+        // third levels.
         val request = GeneratedPlannerRig.request(
             preferences = GeneratedPlannerRig.preferences(
                 userPreferred = listOf("push-pushup"),
@@ -232,14 +206,12 @@ class ExercisePreferencePlannerPrecedenceTest {
         )
     }
 
-    // ------------------------------------------------------------------ 4. progression need stays absent
-
     @Test
     fun theProgressionLevelStaysEmptyRatherThanHoldingAnInventedStandIn() {
-        // §30 step 11 owns progression; P10 recorded the level as empty on purpose. If this stage had
-        // quietly filled it — with a recency heuristic, a family counter or anything else — the order would
-        // stop being §9's and would be a new algorithm wearing its name. The selector's comparison list is
-        // the place that is observable.
+        // Progression need is recorded as empty on purpose. If this stage had quietly filled it — with a
+        // recency heuristic, a family counter or anything else — the order would stop being this order and
+        // would be a new algorithm wearing its name. The selector's comparison list is the observable
+        // place.
         val source = File("src/main/java/com/monkfitness/app/domain/program/generated")
             .let { dir -> if (dir.isDirectory) dir else File("app/$dir") }
             .resolve("ExerciseSelector.kt")
@@ -260,11 +232,9 @@ class ExercisePreferencePlannerPrecedenceTest {
         )
     }
 
-    // ------------------------------------------------------------------ 5. recency, diversity, tie-break
-
     @Test
     fun diversityOutranksTheIdTieBreakAmongExercisesThatShareAFamily() {
-        // §9's *recency/diversity* level, above the deterministic tie-break. `push-pushup` and `push-plank`
+        // The *recency/diversity* level, above the deterministic tie-break. `push-pushup` and `push-plank`
         // share the `push-horizontal` family, and they tie on every level above: neither is preferred by
         // the user, neither by the adaptive layer, and neither is in the recent list. The only things that
         // separate them are this cycle's use counts and the family balance — and both point the same way,

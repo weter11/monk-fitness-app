@@ -12,30 +12,27 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * **`PelvicTiltPose`'s authored tilt is carried by the pelvis AND the low back.**
+ * `PelvicTiltPose`'s authored tilt is carried by the pelvis AND the low back.
  *
- * BPS `Pelvic Tilt (Standard)` §9 is explicit about the split — *"Pelvic rotation: posterior tilt to
- * anterior tilt, a small arc (often only a few degrees of true pelvic rotation, with the lumbar spine
- * moving through its lordosis range)"* — and §5 locates the motion at the lumbopelvic junction. The
- * pose used to publish the whole authored `angleOffset` on the **PELVIS** and leave the canonical
- * lower-spine segment rigid: measured through `SkeletonPipeline.produceFrame`, the `LUMBAR`'s world
- * rotation was `bit-identical` to the `PELVIS`'s at every sampled phase (the articulation rode the
- * root — the M3/M4 defect class the prone family was corrected for), so the drill read as a rigid
- * trunk hinged at the pelvis instead of a pelvic tilt with the low back moving.
+ * The motion belongs at the lumbopelvic junction: a small arc of true pelvic rotation with the lumbar
+ * spine moving through its lordosis range. The pose used to publish the whole authored `angleOffset`
+ * on the PELVIS and leave the canonical lower-spine segment rigid — measured through
+ * `SkeletonPipeline.produceFrame`, the `LUMBAR`'s world rotation was bit-identical to the `PELVIS`'s at
+ * every sampled phase (the articulation rode the root), so the drill read as a rigid trunk hinged at
+ * the pelvis instead of a pelvic tilt with the low back moving.
  *
  * The authored arc is now SPLIT between the two segments, in the same sense and with the SAME total
- * (`pelvisRotation + lumbarRotation == torsoAngle` at every phase), so the rep's `0.12`-rad world arc
- * (the B4 trunk gate's own tolerance-checked quantity), the pelvis's static base, the published trunk
- * chain, the legs' quietness and the pose's floor/contact behaviour are all preserved — only the joint
- * that carries the motion changes. This file pins that split:
+ * (`pelvisRotation + lumbarRotation == torsoAngle` at every phase), so the rep's `0.12`-rad world arc,
+ * the pelvis's static base, the published trunk chain, the legs' quietness and the pose's
+ * floor/contact behaviour are all preserved — only the joint that carries the motion changes:
  *
- *  * `PELVIS_TILT_SHARE = 0.35` — the pelvis's own few degrees (BPS §9);
- *  * the LUMBAR carries the remainder (65% of the arc) — the low back's lordosis range (BPS §5/§9/§10);
+ *  * `PELVIS_TILT_SHARE = 0.35` — the pelvis's own few degrees;
+ *  * the LUMBAR carries the remainder (65% of the arc) — the low back's lordosis range;
  *  * nothing else about the pose moves: positions, contacts, plane, legs and the neck's authored
- *    counter-articulation are the pose's own and are asserted here as guards.
+ *    counter-articulation are asserted here as guards.
  *
- * Every measurement is taken on the **published frame** (`SkeletonPipeline.produceFrame(pose, ctx)`),
- * captured BY VALUE (the pipeline reuses its output buffer — the T-7 aliasing trap).
+ * Every measurement is taken on the published frame, captured BY VALUE (the pipeline reuses its output
+ * buffer).
  */
 class PelvicTiltSpineArticulationTest {
 
@@ -71,7 +68,7 @@ class PelvicTiltSpineArticulationTest {
     private fun snapshot(frame: SkeletonPose): SkeletonPose =
         SkeletonPose().apply { copyFrom(frame) }
 
-    /** A genuinely COLD frame: a fresh pose instance on a fresh pipeline (the T2 COLD leg). */
+    /** A genuinely COLD frame: a fresh pose instance on a fresh pipeline. */
     private fun coldFrame(p: Float): SkeletonPose =
         snapshot(SkeletonPipeline(def).produceFrame(PelvicTiltPose(), ctx(p)).pose)
 
@@ -116,10 +113,6 @@ class PelvicTiltSpineArticulationTest {
         while (x < -Math.PI) x += (2 * Math.PI).toFloat()
         return x
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 1. The defect itself — which joint carries the tilt
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theTiltIsCarriedByTheLowBackAndNotByThePelvisAlone() {
@@ -174,10 +167,6 @@ class PelvicTiltSpineArticulationTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 2. The split adds no range: the two segments sum to the pose's authored rep
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theTwoSegmentsSumToTheAuthoredArcAndAddNoRange() {
         val frames = playingFrames()
@@ -198,8 +187,8 @@ class PelvicTiltSpineArticulationTest {
             wrong.isEmpty()
         )
 
-        // The rep's world arc is the authored one in FULL (0.12 rad) — the B4 trunk gate's own
-        // quantity, re-derived here from the published rotations rather than from the model.
+        // The rep's world arc is the authored one in FULL (0.12 rad), re-derived here from the
+        // published rotations rather than from the model.
         val flat = Math.PI.toFloat()
         val maxSwing = frames.maxOf { (_, frame) ->
             val pel = frame.getJoint(Joint.PELVIS); val chest = frame.getJoint(Joint.CHEST)
@@ -216,10 +205,6 @@ class PelvicTiltSpineArticulationTest {
             abs(authoredLumbar(1f)) > abs(pelvisTiltShare * tiltAmplitude)
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 3. The published trunk IS the split authoring (with the rigid-lumbar authoring as control)
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun thePublishedTrunkIsTheSplitAuthoringAndTheRigidLumbarIsTheControl() {
@@ -265,10 +250,6 @@ class PelvicTiltSpineArticulationTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 4. Everything else is the pose's own: placement, planted legs, hands, plane, neck
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun thePlacementTheLegsAndTheFloorBehaviourAreUnchanged() {
         val frames = playingFrames()
@@ -304,7 +285,7 @@ class PelvicTiltSpineArticulationTest {
         assertTrue("the legs must stay quiet through the tilt:\n" + drifting.take(8).joinToString("\n"), drifting.isEmpty())
 
         // The neck's authored articulation still cancels the trunk's tilt exactly: the head chain
-        // keeps the flat supine orientation its authoring intends (the B4 trunk correction's property).
+        // keeps the flat supine orientation its authoring intends.
         val wrongNeck = mutableListOf<String>()
         for ((p, frame) in frames) {
             val neckWorld = zAngle(frame, Joint.NECK_END)
@@ -318,10 +299,6 @@ class PelvicTiltSpineArticulationTest {
             wrongNeck.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 5. Sagittal-only, and not frame-condition sensitive (the B-8 cold-frame class)
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theSplitIsSagittalAndFrameConditionInvariant() {
@@ -362,10 +339,6 @@ class PelvicTiltSpineArticulationTest {
             drifting.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 6. The BPS's own wording, in numbers
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun thePelvisKeepsAFewDegreesAndTheLowBackCarriesTheLordosisRange() {

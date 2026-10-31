@@ -14,18 +14,14 @@ import org.junit.Test
 import java.time.LocalDate
 
 /**
- * §30 step 17 behaviour: the target scheduling input, and the state equivalence the boundary
- * refactor had to preserve.
+ * The target scheduling input, and the state equivalence the boundary refactor had to preserve.
  *
- * Every case here is a case the *previous* target behaviour already had — the reconciler, the
- * planner and the temporal policy are unchanged, and this suite is what makes that a measurement
- * rather than a promise. The one thing that is new is the input's shape: a target occurrence is now
- * the planned payload plus an execution classification, and no scheduling rule needed anything
- * else.
+ * Every case here is a case the *previous* target behaviour already had — the reconciler, the planner
+ * and the temporal policy are unchanged, and this suite is what makes that a measurement rather than a
+ * promise. The one thing that is new is the input's shape: a target occurrence is now the planned
+ * payload plus an execution classification, and no scheduling rule needed anything else.
  */
 class TargetExistingOccurrenceBoundaryTest {
-
-    // ---- the value itself ----------------------------------------------------------------------------
 
     @Test
     fun aTargetExistingOccurrenceIsItsPayloadAndItsExecution() {
@@ -88,8 +84,6 @@ class TargetExistingOccurrenceBoundaryTest {
         )
     }
 
-    // ---- every execution state survives reconciliation -----------------------------------------------
-
     @Test
     fun everyExecutionStateReachesTheSameReconciliationBucketAsBefore() {
         // The bucket a state lands in is unchanged; only the *type* carrying it changed. A state with
@@ -145,8 +139,6 @@ class TargetExistingOccurrenceBoundaryTest {
         assertEquals(existing, result.superseded)
         assertEquals(emptyList<TargetExistingOccurrence>(), result.preserved)
     }
-
-    // ---- the whole pipeline, on the new input --------------------------------------------------------
 
     @Test
     fun thePlannerCarriesTheNewInputThroughReconciliationUnchanged() {
@@ -297,8 +289,6 @@ class TargetExistingOccurrenceBoundaryTest {
             verdicts.getValue(OccurrenceExecution.PLANNED).retained.size
         )
     }
-
-    // ---- fixtures -------------------------------------------------------------------------------------
 
     private fun planned(
         key: String,

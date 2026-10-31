@@ -46,7 +46,6 @@ class KettlebellSwingPoseTest {
             val rawPose = swingPose.build(context)
             val pose = pipeline.produceFrame(rawPose).pose
 
-            // 1. Validation Report
             val report = validator.validate(
                 pose = pose,
                 definition = def,
@@ -61,14 +60,12 @@ class KettlebellSwingPoseTest {
 
             allReports.add(report)
 
-            // Assert that there are no critical biomechanical errors on each frame
             val failedRules = report.results.filter { !it.isValid }.map { it.ruleId }
             assertTrue(
                 "Frame $i (progress=$progress) failed validation rules: $failedRules. Message: ${report.allIssues.map { it.message }}",
                 report.isValid
             )
 
-            // 2. Symmetry Analysis
             val shA = pose.getJoint(Joint.SHOULDER_A)
             val handA = pose.getJoint(Joint.HAND_A)
             val lenArmA = distance(shA, handA)
@@ -95,7 +92,6 @@ class KettlebellSwingPoseTest {
                 maxLegAsymmetry = legDiff
             }
 
-            // 3. Foot Sliding Analysis (against consecutive frames)
             if (previousPose != null) {
                 val feet = arrayOf(Joint.ANKLE_F, Joint.ANKLE_B, Joint.HEEL_F, Joint.HEEL_B, Joint.TOE_F, Joint.TOE_B)
                 for (f in feet) {
@@ -124,7 +120,6 @@ class KettlebellSwingPoseTest {
         // Assert Foot sliding limits (< 0.5 units threshold)
         assertTrue("Max foot slide too high: $maxFootSlide", maxFootSlide < 0.5f)
 
-        // Compile combined report score
         val finalReport = ValidationReport(
             isValid = allReports.all { it.isValid },
             results = emptyList(),

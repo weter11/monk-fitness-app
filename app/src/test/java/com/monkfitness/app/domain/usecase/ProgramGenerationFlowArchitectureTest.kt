@@ -14,22 +14,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P24's production generation flow, pinned mechanically.
+ * The production generation flow, pinned mechanically.
  *
- * Making generation production-callable is where the layering claims stop being about two files and
- * start being about the whole chain, and the interesting failures are all invisible to a behavioural
- * test because each still produces a plan:
+ * Wiring the chain is where the layering claims become claims about the whole chain, and these
+ * failures are invisible to a behavioural test because each still produces a plan:
  *
- *  * the **classification becoming a rule again** — a `when (category)` added beside the explicit
- *    table, or the table replaced by a lookup, and the app is back to fabricating a training fact
- *    while every planner assertion still passes;
- *  * the **orchestration being duplicated** in the UI layer: a controller that builds its own
- *    `GenerationRequest`, names the planner, or reconciles by hand. Then §7's preservation rules have
- *    two homes and they will diverge;
- *  * the **service acquiring a way to persist** — a repository, a DAO, a clock, an id generator of
- *    its own — which would make "Generate only alters a draft" a promise rather than an absence;
- *  * the **adaptive side leaking in**: a Stage-1 signal, a `PilotProgressionProfiles` read or an
- *    invented preference, none of which P24 integrates;
+ *  * the **classification becoming a rule again** — a `when (category)` beside the explicit table, or
+ *    the table replaced by a lookup: the app fabricates a training fact while every planner assertion
+ *    still passes;
+ *  * the **orchestration duplicated** in the UI layer — a controller building its own
+ *    `GenerationRequest`, naming the planner or reconciling by hand: the preservation rules then have
+ *    two homes and will diverge;
+ *  * the **service acquiring a way to persist** — a repository, a DAO, a clock or an id generator of
+ *    its own, which would make "Generate only alters a draft" a promise rather than an absence;
+ *  * the **adaptive side leaking in** — a Stage-1 signal, a `PilotProgressionProfiles` read or an
+ *    invented preference, none of which this stage integrates;
  *  * the **pure generated package changing** to accommodate the wiring. It must not.
  */
 class ProgramGenerationFlowArchitectureTest {
@@ -51,8 +50,6 @@ class ProgramGenerationFlowArchitectureTest {
     private fun code(source: String): String = source
         .replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), "")
         .replace(Regex("""//[^\n]*"""), "")
-
-    // ------------------------------------------------------------------ the classification is data
 
     @Test
     fun theClassificationIsAStatedTableAndNotARuleOverTheCataloguesGroupings() {
@@ -147,8 +144,6 @@ class ProgramGenerationFlowArchitectureTest {
             )
         )
     }
-
-    // ------------------------------------------------------------------ the service orchestrates, and only that
 
     @Test
     fun theServiceRunsTheExistingDomainComponentsRatherThanRestatingThem() {
@@ -275,10 +270,6 @@ class ProgramGenerationFlowArchitectureTest {
             )
     }
 
-    // ------------------------------------------------------------------ the shape of the result
-
-    // ------------------------------------------------------------------ the controller reaches the service only
-
     @Test
     fun theControllerReachesTheServiceAndNothingBelowIt() {
         val controller = code(File(mainDir, "ui/programs/ProgramsController.kt").readText())
@@ -314,8 +305,6 @@ class ProgramGenerationFlowArchitectureTest {
             )
         }
     }
-
-    // ------------------------------------------------------------------ the composition root, and only it
 
     @Test
     fun theCompositionRootProvidesTheServiceAndNoOneElseBuildsOne() {
@@ -371,8 +360,6 @@ class ProgramGenerationFlowArchitectureTest {
             viewModel.contains("ProgramGenerationService(")
         )
     }
-
-    // ------------------------------------------------------------------ the pure package is untouched
 
     @Test
     fun thePureGeneratedPackageGainedNoFileAndReachesNothingNew() {
@@ -431,12 +418,12 @@ class ProgramGenerationFlowArchitectureTest {
 
     @Test
     fun theServiceSpeaksInTheDomainsOwnDraftValues() {
-                // The methods are `suspend` as of P27 — the context read is a repository read, so the pass
-                // owns a coroutine. A `suspend fun` compiles to a JVM method carrying an extra trailing
-                // `Continuation` parameter, so the *declared* parameter types now read
-                // `(ProgramEditorDraft, Set, Continuation)`. The claim being pinned is the CALLER's
-                // arguments, so the continuation is filtered out rather than the check being relaxed: the
-                // draft type and the equipment set are still asserted exactly, by equality.
+                // The methods are `suspend`: the context read is a repository read, so the pass owns a
+                // coroutine. A `suspend fun` compiles to a JVM method carrying a trailing `Continuation`
+                // parameter, so the *declared* types read `(ProgramEditorDraft, Set, Continuation)`.
+                // The claim pinned is the CALLER's arguments, so the continuation is filtered out
+                // rather than the check relaxed: the draft type and the equipment set are still
+                // asserted exactly, by equality.
                 val methods = ProgramGenerationService::class.java.declaredMethods.associateBy { it.name }
                 listOf("generate", "regenerate", "preview").forEach { name ->
                     val declared = methods.getValue(name)

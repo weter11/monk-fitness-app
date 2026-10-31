@@ -12,14 +12,10 @@ import kotlin.math.abs
 /**
  * Y-T Raises (`yt_raises_standard`) — the exercise's own biomechanics on the PUBLISHED frame.
  *
- * Stated intent (the only in-repo specification for this exercise; no BPS exists for it):
- * `ex_y_t_raises_steps` §1 "Lie face down with the forehead lightly supported", §2 "Raise the arms
- * overhead into a Y shape", §3 "Lower with control, then move the arms out into a T shape",
- * §4 "Lift again while keeping the shoulders down", §5 "Alternate the two positions for the set";
- * `desc` "A shoulder-blade drill… Reach long and lift from the mid-back, not the neck";
- * `tech` "Keep the thumbs pointing up. Lift only as high as you can without shrugging.";
- * `mistakes` "Cranking the neck up. Bending the elbows too much. Swinging the arms instead of lifting
- * with control."
+ * The copy is the only in-repo specification (no BPS exists): lie face down with the forehead
+ * lightly supported, raise the arms overhead into a Y, lower with control and move them out into a
+ * T, lifting from the mid-back rather than the neck, thumbs up, only as high as you can without
+ * shrugging — no cranking the neck up, no bending the elbows, no swinging.
  */
 class YTRaisesPoseTest {
 
@@ -47,21 +43,16 @@ class YTRaisesPoseTest {
     /**
      * The sweep samples the authored rhythm's own frames — measured, never assumed.
      *
-     * The cycle is TWO raises with a controlled lowering between them
-     * ([theArmsRiseTwicePerCycleAndReturnToTheMat]), so the lift is `sin(π·fraction)` inside each half:
-     * the first half raises to the Y, the second to the T. The nine [PoseFrameSweep.DEFAULT_PROGRESS]
-     * samples therefore resolve to FIVE distinct published frames **by construction** —
+     * The cycle is TWO raises with a controlled lowering between them, so the lift is
+     * `sin(π·fraction)` inside each half: the first half raises to the Y, the second to the T. The
+     * nine [PoseFrameSweep.DEFAULT_PROGRESS] samples therefore resolve to FIVE distinct published
+     * frames by construction — the rest position (`p = 0`, `½`, `1`: at zero lift the half's own
+     * target only weights a zero vector, so the arm target IS the rest direction), each raise's
+     * mid-lift (`p = ⅛ ≡ ⅜` for the Y, `p = ⅝ ≡ ⅞` for the T: a raise and its controlled lowering
+     * pass through the same arm position), and each raise's peak (`p = ¼` and `p = ¾`).
      *
-     *  * the rest position: `p = 0`, `½`, `1` (the lift is zero at all three, and at zero lift the
-     *    half's own target only weights a zero vector, so the arm target IS the rest direction);
-     *  * each raise's mid-lift: `p = ⅛ ≡ ⅜` (Y) and `p = ⅝ ≡ ⅞` (T) — a raise and its controlled
-     *    lowering pass through the same arm position, which is what a symmetric rep means;
-     *  * each raise's peak: `p = ¼` (Y) and `p = ¾` (T).
-     *
-     * The symmetric rep is the drill the copy states ("Lower with control… Lift again"), so the
-     * duplication is the authored motion, not a repeated sample: the three frames that must differ
-     * from one another (rest, Y peak, T peak) are asserted apart below, and the hand travel is
-     * asserted by [theHandsSweepTheFullArc].
+     * The duplication is the authored motion, not a repeated sample: the three frames that must
+     * differ from one another (rest, Y peak, T peak) are asserted apart below.
      */
     @Test
     fun theSweepSamplesDistinctPublishedFrames() {

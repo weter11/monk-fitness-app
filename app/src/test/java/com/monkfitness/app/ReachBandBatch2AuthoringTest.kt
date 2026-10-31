@@ -10,59 +10,32 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Second reach-band cleanup batch — `DeepSquatHoldPose`, `JumpSquatPose` (production geometry) and the
+ * Reach-band cleanup batch: `DeepSquatHoldPose`, `JumpSquatPose` (production geometry) and the
  * `CossackSquatPose` deliberate-limit control (test-only; its authoring is unchanged).
  *
- * ## What this batch measured (base `origin/main` @ `ef9400f`, the #253 merge)
+ * Every authored limb target was measured through `SkeletonPipeline.produceFrame` at 15 phases × the
+ * four limb chains × both frame conditions, against the chain's own `[minReach, maxReach]`:
+ *  * `DeepSquatHoldPose` ankles `47.392` every frame (a locked hold) vs `≥ 56.009` ⇒ `8.617` relocation:
+ *    the request asks an interior knee angle of `24.80°` against the constraint's `30°` stop, and the
+ *    pose's own spec states maximal knee flexion of `130–150°` (`30–50°` interior) — the authored
+ *    depth is past its own model, so no chain geometry could honour it.
+ *  * `JumpSquatPose` ankles `210.288` (seam) … `225.269` (apex flight) vs `≤ 205.800`; `225.269` from a
+ *    `112 + 98 = 210` leg is `107 %` of the limb's own length. Its hands `23.396` … `45.321` vs
+ *    `≥ 40.134` ask an interior elbow angle of `15.36°` against the same `30°` stop.
+ *  * `CossackSquatPose` straight-leg ankle asks `207.000`, an interior knee angle of `160.6°`: a REAL
+ *    straight leg, which the spec demands ("the opposite (straight) leg is fully extended … the
+ *    straight foot remains flat"). The engine's deliberate `IKConstraint.effectiveExtensionRatio =
+ *    0.98` cap trims the last `1.2` u so the 2-bone chain never reaches its singular fully-collinear
+ *    configuration — the cap doing its job on a correct request, so this pose's authoring is NOT
+ *    changed. Its hands (`91.010` … `95.111`) and `DeepSquatHoldPose`'s clasped hands (`46.487`) are
+ *    in band with `0.000` relocation.
  *
- * Every authored limb target of the three poses was measured through the production entry point
- * `SkeletonPipeline.produceFrame(pose, ctx)` — `15` phases (`0.00, 0.05, 0.10, 0.20, 0.25, 0.30, 0.40,
- * 0.50, 0.60, 0.70, 0.75, 0.80, 0.90, 0.95, 1.00`) × the four limb chains × both frame conditions —
- * against the chain's own `[SkeletonMath.minReach, maxReach]`.
- *
- * | pose | chain | authored root→target | band | relocation |
- * |---|---|---|---|---|
- * | `DeepSquatHoldPose` | both ankles | `47.392` (every frame; the pose is a locked hold) | `≥ 56.009` | **`8.617`** |
- * | `JumpSquatPose` | both ankles | `210.288` (seam frames) … `225.269` (apex flight) | `≤ 205.800` | **`4.488 … 19.469`** |
- * | `JumpSquatPose` | both hands | `23.396` … `45.321` | `≥ 40.134` | **`0.605 … 16.739`** |
- * | `CossackSquatPose` | both ankles | `207.000` (the extended-straight-leg stance) | `≤ 205.800` | **`1.200`** |
- * | `CossackSquatPose` | both hands | `91.010` … `95.111` | in band | `0.000` |
- * | `DeepSquatHoldPose` | both hands | `46.487` (the clasped-hands centre-chest target) | in band | `0.000` |
- *
- * ## Classification — measured, per SITE, on the realized interior angle
- *
- * The discriminator is whether the authored request is realizable by an IDEAL (`L1 + L2`) chain at all:
- *
- *  * **Unintended authoring error** — the request is past the pose's own model, so it could not be
- *    honoured by ANY chain geometry: `DeepSquatHoldPose`'s ankles ask for an interior knee angle of
- *    `24.80°` against the constraint's own `30°` stop (`docs/Biomechanical Pose Specification (BPS)/
- *    Squat (Deep Hold).md` states maximal knee flexion of `130–150°`, i.e. `30–50°` interior — the
- *    authored depth is past its own spec); `JumpSquatPose`'s flight ankles ask for `225.269` from a
- *    `112 + 98 = 210` leg, i.e. `107 %` of the limb's own length; its hands ask for an interior elbow
- *    angle of `15.36°` against the same `30°` stop. These are the same class as the first batch's
- *    sites (`210.288` from a `210` leg; a `15.8°` knee against the stop).
- *  * **Deliberate model limit** — `CossackSquatPose`'s straight-leg ankle asks for `207.000`, an
- *    interior knee angle of `160.6°`: a REAL straight leg, and the BPS demands exactly that
- *    ("the opposite (straight) leg is **fully extended** … straight-leg knee fully extended … the
- *    straight foot remains flat"). Nothing here is unrealizable — the engine's deliberate
- *    `IKConstraint.effectiveExtensionRatio = 0.98` cap trims the last `1.2` u so that the 2-bone chain
- *    never reaches its singular fully-collinear configuration. The relocation is the cap doing its job
- *    on a correct request, so this pose's authoring is NOT changed: the published straight leg reads
- *    the cap, and the `1.2` u is the trim. Its sibling stance in `BaseLungePose` (the three
- *    alternating lunge variants, out of this batch's scope) carries the same pattern and the same
- *    verdict.
- *
- * ## The fix (pose-side only, reusing the first batch's family helpers)
- *
- * `DeepSquatHoldPose` and `JumpSquatPose` extend `BaseSquatPose`, which already carries the R2/R4
- * projection (first batch, PR #253): `projectLegTargetsToReach` / `projectArmTargetsToReach`, one copy
- * rooted at `hip*` / `shoulder*`, at `REACH_MARGIN = 1e-4` of the chain's span. These two poses call it
- * after `super` — no solver, engine, carrier or stamp semantics change, and the published geometry is
- * preserved (the solver's own relocation IS the boundary projection this replaces).
- *
- * A pose's `build()` is the sole declaration channel and `IK_STAGE_ACTIVE` re-bakes from the carrier,
- * so re-declaring the PRE-BATCH targets through [PreBatchAuthoredTargets] reproduces the pre-fix
- * published frame through the same production entry point — that is the sensitivity control below.
+ * The fix is pose-side only: both fixed poses extend `BaseSquatPose`, which already carries
+ * `projectLegTargetsToReach` / `projectArmTargetsToReach` at `REACH_MARGIN = 1e-4` of the chain's span
+ * (the solver's own relocation IS the boundary projection this replaces). A pose's `build()` is the
+ * sole declaration channel and `IK_STAGE_ACTIVE` re-bakes from the carrier, so re-declaring the
+ * PRE-BATCH targets through [PreBatchAuthoredTargets] reproduces the pre-fix published frame through
+ * the same production entry point — the sensitivity control below.
  */
 class ReachBandBatch2AuthoringTest {
 
@@ -90,7 +63,7 @@ class ReachBandBatch2AuthoringTest {
     private val bandTolerance = 1e-3f
     private val relocationTolerance = 0.05f
 
-    /** The pre-batch relocation the fix removes (measured on `origin/main` @ `ef9400f`). */
+    /** The pre-batch relocation the fix removes (measured on the pre-fix tree). */
     private val preBatchRelocation = 4.488f
 
     private class Reading(
@@ -173,10 +146,6 @@ class ReachBandBatch2AuthoringTest {
 
     private fun where(r: Reading) = "${r.pose}/${r.chain.name} @ p=${r.phase} (${r.frame})"
 
-    // ----------------------------------------------------------------------------------------------
-    // 1 — every authored target of the fixed poses is inside its own chain's reachable band
-    // ----------------------------------------------------------------------------------------------
-
     @Test
     fun everyFixedTargetSitsInsideItsChainsOwnReachBand() {
         val violations = mutableListOf<String>()
@@ -199,10 +168,6 @@ class ReachBandBatch2AuthoringTest {
         )
     }
 
-    // ----------------------------------------------------------------------------------------------
-    // 2 — the published effector IS the authored target (no relocation)
-    // ----------------------------------------------------------------------------------------------
-
     @Test
     fun thePublishedEffectorFollowsTheAuthoredTargetWithoutRelocation() {
         val bad = mutableListOf<String>()
@@ -220,10 +185,6 @@ class ReachBandBatch2AuthoringTest {
         )
     }
 
-    // ----------------------------------------------------------------------------------------------
-    // 3 — the pose records no reach-relocation stamp (the honest IK_TARGET_UNREACHABLE signal)
-    // ----------------------------------------------------------------------------------------------
-
     @Test
     fun thePublishedFrameRecordsNoReachRelocationStamp() {
         val bad = mutableListOf<String>()
@@ -236,11 +197,6 @@ class ReachBandBatch2AuthoringTest {
             bad.isEmpty()
         )
     }
-
-    // ----------------------------------------------------------------------------------------------
-    // 4 — the fix is target-side: the poses keep their authored hold depth, ballistic motion and
-    //     declaration surface
-    // ----------------------------------------------------------------------------------------------
 
     @Test
     fun theFixedPosesKeepTheirAuthoredDepthMotionAndDeclarationSurface() {
@@ -258,7 +214,6 @@ class ReachBandBatch2AuthoringTest {
             holdPelvis.min() <= 61f
         )
 
-        // (b) JumpSquatPose keeps its ballistic cycle: the pelvis travels and the feet follow.
         val jump = readings(JumpSquatPose())
         val playing = jump.filter { it.frame == "playing" }
         val perPhase = playing.groupBy { it.phase }
@@ -295,7 +250,6 @@ class ReachBandBatch2AuthoringTest {
         val holdPhases = hold.filter { it.frame == "playing" }.groupBy { it.phase }
         assertEquals("DeepSquatHoldPose must be sampled at every phase", phases.size, holdPhases.size)
 
-        // (d) anti-collateral: the declaration surface is untouched by a reach-authoring fix.
         for (r in hold + jump) {
             assertEquals("${where(r)}: the declared support model must be unchanged", "LEFT_FOOT,RIGHT_FOOT", r.support)
             assertEquals("${where(r)}: the declared ground level must be unchanged", 0f, r.groundLevel, 0f)
@@ -306,11 +260,6 @@ class ReachBandBatch2AuthoringTest {
             )
         }
     }
-
-    // ----------------------------------------------------------------------------------------------
-    // 5 — the DELIBERATE limit stays deliberate: `CossackSquatPose`'s straight leg is spec'd fully
-    //     extended, the model's `0.98` cap trims it by `1.2` u, and that must NOT be "cleaned"
-    // ----------------------------------------------------------------------------------------------
 
     @Test
     fun theIntentionalCossackStraightLegLimitIsPreserved() {
@@ -364,10 +313,6 @@ class ReachBandBatch2AuthoringTest {
             others.all { it.declaredDistance in it.minReach..it.maxReach }
         )
     }
-
-    // ----------------------------------------------------------------------------------------------
-    // 6 — NON-VACUITY: the same measurement still rejects the PRE-BATCH authoring
-    // ----------------------------------------------------------------------------------------------
 
     /**
      * The sensitivity control. `DeepSquatHoldPose`/`JumpSquatPose` are FINAL classes, so the pre-batch
@@ -448,7 +393,6 @@ class ReachBandBatch2AuthoringTest {
         )
     }
 
-    /** The interior angle at the middle joint of a realized (published) chain. */
     private fun interiorAngleDegrees(a: Vector3, b: Vector3, c: Vector3): Float {
         val ux = a.x - b.x; val uy = a.y - b.y; val uz = a.z - b.z
         val vx = c.x - b.x; val vy = c.y - b.y; val vz = c.z - b.z

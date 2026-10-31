@@ -18,24 +18,19 @@ import org.junit.Test
 import kotlin.math.abs
 
 /**
- * Phase 1 of IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md — R8 Runtime Context Injection
- * single-point verification.
+ * Runtime Context Injection single-point verification.
  *
- * What this suite pins:
+ * Pins:
  *  1. Both [SkeletonPipeline.produceFrame] overloads inject through the single
  *     `injectRuntimeContext` point immediately before the stage chain, each preserving its
  *     own source: the renderer overload forwards caller-supplied arguments verbatim; the
  *     builder overload derives them from `pose.metadata`.
  *  2. The two paths are behaviorally identical when fed the same model (all-joint
- *     tolerance-based equivalence, mirroring the SkeletonPipelineM0Test convention).
- *  3. No stage mutates the context after injection (current-behavior contract observed
- *     through the public API; the debug-build fail-fast itself lives in
- *     `SkeletonPipeline.runStages` / `RuntimeContextSnapshot`). The enforcement's negative
- *     path (violation detection) is NOT covered by committed tests; it was validated by
- *     out-of-band fault injection during the Phase-1 audit (ad-hoc audit evidence, not
- *     committed regression coverage).
- *
- * This test changes no production semantics; it verifies the extraction preserved them.
+ *     tolerance-based equivalence).
+ *  3. No stage mutates the context after injection (observed through the public API; the
+ *     debug-build fail-fast itself lives in `SkeletonPipeline.runStages` /
+ *     `RuntimeContextSnapshot`). The negative path — violation detection — has no committed
+ *     test: it was validated only by out-of-band fault injection.
  */
 class RuntimeContextInjectionTest {
 
@@ -43,7 +38,6 @@ class RuntimeContextInjectionTest {
 
     private fun context(progress: Float) = PoseContext(progress, Side.LEFT, def)
 
-    /** The support model the builder overload derives from `pose.metadata`. */
     private fun derivedEnvironment(builder: PoseBuilder): EnvironmentDefinition =
         builder.metadata.environment
 
@@ -52,7 +46,7 @@ class RuntimeContextInjectionTest {
 
     @Test
     fun rendererOverloadInjectsCallerSuppliedModelEndState() {
-        val env = EnvironmentDefinition() // non-default ground level distinguishes it from the field default usage below
+        val env = EnvironmentDefinition() // non-default ground level distinguishes it from the default-arg path below
         val points = setOf(SupportPoint.LEFT_HAND, SupportPoint.RIGHT_TOES)
 
         val pipeline = SkeletonPipeline(def)
@@ -144,7 +138,7 @@ class RuntimeContextInjectionTest {
             val result = pipeline.produceFrame(built, env, points)
 
             // The pose that ENTERED the chain still carries exactly the injected context:
-            // no stage rewrote it post-injection (the R8 invariant, observed externally).
+            // no stage rewrote it post-injection.
             assertTrue("input pose environment rewritten at progress=$p", result.pose.environment === built.environment && built.environment === env)
             assertEquals("input pose supportedPoints rewritten at progress=$p", points, built.supportedPoints)
 

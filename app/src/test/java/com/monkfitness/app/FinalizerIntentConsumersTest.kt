@@ -9,18 +9,17 @@ import org.junit.Test
 import kotlin.math.abs
 
 /**
- * B2 (RFC_BRANCH_B_IMPLEMENTATION §2) — Finalizer intent consumers.
+ * Finalizer intent consumers.
  *
- * B2 makes the §1.1 `spineIntent` and `jointIntents` carriers live: every trunk/hip/girdle/extremity
- * authoring helper forwards its intent through the sole-mutator `IntentBuilder`, and the
+ * The `spineIntent` and `jointIntents` carriers are live: every trunk/hip/girdle/extremity authoring
+ * helper forwards its intent through the sole-mutator `IntentBuilder`, and the
  * [SkeletonPoseFinalizer] consumes those carriers ([SkeletonPoseFinalizer.applyIntentCarriers]) to
  * re-derive the declared node rotations and re-propagate FK. The helpers ALSO keep writing the node
  * during `build()` (so build-time logic that reads a node's world transform keeps working), so the
  * Finalizer's carrier re-application is idempotent — the rendered frame is byte-identical.
  *
- * (Phase B flag collapse) FINALIZER_CONSUMES_INTENT was collapsed to its true branch and removed,
- * so consumption is now unconditional. This suite asserts the carriers are populated and the
- * rendered frame is finite and deterministic.
+ * Consumption is unconditional. This suite asserts the carriers are populated and the rendered frame is
+ * finite and deterministic.
  */
 class FinalizerIntentConsumersTest {
 

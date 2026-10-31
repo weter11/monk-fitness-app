@@ -22,53 +22,42 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Phase 9 (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md §P9) — R9 (+R15 observer clause)
- * observer-isolation lock-in. TEST-ONLY: the plan states the current API shape already
- * prevents observer writes and names the equality test as P9's enforcement mechanism, so
- * this file adds the permanent regression net and NOTHING else — no production change, no
- * immutability wrapper, no runtime guard, no freeze mechanism, no new state category.
+ * Observer-isolation lock-in. TEST-ONLY: the API shape already prevents observer writes, so this
+ * file adds the permanent regression net and NOTHING else — no production change, no
+ * immutability wrapper, no runtime guard, no new state category.
  *
- * RFC §5 R9: ExerciseValidator reads Published Pose State, Author Intent ranges, and the
- * Frame Context; it never writes the carrier, never derives geometry, and never drives
- * execution. RFC §5 R15(ii): additional read-only observers may consume Published Pose
- * State (via the Finalized Pose) at any time WITHOUT producing state and without new state
- * categories. RFC §3.3 lifetime: once the publish boundary completes (P8 structuralized
- * it), the Finalized Pose carries Published Pose State to its consumers — ExerciseValidator
- * and the Rendering layer today, N observers by the R15(ii) allowance.
+ * ExerciseValidator reads Published Pose State, Author Intent ranges, and the Frame Context; it
+ * never writes the carrier, never derives geometry, and never drives execution. Additional
+ * read-only observers may consume Published Pose State (via the Finalized Pose) at any time
+ * WITHOUT producing state and without new state categories.
  *
- * Published Pose State snapshot scope (authoritative, RFC §3.3 + §4.4):
- *  - the final world transforms of the 31 non-alias nodes (the `joints`/`rotations` carrier
- *    arrays minus WRIST_A/WRIST_P, which alias HAND_A/HAND_P per §2.1 and carry no
- *    independent state), captured from the carrier — the Finalized Pose is Published Pose
- *    State's delivery handle, and the Finalizer's extremity derivation writes published
- *    values directly into the carrier;
- *  - the COMPLETE Validation Stamp set of §4.4 as merged on the published carrier,
- *    including the multi-producer merged values (Clamp max-merge, Straight-Intent-Dropped
- *    OR-merge, Bone-Lengths AND-merge) and the Finalizer-owned per-hip Hip ROM channels.
- * NOT in scope (explicitly excluded): carrier implementation/debug bookkeeping that is not
- * Published Pose State content — `settlementResult` (P3 unpublished section), the P8
- * debug-only finalizer marker and `buildCycleToken`, the P4 `limbSolverExecutions`
- * counter, node-tree internals, and the Frame Context carriers.
+ * Published Pose State snapshot scope:
+ *  - the final world transforms of the 31 non-alias nodes (the carrier arrays minus
+ *    WRIST_A/WRIST_P, which alias HAND_A/HAND_P and carry no independent state), captured from
+ *    the carrier — the Finalized Pose is the delivery handle, and the Finalizer's extremity
+ *    derivation writes published values directly into the carrier;
+ *  - the COMPLETE Validation Stamp set as merged on the published carrier, including the
+ *    multi-producer merged values (Clamp max-merge, Straight-Intent-Dropped OR-merge,
+ *    Bone-Lengths AND-merge) and the Finalizer-owned per-hip Hip ROM channels.
+ * NOT in scope: carrier bookkeeping that is not Published Pose State — `settlementResult`, the
+ * debug-only finalizer marker and `buildCycleToken`, the `limbSolverExecutions` counter,
+ * node-tree internals, and the Frame Context carriers.
  *
- * Comparison is exact bit-for-bit (`Float.toRawBits`), never epsilon: this is an isolation
- * test, so ANY observer write — down to a sign flip — must be detected. The snapshot is a
- * flat list of `NAME=value` lines and the equality failure prints the changed entries, so a
- * violation names the exact transform channel or stamp that an observer touched.
+ * Comparison is exact bit-for-bit (`Float.toRawBits`), never epsilon: this is an isolation test,
+ * so ANY observer write — down to a sign flip — must be detected. The snapshot is a flat list of
+ * `NAME=value` lines, so a violation names the exact transform channel or stamp that was touched.
  *
- * Fixtures go through the REAL `SkeletonPipeline` (P8 publish tail live). ArmCirclesPose
- * enters the ConstraintSolver (STANDING posture intent) so the merged solver-family stamps
- * are genuinely non-default on its published carrier; StandardPushUpPose is the
- * contact-less CUSTOM family (solver skipped, Finalizer stamps only). A non-vacuity guard
- * asserts each snapshot carries real published content — if a fixture ever stops reaching
- * the solver/publish path, the guard fails instead of letting the equality assertions pass
- * vacuously (P2 anti-vacuity pattern).
+ * Fixtures go through the REAL `SkeletonPipeline` (publish tail live). ArmCirclesPose enters the
+ * ConstraintSolver (STANDING posture intent) so the merged solver-family stamps are genuinely
+ * non-default on its published carrier; StandardPushUpPose is the contact-less CUSTOM family
+ * (solver skipped, Finalizer stamps only). A non-vacuity guard asserts each snapshot carries real
+ * published content — if a fixture ever stops reaching the solver/publish path, the guard fails
+ * instead of letting the equality assertions pass vacuously.
  *
- * Second observer / R15(ii): the existing projection path stands in for the additional
- * read-only observer. The test intent is isolation, NOT observer output correctness:
- * observer #2 chains onto the same finalized carrier AFTER observer #1, and the post-chain
- * snapshot must still equal the pre-observation snapshot — adding another observer must not
- * mutate Published Pose State. No new production observer subsystem is invented for the
- * allowance.
+ * Second observer: the existing projection path stands in for the additional read-only observer.
+ * The intent is isolation, NOT observer output correctness: observer #2 chains onto the same
+ * finalized carrier AFTER observer #1, and the post-chain snapshot must still equal the
+ * pre-observation snapshot. No new production observer subsystem is invented for the allowance.
  */
 class ObserverIsolationTest {
 
@@ -79,26 +68,25 @@ class ObserverIsolationTest {
         deltaTime = 1f / 60f, cycleDuration = 2500f
     )
 
-    /** Real pipeline, real publish tail (P8): build → Runtime Context Injection → solve → finalize → publish. */
+    /** Real pipeline, real publish tail: build → Runtime Context Injection → solve → finalize → publish. */
     private fun finalizedCarrier(builder: PoseBuilder, progress: Float = 0.5f): SkeletonPose =
         SkeletonPipeline(definition).produceFrame(builder, ctx(progress)).pose
 
-    // The two ALIAS identifiers (§2.1) — Published Pose State covers the 31 REAL nodes.
+    // The two alias identifiers — Published Pose State covers the 31 REAL nodes.
     private val aliasJoints = setOf(Joint.WRIST_A, Joint.WRIST_P)
 
     private val stampedHips = listOf(Joint.HIP_F, Joint.HIP_B)
 
     /**
-     * Deep snapshot of the entire Published Pose State carried by [pose]: transforms of the
-     * 31 non-alias nodes (world position + world axis-angle rotation, every float channel as
-     * raw bits) plus every §4.4 Validation Stamp on the carrier, including the merged
-     * solver-family values and both hips' Hip ROM stamp channels. Flat `NAME=value` lines so
-     * any diff pinpoints which transform channel or stamp changed.
+     * Deep snapshot of the Published Pose State carried by [pose]: transforms of the 31 non-alias
+     * nodes (world position + world axis-angle rotation, every float channel as raw bits) plus
+     * every Validation Stamp on the carrier, including the merged solver-family values and both
+     * hips' Hip ROM channels. Flat `NAME=value` lines so any diff pinpoints the change.
      */
     private fun snapshotPublishedPoseState(pose: SkeletonPose): List<String> {
         val entries = ArrayList<String>(31 * 7 + 15)
 
-        // 1) §3.3 "the final world transforms of all 31 nodes after Flatten" — carrier values.
+        // 1) The final world transforms of all 31 nodes after Flatten — carrier values.
         for (joint in Joint.entries) {
             if (joint in aliasJoints) continue
             val p = pose.getJoint(joint)
@@ -112,7 +100,7 @@ class ObserverIsolationTest {
             entries += "transform:${joint.name}.rot.angle=${r.angle.toRawBits()}"
         }
 
-        // 2) §4.4 complete Validation Stamp set (merged values exactly as published).
+        // 2) Complete Validation Stamp set (merged values exactly as published).
         entries += "stamp:ClampStamp=${pose.maxIkClampAmount.toRawBits()}"
         entries += "stamp:StraightIntentDropped=${pose.straightIntentDropped}"
         entries += "stamp:BoneLengthsVerified=${pose.boneLengthsVerified}"
@@ -135,12 +123,11 @@ class ObserverIsolationTest {
     }
 
     /**
-     * Anti-vacuity guard (P2 pattern): the snapshot must hold genuinely PUBLISHED, non-default
-     * content — 31 real nodes with no aliases, a populated Hip ROM stamp pair, a non-zero
-     * published world position, and (when [expectMergedSolverStamps]) non-default merged
-     * solver-family stamps proving the ConstraintSolver write window really executed for this
-     * fixture. If the pipeline or fixture drifts away from the solver/publish path, THIS fails
-     * before the equality assertions can become vacuously green.
+     * Anti-vacuity guard: the snapshot must hold genuinely PUBLISHED, non-default content — 31
+     * real nodes with no aliases, a populated Hip ROM stamp pair, a non-zero published world
+     * position, and (when [expectMergedSolverStamps]) non-default merged solver-family stamps
+     * proving the ConstraintSolver write window really executed. If the pipeline or fixture drifts
+     * off the solver/publish path, THIS fails before the equality assertions go vacuously green.
      */
     private fun assertPublishedStateIsNonVacuous(snapshot: List<String>, expectMergedSolverStamps: Boolean) {
         assertEquals("Published Pose State = 31 non-alias nodes x 7 channels + 15 stamp lines", 31 * 7 + 15, snapshot.size)
@@ -219,11 +206,6 @@ class ObserverIsolationTest {
     /** Independent by-value clone of a published carrier (pipeline Frame History copyFrom idiom). */
     private fun detachedCopy(pose: SkeletonPose): SkeletonPose = SkeletonPose().apply { copyFrom(pose) }
 
-    // ---------------------------------------------------------------------------------
-    // 1 — R9: ExerciseValidator isolation. Solver-entered fixture (merged multi-producer
-    //     stamps live on the carrier) AND the contact-less Finalizer-stamps-only family.
-    // ---------------------------------------------------------------------------------
-
     @Test
     fun exerciseValidatorLeavesPublishedPoseStateBitIdentical() {
         val pose = finalizedCarrier(ArmCirclesPose())
@@ -269,11 +251,6 @@ class ObserverIsolationTest {
         assertPublishedPoseStateUnchanged("after validate() with Frame History", before, snapshotPublishedPoseState(observed))
     }
 
-    // ---------------------------------------------------------------------------------
-    // 2 — Rendering-layer observer: SkeletonProjector isolation (writes only its own
-    //     ProjectedSkeleton buffers).
-    // ---------------------------------------------------------------------------------
-
     @Test
     fun skeletonProjectorLeavesPublishedPoseStateBitIdentical() {
         val pose = finalizedCarrier(ArmCirclesPose())
@@ -307,13 +284,8 @@ class ObserverIsolationTest {
         assertPublishedPoseStateUnchanged("after 3x SkeletonProjector.project", before, snapshotPublishedPoseState(pose))
     }
 
-    // ---------------------------------------------------------------------------------
-    // 3 — R15(ii): the architectural allowance for an ADDITIONAL read-only observer.
-    //     The existing projection path is observer #2 — chained AFTER observer #1 on the
-    //     same finalized carrier. Adding another observer must not mutate Published Pose
-    //     State; observation order must not matter (observers produce no state). Isolation
-    //     only — observer output correctness is deliberately NOT asserted here.
-    // ---------------------------------------------------------------------------------
+    // The existing projection path is observer #2, chained AFTER observer #1 on the same
+    // finalized carrier: adding an observer must not mutate state and order must not matter.
 
     @Test
     fun secondReadOnlyObserverDoesNotMutatePublishedPoseState() {
@@ -321,19 +293,19 @@ class ObserverIsolationTest {
         val before = snapshotPublishedPoseState(pose)
         assertPublishedStateIsNonVacuous(before, expectMergedSolverStamps = true)
 
-        // Observer #1 (R9 validator).
+        // Observer #1 (validator).
         validatingObserver(pose)
         // Pin state BEFORE observer #2 runs — otherwise #2's verdict could mask #1's write.
         assertPublishedPoseStateUnchanged("after observer #1 (validator)", before, snapshotPublishedPoseState(pose))
 
-        // Observer #2 (R15(ii) additional observer via the existing rendering path).
+        // Observer #2 (the additional observer, via the existing rendering path).
         projectingObserver(pose)
         assertPublishedPoseStateUnchanged("after observer #2 (projector)", before, snapshotPublishedPoseState(pose))
     }
 
     @Test
     fun observerChainOrderDoesNotAffectPublishedPoseState() {
-        // R15(ii) observers do not sequence-dependently produce state: the reversed chain
+        // Observers do not sequence-dependently produce state: the reversed chain
         // on an identically-produced carrier must preserve equality as well.
         val pose = finalizedCarrier(ArmCirclesPose())
         val before = snapshotPublishedPoseState(pose)

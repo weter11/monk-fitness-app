@@ -23,24 +23,17 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 
 /**
- * Stage 19 — the explicit target schedule authoring path, measured on rows.
+ * The explicit target schedule authoring path, measured on rows.
  *
- * The stage's whole claim is that a caller can now **state** the target scheduling semantics of the
- * revision a save creates, and that the only thing the application layer does with that statement is
- * attach it to the revision it just created:
+ * The whole claim: a caller can **state** the target scheduling semantics of the revision a save
+ * creates, and the only thing the application layer does with that statement is attach it to the
+ * revision it just created — `save(draft, plannedStartDate, targetSchedule)` forwards to
+ * `TargetScheduleSourceRepository.store(...)` and the source belongs to the new revision.
  *
- * ```text
- * caller-owned authoring values
- *         ↓  ProgramSaveService.save(draft, plannedStartDate, targetSchedule)
- * creation / revision-save application boundary
- *         ↓  TargetScheduleSourceRepository.store(...)
- * revision-owned explicit target source
- * ```
- *
- * Every rule here is therefore a *read-back* claim — the stored rows are the assertion, and the
+ * Every rule here is therefore a *read-back* claim: the stored rows are the assertion, and the
  * authoring is a value the test wrote out rather than one a fixture happened to produce. A test whose
- * subject is only "the save returned Success" would pass against code that stored nothing, so the
- * twelve rules below each read the source back through a **fresh** repository.
+ * subject was only "the save returned Success" would pass against code that stored nothing, so each
+ * rule below reads the source back through a **fresh** repository.
  */
 class TargetScheduleAuthoringTest {
 
@@ -50,8 +43,6 @@ class TargetScheduleAuthoringTest {
     fun tearDown() {
         rig.close()
     }
-
-    // ---------------------------------------------------------------- 1. round-trip unchanged
 
     @Test
     fun everyStatedRuleReachesTheStoredSourceExactlyAsWritten() = runBlocking {
@@ -74,8 +65,6 @@ class TargetScheduleAuthoringTest {
             rig.storedTargetRules(outcome.revision.revisionId).associate { it.ruleId to it }
         )
     }
-
-    // ---------------------------------------------------------------- 2. all five cadence forms
 
     @Test
     fun allFiveCadenceFormsSurviveTheAuthoringPathUnchanged() = runBlocking {
@@ -123,8 +112,6 @@ class TargetScheduleAuthoringTest {
         )
     }
 
-    // ---------------------------------------------------------------- 3. bindings
-
     @Test
     fun anExplicitBindingReachesTheStoredSourceAgainstTheRevisionOwnDay() = runBlocking {
         val draft = rig.draftOf("Bound")
@@ -155,7 +142,6 @@ class TargetScheduleAuthoringTest {
         )
     }
 
-    // ---------------------------------------------------------------- 4. create persists it
     @Test
     fun aCreateStoresTheStatedSourceAgainstTheRevisionItJustCreated() = runBlocking {
         val authoring = authoringOf(
@@ -179,8 +165,6 @@ class TargetScheduleAuthoringTest {
                 .source.revisionId
         )
     }
-
-    // ---------------------------------------------------------------- 5. copy
 
     @Test
     fun aCopyStoresANewSourceAgainstTheCopiedRevisionAndLeavesTheSourceProgramAlone() = runBlocking {
@@ -224,8 +208,6 @@ class TargetScheduleAuthoringTest {
         )
     }
 
-    // ---------------------------------------------------------------- 6./7. edit
-
     @Test
     fun aStructuralEditStoresTheNewlySuppliedSourceOnTheNewRevision() = runBlocking {
         rig.createGraph()
@@ -234,10 +216,10 @@ class TargetScheduleAuthoringTest {
         // The first structural edit states a source, so "the previous revision's source is unchanged"
         // is a comparison against a real stored value rather than against an absence.
         //
-        // §30 step 22 revised this call, not the claim: an edit states its target scheduling with
-        // `Replace`, because the same parameter now also has to express *Keep* and *Clear*. Passing
-        // a bare authoring here is `CreationAuthoringOnAnEdit` — the two absences are different
-        // claims, and the assertion below is about where the stated source lands, which is unchanged.
+        // An edit states its target scheduling with `Replace`, because the same parameter also has to
+        // express *Keep* and *Clear*; a bare authoring here is `CreationAuthoringOnAnEdit`. The two
+        // absences are different claims, and the assertion below is about where the stated source
+        // lands, which is unchanged.
         val firstAuthoring = authoringOf(
             rules = listOf(rule("rule-first", "workout-first", ScheduleCadence.Daily, LocalDate.parse("2026-10-05")))
         )
@@ -293,8 +275,6 @@ class TargetScheduleAuthoringTest {
         )
     }
 
-    // ---------------------------------------------------------------- 8. omitted authoring
-
     @Test
     fun omittingTheAuthoringLeavesTheRevisionWithoutASourceRatherThanAnEmptyOne() = runBlocking {
         val outcome = savedOutcome(
@@ -321,10 +301,9 @@ class TargetScheduleAuthoringTest {
         val revisionBefore = rig.currentRevision(programId)!!
         val draft = rig.editor.editDraft(programId).let { (it as ProgramEditorResult.Success).value }
 
-        // Revised, not relaxed: §30 step 22 gave an edit an explicit `Keep / Replace / Clear`
-        // vocabulary, and an edit that states `Replace` still creates no revision when the structure
-        // is unchanged — there is no new revision to own a source. The claim is identical; the
-        // parameter is the one the new contract owns it through.
+        // An edit has an explicit `Keep / Replace / Clear` vocabulary, and one that states `Replace`
+        // still creates no revision when the structure is unchanged — there is no new revision to own a
+        // source. The claim is identical; the parameter is the one the contract owns it through.
         val result = rig.service.save(
             draft,
             targetChange = TargetScheduleRevisionChange.Replace(
@@ -346,8 +325,6 @@ class TargetScheduleAuthoringTest {
             rig.storedTargetSource(revisionBefore.revisionId)
         )
     }
-
-    // ---------------------------------------------------------------- 9. no legacy schedule is consulted
 
     @Test
     fun noTargetFactIsManufacturedFromTheDraftsLegacySchedule() = runBlocking {
@@ -398,15 +375,13 @@ class TargetScheduleAuthoringTest {
         )
     }
 
-    // ---------------------------------------------------------------- 10. atomicity
-
     @Test
     fun aRefusedSourceRollsTheWholeCreationUnitBack() = runBlocking {
         val before = rig.tableCounts()
         val targetBefore = targetTableCounts()
-        // A duplicate rule identity is one of Stage 18's typed refusals, raised by the repository from
-        // inside the save's transaction — so at the moment it fires the Program and its first revision
-        // genuinely exist and must be rolled back with it.
+        // A duplicate rule identity is one of the repository's typed refusals, raised from inside the
+        // save's transaction — so at the moment it fires the Program and its first revision genuinely
+        // exist and must be rolled back with it.
         val authoring = authoringOf(
             rules = listOf(
                 rule("rule-dup", "workout-a", ScheduleCadence.Daily, LocalDate.parse("2026-10-05")),
@@ -508,8 +483,6 @@ class TargetScheduleAuthoringTest {
         )
     }
 
-    // ---------------------------------------------------------------- 11. Stage 18's refusals
-
     @Test
     fun anInvalidSourceClaimStillFailsThroughStageEighteensTypedRefusals() = runBlocking {
         val draft = rig.draftOf("Invalid claims")
@@ -557,8 +530,6 @@ class TargetScheduleAuthoringTest {
         )
         assertEquals("and nothing was written", before, rig.tableCounts())
     }
-
-    // ---------------------------------------------------------------- the mechanism
 
     /**
      * Every target-source table's row count, so "the unit left nothing behind" is asserted over the

@@ -7,81 +7,55 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * **B1 — the diamond push-up's published frames must not put a joint under the pose's own declared
- * ground plane, and the arm chain must realize the bend side the exercise declares.**
+ * The diamond push-up's published frames must not put a joint under the pose's own declared ground
+ * plane, and the arm chain must realize the bend side the exercise declares.
  *
- * ## The defect (measured on `origin/main` @ `2fb6079`, published path)
+ * The defect: `DiamondPushUpPose` authored the family's default *Z-dominant* elbow pole shape
+ * (`poleA = (0.5, 0.5, -2.0)`, the `Wide` variant's bend statement). That convention is sound for
+ * every grip whose hands sit at or outside the shoulder line — `Standard` (1.5), `Wide` (1.9),
+ * `Military` (1.0), `Knee` (1.8), `Decline` (1.5) — because there the shoulder→hand chord is a
+ * lateral line and the pole's Z component selects the elbow's lateral side. The diamond grip is
+ * `0.1`: the hands come to the midline, 41.4 u inboard of the shoulder joint (`z = ±4.6` against the
+ * shoulder's `±46`), so the chord already IS the lateral direction, the pole's `Z` no longer selects
+ * a lateral side, and the chain's perpendicular offset collapses onto the chord's other basis vector
+ * — downward and outward at the bottom of the rep: at `p = 0.5`,
+ * `d = 68.04`, `h = 63.21`, `u = (0.025, -0.793, 0.608)`, `phat = (0.388, -0.553, -0.737)`, i.e.
+ * `ELBOW_A = (-34.29, -19.91, -62.75)` — 19.91 u BELOW the mat the pose declares. The predicate
+ * `SkeletonPoseFinalizer.adjustHandOrientation` uses to decide whether a hand is planted
+ * (`hand.y <= elbow.y + 1`) then flips FALSE over the whole bottom band: the derived
+ * palm/knuckles/fingertips are not flattened onto the declared plane on `67` of the `201` frames of
+ * the dense sweep, while every frame outside that band is flat (measured `PALM_A y = 1.8103`,
+ * `KNUCKLES_A 3.6205`, `FINGERTIPS_A 6.6377` at p = 0.5, against `0.0000` at p = 0.25/0.75) — a
+ * frame-to-frame discontinuity in the same defect.
  *
- * `DiamondPushUpPose` authors the family's default *Z-dominant* elbow pole shape
- * (`poleA = (0.5, 0.5, -2.0)`, the `Wide` variant's bend statement). The family's convention is
- * sound for every grip whose hands sit **at or outside** the shoulder line — `Standard` (grip 1.5),
- * `Wide` (1.9), `Military` (1.0), `Knee` (1.8), `Decline` (1.5) — because there the shoulder→hand
- * chord is a lateral line and the pole's Z component selects the elbow's lateral side.
+ * Why the existing instruments were blind: `ELBOW_A`/`ELBOW_P` are not in the pose's declared support
+ * family (`LEFT_HAND`, `RIGHT_HAND`, `LEFT_TOES`, `RIGHT_TOES` → hand/palm/knuckles/fingertips +
+ * ankle/heel/toe), so the declaration-keyed `EnvironmentPenetrationTest` cannot see them;
+ * `ExerciseValidator`'s ground rule is foot-only; and the pose's elbow is an IK *output* — the pose
+ * owns only the chain root (the shoulder), the end target (the hand) and the pole.
  *
- * The diamond grip is `0.1`: the hands come to the midline, **41.4 u inboard** of the shoulder
- * joint (`z = ±4.6` against the shoulder's `±46`). The chord therefore already *is* the lateral
- * direction, the pole's `Z` no longer selects a lateral side, and the chain's perpendicular
- * offset collapses onto the chord's other basis vector. At the bottom of the rep (the phase with
- * the largest triangle height) that vector points **downward and outward**:
- *
- * ```
- * p = 0.5: shoulder (-59.99, 53.97, -46.00) -> hand (-58.32, 0.00, -4.60)
- *          d = 68.04  h = 63.21  u = (0.025, -0.793, 0.608)  phat = (0.388, -0.553, -0.737)
- *          ELBOW_A = shoulder + u*a + phat*h = (-34.29, -19.91, -62.75)
- * ```
- *
- * i.e. the elbow is realized **19.91 u BELOW the mat the pose itself declares**
- * (`metadata.environment.ground.level = 0`), and the geometric predicate
- * `SkeletonPoseFinalizer.adjustHandOrientation` uses to decide whether a hand is *planted*
- * (`hand.y <= elbow.y + 1`) flips FALSE over the whole bottom band: the derived
- * palm/knuckles/fingertips are **not** flattened onto the declared plane on `67` of the `201`
- * frames of the dense sweep, while every frame outside that band is flat (measured `PALM_A y =
- * 1.8103`, `KNUCKLES_A 3.6205`, `FINGERTIPS_A 6.6377` at p = 0.5, against `0.0000` at
- * p = 0.25/0.75) — a frame-to-frame discontinuity in the same defect.
- *
- * ## Why the existing instruments were blind (the T2 lesson)
- *
- * `ELBOW_A`/`ELBOW_P` are **not** in the pose's declared support family (`LEFT_HAND`, `RIGHT_HAND`,
- * `LEFT_TOES`, `RIGHT_TOES` → hand/palm/knuckles/fingertips + ankle/heel/toe), so the
- * declaration-keyed `EnvironmentPenetrationTest` cannot see them; `ExerciseValidator`'s ground rule
- * is foot-only; and the pose's elbow is an **IK output** — `DiamondPushUpPose` owns only the chain
- * root (the shoulder), the end target (the hand) and the pole. T2 pins the pair
- * (`PublishedBelowGroundInvariantTest.knownBelowGround`) as an attributed open item; this file is
- * the focused regression that item's exit criterion asks for.
- *
- * ## What this test asserts (all on the PUBLISHED frame, never `build()`)
- *
- *  1. No published joint of any frame passes below the pose's own declared plane — over a **dense**
- *     progress sweep (51 samples, not the corpus invariants' 5), under **both** frame conditions
- *     (the genuinely cold first frame of a fresh pose on a fresh pipeline, and the frame an
- *     advancing pipeline publishes), every frame captured **by value** (the T-7 trap: `produceFrame`
- *     returns the Finalizer's reused buffer).
- *  2. The elbow chain has a real clearance — the defect is not merely nudged to `-0.04`.
- *  3. The arm chain reads the exercise's declared bend side (BPS §6/§11: *"the upper arms are
- *     near-parallel to the trunk"*, *"elbows tucked tightly to ribs ... must not flare outward"*,
- *     *"forearms ... close together"*): the elbow stays **outside the fused hand base** laterally
- *     (so the two arms cannot collide in the mid-sagittal plane) and **inside the shoulder line**
- *     (adducted, not flared).
- *  4. The derived hand chain is flattened onto the declared plane on **every** frame — the
- *     engine's own `planted` precondition (`hand.y <= elbow.y + 1`) holds throughout, which is the
- *     second observable of the same root cause (it is the elbow's height that decides it).
- *  5. Anti-vacuity: the sweep really publishes distinct frames, and the elbow really travels.
- *  6. Anti-regression: the family motion contract is untouched (`PushUpMotionTest`'s ≥ 40 u chest
- *     travel) — the fix may not "pass" by stilling the rep.
- *  7. The mirror symmetry is exact (the corrected pole has no lateral component, so A and P must
- *     realize the mirrored chain bit-for-bit).
+ * Asserted on the PUBLISHED frame, never `build()`: no published joint passes below the pose's own
+ * declared plane over a dense 51-sample sweep under both frame conditions, every frame captured by
+ * value (`produceFrame` returns the Finalizer's reused buffer); the elbow chain keeps a real
+ * clearance (the defect is not merely nudged to `-0.04`); the arm chain reads the declared bend side
+ * — the elbow outside the fused hand base laterally (so the arms cannot collide mid-sagittally) and
+ * inside the shoulder line (adducted, not flared); the derived hand chain is flattened on every
+ * frame, since the engine's own `planted` precondition holds throughout; the sweep publishes distinct
+ * frames and the elbow really travels; the family motion contract is untouched (`PushUpMotionTest`'s
+ * ≥ 40 u chest travel — the fix may not "pass" by stilling the rep); and the mirror symmetry is exact
+ * (the corrected pole has no lateral component, so A and P realize the mirrored chain bit-for-bit).
  */
 class DiamondPushUpElbowClearanceTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
 
-    /** The plane the pose itself declares — never a hardcoded zero (`ENGINE.md` §4). */
+    /** The plane the pose itself declares — never a hardcoded zero. */
     private val ground: Float = DiamondPushUpPose().metadata.environment.ground.level
 
     /** Dense sweep: the corpus invariants' 5 samples can miss a single-frame dip. */
     private val samples: List<Float> = (0..50).map { it / 50f }
 
-    /** The T2 invariant's band (`PublishedBelowGroundInvariantTest.groundBand`), same value. */
+    /** The sibling invariant's band, same value. */
     private val band = 0.05f
 
     /**
@@ -89,10 +63,9 @@ class DiamondPushUpElbowClearanceTest {
      *
      * Measured on the fixed tree: the elbow's worst published height over the dense sweep is
      * `16.3014` (p = 0.505, the chain's maximum triangle height phase) against a pre-fix `-19.9130`.
-     * The floor is set well below the measurement (and three orders of magnitude above the T2
-     * band), so it pins the DEFECT, not the exact number: any realization that puts the elbow back
-     * under the mat fails by ~20 u, and the thin-clearance "nudge it above the band" shape fails
-     * too.
+     * The floor is set well below the measurement (and three orders of magnitude above the band), so
+     * it pins the DEFECT, not the exact number: any realization that puts the elbow back under the
+     * mat fails by ~20 u, and the thin-clearance "nudge it above the band" shape fails too.
      */
     private val elbowClearanceFloor = 10f
 
@@ -102,9 +75,9 @@ class DiamondPushUpElbowClearanceTest {
     private enum class Condition { COLD, PLAYING }
 
     /**
-     * One measured frame, primitives only — never a [SkeletonPose] reference (the pipeline
-     * publishes the Finalizer's reused buffer, so holding references aliases every sample to the
-     * last frame and silently reports one frame N times: the T-7 trap).
+     * One measured frame, primitives only — never a [SkeletonPose] reference: the pipeline publishes
+     * the Finalizer's reused buffer, so holding references aliases every sample to the last frame and
+     * silently reports one frame N times.
      */
     private class Frame(
         val condition: Condition,
@@ -132,10 +105,10 @@ class DiamondPushUpElbowClearanceTest {
 
     /**
      * The sweep under both frame conditions.
-     *  * COLD — a fresh pose instance on a fresh pipeline for every sample: the genuinely cold
-     *    first frame of a build that reads no reused node state.
-     *  * PLAYING — one builder advancing 0 → 1 on one pipeline: the frame the engine publishes in
-     *    the rep (mirrors the sibling corpus invariants' second leg).
+     *  * COLD — a fresh pose instance on a fresh pipeline for every sample: the genuinely cold first
+     *    frame of a build that reads no reused node state.
+     *  * PLAYING — one builder advancing 0 → 1 on one pipeline: the frame the engine publishes in the
+     *    rep.
      */
     private fun sweep(): List<Frame> {
         val out = ArrayList<Frame>(samples.size * 2)
@@ -153,10 +126,6 @@ class DiamondPushUpElbowClearanceTest {
     }
 
     private fun fmt(v: Float) = String.format(java.util.Locale.ROOT, "%.4f", v)
-
-    // ------------------------------------------------------------------------------------------
-    // 1 + 2. the defect: no joint under the declared plane, and the elbow clears it for real
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun noPublishedJointOfTheDiamondPushUpPassesBelowItsDeclaredPlane() {
@@ -193,10 +162,6 @@ class DiamondPushUpElbowClearanceTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 3. the realized chain reads the diamond's declared bend side
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theElbowStaysOutsideTheFusedHandBaseAndInsideTheShoulderLine() {
         val frames = sweep()
@@ -224,10 +189,6 @@ class DiamondPushUpElbowClearanceTest {
             }
         }
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 4. the same root cause seen from the engine's own predicate: the planted hand chain
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theDerivedHandChainIsFlattenedOnEveryFrameOfTheRep() {
@@ -259,10 +220,6 @@ class DiamondPushUpElbowClearanceTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 5. anti-vacuity
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theSweepPublishesDistinctFramesAndTheElbowReallyTravels() {
         val frames = sweep()
@@ -278,10 +235,6 @@ class DiamondPushUpElbowClearanceTest {
             elbowSpan > 20f
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 6 + 7. the motion contract survives, and the correction is mirror-exact
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theFamilyMotionContractIsPreserved() {

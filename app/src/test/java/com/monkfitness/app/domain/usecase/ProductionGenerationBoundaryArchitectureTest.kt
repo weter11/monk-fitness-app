@@ -11,29 +11,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P23's boundary, pinned mechanically rather than by convention.
+ * The boundary between the pure generated domain and the app's real catalogue, pinned mechanically rather
+ * than by convention — every failure mode here is invisible to a behavioural test:
  *
- * P23 is the stage where the pure generated domain and the app's real catalogue are connected, which
- * is exactly where the interesting failure modes live — and every one of them is invisible to a
- * behavioural test:
- *
- *  * a **silent default** where an honest refusal belongs. An exercise with no stated focus membership
- *    joined to the whole focus vocabulary, or dropped from the candidate list, or read as "no
- *    equipment needed", all produce a *plan* — a plausible one — built on a fact nobody stated. §6,
- *    §8 and §33 forbid each of them, and none of them fails any assertion in the planner;
- *  * **inferred membership**: classifying by `ExerciseCategory`, `ExerciseSubCategory` or
- *    `exerciseToFamiliesMap`. Two of those three are vocabularies that look like [Focus] and are not,
- *    so the mistake reads as a reasonable simplification in review and as a fabricated training fact
- *    at runtime;
- *  * **inherited legacy semantics**: the boundary reusing `isAccessibleWith`'s "empty means
- *    unconstrained" rule, which silently offers bar exercises to a user who declared no equipment;
- *  * the **dependency direction inverting**: the generated planner reaching for the catalogue, or this
- *    adapter reaching into the planner's decisions, so generation becomes the legacy engine (§30
- *    step 10's own scope fence);
- *  * the boundary acquiring a **collaborator** — a repository, a clock, a random source — when its
- *    whole claim is that it is a function of two arguments.
- *
- * Each is asserted against the sources, the compiled shape, or both.
+ *  * a **silent default** where an honest refusal belongs: an exercise with no stated focus membership
+ *    joined to the whole focus vocabulary, dropped from the candidate list, or read as "no equipment
+ *    needed". Each produces a *plausible plan* built on a fact nobody stated, and none fails a planner
+ *    assertion;
+ *  * **inferred membership** from `ExerciseCategory`, `ExerciseSubCategory` or `exerciseToFamiliesMap` —
+ *    vocabularies that look like [Focus] and are not, so the mistake reads as a reasonable simplification
+ *    in review and as a fabricated training fact at runtime;
+ *  * **inherited legacy semantics**: reusing `isAccessibleWith`'s "empty means unconstrained" rule, which
+ *    silently offers bar exercises to a user who declared no equipment;
+ *  * the **dependency direction inverting**, so generation becomes the legacy engine;
+ *  * the boundary acquiring a **collaborator** — a repository, a clock, a random source — when its whole
+ *    claim is that it is a function of two arguments.
  */
 class ProductionGenerationBoundaryArchitectureTest {
 
@@ -54,8 +46,6 @@ class ProductionGenerationBoundaryArchitectureTest {
         .replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), "")
         .replace(Regex("""//[^\n]*"""), "")
 
-    // ------------------------------------------------------------------ placement
-
     @Test
     fun theBoundaryLivesInTheApplicationLayerAndNotInThePureGeneratedPackage() {
         assertTrue(boundaryFile.isFile)
@@ -64,7 +54,7 @@ class ProductionGenerationBoundaryArchitectureTest {
         assertFalse(boundaryFile.parentFile!!.canonicalPath.contains(generatedDir.canonicalPath))
         assertEquals("usecase", factsFile.parentFile!!.name)
         assertFalse(factsFile.parentFile!!.canonicalPath.contains(generatedDir.canonicalPath))
-        // And the pure package gained no file by this stage: the census that pins it is Stage 10's.
+        // And the pure package gained no file here: its file census is pinned by its own gate.
         assertEquals(
             listOf(
                 "ExerciseSelector.kt",
@@ -81,14 +71,12 @@ class ProductionGenerationBoundaryArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ no silent default
-
     @Test
     fun noFocusIsEverSubstitutedForAMissingClassification() {
-        // The four substitutions a boundary reaches for when the source says nothing. `Focus.entries`
-        // is "trains everything"; `FocusPlan.Balanced.eligibleFocuses` is the same claim wearing a
-        // different name; `emptySet()` is refused by `GenerationCandidate` itself; and an `else` arm in
-        // the `when` is the same substitution with one more hop.
+        // The four substitutions a boundary reaches for when the source says nothing: `Focus.entries` is
+        // "trains everything"; `FocusPlan.Balanced.eligibleFocuses` is the same claim renamed;
+        // `emptySet()` is refused by `GenerationCandidate` itself; and an `else` arm in the `when` is the
+        // same substitution one hop away.
         val forbidden = listOf(
             "Focus.entries", "Focus.values()", "FocusPlan.Balanced", "focuses = emptySet()",
             "focuses = Focus", "?: setOf(", "?: FocusPlan", "else -> setOf(", "else -> Focus"
@@ -118,9 +106,9 @@ class ProductionGenerationBoundaryArchitectureTest {
             1,
             occurrences(code, "null -> unclassified += exercise.id")
         )
-        // `filterValues` inside the duplicate-id guard is not this: it names what *failed*, it does
-        // not remove anything. What must not appear is a filter that drops candidates, or any
-        // re-ordering, before the caller sees the two halves.
+        // `filterValues` inside the duplicate-id guard is not this: it names what *failed* rather than
+        // removing anything. What must not appear is a filter dropping candidates, or any re-ordering,
+        // before the caller sees the two halves.
         val dropsOrReorders = listOf("filter {", "filterNot", ".sorted(", ".distinct()", ".reversed()")
         val offenders = codeLines(boundaryFile).filter { line ->
             dropsOrReorders.any { token -> line.contains(token) }
@@ -147,12 +135,10 @@ class ProductionGenerationBoundaryArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ no inferred membership
-
     @Test
     fun theBoundaryInfersNoFocusFromTheCataloguesOwnGroupings() {
-        // The whole point of this stage's gap record: the catalogue holds three vocabularies that are
-        // not the focus vocabulary, two of which are named exactly like focus members.
+        // The catalogue holds three vocabularies that are not the focus vocabulary, two of which are named
+        // exactly like focus members.
         val forbidden = listOf(
             "ExerciseCategory", "ExerciseSubCategory", "exerciseToFamiliesMap",
             "ExerciseCategoryFilter", "postureFocusAreas", "stretchFocusAreas",
@@ -174,8 +160,8 @@ class ProductionGenerationBoundaryArchitectureTest {
 
     @Test
     fun theCataloguesRealGroupingsAreNotFocusVocabularyAndTheTestReadsThemToProveIt() {
-        // The absence claim above is only falsifiable if something states what the catalogue *does*
-        // hold. Read it off the real catalogue and compare with the focus vocabulary.
+        // The absence claim is only falsifiable if something states what the catalogue *does* hold: read
+        // off the real catalogue and compared with the focus vocabulary.
         val exercises = WorkoutGenerator().getExerciseLibrary()
 
         val categoryNames = exercises.map { it.category.name }.toSet()
@@ -195,11 +181,10 @@ class ProductionGenerationBoundaryArchitectureTest {
             setOf("SHOULDERS", "SPINE", "HIPS", "LEGS", "CORE", "FULL_BODY", "HYPERLORDOSIS"),
             subCategoryNames
         )
-        // The vocabulary that *looks* like focus membership and is not — the standing example of why
-        // the inference is refused rather than merely avoided. MOBILITY and POSTURE are categories
-        // that are also focus names; LEGS and CORE are body regions that are also focus names. So a
-        // classifier built on "this is a mobility category" or "this trains the legs" would look
-        // reasonable in review and be a fabricated training fact at runtime.
+        // The vocabulary that *looks* like focus membership and is not: MOBILITY and POSTURE are
+        // categories that are also focus names, LEGS and CORE are body regions that are also focus names.
+        // A classifier built on "this is a mobility category" would look reasonable in review and be a
+        // fabricated training fact at runtime.
         assertTrue(
             "the catalogue's categories really do include two names the focus vocabulary also uses: " +
                 "$categoryNames",
@@ -220,9 +205,9 @@ class ProductionGenerationBoundaryArchitectureTest {
             styleNames.contains("CALISTHENICS") && styleNames.contains("LOWER_BACK")
         )
         // The decisive half: the overlap is not a mapping. Four of the seven focuses are names the
-        // catalogue happens to use, and three are not — and the ones that overlap are ambiguous,
-        // because MOBILITY as a category covers stretching, mobility *and* posture work, not the
-        // single focus a generated plan would allocate to it.
+        // catalogue happens to use and three are not, and the overlapping ones are ambiguous — MOBILITY as
+        // a category covers stretching, mobility *and* posture work, not the single focus a plan would
+        // allocate to it.
         assertEquals(
             "the focuses the catalogue names somewhere",
             setOf("MOBILITY", "POSTURE", "LEGS", "CORE"),
@@ -239,8 +224,6 @@ class ProductionGenerationBoundaryArchitectureTest {
             focusNames.toList()
         )
     }
-
-    // ------------------------------------------------------------------ the direction of the dependency
 
     @Test
     fun theGeneratedDomainReachesNeitherTheCatalogueNorThisBoundary() {
@@ -288,35 +271,26 @@ class ProductionGenerationBoundaryArchitectureTest {
             "the sweep must actually cover the production tree — a renamed package makes the covered " +
                 "set empty, the offender list empty too, and the claim green without having looked at " +
                 "anything (found ${readers.size})",
-            // Raised from 4 by P30 with the reader list below, in the same pass, because the two numbers
-            // are the same claim: this many readers are *expected*, so fewer means the sweep is broken.
-            // Raised again by P33, again with the list, for the same reason.
+            // Kept in step with the reader list below, because the two numbers are the same claim: this
+            // many readers are *expected*, so fewer means the sweep is broken.
             readers.size >= 6
         )
-        // P30 **extended** this list rather than relaxing it, and the extension is the point. The new
-        // reader is `CatalogExerciseFamilyClassification`, and it is allowed here for one stated reason:
-        // §9's exercise→family membership is a fact the catalogue *already states per exercise*, so the
-        // only honest way to answer it is to read that field — and the alternative would have been a
-        // second exercise list, which is a far larger sin than a fifth reader of the first one.
+        // The list is **extended** rather than relaxed, and each addition carries its reason.
+        // `CatalogExerciseFamilyClassification` is allowed because exercise→family membership is a fact the
+        // catalogue *already states per exercise*, so the only honest answer is to read that field; the
+        // alternative is a second exercise list. `CatalogExerciseRangeSource` answers the progression span
+        // an exercise travels, likewise stated per exercise (`baseMinReps`, `phase4MaxReps`,
+        // `baseDurationSeconds`, `phase4DurationSeconds`, `isTimerBased`) and folded by
+        // `toConfigurationMetadata()`; the alternative is a second table of spans, which would be a second
+        // owner of the catalogue and drift from it on the first exercise edited.
         //
-        // P33 extends it once more, on exactly the same footing and for the same reason. The new reader
-        // is `CatalogExerciseRangeSource`, and the fact it answers — the progression span an exercise
-        // travels — is likewise stated per exercise in the catalogue's own definition (`baseMinReps`,
-        // `phase4MaxReps`, `baseDurationSeconds`, `phase4DurationSeconds`, `isTimerBased`), read through
-        // the `toConfigurationMetadata()` mapper that already folds them. The alternative is the one P30
-        // refused: a second table of spans, which would be a second owner of the catalogue and would
-        // drift from it on the first exercise edited.
+        // Neither is a second *owner*: the classification holds a projection of `familyId` and nothing
+        // else, the range source a projection of the span and nothing else — no `Exercise`, no name, no
+        // equipment, no animation id in either. A further reader would be one, and this gate would say so.
         //
-        // Neither of them is a second *owner*: the classification holds a projection of `familyId` and
-        // nothing else, the range source a projection of the span and nothing else — no `Exercise`, no
-        // name, no equipment, no animation id in either — which is the same discipline
-        // `ProgramExerciseLibrary` holds its ids under, and `ProgramExerciseFamilyClassificationTest`
-        // asserts it for the first of them. A further reader would still be a second owner, and this gate
-        // would say so.
-        //
-        // The entry is placed where `sorted()` puts it — `Catalog…` before `Production…` — because these
-        // assertions compare against `readers.sorted()`, so an entry appended at the end fails with a diff
-        // that reads like a missing file when the file is present.
+        // Entries are placed where `sorted()` puts them — `Catalog…` before `Production…` — because these
+        // assertions compare against `readers.sorted()`, so an appended entry fails with a diff that reads
+        // like a missing file when the file is present.
         assertEquals(
             "the shipped catalogue is read by the legacy engine, the settings read-back, the " +
                 "§5 membership adapter, MainViewModel's option list, the P23 generation boundary — " +
@@ -337,8 +311,7 @@ class ProductionGenerationBoundaryArchitectureTest {
     @Test
     fun theBoundaryInvokesNoPlannerDecisionAndOwnsNoBusinessRule() {
         // The planner's decisions — allocation, selection, the equipment constraint, reconciliation —
-        // belong to the generated domain. An adapter that restates one of them is a second copy that
-        // drifts.
+        // belong to the generated domain; an adapter restating one is a second copy that drifts.
         val forbidden = listOf(
             "FocusPlanner", "ExerciseSelector", "GeneratedPlanner", "PlanReconciler",
             "ProgramGeneratedEditor", "isUsable", "usableCandidatesFor", "plannableFocuses",
@@ -356,8 +329,6 @@ class ProductionGenerationBoundaryArchitectureTest {
             offenders.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ no collaborators, no ambient input
 
     @Test
     fun theBoundaryHoldsNoStateAndAcquiresNoCollaborator() {
@@ -426,8 +397,8 @@ class ProductionGenerationBoundaryArchitectureTest {
 
     @Test
     fun theBoundaryImportsTheAppModelAndTheGeneratedDomainAndNothingElse() {
-        // The imports are the boundary's entire dependency statement, so the claim is exact rather
-        // than approximate: two vocabularies, and the legacy engine that owns the catalogue.
+        // The imports are the boundary's entire dependency statement, so the claim is exact: two
+        // vocabularies, and the legacy engine that owns the catalogue.
         val imports = boundarySources.flatMap { file -> codeLines(file) }.filter { it.startsWith("import ") }
         val prefixes = listOf(
             "import com.monkfitness.app.data.model.",
@@ -472,13 +443,10 @@ class ProductionGenerationBoundaryArchitectureTest {
         assertTrue("no platform or runtime type reaches the boundary's shape: $offenders", offenders.isEmpty())
     }
 
-    // ------------------------------------------------------------------ the wiring P24 added
-
     @Test
     fun theBoundaryIsWiredExactlyOnceThroughTheGenerationService() {
-        // P23 landed the boundary unwired and pinned that as a cardinality of zero, naming P24 as the
-        // stage that would invert it. P24 is that stage, so the pin is inverted here rather than
-        // deleted: the boundary now has **exactly** the consumers the production flow needs, and a
+        // The boundary was landed unwired, with that pinned as a cardinality of zero; the pin is inverted
+        // here rather than deleted. It now has **exactly** the consumers the production flow needs, and a
         // second reader appearing later still fails.
         val consumers = mainDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
@@ -515,15 +483,15 @@ class ProductionGenerationBoundaryArchitectureTest {
             container.contains("ids = DraftIdSource { idGenerator.newId() }")
         )
 
-        // The legacy half of the P23 claim stays whole: the generator is untouched, and it remains the
-        // app's own exercise source — which is what makes the real-catalogue test meaningful.
+        // The legacy half stays whole: the generator is untouched and remains the app's own exercise
+        // source, which is what makes the real-catalogue test meaningful.
         assertTrue(
             "the legacy generator is untouched and remains the app's own exercise source",
             File(mainDir, "domain/usecase/WorkoutGenerator.kt").readText()
                 .contains("fun getExerciseLibrary(")
         )
-        // The controller reaches the service and nothing below it: it must not name the boundary, the
-        // classification or the planner, or the orchestration would have a second home in the UI.
+        // The controller reaches the service and nothing below it: naming the boundary, the classification
+        // or the planner would give the orchestration a second home in the UI.
         val controller = code(File(mainDir, "ui/programs/ProgramsController.kt").readText())
         listOf(
             "ProductionGenerationBoundary", "ProductionFocusClassification", "GeneratedPlanner",
@@ -539,9 +507,8 @@ class ProductionGenerationBoundaryArchitectureTest {
 
     @Test
     fun theGeneratedDomainStillDeclaresTheCandidateShapeThisBoundaryComposes() {
-        // The two halves meet on `GenerationCandidate`'s own contract, so that contract is pinned from
-        // the boundary's side too: a candidate states non-empty focuses, and its exercise id and
-        // family are its metadata's.
+        // The two halves meet on `GenerationCandidate`'s own contract, pinned from the boundary's side
+        // too: a candidate states non-empty focuses, and its exercise id and family are its metadata's.
         assertEquals(
             "a candidate is exactly the three facts the boundary supplies",
             listOf("dimension", "focuses", "metadata"),
@@ -563,12 +530,9 @@ class ProductionGenerationBoundaryArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ helpers
-
     /**
-     * The files this stage owns, excluded from the consumer sweep below because a file that *declares*
-     * a type obviously names it. P24 added the classification beside them, which is why the sweep
-     * excludes three files and not two.
+     * The files this stage owns, excluded from the consumer sweep because a file that *declares* a type
+     * obviously names it — three files, not two.
      */
     private val OWN_FILES = listOf(
         "domain/usecase/ProductionGenerationBoundary.kt",

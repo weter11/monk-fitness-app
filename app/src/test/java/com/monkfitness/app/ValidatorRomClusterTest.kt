@@ -7,11 +7,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * UNI-2 / UNI-3 / UNI-6 — validator / ROM cluster.
- *
- * These exercise the new authored-intent and hip-ROM rules directly (crafted poses + contacts)
- * and end-to-end through the engineering reference pipeline (so the global solver rework from
- * UNI-1 is confirmed to still reproduce the references while Middle Split becomes detectable).
+ * Validator / ROM cluster: the authored-intent and hip-ROM rules, exercised directly (crafted poses +
+ * contacts) and end-to-end through the engineering reference pipeline.
  */
 class ValidatorRomClusterTest {
 
@@ -163,8 +160,6 @@ class ValidatorRomClusterTest {
         assertTrue(rule.isValid)
     }
 
-    // ---- UNI-3: individual anatomical hip-ROM limits (independently enforced) ----
-
     private val limits = SkeletonDefinition.DEFAULT_ADULT.hipRomLimits
 
     /** Places the front femur (hip -> knee) along a pelvis-local unit direction (straight leg). */
@@ -189,10 +184,10 @@ class ValidatorRomClusterTest {
             .results.first { it.ruleId == "HIP_ROM_LIMIT" }
 
     /**
-     * B5 — drives the engine-produced hip-ROM §1.2 stamp (SkeletonMath.computeHipRomStamp,
-     * the exact femur-direction math the Finalizer runs) so the validator reads it instead of
-     * re-deriving geometry. This is the same stamp the production pipeline writes; feeding it
-     * here keeps the test honest about the engine/validator contract.
+     * Drives the engine-produced hip-ROM stamp (`SkeletonMath.computeHipRomStamp`, the exact
+     * femur-direction math the Finalizer runs) so the validator reads it instead of re-deriving
+     * geometry. This is the same stamp the production pipeline writes; feeding it here keeps the test
+     * honest about the engine/validator contract.
      */
     private fun populateHipRom(pose: SkeletonPose): SkeletonPose {
         val empty = HipRomStamp(0f, 0f, 0f, 0f)
@@ -324,12 +319,10 @@ class ValidatorRomClusterTest {
         assertFalse(rule.isValid)
     }
 
-    // ---- End-to-end: the UNI-1 solver rework must still reproduce references ----
-
     private fun finalized(pose: BaseValidationPose): SkeletonPose {
-        // M2: route through the pipeline (the production path) so the Solver + Finalizer run in
-        // fixed order, exactly as pre-M2 (the Finalizer itself no longer calls the Solver). This
-        // keeps the end-to-end fixtures faithful to production and byte-identical to the baseline.
+        // Route through the pipeline (the production path) so the Solver + Finalizer run in fixed
+        // order, exactly as before (the Finalizer itself no longer calls the Solver). This keeps the
+        // end-to-end fixtures faithful to production and byte-identical to the baseline.
         return SkeletonPipeline(def).produceFrame(
             pose, PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)
         ).pose
@@ -337,12 +330,11 @@ class ValidatorRomClusterTest {
 
     @Test
     fun middleSplitSurfacesDroppedStraightIntent() {
-        // Middle Split is a DIAGNOSTIC INSTRUMENT, not a development target
-        // (docs/VALIDATION.md §2, MIDDLE_SPLIT_DIAGNOSTIC_AUDIT.md). It requests straight limbs at
-        // targets inside the proximal bone (hip→foot ≈ 58.9 < L1 112), so solveStraightLimb drops
-        // the straight intent and returns a bent limb. The instrument's job is to READ that: the
-        // validator must flag the dropped straight intent. It must NOT be retuned to full reach to
-        // make the limbs resolve straight (that would tamper with the probe). Hip ROM stays in range.
+        // Middle Split is a DIAGNOSTIC INSTRUMENT, not a development target. It requests straight
+        // limbs at targets inside the proximal bone (hip→foot ≈ 58.9 < L1 112), so solveStraightLimb
+        // drops the straight intent and returns a bent limb. The instrument's job is to READ that: the
+        // validator must flag the dropped straight intent. It must NOT be retuned to full reach to make
+        // the limbs resolve straight (that would tamper with the probe). Hip ROM stays in range.
         val pose = finalized(MiddleSplitPose())
         val report = ExerciseValidator(ValidatorConfig.ENGINEERING_VALIDATION)
             .validate(pose, def, env, camera, 1000f, 1000f)
@@ -355,10 +347,10 @@ class ValidatorRomClusterTest {
 
     @Test
     fun straightIntentStillDetectableOnBrokenReference() {
-        // Complementary coverage alongside the Middle Split instrument: a purpose-built fixture
-        // authors a `straight=true` limb with an unsatisfiable (too-close) target, which the UNI-9
-        // fallback resolves bent. The validator must flag it. This isolates the detection logic
-        // from the specific geometry of any real reference pose.
+        // Complementary coverage alongside the Middle Split instrument: a purpose-built fixture authors
+        // a `straight=true` limb with an unsatisfiable (too-close) target, which the fallback resolves
+        // bent. The validator must flag it. This isolates the detection logic from the specific geometry
+        // of any real reference pose.
         val pose = finalized(BrokenStraightLimbPose())
         val report = ExerciseValidator(ValidatorConfig.ENGINEERING_VALIDATION)
             .validate(pose, def, env, camera, 1000f, 1000f)
@@ -370,10 +362,10 @@ class ValidatorRomClusterTest {
     }
 
     /**
-     * Purpose-built fixture proving UNI-2 detection works independently of any real reference.
-     * Authors a `straight=true` leg whose target sits 30u from the hip — well inside L1 (112) —
-     * so [SkeletonMath.solveStraightLimb] falls back to the bent UNI-9 solve and the straight
-     * intent is silently dropped, exactly the condition the validator must surface.
+     * Purpose-built fixture proving the detection works independently of any real reference. Authors a
+     * `straight=true` leg whose target sits 30u from the hip — well inside L1 (112) — so
+     * [SkeletonMath.solveStraightLimb] falls back to the bent solve and the straight intent is silently
+     * dropped, exactly the condition the validator must surface.
      */
     private class BrokenStraightLimbPose : BaseValidationPose() {
         override fun buildStatic(def: SkeletonDefinition): SkeletonPose {

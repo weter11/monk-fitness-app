@@ -13,22 +13,18 @@ import java.time.LocalDate
  * The upgrade a device actually performs: a populated version-7 database, the production migration,
  * and the rows that have to survive it.
  *
- * Everything here runs on a real SQLite engine (`SqliteTestDatabase`), so the claims are engine
- * claims: the ten shipped tables are still there afterwards, every representative legacy row still
- * holds exactly the values it held, the Stage-1 adaptive tables are still writable, and the fifteen
- * target tables carry the primary keys, foreign keys, delete actions and indices the architecture
- * requires — read back from `sqlite_master` and `pragma_*`, not restated from the migration's text.
+ * Everything runs on a real SQLite engine (`SqliteTestDatabase`), so the claims are engine claims: the
+ * retained tables are still there afterwards, every representative legacy row still holds the values it
+ * held, and the target tables carry the primary keys, foreign keys, delete actions and indices the
+ * architecture requires — read back from `sqlite_master` and `pragma_*`, not restated from the
+ * migration's text.
  *
- * The blueprint is explicit that there is **no legacy program/history migration** (§30): this upgrade
- * adds the target schema and touches nothing else. No legacy row is reinterpreted as a Program, no
- * placeholder Program/Revision/Session is backfilled, and the legacy `set_log` is not repurposed as
- * the target set log.
+ * There is **no legacy program/history migration**: the upgrade adds the target schema and touches
+ * nothing else. No legacy row is reinterpreted as a Program, no placeholder Program/Revision/Session is
+ * backfilled, and the legacy `set_log` is not repurposed as the target set log.
  *
- * The chain a device runs is `7 → 8 → 9 → 10`: the target schema, then the schedule-frequency
- * correction (`docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md`), then the Goal/Focus columns
- * (`docs/PROGRAM_GENERATED_PLANNER.md`) — each of the last two adding nullable columns to
- * `program_revision` and nothing else. Everything below executes the production migration objects in
- * that order, so the database under test is the one the app opens.
+ * Everything below executes the production migration objects in chain order, so the database under test
+ * is the one the app opens.
  */
 class ProgramMigrationPreservationTest {
 
@@ -89,19 +85,18 @@ class ProgramMigrationPreservationTest {
         // The deployed chain, in the order a device runs it.
         database.migrate(AppDatabase.MIGRATION_9_10)
         database.migrate(AppDatabase.MIGRATION_10_11)
-        // §30 step 15: the retirement step.
+        // The retirement step.
         database.migrate(AppDatabase.MIGRATION_11_12)
         // Target slot semantic identity: nullable, additive, and no legacy backfill.
         database.migrate(AppDatabase.MIGRATION_12_13)
         database.migrate(AppDatabase.MIGRATION_13_14)
-        // Stage 18: the revision-owned explicit target schedule source — two new tables and no backfill.
+        // The revision-owned explicit target schedule source — two new tables and no backfill.
         database.migrate(AppDatabase.MIGRATION_14_15)
-        // §30 step 28: the user's exercise preference — one nullable column, no default, no backfill.
+        // The user's exercise preference — one nullable column, no default, no backfill.
         database.migrate(AppDatabase.MIGRATION_15_16)
-        // P29: the element's historical focus and the snapshot's frozen copy. Stopping short
-        // would leave this suite exercising a database the app can no longer produce.
+        // The element's historical focus and the snapshot's frozen copy.
         database.migrate(AppDatabase.MIGRATION_16_17)
-        // P31: the app-owned progression relation catalogue — one new table, no seed, no backfill.
+        // The app-owned progression relation catalogue — one new table, no seed, no backfill.
         // Stopping short would leave this suite exercising a database the app can no longer produce.
         database.migrate(AppDatabase.MIGRATION_17_18)
     }
@@ -110,10 +105,7 @@ class ProgramMigrationPreservationTest {
     private fun versionEightDatabase(): SqliteTestDatabase =
         versionSevenDatabase().also { it.migrate(AppDatabase.MIGRATION_7_8) }
 
-    /**
-     * A populated **version-9** database: what a device that ran the schedule-frequency correction
-     * holds, before the Goal/Focus columns exist.
-     */
+    /** A populated **version-9** database: before the Goal/Focus columns exist. */
     private fun versionNineDatabase(): SqliteTestDatabase = versionEightDatabase().also { database ->
         database.migrate(AppDatabase.MIGRATION_8_9)
     }
@@ -297,10 +289,6 @@ class ProgramMigrationPreservationTest {
 
     @Test
     fun theStageOneAdaptivePersistenceIsGoneAndTheTargetOneIsWhatRemains() {
-        // §30 step 15 inverted this claim. It used to prove the Stage-1 tables were still *writable*
-        // after the upgrade — the point of the coexisting generations. The coexistence is over: the
-        // Stage-1 tables are dropped and the target ones are the only adaptive persistence there is, so
-        // the claim becomes that a write lands in the target tables and nowhere else.
         val database = migratedDatabase()
 
         for (retired in listOf("family_progression_state", "adaptive_decision_record")) {
@@ -458,8 +446,7 @@ class ProgramMigrationPreservationTest {
 
     @Test
     fun theTargetSetLogIsTheOnlySetLogAfterTheUpgrade() {
-        // §30 step 15 inverted this claim: it used to be about two independent set logs coexisting.
-        // One is retired, so the claim is that there is exactly one — and that it is the target one.
+        // Exactly one set log survives the upgrade, and it is the target one.
         val database = migratedDatabase()
         ProgramGraphInserts.insertCompleteProgram(
             database, "1", targetOccurrenceRows = true, targetScheduleSourceRows = true
@@ -620,10 +607,8 @@ class ProgramMigrationPreservationTest {
         assertEquals(14, AppDatabase.MIGRATION_13_14.endVersion)
         assertEquals(14, AppDatabase.MIGRATION_14_15.startVersion)
         assertEquals(15, AppDatabase.MIGRATION_14_15.endVersion)
-        // §30 step 28's step is the last one, so it is the only one whose end version is the declared one.
         assertEquals(15, AppDatabase.MIGRATION_15_16.startVersion)
         assertEquals(16, AppDatabase.MIGRATION_15_16.endVersion)
-        // P31's step is the last one, so it is the only one whose end version is the declared one.
         assertEquals(17, AppDatabase.MIGRATION_17_18.startVersion)
         assertEquals(18, AppDatabase.MIGRATION_17_18.endVersion)
 
@@ -639,8 +624,6 @@ class ProgramMigrationPreservationTest {
             database.migrate(AppDatabase.MIGRATION_13_14)
             database.migrate(AppDatabase.MIGRATION_14_15)
             database.migrate(AppDatabase.MIGRATION_15_16)
-        // P29: the element's historical focus and the snapshot's frozen copy. Stopping short
-        // would leave this suite exercising a database the app can no longer produce.
         database.migrate(AppDatabase.MIGRATION_16_17)
         database.migrate(AppDatabase.MIGRATION_17_18)
         } catch (failure: SQLException) {

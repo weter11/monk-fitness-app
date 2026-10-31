@@ -9,14 +9,11 @@ import org.junit.Test
 import kotlin.math.abs
 
 /**
- * M2 (RFC_GAP_CLOSURE) — `SkeletonPipeline` active stage-chain verification.
+ * `SkeletonPipeline` active stage-chain verification.
  *
- * (Phase B flag collapse) PIPELINE_ACTIVE and FINALIZER_OWNS_CONVERSION were collapsed to their
- * true branches and removed, so the pipeline is unconditionally live and there is no legacy
- * bypass or coherence invariant. This suite verifies the production guarantee: both entry points
- * ([produceFrame] with a [PoseBuilder] and with a pre-built [SkeletonPose] for renderers) are
- * byte-identical to a manual stage-chain run (Phase 1 `IkStage` → Solver → Finalizer), and the
- * validated path matches the direct validator.
+ * The production guarantee: both entry points ([produceFrame] with a [PoseBuilder] and with a
+ * pre-built [SkeletonPose] for renderers) are byte-identical to a manual stage-chain run (`IkStage` →
+ * Solver → Finalizer), and the validated path matches the direct validator.
  */
 class SkeletonPipelineM0Test {
 
@@ -51,11 +48,10 @@ class SkeletonPipelineM0Test {
                 val p = i / frames.toFloat()
 
                 val built = refPose.build(PoseContext(p, Side.LEFT, def))
-                // P12 WP-I: the manual replication includes the production limb stage (Phase 1).
-                // With the deployed default activated the limbs are realized by `IkStage` (§12.7a),
-                // so a reference that skipped it would compare the pipeline against a frame whose
-                // limbs were never realized. The call self-gates on the rollout flag, so the
-                // replication stays exact in both configurations.
+                // The manual replication includes the production limb stage: the limbs are
+                // realized by `IkStage`, so a reference that skipped it would compare the pipeline
+                // against a frame whose limbs were never realized. The call self-gates on the
+                // rollout flag, so the replication stays exact in both configurations.
                 IkStage.apply(built, def)
                 // Stamp the environment-driven support model so the Finalizer derives support
                 // planes identically to the active pipeline path (which stamps these from
@@ -118,8 +114,8 @@ class SkeletonPipelineM0Test {
 
         // Independent pose instances per path (see byte-identity test rationale).
         val built = StandardPullUpPose().build(PoseContext(0f, Side.LEFT, def))
-        // P12 WP-I: mirror the production stage chain exactly (Phase 1 → Phase 2 → Finalizer), so
-        // the direct-validation frame is the same frame the validated entry point produces.
+        // Mirror the production stage chain exactly (IkStage → Solver → Finalizer), so the
+        // direct-validation frame is the same frame the validated entry point produces.
         IkStage.apply(built, def)
         if (built.roots.isNotEmpty() && built.hasContacts()) ConstraintSolver.solve(built, def)
         val directPose = SkeletonPoseFinalizer(def).finalize(built)
@@ -131,10 +127,9 @@ class SkeletonPipelineM0Test {
 
     @Test
     fun pipelineIsUnconditionallyLive() {
-        // Phase B removed the PIPELINE_ACTIVE flag and Phase F deleted the global flag object
-        // entirely; the pipeline always drives the Solver+Finalizer chain and there is no runtime
-        // switch to disable it. The two entry points agreeing (covered by the byte-identity tests
-        // above) is the structural guarantee that replaces the old flag assertion.
+        // The pipeline always drives the Solver+Finalizer chain and there is no runtime switch to
+        // disable it. The two entry points agreeing (covered by the byte-identity tests above) is
+        // the structural guarantee.
         val pipeline = SkeletonPipeline(def)
         val a = pipeline.produceFrame(StandardPullUpPose(), PoseContext(0f, Side.LEFT, def)).pose
         val b = pipeline.produceFrame(StandardPullUpPose().build(PoseContext(0f, Side.LEFT, def))).pose

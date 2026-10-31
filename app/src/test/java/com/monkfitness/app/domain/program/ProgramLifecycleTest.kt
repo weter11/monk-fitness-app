@@ -23,7 +23,7 @@ import org.junit.Test
 import java.time.LocalDate
 
 /**
- * The Program lifecycle and My Programs surface against a real SQLite engine — §30 step 5.
+ * The Program lifecycle and My Programs surface against a real SQLite engine.
  *
  * Every rule the stage owns is driven through [ProgramLifecycleService] over the production DAOs, so
  * each claim is decided by the engine's foreign keys and transactions rather than by the service's
@@ -34,20 +34,18 @@ import java.time.LocalDate
  *    database enforces;
  *  * a completed Program's delete is the cascade's, and every Program-owned table goes with it;
  *  * a copied Program's plan is a *new* revision identity, because two Programs cannot share a plan
- *    row (§6, §23).
+ *    row.
  *
- * The suite's shape is deliberately RED-first in its assertion style: each rule is stated as the
- * observable outcome (a status, a stamp, a count, a refusal type), so a mutation of the production
- * code fails exactly one of them by name. [theLegalLifecycleTransitionsAreTheOnlyOnesThatMoveAProgram]
- * is the whole transition table in one test, and the rest each pin one rule to it.
+ * Each rule is stated as the observable outcome (a status, a stamp, a count, a refusal type), so a
+ * mutation of the production code fails exactly one of them by name.
+ * [theLegalLifecycleTransitionsAreTheOnlyOnesThatMoveAProgram] is the whole transition table in one
+ * test, and the rest each pin one rule to it.
  */
 class ProgramLifecycleTest {
 
     private val rig = ProgramLifecycleRig("a")
 
     private val programId: ProgramId get() = rig.graph.program.programId
-
-    // ============================================================ the lifecycle (§3)
 
     @Test
     fun theLegalLifecycleTransitionsAreTheOnlyOnesThatMoveAProgram() = runBlocking {
@@ -242,8 +240,6 @@ class ProgramLifecycleTest {
         assertEquals("a completed Program is unchanged by every resumption attempt", completed, rig.stored(programId))
     }
 
-    // ============================================================ archive (§3, §29)
-
     @Test
     fun archiveIsAStampAndNotALifecycleState() = runBlocking {
         rig.createGraph()
@@ -312,8 +308,6 @@ class ProgramLifecycleTest {
         assertTrue(rig.stored(programId).isArchived)
     }
 
-    // ============================================================ selection (§3, §21)
-
     @Test
     fun selectionIsGlobalAndMutuallyExclusive() = runBlocking {
         rig.createGraph()
@@ -370,19 +364,15 @@ class ProgramLifecycleTest {
         assertNull(view.selectedProgramId)
     }
 
-    // ============================================================ the Standard Program (§4)
-
     @Test
     fun theStandardProgramCanBeSelectedButNotEditedOrDeleted() = runBlocking {
         rig.createStandardProgram()
         val standard = rig.standardProgramId
 
-        // Selectable.
         val selected = rig.service.selectProgram(standard)
         assertTrue(selected is ProgramOperationResult.Success)
         assertEquals(standard, rig.state()!!.selectedProgramId)
 
-        // Not renamable.
         val rename = rig.service.renameProgram(standard, name = "My own name")
         assertRefused(rename, ProgramOperationRefusal.StandardProgramCannotBeEdited)
         assertEquals(
@@ -391,7 +381,6 @@ class ProgramLifecycleTest {
             rig.stored(standard).name
         )
 
-        // Not deletable.
         val delete = rig.service.deleteProgram(standard)
         assertRefused(delete, ProgramOperationRefusal.StandardProgramCannotBeDeleted)
         assertEquals("the built-in Program survived", 1, rig.database.count("program"))
@@ -425,7 +414,6 @@ class ProgramLifecycleTest {
         assertEquals(1, rig.revisionCount(copied.programId))
         assertEquals("and the source's plan was untouched", 1, rig.revisionCount(rig.standardProgramId))
 
-        // And the copy is freely editable.
         val renamed = rig.service.renameProgram(copied.programId, name = "Renamed copy")
         assertTrue(renamed is ProgramOperationResult.Success)
         assertEquals("Renamed copy", rig.stored(copied.programId).name)
@@ -457,8 +445,6 @@ class ProgramLifecycleTest {
             rig.stored(programId).lifecycleStatus
         )
     }
-
-    // ============================================================ deletion (§29)
 
     @Test
     fun deletingTheSelectedProgramSelectsTheStandardProgramAsTheFallback() = runBlocking {
@@ -585,8 +571,6 @@ class ProgramLifecycleTest {
         )
     }
 
-    // ============================================================ revisions (§6)
-
     @Test
     fun noRevisionIsCreatedForLifecycleSelectionRenameArchiveOrPlannedStart() = runBlocking {
         rig.createGraph()
@@ -643,8 +627,6 @@ class ProgramLifecycleTest {
         )
     }
 
-    // ============================================================ failures (§28, §33)
-
     @Test
     fun aStorageFailureIsReportedRatherThanTurnedIntoAnEmptyResult() = runBlocking {
         rig.createGraph()
@@ -663,8 +645,6 @@ class ProgramLifecycleTest {
             cause is IllegalArgumentException && cause.message!!.contains("lifecycleStatus")
         )
     }
-
-    // ============================================================ helpers
 
     private fun serviceStart(): ProgramOperationResult<Program> = runBlocking {
         rig.service.startProgram(programId)

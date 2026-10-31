@@ -4,15 +4,15 @@ import com.monkfitness.app.animation.*
 import com.monkfitness.app.poses.*
 
 /**
- * Shared probe for the motion-range contract (PDP §5 [7], PAC §3/§4).
+ * Shared probe for the motion-range contract.
  *
- * The ExerciseValidator only checks per-frame *validity*, so a perfectly valid but static pose
- * passes with 0 errors yet animates nothing. This probe measures the actual vertical travel of
- * the body through the rep, exactly the way the production SkeletonPipeline resolves motion.
+ * The ExerciseValidator only checks per-frame *validity*, so a perfectly valid but static pose passes
+ * with 0 errors yet animates nothing. This probe measures the actual travel of the body through the
+ * rep, exactly the way the production SkeletonPipeline resolves motion.
  *
- * IMPORTANT: SkeletonPipeline.produceFrame() returns a *reused mutable buffer*. Joint Y values must
- * be read into primitives during the pass; never store .pose references (they all alias the last
- * frame, which silently reports 0 travel).
+ * IMPORTANT: SkeletonPipeline.produceFrame() returns a *reused mutable buffer*. Joint values must be
+ * read into primitives during the pass; never store .pose references (they all alias the last frame,
+ * which silently reports 0 travel).
  */
 object MotionProbe {
 
@@ -26,18 +26,17 @@ object MotionProbe {
         maxAxisTravel(pose, def, axis = 1)
 
     /**
-     * P12 (§12.6) — max travel of any tracked joint on ANY world axis across the rep.
+     * Max travel of any tracked joint on ANY world axis across the rep.
      *
-     * Motivation: the Y-only metric is an axis assumption (exercise motion is vertical in
-     * world space). It held while it was tuned, but two mobility poses measured *through*
-     * reconstruction artifacts: the legacy `solveIK -> raw-offset` writes re-rotated the
-     * limb a second time under FK, flinging it vertically even though the authored choreo-
-     * graphy is horizontal (prone Reverse Snow Angel sweeps the hands in the sagittal plane
-     * of a body lying along X; Cat-Cow arches). Post-migration the limbs realize where the
-     * pose actually declared them — so the motion contract must be read as "the joint
-     * travels through its authored range", on the axis the choreography lives on. The 3D
-     * axis span is a strict superset of the Y span (a pose can only measure >= here), so
-     * switching a floor to this metric can never mask motion the Y metric caught.
+     * Motivation: the Y-only metric is an axis assumption (exercise motion is vertical in world
+     * space). Two mobility poses measured *through* reconstruction artifacts: the legacy
+     * `solveIK -> raw-offset` writes re-rotated the limb a second time under FK, flinging it
+     * vertically even though the authored choreography is horizontal (prone Reverse Snow Angel sweeps
+     * the hands in the sagittal plane of a body lying along X; Cat-Cow arches). Post-migration the
+     * limbs realize where the pose actually declared them — so the motion contract must be read as
+     * "the joint travels through its authored range", on the axis the choreography lives on. The 3D
+     * axis span is a strict superset of the Y span, so switching a floor to this metric can never mask
+     * motion the Y metric caught.
      */
     fun maxTravel3D(pose: PoseBuilder, def: SkeletonDefinition = SkeletonDefinition.DEFAULT_ADULT): Float {
         var best = 0f

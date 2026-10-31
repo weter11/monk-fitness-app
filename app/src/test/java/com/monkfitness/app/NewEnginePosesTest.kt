@@ -53,12 +53,12 @@ class NewEnginePosesTest {
         val pose = IsometricSidePlankPose()
         assertNotNull(pose.metadata)
 
-        // B-7 — the hip height is no longer an authored literal: the pelvis is anchored on the
-        // PROPPED support forearm. The settled frame drops the hips to the pose's authored
-        // reach-limited height, and the braced frame puts them on the one straight
-        // shoulder→hip→ankle line the side-plank BPS §3/§5 requires (the line is measured from the
-        // published frame's own propped shoulder and planted support foot, so this cannot drift).
-        // Read from the PUBLISHED frame: a bare `build()` result has not been limb-finalized yet.
+        // The hip height is not an authored literal: the pelvis is anchored on the PROPPED support
+        // forearm. The settled frame drops the hips to the pose's reach-limited height, and the
+        // braced frame puts them on the one straight shoulder→hip→ankle line the side plank requires
+        // (measured from the published frame's own propped shoulder and planted support foot, so it
+        // cannot drift). Read from the PUBLISHED frame: a bare `build()` result is not limb-finalized
+        // yet.
         val result0 = publishedFrame(pose, 0f)
         val pelvisY0 = result0.getJoint(Joint.PELVIS).y
         assertEquals(
@@ -77,7 +77,7 @@ class NewEnginePosesTest {
         val pose = StaticForearmPlankPose()
         assertNotNull(pose.metadata)
 
-        // B-7 — see the side-plank test above: the hips are anchored on the propped forearm plant.
+        // As in the side-plank test above: the hips are anchored on the propped forearm plant.
         val result0 = publishedFrame(pose, 0f)
         val pelvisY0 = result0.getJoint(Joint.PELVIS).y
         assertEquals(
@@ -251,7 +251,6 @@ class NewEnginePosesTest {
 
     @Test
     fun testRegistryIntegration() {
-        // Verify they are successfully registered and retrieved
         val cobraConfig = PoseRegistry.getPoseConfig("cobra_stretch_hold")
         assertNotNull("cobra_stretch_hold should be registered", cobraConfig)
         assertTrue(cobraConfig!!.builder is ProneCobraStretchPose)

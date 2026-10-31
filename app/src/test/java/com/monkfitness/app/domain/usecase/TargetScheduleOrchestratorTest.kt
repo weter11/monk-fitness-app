@@ -36,8 +36,7 @@ import java.time.Instant
 import java.time.LocalDate
 
 /**
- * Phase 12 behaviour: the orchestrator composes the three existing stages and adds no
- * scheduling semantics of its own.
+ * The orchestrator composes the three existing stages and adds no scheduling semantics of its own.
  */
 class TargetScheduleOrchestratorTest {
     private val rig = ProgramDataAccessRig("target-orchestration")

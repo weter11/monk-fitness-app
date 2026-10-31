@@ -1,27 +1,27 @@
 package com.monkfitness.app.data.local
 
 /**
- * The Program System's target schema as a *data structure*: what every target table is called, what
- * it stores, who owns it and which powers the database itself has to enforce.
+ * The Program System's target schema as data: what each table is called, what it stores, who owns it
+ * and which powers the database enforces.
  *
  * This file is the single statement of the schema contract. The three Program System test classes
  * read it from different directions — the migration's own statements, Room's generated DDL, and a
  * real SQLite engine's `sqlite_master`/`pragma` metadata — so a table, key, index or delete action
- * that drifts from the architecture fails in more than one place at once.
+ * that drifts fails in more than one place at once.
  *
  * The DDL is **derived** from the tables below following Room's emitter conventions (columns in
  * declaration order, then the primary key, then the foreign keys; `index_<table>_<columns>` for
- * indices). Deriving it means the migration cannot quietly grow a table this contract does not
- * describe, and that the expected SQL Room generates for the entities has exactly one author.
+ * indices), so the migration cannot quietly grow a table this contract does not describe and the
+ * expected SQL Room generates has exactly one author.
  */
 internal object ProgramSchemaFixture {
 
     /**
-     * The entities of §23 in the order `AppDatabase` declares them, with the physical table each one
-     * is stored in.
+     * The entities in the order `AppDatabase` declares them, with the physical table each is stored
+     * in.
      *
-     * Where the §23 entity's own snake_case name is already taken by a shipped table, the target
-     * table carries the `program_` ownership prefix instead: the version-2..7 database already owns
+     * Where an entity's own snake_case name is already taken by a shipped table, the target table
+     * carries the `program_` ownership prefix instead: the version-2..7 database already owns
      * `set_log` (the legacy logging table), `family_progression_state` and `adaptive_decision_record`
      * (the Stage-1 adaptive pair), and none of those may be reused, renamed or reshaped here.
      */
@@ -36,9 +36,9 @@ internal object ProgramSchemaFixture {
         "ProgramTargetOccurrenceComponentEntity" to "program_target_occurrence_component",
         "ProgramTargetScheduleRuleEntity" to "program_target_schedule_rule",
         "ProgramTargetProgramDayBindingEntity" to "program_target_program_day_binding",
-        // P31: the app-owned progression relation catalogue. Declared here because it is a real target
-        // table with its own entity — but it is **not** revision-owned and carries no Program or
-        // revision column, which is the schema's own statement that a ladder belongs to a family.
+        // The app-owned progression relation catalogue: a real target table with its own entity, but
+        // **not** revision-owned and carrying no Program or revision column — the schema's own
+        // statement that a ladder belongs to a family.
         "ProgressionRelationVariantEntity" to "progression_relation_variant",
         "WorkoutSessionEntity" to "workout_session",
         "SessionSnapshotEntity" to "session_snapshot",
@@ -51,24 +51,22 @@ internal object ProgramSchemaFixture {
         "AdaptiveAdjustmentEntity" to "adaptive_adjustment"
     )
 
-    /** The physical tables the target schema adds. */
     val TABLES: List<String> = ENTITIES.map { it.second }
 
     /**
-     * The two auxiliary tables the immutable Session Snapshot (§19) is stored in. They are not §23
-     * entities of their own: they exist because a snapshot has to survive a revision it no longer
-     * matches, which no foreign key into the live plan can express.
+     * The two auxiliary tables the immutable Session Snapshot is stored in. They are not entities of
+     * their own: they exist because a snapshot has to survive a revision it no longer matches, which
+     * no foreign key into the live plan can express.
      */
     val AUXILIARY_TABLES: List<String> = listOf("session_snapshot", "session_snapshot_exercise")
 
     /** The physical tables of the version-7 database, which this schema adds to and never rewrites. */
     val LEGACY_TABLES: List<String> = LegacyV7Schema.TABLES
 
-    /** Every table the version-8 database contains. */
     val ALL_TABLES: List<String> = LEGACY_TABLES + TABLES
 
     /**
-     * The shipped tables **§30 step 15 keeps**, because they belong to global features and not to a
+     * The shipped tables the migration **keeps**, because they belong to global features and not to a
      * Program: the posture/mobility track, the body-weight log, and the nutrition plan's own calendar.
      */
     val RETAINED_TABLES: List<String> = listOf(
@@ -80,13 +78,13 @@ internal object ProgramSchemaFixture {
     )
 
     /**
-     * The shipped tables **§30 step 15 retires**, and `MIGRATION_11_12` drops.
+     * The shipped tables the migration **retires**, and `MIGRATION_11_12` drops.
      *
      * They are the shipped 56-day program's own state (`user_progress`, `program_day_state`,
      * `set_log`) and the Stage-1 adaptive generation's (`family_progression_state`,
-     * `adaptive_decision_record`). The blueprint states that no legacy program/history migration is
-     * required, so they are dropped rather than converted — and this list is what makes "dropped"
-     * measurable instead of a claim about the migration's text.
+     * `adaptive_decision_record`). No legacy program/history migration is required, so they are
+     * dropped rather than converted — and this list is what makes "dropped" measurable instead of a
+     * claim about the migration's text.
      */
     val RETIRED_TABLES: List<String> = listOf(
         "user_progress",
@@ -96,22 +94,18 @@ internal object ProgramSchemaFixture {
         "adaptive_decision_record"
     )
 
-    /** Every table the current (version 13) database contains: the retained global ones, then the target. */
     val ALL_TABLES_AT_CURRENT_VERSION: List<String> = RETAINED_TABLES + TABLES
 
-    /** One declared column. */
     data class Column(val name: String, val type: String, val nullable: Boolean = false)
 
     /**
      * One declared foreign key, with the action the architecture requires on delete.
      *
-     * The columns are **lists** because one key in this schema is genuinely composite: a target
-     * occurrence's component rows are owned by the occurrence, and "the occurrence" is the pair
-     * `(programId, occurrenceKey)` rather than either column alone. Modelling that as a single child
-     * column would have to pick one of the two — leaving the other unreferenced, so a component could
-     * name a Program its own occurrence does not belong to. [single] is the one-column case, which is
-     * every other key in the schema, and it says the same thing without a one-element list at each of
-     * the two dozen call sites.
+     * The columns are **lists** because one key here is genuinely composite: a target occurrence's
+     * component rows are owned by the pair `(programId, occurrenceKey)` rather than either column
+     * alone. A single child column would have to pick one of the two, leaving the other unreferenced,
+     * so a component could name a Program its own occurrence does not belong to. [single] is the
+     * one-column case every other key uses, without a one-element list at each call site.
      */
     data class ExpectedForeignKey(
         val childColumns: List<String>,
@@ -120,7 +114,6 @@ internal object ProgramSchemaFixture {
         val onDelete: String
     ) {
         companion object {
-            /** The one-column case: a child column referencing a single parent column. */
             fun single(
                 childColumn: String,
                 parentTable: String,
@@ -130,7 +123,6 @@ internal object ProgramSchemaFixture {
         }
     }
 
-    /** One declared index. */
     data class ExpectedIndex(val name: String, val columns: List<String>, val unique: Boolean)
 
     private val TEXT = "TEXT"
@@ -140,8 +132,8 @@ internal object ProgramSchemaFixture {
      * Every target table's columns, in declaration order.
      *
      * `perSetTargets`, `appliedAdjustmentIds`, `scheduleWeekdays` and the adjustment's before/after
-     * prescriptions are `TEXT` on purpose: they are converted, deterministic single-column
-     * representations of an ordered (or canonical-order) collection, not scalars.
+     * prescriptions are `TEXT` on purpose: converted, deterministic single-column representations of
+     * an ordered (or canonical-order) collection, not scalars.
      */
     val COLUMNS: Map<String, List<Column>> = mapOf(
         "program" to listOf(
@@ -232,11 +224,11 @@ internal object ProgramSchemaFixture {
             Column("workoutId", TEXT),
             Column("programDayId", TEXT)
         ),
-        // P31's ladder catalogue. One normalized child row per variant: no serialized ladder blob, no
+        // The ladder catalogue. One normalized child row per variant: no serialized ladder blob, no
         // current state, no adaptive outcome, no policy, no timestamp, no ranking and no difficulty
         // score — this is configuration, and every one of those is adaptive history. `perSetTargets`
-        // is `TEXT` for the same reason `program_exercise.perSetTargets` is: it is the schema's
-        // existing lossless converter over an ordered per-set list, not a scalar.
+        // is `TEXT` for the same reason `program_exercise.perSetTargets` is: the existing lossless
+        // converter over an ordered per-set list, not a scalar.
         "progression_relation_variant" to listOf(
             Column("familyId", TEXT),
             Column("level", INTEGER),
@@ -333,8 +325,8 @@ internal object ProgramSchemaFixture {
     )
 
     /**
-     * The identity of every target entity. Identity is the entity's own id — never a date, a cycle
-     * number, a day number or a legacy revision integer (§1, §23).
+     * The identity of every target entity: the entity's own id — never a date, a cycle number, a day
+     * number or a legacy revision integer.
      */
     val PRIMARY_KEYS: Map<String, List<String>> = mapOf(
         "program" to listOf("programId"),
@@ -350,10 +342,10 @@ internal object ProgramSchemaFixture {
         // at another revision by a write.
         "program_target_schedule_rule" to listOf("revisionId", "ruleId"),
         "program_target_program_day_binding" to listOf("revisionId", "workoutId"),
-        // P31: one variant IS the pair (familyId, exerciseId). This is what makes "one exercise is one
-        // position in its family's ladder" a database constraint rather than a caller convention — and
-        // it is deliberately NOT (familyId, level), because two variants at one level are a legitimate
-        // declaration and a uniqueness constraint there would refuse §15's own shape.
+        // One variant IS the pair (familyId, exerciseId), which makes "one exercise is one position in
+        // its family's ladder" a database constraint rather than a caller convention — and deliberately
+        // NOT (familyId, level), because two variants at one level are a legitimate declaration and a
+        // uniqueness constraint there would refuse that shape.
         "progression_relation_variant" to listOf("familyId", "exerciseId"),
         "workout_session" to listOf("sessionId"),
         "session_snapshot" to listOf("sessionId"),
@@ -369,11 +361,11 @@ internal object ProgramSchemaFixture {
     /**
      * The ownership graph, expressed as the delete action each child's foreign key carries.
      *
-     * Every Program-owned child cascades with its owner, so a Program is destroyed atomically
-     * (§27, §29). Two references deliberately do not: `app_state.nextProgramId` is the blueprint's
-     * explicit `SET NULL` (§29), and `app_state.selectedProgramId` is `NO ACTION` so that deleting
-     * the selected Program is *refused* until the selection is handled — the fallback rule (§3) is a
-     * lifecycle decision, and a `SET NULL` there would silently erase which program the user chose.
+     * Every Program-owned child cascades with its owner, so a Program is destroyed atomically. Two
+     * references deliberately do not: `app_state.nextProgramId` is an explicit `SET NULL`, and
+     * `app_state.selectedProgramId` is `NO ACTION` so deleting the selected Program is *refused*
+     * until the selection is handled — the fallback is a lifecycle decision, and `SET NULL` there
+     * would silently erase which program the user chose.
      */
     val FOREIGN_KEYS: Map<String, List<ExpectedForeignKey>> = mapOf(
         "program" to emptyList(),
@@ -410,10 +402,10 @@ internal object ProgramSchemaFixture {
         "program_target_schedule_rule" to listOf(
             ExpectedForeignKey.single("revisionId", "program_revision", "revisionId", "CASCADE")
         ),
-        // P31's catalogue declares NO foreign key at all, and that absence is the schema-level statement
-        // that a ladder is global rather than revision-owned. There is no family catalogue table in this
-        // schema either — `familyId` is opaque and copied verbatim — so a foreign key could only have
-        // pointed at a Program or a revision, which is exactly the scope this table refuses.
+        // The catalogue declares NO foreign key at all, and that absence is the schema-level statement
+        // that a ladder is global rather than revision-owned. There is no family catalogue table
+        // either — `familyId` is opaque and copied verbatim — so a foreign key could only have pointed
+        // at a Program or a revision, exactly the scope this table refuses.
         "progression_relation_variant" to emptyList(),
         // The binding also dies with the plan day it names. What the schema cannot express — that the
         // day belongs to *this* revision — is the repository's own refusal.
@@ -462,8 +454,8 @@ internal object ProgramSchemaFixture {
      * be unique is, and the lookups the schema is designed for are covered.
      *
      * Note what is **not** here: nothing makes `workout_session.slotId` unique, because one slot may
-     * carry several attempts (§19); nothing makes `program_exercise` unique on its exercise, because
-     * a day may use the same exercise more than once (§9).
+     * carry several attempts; nothing makes `program_exercise` unique on its exercise, because a day
+     * may use the same exercise more than once.
      */
     val INDEXES: Map<String, List<ExpectedIndex>> = mapOf(
         "program" to emptyList(),
@@ -526,9 +518,8 @@ internal object ProgramSchemaFixture {
                 unique = false
             )
         ),
-        // P31 declares no index: `familyId` is the `(familyId, exerciseId)` primary key's leading
-        // column and the only column the catalogue is ever read by, exactly as
-        // `program_target_schedule_rule` declares none.
+        // No index: `familyId` is the `(familyId, exerciseId)` primary key's leading column and the
+        // only column the catalogue is ever read by, exactly as `program_target_schedule_rule`.
         "progression_relation_variant" to emptyList(),
         "workout_session" to listOf(
             ExpectedIndex("index_workout_session_slotId", listOf("slotId"), unique = false),
@@ -602,15 +593,13 @@ internal object ProgramSchemaFixture {
             "recovery"
         ),
         "adaptive_adjustment" to listOf("beforePrescriptionDimension", "afterPrescriptionDimension"),
-        // P31: the ladder variant's dimension is the same existing vocabulary, spelled as its own enum
-        // name so a renumbered enum cannot silently re-point a stored rung onto a different unit.
+        // The ladder variant's dimension is the same existing vocabulary, spelled as its own enum name
+        // so a renumbered enum cannot silently re-point a stored rung onto a different unit.
         "progression_relation_variant" to listOf("prescriptionDimension")
     )
 
-    /**
-     * The columns that store a collection, converted to one deterministic `TEXT` value. These are
-     * the columns that must never be flattened into a scalar.
-     */
+    /** The columns that store a collection converted to one deterministic `TEXT` value, and must
+     * never be flattened into a scalar. */
     val COLLECTION_COLUMNS: Map<String, List<String>> = mapOf(
         "program_revision" to listOf("scheduleWeekdays"),
         "program_exercise" to listOf("perSetTargets"),
@@ -618,9 +607,9 @@ internal object ProgramSchemaFixture {
         "session_snapshot_exercise" to listOf("perSetTargets"),
         "session_exercise" to listOf("perSetTargets"),
         "adaptive_adjustment" to listOf("beforePerSetTargets", "afterPerSetTargets"),
-        // P31: the ladder variant's per-set list, through the SAME existing lossless converter the plan
-        // element uses. Registering it here is what makes "this column holds a converted ordered
-        // collection, and therefore must not be flattened to a scalar" a checked claim rather than prose.
+        // The ladder variant's per-set list goes through the SAME existing lossless converter the plan
+        // element uses; registering it here makes "this column holds a converted ordered collection and
+        // must not be flattened to a scalar" a checked claim rather than prose.
         "progression_relation_variant" to listOf("perSetTargets")
     )
 
@@ -628,32 +617,12 @@ internal object ProgramSchemaFixture {
      * Every **additive step** of the migration chain, in the order a device runs them, with the
      * columns each one appends to a table the version-8 migration created.
      *
-     * They are kept apart from [COLUMNS] on purpose: an `ALTER TABLE ... ADD COLUMN` is not part of the
-     * `CREATE TABLE` the version-8 migration executes, and folding these columns into [COLUMNS] would
-     * make that contract describe a table the migration does not create — the schema-equality test would
-     * then fail for the right reason but with the wrong fix available. Keeping them apart *per step* is
-     * the same discipline one level up: a step's statement list and the columns that step declares are
-     * each other's contract, so a column added by a later step may not be expected of an earlier one.
-     *
-     * ```text
-     * MIGRATION_8_9    program_revision.scheduleSessionsPerWeek   the schedule-frequency correction (§20)
-     * MIGRATION_9_10   program_revision.focusGoal                 the Goals & Focus configuration (§6, §8)
-     *                  program_revision.focusTargets
-     * MIGRATION_10_11  program_family_progression_state            the adaptive window bookkeeping
-     *                  .precedingProgressQualifyingWindows          (§15, §30 step 12)
-     *                  .precedingRegressQualifyingWindows
-     *                  .precedingRecoveryQualifyingWindows
-     *                  .qualifyingWindowsSinceLastChange
-     *                  .recoveryQualifyingWindows
-     *                  program_adaptive_decision_record.reason      the rule that answered (§13, §22)
-     * MIGRATION_15_16  program_revision.preferredExerciseIds         the user's exercise preference (§9)
-     * MIGRATION_16_17  program_exercise.focus                        the focus a generated element was
-     *                  session_snapshot_exercise.focus               assigned (§8), and its frozen copy (§19)
-     * ```
-     *
-     * See `docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md` for the first,
-     * `docs/PROGRAM_GENERATED_PLANNER.md` for the second and `docs/PROGRAM_ADAPTIVE_INTEGRATION.md`
-     * for the third.
+     * Kept apart from [COLUMNS] on purpose: an `ALTER TABLE ... ADD COLUMN` is not part of the
+     * `CREATE TABLE` the version-8 migration executes, so folding these in would make that contract
+     * describe a table the migration does not create — the schema-equality test would fail for the
+     * right reason with the wrong fix available. Keeping them apart *per step* is the same discipline
+     * one level up: a step's statement list and its declared columns are each other's contract, so a
+     * column added by a later step may not be expected of an earlier one.
      */
     val ADDITIVE_STEPS: List<Pair<String, Map<String, List<Column>>>> = listOf(
         "MIGRATION_8_9" to mapOf(
@@ -682,21 +651,21 @@ internal object ProgramSchemaFixture {
                 Column("targetOccurrenceKey", TEXT, nullable = true)
             )
         ),
-        // §30 step 28. Nullable and defaulted to nothing, for the same reason the focus columns above are:
-        // `null` is what an upgraded row holds, and it means the user named no preferred exercises — not a
-        // zero and not a ranking. A `DEFAULT` of any kind would write a preference nobody chose.
+        // Nullable and defaulted to nothing, for the same reason the focus columns below are: `null` is
+        // what an upgraded row holds, and it means the user named no preferred exercises — not a zero and
+        // not a ranking. A `DEFAULT` of any kind would write a preference nobody chose.
         "MIGRATION_15_16" to mapOf(
             "program_revision" to listOf(Column("preferredExerciseIds", TEXT, nullable = true))
         ),
-        // P29. The focus an element was **presented under**, stored in two places for two different
-        // reasons, and both nullable with no default — `null` means *no focus was ever recorded*, which
-        // is what every pre-P29 row, every manual program and every user-authored element holds. A
-        // default would write a training claim nobody made.
+        // The focus an element was **presented under**, stored twice for two reasons, both nullable with
+        // no default — `null` means *no focus was ever recorded*, which is what every legacy row, every
+        // manual program and every user-authored element holds. A default would write a training claim
+        // nobody made.
         //
         // `program_exercise.focus` exists because `PlanReconciler` used to drop `GeneratedElement.focus`
-        // when it materialised an element, so the fact existed only transiently. `session_snapshot_exercise.focus`
-        // is a **copy** frozen at session start, for §19's reason: a later revision or a regeneration must
-        // not re-explain which focus a workout that already happened was presented for.
+        // when it materialised an element, so the fact existed only transiently.
+        // `session_snapshot_exercise.focus` is a **copy** frozen at session start: a later revision or a
+        // regeneration must not re-explain which focus an already-finished workout was presented for.
         "MIGRATION_16_17" to mapOf(
             "program_exercise" to listOf(Column("focus", TEXT, nullable = true)),
             "session_snapshot_exercise" to listOf(Column("focus", TEXT, nullable = true))
@@ -713,7 +682,7 @@ internal object ProgramSchemaFixture {
         .groupBy({ it.first }, { it.second })
 
     /**
-     * §30 step 12's five window-bookkeeping columns, in the order the entity declares them.
+     * The five window-bookkeeping columns, in the order the entity declares them.
      *
      * They are named once here because three claims are made about exactly this list: the entity
      * declares them in this order, the migration appends them in this order (so a fresh database and an
@@ -729,38 +698,31 @@ internal object ProgramSchemaFixture {
 
     /**
      * Every statement one additive step must execute, in the order SQLite receives them: one
-     * `ADD COLUMN` per column that step declares. No default appears anywhere — a frequency the user
-     * never chose and a goal they never stated are exactly what a default would invent.
+     * `ADD COLUMN` per declared column. No default appears anywhere — a frequency the user never chose
+     * and a goal they never stated are exactly what a default would invent.
      */
     fun expectedAdditiveStatements(step: String): List<String> =
         ADDITIVE_STEPS.first { it.first == step }.second.flatMap { (table, columns) ->
             columns.map { column -> "ALTER TABLE `$table` ADD COLUMN `${column.name}` ${column.type}" }
         }
 
-    /** Every additive statement the whole chain executes, in chain order. */
     val EXPECTED_ADDITIVE_STATEMENTS: List<String> =
         ADDITIVE_STEPS.flatMap { (step, _) -> expectedAdditiveStatements(step) }
 
-    /**
-     * The columns one additive step appends to [table], so a test can assert a step's own contract
-     * without reading the cumulative list.
-     */
     fun columnsAddedBy(step: String, table: String): List<Column> =
         ADDITIVE_STEPS.first { it.first == step }.second[table].orEmpty()
 
-    /** What a table holds at the **current** version: the version-8 columns plus the added ones. */
     fun columnsNow(table: String): List<Column> =
         COLUMNS.getValue(table) + ADDED_COLUMNS[table].orEmpty()
 
     /**
-     * What a table holds **after [through]** and only that step — the version-8 columns plus the columns
-     * every step up to and including it appended.
+     * What a table holds **after [through]** and only that step — the version-8 columns plus those every
+     * step up to and including it appended.
      *
-     * [columnsNow] is the right expectation for a chain that ran all the way to the current version, and
-     * the wrong one for a chain that deliberately stops: an earlier suite that upgrades a version-9 database
-     * to 10 to check the *goal correction* would otherwise be asked to produce the columns of steps 14, 15
-     * and 16 as well. Comparing such a chain against the cumulative list fails for a reason that has nothing
-     * to do with the step under test, which is the wrong reason to fail.
+     * [columnsNow] is the wrong expectation for a chain that deliberately stops: a suite that upgrades
+     * a version-9 database to 10 to check the *goal correction* would otherwise be asked to produce the
+     * columns of later steps too. Comparing such a chain against the cumulative list fails for a reason
+     * that has nothing to do with the step under test.
      */
     fun columnsAfter(through: String, table: String): List<Column> {
         val upTo = ADDITIVE_STEPS.takeWhile { (step, _) -> step != through }.map { it.first } + through
@@ -769,22 +731,15 @@ internal object ProgramSchemaFixture {
         }
     }
 
-    /** The tables of the target schema that are owned by a Program and cascade with it. */
     val PROGRAM_OWNED_TABLES: List<String> =
         TABLES.filter { FOREIGN_KEYS.getValue(it).any { key -> key.onDelete == "CASCADE" } }
 
-    // ---- the DDL Room generates for the schema above -----------------------------------------------
-
-    /**
-     * The `CREATE TABLE` statement Room emits for one target table as the **version-8 migration**
-     * creates it: columns in declaration order, then the primary key, then the foreign keys.
-     */
     fun expectedTableDdl(table: String): String = tableDdl(table, COLUMNS.getValue(table))
 
     /**
-     * The `CREATE TABLE` statement the same table has at the **current** version: the version-8 columns
-     * plus the added ones. A freshly created database and an upgraded one hold the same definition,
-     * because an appended column keeps the declaration order of the entity.
+     * The same table's `CREATE TABLE` at the **current** version. A freshly created database and an
+     * upgraded one hold the same definition, because an appended column keeps the declaration order of
+     * the entity.
      */
     fun expectedCurrentTableDdl(table: String): String = tableDdl(table, columnsNow(table))
 
@@ -807,55 +762,49 @@ internal object ProgramSchemaFixture {
      * The target tables that a **later** migration step creates, so `MIGRATION_7_8`'s own statement
      * list does not claim them.
      *
-     * The version-8 step is the one that creates the bulk of the target schema, and
-     * [EXPECTED_MIGRATION_STATEMENTS] is *its* contract. §30 step 14's two tables are not part of
-     * that step: they are created by `MIGRATION_13_14`, alongside the index that step adds, and
-     * [EXPECTED_TARGET_OCCURRENCE_STATEMENTS] is that step's contract instead. Keeping the two lists
-     * apart is the same discipline the additive steps use — a step's statements are its own contract,
-     * so a table a later step creates is never expected of an earlier one.
+     * The version-8 step creates the bulk of the target schema and [EXPECTED_MIGRATION_STATEMENTS] is
+     * *its* contract; the target occurrence tables are created by `MIGRATION_13_14` and
+     * [EXPECTED_TARGET_OCCURRENCE_STATEMENTS] is that step's contract instead. Keeping the lists apart
+     * is the discipline the additive steps use — a step's statements are its own contract, so a table
+     * a later step creates is never expected of an earlier one.
      */
     val LATER_TABLES: List<String> = listOf(
         "program_target_occurrence",
         "program_target_occurrence_component",
         "program_target_schedule_rule",
         "program_target_program_day_binding",
-        // P31: created by MIGRATION_17_18, so `MIGRATION_7_8`'s own statement list does not claim it,
-        // and EXPECTED_PROGRESSION_RELATION_STATEMENTS below is that step's contract instead.
+        // Created by MIGRATION_17_18, so `MIGRATION_7_8`'s statement list does not claim it and
+        // EXPECTED_PROGRESSION_RELATION_STATEMENTS below is that step's contract instead.
         "progression_relation_variant"
     )
 
-    /** The tables the version-7 → version-8 migration creates, in the order it creates them. */
     val VERSION_EIGHT_TABLES: List<String> = TABLES.filterNot { it in LATER_TABLES }
 
-    /** The `CREATE [UNIQUE] INDEX` statement Room emits for one declared index. */
     fun expectedIndexDdl(table: String, index: ExpectedIndex): String {
         val kind = if (index.unique) "CREATE UNIQUE INDEX" else "CREATE INDEX"
         val columns = index.columns.joinToString(", ") { "`$it`" }
         return "$kind IF NOT EXISTS `${index.name}` ON `$table` ($columns)"
     }
 
-    /** The indices the version-7 → version-8 migration creates; later steps create their own. */
     private val VERSION_EIGHT_INDICES: Map<String, List<ExpectedIndex>> = INDEXES.mapValues { (_, indices) ->
         indices.filterNot { it.name == "index_program_workout_slot_programId_targetOccurrenceKey" }
     }
 
-    /**
-     * Every statement the version-7 → version-8 migration must execute, in the order Room emits them:
-     * per entity, its table and then the indices that existed at that version.
-     */
+    /** Every statement the version-7 → version-8 migration must execute: per entity, its table and
+     * then the indices that existed at that version. */
     val EXPECTED_MIGRATION_STATEMENTS: List<String> = VERSION_EIGHT_TABLES.flatMap { table ->
         listOf(expectedTableDdl(table)) +
             VERSION_EIGHT_INDICES.getValue(table).map { expectedIndexDdl(table, it) }
     }
 
     /**
-     * Every statement the version-13 → version-14 migration must execute, in order: the two target
-     * occurrence tables and the component table's lookup index.
+     * Every statement the version-13 → version-14 migration must execute: the two target occurrence
+     * tables and the component table's lookup index.
      *
-     * It is **only** those three statements. The step creates storage and writes no row, so there is
-     * no `UPDATE`, `INSERT`, `DELETE`, `ALTER` or `RENAME` here and no backfill of the new tables from
-     * `program_workout_slot` — a slot carries no components, so any such row would have to invent
-     * them, and an invented payload that reads back as stored is worse than an absent record.
+     * It is **only** those three. The step creates storage and writes no row, so no `UPDATE`,
+     * `INSERT`, `DELETE`, `ALTER` or `RENAME` and no backfill from `program_workout_slot` — a slot
+     * carries no components, so any such row would invent them, and an invented payload that reads
+     * back as stored is worse than an absent record.
      */
     val EXPECTED_TARGET_OCCURRENCE_STATEMENTS: List<String> = listOf(
         expectedTableDdl("program_target_occurrence"),
@@ -867,15 +816,14 @@ internal object ProgramSchemaFixture {
     )
 
     /**
-     * Every statement the version-14 → version-15 migration must execute, in order: the two
-     * revision-owned target schedule source tables, and nothing else.
+     * Every statement the version-14 → version-15 migration must execute: the two revision-owned
+     * target schedule source tables, and nothing else.
      *
-     * It is **only** those two statements. The step creates storage and writes no row, so there is no
-     * `UPDATE`, `INSERT`, `DELETE`, `ALTER` or `RENAME` here — and in particular no backfill of the
-     * new tables from `program_revision`'s legacy schedule columns. Those columns say when legacy
-     * slots fall; a target rule also needs a rule identity, a workout identity, an anchor date and a
-     * derived rule's source, so any row manufactured from them would invent four facts, and an
-     * invented row that later reads back as *stored* is worse than an absent one.
+     * It is **only** those two. The step creates storage and writes no row, so no `UPDATE`, `INSERT`,
+     * `DELETE`, `ALTER` or `RENAME` — and in particular no backfill from `program_revision`'s legacy
+     * schedule columns. Those say when legacy slots fall; a target rule also needs a rule identity, a
+     * workout identity, an anchor date and a derived rule's source, so any row manufactured from them
+     * would invent four facts, and an invented row that reads back as *stored* is worse than none.
      */
     val EXPECTED_TARGET_SCHEDULE_SOURCE_STATEMENTS: List<String> = listOf(
         expectedTableDdl("program_target_schedule_rule"),
@@ -890,11 +838,11 @@ internal object ProgramSchemaFixture {
      * Every statement the version-17 → version-18 migration must execute, and it is **exactly one**.
      *
      * The step creates the ladder catalogue's single table and nothing else: no `ALTER`, no
-     * `INSERT ... SELECT` backfill, no seed of any family. That absence is the load-bearing part of
-     * this list rather than an omission — a ladder is a definition this app authors, and manufacturing
-     * one from `program_exercise` or `program_family_progression_state` would write a claim about what
-     * a family trains that no author ever made. So an upgraded device declares no ladder, production
-     * keeps reporting `NO_DECLARED_PROGRESSION_RELATION`, and the count below stays `1`.
+     * `INSERT ... SELECT` backfill, no seed of any family. That absence is load-bearing rather than an
+     * omission — a ladder is a definition this app authors, and manufacturing one from
+     * `program_exercise` or `program_family_progression_state` would write a claim about what a family
+     * trains that no author ever made. So an upgraded device declares no ladder, production keeps
+     * reporting `NO_DECLARED_PROGRESSION_RELATION`, and the count stays `1`.
      */
     val EXPECTED_PROGRESSION_RELATION_STATEMENTS: List<String> = listOf(
         expectedTableDdl("progression_relation_variant")

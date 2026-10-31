@@ -4,9 +4,9 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * Motion-range contract for the VERTICAL PULL family (PDP §5 [7], PAC §3/§4).
- * A pull-up/chin-up raises the body to the bar and lowers it; a static pull would pass the
- * validator yet animate nothing.
+ * Motion-range contract for the VERTICAL PULL family.
+ * A pull-up/chin-up raises the body to the bar and lowers it; a static pull would pass the validator
+ * yet animate nothing.
  */
 class PullMotionTest {
 

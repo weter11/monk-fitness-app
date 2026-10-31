@@ -15,25 +15,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §30 step 8's boundaries, pinned mechanically instead of by convention.
+ * The session runtime's boundaries, pinned mechanically instead of by convention.
  *
- * The session runtime is the layer that finally *writes* what a workout was, so every temptation it has
- * is one import away: a DAO "just to read the plan day", the database "for the transaction", the
- * scheduler "to know which slot is next", an adaptive policy "to decide the next set", a
- * `saveNewRevision` "to keep the plan in step with what was performed", a ViewModel "to tell the screen
- * the workout is over". §6, §16, §19, §20, §25, §26, §27 and §33 forbid every one of them, and §27/§30
- * assign each to a later — or an earlier — stage. The rules are therefore asserted against the sources,
- * the compiled shape and the composition root:
- *
- *  * the runtime reaches no DAO, no Room type, no entity and no Android type;
- *  * it acquires no database and holds no mutable state;
- *  * its collaborators are exactly the four repositories of §27's completion, the two §26 ports and the
- *    transaction runner — no scheduler, no generator, no policy, no progress reader, no UI;
- *  * it offers exactly the five operations of §19 and no sixth (no `back`, no `skip`, no `abandon`);
- *  * it never writes a revision, never constructs a schedule and never evaluates a policy;
- *  * it never turns a failure into an empty value, and never swallows one;
- *  * and nothing in the UI layer reaches it yet — wiring a screen is a later step, and this test is what
- *    says so.
+ * The runtime is the layer that finally *writes* what a workout was, so every temptation it has is one
+ * import away: a DAO "just to read the plan day", the database "for the transaction", the scheduler
+ * "to know which slot is next", an adaptive policy "to decide the next set", a `saveNewRevision` "to
+ * keep the plan in step with what was performed", a ViewModel "to tell the screen the workout is over".
+ * Each of those belongs to another stage, so the rules are asserted against the sources, the compiled
+ * shape and the composition root: the runtime reaches no DAO, Room type, entity or Android type,
+ * acquires no database and holds no mutable state, its collaborators are exactly the four completion
+ * repositories plus the two adaptive ports and the transaction runner, it offers exactly five operations
+ * and no sixth (no `back`, no `skip`, no `abandon`), it never writes a revision, constructs a schedule
+ * or evaluates a policy, and it never turns a failure into an empty value or swallows one.
  */
 class SessionRuntimeArchitectureTest {
 
@@ -76,8 +69,6 @@ class SessionRuntimeArchitectureTest {
         File(mainDir, source).readText()
             .replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), "")
             .replace(Regex("//[^\n]*"), "")
-
-    // ------------------------------------------------------------------ layering
 
     @Test
     fun theRuntimeReachesNoDaoNoRoomTypeNoEntityAndNoAndroidType() {
@@ -134,8 +125,6 @@ class SessionRuntimeArchitectureTest {
             offenders.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ what the runtime may not have
 
     @Test
     fun theRuntimeIsWiredWithExactlyTheCollaboratorsItsTransactionNeeds() {
@@ -225,17 +214,13 @@ class SessionRuntimeArchitectureTest {
     }
 
     /**
-     * §30 step 12 revised one entry of this fence, and this test states both halves of the new line:
+     * Both halves of the fence. Still forbidden: the whole scheduling vocabulary, and any calendar this
+     * layer would *acquire* (`LocalDate.now`, `ZoneId.systemDefault`, a clock read for a date). Allowed
+     * once: the zone it is *given*, used for exactly one comparison — the day an adaptive decision was
+     * taken on against the day of the opportunity it names.
      *
-     * ```text
-     * still forbidden   the whole scheduling vocabulary, and any calendar this layer would *acquire*
-     *                   (`LocalDate.now`, `ZoneId.systemDefault`, a clock read for a date)
-     * allowed, once     the zone it is *given*, used for exactly one comparison: the day an adaptive
-     *                   decision was taken on against the day of the opportunity it names
-     * ```
-     *
-     * The zone is not a scheduling decision: a date and an instant are different facts, and §26 puts
-     * their conversion in the layer that owns the clock — which is also why the value is a constructor
+     * The zone is not a scheduling decision: a date and an instant are different facts, and their
+     * conversion belongs in the layer that owns the clock — which is also why the value is a constructor
      * fact and the same one the producer of that decision receives (`AppContainer`). The positive half
      * below is what keeps this from becoming a hole: the runtime may *read* a calendar it was handed,
      * never acquire one.
@@ -275,10 +260,9 @@ class SessionRuntimeArchitectureTest {
 
     @Test
     fun theRuntimeContainsNoAdaptiveEnginePolicyOrGenerator() {
-        // §30 step 12 revised one entry: the runtime now composes §27's *adaptive state* leg, so
-        // `FamilyProgressionState` — §23's own stored state value — crosses it as a *value* it writes
-        // inside the completion's transaction. Nothing else about the fence moved, and it is tightened
-        // where the new stage could leak into this layer: no integration, no window, no ladder, no
+        // The runtime composes the completion's *adaptive state* leg, so `FamilyProgressionState` — the
+        // stored state value — crosses it as a *value* it writes inside the transaction. The fence is
+        // tightened where that stage could leak in: no integration, no window, no ladder, no
         // classification and no reason vocabulary may be named here at all. The positive half of the
         // rule is asserted beside this test.
         val forbidden = listOf(
@@ -308,10 +292,10 @@ class SessionRuntimeArchitectureTest {
 
     @Test
     fun theRuntimeOnlyEverCarriesTheAdaptiveStateLegAndNeverProducesOne() {
-        // The positive half of the fence above: the one adaptive value that crosses this layer is
-        // §23's stored family state, and the runtime may only *carry* it into the transaction. Nothing
-        // here reads a family state, computes one, advances a counter, resolves a ladder or builds an
-        // integration request — §30 step 12's own use case does that, and the composition root hands
+        // The positive half of the fence above: the one adaptive value that crosses this layer is the
+        // stored family state, and the runtime may only *carry* it into the transaction. Nothing here
+        // reads a family state, computes one, advances a counter, resolves a ladder or builds an
+        // integration request — the integration's own use case does that and the composition root hands
         // its outcome over.
         val offenders = codeLines(allSources).mapNotNull { (source, line) ->
             when {
@@ -354,15 +338,13 @@ class SessionRuntimeArchitectureTest {
 
     @Test
     fun theRuntimeIsCalledFromExactlyOneStateHolderAndConstructedOnlyByTheCompositionRoot() {
-        // §30 step 15 inverted this claim. Until then *nothing* in the UI reached the runtime: the
-        // target runtime was DI-wired and unused, and the app still ran the shipped 56-day program. The
-        // cutover makes this screen the production path, so the claim is no longer an absence — it is a
+        // The session screen is the production path, so the claim is not an absence but a
         // **cardinality**, which is the part that can regress:
         //
         //   1. the runtime's operations are called from exactly one place, and it is the state holder
         //      that the session screen renders;
-        //   2. no ViewModel and no screen ever *constructs* one — §26: it receives the graph the
-        //      composition root built.
+        //   2. no ViewModel and no screen ever *constructs* one — it receives the graph the composition
+        //      root built.
         val operations = listOf(
             ".startSession(", ".restoreSession(", ".confirmSet(", ".cancelSession(", ".finishSession("
         )
@@ -426,8 +408,6 @@ class SessionRuntimeArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ errors are not swallowed
-
     @Test
     fun theRuntimeTurnsNoFailureIntoAnEmptyValue() {
         val runtime = sourceText(runtimeSource)
@@ -468,8 +448,6 @@ class SessionRuntimeArchitectureTest {
             domain.none { (_, line) -> line.contains("try {") && line.contains("catch") }
         )
     }
-
-    // ------------------------------------------------------------------ the pure values stay pure
 
     @Test
     fun theNewDomainValuesSeeNothingButKotlinJavaAndTheDomain() {
@@ -519,8 +497,6 @@ class SessionRuntimeArchitectureTest {
             listOf("\"workout\"", "\"adaptive/decision\"").all { puritySource.readText().contains(it) }
         )
     }
-
-    // ------------------------------------------------------------------ the wiring
 
     @Test
     fun theCompositionRootWiresTheRuntimeAndNothingInTheUiDoes() {

@@ -28,30 +28,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Phase 4 (R5) — Straight-Intent-Dropped producer coverage
- * (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md §P4; RFC §4.2 Straight-Limb Fallback, §4.4 OR row).
+ * Straight-Intent-Dropped producer coverage.
  *
  * Ownership model proven here: the fallback outcome is born at the branch that executes it —
  * the `dist < L1` bent fallback and the contact-slide branch inside `solveStraightLimb` — and is
- * carried as a scratch reading (RFC §4.3: the Limb Solve Result holds the clamp/straight/
- * bone-length readings). Producers fold it into the carrier stamp via
+ * carried as a scratch reading (the Limb Solve Result holds the clamp/straight/bone-length
+ * readings). Producers fold it into the carrier stamp via
  * [com.monkfitness.app.animation.ValidationStampMerge.dropped]: the Active Limb Solver
  * implementations write first; the ConstraintSolver strengthens exactly once, from its own
  * branch evidence. NO code re-infers the outcome from a reconstructed predicate.
- *
- * Counterfactual red-gate (P2 discipline): the pose-level integration tests were executed
- * against `origin/main` (d1d8962) before green was claimed — there the flag has no writer at
- * all (registered defect V1) and they fail with `expected true / found false`.
  */
 class StraightIntentFallbackTest {
 
     private val constraint = IKConstraint(30f, 1f, AngularJointLimits(15f, 180f, 170f))
 
-    // ------------------------------------------------------------ scratch-level units (SkeletonMath)
-
     @Test
     fun straightRequestInsideProximalBoneRecordsFallbackInScratch() {
-        // L1=2, L2=1: target at 0.5 clamps to minReach ≈ 1.24 — still < L1 → UNI-9 bent fallback.
+        // L1=2, L2=1: target at 0.5 clamps to minReach ≈ 1.24 — still < L1 → bent fallback.
         val result = SkeletonMath.solveStraightLimb(
             Vector3(0f, 0f, 0f), Vector3(0.5f, 0f, 0f), 2f, 1f, constraint
         )
@@ -95,8 +88,6 @@ class StraightIntentFallbackTest {
         assertTrue(result.straightIntentDropped)
     }
 
-    // ------------------------------------------------------------- authoring-family fold (bake)
-
     @Test
     fun packageLevelBakeFoldsScratchIntoCarrierStamp() {
         val nodes = SkeletonFactory.createStandardSkeleton()
@@ -105,11 +96,10 @@ class StraightIntentFallbackTest {
 
         fun bake(straight: Boolean, targetX: Float): SkeletonPose {
             val pose = SkeletonPose()
-            // P12 WP-I: the read-fold asserted below is the AUTHORING BAKE's realized-instance
-            // reading, which is produced only while the engine stage is disabled (§12.7a). The
-            // deployed default is now the activated configuration, so this scope is explicit rather
-            // than assumed; the activated producer of the same reading is covered by the
-            // stage-window test in this file (`activeIkStageFoldsFallbackAndCountsOneExecution`).
+            // The fold asserted below is the AUTHORING BAKE's reading, produced only while the
+            // engine stage is disabled; the deployed default is the activated configuration, so
+            // this scope is explicit. The activated producer is covered by
+            // `activeIkStageFoldsFallbackAndCountsOneExecution`.
             val original = IK_STAGE_ACTIVE
             try {
                 IK_STAGE_ACTIVE = false
@@ -136,23 +126,17 @@ class StraightIntentFallbackTest {
         )
     }
 
-    // ------------------------------------------------- validation-family producer (the V1 fix)
-
     @Test
     fun middleSplitBentLegProbeDropsStraightIntentAtBuild() {
         // MiddleSplitPose is the canonical straight-intent probe: legs author `straight = true`
-        // at hip→foot ≈ 57 units vs thighLength 112 — the engine's only honest outcome is the
-        // bent fallback, which P4 now surfaces on the carrier. This is the first real producer
-        // coverage for the ONLY production authors of straight intent.
+        // at hip→foot ≈ 57 units vs thighLength 112, so the engine's only honest outcome is the
+        // bent fallback — the sole production authors of straight intent.
         //
-        // P12 (WP-F / §12.8 retarget): the reading asserted HERE is the AUTHORING-CONFIGURATION
-        // producer — the bake folding its executed fallback — so it pins flag-OFF explicitly
-        // (R5 keeps both configurations supported; this test's claim is about the bake). Under
-        // the activated configuration the drop is produced by the engine stage window and is
-        // observed on the PUBLISHED state: that path is covered by
+        // The reading asserted HERE is the AUTHORING-CONFIGURATION producer (the bake folding its
+        // executed fallback), so it pins flag-OFF; both configurations stay supported. The
+        // activated producer is observed on the PUBLISHED state by
         // [middleSplitPublishedStateCarriesTheDropThroughThePipeline] plus
-        // ValidationOwnershipReCertificationTest.straightProbeReadingComesFromActiveImplementation
-        // (which pins build-window-empty / stage-window-produces exactly).
+        // ValidationOwnershipReCertificationTest.straightProbeReadingComesFromActiveImplementation.
         val original = IK_STAGE_ACTIVE
         try {
             IK_STAGE_ACTIVE = false
@@ -176,8 +160,6 @@ class StraightIntentFallbackTest {
             result.pose.straightIntentDropped
         )
     }
-
-    // ------------------------------------------------------- ConstraintSolver strengthen-only
 
     @Test
     fun solverBranchEvidenceStrengthensARebentStraightContact() {
@@ -213,7 +195,7 @@ class StraightIntentFallbackTest {
     @Test
     fun solverCannotEraseAPrimaryDrop() {
         // Benign posture-driven settlement (no straight specs): a primary `true` must survive
-        // the merge-once strengthen-only write (R6 / §4.4 OR).
+        // the merge-once strengthen-only (OR) write.
         val nodes = SkeletonFactory.createStandardSkeleton()
         nodes.roots.forEach { it.updateWorldTransforms(Vector3(), JointRotation()) }
         val pose = SkeletonPose()
@@ -223,8 +205,6 @@ class StraightIntentFallbackTest {
         ConstraintSolver.solve(pose, SkeletonDefinition.DEFAULT_ADULT)
         assertTrue(pose.straightIntentDropped)
     }
-
-    // ----------------------------------------------------------- runtime-window enforcement
 
     @Test
     fun activeIkStageFoldsFallbackAndCountsOneExecution() {
@@ -280,17 +260,13 @@ class StraightIntentFallbackTest {
 
     @Test
     fun pipelineRejectsASecondRuntimeSolverWindow() {
-        // Fault injection: a second Phase-1 runtime solver window on one frame must make the
-        // pipeline throw. PR #216's counter shape could not catch this design; this pins the
-        // ENFORCEMENT, not just the counter's existence.
-        //
-        // P12 WP-H (finding F-2) — the injection goes through the REGISTERED realization path. The
-        // previous shape wrote the counter directly (`built.limbSolverExecutions = 2`), which tests
-        // the `check` expression rather than the mechanism: a fabricated evidence value can never
-        // be produced by production code, so the assertion proved nothing about enforcement. A
-        // genuine second window is produced by the two registered engines co-executing on one
-        // frame — the test-only direct stage window plus the pipeline's own stage window — the
-        // exact co-execution shape `SingleActiveSolverEnforcementTest` anchors.
+        // Fault injection: a second runtime solver window on one frame must make the pipeline
+        // throw — this pins the ENFORCEMENT, not the counter's existence. The injection goes
+        // through the REGISTERED realization path: writing the counter directly would test the
+        // `check` expression, not the mechanism, since production can never fabricate an evidence
+        // value. A genuine second window comes from the two registered engines co-executing on one
+        // frame — the test-only direct stage window plus the pipeline's own — the exact shape
+        // `SingleActiveSolverEnforcementTest` anchors.
         val original = IK_STAGE_ACTIVE
         try {
             IK_STAGE_ACTIVE = true

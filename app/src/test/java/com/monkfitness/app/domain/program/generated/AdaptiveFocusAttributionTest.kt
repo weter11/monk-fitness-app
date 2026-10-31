@@ -32,44 +32,18 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * P29's **focus attribution**: the one place where the semantic link between a generated plan and a
- * performed exercise is created.
+ * Focus attribution: the one place where the semantic link between a generated plan and a performed
+ * exercise is created.
  *
- * ### The gap this stage found, which was not the gap P27 recorded
- *
- * P27 left `recentExposureByFocus` and `recentLoadByFocus` neutral and wrote down why: *"no object on
- * the way from a plan to a performed set carries a focus"*. That statement was **true and incomplete**.
- * The focus did exist — `GeneratedElement.focus`, assigned by the Focus Planner, asserted by
- * `GeneratedSlot` to be exactly the assignment's focuses in order — and `PlanReconciler` dropped it in
- * the very next step, when it materialised the element into a `ProgramExercise`.
- *
- * So the defect was a **discarded fact**, not a missing one, and the difference decides the fix:
- *
- * ```text
- * missing fact   → the only way forward is to invent a proxy (P27 correctly refused)
- * discarded fact → the only way forward is to stop discarding it (this suite)
- * ```
- *
- * A proxy would have been `ProductionFocusClassification`: classify a performed exercise by what the
- * catalogue says it trains. That is forbidden here structurally, not merely by convention —
- * `theContextSourceStatesNoRecoveryAndNoFocusDerivedSignal` bans the token in the context source, and
- * `theOnlyPlaceThatCopiesAGeneratedFocusIsTheReconciler` (architecture suite) bans it everywhere else.
- *
- * ### What this suite asserts, claim by claim
- *
- * | claim | test |
- * | --- | --- |
- * | the plan element's focus survives reconciliation | `theGeneratedElementsFocusSurvivesMaterialisation` |
- * | the **primary** focus is what is recorded | `thePrimaryFocusOfAnAssignmentIsTheRecordedFocus` |
- * | a **secondary** focus is recorded on its own element, not folded into the primary | `eachSecondaryFocusIsRecordedOnItsOwnElement` |
- * | **assignment order** is preserved end to end | `theAssignmentOrderSurvivesIntoThePresentation` |
- * | no default focus is invented for an unassigned element | `anElementWithNoAssignmentRecordsNoFocus` |
- * | an **adjusted** element keeps the focus of its assignment | `anAdjustmentChangesWhatIsShownAndNeverWhichFocusItServes` |
- * | an adjusted element is never left focus-less | `aStandingAdjustmentNeverErasesTheRecordedFocus` |
+ * The defect it closes was a **discarded fact**, not a missing one: `GeneratedElement.focus` existed —
+ * assigned by the Focus Planner, asserted by `GeneratedSlot` to be exactly the assignment's focuses in
+ * order — and `PlanReconciler` dropped it when it materialised the element into a `ProgramExercise`.
+ * So the fix is to stop discarding it. Inventing a proxy instead (`ProductionFocusClassification`,
+ * classifying a performed exercise by what the catalogue says it trains) is forbidden structurally, not
+ * merely by convention: `theContextSourceStatesNoRecoveryAndNoFocusDerivedSignal` bans the token in the
+ * context source, and `theOnlyPlaceThatCopiesAGeneratedFocusIsTheReconciler` bans it everywhere else.
  */
 class AdaptiveFocusAttributionTest {
-
-    // ------------------------------------------------------------------ the discarded fact is now kept
 
     @Test
     fun theGeneratedElementsFocusSurvivesMaterialisation() {
@@ -91,7 +65,7 @@ class AdaptiveFocusAttributionTest {
     @Test
     fun thePrimaryFocusOfAnAssignmentIsTheRecordedFocus() {
         // A single-focus slot is the ordinary case, and the one where a "primary" and a "first element"
-        // could be confused. They are the same value only because §8's contract says the first element
+        // could be confused. They are the same value only because the contract says the first element
         // serves the primary — which is asserted here rather than assumed.
         val plan = generatedPlan(assignment = FocusAssignment(primary = Focus.LEGS))
 
@@ -142,7 +116,7 @@ class AdaptiveFocusAttributionTest {
     fun theAssignmentOrderSurvivesIntoThePresentation() {
         // End to end within the domain: plan → draft element → what a session would be shown. If the
         // order is lost here, then "which element was the secondary" is unanswerable at the snapshot
-        // boundary, and §19 would freeze an ambiguous history.
+        // boundary, and the frozen history is ambiguous.
         val plan = generatedPlan(
             assignment = FocusAssignment(primary = Focus.PULL, secondary = listOf(Focus.LEGS))
         )
@@ -156,8 +130,6 @@ class AdaptiveFocusAttributionTest {
             presented.exercises.map { it.focus }
         )
     }
-
-    // ------------------------------------------------------------------ absence is never a default
 
     @Test
     fun anElementWithNoAssignmentRecordsNoFocus() {
@@ -199,11 +171,9 @@ class AdaptiveFocusAttributionTest {
         )
     }
 
-    // ------------------------------------------------------------------ an adjustment is not a reassignment
-
     @Test
     fun anAdjustmentChangesWhatIsShownAndNeverWhichFocusItServes() {
-        // §16's rule: an adjustment supersedes the *presentation* of an element. It does not re-decide the
+        // The rule: an adjustment supersedes the *presentation* of an element. It does not re-decide the
         // slot's assignment, so an adjusted occurrence still trains the focus its element was planned for.
         val plan = generatedPlan(assignment = FocusAssignment(primary = Focus.CORE))
         val elements = PlanReconciler.reconcile(draftOf(), plan, ids()).days.first().exercises
@@ -247,7 +217,7 @@ class AdaptiveFocusAttributionTest {
     fun aStandingAdjustmentNeverErasesTheRecordedFocus() {
         // The negative form of the rule above, and the one that actually protects history: the stored
         // adjustment carries no focus of its own, so reading the presented element from the adjustment
-        // would produce a focus-less element and §19 would freeze that absence into the snapshot forever.
+        // would produce a focus-less element and the snapshot would freeze that absence forever.
         val plan = generatedPlan(assignment = FocusAssignment(primary = Focus.LEGS))
         val elements = PlanReconciler.reconcile(draftOf(), plan, ids()).days.first().exercises
         val target = elements.single()
@@ -281,13 +251,11 @@ class AdaptiveFocusAttributionTest {
         )
     }
 
-    // ------------------------------------------------------------------ the snapshot boundary
-
     @Test
     fun theHistoricalSnapshotStatesTheFocusThePresentationCarried() {
-        // The fact §19 freezes: an `EffectiveWorkout` presented from a revision that has focuses states
-        // them, and that is what a snapshot element copies. Nothing here reads a revision, a catalogue or
-        // an adaptive state — the value is already on the presentation.
+        // The fact a snapshot freezes: an `EffectiveWorkout` presented from a revision that has focuses
+        // states them, and that is what a snapshot element copies. Nothing here reads a revision, a
+        // catalogue or an adaptive state — the value is already on the presentation.
         val plan = generatedPlan(
             assignment = FocusAssignment(primary = Focus.PUSH, secondary = listOf(Focus.CORE))
         )
@@ -305,8 +273,8 @@ class AdaptiveFocusAttributionTest {
 
     @Test
     fun theGeneratedPackageGainedNoFocusVocabularyOfItsOwn() {
-        // The recorded focus is §8's `Focus`, by identity — not a new token type, not a string, and not a
-        // second vocabulary that could drift from the Focus Planner's.
+        // The recorded focus is the domain's `Focus`, by identity — not a new token type, not a string,
+        // and not a second vocabulary that could drift from the Focus Planner's.
         val reconciled = PlanReconciler.reconcile(
             draftOf(),
             generatedPlan(assignment = FocusAssignment(primary = Focus.PULL)),
@@ -325,8 +293,6 @@ class AdaptiveFocusAttributionTest {
             Focus.entries.contains(recorded)
         )
     }
-
-    // ------------------------------------------------------------------ fixtures
 
     private fun assertTrue(message: String, condition: Boolean) =
         org.junit.Assert.assertTrue(message, condition)

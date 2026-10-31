@@ -47,27 +47,13 @@ import java.time.ZoneOffset
  * The session-runtime suite's rig: the data-access rig's real SQLite engine and production DAOs, plus
  * the [SessionRuntime] built over them exactly as [com.monkfitness.app.di.AppContainer] builds it.
  *
- * Everything a session test needs to state is reachable from here:
- *
- *  * [runtime] — the behaviour under test, constructed with a [MovableClock] (so *when* a workout
- *    started, when a set was confirmed and when it finished are values the test chose) and a
- *    [SequentialIds] generator (so every minted session, occurrence and set id is readable in a failure
- *    message);
- *  * [database] — the engine, for the mutations a test performs *underneath* a session (rewriting the
- *    plan, re-pointing an element) and for the row-level readings that make "the snapshot is stored"
- *    and "nothing was written" measurable rather than argued;
- *  * [freshRuntime] — the same graph through **freshly constructed repositories**, which is what makes
- *    "this value came from storage" a claim about rows rather than about a cache: the runtime holds no
- *    state of its own, so a restart is exactly a second instance over the same database;
- *  * [graph] / [createProgram] — a Program with a real three-day plan and one opportunity per plan day,
- *    created through the production creation path;
- *  * [saveRevisedPlan] — a second, structurally different revision of it: a different element order, a
- *    different exercise and different prescriptions, with **new** day and element identities, which is
- *    the §6 Save a started session must be immune to;
- *  * [plantAdjustment] — one applied decision and the adjustment it produced, stored through the
- *    production adaptive path, so a presentation can be measured with an adjustment standing for it;
- *  * [tableCounts] — the row count of **every** table, which is how "a refused operation wrote nothing"
- *    and "a cancelled session did not touch its opportunity" are measured.
+ * Three members carry claims rather than convenience. [freshRuntime] builds the same graph through
+ * **freshly constructed repositories**, which is what makes "this value came from storage" a claim
+ * about rows rather than a cache: the runtime holds no state, so a restart is exactly a second instance
+ * over the same database. [database] allows the mutations a test performs *underneath* a session
+ * (rewriting the plan, re-pointing an element) and the row-level readings that make "the snapshot is
+ * stored" and "nothing was written" measurable rather than argued. [tableCounts] counts **every**
+ * table, which is how "a refused operation wrote nothing" is measured.
  *
  * The fixture's own times and ids are the data-access fixture's (`ProgramGraphFixture`), extended with
  * the moments a session needs — started, confirmed, finished — so the two suites describe the same
@@ -128,14 +114,12 @@ internal class SessionRuntimeRig(key: String = "r", database: SqliteTestDatabase
     /** One slot's id, by its plan day's position. */
     fun slotId(position: Int): SlotId = slot(position).slotId
 
-    // ---------------------------------------------------------------- the live plan a session outlives
-
     /**
      * Saves a **second** revision of the Program that changes exactly what a started session must be
      * immune to: the elements' order, the exercise of one of them, and every prescription — with new
-     * day and element identities, because a revision's rows are new rows (§6).
+     * day and element identities, because a revision's rows are new rows.
      *
-     * This is the §6 Save a live plan changes by, and it is what the snapshot suite runs underneath a
+     * This is the Save a live plan changes by, and it is what the snapshot suite runs underneath a
      * session.
      */
     suspend fun saveRevisedPlan(key: String = "r"): ProgramRevision {
@@ -258,8 +242,6 @@ internal class SessionRuntimeRig(key: String = "r", database: SqliteTestDatabase
         return adjustment
     }
 
-    // ---------------------------------------------------------------- what the tests read back
-
     /** The stored session, read through a fresh repository — never a value a call returned. */
     suspend fun stored(sessionId: SessionId): WorkoutSession? =
         data.freshSessionRepository().sessionById(sessionId)
@@ -343,9 +325,8 @@ internal class SessionRuntimeRig(key: String = "r", database: SqliteTestDatabase
             "program_day",
             "program_exercise",
             "program",
-            // The retained global tables. §30 step 15 dropped the shipped program's four that this
-            // census used to reach, so these are what "nothing was written" can still cover — and they
-            // are where a careless write would still land.
+            // The retained global tables: what "nothing was written" can still cover, and where a
+            // careless write would still land.
             "posture_session_progress",
             "body_weight_log",
             "meal_cycles",
@@ -370,7 +351,7 @@ internal object SessionFixture {
     /** When the workout is finished or cancelled. */
     val FINISHED: Instant = Instant.parse("2026-09-21T08:20:00Z")
 
-    /** When a §6 Save replaces the plan underneath a session. */
+    /** When a Save replaces the plan underneath a session. */
     val REVISED: Instant = Instant.parse("2026-09-21T09:00:00Z")
 
     /** When an adjustment is produced for an opportunity. */

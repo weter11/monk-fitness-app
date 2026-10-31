@@ -9,10 +9,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Ad-hoc diagnostic sweep (2026-08-23): user-reported crash when starting a
- * Posture & Mobility session. Exercises every day x training type x focus-area
- * set x equipment set the UI can produce and asserts the two invariants the
- * session UI depends on: non-empty exercise list, unique exercise ids
+ * Ad-hoc diagnostic sweep for a user-reported crash when starting a Posture & Mobility session.
+ * Exercises every day x training type x focus-area set x equipment set the UI can produce and asserts
+ * the two invariants the session UI depends on: non-empty exercise list, unique exercise ids
  * (LazyColumn itemsIndexed key). Not a change-detector: invariants only.
  */
 class PostureSessionExhaustiveSweepTest {

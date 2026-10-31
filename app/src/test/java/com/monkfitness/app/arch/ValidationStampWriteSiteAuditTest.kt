@@ -6,17 +6,15 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Phase 2 (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md — R4/R6 centralization) — whitelist
- * enforcement, decision F6: a TEST-TIME audit (not runtime enforcement) asserting that raw
+ * Whitelist enforcement: a TEST-TIME audit (not runtime enforcement) asserting that raw
  * Validation Stamp writes occur only at explicitly authorized production sites.
  *
  * Model:
  *  - Every assignment to a stamp carrier field in `src/main/java` must either go through
- *    [com.monkfitness.app.animation.ValidationStampMerge] (an R4/R6 strengthening merge) or
- *    appear verbatim in [authorizedRawWrites] below, each with its architectural reason:
- *    the sanctioned build-scoped re-arms (decision F2), sole-producer overwrite cycles
- *    (RFC §4.4), the provisional V12 secondary strengthen (decision F3), and the
- *    carrier-internal duplication in `copyFrom`.
+ *    [com.monkfitness.app.animation.ValidationStampMerge] (a strengthening merge) or appear
+ *    verbatim in [authorizedRawWrites] below, each with its architectural reason: the
+ *    sanctioned build-scoped re-arms, sole-producer overwrite cycles, the provisional secondary
+ *    strengthen, and the carrier-internal duplication in `copyFrom`.
  *  - Bidirectional: an unauthorized write fails the audit, and a whitelisted site that
  *    disappears (or duplicates) also fails — the whitelist cannot silently rot.
  *
@@ -41,7 +39,6 @@ class ValidationStampWriteSiteAuditTest {
 
     /** file name -> (field, exact trimmed line, why this raw write exists). */
     private val authorizedRawWrites: Map<String, List<Triple<String, String, String>>> = mapOf(
-        // --- Active Limb Solver: sanctioned build-scoped re-arms (decision F2) -------------
         "BasePose.kt" to listOf(
             Triple(
                 "boneLengthsVerified", "jointsBuffer.boneLengthsVerified = true",
@@ -83,7 +80,6 @@ class ValidationStampWriteSiteAuditTest {
             )
         ),
 
-        // --- Root Translation / Rotation Delta: sole producer, sanctioned overwrite cycle ---
         "ConstraintSolver.kt" to listOf(
             Triple(
                 "rootTranslationDelta", "pose.rootTranslationDelta = 0f",
@@ -104,7 +100,6 @@ class ValidationStampWriteSiteAuditTest {
             )
         ),
 
-        // --- Finalizer: sole-producer stamps + provisional V12 strengthen -------------------
         "SkeletonPoseFinalizer.kt" to listOf(
             Triple(
                 "rootTranslationDelta",
@@ -127,7 +122,6 @@ class ValidationStampWriteSiteAuditTest {
             )
         ),
 
-        // --- Carrier-internal duplication (no production callers found on main) -------------
         "PoseDefinition.kt" to listOf(
             Triple(
                 "maxIkClampAmount", "this.maxIkClampAmount = other.maxIkClampAmount",
@@ -164,12 +158,10 @@ class ValidationStampWriteSiteAuditTest {
                 val line = stripComment(lines[i])
                 val m = assignmentRegex.find(line) ?: continue
                 if (m.groupValues[1] !in stampFields) continue
-                // Phase 4 (R5): the IKResult scratch buffer is a solve-local outcome carrier
-                // (RFC §4.3 — Limb Solve Result, never an inter-subsystem state), not the
-                // pose's Validation Stamp. Its field writes are out of this audit's scope;
-                // the carrier stamp itself is only writable through ValidationStampMerge or
-                // the whitelisted sites below. Receiver-based: every carrier write in the
-                // codebase sits on `pose.`/`jointsBuffer.`/`buffer.`/`this.` — never `result.`.
+                // The IKResult scratch buffer is a solve-local outcome carrier (Limb Solve
+                // Result, never inter-subsystem state), not the pose's Validation Stamp, so its
+                // field writes are out of scope. Receiver-based: every carrier write sits on
+                // `pose.`/`jointsBuffer.`/`buffer.`/`this.` — never `result.`.
                 val lhs = line.substringBefore('=')
                 if (Regex("""(?<![A-Za-z0-9_])result\.${m.groupValues[1]}\s*$""").containsMatchIn(lhs)) continue
                 val throughHelper = line.contains("ValidationStampMerge.") ||
@@ -208,7 +200,7 @@ class ValidationStampWriteSiteAuditTest {
 
     /**
      * The sole-producer Hip ROM Stamp overwrite is preceded by exactly one map clear per
-     * publication — pin both halves of the overwrite cycle.
+     * publication — both halves of the overwrite cycle are pinned.
      */
     @Test
     fun hipRomStampOverwriteCycleIsComplete() {
@@ -221,8 +213,6 @@ class ValidationStampWriteSiteAuditTest {
             }
         assertEquals(1, clears.size)
     }
-
-    // ------------------------------------------------------------------
 
     private fun fieldName(line: String): String =
         stampFields.first { line.contains(it) }

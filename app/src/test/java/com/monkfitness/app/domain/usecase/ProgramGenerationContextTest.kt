@@ -35,33 +35,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P27's **production generation context** — what a generation pass is planned against, and, just as
- * importantly, what it is *not* planned against.
+ * The production generation context — what a generation pass is planned against, and just as importantly
+ * what it is *not* planned against.
  *
- * The class under test is [ProgramHistoryGenerationContext], the one production owner of §8's plain
- * signals. Every test here is written to fail for a **specific fabrication**, because the failure modes
- * this stage exists to prevent are all silent: a context that reads plausible and produces a slightly
- * different plan for the same user, with nothing crashing and every planner assertion still green.
+ * [ProgramHistoryGenerationContext] is the one production owner of the plain signals, and every test here
+ * fails for a **specific fabrication**, because the failure modes are all silent: a context that reads
+ * plausible and produces a slightly different plan for the same user, with nothing crashing and every
+ * planner assertion still green. The fabrications closed: exposure or load counted from sessions, slots or
+ * repetitions; absence turned into `0`; `currentExerciseId` promoted to an adaptive preference; recovery
+ * derived from elapsed time.
  *
- * The four fabrications the brief names, and the test that closes each:
- *
- * | fabrication | test |
- * | --- | --- |
- * | exposure or load counted from sessions / slots / repetitions | `exposureIsNotDerivedFromTheSessionCount`, `loadIsNotDerivedFromRepetitions` |
- * | absence turned into `0` | `aProgramWithNoHistoryStatesAbsenceRatherThanZero`, `aSkippedOccurrenceIsNotAZeroExposure` |
- * | `currentExerciseId` promoted to an adaptive preference | `aStoredFamiliesCurrentExerciseIsNeverReadAsAGenerationPreference` |
- * | recovery derived from elapsed time | `recoveryIsNeverDerivedFromElapsedTime` |
- *
- * ### Why a *negative* suite is the honest shape here
- *
- * Six of the six signals cannot all be filled from production today, and the value of this class is
- * mostly in the five it refuses to invent. So the suite asserts the refusals as first-class facts: a
- * neutral field is not a missing test, it is the documented answer, and a later stage that fills one of
- * them will have to *revise* these tests rather than find them silently passing.
+ * The suite asserts its refusals as first-class facts, because the signals cannot all be filled from
+ * production: a neutral field is the documented answer, not a missing test, and a later stage filling one
+ * will have to *revise* these tests rather than find them silently passing.
  */
 class ProgramGenerationContextTest {
-
-    // ------------------------------------------------------------------ scope: one Program, never another
 
     @Test
     fun theContextIsScopedToTheDraftsOwnProgram() = runBlocking {
@@ -90,8 +78,8 @@ class ProgramGenerationContextTest {
 
     @Test
     fun anotherProgramsHistoryNeverEntersTheRequest() = runBlocking {
-        // The other Program's history is *present and non-empty*, so this is not an absence test: a
-        // source that read the wrong Program would produce a real, plausible, wrong list.
+        // The other Program's history is *present and non-empty*, so this is not an absence test: a source
+        // reading the wrong Program would produce a real, plausible, wrong list.
         val read = RecordingHistory(
             mapOf(
                 PROGRAM to listOf(session("alpha", minutes = 10, exercises = listOf(performed("squats")))),
@@ -119,10 +107,9 @@ class ProgramGenerationContextTest {
 
     @Test
     fun anAllProgramsAggregationIsNeverAssembled() = runBlocking {
-        // The failure this closes is not "another Program leaks in" but "everything is summed": a
-        // context source with no scope at all would still pass the *previous* test if this Program's
-        // own list happened to be a prefix. So the fixture makes the foreign list strictly larger and
-        // asserts the total count too.
+        // The failure closed here is not "another Program leaks in" but "everything is summed": a source
+        // with no scope at all would pass the *previous* test if this Program's own list were a prefix, so
+        // the fixture makes the foreign list strictly larger and asserts the total count too.
         val read = RecordingHistory(
             mapOf(
                 PROGRAM to listOf(session("alpha", minutes = 10, exercises = listOf(performed("squats")))),
@@ -141,16 +128,13 @@ class ProgramGenerationContextTest {
         )
     }
 
-    // ------------------------------------------------------------------ a new Program states nothing
-
     @Test
     fun aNewProgramGetsTheNeutralContextAndIsNeverReadAtAll() = runBlocking {
         val read = RecordingHistory(mapOf(PROGRAM to listOf(session("alpha", exercises = listOf(performed("squats"))))))
         val context = ProgramHistoryGenerationContext(read)
 
-        // A draft with no ProgramId will CREATE a Program. There is nothing to scope a read to, so the
-        // honest answer is the neutral one — and no read is issued at all, which is what makes this
-        // more than a filtered result.
+        // A draft with no ProgramId will CREATE a Program: nothing to scope a read to, so the answer is
+        // neutral and no read is issued at all — which is what makes this more than a filtered result.
         val preferences = context.preferencesFor(ProgramEditorDraft(name = "New", mode = com.monkfitness.app.domain.program.ProgramMode.GENERATED))
 
         assertEquals(
@@ -176,9 +160,8 @@ class ProgramGenerationContextTest {
     @Test
     fun aProgramWithNoHistoryStatesAbsenceRatherThanZero() = runBlocking {
         // Distinct from the new-Program case: here the Program EXISTS and was read, and the answer is
-        // still the neutral one. `recentExposureByFocus` is the field this is really about — an
-        // existing Program with no performed session has no exposure to state, and an entry per focus
-        // reading `0` would claim the Program trained each focus as often as nothing.
+        // still neutral. `recentExposureByFocus` is the field this is about — an entry per focus reading
+        // `0` would claim the Program trained each focus as often as nothing.
         val read = RecordingHistory(mapOf(PROGRAM to emptyList()))
         val context = ProgramHistoryGenerationContext(read)
 
@@ -207,8 +190,6 @@ class ProgramGenerationContextTest {
         }
     }
 
-    // ------------------------------------------------------------------ what counts as performed
-
     @Test
     fun recentExercisesAreOrderedMostRecentFirst() = runBlocking {
         val history = listOf(
@@ -231,8 +212,8 @@ class ProgramGenerationContextTest {
     @Test
     fun aRepeatedExerciseKeepsItsMostRecentPositionAndIsStatedOnce() = runBlocking {
         // `GenerationPreferences` refuses a duplicate in `recentExerciseIds` ("most recent first is an
-        // order, so an exercise appears at most once"), so the source must de-duplicate rather than pass
-        // the raw list through — and it must keep the *latest* sighting, not the first it walked past.
+        // order, so an exercise appears at most once"), so the source de-duplicates — keeping the *latest*
+        // sighting, not the first it walked past.
         val history = listOf(
             session("s1", minutes = 10, exercises = listOf(performed("squats"), performed("rows"))),
             session("s2", minutes = 20, exercises = listOf(performed("squats")))
@@ -250,9 +231,9 @@ class ProgramGenerationContextTest {
 
     @Test
     fun skippedAndUnperformedOccurrencesDoNotBecomeExposure() = runBlocking {
-        // Three shapes of "not performed", all of which the brief names: an explicitly skipped exercise,
-        // an occurrence that was presented and confirmed nothing, and content that was planned but never
-        // started (which is simply absent from the session graph and therefore cannot appear at all).
+        // Three shapes of "not performed": an explicitly skipped exercise, an occurrence presented but
+        // confirming nothing, and content planned but never started (absent from the session graph, so it
+        // cannot appear at all).
         val history = listOf(
             session(
                 "s1",
@@ -318,9 +299,9 @@ class ProgramGenerationContextTest {
 
     @Test
     fun aCancelledAttemptStillCountsWhatWasActuallyPerformed() = runBlocking {
-        // §19 preserves a cancelled attempt's partial work in the session, and the brief says "only real
-        // performed exposures". Filtering on the session's status would be inventing a rule no domain
-        // statement owns; the per-occurrence rule is the one that exists.
+        // A cancelled attempt's partial work is preserved in the session, and only real performed
+        // exposures count. Filtering on the session's status would invent a rule no domain statement owns;
+        // the per-occurrence rule is the one that exists.
         val cancelled = session(
             "s1",
             minutes = 10,
@@ -338,13 +319,11 @@ class ProgramGenerationContextTest {
         )
     }
 
-    // ------------------------------------------------------------------ the signals that stay neutral
-
     @Test
     fun exposureIsNotDerivedFromTheSessionCount() = runBlocking {
-        // The specific forbidden derivation: one workout that trained two focuses must contribute to
-        // two entries, so a session count can never be the answer — and a source that counted sessions
-        // would produce a NON-empty map here, which is exactly what this asserts against.
+        // The forbidden derivation: one workout training two focuses must contribute to two entries, so a
+        // session count can never be the answer — and a source counting sessions would produce a
+        // NON-empty map here, which is what this asserts against.
         val history = (1..4).map { position ->
             session("s$position", minutes = 10 * position, exercises = listOf(performed("squats")))
         }
@@ -363,9 +342,9 @@ class ProgramGenerationContextTest {
 
     @Test
     fun loadIsNotDerivedFromRepetitions() = runBlocking {
-        // 24 confirmed sets across the history, and the load map is still empty. The forbidden moves are
-        // all visible in that number: summing repetitions, converting seconds, collapsing a LoadProfile
-        // to a scalar, or attributing sets to a focus.
+        // 24 confirmed sets across the history, and the load map is still empty. Every forbidden move is
+        // visible in that number: summing repetitions, converting seconds, collapsing a LoadProfile to a
+        // scalar, or attributing sets to a focus.
         val history = (1..3).map { position ->
             session(
                 "s$position",
@@ -387,9 +366,9 @@ class ProgramGenerationContextTest {
 
     @Test
     fun noCrossDimensionScalarConversionReachesTheRequest() = runBlocking {
-        // One session holding BOTH a repetition prescription and a time prescription: the two are
-        // incomparable measurements (§LoadProfile's own rule), so any single figure over them would be
-        // meaningless. The fixture makes the trap concrete rather than asserting a general principle.
+        // One session holding BOTH a repetition and a time prescription: the two are incomparable
+        // measurements, so any single figure over them is meaningless. The fixture makes the trap concrete
+        // rather than asserting a general principle.
         val mixed = session(
             "s1",
             exercises = listOf(
@@ -424,15 +403,12 @@ class ProgramGenerationContextTest {
 
     @Test
     fun aStoredFamiliesCurrentExerciseIsNeverReadAsAGenerationPreference() = runBlocking {
-        // The named prohibition. `FamilyProgressionState.currentExerciseId` exists and is stored, and its
-        // own KDoc says it is "the exercise id the family is currently on" — family-scoped and
-        // revision-scoped. Turning it into a generation preference would need a contract that does not
-        // exist, so this suite states the *outcome*: the source never reads it, and the list is empty.
+        // `FamilyProgressionState.currentExerciseId` is stored and means "the exercise the family is
+        // currently on" — family- and revision-scoped. Turning it into a generation preference would need a
+        // contract that does not exist, so the outcome is asserted: the source never reads it.
         //
-        // The strongest available form of that claim is structural, and it is asserted separately in
-        // `ProgramGenerationContextArchitectureTest` (the source names no adaptive collaborator at all).
-        // Behaviourally, what matters is that a history rich enough to suggest a preference still yields
-        // an empty preference list.
+        // The structural form of the claim lives in `ProgramGenerationContextArchitectureTest`; what
+        // matters here is that a history rich enough to suggest a preference still yields an empty list.
         val history = (1..6).map { position ->
             session("s$position", minutes = 10 * position, exercises = listOf(performed("bench_press")))
         }
@@ -456,9 +432,9 @@ class ProgramGenerationContextTest {
     @Test
     fun recoveryIsNeverDerivedFromElapsedTime() = runBlocking {
         // A gap of two hours between the last session and now, and recovery is still UNKNOWN. There is no
-        // clock in the source at all, which is what makes this structural rather than merely asserted —
-        // but the behavioural claim is stated here too, because a future "helpful" cooldown rule is
-        // exactly the kind of change that arrives with a test attached.
+        // clock in the source at all, which makes this structural rather than merely asserted — but the
+        // behavioural claim is stated here too, because a "helpful" cooldown rule is exactly the change
+        // that arrives with a test attached.
         val history = listOf(session("s1", minutes = 10, exercises = listOf(performed("squats"))))
 
         val preferences = ProgramHistoryGenerationContext(RecordingHistory(mapOf(PROGRAM to history)))
@@ -473,19 +449,13 @@ class ProgramGenerationContextTest {
     }
 
     /**
-     * **P27's claim, revised by P28 — not relaxed.**
+     * A draft full of user-authored, pinned elements still states what the user **built**, not what they
+     * would prefer a generator to pick: reading plan content as a wish list is a different meaning the
+     * codebase does not state.
      *
-     * P27 asserted that §9's top level stays empty *because no persisted preference existed*. P28 gave the
-     * signal a real owner, so that reason is gone; the claim underneath it is not. A draft full of
-     * user-authored, pinned elements still states what the user **built**, not what they would prefer a
-     * generator to pick, and reading plan content as a wish list remains a different meaning the codebase
-     * does not state.
-     *
-     * So the test is restated against the value that now carries the preference, and it is *stronger* than
-     * before: it plants a draft with pinned and user-authored elements AND an explicitly stated preference,
-     * then asserts the request holds **exactly** the stated preference — the plan's content appears nowhere
-     * in it. An implementation that read plan content would add those ids and fail; one that dropped the
-     * stated preference would fail the other half.
+     * The test plants such a draft AND an explicitly stated preference, then asserts the request holds
+     * **exactly** the stated preference — the plan's content appears nowhere in it. Reading plan content
+     * adds ids and fails; dropping the stated preference fails the other half.
      */
     @Test
     fun noUserPreferenceIsInventedFromTheDraftsOwnPlanContent() = runBlocking {
@@ -527,12 +497,10 @@ class ProgramGenerationContextTest {
         )
     }
 
-    // ------------------------------------------------------------------ the read itself
-
     @Test
     fun theContextIsReadFromTheOneRepositoryReadAndNeverFromADao() = runBlocking {
-        // Two facts about the read itself, measured together because they are one decision: it is the
-        // repository's own `sessionsOfProgram`, and it is asked exactly once per call.
+        // Two facts measured together because they are one decision: the read is the repository's own
+        // `sessionsOfProgram`, and it is asked exactly once per call.
         val read = RecordingHistory(mapOf(PROGRAM to listOf(session("s1", exercises = listOf(performed("squats"))))))
         val context = ProgramHistoryGenerationContext(read)
 
@@ -547,9 +515,8 @@ class ProgramGenerationContextTest {
 
     @Test
     fun equalInputStateProducesEqualPreferences() = runBlocking {
-        // The snapshot-consistency claim at the source's own level: same Program, same stored history,
-        // two separate reads, one answer. There is no caching that could make this pass for the wrong
-        // reason — each call goes to the read again.
+        // Same Program, same stored history, two separate reads, one answer — and no cache that could make
+        // this pass for the wrong reason, since each call goes to the read again.
         val history = listOf(
             session("s1", minutes = 10, exercises = listOf(performed("squats"))),
             session("s2", minutes = 20, exercises = listOf(performed("rows")))
@@ -563,8 +530,6 @@ class ProgramGenerationContextTest {
         assertEquals("the same stored state yields the same stated facts", first, second)
         assertEquals("and the read really happened twice, so the equality is not a cache", 2, read.calls)
     }
-
-    // ------------------------------------------------------------------ fixtures
 
     private companion object {
 
@@ -583,8 +548,8 @@ class ProgramGenerationContextTest {
         )
 
         /**
-         * A stored session of one Program: complete, snapshot-bound and legal, so the fixture cannot
-         * drift into a shape the repository would refuse.
+         * A stored session: complete, snapshot-bound and legal, so the fixture cannot drift into a shape the
+         * repository would refuse.
          */
         fun session(
             key: String,
@@ -646,9 +611,9 @@ class ProgramGenerationContextTest {
 /**
  * A [GenerationSessionHistory] that answers from a stated map and **records what it was asked for**.
  *
- * The recording is the point: "scoped to one Program" is only measurable if the read can be observed,
- * and a suite that asserted only the returned list could not tell a correctly scoped read from one that
- * read everything and happened to return the right answer.
+ * The recording is the point: "scoped to one Program" is only measurable if the read can be observed, and
+ * asserting only the returned list could not tell a correctly scoped read from one that read everything
+ * and happened to return the right answer.
  */
 private class RecordingHistory(
     private val byProgram: Map<ProgramId, List<WorkoutSession>>

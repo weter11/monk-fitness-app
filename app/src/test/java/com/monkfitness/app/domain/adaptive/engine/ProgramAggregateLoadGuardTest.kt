@@ -10,10 +10,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §18's aggregate load guard, measured at its own boundary.
+ * The aggregate load guard, measured at its own boundary.
  *
  * The guard is a component and not a step inside the engine, so it is exercised here directly, at every
- * scope §18 names, with profiles stated by hand. That is what makes its refusals checkable: a rule is
+ * scope it names, with profiles stated by hand. That is what makes its refusals checkable: a rule is
  * only proven when the *exact* channel it is about moves, when a channel it may not compare stays out
  * of the verdict, and when the same three profiles always produce the same verdict.
  */
@@ -23,8 +23,6 @@ class ProgramAggregateLoadGuardTest {
 
     private val baseline =
         profile(scope = AdaptiveScope.EXERCISE, sets = 3, repetitions = 30, level = 2)
-
-    // ------------------------------------------------------------------ what it approves
 
     @Test
     fun aSafeCandidateStaysApproved() {
@@ -100,8 +98,6 @@ class ProgramAggregateLoadGuardTest {
             verdict.exceeded.map { it.channel }
         )
     }
-
-    // ------------------------------------------------------------------ what it refuses
 
     @Test
     fun anExcessiveAutomaticIncreaseIsFilteredAndNamesTheChannel() {
@@ -193,8 +189,6 @@ class ProgramAggregateLoadGuardTest {
         assertEquals(listOf(ProgramLoadChannel.INTENSITY_LEVEL), verdict.exceeded.map { it.channel })
     }
 
-    // ------------------------------------------------------------------ what it does not guard
-
     @Test
     fun onlyAChangeIsGuardedAndNeverACondition() {
         assertEquals(
@@ -247,8 +241,6 @@ class ProgramAggregateLoadGuardTest {
             (verdict as ProgramGuardVerdict.Filtered).reason
         )
     }
-
-    // ------------------------------------------------------------------ comparability
 
     @Test
     fun profilesStatedAtDifferentScopesAreNeverCompared() {
@@ -313,8 +305,6 @@ class ProgramAggregateLoadGuardTest {
             oneOrder.channels.map { it.channel }
         )
     }
-
-    // ------------------------------------------------------------------ the recent context
 
     @Test
     fun aRecentContextThatMetThePlanAndOwedNothingDoesNotBlock() {
@@ -423,8 +413,6 @@ class ProgramAggregateLoadGuardTest {
             comparison.channelOf(ProgramLoadChannel.INTENSITY_LEVEL, null)
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun approved(verdict: ProgramGuardVerdict): ProgramGuardVerdict.Approved {
         assertTrue("expected an approval, got $verdict", verdict is ProgramGuardVerdict.Approved)

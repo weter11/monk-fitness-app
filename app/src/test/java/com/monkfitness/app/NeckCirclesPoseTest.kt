@@ -18,18 +18,14 @@ import kotlin.math.sqrt
 /**
  * Neck Circles (`neck_circles_hold`) — the exercise's own cervical biomechanics on the PUBLISHED frame.
  *
- * ## Stated intent (there is no BPS and no exercise copy)
+ * There is no BPS and no exercise copy: `WorkoutGenerator` passes `R.string.ex_neck_circles` as
+ * *every* field, so the catalog entry is the title and nothing else — a controlled circle of the
+ * head, filed as a `neck_mobility` timer drill.
  *
- * `WorkoutGenerator` passes `R.string.ex_neck_circles` as *every* field, so the catalog entry is the
- * title and nothing else; the identity is that title across all three locales — *"Neck Circles"*,
- * `values-ru` *"Круговые движения головой"*, `values-uk` *"Обертания головою"* — i.e. a controlled
- * circle of the head, filed as a `neck_mobility` timer drill.
- *
- * The assertions below therefore measure a **cervical cone**: both bones of the chain lie on one
- * direction that advances through a full turn, so the neck's tip rolls on a circle of radius
- * `neckLength · sin θ` while the head's centre rides a bigger one (`(neckLength + 18) · sin θ`) at a
- * **constant height** — and nothing outside the chain moves at all, which is what separates a neck
- * circle from a whole-body roll.
+ * The assertions measure a cervical cone: both bones of the chain lie on one direction that advances
+ * through a full turn, so the neck's tip rolls on a circle of radius `neckLength · sin θ` while the
+ * head's centre rides a bigger one (`(neckLength + 18) · sin θ`) at a constant height — and nothing
+ * outside the chain moves at all, which is what separates a neck circle from a whole-body roll.
  *
  * Every reading is taken through [PoseFrameSweep] (the pipeline entered exactly as `SkeletonRenderer`
  * enters it), never on a raw `build()` result.
@@ -71,7 +67,7 @@ class NeckCirclesPoseTest {
     fun theSweepSamplesDistinctPublishedFrames() {
         val f = frames()
         // Measured 9 of 9: every sample of the circle publishes its own geometry (the seam pair p=0/p=1
-        // differs only by `sin 2π` float noise). A sweep that collapsed to one frame is the T-7 aliasing
+        // differs only by `sin 2π` float noise). A sweep that collapsed to one frame is the aliasing
         // signature and would make every assertion below vacuous.
         assertTrue(
             "the published-frame sweep aliased: only ${PoseFrameSweep.distinctFrameCount(f)} of ${f.size} " +
@@ -280,7 +276,7 @@ class NeckCirclesPoseTest {
         }
     }
 
-    /** The declared base of support reaches the published frame (R8/B-5, the hero's own model). */
+    /** The declared base of support must reach the published frame. */
     @Test
     fun theDeclaredSupportReachesThePublishedFrame() {
         val f = frames()

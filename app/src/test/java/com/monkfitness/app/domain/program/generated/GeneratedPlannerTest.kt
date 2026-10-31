@@ -16,16 +16,12 @@ import org.junit.Test
 import java.time.DayOfWeek
 
 /**
- * §8 and §9's **Generated Planner**, pinned on the plan it produces.
- *
- * The claims here are the ones §30 step 10's architecture gates name: deterministic generation, the
- * focus assignment of every slot, hard constraints that are never violated, repeated use that stays
- * distinct, and an output that is a value rather than a draft — with nothing to persist it and no
- * calendar to place it on.
+ * The **Generated Planner**, pinned on the plan it produces: deterministic generation, the focus
+ * assignment of every slot, hard constraints that are never violated, repeated use that stays distinct,
+ * and an output that is a value rather than a draft — with nothing to persist it and no calendar to
+ * place it on.
  */
 class GeneratedPlannerTest {
-
-    // ------------------------------------------------------------------ determinism (§9)
 
     @Test
     fun theSameRequestProducesTheSamePlan() {
@@ -114,8 +110,6 @@ class GeneratedPlannerTest {
         )
     }
 
-    // ------------------------------------------------------------------ the plan's own shape
-
     @Test
     fun everySlotPlansOneElementPerAssignedFocusInTheAssignmentsOwnOrder() {
         val plan = GeneratedPlanner.plan(GeneratedPlannerRig.request())
@@ -176,8 +170,6 @@ class GeneratedPlannerTest {
             GeneratedPlanner.plan(GeneratedPlannerRig.request(focus = configuration)).focus
         )
     }
-
-    // ------------------------------------------------------------------ selection (§9)
 
     @Test
     fun anExerciseTheEquipmentCannotSupportIsNeverChosen() {
@@ -356,8 +348,6 @@ class GeneratedPlannerTest {
             plan.slots.sumOf { it.elements.count { element -> element.exerciseId == "posture-wall-slide" } }
         )
     }
-
-    // ------------------------------------------------------------------ what cannot be planned
 
     @Test
     fun aFocusNothingTrainsIsReportedRatherThanFilled() {

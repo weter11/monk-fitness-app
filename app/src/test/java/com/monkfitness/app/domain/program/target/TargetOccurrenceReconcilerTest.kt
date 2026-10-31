@@ -224,10 +224,8 @@ class TargetOccurrenceReconcilerTest {
 
     @Test
     fun aHistoricalOccurrenceIsPreservedEqualityIdenticalWithoutAnyActualResults() {
-        // Phase 17 revised this test rather than relaxing it. It planted `ActualResult`s and asserted
-        // they came back identically, which was only observable because the target input borrowed a
-        // type that carried them. The reconciler never read them; the same preservation case is now
-        // stated over the two facts it does read — identity/payload and execution classification.
+        // The preservation case is stated over the two facts the reconciler does read — identity/payload
+        // and execution classification — not over `ActualResult`s it never read.
         val existing = existing(planned("strength", DAY_ONE), OccurrenceExecution.COMPLETED)
 
         val result = TargetOccurrenceReconciler.reconcile(listOf(existing), emptyList())
@@ -280,9 +278,8 @@ class TargetOccurrenceReconcilerTest {
         val startedOccurrence = planned("strength", DAY_ONE)
         val completedOccurrence = planned("mobility", DAY_TWO)
         val replacement = planned("posture", DAY_ONE)
-        // Phase 17 revised this test rather than relaxing it. It exercises the *legacy* Stage 1
-        // reconciler, so it now states its input in the legacy vocabulary: the target contour no
-        // longer speaks `ExistingOccurrence`, but the legacy contour is untouched and still is.
+        // This case exercises the *legacy* reconciler, so it states its input in the legacy vocabulary:
+        // the target contour no longer speaks `ExistingOccurrence`, but the legacy contour still does.
         val existing = listOf(
             legacyExisting(startedOccurrence, OccurrenceExecution.STARTED),
             legacyExisting(completedOccurrence, OccurrenceExecution.COMPLETED)
@@ -332,7 +329,7 @@ class TargetOccurrenceReconcilerTest {
         execution: OccurrenceExecution = OccurrenceExecution.PLANNED
     ) = TargetExistingOccurrence(occurrence, execution)
 
-    /** The legacy Stage 1 input, used only by the legacy-parity case above. */
+    /** The legacy input, used only by the legacy-parity case above. */
     private fun legacyExisting(
         occurrence: PlannedOccurrence,
         execution: OccurrenceExecution

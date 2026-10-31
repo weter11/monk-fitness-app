@@ -13,7 +13,7 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 /**
- * §5's first step and §11's determinism, measured on the reader and the writer themselves.
+ * The reader and the writer themselves, and the two determinism claims they carry.
  *
  * Two things are being pinned here, and they are the two halves of *"malformed JSON must not become an
  * empty Program"* plus *"the same Program input produces byte-equivalent JSON"*:
@@ -28,8 +28,6 @@ import org.junit.Test
  *    all.
  */
 class ProgramTransferJsonTest {
-
-    // ------------------------------------------------------------------ the reader
 
     @Test
     fun aDocumentIsReadIntoItsValues() {
@@ -168,8 +166,6 @@ class ProgramTransferJsonTest {
 
         assertTrue("the guard is a bound and not a refusal", read is JsonValue.JsonArray)
     }
-
-    // ------------------------------------------------------------------ the writer
 
     private fun document(
         name: String = "Push day",

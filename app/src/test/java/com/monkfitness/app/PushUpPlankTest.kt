@@ -64,7 +64,6 @@ class PushUpPlankTest {
         val rom = resultTop.pelvisHeight - resultBottom.pelvisHeight
         assertTrue("Knee push-up ROM should be comfortably large, found: $rom", rom > 10f)
 
-        // Checking alignment logic
         assertTrue(resultTop.kneeX > 60f)
         assertTrue(resultBottom.kneeX > 60f)
     }

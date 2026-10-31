@@ -41,24 +41,18 @@ import com.monkfitness.app.domain.usecase.TargetScheduleSource
 import com.monkfitness.app.domain.usecase.TargetScheduleSourceBridge
 
 /**
- * §30 step 14's rig: the Program System's application services over the data-access rig's real SQLite
- * engine, with the Program UI's state holder wired over them exactly as `MainViewModel` wires it.
+ * The Program System's application services over the transfer rig's real SQLite engine, with the
+ * Program UI's state holder wired over them exactly as `MainViewModel` wires it — so every claim
+ * this suite makes about the UI is measured on storage through the **controller** rather than argued
+ * from a screen's shape.
  *
- * It exists so that every claim this stage makes about the UI is measured on storage through the
- * **controller** rather than argued from a screen's shape:
- *
- *  * [controller] is the object under test — the same construction `MainViewModel` performs, with the two
- *    ports the UI supplies (`catalogue`, `shareTarget`) as doubles that record what they were asked;
- *  * [transfer] is §30 step 13's rig, so the import and export halves are the production services over the
- *    production repositories, and the fixture a test imports is the format's own;
- *  * [clock] and [ids] are the two §26 ports, so a test states the moment of an import and reads back every
- *    identity the import minted;
- *  * [shares] records the file the platform boundary was handed, which is how *"Share goes through §11's
- *    path"* is measured instead of asserted.
+ * [transfer] is the transfer rig (production import/export over production repositories), [clock]
+ * and [ids] are movable so a test states the moment and reads back every minted id, and [shares]
+ * records the file the platform boundary was handed.
  */
 internal class ProgramsRig(key: String = "ui") {
 
-    /** §30 step 13's rig: the real engine, the production repositories and the transfer services. */
+    /** The real engine, the production repositories and the transfer services. */
     val transfer = ProgramTransferRig(key)
 
     val database get() = transfer.database
@@ -69,10 +63,9 @@ internal class ProgramsRig(key: String = "ui") {
     /** Deterministic identity: every id a save mints is readable in a failure message. */
     val ids: SequentialIds get() = transfer.ids
 
-    /** The calendar every date is read in. */
     val zone get() = transfer.zone
 
-    /** §7's editor, wired as the composition root wires it (the same three collaborators, same runner). */
+    /** The editor, wired as the composition root wires it: same three collaborators, same runner. */
     val editor = ProgramEditorService(
         programRepository = transfer.programRepository,
         planRepository = transfer.planRepository,
@@ -82,10 +75,9 @@ internal class ProgramsRig(key: String = "ui") {
     )
 
     /**
-     * §27's production Save — the creation unit (Program + first Revision + initial Slots, anchored
-     * to the request's date) and the revision-plus-reconciliation pair — wired as `MainViewModel`
-     * wires it through the composition root, over the same repositories, the same Scheduler and the
-     * same transaction runner.
+     * The production Save — the creation unit (Program + first Revision + initial Slots, anchored to
+     * the request's date) and the revision-plus-reconciliation pair — wired as `MainViewModel` wires
+     * it: same repositories, same Scheduler, same transaction runner.
      */
     val saveService = ProgramSaveService(
         editor = editor,
@@ -97,7 +89,7 @@ internal class ProgramsRig(key: String = "ui") {
         inTransaction = transfer.data.transaction
     )
 
-    /** §21's Progress/History layer, read by the Detail screen only. */
+    /** The Progress/History layer, read by the Detail screen only. */
     val progress = ProgramProgressService(
         programRepository = transfer.programRepository,
         scheduleRepository = transfer.scheduleRepository,
@@ -107,17 +99,15 @@ internal class ProgramsRig(key: String = "ui") {
     )
 
     /**
-     * §30 step 24's production Generate/Regenerate, wired over the **real** shipped catalogue and the
-     * **real** production focus classification, exactly as the composition root wires it.
+     * The production Generate/Regenerate, over the **real** shipped catalogue and the **real**
+     * production focus classification, exactly as the composition root wires it.
      *
-     * Deliberately not a fixture: the claim this rig exists to measure is that `Generate` runs a real
-     * generation pass over the app's own exercises, and a fixture catalogue would make the UI suite
-     * prove something about the rig instead. The identity source is the rig's own, so every minted
-     * draft handle is readable in a failure message.
+     * Deliberately not a fixture: the claim is that `Generate` runs a real generation pass over the
+     * app's own exercises, and a fixture catalogue would make the UI suite prove something about the
+     * rig instead.
      */
     var generation: ProgramGenerationService = generationOver(ProductionFocusClassification)
 
-    /** The service as [source] states the classification, over the real shipped catalogue. */
     private fun generationOver(
         source: ExerciseGenerationFacts.GenerationFocusSource
     ): ProgramGenerationService = ProgramGenerationService(
@@ -133,25 +123,16 @@ internal class ProgramsRig(key: String = "ui") {
     )
 
     /**
-     * P27's production context, wired over the rig's **real** session repository.
+     * The production context, over the rig's **real** session repository.
      *
      * Deliberately not a stated value: the claim the UI suites make about Generate and Preview is a
-     * claim about the production graph, and a context source that answered from a fixture would prove
-     * something about the rig instead. The read is `sessionsOfProgram` — the one path that assembles a
-     * complete `WorkoutSession` — so the store-a-session-then-generate flow is measured end to end.
+     * claim about the production graph. The read is `sessionsOfProgram` — the one path that assembles
+     * a complete `WorkoutSession` — so store-a-session-then-generate is measured end to end.
      */
     private fun productionContext(): ProgramHistoryGenerationContext = ProgramHistoryGenerationContext(
         sessions = GenerationSessionHistory { programId -> transfer.sessionRepository.sessionsOfProgram(programId) }
     )
 
-    /**
-     * Re-wires the controller over a different focus classification.
-     *
-     * The shipped classification classifies every exercise, so a **refusal** is unreachable through
-     * it — which is exactly why the refusal tests state a different one rather than contorting the
-     * production data to fail. Production wiring is untouched: the default is the real table, and
-     * this is the same port a future user-facing Goals & Focus editor would replace.
-     */
     /**
      * The catalogue's own bar-or-band exercises — the ones a user who declared no equipment cannot
      * perform. Read from the real catalogue so a test never restates the data.
@@ -164,8 +145,8 @@ internal class ProgramsRig(key: String = "ui") {
     /**
      * Rebuilds [controller] over the **current** [generation].
      *
-     * P26 needs to hand the state holder a service that fails (§28's `SYSTEM_FAILURE` class), and a
-     * controller takes its collaborators at construction. Rather than a second construction site — which
+     * A failure test needs to hand the state holder a service that fails, and a controller takes its
+     * collaborators at construction. Rather than a second construction site — which
      * `ProgramsArchitectureTest` pins to exactly two files — the test states the service and asks the
      * rig to rewire, so the graph under test stays the one the composition root builds.
      */
@@ -174,11 +155,11 @@ internal class ProgramsRig(key: String = "ui") {
     /**
      * The generation service over a **fixture** catalogue rather than the shipped one.
      *
-     * §30 step 26 needs a pass that reports *two different* planner limitations in one result —
-     * "nothing trains this focus" and "every exercise for it needs equipment you do not have" — and the
-     * shipped catalogue cannot produce that pair: its classification covers every exercise, so the only
-     * reachable limitation is the equipment one. A fixture states the two facts instead of arguing the
-     * production data into failing, which is the same discipline P25's refusal tests used.
+     * A pass that reports *two different* planner limitations in one result — "nothing trains this
+     * focus" and "every exercise for it needs equipment you do not have" — is unreachable through the
+     * shipped catalogue, whose classification covers every exercise, leaving equipment as the only
+     * reachable limitation. A fixture states the two facts instead of arguing the production data into
+     * failing.
      */
     fun generationOver(
         exercises: List<com.monkfitness.app.data.model.Exercise>,
@@ -212,13 +193,12 @@ internal class ProgramsRig(key: String = "ui") {
     )
 
     /**
-     * When set, the generation pass fails at the catalogue read — §28's `SYSTEM_FAILURE` class, on
-     * purpose and without a device.
+     * When set, the generation pass fails at the catalogue read.
      *
      * It is a flag on the **catalogue port** rather than a second service handed to the state holder,
-     * because the controller takes its collaborators at construction: rebuilding the controller to give
-     * it a failing service would throw away the very working draft a failure test is about. The failure
-     * therefore arrives through the same seam a real one does.
+     * because the controller takes its collaborators at construction: rebuilding the controller to
+     * give it a failing service would throw away the very working draft a failure test is about. The
+     * failure therefore arrives through the same seam a real one does.
      */
     var generationFails: Boolean = false
 
@@ -228,9 +208,8 @@ internal class ProgramsRig(key: String = "ui") {
     }
 
     /**
-     * The equipment the controller states at the moment of a generation pass. Settable, so a test can
-     * state "the user owns a bar" and measure what the plan does with it — and it defaults to the
-     * **empty** set, which is what `SettingsManager.availableEquipmentFlow` defaults to and what P24
+     * The equipment the controller states at the moment of a generation pass. It defaults to the
+     * **empty** set — what `SettingsManager.availableEquipmentFlow` defaults to, and what the planner
      * reads as *the user declared no equipment* rather than *constrain nothing*.
      */
     var declaredEquipment: Set<Equipment> = emptySet()
@@ -245,9 +224,9 @@ internal class ProgramsRig(key: String = "ui") {
     var catalogueFails: Boolean = false
 
     /**
-     * The exercise choices the plan editor is offered: the ids the fixtures plan with, so a draft built by
-     * a test adds exercises the app's own categories would recognise. `nameRes = 0` is the adapter's own
-     * "the catalogue has no label for this id" case, which the screens render as the id.
+     * The exercise choices the plan editor is offered: the ids the fixtures plan with, so a draft built
+     * by a test adds exercises the app's own categories would recognise. `nameRes = 0` is the adapter's
+     * own "the catalogue has no label for this id" case, which the screens render as the id.
      */
     val catalogueOptions: MutableList<ExerciseOptionUi> = ProgramTransferFixture.KNOWN_EXERCISE_IDS
         .sorted()
@@ -255,9 +234,9 @@ internal class ProgramsRig(key: String = "ui") {
         .toMutableList()
 
     /**
-     * §30 step 21's composed Start, wired as the composition root wires it: the real lifecycle
-     * service, the real target production consumer over the real adapter / orchestrator / persister,
-     * the real pause repository and the rig's own calendar.
+     * The composed Start, wired as the composition root wires it: the real lifecycle service, the real
+     * target production consumer over the real adapter / orchestrator / persister, the real pause
+     * repository and the rig's own calendar.
      *
      * The UI suites reach target scheduling only through this node, exactly as `MainViewModel` wires
      * it, so a claim such as "a start with no target authoring writes no target row" is measured on
@@ -327,22 +306,18 @@ internal class ProgramsRig(key: String = "ui") {
     /** The state the screens would render, read as a value. */
     val state: ProgramsUiState get() = controller.state.value
 
-    // ---------------------------------------------------------------- what the tests start from
-
     /** Stores the fixture's non-trivial source Program, which an export and an import both use. */
     suspend fun storeSourceProgram() = transfer.storeSourceProgram()
 
-    /** Creates the built-in Standard Program, so §3's delete fallback has somewhere to fall back to. */
+    /** Creates the built-in Standard Program, so the delete fallback has somewhere to fall back to. */
     suspend fun seedStandardProgram() = transfer.seedStandardProgram()
 
-    /** The source Program's identity. */
     val sourceProgramId: ProgramId get() = transfer.sourceProgramId
 
     /**
      * Creates a Program through the **editor**, as the UI's `Build it myself` path does: open a MANUAL
-     * draft, name it, add one training day with one exercise, save.
-     *
-     * @return the new Program's id, read back from the state the save refreshed.
+     * draft, name it, add one training day with one exercise, save. Returns the new Program's id, read
+     * back from the state the save refreshed.
      */
     suspend fun createProgramThroughTheUi(name: String, exerciseId: String = FIRST_EXERCISE): String? {
         controller.openCreateDraft(ProgramMode.MANUAL)
@@ -357,10 +332,8 @@ internal class ProgramsRig(key: String = "ui") {
     /** The Programs as stored, read through a fresh repository so nothing is a cache. */
     suspend fun storedPrograms(): List<Program> = transfer.storedPrograms()
 
-    /** A Program as stored, or `null`. */
     suspend fun storedProgram(programId: ProgramId): Program? = transfer.storedProgram(programId)
 
-    /** The selection, read from the state row itself. */
     suspend fun selectedProgramId(): ProgramId? = transfer.selection()?.selectedProgramId
 
     /**
@@ -382,10 +355,10 @@ internal class ProgramsRig(key: String = "ui") {
      * [eligible] — the claim the planner's own candidate filter makes, read back through the
      * **production** classification.
      *
-     * It is deliberately not "the union of the exercises' focuses equals the user's selection": an
-     * exercise states every focus it trains, so a mobility drill selected for MOBILITY may also state
-     * CORE and POSTURE. What must hold is that no planned exercise is one that serves *none* of the
-     * focuses the user chose — which is what a configuration that was silently replaced would produce.
+     * Deliberately not "the union of the exercises' focuses equals the user's selection": an exercise
+     * states every focus it trains, so a mobility drill selected for MOBILITY may also state CORE and
+     * POSTURE. What must hold is that no planned exercise serves *none* of the focuses the user chose —
+     * which is what a configuration that was silently replaced would produce.
      */
     suspend fun everyPlannedExerciseServes(eligible: Set<Focus>): Boolean {
         val draft = state.draft ?: return false
@@ -412,12 +385,12 @@ internal class ProgramsRig(key: String = "ui") {
     suspend fun slotsOf(programId: ProgramId): List<WorkoutSlot> = transfer.slotsOf(programId)
 
     /**
-     * Stores an explicit target authoring against [programId]'s current revision — the one fact
-     * §30 step 21's controlled invocation needs before a target pass has anything to plan from.
+     * Stores an explicit target authoring against [programId]'s current revision — the one fact a
+     * target pass needs before it has anything to plan from.
      *
-     * The rule is anchored on the rig's own clock in the rig's own calendar, which is exactly the
-     * date `startProgram` will stamp as the factual start, so the authored cadence actually
-     * resolves rather than being silently filtered out by its own anchor.
+     * The rule is anchored on the rig's own clock in the rig's own calendar, which is exactly the date
+     * `startProgram` will stamp as the factual start, so the authored cadence actually resolves rather
+     * than being silently filtered out by its own anchor.
      */
     suspend fun authorTargetSource(programId: ProgramId) {
         val revision = transfer.planRepository.currentRevision(programId)!!

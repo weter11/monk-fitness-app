@@ -9,74 +9,48 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
- * **B4 — the supine poses' realized elbows must not pass through the mat they declare.**
+ * The supine poses' realized elbows must not pass through the mat they declare.
  *
- * `GluteBridgePose` and `PelvicTiltPose` are the two supine (lying-on-the-back) production poses.
- * Both author the arms the same way — hands at a fixed flank position
- * (`(-35, 12, ±(shoulderWidth + 5))`, *"static (prevents hand sliding)"*) realized through
+ * `GluteBridgePose` and `PelvicTiltPose` both author the arms the same way — hands at a fixed flank
+ * position (`(-35, 12, ±(shoulderWidth + 5))`, *"static (prevents hand sliding)"*) realized through
  * `bakeIkLimb` with the pole `(0, -1, ∓1)` — and both publish their `ELBOW_A`/`ELBOW_P` below their
- * own declared plane (`metadata.environment.ground.level = 0`) at EVERY phase of the rep.
+ * own declared plane (`metadata.environment.ground.level = 0`) at EVERY phase of the rep:
+ * `GluteBridgePose` worst `−30.6914` (at `p = 1.0`), `PelvicTiltPose` worst `−33.3501`, identical
+ * under both frame conditions.
  *
- * **Measured on the tree that carries B1/B2/B3 (`origin/main` @ `ba3928b`), on the published path
- * `SkeletonPipeline.produceFrame(pose, ctx)`:** `GluteBridgePose` `ELBOW_A/P` worst `−30.6914`
- * (at `p = 1.0`), `PelvicTiltPose` `ELBOW_A/P` worst `−33.3501`; the readings are identical under
- * both frame conditions (the elbow is not frame-condition sensitive here). Both pairs are pinned as
- * attributed open items by `PublishedBelowGroundInvariantTest.knownBelowGround` (T2); that table's
- * stale-pin guard is this correction's exit criterion, so the entries cannot outlive it.
+ * The root cause is the authored pole, provably. The elbow is an IK *output*: the pose owns the chain
+ * root (the shoulder), the end target (the hand) and the pole (the bend side). Re-deriving the
+ * published elbow from that triangle (`a = (d² + L1² − L2²)/2d`, `h = √(L1² − a²)`,
+ * `phat = normalize(pole − u·(pole·u))`, elbow `= root + u·a + phat·h`) reproduces the published joint
+ * exactly at every sampled phase of both poses (`err ≤ 0.032`, `0.000000` on most samples) — so
+ * nothing else (solver, finalizer, frames) contributes.
  *
- * **The root cause is the authored pole, provably (the B1 shape).** The elbow is an IK *output*: the
- * pose owns three things — the chain root (the shoulder), the end target (the hand) and the pole
- * (the bend side). Re-deriving the published elbow from that triangle
- * (`a = (d² + L1² − L2²)/2d`, `h = √(L1² − a²)`, `phat = normalize(pole − u·(pole·u))`, elbow
- * `= root + u·a + phat·h`) reproduces the published joint exactly at every sampled phase of both
- * poses (`err ≤ 0.032`, and `0.000000` on most samples) — so nothing else (solver, finalizer,
- * frames) contributes and the authored pole is the whole cause.
+ * `(0, -1, ∓1)` is the standing family's convention, where a downward bow is harmless. On these
+ * supine poses the chord shoulder→hand lies in the floor plane (shoulder `y ≈ 12.9 … 14.0`, hand
+ * `y = 12.0`), so the pole's `−1` Y component lands the perpendicular residual on the chord's
+ * DOWNWARD basis vector: measured `phat_y = −0.7069 … −0.7075` against `h = 58.49 … 60.74`, i.e. the
+ * elbow bows `≈ 41 u` below the chord — through the mat, by `28.6 … 33.4 u`, at every phase.
  *
- * `(0, -1, ∓1)` is the standing family's convention (BaseSquat/BaseLunge/ArmCircles/LatStretch/
- * HipCars/KettlebellSwing) where a downward bow is harmless. On these supine poses the chord
- * shoulder→hand lies in the floor plane (shoulder `y ≈ 12.9 … 14.0`, hand `y = 12.0`), so the
- * pole's `−1` Y component lands the perpendicular residual on the chord's DOWNWARD basis vector:
- * measured `phat_y = −0.7069 … −0.7075` against `h = 58.49 … 60.74`, i.e. the elbow bows
- * `≈ 41 u` below the chord — through the mat, by `28.6 … 33.4 u`, at every phase of both poses.
+ * The fix is pose-side bend-side authoring only: the pole becomes the pose's own lateral axis,
+ * `(0, 0, ∓1)` — both poses rotate about the world Z axis only, so world `±Z` IS the body's lateral
+ * axis at every phase, and the arm's plane becomes the floor plane (*"arms lying flat alongside the
+ * body"*, the pose's own comment). The elbow keeps the lateral side the pole's Z sign already selects
+ * (outboard, never across the torso) and moves from `28.6 … 33.4 u` BESIDE the mat to
+ * `+7.1 … +12.9 u` above it, its residual bow horizontal.
  *
- * **The correction is pose-side bend-side authoring only** (no solver/engine/phase/ownership
- * change, no tolerance moved): the pole becomes the pose's own lateral axis, `(0, 0, ∓1)` — both
- * poses rotate about the world Z axis only (`declarePelvisTilt(..., Vector3(0, 0, 1), torsoAngle)`),
- * so world `±Z` IS the body's lateral axis at every phase, and the arm's plane becomes the floor
- * plane ("*arms lying flat alongside the body*", the pose's own comment). The elbow keeps the
- * lateral side the current pole's Z sign already selects (outboard, never across the torso) and
- * moves from `28.6 … 33.4 u` BESIDE the mat to `+7.1 … +12.9 u` above it, its residual bow
- * horizontal.
+ * Asserted on the PUBLISHED frame, captured by value (`produceFrame(...).pose` is the Finalizer's
+ * reused output buffer), over a DENSE 51-sample sweep in both frame conditions: no arm-chain joint
+ * passes below the pose's own declared plane (and for `GluteBridgePose` the whole body does not); the
+ * elbow lies IN the floor plane, stays outboard and is a real solution of its own chain; the authored
+ * hand placement, planted feet and support declaration are untouched; the two arms are exact mirrors
+ * and both poses declare the same arm authoring; the rep still moves and publishes distinct frames;
+ * and the arm geometry is identical cold and settled.
  *
- * **What this file asserts (all on the PUBLISHED frame, captured by value — `produceFrame(...).pose`
- * is the Finalizer's reused output buffer, the T-7 trap), over a DENSE 51-sample sweep in both
- * frame conditions:**
- *  1. no realized joint of either pose's arm chain (elbow and everything distal — the joints the arm
- *     authoring owns) passes below that pose's own declared plane, and for `GluteBridgePose` the
- *     whole body does not ([noArmChainJointPassesBelowThePosesOwnDeclaredPlane]);
- *  2. the elbow's clearance and its bend side — it lies IN the floor plane (its Y offset from its
- *     own shoulder→hand chord is a fraction of `h`), stays outboard, and is a real solution of its
- *     own chain ([theElbowLiesInTheFloorPlaneAndClearsTheMat]);
- *  3. the authored hand placement, the planted feet and the declared support model are untouched
- *     ([theAuthoredHandsThePlantedFeetAndTheSupportDeclarationAreUnchanged]);
- *  4. the two poses' arms are exact mirrors of each other, and both poses still declare the SAME
- *     arm authoring ([theTwoArmsAreExactMirrorsOfTheAuthoredChain]);
- *  5. the authored rep still moves (the CoreMotionTest / MobilityMotionTest floors) and the sweep
- *     publishes distinct frames ([thePosesChoreographyAndMotionContractAreUnchanged]);
- *  6. the arm geometry is identical on a genuinely cold first frame and on a settled frame
- *     ([theArmGeometryIsFrameConditionInvariant]) — this change must not introduce a cold-frame
- *     defect (the B-8 class).
- *
- * **Out of scope of THIS file: `PelvicTiltPose`'s trunk chain.** This file's subject is the two poses'
- * arm authoring. That pose's rigid trunk was authored through its own mat by the same class of defect
- * — a pose-side authoring constant, not an engine item — but with its own root cause: the trunk's
- * tilt direction, on a pelvis pinned at `y = 14` (`CHEST`/`SHOULDER_*` `−0.3659`, `NECK_END` `−2.5295`,
- * `HEAD_POS` `−2.5384` at `p = 1.0`). It was recorded and pinned in T2 as a separate open item and is
- * corrected separately by the B4 trunk change (`fix/b4-pelvic-tilt-trunk-ground-plane`: the tilt arc
- * is authored out of the mat, the arms' bend side untouched), whose gate is
- * `PelvicTiltTrunkPlaneTest`. This file therefore keeps claiming the plane for `GluteBridgePose`'s
- * whole body and for both poses' arm chains — and its assertions are re-run **unchanged** on the
- * trunk-corrected tree, which is what shows that correction did not undo this one.
+ * `PelvicTiltPose`'s trunk chain is NOT this file's subject: it was authored through its own mat by
+ * the same class of defect but with its own root cause (the tilt direction, on a pelvis pinned at
+ * `y = 14`), and its gate is `PelvicTiltTrunkPlaneTest`. This file keeps claiming the plane for
+ * `GluteBridgePose`'s whole body and for both poses' arm chains, and its assertions re-run unchanged
+ * on the trunk-corrected tree — which is what shows that correction did not undo this one.
  */
 class SupineArmElbowPlaneTest {
 
@@ -88,13 +62,13 @@ class SupineArmElbowPlaneTest {
     /** A DENSE sweep: the violation holds at every phase, so 5 samples cannot step over it. */
     private val sweep = (0..50).map { it * 0.02f }
 
-    /** The T2 band: a joint the derivation places ON the plane reads `0.000000`, so this absorbs noise only. */
+    /** The published-plane band: a joint the derivation places ON the plane reads `0.000000`, so this absorbs noise only. */
     private val planeBand = 0.05f
 
     /**
      * Cosine tolerance for "the declared target still lies on the pose's authored ray" — the property
-     * the R2/R4 reach projection preserves (fourth reach-band batch). The projection is exact (the
-     * same float expression from the same root), so `1e-5` is float slack.
+     * the reach projection preserves. The projection is exact (the same float expression from the same
+     * root), so `1e-5` is float slack.
      */
     private val rayTolerance = 1f - 1e-5f
 
@@ -181,15 +155,11 @@ class SupineArmElbowPlaneTest {
         return elbow.y - (shoulder.y + t * cy)
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 1. The invariant this fix exists for — the arm chain against the pose's OWN declared plane
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun noArmChainJointPassesBelowThePosesOwnDeclaredPlane() {
         val below = mutableListOf<String>()
         for (name in poses) {
-            // The plane is READ from the pose, never assumed to be zero (the T2 channel).
+            // The plane is READ from the pose, never assumed to be zero.
             val level = ground(name)
             val frames = allFrames(name)
             assertEquals(
@@ -229,10 +199,6 @@ class SupineArmElbowPlaneTest {
             gluteBelow.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 2. The elbow's clearance and bend side — the physical shape the pose declares
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theElbowLiesInTheFloorPlaneAndClearsTheMat() {
@@ -293,14 +259,10 @@ class SupineArmElbowPlaneTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 3. The authored hand placement, the planted feet and the declaration — guards that must NOT move
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theAuthoredHandsThePlantedFeetAndTheSupportDeclarationAreUnchanged() {
         for (name in poses) {
-            // The pose's own declaration channel (B-2/B-4): the planted feet, unchanged by this fix.
+            // The pose's own declaration channel: the planted feet, unchanged by this fix.
             assertEquals(
                 "$name: the declared support model must be the pose's own (unchanged by this correction)",
                 setOf(SupportPoint.LEFT_FOOT, SupportPoint.RIGHT_FOOT),
@@ -321,7 +283,7 @@ class SupineArmElbowPlaneTest {
                     ) {
                         moved.add("$name $condition p=$p $side hand=(${f(hand.x)}, ${f(hand.y)}, ${f(hand.z)})")
                     }
-                    // …and the solver must realize that authored target, not relocate it (§1.1 carrier).
+                    // …and the solver must realize that authored target, not relocate it.
                     val target = frame.limbTargets.firstOrNull { it.joint == handOf(side) }
                         ?: error("the published frame must carry the arm's declared target (the §1.1 carrier)")
                     if (dist(hand, target.world) > planeBand) {
@@ -370,10 +332,6 @@ class SupineArmElbowPlaneTest {
             )
         }
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 4. The two arms as mirrors, and the two poses' shared arm authoring
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theTwoArmsAreExactMirrorsOfTheAuthoredChain() {
@@ -430,10 +388,6 @@ class SupineArmElbowPlaneTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 5. Choreography — the poses must keep moving, exactly as they did
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun thePosesChoreographyAndMotionContractAreUnchanged() {
         // GluteBridgePose — the hip lift is the pose's own choreography and its motion contract
@@ -473,7 +427,7 @@ class SupineArmElbowPlaneTest {
             tiltTravel >= 12f
         )
 
-        // Anti-vacuity (T-7): the sweep must publish DISTINCT frames of both poses.
+        // Anti-vacuity: the sweep must publish DISTINCT frames of both poses.
         for (name in poses) {
             val frames = playingFrames(name)
             assertEquals(
@@ -482,10 +436,6 @@ class SupineArmElbowPlaneTest {
             )
         }
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 6. Cold-frame invariance (the B-8 class must not be re-opened here)
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theArmGeometryIsFrameConditionInvariant() {

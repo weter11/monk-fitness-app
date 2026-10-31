@@ -13,20 +13,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Regression test for the carrier-accumulation leak (audit 2026-08-23): pose instances are
- * long-lived singletons reused across animation frames. Before the fix, [SkeletonPose.IntentBuilder.reset]
- * had zero callers, so every build appended entries into the builder's reusable `jointsBuffer`
- * (+1–2 [com.monkfitness.app.animation.RelativeArticulation] per frame on non-contact poses),
- * growing the Finalizer's per-frame consume cost linearly forever.
+ * Regression test for the carrier-accumulation leak: pose instances are long-lived singletons reused
+ * across animation frames. [SkeletonPose.IntentBuilder.reset] had zero callers, so every build appended
+ * entries into the builder's reusable `jointsBuffer` (+1–2
+ * [com.monkfitness.app.animation.RelativeArticulation] per frame on non-contact poses), growing the
+ * Finalizer's per-frame consume cost linearly forever.
  *
- * The invariant is asserted on the builder's INTERNAL buffer, mirroring how the audit measured
- * the bug: `build()` returns the post-Finalizer pose whose §1.1 intent carriers are legitimately
- * consumed (emptied), so the leak is only observable on the reused buffer itself. White-box
- * access via reflection matches the precedent in [SquatFamilyConsistencyTest].
+ * The invariant is asserted on the builder's INTERNAL buffer, mirroring how the leak was measured:
+ * `build()` returns the post-Finalizer pose whose intent carriers are legitimately consumed (emptied),
+ * so the leak is only observable on the reused buffer itself. White-box access via reflection matches
+ * the precedent in [SquatFamilyConsistencyTest].
  *
- * Contract: buffer carrier counts are a pure function of one build — repeated builds on the
- * SAME instance must not grow them (per-frame intent complexity locked to O(1)), and the test
- * must prove it exercises real carrier writes (non-zero totals), so it cannot pass vacuously.
+ * Contract: buffer carrier counts are a pure function of one build — repeated builds on the SAME
+ * instance must not grow them (per-frame intent complexity locked to O(1)), and the test must prove it
+ * exercises real carrier writes (non-zero totals), so it cannot pass vacuously.
  */
 class CarrierHygieneTest {
 

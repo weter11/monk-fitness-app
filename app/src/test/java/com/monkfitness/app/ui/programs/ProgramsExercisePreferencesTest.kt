@@ -11,21 +11,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §30 step 28's **exercise preference**, measured through the **controller** on the real engine — the only
- * place a claim about what the editor shows, what `Save` persists, or what `Generate` reads can be true or
+ * **Exercise preference** measured through the **controller** on the real engine — the only place a
+ * claim about what the editor shows, what `Save` persists, or what `Generate` reads can be true or
  * false.
  *
- * ```text
- * the four operations   add, remove, move up, move down — each on the draft's own value
- * the rendered order    the draft's order, not a screen's copy of it
- * unknown ids           refused by the layer holding the catalogue, before the draft changes
- * Save                  persists the order; a preference-only change mints exactly one Revision
- * Generate              reads the draft's preference and never persists one
- * ```
- *
- * The exercise ids used here are read from the **real catalogue** the controller publishes, never
- * restated: an id invented by a test would fail for the wrong reason — the refusal under test is "this
- * exercise does not exist", which an invented id satisfies trivially.
+ * The ids are read from the **real catalogue** the controller publishes, never restated: the refusal
+ * under test is "this exercise does not exist", which an invented id satisfies trivially.
  */
 class ProgramsExercisePreferencesTest {
 
@@ -36,10 +27,8 @@ class ProgramsExercisePreferencesTest {
         rig.close()
     }
 
-    /** Real catalogue ids, in the order the controller published them. */
+    /** Real catalogue ids, in the order the controller published them (not a ranking). */
     private fun catalogueIds(): List<String> = rig.state.exerciseOptions.map { it.exerciseId }
-
-    // ---------------------------------------------------------------- the four operations
 
     @Test
     fun theDraftStartsWithNoPreferenceAndNothingInventsOne() = runBlocking {
@@ -194,7 +183,7 @@ class ProgramsExercisePreferencesTest {
 
     @Test
     fun theMoveButtonsAreDisabledAtTheEndsRatherThanSwallowingTheTap() {
-        // Pure authoring rule, decided without a Compose harness: the two ends of the list.
+        // Pure authoring rule, no Compose harness: the two ends of the list.
         assertTrue(
             "the first entry can move down but has nowhere to move up to",
             !movementEnabled(1, 3).canMoveUp && movementEnabled(1, 3).canMoveDown
@@ -213,17 +202,14 @@ class ProgramsExercisePreferencesTest {
         )
     }
 
-    // ---------------------------------------------------------------- Save, and revision semantics
-
     @Test
     fun savePersistsTheExactOrderAndReloadReturnsIt() = runBlocking {
         rig.controller.openCreateDraft(ProgramMode.MANUAL)
         val ids = catalogueIds()
         rig.controller.setDraftName("Preferred program")
         rig.controller.addDraftDay(ProgramDayType.TRAINING)
-        // §20: a work day must prescribe something to be savable, so the fixture plants one element.
-        // Without it the Save would be refused for an unrelated reason and this test would prove nothing
-        // about the preference.
+        // A work day must prescribe something to be savable: without this element the Save would be
+        // refused for an unrelated reason and the test would prove nothing about the preference.
         rig.controller.addDraftElement(rig.state.draft!!.days[0].programDayId, ids[0])
         // Added in a deliberately non-alphabetical order so "persisted in the user's order" cannot pass
         // by accident: the stored list must be this exact sequence, not a sorted one.
@@ -283,8 +269,6 @@ class ProgramsExercisePreferencesTest {
             rig.revisionCount(ProgramId(programId))
         )
     }
-
-    // ---------------------------------------------------------------- generation
 
     @Test
     fun generateReadsTheDraftsPreferenceAndNeverPersistsOne() = runBlocking {

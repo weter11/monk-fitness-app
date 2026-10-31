@@ -24,27 +24,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P23's behavioural suite: the production generation boundary as a **function of the catalogue and
- * the stated facts**, read against the real shipped catalogue wherever a claim is about the real one.
- *
- * The claims under test, in the order they matter:
- *
- *  * a production exercise becomes a `GenerationCandidate` carrying its own identity, its own
- *    canonical metadata, the focuses the caller stated and its own prescription dimension;
- *  * every one of the 68 shipped exercises survives the mapping — no exercise is lost, renamed or
- *    merged, and every id is still the catalogue's own;
- *  * focus membership is **passed through**, and an exercise the source does not state is reported as
- *    unclassified rather than defaulted, filtered away or given the whole vocabulary;
- *  * required equipment is passed through, and no candidate ever requires `Equipment.NONE`;
- *  * available equipment is forwarded verbatim, and the boundary does not inherit the legacy
- *    "empty means unconstrained" rule;
- *  * the mapping is deterministic and order-preserving;
- *  * the assembled request is the pure generation input, and the end of the chain really does reach
- *    `GeneratedPlanner`.
+ * The production generation boundary as a **function of the catalogue and the stated facts**, read
+ * against the real shipped catalogue wherever a claim is about the real one. The boundary maps and
+ * forwards only — it never defaults, filters or invents what the source did not state.
  */
 class ProductionGenerationBoundaryTest {
-
-    // ------------------------------------------------------------------ fixtures
 
     private val pushups = exercise(
         id = "pushups",
@@ -106,8 +90,6 @@ class ProductionGenerationBoundaryTest {
         setOf(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)
     )
 
-    // ------------------------------------------------------------------ the mapping
-
     @Test
     fun aProductionExerciseBecomesACandidateCarryingItsOwnIdentityAndMetadata() {
         val catalogue = ProductionGenerationBoundary.catalogueOf(
@@ -128,8 +110,8 @@ class ProductionGenerationBoundaryTest {
 
     @Test
     fun theMetadataIsTheCataloguesOwnAndNotARestatement() {
-        // The category→domain and sub-category→region mappings are the app's, and they are exhaustive:
-        // an exercise in a flexibility category lands in FLEXIBILITY, not in STRENGTH by accident.
+        // The category→domain and sub-category→region mappings are the app's and are exhaustive: a
+        // flexibility exercise lands in FLEXIBILITY, not in STRENGTH by accident.
         val catCamel = exercise(
             "cat_cow", "cat_cow", ExerciseCategory.MOBILITY, ExerciseSubCategory.SPINE,
             emptySet(), isTimerBased = true
@@ -153,8 +135,8 @@ class ProductionGenerationBoundaryTest {
             sourceOf("pushups" to setOf(Focus.PUSH), "hang" to setOf(Focus.PULL))
         )
 
-        // A timed exercise is prescribed in seconds and every other one in repetitions — the same rule
-        // the plan editor applies when a user adds an exercise by hand.
+        // A timed exercise is prescribed in seconds and every other one in repetitions — the rule the
+        // plan editor applies when a user adds an exercise by hand.
         assertEquals(PrescriptionDimension.TIME_BASED, catalogue.candidateFor("hang")!!.dimension)
         assertEquals(PrescriptionDimension.REP_BASED, catalogue.candidateFor("pushups")!!.dimension)
         // And the boundary never produces a dimension the domain has no prescription for.
@@ -180,8 +162,6 @@ class ProductionGenerationBoundaryTest {
         )
     }
 
-    // ------------------------------------------------------------------ focus membership
-
     @Test
     fun focusMembershipIsStatedByTheCallerAndEveryFocusOfItReaches() {
         val catalogue = ProductionGenerationBoundary.catalogueOf(
@@ -191,7 +171,7 @@ class ProductionGenerationBoundaryTest {
 
         val candidate = catalogue.candidateFor("pushups")!!
         assertEquals(setOf(Focus.PUSH, Focus.CORE, Focus.MOBILITY), candidate.focuses)
-        // Held in canonical order whichever order the caller stated them in (§8's determinism rule).
+        // Held in canonical order whichever order the caller stated them in.
         assertEquals(
             listOf(Focus.PUSH, Focus.CORE, Focus.MOBILITY),
             candidate.focusesInOrder
@@ -220,7 +200,7 @@ class ProductionGenerationBoundaryTest {
 
     @Test
     fun anEmptyFocusSetIsARefusalAndNotAnEveryFocusExercise() {
-        // The boundary refuses to manufacture a candidate, and it refuses to substitute the whole
+        // The boundary refuses to manufacture a candidate, and refuses to substitute the whole
         // vocabulary for the missing answer.
         val thrown = runCatching {
             ProductionGenerationBoundary.catalogueOf(listOf(pushups), sourceOf("pushups" to emptySet()))
@@ -238,7 +218,6 @@ class ProductionGenerationBoundaryTest {
 
     @Test
     fun aSourceThatStatesNothingClassifiesNothingAndSaysSoForEveryExercise() {
-        // The state P24 inherits: the app has no focus classification table yet.
         val catalogue = ProductionGenerationBoundary.catalogueOf(
             listOf(pushups, pullups, hang),
             GenerationFocusSource { null }
@@ -247,8 +226,6 @@ class ProductionGenerationBoundaryTest {
         assertEquals(emptyList<Any>(), catalogue.candidates)
         assertEquals(listOf("pushups", "pullups", "hang"), catalogue.unclassifiedExerciseIds)
     }
-
-    // ------------------------------------------------------------------ the request
 
     @Test
     fun theRequestIsTheCatalogueForwardedIntoThePureGenerationInput() {
@@ -270,8 +247,8 @@ class ProductionGenerationBoundaryTest {
         assertEquals(3, request.sessionsPerWeek)
         assertEquals(4, request.cycleWeeks)
         assertEquals(12, request.slotCount)
-        // Canonical focus order is the vocabulary's own declaration order, not the order the caller
-        // named them in: PUSH is declared before PULL.
+        // Canonical focus order is the vocabulary's own declaration order, not the caller's: PUSH is
+        // declared before PULL.
         assertEquals(
             listOf(Focus.PUSH, Focus.PULL),
             request.plannableFocuses
@@ -281,8 +258,8 @@ class ProductionGenerationBoundaryTest {
     @Test
     fun availableEquipmentIsForwardedVerbatimAndTheLegacyEmptyMeansNothingRuleIsNotInherited() {
         // The legacy `isAccessibleWith` reads an empty available set as "no equipment configured, so
-        // constrain nothing". Generation's reading is strict, and the boundary does not soften it:
-        // a user who declared nothing gets only the exercises that require nothing.
+        // constrain nothing". Generation's reading is strict and the boundary does not soften it: a
+        // user who declared nothing gets only the exercises that require nothing.
         val catalogue = ProductionGenerationBoundary.catalogueOf(
             listOf(pushups, pullups),
             sourceOf("pushups" to setOf(Focus.PUSH), "pullups" to setOf(Focus.PULL))
@@ -346,8 +323,6 @@ class ProductionGenerationBoundaryTest {
         assertEquals(policy, request.policy)
     }
 
-    // ------------------------------------------------------------------ determinism
-
     @Test
     fun theMappingIsDeterministicAndPreservesTheCataloguesOwnOrder() {
         val exercises = listOf(pushups, pullups, hang)
@@ -385,11 +360,9 @@ class ProductionGenerationBoundaryTest {
             "every planned element names a catalogue exercise",
             plan.slots.flatMap { it.elements }.all { it.exerciseId in setOf("pushups", "pullups") }
         )
-        // Same inputs, same plan — the boundary adds no state and no ambiguity to §9's determinism.
+        // Same inputs, same plan — the boundary adds no state and no ambiguity to determinism.
         assertEquals(plan, GeneratedPlanner.plan(request))
     }
-
-    // ------------------------------------------------------------------ the shipped catalogue
 
     @Test
     fun everyShippedExerciseSurvivesTheMappingOfTheRealCatalogue() {

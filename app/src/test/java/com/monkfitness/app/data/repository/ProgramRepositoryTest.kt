@@ -17,8 +17,8 @@ import java.sql.SQLException
  * `ProgramRepository` against a real SQLite engine: the whole-Program round trip, the atomic creation,
  * the deletion that is the schema's own cascade, and the failures that must reach the caller.
  *
- * The repository is exercised through the DAOs the way production will, so every claim here is decided
- * by the engine's transaction and foreign keys rather than by the repository's code shape.
+ * Exercised through the DAOs the way production will, so every claim is decided by the engine's
+ * transaction and foreign keys rather than by the repository's code shape.
  */
 class ProgramRepositoryTest {
 
@@ -26,7 +26,6 @@ class ProgramRepositoryTest {
 
     private val programId = ProgramId(ProgramGraphFixture.programId("a"))
 
-    // ---- the aggregate ----------------------------------------------------------------------------
 
     @Test
     fun theWholeProgramGraphRoundTripsThroughTheRepository() = runBlocking {
@@ -122,7 +121,6 @@ class ProgramRepositoryTest {
         assertEquals(0, repository.countPrograms())
     }
 
-    // ---- creation is atomic -----------------------------------------------------------------------
 
     @Test
     fun aFailureWhileWritingThePlanLeavesNoProgramBehind() = runBlocking {
@@ -182,7 +180,6 @@ class ProgramRepositoryTest {
         assertEquals(0, rig.database.count("program"))
     }
 
-    // ---- the non-structural facts -----------------------------------------------------------------
 
     @Test
     fun updatingAProgramChangesOnlyWhatIsNotStructure() = runBlocking {
@@ -209,7 +206,6 @@ class ProgramRepositoryTest {
         )
     }
 
-    // ---- deletion is the database's cascade -------------------------------------------------------
 
     @Test
     fun deletingAProgramRemovesItsWholeGraphAndLeavesTheOtherAndTheGlobalRowsAlone() = runBlocking {
@@ -325,10 +321,8 @@ class ProgramRepositoryTest {
 
         rig.programRepository.deleteProgram(programId)
 
-        // §30 step 15 inverted this test. It used to prove the deletion left the *Stage-1* audit trail
-        // alone — "not Program-owned, not deleted" — and the Stage-1 tables are gone. A retained global
-        // row is the same claim on the schema that exists: deleting a Program is not a reset, and it
-        // reaches nothing outside the graph it owns (§29).
+        // Deleting a Program is not a reset: it reaches nothing outside the graph it owns, so a retained
+        // global row survives it.
         assertEquals(
             "a retained global row is not Program-owned and is not deleted with a Program",
             listOf("1", "1"),

@@ -18,13 +18,11 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Phase 6 (R2) — root-authority boundary assertions
- * (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md §P6 test plan; RFC §5 R2, §3 rotation-space rule,
- * §6 phase boundaries).
+ * Root-authority boundary assertions.
  *
- * R2: from the end of build until publish, ConstraintSolver is the sole subsystem that
- * translates or ROTATES the root (pelvis). P6 turns that convention into a debug-time failure
- * at the phase boundaries of [SkeletonPipeline.runStages]:
+ * From the end of build until publish, ConstraintSolver is the sole subsystem that translates
+ * or ROTATES the root (pelvis). These tests turn that convention into a debug-time failure at
+ * the phase boundaries of [SkeletonPipeline.runStages]:
  *
  *  - capture A — window entry (post-build / post-injection; last lawful authoring write);
  *  - Check 1 — after Phase 1 (`IkStage.apply`): pelvis bit-identical to A;
@@ -36,13 +34,12 @@ import java.io.File
  *  - solve-skipped branch (contact-less CUSTOM): no authorized mover exists after build, so
  *    the protected reference stays A — Check 2 then proves A survives to publish untouched.
  *
- * P5 carry-forward: which reference a frame protects is decided by the EXPLICIT solve-branch
- * instrumentation inside `runStages`, never inferred from the retained Frame History
+ * Which reference a frame protects is decided by the EXPLICIT solve-branch instrumentation
+ * inside `runStages`, never inferred from the retained Frame History
  * (`previous`/`prePrevious`/`previousSmoothingRoot`) — see
- * [solverSkippedFrameAfterSolvedFrameProtectsOwnAuthoredRoot], the P5 pitfall-1 false-fire trap.
+ * [solverSkippedFrameAfterSolvedFrameProtectsOwnAuthoredRoot], the false-fire trap.
  *
- * This file compiles on the PRE-P6 tree (the future utility is looked up reflectively), so the
- * same bytes run as the counterfactual RED gate on `origin/main` without P6 instrumentation.
+ * The utility is looked up reflectively, so these bytes also compile on a tree without it.
  */
 class RootAuthorityTest {
 
@@ -62,10 +59,9 @@ class RootAuthorityTest {
 
     @Test
     fun pipelineDeclaresR2BoundaryInstrumentation() {
-        // Wiring audit — RED on pre-P6 main: the shared utility does not exist and the
-        // pipeline has no boundary call sites, so a forbidden in-window pelvis mutation
-        // currently runs through runStages completely undetected. (Supplementary audit —
-        // the behavioral tests in this class are the primary regression.)
+        // Wiring audit: without the utility the pipeline has no boundary call sites, so an
+        // in-window pelvis mutation runs through runStages undetected. (Supplementary — the
+        // behavioral tests in this class are the primary regression.)
         val util = try {
             Class.forName("com.monkfitness.app.animation.PhaseBoundaryAsserts")
         } catch (e: ClassNotFoundException) {
@@ -76,9 +72,8 @@ class RootAuthorityTest {
                 "package (plan §P6 — the mechanism later phases reuse)",
             util
         )
-        // Centralization: the enforcement message lives in the utility exactly once, and the
-        // pipeline calls the capture/assert helpers at the boundaries (no ad-hoc duplicate
-        // root-authority mechanism in production).
+        // Centralization: the enforcement message lives in the utility exactly once and the
+        // pipeline calls its helpers at the boundaries — no ad-hoc duplicate mechanism.
         val sources = productionAnimationSources()
         val r2Sites = sources.filter { (_, lines) ->
             lines.any { it.contains("R2 violation") }
@@ -104,16 +99,15 @@ class RootAuthorityTest {
 
     @Test
     fun armedStateSwitchIsConfinedToTheSolverWindowAndUtilityUseIsCentralized() {
-        // Supplementary audits (defense-in-depth; the behavioral tests above are the primary
+        // Supplementary audits (defense-in-depth; the behavioral tests are the primary
         // regression). Three static contracts of the armed-state pattern:
-        //  (1) the protected-root reference switches at EXACTLY ONE production site, and it
-        //      sits inside the solve-branch window (the P5 pattern: instrumentation at the
-        //      execution site, not a second mechanism elsewhere);
+        //  (1) the protected-root reference switches at EXACTLY ONE production site, inside the
+        //      solve-branch window (instrumentation at the execution site, not elsewhere);
         //  (2) the instrumentation never reads retained Frame History (`previous`/
         //      `prePrevious`) to arm or suppress protection — the behavioral trap for that
         //      error class is [solverSkippedFrameAfterSolvedFrameProtectsOwnAuthoredRoot];
         //  (3) PhaseBoundaryAsserts is driven only by SkeletonPipeline — no ad-hoc
-        //      root-authority check has appeared in an unrelated production class.
+        //      root-authority check in an unrelated production class.
         val sources = productionAnimationSources()
         val pipeline = sources["SkeletonPipeline.kt"] ?: error("SkeletonPipeline.kt not found")
         val isSwitchSite = Regex("""^r2ProtectedRoot\s*=(?!=)""")
@@ -157,19 +151,15 @@ class RootAuthorityTest {
 
     @Test
     fun forbiddenRootRotationInFinalizerWindowThrowsAtCheck2() {
-        // THE primary behavioral regression (plan test (a)/(d) shape): a real root mutation
-        // executed INSIDE the protected window by production code — the Finalizer's intent
-        // carrier consumer ([SkeletonPoseFinalizer] applyIntentCarriers) writes the PELVIS node's
-        // localRotation when a pose declares a PELVIS relative articulation on a contact-less
-        // pose (contact poses skip the consumer; no production pose declares a pelvis
-        // articulation, so the window is empty in normal operation — the fault is the
-        // declaration itself, which is exactly the shape of a future regression). Before P6 the
-        // mutation reaches the published frame SILENTLY (RED); after P6 the boundary check must
-        // fail fast with an R2 violation.
+        // THE primary behavioral regression: a real root mutation executed INSIDE the protected
+        // window by production code — the Finalizer's intent carrier consumer writes the PELVIS
+        // node's localRotation when a pose declares a PELVIS relative articulation on a
+        // contact-less pose (contact poses skip the consumer; no production pose declares a
+        // pelvis articulation, so the window is empty in normal operation — the fault is the
+        // declaration itself, exactly the shape of a future regression).
         //
         // Contact-less CUSTOM fixture ⇒ solver legitimately skipped ⇒ the protected reference is
-        // capture A (plan: "Checks 1 and 2 then compare against A directly"), so this test also
-        // pins the solve-skipped branch handling end-to-end through publish.
+        // capture A, so this also pins the solve-skipped branch end-to-end through publish.
         val pipeline = SkeletonPipeline(definition)
         val fixture = FrameFixture()
         val pose = fixture.authorRoot(100f, 50f)
@@ -186,11 +176,9 @@ class RootAuthorityTest {
     @Test
     fun forbiddenRootRotationAfterSolvedFrameThrowsAtCheck2AgainstSettledRoot() {
         // Same injection on a frame that DID solve (posture-driven STANDING, no contacts): the
-        // solver moved the root (seed pins Y) and capture B became the protected reference. The
-        // Finalizer-window rotation must still trip Check 2 — now against B. If the guard
-        // wrongly compared against A (authored Y=50) instead of B, this test would still throw
-        // for the rotation, but [cleanSolvedFrameRootMotionPassesBothBoundaries] is the paired
-        // over-breadth guard that fails if the reference does NOT switch to B on solved frames.
+        // solver moved the root (seed pins Y) and capture B became the protected reference, so
+        // Check 2 must trip against B. A guard that wrongly compared A would still throw here;
+        // [cleanSolvedFrameRootMotionPassesBothBoundaries] is the paired over-breadth guard.
         val pipeline = SkeletonPipeline(definition)
         val fixture = FrameFixture()
         val pose = fixture.authorRoot(100f, 50f)
@@ -208,11 +196,10 @@ class RootAuthorityTest {
 
     @Test
     fun cleanSolvedFrameRootMotionPassesBothBoundaries() {
-        // Plan test (b) + over-breadth guard for the A→B reference switch: the ConstraintSolver
-        // legitimately translates the root (posture seed pins Y off the authored value); the
-        // boundary checks must not treat the authorized mover's own write as a violation. If
-        // Check 2 compared the published pelvis against capture A (authored 50) instead of B
-        // (settled standY), this frame would throw.
+        // Over-breadth guard for the A→B reference switch: the ConstraintSolver legitimately
+        // translates the root (the posture seed pins Y off the authored value), and the boundary
+        // checks must not treat the authorized mover's own write as a violation. Comparing the
+        // published pelvis against capture A (authored 50) instead of B (settled standY) throws.
         val pipeline = SkeletonPipeline(definition)
         val fixture = FrameFixture()
         SkeletonPose.IntentBuilder(fixture.pose).posture(PostureIntent.Kind.STANDING)
@@ -227,12 +214,11 @@ class RootAuthorityTest {
 
     @Test
     fun solverSkippedFrameAfterSolvedFrameProtectsOwnAuthoredRoot() {
-        // P5 carry-forward (armed-state, not retained history) + plan branch handling: frame 1
-        // SOLVES (its settled root differs from authored), frame 2 is a contact-less CUSTOM
-        // skip authored at a DIFFERENT root. Correct reference for frame 2 is its OWN capture A
-        // (no authorized mover exists after build). An implementation that inferred solver
-        // execution state from the retained Frame History would protect frame 2 against frame
-        // 1's settled root and false-fire — exactly P5 pitfall 1. The resetHistory() variant
+        // Armed-state, not retained history: frame 1 SOLVES (settled root differs from
+        // authored), frame 2 is a contact-less CUSTOM skip authored at a DIFFERENT root, so its
+        // correct reference is its OWN capture A (no authorized mover exists after build). An
+        // implementation inferring solver state from the retained Frame History would protect
+        // frame 2 against frame 1's settled root and false-fire. The resetHistory() variant
         // pins that history presence/absence never changes the outcome.
         val pipeline = SkeletonPipeline(definition)
         val solvedFixture = FrameFixture()
@@ -259,14 +245,12 @@ class RootAuthorityTest {
 
     @Test
     fun ikStageActiveFrameMovesLimbsWithoutTrippingCheck1() {
-        // Plan test (c) positive half: with the engine-side limb stage ACTIVE, Phase 1 runs and
-        // writes limb-node locals through the real production path. Check 1 must pass — limb
-        // writes and FK-propagated child transforms are NOT root mutation (the
-        // important-distinction clause). The negative half of plan (c) — a pelvis mutation
-        // INSIDE IkStage — has no observable production route today (no data fed to the stage
-        // can write the pelvis node; the stage's chain map never names PELVIS as a write
-        // target), so its non-vacuity is pinned at the helper level in
-        // [PhaseBoundaryAssertsTest] plus the source audit of the Check-1 call site.
+        // With the engine-side limb stage ACTIVE, Phase 1 runs and writes limb-node locals
+        // through the real production path. Check 1 must pass — limb writes and FK-propagated
+        // child transforms are NOT root mutation. The negative half (a pelvis mutation INSIDE
+        // IkStage) has no observable production route: no data fed to the stage can write the
+        // pelvis node, whose chain map never names PELVIS as a write target — so its non-vacuity
+        // is pinned at the helper level in [PhaseBoundaryAssertsTest].
         val reference = SkeletonPipeline(definition)
         val refFixture = FrameFixture()
         refFixture.pose.limbTargets.add(
@@ -277,9 +261,9 @@ class RootAuthorityTest {
             )
         )
         // The anti-vacuity reference is the AUTHORING configuration — the implementation that
-        // realizes the limb while the engine stage is disabled (§12.7a). WP-I scopes it explicitly:
-        // the deployed default is now the ACTIVATED configuration, so relying on the default would
-        // compare the activated path against itself and the guard below would be vacuous.
+        // realizes the limb while the engine stage is disabled. The deployed default is the
+        // ACTIVATED configuration, so relying on the default would compare the activated path
+        // against itself and the guard below would be vacuous.
         val refPublished = inAuthoringConfiguration { reference.produceFrame(refFixture.authorRoot(40f)).pose }
 
         val pipeline = SkeletonPipeline(definition)
@@ -309,9 +293,9 @@ class RootAuthorityTest {
 
     /**
      * Runs [block] in the **authoring configuration** (`IK_STAGE_ACTIVE = false`) and restores the
-     * previous configuration. P12 WP-I: the deployed default is the activated configuration, so a
-     * reference frame that must be produced by the authoring bake has to name its configuration
-     * explicitly (§12.7a: each implementation realizes only under its own configuration).
+     * previous one. The deployed default is the activated configuration, so a reference frame that
+     * must come from the authoring bake has to name its configuration explicitly — each
+     * implementation realizes only under its own configuration.
      */
     private fun <T> inAuthoringConfiguration(block: () -> T): T {
         val original = IK_STAGE_ACTIVE

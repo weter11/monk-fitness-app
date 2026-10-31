@@ -11,14 +11,12 @@ class ExerciseGenerationContractTest {
         val def = SkeletonDefinition.DEFAULT_ADULT
         val env = EnvironmentDefinition()
 
-        // 1. Generate Request
         val request = ExerciseGenerationRequest(
             exerciseName = "Test Push-Up",
             definition = def,
             environment = env
         )
 
-        // 2. Mock generation result showing the loop parameters:
         // Generate -> Validate -> Score -> Retry
         val snapshots = emptyList<ExerciseSnapshot>()
         val result = ExerciseGenerationResult(
@@ -33,7 +31,7 @@ class ExerciseGenerationContractTest {
             allIssues = emptyList()
         )
 
-        // Score (derived from validation only; the standalone review pipeline was removed in Phase G)
+        // Score (derived from validation only; the standalone review pipeline no longer exists)
         val score = GenerationScore(
             overallScore = if (validationReport.isValid) 100 else 0,
             isValid = validationReport.isValid

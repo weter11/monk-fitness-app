@@ -31,28 +31,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §5's export half: what a shared file **is**, and everything it is not.
+ * The export half: what a shared file **is**, and everything it is not.
  *
- * The suite is written as two lists of claims, and the second is the one §2, §15 and §16 care about:
+ * The file carries the Program's definition and its revision's configuration losslessly — name,
+ * description, mode, duration, schedule, focus, days, exercises, prescriptions, authorship and
+ * pinning. It cannot carry an identity, a timestamp, a lifecycle state, a source, a session, a set,
+ * a statistic, a streak, a family state, a decision or an adjustment.
  *
- * ```text
- * what the file carries     the Program's definition and its revision's configuration — name,
- *                           description, mode, duration, schedule, focus, days, exercises,
- *                           prescriptions, authorship and pinning — losslessly
- * what it cannot carry      an identity, a timestamp, a lifecycle state, a source, a session, a set, a
- *                           statistic, a streak, a family state, a decision or an adjustment
- * ```
+ * That second list is proven three ways at once: the document type has no field any of them could
+ * occupy (so the bytes cannot contain one), the service holds no collaborator that could produce one,
+ * and the tests read the *text* of the file for the ids and tokens the fixture actually stored.
  *
- * The second list is proven three ways at once: the document type has no field any of them could occupy
- * (so the bytes cannot contain one), the service holds no collaborator that could produce one (its single
- * argument is the repository that returns a Program with its current revision), and the tests read the
- * *text* of the file for the ids and the tokens the fixture actually stored. Nothing here claims "the code
- * looks like it does not write that".
- *
- * The fixture Program is deliberately non-trivial — three days with a rest day, one exercise used twice,
- * per-set repetitions and per-set durations, a pinned user-authored element beside generated ones, a live
- * session with confirmed sets and the target adaptive generation's three kinds of row — so that every
- * "absent" claim below is a claim about something that *is* there.
+ * The fixture Program is deliberately non-trivial — three days with a rest day, one exercise used
+ * twice, per-set repetitions and per-set durations, a pinned user-authored element beside generated
+ * ones, a live session with confirmed sets and the target adaptive generation's three kinds of row —
+ * so every "absent" claim below is a claim about something that *is* there.
  */
 class ProgramExportServiceTest {
 
@@ -60,8 +53,6 @@ class ProgramExportServiceTest {
 
     @After
     fun tearDown() = rig.close()
-
-    // ------------------------------------------------------------------ what the file carries
 
     @Test
     fun theExportedFileIsTheProgramsDefinitionAndItsRevisionLosslessly() = runBlocking {
@@ -212,8 +203,6 @@ class ProgramExportServiceTest {
         )
     }
 
-    // ------------------------------------------------------------------ what the file cannot carry
-
     @Test
     fun theExportedTextContainsNoIdentityTimestampLifecycleOrRuntimeFact() = runBlocking {
         val source = rig.storeSourceProgram()
@@ -223,7 +212,6 @@ class ProgramExportServiceTest {
         val text = rig.exported(rig.sourceProgramId).text
 
         val forbidden = listOf(
-            // §2: no identity of any kind.
             source.program.programId.value,
             source.revision.revisionId.value,
             ProgramGraphFixture.dayId("export", 1),
@@ -236,15 +224,12 @@ class ProgramExportServiceTest {
             "decision-source",
             "adjustment-source",
             "pushups-family",
-            // §2: no runtime, lifecycle or provenance fact.
             "programId", "revisionId", "programDayId", "programExerciseId", "revisionNumber",
             "lifecycleStatus", "NOT_STARTED", "RUNNING", "PAUSED", "COMPLETED", "archived",
             "createdAt", "updatedAt", "plannedStartDate", "actualStartDate",
             "source", "STANDARD", "IMPORTED",
-            // §15: no adaptive vocabulary at all.
             "adaptive", "Adaptive", "family", "decision", "Decision", "adjustment", "Adjustment",
             "exposure", "recovery", "streak", "policy",
-            // §16: no session, set, statistic or progress vocabulary.
             "session", "setLog", "SetLog", "attempt", "completedSets", "progress", "statistics",
             "cycleNumber", "set_log", "user_progress"
         )
@@ -346,8 +331,6 @@ class ProgramExportServiceTest {
         )
     }
 
-    // ------------------------------------------------------------------ its refusals
-
     @Test
     fun aProgramThatIsNotStoredIsRefused() = runBlocking {
         rig.storeSourceProgram()
@@ -362,9 +345,7 @@ class ProgramExportServiceTest {
         )
     }
 
-    // ------------------------------------------------------------------ helpers
-
-    /** A lookup used once: the document's days as the (type, name) list a reader can check by eye. */
+    /** A lookup used once: the document's days as a (type, name) list a reader can check by eye. */
     private fun storeOf(document: ProgramTransferDocument) =
         document.revision.days.mapNotNull { day -> day.name }
 }

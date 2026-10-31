@@ -20,24 +20,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §30 step 26's **Preview**, measured through the **controller** on the real engine — the only place a
- * claim about what the editor shows, and about what the editor *does not do*, can be true or false.
+ * **Preview**, measured through the **controller** on the real engine — the only place a claim about
+ * what the editor shows, and about what the editor *does not do*, can be true or false.
  *
- * The invariant the whole stage exists to protect:
- *
- * ```text
- * CURRENT WORKING DRAFT
- *         ├── Preview ──→ PROSPECTIVE RESULT
- *         │                    └── Apply ──→ CURRENT WORKING DRAFT
- *         └── Save ──→ PERSISTED PROGRAM / REVISION
- * ```
- *
- * Every test below measures one side of that picture on storage rather than asserting about the
- * controller's shape: a preview that changed the draft, wrote a row or minted a Revision would be
- * caught by comparing the *same rig* before and after. The interesting failures are silent ones — a
- * preview that installs itself quietly, a stale preview that stays applicable to a draft that has
- * moved on, a reconciliation that hides a conflict, a limitation that is swallowed — and each of those
- * leaves a screen that looks finished.
+ * The invariant: a Preview produces a prospective result that Apply installs into the working draft,
+ * while Save remains the only route to a persisted Program/Revision. Every test measures one side of
+ * that on storage rather than asserting about the controller's shape: a preview that changed the
+ * draft, wrote a row or minted a Revision would be caught by comparing the *same rig* before and
+ * after. The interesting failures are silent ones — a preview that installs itself quietly, a stale
+ * preview that stays applicable to a draft that has moved on, a reconciliation that hides a conflict,
+ * a limitation that is swallowed — and each leaves a screen that looks finished.
  */
 class ProgramsGenerationPreviewTest {
 
@@ -50,8 +42,6 @@ class ProgramsGenerationPreviewTest {
 
     /** Opens a GENERATED draft with nothing in it, which is the state a Preview is asked from. */
     private suspend fun openGenerated() = rig.controller.openCreateDraft(ProgramMode.GENERATED)
-
-    // ---------------------------------------------------------------- preview isolation
 
     @Test
     fun aPreviewDoesNotChangeTheWorkingDraft() = runBlocking {
@@ -197,8 +187,6 @@ class ProgramsGenerationPreviewTest {
         )
     }
 
-    // ---------------------------------------------------------------- preview content
-
     @Test
     fun thePreviewExposesThePlanItWouldApply() = runBlocking {
         openGenerated()
@@ -284,8 +272,8 @@ class ProgramsGenerationPreviewTest {
     @Test
     fun aPreviewNamesEveryLimitationThePlannerReported() = runBlocking {
         // A focus the catalogue cannot serve at all is the reachable limitation: the planner reports it
-        // and plans around it. Swallowing it would be §33's silent substitution — the user would read a
-        // plan as if every focus in their selection were in it.
+        // and plans around it. Swallowing it would be a silent substitution — the user would read a plan
+        // as if every focus in their selection were in it.
         //
         // It is reached through the classification port rather than by contorting the production table:
         // a source that states PULL for every exercise makes the BALANCED configuration's other six
@@ -341,11 +329,11 @@ class ProgramsGenerationPreviewTest {
 
     @Test
     fun eachLimitationReasonGetsItsOwnSentenceAndNotOneGenericFallback() = runBlocking {
-        // The distinction §33 rests on: a focus the equipment forbids and a focus nothing trains are
-        // two different facts with two different remedies (declare your equipment / choose another
-        // focus), so collapsing them into one sentence is the silent substitution this stage exists to
-        // prevent. It is invisible in a preview that reports only one reason, which is why the
-        // measurement below states a catalogue that produces **both**.
+        // The distinction: a focus the equipment forbids and a focus nothing trains are two different
+        // facts with two different remedies (declare your equipment / choose another focus), so
+        // collapsing them into one sentence is the silent substitution this stage prevents. It is
+        // invisible in a preview that reports only one reason, which is why the measurement below
+        // states a catalogue that produces **both**.
         rig.generation = rig.generationOver(
             exercises = listOf(
                 rig.fixtureExercise("pushup_standard"),
@@ -402,9 +390,9 @@ class ProgramsGenerationPreviewTest {
     fun thePreviewStartsEveryElementAtTheLowerBoundOfItsOwnCatalogueRange() = runBlocking {
         // The owner's rule, measured on a real pass: a new exercise starts at the **lower bound of the
         // range its own catalogue definition states**, for the set count that definition carries — not
-        // at §10's fixed 12 / 10 / 8 / 6 or 30 / 30 / 45 shapes, and not at a fixed 4 or 3 sets. The
-        // expected numbers are read from the catalogue itself (the same list the generation boundary
-        // reads), so this test never restates the data it is checking.
+        // at a fixed 12 / 10 / 8 / 6, 30 / 30 / 45 or 4 / 3 shape. The expected numbers are read from
+        // the catalogue itself (the same list the generation boundary reads), so this test never
+        // restates the data it is checking.
         openGenerated()
         rig.controller.setDraftFocus(FocusPlan.focused(listOf(Focus.PUSH)))
 
@@ -472,8 +460,6 @@ class ProgramsGenerationPreviewTest {
             uneven.isUniformPrescription
         )
     }
-
-    // ---------------------------------------------------------------- reconciliation
 
     @Test
     fun thePreviewReportsTheCountsOfWhatWouldHappenToTheDraft() = runBlocking {
@@ -632,8 +618,8 @@ class ProgramsGenerationPreviewTest {
             preview.changes.isNotEmpty()
         )
         // The reconciliation reports a replacement as two independent rows. The Preview's own shape
-        // must carry no relation between them — if it did, the screen would be free to render one as
-        // the successor of the other, which is precisely what §7's recorded decision refuses.
+        // must carry no relation between them — if it did, the screen could render one as the
+        // successor of the other, which the recorded decision refuses.
         val changeFields = ProgramGenerationPreviewUi::class.java.declaredFields
             .map { field -> field.name }
         assertTrue(
@@ -653,8 +639,6 @@ class ProgramsGenerationPreviewTest {
                 .all { it.exerciseId != null }
         )
     }
-
-    // ---------------------------------------------------------------- apply
 
     @Test
     fun applyPreviewInstallsTheProspectiveDraftAndNothingIsPersisted() = runBlocking {
@@ -761,8 +745,6 @@ class ProgramsGenerationPreviewTest {
 
         assertEquals("…so the draft is what it was", before, rig.state.draft)
     }
-
-    // ---------------------------------------------------------------- stale safety
 
     @Test
     fun editingTheNameClearsThePreview() = runBlocking {
@@ -912,13 +894,11 @@ class ProgramsGenerationPreviewTest {
         assertEquals("…and the draft never moved", before, rig.state.draft)
     }
 
-    // ---------------------------------------------------------------- refusal and failure
-
     @Test
     fun aPreviewRefusalLeavesTheDraftUntouchedAndPublishesNoPreview() = runBlocking {
         // A catalogue that classifies nothing is the refusal Generate already refuses on. A Preview
-        // must refuse the same way: §33 forbids turning "the app states nothing here" into an empty
-        // preview a user would read as a plan.
+        // must refuse the same way: turning "the app states nothing here" into an empty preview a user
+        // would read as a plan is forbidden.
         rig.withFocusSource { null }
         openGenerated()
         val before = rig.state.draft
@@ -963,8 +943,6 @@ class ProgramsGenerationPreviewTest {
         assertTrue(rig.state.notice is ProgramNotice.Failed)
     }
 
-    // ---------------------------------------------------------------- P25 preservation
-
     @Test
     fun aFocusedConfigurationIsWhatThePreviewPlansFor() = runBlocking {
         openGenerated()
@@ -1007,8 +985,6 @@ class ProgramsGenerationPreviewTest {
         )
     }
 
-    // ---------------------------------------------------------------- helpers
-
     /**
      * Whether every exercise the **preview** lists can serve one of [eligible] — read back through the
      * production classification rather than through the draft, because a preview leaves the draft
@@ -1025,7 +1001,7 @@ class ProgramsGenerationPreviewTest {
 
     private companion object {
 
-        /** §8's seven focus labels, read from the mapping rather than restated. */
+        /** The seven focus labels, read from the mapping rather than restated. */
         val FOCUS_LABEL_RESOURCES: Set<Int> = Focus.entries.map { focus -> focusLabelRes(focus) }.toSet()
 
         /** The three sentences a `FocusUnusableReason` can map to, plus the whole-configuration one. */

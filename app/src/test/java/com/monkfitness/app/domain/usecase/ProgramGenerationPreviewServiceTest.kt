@@ -25,20 +25,18 @@ import org.junit.Test
 import kotlinx.coroutines.runBlocking
 
 /**
- * §30 step 26's **Preview** at the application boundary — the claim that a preview is the *same*
- * pass as a generate, not a second planner path that happens to agree with it.
+ * **Preview** at the application boundary — the claim that a preview is the *same* pass as a generate,
+ * not a second planner path that happens to agree with it.
  *
- * The controller-level isolation (`workingDraft` unchanged, no Revision, no row written) is measured
- * in `ProgramsGenerationPreviewTest` over the real engine. What belongs here is narrower and is the
- * one thing the controller cannot prove about itself: that [ProgramGenerationService.preview] reaches
- * exactly the same boundary, request, planner, editor and reconciler that [ProgramGenerationService.generate]
- * reaches, and that it hands back the same three values rather than a reduced, filtered or
- * re-planned subset of them.
+ * Controller-level isolation (`workingDraft` unchanged, no Revision, no row written) is measured in
+ * `ProgramsGenerationPreviewTest` over the real engine. What belongs here is the one thing the
+ * controller cannot prove about itself: that [ProgramGenerationService.preview] reaches exactly the
+ * same boundary, request, planner, editor and reconciler as [ProgramGenerationService.generate], and
+ * hands back the same three values rather than a reduced or re-planned subset.
  *
- * A preview that answered with *only* a plan would make the Preview screen the second place that
- * decides what "the generated plan" means, and a preview that ran its own pipeline could disagree
- * with the Generate the user is being shown a preview of. Both are silent failures: nothing crashes,
- * and the numbers simply differ.
+ * A preview that answered with *only* a plan would make the Preview screen the second place deciding
+ * what "the generated plan" means; one that ran its own pipeline could disagree with the Generate it
+ * previews. Both fail silently — nothing crashes, the numbers simply differ.
  */
 class ProgramGenerationPreviewServiceTest {
 
@@ -81,8 +79,6 @@ class ProgramGenerationPreviewServiceTest {
         focus = focus
     )
 
-    // ---------------------------------------------------------------- the same pass, not a second one
-
     @Test
     fun aPreviewIsTheGeneratePassOverTheSameInput() = runBlocking {
             val start = draft(focus = FocusPlan.focused(listOf(Focus.PUSH, Focus.PULL)))
@@ -111,9 +107,9 @@ class ProgramGenerationPreviewServiceTest {
 
     @Test
     fun aPreviewCarriesAllThreeResultsAndNotJustTheDraft() = runBlocking {
-            // This is the whole stage: P24 already produced `plan` and `reconciliation` and the controller
-            // used only `draft`. A preview that dropped either would leave nothing to show, which is the
-            // defect the Preview exists to remove.
+            // The whole point: `plan` and `reconciliation` already exist and the controller used only
+            // `draft`. A preview that dropped either would leave nothing to show, which is the defect
+            // the Preview exists to remove.
             val edit = (realService().preview(draft(), emptySet())
                 as ProgramGenerationResult.Generated).edit
 
@@ -195,8 +191,6 @@ class ProgramGenerationPreviewServiceTest {
             assertTrue(edit.draft.days.isNotEmpty())
     }
 
-    // ---------------------------------------------------------------- the same refusals and failures
-
     @Test
     fun aPreviewThatStatesNothingIsRefusedRatherThanPreviewedAsEmpty() = runBlocking {
             val result = serviceOver(
@@ -272,21 +266,19 @@ class ProgramGenerationPreviewServiceTest {
             )
     }
 
-    // ---------------------------------------------------------------- no second planner path
-
     @Test
     fun previewIsOneCallIntoTheSamePrivatePassRatherThanAPipelineOfItsOwn() = runBlocking {
-            // The mechanical half of "no second generation path": the public surface of the service has
-            // exactly three entry points and all three reach the same private `edit`. A preview that
-            // assembled its own request, or called the planner directly, would have to be a fourth method
-            // with the boundary's or the planner's name in it.
-            // Public only: the shared private `edit` is deliberately an implementation detail, and a gate
-            // that counted it would break the next time it is renamed without any rule having changed.
+            // The mechanical half of "no second generation path": the public surface has exactly three
+            // entry points and all three reach the same private `edit`. A preview that assembled its own
+            // request, or called the planner directly, would have to be a fourth method carrying the
+            // boundary's or the planner's name.
+            // Public only: the shared private `edit` is an implementation detail, and a gate counting it
+            // would break the next time it is renamed without any rule having changed.
             //
-            // P27: the three are `suspend`, so each carries a trailing `Continuation` in its JVM
-            // signature and the parameter count is 3, not 2. The filter below selects on the CALLER's
-            // arguments — the continuation is excluded, not the count loosened — so a fourth entry point
-            // taking a different pair of arguments still cannot slip through this census.
+            // The three are `suspend`, so each carries a trailing `Continuation` in its JVM signature and
+            // the parameter count is 3, not 2. The filter below selects on the CALLER's arguments — the
+            // continuation is excluded, not the count loosened — so a fourth entry point taking a
+            // different pair of arguments still cannot slip through this census.
             val continuation = kotlin.coroutines.Continuation::class.java
             val entryPoints = ProgramGenerationService::class.java.declaredMethods
                 .filter { method -> java.lang.reflect.Modifier.isPublic(method.modifiers) }
@@ -350,9 +342,8 @@ class ProgramGenerationPreviewServiceTest {
 
     @Test
     fun theServiceStillDeclaresNoPersistenceCollaborator() = runBlocking {
-            // §33 and §6: the only route from a generation pass to storage is `ProgramEditorService.save`.
-            // A Preview that quietly reached a repository would be a hidden Save, which is the one thing
-            // §30 step 26's invariant forbids.
+            // The only route from a generation pass to storage is `ProgramEditorService.save`. A Preview
+            // that quietly reached a repository would be a hidden Save, which the invariant forbids.
             // Every declared constructor, because Kotlin emits a synthetic one for the default arguments
             // as well as the primary: a gate reading only `.single()` would pass for the wrong reason the
             // day a second real constructor appeared beside it.

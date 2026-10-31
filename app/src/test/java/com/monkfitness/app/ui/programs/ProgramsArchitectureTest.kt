@@ -19,12 +19,12 @@ import java.lang.reflect.Modifier
 import java.time.ZoneId
 
 /**
- * §16's chain, §13's ViewModel boundary and §6's prohibitions, pinned mechanically.
+ * The UI chain, the ViewModel boundary and the prohibitions, pinned mechanically.
  *
  * The Program UI is the first layer of this system that a user can *press*, so the ways it can go wrong
- * are the ways §25 and §33 name: a screen reaching a DAO, a state object carrying a Room entity, a view
- * model building its own repositories, a second navigation graph, a share built by hand instead of handed
- * to the platform boundary. Each of those is asserted against the sources and against the compiled shape.
+ * are: a screen reaching a DAO, a state object carrying a Room entity, a view model building its own
+ * repositories, a second navigation graph, a share built by hand instead of handed to the platform
+ * boundary. Each is asserted against the sources and against the compiled shape.
  */
 class ProgramsArchitectureTest {
 
@@ -72,8 +72,6 @@ class ProgramsArchitectureTest {
         assertEquals("$because — found: $offenders", emptyList<String>(), offenders)
     }
 
-    // ---- the feature's shape ---------------------------------------------------------------------
-
     @Test
     fun theProgramUiIsAPlainStateHolderPlusComposeScreens() {
         assertTrue("expected the state holder's sources", stateHolderSources.size >= 3)
@@ -85,8 +83,6 @@ class ProgramsArchitectureTest {
             assertTrue("expected the screen ${file.name}", file.isFile)
         }
     }
-
-    // ---- §16: no Composable reaches the data layer ------------------------------------------------
 
     @Test
     fun theStateHolderReachesNoComposeNoAndroidAndNoDataLayer() = assertNoToken(
@@ -120,8 +116,6 @@ class ProgramsArchitectureTest {
         ),
         "a screen receives its state holder; it does not build one, and it builds no service"
     )
-
-    // ---- §13: the ViewModel hands over, it does not build ------------------------------------------
 
     @Test
     fun theViewModelConstructsNoProgramServiceRepositoryOrDatabase() = assertNoToken(
@@ -181,8 +175,6 @@ class ProgramsArchitectureTest {
         )
     }
 
-    // ---- the collaborators, as a census -------------------------------------------------------------
-
     @Test
     fun theStateHoldersCollaboratorsAreExactlyTheOwnersOfWhatItDoes() {
         val constructor = ProgramsController::class.java.declaredConstructors.single()
@@ -201,10 +193,10 @@ class ProgramsArchitectureTest {
                 "normalisation rule of its own",
             listOf(
                 ProgramLifecycleService::class.java.name,
-                // Revised (not relaxed) by §30 step 21: Start is no longer the lifecycle service's
-                // operation alone. The state holder is given the *composed* one instead, so the
-                // target scheduling policy is unreachable from a screen — the controller still names
-                // no target type and still decides nothing about windows, compositions or sources.
+                // Start is no longer the lifecycle service's operation alone: the state holder is given
+                // the *composed* one instead, so the target scheduling policy is unreachable from a
+                // screen — the controller still names no target type and still decides nothing about
+                // windows, compositions or sources.
                 ProgramStartService::class.java.name,
                 ProgramEditorService::class.java.name,
                 ProgramSaveService::class.java.name,
@@ -213,10 +205,10 @@ class ProgramsArchitectureTest {
                 ProgramProgressService::class.java.name,
                 ProgramScheduler::class.java.name,
                 ProgramGenerationService::class.java.name,
-                // The declared-equipment port is a Kotlin `suspend () -> Set<Equipment>`. At JVM
-                // level a suspend function always carries its continuation as an argument, so the
-                // erased type is `Function1` (one argument: the continuation) and **not** `Function0`
-                // or `Function2`. Read off `getParameterTypes()` rather than assumed from the source.
+                // The declared-equipment port is a Kotlin `suspend () -> Set<Equipment>`. At JVM level a
+                // suspend function always carries its continuation as an argument, so the erased type is
+                // `Function1` (one argument: the continuation) and **not** `Function0` or `Function2`.
+                // Read off `getParameterTypes()` rather than assumed from the source.
                 kotlin.jvm.functions.Function1::class.java.name,
                 ExerciseCatalogue::class.java.name,
                 ProgramShareTarget::class.java.name,
@@ -235,8 +227,6 @@ class ProgramsArchitectureTest {
             !Modifier.isAbstract(ProgramsController::class.java.modifiers)
         )
     }
-
-    // ---- the platform boundary ---------------------------------------------------------------------
 
     @Test
     fun thePlatformObjectsAppearOnlyAtTheTwoCallSitesAndNeverInTheStateHolder() {
@@ -265,8 +255,6 @@ class ProgramsArchitectureTest {
             offenders.map { path -> path.removePrefix("viewmodel/") }
         )
     }
-
-    // ---- Compose stays where Compose belongs -------------------------------------------------------
 
     @Test
     fun theDetailScreenLeavesTheScreenOnlyWhenTheDeleteCompleted() {
@@ -303,9 +291,8 @@ class ProgramsArchitectureTest {
         }
     }
 
-    // ---- the creation remediation's source-level contracts -------------------------------------------
-    // These screens have no Compose harness (§17), so the wiring half of each fix is pinned against
-    // the source; the behaviour half is measured through the controllers in `ProgramsControllerTest`,
+    // These screens have no Compose harness, so the wiring half of each fix is pinned against the
+    // source; the behaviour half is measured through the controllers in `ProgramsControllerTest`,
     // `ProgramHomeControllerTest` and `ProgramSaveServiceTest`.
 
     @Test

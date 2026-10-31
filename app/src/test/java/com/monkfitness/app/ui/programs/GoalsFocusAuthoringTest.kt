@@ -12,19 +12,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §7's *Goals & Focus* authoring rules, as the pure functions the screen calls.
+ * The *Goals & Focus* authoring rules, as the pure functions the screen calls.
  *
  * The screen renders and nothing else, so the three questions it cannot answer for itself — what a
  * multi-select toggle produces, whether the typed percentages describe a configuration yet, and which
- * of the seven focuses a label exists for — are decided here, without a Compose harness (§17).
+ * of the seven focuses a label exists for — are decided here, without a Compose harness.
  *
- * The claim underneath all of it is §7's: **the user states the goal and the focus, and the domain's
- * own vocabulary decides what that statement means**. Nothing here completes an allocation, splits a
+ * The claim underneath all of it: **the user states the goal and the focus, and the domain's own
+ * vocabulary decides what that statement means**. Nothing here completes an allocation, splits a
  * percentage, reorders a selection into a priority or answers for a focus the user did not name.
  */
 class GoalsFocusAuthoringTest {
-
-    // ---------------------------------------------------------------- FOCUSED
 
     @Test
     fun choosingOneFocusIsAFocusedPlanNamingExactlyThatFocus() {
@@ -102,8 +100,6 @@ class GoalsFocusAuthoringTest {
             fromCustom?.eligibleFocuses
         )
     }
-
-    // ---------------------------------------------------------------- CUSTOM
 
     @Test
     fun theUsersOwnSharesAreTheAllocation() {
@@ -201,8 +197,8 @@ class GoalsFocusAuthoringTest {
 
     @Test
     fun oneFocusCarryingTwoSharesIsRefused() {
-        // The entry is a map, so a focus cannot be stated twice; the domain refuses the same shape for
-        // a caller that builds the list directly, and the entry is simply not a way to reach it.
+        // The entry is a map, so a focus cannot be stated twice; the domain refuses the same shape for a
+        // caller that builds the list directly, and the entry is simply not a way to reach it.
         val entry = FocusPercentEntry().withPercent(Focus.PUSH, 50).withPercent(Focus.PUSH, 50)
 
         assertEquals("the second entry for a focus replaces the first, so one focus carries one share", 50, entry.percentOf(Focus.PUSH))
@@ -219,8 +215,6 @@ class GoalsFocusAuthoringTest {
             entry.toFocusPlan()
         )
     }
-
-    // ---------------------------------------------------------------- the seven labels
 
     @Test
     fun everyFocusInTheVocabularyHasExactlyOneLabel() {
@@ -254,8 +248,6 @@ class GoalsFocusAuthoringTest {
             labels.map { (_, label) -> label }.toSet()
         )
     }
-
-    // ---------------------------------------------------------------- BALANCED
 
     @Test
     fun balancedStatesNoShareAtAllAndNamesNothing() {

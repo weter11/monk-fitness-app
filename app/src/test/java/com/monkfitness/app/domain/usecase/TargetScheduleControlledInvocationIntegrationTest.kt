@@ -41,33 +41,16 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * §30 step 21 on a real SQLite engine: the **first controlled production invocation** of the target
- * scheduling contour, driven the way the application drives it.
- *
- * ```text
- * a NOT_STARTED Program with a persisted explicit target source
- *         ↓  ProgramStartService.start
- * ProgramLifecycleService.startProgram        → the factual actualStartDate
- *         ↓  the five stated values
- * TargetScheduleProductionConsumer.run        → target occurrence + target slot, on disk
- * ```
+ * The **first controlled production invocation** of the target scheduling contour on a real SQLite
+ * engine, driven the way the application drives it: a NOT_STARTED Program with a persisted explicit
+ * target source goes through `ProgramStartService.start` → `ProgramLifecycleService.startProgram`
+ * (the factual actualStartDate) → the five stated values → `TargetScheduleProductionConsumer.run`,
+ * which lands a target occurrence and a target slot on disk.
  *
  * Every collaborator is the production one, composed as `AppContainer` composes it; only the clock,
- * the identity generator and the calendar are values a test must state, because a test cannot ask
- * the device for them. Nothing is mocked, so "the target pass wrote a row" and "the legacy slots are
+ * the identity generator and the calendar are values a test must state, because a test cannot ask the
+ * device for them. Nothing is mocked, so "the target pass wrote a row" and "the legacy slots are
  * byte-identical" are statements about storage.
- *
- * ```text
- *  1. a start creates the target occurrence and the target slot
- *  2. the legacy slots the application trains from are byte-identical afterwards
- *  3. a second controlled invocation creates nothing the first one created
- *  4. the five values are the real production values, each one reaching the stage that owns it
- *  5. a derived rule with no stated source is the resolver's own refusal
- *  6. a Program with no target authoring is a typed absence and writes no target row
- *  7. a Program the lifecycle refuses to start never reaches the target contour
- *  8. two Programs with identical rule identities do not consume each other's target state
- *  9. a completed occurrence stays completed across another controlled invocation
- * ```
  */
 class TargetScheduleControlledInvocationIntegrationTest {
 
@@ -80,8 +63,6 @@ class TargetScheduleControlledInvocationIntegrationTest {
     fun close() {
         rig.close()
     }
-
-    // ---- 1. the controlled invocation creates target persistence ------------------------------------
 
     @Test
     fun aStartCreatesTheTargetOccurrenceAndTheTargetSlot() = runBlocking {
@@ -114,8 +95,6 @@ class TargetScheduleControlledInvocationIntegrationTest {
         )
     }
 
-    // ---- 2. legacy isolation -----------------------------------------------------------------------
-
     @Test
     fun theLegacySlotsTheApplicationTrainsFromAreByteIdenticalAfterTheStart() = runBlocking {
         createNotStartedGraph()
@@ -138,8 +117,6 @@ class TargetScheduleControlledInvocationIntegrationTest {
         )
     }
 
-    // ---- 3. idempotence ---------------------------------------------------------------------------
-
     @Test
     fun aSecondControlledInvocationCreatesNoDuplicateOccurrenceOrSlot() = runBlocking {
         createNotStartedGraph()
@@ -147,8 +124,8 @@ class TargetScheduleControlledInvocationIntegrationTest {
 
         val first = start(ProgramId(programId)).started()
         val rowsAfterFirst = rig.targetRowCounts()
-        // A second start on a running Program is `AlreadyThere` (§3), which is a success: the
-        // operation runs the same controlled invocation again over the same factual start date.
+        // A second start on a running Program is `AlreadyThere`, which is a success: the operation
+        // runs the same controlled invocation again over the same factual start date.
         val second = start(ProgramId(programId)).started()
 
         assertEquals(
@@ -163,8 +140,6 @@ class TargetScheduleControlledInvocationIntegrationTest {
         )
         assertEquals("the target tables are unchanged", rowsAfterFirst, rig.targetRowCounts())
     }
-
-    // ---- 4. the five stated values -----------------------------------------------------------------
 
     @Test
     fun theProductionContextIsTheFiveStatedValuesAndEachReachesTheStageThatOwnsIt() = runBlocking {
@@ -287,8 +262,6 @@ class TargetScheduleControlledInvocationIntegrationTest {
         assertEquals("and nothing was written", 0 to 0, rig.targetRowCounts())
     }
 
-    // ---- 5. the derived refusal --------------------------------------------------------------------
-
     @Test
     fun aDerivedRuleWithNoStatedSourceIsTheResolversOwnRefusalAndWritesNothing() = runBlocking {
         createNotStartedGraph()
@@ -324,8 +297,6 @@ class TargetScheduleControlledInvocationIntegrationTest {
         )
     }
 
-    // ---- 6. the typed absence ----------------------------------------------------------------------
-
     @Test
     fun aProgramWithNoTargetAuthoringIsATypedAbsenceAndWritesNoTargetRow() = runBlocking {
         createNotStartedGraph()
@@ -353,13 +324,11 @@ class TargetScheduleControlledInvocationIntegrationTest {
         )
     }
 
-    // ---- 7. a refused start ------------------------------------------------------------------------
-
     @Test
     fun aProgramTheLifecycleRefusesToStartNeverReachesTheTargetContour() = runBlocking {
         createNotStartedGraph()
         rig.targetScheduleSourceRepository.store(source(revisionId, strengthRule(STARTED_DATE)))
-        // Started once, then completed: §3's terminal Program cannot be started again.
+        // Started once, then completed: a terminal Program cannot be started again.
         start(ProgramId(programId))
         lifecycleService.completeProgram(ProgramId(programId))
 
@@ -381,8 +350,6 @@ class TargetScheduleControlledInvocationIntegrationTest {
             rig.targetRowCounts()
         )
     }
-
-    // ---- 8. cross-Program isolation -----------------------------------------------------------------
 
     @Test
     fun twoProgramsWithIdenticalRuleIdentitiesDoNotConsumeEachOthersTargetState() = runBlocking {
@@ -426,8 +393,6 @@ class TargetScheduleControlledInvocationIntegrationTest {
         )
     }
 
-    // ---- 9. an existing completed occurrence --------------------------------------------------------
-
     @Test
     fun aCompletedTargetOccurrenceStaysCompletedAcrossAnotherControlledInvocation() = runBlocking {
         createNotStartedGraph()
@@ -466,13 +431,11 @@ class TargetScheduleControlledInvocationIntegrationTest {
         assertEquals("and no duplicate was written", 30 to 30, rig.targetRowCounts())
     }
 
-    // ---- fixtures ----------------------------------------------------------------------------------
-
     private suspend fun start(programId: ProgramId) = service(ZONE).start(programId)
 
     private suspend fun startIn(zone: ZoneId, programId: ProgramId) = service(zone).start(programId)
 
-    /** §3's lifecycle owner, wired as the composition root wires it over the rig's real engine. */
+    /** The lifecycle owner, wired as the composition root wires it over the rig's real engine. */
     private val lifecycleService = ProgramLifecycleService(
         programRepository = rig.programRepository,
         scheduleRepository = rig.programScheduleRepository,

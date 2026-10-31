@@ -11,30 +11,15 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The mechanical boundaries of §30 step 15, checked against the sources themselves.
+ * The mechanical boundaries of the read-back layer, checked against the sources themselves.
  *
- * The phase is a **read-back layer**, and almost everything it must not do is a prohibition: do not
- * reach a DAO, do not derive an occurrence from a plan day or a legacy schedule, do not parse the
- * occurrence key, do not acquire ambient time, do not consult the current revision, and above all do
- * not quietly pick one `OccurrenceExecution` out of several stored attempts. A prohibition that lives
- * only in a KDoc erodes the first time a convenient import appears, so each is asserted here as a
- * **token or a shape in real code**, with comments stripped first — which is what lets these files
- * explain the absences in prose without tripping the rules about them.
- *
- * The ten gates, in the order the phase states them:
- *
- * ```text
- * 1. semantic target data comes from TargetScheduleOccurrenceRepository
- * 2. slot data comes from ProgramScheduleRepository
- * 3. session execution data comes from WorkoutSessionRepository
- * 4. no DAO / Room / AppDatabase access exists in the target execution reader
- * 5. no planner / resolver / composer / policy / presenter / materializer / persister dependency
- * 6. no ProgramSchedule → TargetSchedule inference
- * 7. no ProgramDay identity inference
- * 8. no occurrenceKey parsing
- * 9. no clock, randomness or IdGenerator dependency
- * 10. no ExistingOccurrence execution precedence is encoded
- * ```
+ * Almost everything it must not do is a prohibition: do not reach a DAO, do not derive an occurrence
+ * from a plan day or a legacy schedule, do not parse the occurrence key, do not acquire ambient time,
+ * do not consult the current revision, and above all do not quietly pick one `OccurrenceExecution` out
+ * of several stored attempts. A prohibition that lives only in a KDoc erodes the first time a
+ * convenient import appears, so each is asserted here as a **token or a shape in real code**, with
+ * comments stripped first — which is what lets these files explain the absences in prose without
+ * tripping the rules about them.
  */
 class TargetOccurrenceExecutionReadArchitectureTest {
 
@@ -88,8 +73,6 @@ class TargetOccurrenceExecutionReadArchitectureTest {
         }
     }
 
-    // ---- 1./2./3. the three owners ------------------------------------------------------------------
-
     @Test
     fun eachLayerComesFromTheRepositoryThatOwnsIt() {
         assertTrue(
@@ -131,8 +114,6 @@ class TargetOccurrenceExecutionReadArchitectureTest {
         )
     }
 
-    // ---- 4. no storage access below the repositories -----------------------------------------------
-
     @Test
     fun theTargetExecutionReaderReachesStorageOnlyThroughTheRepositories() {
         val storage = listOf(
@@ -157,8 +138,6 @@ class TargetOccurrenceExecutionReadArchitectureTest {
         }
     }
 
-    // ---- 5. no engine stage ------------------------------------------------------------------------
-
     @Test
     fun theReadBackDependsOnNoEngineStageAndNoOtherUseCase() {
         val forbidden = listOf(
@@ -178,8 +157,6 @@ class TargetOccurrenceExecutionReadArchitectureTest {
             found.isEmpty()
         )
     }
-
-    // ---- 6. no ProgramSchedule inference -------------------------------------------------------------
 
     @Test
     fun thereIsNoProgramScheduleToTargetScheduleInference() {
@@ -203,8 +180,6 @@ class TargetOccurrenceExecutionReadArchitectureTest {
         )
     }
 
-    // ---- 7. no ProgramDay identity inference ---------------------------------------------------------
-
     @Test
     fun thereIsNoProgramDayIdentityInference() {
         val forbidden = listOf(
@@ -226,8 +201,6 @@ class TargetOccurrenceExecutionReadArchitectureTest {
             code(valueFile).contains("val slot: WorkoutSlot")
         )
     }
-
-    // ---- 8. no key parsing ---------------------------------------------------------------------------
 
     @Test
     fun thereIsNoOccurrenceKeyParsing() {
@@ -252,8 +225,6 @@ class TargetOccurrenceExecutionReadArchitectureTest {
         )
     }
 
-    // ---- 9. no ambient time, no randomness -----------------------------------------------------------
-
     @Test
     fun theReadBackAcquiresNoAmbientTimeAndNoRandomness() {
         val forbidden = listOf(
@@ -269,8 +240,6 @@ class TargetOccurrenceExecutionReadArchitectureTest {
             found.isEmpty()
         )
     }
-
-    // ---- 10. no execution precedence -----------------------------------------------------------------
 
     @Test
     fun noExistingOccurrenceExecutionPrecedenceIsEncoded() {
@@ -324,8 +293,6 @@ class TargetOccurrenceExecutionReadArchitectureTest {
             counts.contains("OccurrenceExecution")
         )
     }
-
-    // ---- the record's own shape ----------------------------------------------------------------------
 
     @Test
     fun theRecordKeepsTheFourLayersExplicitlySeparate() {
@@ -387,8 +354,6 @@ class TargetOccurrenceExecutionReadArchitectureTest {
                 reader.contains("?: TargetOccurrenceExecutionRecord")
         )
     }
-
-    // ---- the record's own invariants ------------------------------------------------------------------
 
     @Test
     fun theRecordRefusesAMismatchedOccurrenceSlotOrAttempt() {

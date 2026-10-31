@@ -30,7 +30,6 @@ class WidePushUpPoseTest {
         )
         val validator = ExerciseValidator(config)
 
-        // Sample progress from 0 to 1 in 100 steps
         val frameCount = 100
         val dt = 0.0166f // ~16.6ms frame time at 60fps
         val poses = ArrayList<SkeletonPose>()
@@ -76,7 +75,6 @@ class WidePushUpPoseTest {
             previousPose = currentPose
         }
 
-        // Print summary of issues
         println("=== VALIDATION ISSUE SUMMARY ===")
         println("Total issues collected: ${collectedIssues.size}")
         val uniqueRuleIds = collectedIssues.map { it.ruleId }.distinct()

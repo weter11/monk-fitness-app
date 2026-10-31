@@ -21,19 +21,11 @@ import java.time.Instant
 import java.time.LocalDate
 
 /**
- * A missed opportunity and a cancelled session are **not** workouts that scored zero.
- *
- * This is the invariant the architecture states most bluntly (§12), and it is asserted here four ways,
- * because any one of them alone could be satisfied by accident:
- *
- *  * the slot type has no amount to be zero — its field set is pinned, so nothing can be added for a
- *    later change to fill with zeroes;
- *  * a missed slot may still have been attempted, and its cancelled attempt keeps its partial work in
- *    the session rather than being flattened into a slot result;
- *  * the exposure model has no "observed nothing" instance to construct: no exposure is the *absence*
- *    of an observation, and there is no `NONE` level to spell it with;
- *  * a set result cannot record zero work at all, so no downstream aggregate can be built from
- *    placeholder rows.
+ * A missed opportunity and a cancelled session are **not** workouts that scored zero — asserted four
+ * ways, because any one of them alone could be satisfied by accident: the slot type has no amount to
+ * be zero, a missed slot's cancelled attempt keeps its partial work in the session rather than being
+ * flattened into a slot result, the exposure model has no "observed nothing" instance (no exposure is
+ * the *absence* of an observation), and a set result cannot record zero work at all.
  */
 class MissedAndCancelledAreNotZeroPerformanceTest {
 
@@ -164,8 +156,6 @@ class MissedAndCancelledAreNotZeroPerformanceTest {
         }
         assertRejects("a set at index 0") { result(reps = 10, seconds = 0, index = 0) }
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun cancelledSessionWithPartialWork(): WorkoutSession {
         val workout = EffectiveWorkout(

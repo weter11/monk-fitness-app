@@ -5,24 +5,18 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The boundary of the new Program System domain, pinned mechanically instead of by convention.
- *
- * The foundation this change adds is *pure*: it is JVM Kotlin over `java.time`, with no Room, no
- * Android, no `androidx`, no data layer, no UI and no ViewModel — which is what makes it testable
- * without a device and what the whole later roadmap (entities, mappers, DAOs, repositories) was
- * designed around. A comment saying so erodes on the first convenient import, so the rules are
- * asserted against the sources themselves:
+ * The boundary of the Program System domain, pinned mechanically instead of by convention: a comment
+ * saying "pure" erodes on the first convenient import, so the rules are asserted against the sources.
  *
  *  * only plain `kotlin.`/`java.`/domain imports may appear;
  *  * no Room annotation and no `androidx` type may appear;
  *  * the models are values: no `var` and no mutable collection type anywhere;
- *  * no floating point and no progression coefficient may appear — there is no load score to be
- *    invented, and no coefficient inside the adaptive foundation to be tuned.
+ *  * no floating point and no progression coefficient — there is no load score to invent and no
+ *    coefficient to tune.
  *
- * The last rule is the one that needs a word of explanation: it is scoped to the files this change
- * adds, because the *previous* adaptive stage (which lives in the same `domain/adaptive` package and
- * is deliberately untouched here) does compute exposure ratios as `Double`. Those ratios belong to
- * that engine and are not part of this foundation; the new files must stay free of them.
+ * The last rule is scoped to the files added here: the earlier adaptive stage in the same
+ * `domain/adaptive` package does compute exposure ratios as `Double`, and those belong to that
+ * engine, not to this foundation.
  */
 class ProgramDomainPurityTest {
 
@@ -32,19 +26,14 @@ class ProgramDomainPurityTest {
     }
 
     /**
-     * The packages this change creates wholesale.
-     *
-     * `adaptive/engine` was added by §30 step 11: the target adaptive engine is a pure domain component
-     * whose rules are exactly the ones this scan pins — no data layer, no platform, no mutable state, no
-     * floating point and no random source. Adding it here is what makes those rules apply to it without
-     * a second scan.
+     * `adaptive/engine` is a pure domain component whose rules are exactly the ones this scan pins,
+     * so listing it is what makes those rules apply to it without a second scan.
      */
     private val newPackages = listOf(
         "common", "program", "program/target", "prescription", "workout", "adaptive/decision", "adaptive/engine",
-        // §30 step 13 added the transfer model, the JSON codec and the mappers. Naming the sub-package
-        // explicitly is deliberate: it is the package a reader and a writer of *untrusted text* live in,
-        // which is exactly where "no `var`, no mutable collection, no floating point, no random source and
-        // no platform import" has to hold without being argued about.
+        // Named explicitly: this is the package a reader and a writer of *untrusted text* live in,
+        // which is exactly where "no `var`, no mutable collection, no floating point, no random source
+        // and no platform import" has to hold without being argued about.
         "program/transfer"
     )
 
@@ -69,8 +58,6 @@ class ProgramDomainPurityTest {
         "@Relation", "@Embedded", "@TypeConverter", "@Ignore"
     )
 
-    // ------------------------------------------------------------------ the scan really finds the files
-
     @Test
     fun theScanSeesTheWholeFoundation() {
         val sources = foundationSources()
@@ -92,8 +79,6 @@ class ProgramDomainPurityTest {
             )
         }
     }
-
-    // ------------------------------------------------------------------ purity
 
     @Test
     fun noFoundationSourceImportsAndroidRoomDataUiOrViewmodel() {
@@ -142,8 +127,6 @@ class ProgramDomainPurityTest {
         )
     }
 
-    // ------------------------------------------------------------------ immutability
-
     @Test
     fun theFoundationHoldsValuesAndDeclaresNoMutableState() {
         val offenders = scan(foundationSources()) { line ->
@@ -161,8 +144,6 @@ class ProgramDomainPurityTest {
             offenders.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ no invented arithmetic
 
     @Test
     fun theFoundationDeclaresNoFloatingPointAndNoProgressionCoefficient() {
@@ -185,8 +166,6 @@ class ProgramDomainPurityTest {
         )
     }
 
-    // ------------------------------------------------------------------ helpers
-
     private fun foundationSources(): List<File> = newPackages.flatMap { pkg ->
         File(domainDir, pkg).walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
@@ -199,11 +178,8 @@ class ProgramDomainPurityTest {
         }
 
     /**
-     * The executable lines of [source], with block comments and line comments removed.
-     *
-     * The rules above are rules about *code*. The KDoc in this foundation explains, in prose, that
-     * there is no coefficient and no load score — and a scan that reads prose would fail on the
-     * explanation of the very rule it is checking.
+     * The executable lines of [source], comments removed: the rules above are rules about *code*, and
+     * a scan that read the prose explaining "no coefficient" would fail on that explanation.
      */
     private fun codeLines(source: File): List<String> =
         source.readText()

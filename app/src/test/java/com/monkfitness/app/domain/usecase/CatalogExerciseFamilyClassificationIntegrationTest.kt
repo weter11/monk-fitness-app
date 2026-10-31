@@ -11,46 +11,40 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P30's production claim, measured on a real database with the real repositories and the **production**
+ * The production claim, measured on a real database with the real repositories and the **production**
  * classification — the one thing a stage about closing a gap must prove is that closing it did not change
  * the answer.
  *
- * The assertions here are ordered by how easily each could pass for the wrong reason:
- *
- * 1. the classification is reached at all (otherwise every later assertion is vacuous);
- * 2. it is reached **before** the progression-relation refusal, which is the gap that moved;
- * 3. the refusal is still made, and it is the *typed* one;
- * 4. nothing was written, so closing a gap did not become making a decision;
- * 5. the classification is inert with respect to Program, revision and history.
+ * The assertions are ordered by how easily each could pass for the wrong reason: the classification is
+ * reached at all (otherwise every later assertion is vacuous), it is reached **before** the
+ * progression-relation refusal that moved, the refusal is still made and is the *typed* one, nothing is
+ * written (so closing a gap did not become making a decision), and the classification is inert with
+ * respect to Program, revision and history.
  */
 class CatalogExerciseFamilyClassificationIntegrationTest {
 
     /**
      * The rig, with the ladder source **explicitly emptied**.
      *
-     * This whole class measures the *empty-catalogue* claims P30 established: that classification is
-     * reached before the relation refusal, that the refusal is the typed one, and that nothing is
-     * written. P32 changed the rig's default to the **production** stored provider, so under the new
-     * default these passes no longer refuse at all — they reach the engine with a real `pushups` ladder
-     * and return its own bounded `AWAITING_CONFIRMATION` hold.
+     * This class measures the *empty-catalogue* claims: classification is reached before the relation
+     * refusal, the refusal is the typed one, and nothing is written. The rig's default is now the
+     * **production** stored provider, under which these passes do not refuse at all — they reach the
+     * engine with a real `pushups` ladder and return its own bounded `AWAITING_CONFIRMATION` hold.
      *
-     * That is not a regression, it is the stage working. So the empty case is now **stated rather than
-     * assumed**: `.withoutLadder()` is what these assertions require, and it is the honest way to keep a
-     * P30 claim alive after P32 changed the default underneath it. P32's own positive assertions live in
-     * `ProductionAdaptiveProgressionContentTest`, over the same rig with the production provider.
+     * That is the stage working, not a regression, so the empty case is **stated rather than assumed**:
+     * `.withoutLadder()` is what these assertions require. The positive assertions over the production
+     * provider live in `ProductionAdaptiveProgressionContentTest`, over the same rig.
      */
     private val rig = CatalogAdaptiveIntegrationRig.of().withoutLadder()
 
     @After
     fun close() = rig.close()
 
-    // ================================================================ the gap that moved
-
     /**
      * **The central assertion.** With the production classification and no declared ladder, an adaptive
      * pass over a day presenting a family the completion exposed reports
-     * [AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION] — *not* `NO_FAMILY_CLASSIFICATION`, which is
-     * where the same pass stopped before P30.
+     * [AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION] — *not* `NO_FAMILY_CLASSIFICATION`, where the
+     * same pass stopped while the gap was open.
      *
      * The two gaps are asserted to be different values and only the later one is produced, because
      * "it is a gap" alone would pass under either and prove nothing about which fact is now present.
@@ -76,8 +70,8 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
     }
 
     /**
-     * **The negative control, kept live.** Removing the classification — the exact state P29 shipped —
-     * returns the pass to the earlier gap.
+     * **The negative control, kept live.** Removing the classification returns the pass to the earlier
+     * gap.
      *
      * This is the falsification of the test above: without it, a rig whose day simply presented nothing
      * classifiable would report `NO_DECLARED_PROGRESSION_RELATION` for the wrong reason and the central
@@ -174,8 +168,8 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
         rig.createSingleFamilyGraph()
         val trigger = rig.seedHistoryAndTrigger()
         // The family state says level 1 with `currentExerciseId` set. It is a *stored fact about the
-        // family*, not a ladder: P30 must not read it as a generation preference, and must not let it
-        // stand in for a relation that does not exist.
+        // family*, not a ladder: it must not be read as a generation preference, nor stand in for a
+        // relation that does not exist.
         assertNull(
             "the rig stores no family state for this family yet",
             rig.storedFamilyStateOf("pushups")
@@ -195,8 +189,6 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
         )
     }
 
-    // ================================================================ Program and revision scope
-
     /**
      * **No cross-Program behaviour.** Two Programs, two databases, two histories — and Program B's pass
      * reports the same typed gap from its own facts alone, with nothing of Program A's reaching it.
@@ -207,10 +199,10 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
      */
     @Test
     fun programAHistoryNeverEntersProgramB() = runBlocking {
-        // Both rigs take the empty ladder explicitly, for the same reason the class-level rig does: the
-        // claim here is about *Program scope*, and it is measured on the empty-catalogue refusal. Under
-        // the production provider neither pass would refuse, so the two Programs would be compared on a
-        // decision rather than on the typed gap this test is about.
+        // Both rigs take the empty ladder explicitly, as the class-level rig does: the claim is about
+        // *Program scope* and is measured on the empty-catalogue refusal. Under the production provider
+        // neither pass would refuse, and the two Programs would be compared on a decision rather than on
+        // the typed gap this test is about.
         val first = CatalogAdaptiveIntegrationRig.of().withoutLadder()
         try {
             first.createSingleFamilyGraph()
@@ -282,14 +274,13 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
     }
 
     /**
-     * **The P29 focus-history signals are unchanged.** The classification is on the adaptive pass only; a
-     * day presenting no exposed family reaches its gap through the same family history P29 built, and
-     * the whole census of tables P29 added is untouched by a pass that classifies.
+     * **The focus-history signals are unchanged.** The classification is on the adaptive pass only; a day
+     * presenting no exposed family reaches its gap through the same family history, and the whole census
+     * of the tables behind it is untouched by a pass that classifies.
      *
-     * The claim is deliberately narrow and is why the suite is worth having: P30 could easily have
-     * reached `GenerationPreferences` — the temptation being to fill `adaptivePreferredExerciseIds` with
-     * the family it can now name — and the assertion that nothing is written anywhere is what says it
-     * did not.
+     * The claim is narrow and is why the suite is worth having: the temptation is to fill
+     * `adaptivePreferredExerciseIds` with the family it can now name, and the assertion that nothing is
+     * written anywhere is what says it did not.
      */
     @Test
     fun theAdaptiveAndRecoverySignalsRemainNeutralExactlyAsP29Concluded() = runBlocking {

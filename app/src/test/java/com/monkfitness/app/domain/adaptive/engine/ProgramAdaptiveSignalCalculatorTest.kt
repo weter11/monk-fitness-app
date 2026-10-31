@@ -19,12 +19,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §13's signals, measured from the window's own facts.
+ * The adaptive signals, measured from the window's own facts.
  *
- * The claims this suite has to hold are the ones §12 states in negatives: a missed opportunity is not a
- * zero, missing history is not a failure, an idle window is not a decline, and a trend is only ever
- * reported once it has been measured. Each of them is asserted against the counts the calculator
- * produces rather than against prose.
+ * The claims are the ones stated in negatives: a missed opportunity is not a zero, missing history is
+ * not a failure, an idle window is not a decline, and a trend is only ever reported once it has been
+ * measured. Each is asserted against the counts the calculator produces rather than against prose.
  */
 class ProgramAdaptiveSignalCalculatorTest {
 
@@ -47,8 +46,6 @@ class ProgramAdaptiveSignalCalculatorTest {
         familyId = familyId,
         policy = policy
     )
-
-    // ------------------------------------------------------------------ counts and comparability
 
     @Test
     fun theHistoryOfAFamilyIsCountedFromItsOwnOccurrencesAndFromNothingElse() {
@@ -85,8 +82,6 @@ class ProgramAdaptiveSignalCalculatorTest {
         assertEquals(1, signals.exposure.exposures)
         assertEquals("mystery_press", signals.familyId)
     }
-
-    // ------------------------------------------------------------------ what is missing stays missing
 
     @Test
     fun aTrendIsOnlyReportedOnceItHasBeenMeasured() {
@@ -126,8 +121,6 @@ class ProgramAdaptiveSignalCalculatorTest {
         assertNull(signals.trend)
     }
 
-    // ------------------------------------------------------------------ the trend's own arithmetic
-
     @Test
     fun theTrendReadsWhatTheNewerHalfAchievedAgainstWhatTheOlderHalfWasAskedFor() {
         val improving = signalsOf(exposures = improvement())
@@ -160,8 +153,6 @@ class ProgramAdaptiveSignalCalculatorTest {
         assertEquals(5, signals.exposure.exposures)
     }
 
-    // ------------------------------------------------------------------ attendance
-
     @Test
     fun attendanceIsMeasuredOverTheOpportunitiesThePlanItselfOffered() {
         assertEquals(
@@ -191,8 +182,6 @@ class ProgramAdaptiveSignalCalculatorTest {
         )
     }
 
-    // ------------------------------------------------------------------ the recent context
-
     @Test
     fun theRecentContextIsComparedAgainstWhatThePlanPrescribes() {
         val withContext = ProgramAdaptiveSignalCalculator.calculate(
@@ -213,8 +202,6 @@ class ProgramAdaptiveSignalCalculatorTest {
                 as ProgramChannelComparison.Compared).delta
         )
     }
-
-    // ------------------------------------------------------------------ determinism
 
     @Test
     fun theSignalsAreAFunctionOfTheWindowAndNotOfACollectionOrder() {

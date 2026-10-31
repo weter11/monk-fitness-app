@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** Mechanical boundary for Phase 12 target schedule orchestration. */
+/** Mechanical boundary for target schedule orchestration. */
 class TargetScheduleOrchestratorArchitectureTest {
     private val mainDir = File("src/main/java/com/monkfitness/app").let { dir ->
         if (dir.isDirectory) dir else File("app/$dir")

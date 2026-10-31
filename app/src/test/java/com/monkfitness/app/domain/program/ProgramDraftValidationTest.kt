@@ -12,17 +12,15 @@ import org.junit.Test
 import java.lang.reflect.Modifier
 
 /**
- * §7's `validate` step, rule by rule.
+ * The `validate` step, rule by rule.
  *
  * Every rule is stated twice: a draft that breaks it is refused with the issue that names it, and a
- * draft that does not is saved-able. The second half matters as much as the first — a validator that
- * refuses everything protects nothing, and the rules here are deliberately few because a manual
- * program is free-form (§2, §10) and the only thing standing between the editor and a bad revision is
- * what a revision can actually hold.
+ * draft that does not is saveable. The second half matters as much as the first — a validator that
+ * refuses everything protects nothing, and the rules are deliberately few because a manual program is
+ * free-form and the only thing standing between the editor and a bad revision is what a revision can
+ * actually hold.
  */
 class ProgramDraftValidationTest {
-
-    // ------------------------------------------------------------------ the three entry points
 
     @Test
     fun aFinishedDraftOfEachEntryPointIsValid() {
@@ -43,8 +41,6 @@ class ProgramDraftValidationTest {
             ProgramDraftValidation.VALID.issues.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ the rules
 
     @Test
     fun aProgramNeedsAName() {
@@ -156,8 +152,6 @@ class ProgramDraftValidationTest {
         )
     }
 
-    // ------------------------------------------------------------------ findings, never repairs
-
     @Test
     fun theValidationCarriesFindingsAndIsStructurallyIncapableOfCarryingARepair() {
         val fields = ProgramDraftValidation::class.java.declaredFields
@@ -189,8 +183,6 @@ class ProgramDraftValidationTest {
         assertEquals("two validations of one draft agree", issues, broken.validation().issues)
         assertEquals("and repeated findings are reported once", issues.distinct(), issues)
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun draft(name: String, days: List<ProgramDay>) =
         ProgramEditorDraft(name = name, days = days)

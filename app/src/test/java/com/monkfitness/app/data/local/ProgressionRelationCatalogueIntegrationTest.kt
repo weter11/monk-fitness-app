@@ -19,23 +19,16 @@ import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
 
 /**
- * P31's explicit **empty-production proof**, plus the schema contract of the step that created the
- * storage.
+ * The **empty-production proof**, plus the schema contract of the step that created the storage.
  *
- * The stage's central risk is not that it does too little — it is that it quietly does *too much*. A
+ * The central risk is not that the stage does too little — it is that it quietly does *too much*. A
  * storage boundary plus a provider is exactly the shape from which a fabricated ladder leaks: a seeded
- * migration, a default rung, a family-state read dressed up as a ladder. So the claim under test is the
- * negative one, measured on a real database with the real repository and the real provider:
+ * migration, a default rung, a family-state read dressed up as a ladder. So the claim is the negative
+ * one, measured on a real database with the real repository and the real provider: an empty catalogue
+ * plus the production provider answers `null`, the honest "no ladder is declared".
  *
- * ```text
- * empty persisted progression catalogue
- *   + real production provider
- *   ─────────────────────────────────
- *   null — the honest "no ladder is declared"
- * ```
- *
- * and, at the schema level, that the step which created the table wrote no row and altered nothing
- * else. Every assertion here is about what is *absent*.
+ * At the schema level the claim is that the step which created the table wrote no row and altered
+ * nothing else. Every assertion here is about what is *absent*.
  */
 class ProgressionRelationCatalogueIntegrationTest {
 
@@ -44,7 +37,6 @@ class ProgressionRelationCatalogueIntegrationTest {
     @After
     fun close() = rig.close()
 
-    // ================================================================ the empty catalogue
 
     /**
      * **The central assertion.** The production provider over an empty catalogue answers `null`, for
@@ -53,7 +45,7 @@ class ProgressionRelationCatalogueIntegrationTest {
      * The near misses are the load-bearing half. A provider that fell back to "the family that sounds
      * most like this one", or to a default bucket, would answer a real relation for `pushup` while
      * still answering `null` for a wholly unknown id — so asserting only the unknown case would pass a
-     * provider that invents exactly the fallback §9 forbids.
+     * provider that invents exactly the fallback the domain forbids.
      */
     @Test
     fun anEmptyCatalogueBackedProviderAnswersNullForEveryFamily() = runBlocking {
@@ -117,14 +109,6 @@ class ProgressionRelationCatalogueIntegrationTest {
     }
 
     /**
-     * **The provider holds nothing but the repository.**
-     *
-     * Asserted on the declared fields rather than by reading the source, because a collaborator list is
-     * the only place a *default* could hide: a second field could be a hard-coded ladder, a fallback
-     * family provider, a clock or an id source, and none of those would be visible in a behavioural test
-     * over an empty catalogue.
-     */
-    /**
      * **The catalogue is app-owned and survives everything that happens to a plan.**
      *
      * A ladder belongs to a family, not to a Program — so a Program being deleted, and a revision
@@ -157,12 +141,8 @@ class ProgressionRelationCatalogueIntegrationTest {
         )
     }
 
-    // ================================================================ the migration's own contract
-
-    /**
-     * **The step's table is shaped the way the entity declares it**, read off a real engine's own
-     * `pragma_table_info` rather than off the migration's text.
-     */
+    /** **The table is shaped the way the entity declares it**, read off a real engine's
+     * `pragma_table_info` rather than off the migration's text. */
     @Test
     fun theStoredTableHasTheDeclaredColumnsKeyAndNoDefaults() {
         val upgraded = fullyMigrated()
@@ -195,15 +175,14 @@ class ProgressionRelationCatalogueIntegrationTest {
             )
             assertEquals(
                 "and no index is declared, because the key's leading column is the only read column",
-                // Scoped to *this* table: the database legitimately declares many indices, and the
-                // claim is that P31's table adds no *declared* one. `sqlite_master` cannot be read with
-                // a substring test on the name, because it also holds the table's own row under it.
+                // Scoped to *this* table: the database legitimately declares many indices and the claim
+                // is that this table adds no *declared* one. `sqlite_master` cannot be read with a
+                // substring test on the name, because it also holds the table's own row under it.
                 //
-                // What remains is SQLite's `sqlite_autoindex_*`, which it creates for a composite
-                // PRIMARY KEY. That entry is the key itself rather than a declared index — the same one
-                // every other composite-keyed table in this schema produces — so the claim excludes it
-                // by prefix and says so, rather than asserting an empty list that would be false about
-                // the engine.
+                // What remains is SQLite's `sqlite_autoindex_*`, created for a composite PRIMARY KEY.
+                // That entry is the key itself rather than a declared index — the same one every other
+                // composite-keyed table here produces — so the claim excludes it by prefix rather than
+                // asserting an empty list that would be false about the engine.
                 emptyList<String>(),
                 upgraded.strings(
                     "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?",
@@ -260,8 +239,7 @@ class ProgressionRelationCatalogueIntegrationTest {
     /**
      * **The step creates the table and writes nothing.**
      *
-     * Read through a recording proxy exactly as `ProgramSchemaTest` does, so the assertion is about the
-     * statements the device is actually handed.
+     * Read through a recording proxy, so the assertion is about the statements the device is handed.
      */
     @Test
     fun theStepCreatesTheTableAndWritesNoRowAndTouchesNothingElse() {
@@ -298,8 +276,8 @@ class ProgressionRelationCatalogueIntegrationTest {
     }
 
     /**
-     * **An upgraded database carries no ladder row** — the mechanical form of "P31 invented no ladder
-     * content", measured on the engine rather than on the migration's text.
+     * **An upgraded database carries no ladder row** — the mechanical form of "no ladder content was
+     * invented", measured on the engine rather than on the migration's text.
      */
     @Test
     fun aFullyUpgradedDatabaseHoldsNoLadderRow() {
@@ -322,7 +300,7 @@ class ProgressionRelationCatalogueIntegrationTest {
 
     /**
      * **The persisted row is exactly the entity's fields** — the same mechanical check the harness
-     * applies to every other target entity, run here so P31's table is not exempt from it.
+     * applies to every other target entity, run here so this table is not exempt from it.
      */
     @Test
     fun theEntityDeclaresExactlyTheColumnsTheTableStores() {
@@ -342,8 +320,6 @@ class ProgressionRelationCatalogueIntegrationTest {
             rig.database.columnNames("progression_relation_variant")
         )
     }
-
-    // ================================================================ helpers
 
     /** A version-7 database with the whole deployed chain executed, ending at version 18. */
     private fun fullyMigrated(): SqliteTestDatabase =

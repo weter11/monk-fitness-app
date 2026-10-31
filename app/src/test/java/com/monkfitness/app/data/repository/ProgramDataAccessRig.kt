@@ -63,35 +63,33 @@ import java.time.Instant
 import java.time.LocalDate
 
 /**
- * The repository suites' rig: a migrated version-8 database, the target DAOs executed on the real
- * SQLite engine, the seven repositories wired exactly as `AppContainer` will wire them (§26), and a
- * transaction runner that performs a genuine `COMMIT`/`ROLLBACK`.
+ * The repository suites' rig: a fully migrated database, the target DAOs executed on the real SQLite
+ * engine, the repositories wired exactly as `AppContainer` wires them, and a transaction runner that
+ * performs a genuine `COMMIT`/`ROLLBACK`.
  *
- * Everything a suite needs is reachable from here: [database] for direct SQL (mutating a live plan
- * underneath a session, counting rows after a rollback), the repositories for the behaviour under
- * test, and [restart] for reading the same rows through a second repository instance — which is what
- * proves a value came from storage rather than from a cache in memory.
+ * [database] is there for direct SQL (mutating a live plan underneath a session, counting rows after a
+ * rollback), and the `fresh*` builders read the same rows through a second repository instance — which
+ * is what proves a value came from storage rather than from a cache in memory.
  *
- * The clock is a value, not a hidden call: [now] can be set by a test, because the only timestamp this
- * layer stamps is a family state's write stamp and a test must be able to state when that was.
+ * The clock is a value, not a hidden call: [now] is settable because the only timestamp this layer
+ * stamps is a family state's write stamp, and a test must be able to state when that was.
  */
 internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatabase? = null) {
 
     /**
-     * The migrated database: the version-7 schema, then the production migrations to version 9.
+     * The migrated database: the version-7 schema, then the production chain.
      *
      * A rig built over a **supplied** database does not migrate it: the caller already did, and the
-     * deployed chain is not idempotent (a second `ALTER TABLE ... ADD COLUMN` is an error, exactly as it
-     * would be on a device opening the same file twice). That is what lets two rigs — two *processes*, as
-     * far as SQLite is concerned — share one file: one opens it and runs the chain, the other opens the
-     * same file and reads what the first wrote.
+     * chain is not idempotent (a second `ALTER TABLE ... ADD COLUMN` is an error, as on a device opening
+     * the same file twice). That is what lets two rigs — two *processes*, to SQLite — share one file:
+     * one opens it and runs the chain, the other reads what the first wrote.
      */
     val database: SqliteTestDatabase = supplied ?: SqliteTestDatabase.inMemory().also(::migrate)
 
     /**
-     * The transaction runner the repositories receive. Production passes
-     * `AppDatabase.withTransaction`; here it is the engine's own transaction, so an atomicity claim is
-     * decided by SQLite rather than by the test's bookkeeping.
+     * The transaction runner the repositories receive. Production passes `AppDatabase.withTransaction`;
+     * here it is the engine's own transaction, so an atomicity claim is decided by SQLite rather than by
+     * the test's bookkeeping.
      */
     val transaction: suspend (suspend () -> Unit) -> Unit = { block -> database.transaction { block() } }
 
@@ -107,16 +105,16 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
     val dayDao = SqliteProgramDayDao(database)
     val exerciseDao: ProgramExerciseDao = FailingProgramExerciseDao(SqliteProgramExerciseDao(database), faults)
     val slotDao: ProgramWorkoutSlotDao = FailingProgramWorkoutSlotDao(SqliteProgramWorkoutSlotDao(database), faults)
-    // §30 step 14: the target occurrence's semantic payload, with one switchable failure on the
-    // *component* insert — the second leg of the atomic unit whose first leg is the slot insert, so a
-    // rollback claim is measurable at a point other than the last write.
+    // The target occurrence's semantic payload, with one switchable failure on the *component* insert —
+    // the second leg of the atomic unit whose first leg is the slot insert, so a rollback claim is
+    // measurable at a point other than the last write.
     val targetOccurrenceDao: ProgramTargetOccurrenceDao =
         FailingProgramTargetOccurrenceDao(SqliteProgramTargetOccurrenceDao(database), faults)
-    // Stage 18: a revision's explicit target schedule source, with §30 step 19's one switchable
-    // failure on the *binding* insert. That is the source's second write and the save unit's last
-    // leg, so faulting it leaves the Program, its revision, its plan, its slots and the source's own
-    // rule rows genuinely written — which is what makes "the source and the revision are one unit"
-    // measurable rather than a claim that anything failed at the first statement.
+    // A revision's explicit target schedule source, with one switchable failure on the *binding*
+    // insert. That is the source's second write and the save unit's last leg, so faulting it leaves the
+    // Program, its revision, its plan, its slots and the source's own rule rows genuinely written —
+    // which makes "the source and the revision are one unit" measurable rather than a claim that
+    // anything failed at the first statement.
     val targetScheduleSourceDao: ProgramTargetScheduleSourceDao =
         FailingProgramTargetScheduleSourceDao(SqliteProgramTargetScheduleSourceDao(database), faults)
     val sessionDao = SqliteWorkoutSessionDao(database)
@@ -149,27 +147,26 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
     )
     val programProgressRepository = ProgramProgressRepository(slotDao, sessionDao, setLogDao)
 
-    // P31: the app-owned progression relation catalogue — its own DAO and its own repository, wired
-    // exactly as `AppContainer` will wire it and deliberately NOT folded into
-    // `programAdaptiveRepository`, because a ladder is a definition and not adaptive history.
+    // The app-owned progression relation catalogue — its own DAO and repository, wired as `AppContainer`
+    // wires it and deliberately NOT folded into `programAdaptiveRepository`, because a ladder is a
+    // definition and not adaptive history.
     val relationVariantDao = SqliteProgressionRelationVariantDao(database)
     val progressionRelationRepository = ProgressionRelationRepository(relationVariantDao, transaction)
 
-    /** The graph this rig was created for: a Program, its first revision and its initial slots. */
     val graph: ProgramGraph = ProgramGraphFixture.graph(key)
 
     /**
-     * Persists the rig's own graph through the repository, so a suite starts from a Program that was
-     * created the way the future use case will create one.
+     * Persists the rig's own graph through the repository, so a suite starts from a Program created the
+     * way the use case creates one.
      */
     suspend fun createGraph() = programRepository.createProgram(graph.program, graph.revision, graph.slots)
 
     /**
-     * Starts a session and confirms the sets its value describes, one confirmed set at a time.
+     * Starts a session and confirms the sets its value describes, one at a time.
      *
      * `startSession` deliberately writes only the session and its captured presentation — a set is
-     * confirmed *during* the workout (§27), not at start — so a suite that expects performed sets has to
-     * append them the way the session runtime will.
+     * confirmed *during* the workout, not at start — so a suite that expects performed sets has to
+     * append them the way the session runtime does.
      */
     suspend fun startSessionWithSets(session: WorkoutSession) {
         workoutSessionRepository.startSession(session)
@@ -181,8 +178,8 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
     }
 
     /**
-     * The same rows read through freshly built repositories: they hold no state of their own, so a
-     * value that survives this is a value that came from storage.
+     * The same rows read through freshly built repositories: they hold no state of their own, so a value
+     * that survives this came from storage.
      */
     fun freshProgramRepository() = ProgramRepository(programDao, revisionDao, dayDao, exerciseDao, slotDao, transaction)
 
@@ -200,24 +197,17 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
         familyStateDao, decisionDao, adjustmentDao, now = { now }, inTransaction = transaction
     )
 
-    /**
-     * P31: the ladder catalogue read through a freshly built repository.
-     *
-     * It exists because this repository holds no state of its own, so a value that survives a rebuild
-     * is a value that came from storage — which is the only way to tell a genuine round trip from a
-     * value that merely never left the object that was written.
-     */
+    /** The ladder catalogue read through a freshly built repository, for the same reason. */
     fun freshProgressionRelationRepository() =
         ProgressionRelationRepository(SqliteProgressionRelationVariantDao(database), transaction)
 
     fun close() = database.close()
 
     /**
-     * The two target-owned tables this stage can grow, counted on the engine itself.
+     * The two target-owned tables counted on the engine itself.
      *
-     * The rig's shared `tableCounts()` census is a closed list built from the scheduler fixture's
-     * table names, so a target table is not in it; a stage that creates one counts it here, beside
-     * the shared census, and asserts both.
+     * The shared `tableCounts()` census is a closed list built from the scheduler fixture's table names,
+     * so a target table is not in it; a suite that creates one counts it here and asserts both.
      */
     fun targetRowCounts(): Pair<Int, Int> = database.count("program_target_occurrence") to
         database.scalar("SELECT COUNT(*) FROM `program_workout_slot` WHERE `targetOccurrenceKey` IS NOT NULL")!!.toInt()
@@ -226,39 +216,34 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
 
         /**
          * Runs the **deployed** migration chain on an open database: the shipped version-7 schema, then
-         * the production migrations to version 11.
+         * the production migrations to the current version.
          *
-         * It is the rig's own setup, exposed because a file-backed database has to be migrated by the
-         * first connection that opens it and *not* by the second: a device at version 7 upgrades once, and
-         * every later open finds the chain already applied.
+         * Exposed because a file-backed database has to be migrated by the first connection that opens it
+         * and *not* by the second: a device at version 7 upgrades once, and every later open finds the
+         * chain already applied.
          */
         fun migrate(database: SqliteTestDatabase) {
             database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
             // The deployed chain: the target schema, the schedule-frequency correction, the Goal/Focus
-            // columns, then §30 step 12's window bookkeeping. Stopping short would exercise a database no
-            // device opens.
+            // columns, then the window bookkeeping. Stopping short would exercise a database no device
+            // opens.
             database.migrate(AppDatabase.MIGRATION_7_8)
             database.migrate(AppDatabase.MIGRATION_8_9)
             database.migrate(AppDatabase.MIGRATION_9_10)
             database.migrate(AppDatabase.MIGRATION_10_11)
-            // §30 step 15: the rig's database is the schema the app opens, so it runs the retirement
-            // step too — otherwise every repository suite would be exercising a database the app can
-            // no longer produce.
+            // The retirement step too: the rig's database is the schema the app opens, so stopping short
+            // would leave every repository suite exercising a database the app can no longer produce.
             database.migrate(AppDatabase.MIGRATION_11_12)
             database.migrate(AppDatabase.MIGRATION_12_13)
-            // §30 step 14: the target occurrence's semantic tables. Stopping short would leave every
-            // repository suite below exercising a database the app can no longer produce.
+            // The target occurrence's semantic tables.
             database.migrate(AppDatabase.MIGRATION_13_14)
-            // Stage 18: the revision-owned explicit target schedule source. Stopping short would leave
-            // every repository suite exercising a database the app can no longer produce.
+            // The revision-owned explicit target schedule source.
             database.migrate(AppDatabase.MIGRATION_14_15)
-            // §30 step 28: the user's exercise preference column. Stopping short would leave every
-            // repository suite below exercising a database the app can no longer produce.
+            // The user's exercise preference column.
             database.migrate(AppDatabase.MIGRATION_15_16)
-            // P29: the element's historical focus and the snapshot's frozen copy. Stopping short would
-            // leave every repository suite below exercising a database the app can no longer produce —
-            // and `insertRow`'s column check compares the entity's fields against the live schema, so a
-            // rig at version 16 would fail 455 tests with one honest message.
+            // The element's historical focus and the snapshot's frozen copy. `insertRow`'s column check
+            // compares the entity's fields against the live schema, so a rig one version behind would
+            // fail every repository test with one honest message.
             database.migrate(AppDatabase.MIGRATION_16_17)
             database.migrate(AppDatabase.MIGRATION_17_18)
         }
@@ -271,58 +256,51 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
  */
 internal class ProgramDaoFaults {
 
-    /** When set, inserting the revision's plan elements fails — the "exercise insert fails" case. */
     var failExerciseInsert: Boolean = false
 
-    /** When set, inserting the session's snapshot fails. */
     var failSnapshotInsert: Boolean = false
 
-    /** When set, inserting the occurrences a session runs fails — the failure *after* the snapshot. */
+    /** The failure *after* the snapshot. */
     var failSessionExerciseInsert: Boolean = false
 
-    /** When set, recording a slot's outcome fails — the middle leg of a completion. */
+    /** The middle leg of a completion. */
     var failSlotOutcomeUpdate: Boolean = false
 
-    /** When set, appending a confirmed set fails. */
     var failSetLogInsert: Boolean = false
 
-    /** When set, appending the adjustment of an applied decision fails. */
     var failAdjustmentInsert: Boolean = false
 
-    /** When set, appending the decision itself fails — the first leg of the adaptive half. */
+    /** The first leg of the adaptive half. */
     var failDecisionInsert: Boolean = false
 
-    /** When set, writing the family's state after a window fails — the last leg of §27's unit. */
+    /** The last leg of the adaptive unit. */
     var failFamilyStateInsert: Boolean = false
 
     /**
      * When set, reading a Program's opportunities fails — the read a Scheduler pass makes of the stored
-     * slots (`ProgramScheduler.pass` reads them before it decides). It plants §28's `SYSTEM_FAILURE` in the
-     * path a *read* takes, which is what the Program UI has to tell apart from the ordinary absence of a
-     * next date.
+     * slots before it decides. It plants `SYSTEM_FAILURE` in the path a *read* takes, which the Program UI
+     * has to tell apart from the ordinary absence of a next date.
      */
     var failSlotRead: Boolean = false
 
     /**
-     * When set, inserting a target occurrence's **components** fails — the second leg of §30 step 14's
-     * atomic unit, the first leg being the slot insert that precedes it.
+     * When set, inserting a target occurrence's **components** fails — the second leg of the atomic unit
+     * whose first leg is the slot insert.
      *
-     * It is deliberately the component insert and not the parent insert: failing the parent would fail
-     * the unit at its first statement, which proves only that nothing ran. Failing the *second* leg
-     * proves the rollback is real, because the parent row and the slot row have both been written by
-     * then and both have to disappear.
+     * Deliberately the component insert and not the parent: failing the parent would fail the unit at its
+     * first statement, which proves only that nothing ran. Failing the *second* leg proves the rollback is
+     * real, because the parent row and the slot row have both been written and both must disappear.
      */
     var failTargetOccurrenceComponentInsert: Boolean = false
 
     /**
      * When set, inserting a target source's **bindings** fails — the second of the source's two writes
-     * and the last leg of §30 step 19's revision-creation unit.
+     * and the last leg of the revision-creation unit.
      *
-     * §30 step 19's claim is that a revision and its explicit target source are one atomic operation.
-     * The only way to measure that is to fail after the first write has already landed: a fault on the
-     * rule insert would fail the unit at its first statement and prove only that nothing ran, while a
-     * fault on the *binding* insert proves the rollback reaches back over a Program, a revision, a
-     * plan, a set of initial slots and the source's own rule rows.
+     * The claim is that a revision and its explicit target source are one atomic operation, and the only
+     * way to measure it is to fail after the first write has landed: a fault on the rule insert would
+     * prove only that nothing ran, while a fault on the *binding* insert proves the rollback reaches back
+     * over a Program, a revision, a plan, a set of initial slots and the source's own rule rows.
      */
     var failTargetBindingInsert: Boolean = false
 
@@ -345,10 +323,9 @@ internal class ProgramDaoFaults {
 /**
  * A revision's explicit target source rows, with one switchable failure on the **binding** insert.
  *
- * §30 step 19 writes a revision and its target source in one unit, and the source's own two writes are
- * its rules then its bindings. The failure sits on the second because that is the statement that makes
- * the rollback claim measurable: when it fires, the Program, the revision, the plan, the initial slots
- * and the source's rule rows are all already on disk, and all of them have to disappear.
+ * The source's own two writes are its rules then its bindings. The failure sits on the second because
+ * that makes the rollback claim measurable: when it fires, the Program, the revision, the plan, the
+ * initial slots and the source's rule rows are all already on disk and all have to disappear.
  */
 private class FailingProgramTargetScheduleSourceDao(
     private val delegate: ProgramTargetScheduleSourceDao,
@@ -373,11 +350,9 @@ private class FailingProgramTargetScheduleSourceDao(
 /**
  * The target occurrence's semantic rows, with one switchable failure on the component insert.
  *
- * The failure sits on the **second** of the unit's two writes on purpose. §30 step 14's claim is that
- * the target slot and the target occurrence it presents are one atomic operation, and the only way to
- * measure that is to fail after the first write has already landed: a fault on the first write proves
- * only that nothing started, while a fault on the second proves the rollback reaches back and undoes a
- * row that was genuinely written.
+ * The failure sits on the **second** of the unit's two writes on purpose: the target slot and the
+ * occurrence it presents are one atomic operation, and only failing after the first write has landed
+ * proves the rollback undoes a row that was genuinely written rather than that nothing started.
  */
 private class FailingProgramTargetOccurrenceDao(
     private val delegate: ProgramTargetOccurrenceDao,
@@ -475,9 +450,9 @@ private class FailingSessionSnapshotDao(
 /**
  * The session's occurrences, with one switchable failure.
  *
- * It exists for the third deliberate-failure point of a start: a snapshot that landed and a session
- * that did not keep its occurrences is as forbidden as a session with no snapshot at all, and only a
- * real transaction can prove that.
+ * The third deliberate-failure point of a start: a snapshot that landed with a session that did not keep
+ * its occurrences is as forbidden as a session with no snapshot at all, and only a real transaction can
+ * prove that.
  */
 private class FailingSessionExerciseDao(
     private val delegate: SessionExerciseDao,
@@ -497,8 +472,8 @@ private class FailingSessionExerciseDao(
 
 /**
  * The opportunities, with one switchable failure on the outcome write — the middle leg of a completion
- * (the session is written first, the adaptive decision last), which is what makes "the whole completion
- * or none of it" measurable at a point other than the last write.
+ * (session first, adaptive decision last), which makes "the whole completion or none of it" measurable
+ * at a point other than the last write.
  */
 private class FailingProgramWorkoutSlotDao(
     private val delegate: ProgramWorkoutSlotDao,
@@ -597,15 +572,6 @@ internal data class ProgramGraph(
     fun dayIdValue(position: Int): String = dayId(position).value
 }
 
-/**
- * The domain graphs the suites build on: a deliberately non-trivial plan (two training days with a
- * rest day between them, one exercise occurring twice in a day, a per-set repetition prescription and
- * a per-set duration prescription) and a session whose captured presentation differs from the live
- * plan.
- *
- * Every id carries the graph's key, so two Programs can coexist in one database and "the other
- * Program survived" is measurable rather than asserted.
- */
 internal fun failureOf(block: suspend () -> Unit): Throwable {
     val thrown = try {
         kotlinx.coroutines.runBlocking { block() }
@@ -616,6 +582,14 @@ internal fun failureOf(block: suspend () -> Unit): Throwable {
     return requireNotNull(thrown) { "expected the call to fail, and it did not" }
 }
 
+/**
+ * The domain graphs the suites build on: a deliberately non-trivial plan (two training days with a rest
+ * day between them, one exercise occurring twice in a day, a per-set repetition and a per-set duration
+ * prescription) and a session whose captured presentation differs from the live plan.
+ *
+ * Every id carries the graph's key, so two Programs can coexist in one database and "the other Program
+ * survived" is measurable rather than asserted.
+ */
 internal object ProgramGraphFixture {
 
     val CREATED: Instant = Instant.parse("2026-09-13T08:00:00Z")
@@ -658,15 +632,6 @@ internal object ProgramGraphFixture {
         archivedAt = archivedAt
     )
 
-    /**
-     * The three-day plan:
-     *
-     * ```text
-     * day 1  TRAINING  plan-ex-1 pushup 12/10/8/6 (generated), plan-ex-2 pike_pushup 8/8 (user, pinned)
-     * day 2  REST      no elements
-     * day 3  TRAINING  plan-ex-3 pushup 5, plan-ex-4 pushup 5 (the same exercise twice), plank 30/30/45
-     * ```
-     */
     fun days(key: String): List<ProgramDay> = listOf(
         ProgramDay(
             programDayId = ProgramDayId(dayId(key, 1)),
@@ -723,12 +688,11 @@ internal object ProgramGraphFixture {
     )
 
     /**
-     * A structurally different second revision of the same Program: a new revision identity, new day
-     * identities and new occurrence identities, and a different prescription.
+     * A structurally different second revision of the same Program: new revision, day and occurrence
+     * identities, and a different prescription.
      *
-     * The identities have to be new: a day and an occurrence are rows of their own, so a second
-     * revision that reused them would be rewriting the first one's plan rather than adding a plan
-     * (§6, §9).
+     * The identities have to be new: a day and an occurrence are rows of their own, so a second revision
+     * that reused them would rewrite the first one's plan rather than add a plan.
      */
     fun nextRevision(key: String, revisionNumber: Int = 2): ProgramRevision {
         val tag = "$key-$revisionNumber"
@@ -763,12 +727,6 @@ internal object ProgramGraphFixture {
         createdAt = COMPUTED
     )
 
-    /**
-     * Runs [block] and returns the `Throwable` it failed with, failing the test when it did not fail.
-     *
-     * Every failure claim in the repository suites goes through this, so "the repository propagates the
-     * failure" is measured rather than argued.
-     */
     fun revision(key: String, revisionNumber: Int = 1): ProgramRevision = ProgramRevision(
         revisionId = RevisionId(revisionId(key)),
         programId = ProgramId(programId(key)),
@@ -782,7 +740,6 @@ internal object ProgramGraphFixture {
         createdAt = CREATED
     )
 
-    /** One planned slot per plan day, in the plan's order, all still open. */
     fun slots(key: String): List<WorkoutSlot> = (1..3).map { position ->
         WorkoutSlot(
             slotId = SlotId(slotId(key, position)),
@@ -794,7 +751,6 @@ internal object ProgramGraphFixture {
         )
     }
 
-    /** The whole graph of one Program, ready for `createProgram`. */
     fun graph(key: String): ProgramGraph = ProgramGraph(
         program = program(key),
         revision = revision(key),
@@ -802,9 +758,9 @@ internal object ProgramGraphFixture {
     )
 
     /**
-     * A session for the slot presenting [position], whose captured presentation is an **adjusted**
-     * version of the live plan: the first element is presented as `knee_pushup 10/8` while the revision
-     * says `pushup 12/10/8/6`, and one adjustment is recorded as applied.
+     * A session for [slot] whose captured presentation is an **adjusted** version of the live plan: the
+     * first element is presented as `knee_pushup 10/8` while the revision says `pushup 12/10/8/6`, and one
+     * adjustment is recorded as applied.
      *
      * That difference is the point of the snapshot suite: after the live plan is rewritten, the session
      * must still describe what it captured.

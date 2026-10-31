@@ -4,21 +4,12 @@ import com.monkfitness.app.animation.*
 import org.junit.Assert.*
 import org.junit.Test
 
-/**
- * SupportMathTest verifies the correctness of the generic biomechanical support model:
- * - PivotType enum and SupportContact enum usage.
- * - SupportDefinition.
- * - SupportMath automatic lever length calculations.
- * - SupportMath support centroid calculations.
- * - SupportMath LeverModel calculations including offsets.
- */
 class SupportMathTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
 
     @Test
     fun testSupportPointEnum() {
-        // Verify target values exist in SupportPoint
         assertNotNull(SupportPoint.LEFT_FOOT)
         assertNotNull(SupportPoint.RIGHT_FOOT)
         assertNotNull(SupportPoint.LEFT_TOES)
@@ -63,7 +54,6 @@ class SupportMathTest {
         assertEquals(0.8f, contact.friction, 1e-4f)
         assertEquals(5f, contact.heightOffset, 1e-4f)
 
-        // Test companion objects are non-null and correctly mapped
         assertEquals(SupportPoint.LEFT_FOOT, SupportContact.LEFT_FOOT.point)
         assertEquals(SupportPoint.RIGHT_FOOT, SupportContact.RIGHT_FOOT.point)
         assertEquals(SupportPoint.LEFT_TOES, SupportContact.LEFT_TOES.point)
@@ -101,14 +91,12 @@ class SupportMathTest {
     fun testSupportCentroidComputation() {
         val pose = SkeletonPose()
 
-        // Mock joint coordinates
         pose.setJoint(Joint.HAND_P, Vector3(10f, 20f, 30f))
         pose.setJoint(Joint.HAND_A, Vector3(20f, 40f, 60f))
 
         val contacts = setOf(SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND)
         val centroid = SupportMath.computeSupportCentroid(pose, contacts)
 
-        // Average of (10, 20, 30) and (20, 40, 60) should be (15, 30, 45)
         assertEquals(15f, centroid.x, 1e-4f)
         assertEquals(30f, centroid.y, 1e-4f)
         assertEquals(45f, centroid.z, 1e-4f)
@@ -118,7 +106,6 @@ class SupportMathTest {
     fun testLeverModelComputationWithOffsets() {
         val pose = SkeletonPose()
 
-        // Mock knees coordinates
         pose.setJoint(Joint.KNEE_B, Vector3(100f, 50f, 10f))
         pose.setJoint(Joint.KNEE_F, Vector3(120f, 50f, -10f))
 
@@ -148,7 +135,7 @@ class SupportMathTest {
         // Test with L1 = 98 (shin), L2 = 112 (thigh), targetFlexionDegrees = 8f
         val result = SkeletonMath.solveNearStraightLimb(98f, 112f, 8f)
 
-        // Expected target linear distance (d) is around 209.4907 (roughly 99.76% of 210)
+        // The target linear distance is ~209.4907 (roughly 99.76% of 210).
         assertEquals(209.4907f, result.d, 0.01f)
 
         // Linear ratio check

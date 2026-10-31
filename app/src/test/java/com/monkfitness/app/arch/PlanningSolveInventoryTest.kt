@@ -5,17 +5,14 @@ import org.junit.Test
 import java.io.File
 
 /**
- * P12 (§12.4b) — the sanctioned planning solve's inventory lock.
+ * `planLimbPlacement` is the ONLY authoring-time limb solve allowed outside the registered
+ * Active Limb Solver implementations, admitted for exactly one purpose: composing later Limb
+ * Targets for a family whose choreography depends on an earlier limb's bent placement (the
+ * hip-flexor chain). A new caller makes it a shadow solver; that expansion requires an explicit
+ * plan amendment, so this audit pins the call sites.
  *
- * `planLimbPlacement` is the ONLY authoring-time limb-solve computation allowed to exist outside
- * the registered Active Limb Solver implementations, and the plan admits it for exactly one
- * purpose: composing later Limb Targets for a family whose choreography depends on an earlier
- * limb's bent placement (the hip-flexor chain). If it grows additional callers it is becoming a
- * shadow solver, which R5 forbids; that expansion requires an explicit plan amendment, so this
- * audit pins the call sites.
- *
- * The primitive body itself (BasePose.kt) is the only place allowed to touch `solveIK` outside
- * the registered implementations — see
+ * The primitive body (BasePose.kt) is the only place allowed to touch `solveIK` outside the
+ * registered implementations — see
  * [LimbSolverOwnershipActivationContractTest.noUnauthorizedDirectSolveInProductionPoses].
  */
 class PlanningSolveInventoryTest {

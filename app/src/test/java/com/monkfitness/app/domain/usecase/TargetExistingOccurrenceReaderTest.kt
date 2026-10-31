@@ -38,23 +38,14 @@ import java.time.Instant
 import java.time.LocalDate
 
 /**
- * §30 step 17's bridge, measured on a real SQLite engine: a stored target occurrence becomes the
- * target scheduling input, and the execution it carries is the Phase 16 policy's verdict.
+ * The bridge, measured on a real SQLite engine: a stored target occurrence becomes the target
+ * scheduling input, and the execution it carries is the temporal policy's verdict, not the bridge's.
  *
  * The rows are written by the production write paths — a real `TargetScheduleSlotPersister` pass for
- * the slot and the semantic occurrence, a real `startSession` / `finishSession` / `recordSessionOutcome`
- * for each attempt — because the point of the bridge is that it reads what was actually stored, not
- * that it can be handed a hand-built verdict.
- *
- * The claims under test:
- *
- * ```text
- *  1. an occurrence with no attempt becomes a PLANNED scheduling input
- *  2. a started / completed / cancelled history becomes STARTED / COMPLETED / CANCELLED
- *  3. the execution is the Phase 16 policy's, over the same stored history
- *  4. the payload is forwarded unchanged and no performance data is required or produced
- *  5. a read refusal propagates rather than defaulting to PLANNED
- * ```
+ * the slot and the semantic occurrence, a real `startSession` / `finishSession` /
+ * `recordSessionOutcome` for each attempt — because the point of the bridge is that it reads what was
+ * actually stored, not that it can be handed a hand-built verdict. A read refusal propagates rather
+ * than defaulting to PLANNED.
  */
 class TargetExistingOccurrenceReaderTest {
 
@@ -68,8 +59,6 @@ class TargetExistingOccurrenceReaderTest {
     fun close() {
         rig.close()
     }
-
-    // ---- 1./2. the stored history becomes the scheduling execution ---------------------------------
 
     @Test
     fun anOccurrenceWithNoAttemptBecomesAPlannedSchedulingInput() = runBlocking {
@@ -110,8 +99,6 @@ class TargetExistingOccurrenceReaderTest {
 
         assertEquals(OccurrenceExecution.CANCELLED, existing.execution)
     }
-
-    // ---- 3. the verdict is the Phase 16 policy's, not the bridge's ----------------------------------
 
     @Test
     fun theExecutionIsThePhaseSixteenPolicyVerdictOverTheSameStoredHistory() = runBlocking {
@@ -155,8 +142,6 @@ class TargetExistingOccurrenceReaderTest {
         assertEquals(OccurrenceExecution.COMPLETED, existing.execution)
     }
 
-    // ---- 4. the payload and the absence of performance ----------------------------------------------
-
     @Test
     fun theStoredPayloadIsReturnedAndAReplacementConflictStillReachesTheReconciler() = runBlocking {
         // The stored occurrence is `OLD`. The caller presents the same identity with a different
@@ -180,7 +165,7 @@ class TargetExistingOccurrenceReaderTest {
 
         // 1. The identity is the caller's, unchanged — the key is what the lookup used.
         assertEquals("strength", existing.occurrenceKey)
-        // 2. The execution is the Phase 16 verdict, not the caller's and not a default.
+        // 2. The execution is the temporal policy's verdict, not the caller's and not a default.
         assertEquals(OccurrenceExecution.COMPLETED, existing.execution)
         // 3. The payload is the *persisted* one, not the caller's.
         assertSamePayload(occurrence("strength", DAY), existing.occurrence)
@@ -244,8 +229,6 @@ class TargetExistingOccurrenceReaderTest {
         )
     }
 
-    // ---- 5. no performance data crosses this boundary -----------------------------------------------
-
     @Test
     fun noActualResultIsConstructedAndNoPerformanceIsAggregated() = runBlocking {
         // The attempt below confirmed two real sets of real reps. None of that may reach the
@@ -273,8 +256,6 @@ class TargetExistingOccurrenceReaderTest {
         )
     }
 
-    // ---- 5. refusals propagate ----------------------------------------------------------------------
-
     @Test
     fun aMissingStoredOccurrenceIsRefusedRatherThanDefaultedToPlanned() = runBlocking {
         rig.createGraph()
@@ -288,8 +269,6 @@ class TargetExistingOccurrenceReaderTest {
 
         assertEquals("absent", failure.occurrenceKey)
     }
-
-    // ---- fixtures ------------------------------------------------------------------------------------
 
     private fun assertSamePayload(expected: PlannedOccurrence, actual: PlannedOccurrence) {
         assertEquals(expected.occurrenceKey, actual.occurrenceKey)

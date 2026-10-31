@@ -6,7 +6,7 @@ import org.junit.Test
 import java.io.File
 import java.lang.reflect.Modifier
 
-/** Mechanical pure-domain boundary for Stage 7 target occurrence presentation. */
+/** Mechanical pure-domain boundary for target occurrence presentation. */
 class TargetOccurrencePresenterArchitectureTest {
     private val mainDir = File("src/main/java/com/monkfitness/app").let { dir ->
         if (dir.isDirectory) dir else File("app/$dir")
@@ -21,29 +21,29 @@ class TargetOccurrencePresenterArchitectureTest {
 
         assertEquals(
             listOf(
-                // §30 step 17: the target scheduling input occurrence — the planned payload plus the
-                // one execution classification the scheduling rules read. It is a pure value in this
-                // package for the same reason as the entries above (schedule semantics, no storage,
-                // no clock, no id generator) and it is deliberately narrower than the domain's
-                // `ExistingOccurrence`: it carries no ActualResult, no performed work and no
-                // session or slot state. The list stays closed: a twelfth file still fails here.
+                // The target scheduling input occurrence — the planned payload plus the one execution
+                // classification the scheduling rules read. It is a pure value in this package for the
+                // same reason as the entries above (schedule semantics, no storage, no clock, no id
+                // generator) and it is deliberately narrower than the domain's `ExistingOccurrence`: it
+                // carries no ActualResult, no performed work and no session or slot state. The list
+                // stays closed: a twelfth file still fails here.
                 "TargetExistingOccurrence.kt",
                 "TargetOccurrenceComposer.kt",
-                // §30 step 16: the occurrence-execution *precedence*, and the single owner of it. It
-                // belongs in this pure package for the same reason as the two entries below — schedule
-                // semantics over an already-read record — and it holds no storage, no clock and no id
-                // generator. Unlike the read-back below it does hold a verdict, which is exactly why it
-                // is a *named* owner rather than an incidental member of a record or a repository.
+                // The occurrence-execution *precedence*, and the single owner of it. It belongs in this
+                // pure package for the same reason as the two entries below — schedule semantics over an
+                // already-read record — and it holds no storage, no clock and no id generator. Unlike
+                // the read-back below it does hold a verdict, which is exactly why it is a *named* owner
+                // rather than an incidental member of a record or a repository.
                 "TargetOccurrenceExecutionPolicy.kt",
-                // §30 step 15: the target occurrence's stored execution read-back value, its pure
-                // aggregation and its typed refusals. It is a pure value in this package for the same
-                // reason as the Phase 14 entry below — the same semantic facts, read back — and it
-                // holds no storage, no clock, no id generator and, deliberately, no execution verdict.
+                // The target occurrence's stored execution read-back value, its pure aggregation and its
+                // typed refusals. It is a pure value in this package for the same reason as the
+                // persistence entry below — the same semantic facts, read back — and it holds no
+                // storage, no clock, no id generator and, deliberately, no execution verdict.
                 "TargetOccurrenceExecutionRead.kt",
-                // §30 step 14: the target occurrence's persisted semantic value and its typed
-                // conflict. It is a pure value in this package because it is schedule *semantics* —
-                // the same kind of thing the reconciler already holds — with no storage, no clock and
-                // no id generator of its own. The list stays closed: an eleventh file still fails here.
+                // The target occurrence's persisted semantic value and its typed conflict. It is a pure
+                // value in this package because it is schedule *semantics* — the same kind of thing the
+                // reconciler already holds — with no storage, no clock and no id generator of its own.
+                // The list stays closed: an eleventh file still fails here.
                 "TargetOccurrencePersistence.kt",
                 "TargetOccurrencePresenter.kt",
                 "TargetOccurrenceReconciler.kt",
@@ -125,10 +125,8 @@ class TargetOccurrencePresenterArchitectureTest {
 
     @Test
     fun stageSevenHasExactlyOneProductionCallerAndItIsTheStageElevenApplicationBoundary() {
-        // Stage 11 revised this claim rather than relaxing it. While nothing applied a decision, the
-        // pin was an *absence*: no production source outside the pure target package named the
-        // presenter. The application boundary is now that one caller, so the closed list is the
-        // single-element one — a second consumer appearing later still fails here.
+        // The pin is a closed single-element list rather than an absence: the application boundary is
+        // the one caller, and a second consumer appearing later still fails here.
         val outsideReferences = File(mainDir, "domain").walkTopDown()
             .filter { it.isFile && it.extension == "kt" && it.parentFile != targetDir }
             .mapNotNull { source -> if (source.readText().contains("TargetOccurrencePresenter")) source.path else null }

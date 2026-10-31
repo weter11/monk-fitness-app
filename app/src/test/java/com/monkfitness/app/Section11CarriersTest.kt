@@ -7,24 +7,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * M5 status audit (RFC_GAP_CLOSURE §M5) — pins the *truthful* state of the §1.1 intent carriers.
+ * Pins the truthful state of the intent carriers, by runtime observation rather than grep.
  *
- * The RFC originally claimed M5 was "automatic once M2 lands". That is false. This suite proves the
- * actual state by runtime observation rather than grep:
- *  - The **live** subset of §1.1 — `contacts`, `contactPrecedence`, `postureIntent` — IS populated
- *    by the validation instruments and consumed by the [ConstraintSolver] (this is what M3/M4 exercise).
- *  - The **live** subset after B1 — `limbTargets` — IS now populated by every `bakeIkLimb` call (which
- *    forwards its end joint + world target into the carrier) and IS consumed by the engine-owned
- *    `IkStage` (RFC_BRANCH_B_IMPLEMENTATION §2 B1). This is the dead→live flip that defines B1-complete.
- *  - **B2 (now complete):** `spineIntent` and `jointIntents` are now poppedated by every trunk/hip/
- *    girdle/extremity authoring helper (which forwards its intent through the sole-mutator
- *    `IntentBuilder`) and consumed by the [SkeletonPoseFinalizer] (RFC_BRANCH_B_IMPLEMENTATION §2 B2).
- *    The `spineAndJointCarriersLiveAfterB2` test flips the old dead→live assertion; the B2 equivalence
- *    is proven by `FinalizerIntentConsumersTest` (maxDeviation 0.0 on vs off).
+ * The live subset: `contacts`, `contactPrecedence` and `postureIntent` are populated by the validation
+ * instruments and consumed by the [ConstraintSolver]; `limbTargets` is populated by every `bakeIkLimb`
+ * call (which forwards its end joint + world target into the carrier) and consumed by the
+ * engine-owned `IkStage`; `spineIntent` and `jointIntents` are populated by every
+ * trunk/hip/girdle/extremity authoring helper (which forwards its intent through the sole-mutator
+ * `IntentBuilder`) and consumed by the [SkeletonPoseFinalizer]; and `extremityOverrides` is read by
+ * the Finalizer's hand/foot derivation, so it is consumed, not dead.
  *
- * `extremityOverrides` was already live from W1 (the Finalizer's hand/foot derivation reads it), so it
- * is consumed, not dead. The remaining deferred `BasePose`→`IntentBuilder` intent-only migration (B4)
- * will delete the helpers' node writes, leaving the carriers as the sole authoring surface.
+ * A carrier that is populated but never consumed is dead, and a carrier consumed but never populated
+ * asserts nothing — these tests keep that distinction observable so a silent regression fails here.
+ * The deferred `BasePose`→`IntentBuilder` intent-only migration will delete the helpers' node writes,
+ * leaving the carriers as the sole authoring surface.
  */
 class Section11CarriersTest {
 
@@ -47,10 +43,10 @@ class Section11CarriersTest {
     )
 
     /**
-     * Poses that actually AUTHOR a trunk/hip/girdle/extremity intent. These are the poses the B2
-     * dead→live flip targets: their `spineIntent` / `jointIntents` carriers must now be populated
-     * (the authoring helpers forward through the sole-mutator IntentBuilder). Poses that express no
-     * such intent legitimately leave the carriers empty, so they are intentionally excluded.
+     * Poses that actually AUTHOR a trunk/hip/girdle/extremity intent — the poses whose `spineIntent` /
+     * `jointIntents` carriers must be populated (the authoring helpers forward through the sole-mutator
+     * IntentBuilder). Poses that express no such intent legitimately leave the carriers empty, so they
+     * are intentionally excluded.
      */
     private fun trunkHipPoses(): List<Pair<String, () -> PoseBuilder>> = listOf(
         "StaticForearmPlank" to { StaticForearmPlankPose() },
@@ -64,7 +60,7 @@ class Section11CarriersTest {
     fun liveCarriersPopulatedByContactInstruments() {
         for ((name, factory) in contactPoses()) {
             val pose = factory().build(PoseContext(0.5f, Side.LEFT, def))
-            // `contacts` + `postureIntent`/`contactPrecedence` are the live §1.1 carriers the engine
+            // `contacts` + `postureIntent`/`contactPrecedence` are the live carriers the engine
             // (ConstraintSolver) actually consumes. At least one must be non-empty for a contact pose.
             val anyLive = pose.contacts.isNotEmpty() ||
                 pose.postureIntent.kind != PostureIntent.Kind.CUSTOM ||
@@ -76,8 +72,8 @@ class Section11CarriersTest {
 
     @Test
     fun liveLimbTargetsPopulatedByPoses() {
-        // B1 dead→live flip: every pose that bakes a limb now also declares a `limbTargets`
-        // entry (bakeIkLimb forwards its end joint + world target into the §1.1 carrier).
+        // Every pose that bakes a limb now also declares a `limbTargets` entry (bakeIkLimb forwards its
+        // end joint + world target into the carrier).
         val all = productionPoses() + contactPoses()
         for ((name, factory) in all) {
             val pose = when (factory) {
@@ -91,9 +87,9 @@ class Section11CarriersTest {
 
     @Test
     fun spineAndJointCarriersLiveAfterB2() {
-        // B2 dead→live flip: the trunk/hip/girdle/extremity authoring helpers now forward their
-        // intent through the sole-mutator IntentBuilder, so the §1.1 `spineIntent` and `jointIntents`
-        // carriers are populated for every pose that authors such intent (the Finalizer consumes them).
+        // The trunk/hip/girdle/extremity authoring helpers forward their intent through the sole-mutator
+        // IntentBuilder, so the `spineIntent` and `jointIntents` carriers are populated for every pose
+        // that authors such intent (the Finalizer consumes them).
         for ((name, factory) in trunkHipPoses()) {
             val pose = factory().build(PoseContext(0.5f, Side.LEFT, def))
             // Every trunk/hip/girdle/extremity authoring pose records a joint articulation.
@@ -120,9 +116,9 @@ class Section11CarriersTest {
 
     @Test
     fun limbTargetsConsumedByPipeline() {
-        // End-to-end: after a full pipeline produceFrame (IkStage → Solver → Finalizer) the B1
-        // `limbTargets` carrier is retained and the B2 `jointIntents` carrier is populated (live)
-        // and consumed by the Finalizer (idempotent, byte-identical output). Contact poses are
+        // End-to-end: after a full pipeline produceFrame (IkStage → Solver → Finalizer) the
+        // `limbTargets` carrier is retained and the `jointIntents` carrier is populated (live) and
+        // consumed by the Finalizer (idempotent, byte-identical output). Contact poses are
         // solver-settled, so the consumer is a no-op for them — the carrier is still retained.
         for ((name, factory) in contactPoses()) {
             val out = SkeletonPipeline(def).produceFrame(factory(), PoseContext(0.5f, Side.LEFT, def))
@@ -132,10 +128,10 @@ class Section11CarriersTest {
     }
 
     /**
-     * B4a (RFC_BRANCH_B_REPLAN §3) — the last 5 bare ROM writes are now carrier-backed. Every
-     * ROM-bearing joint (spine/neck/hip) records a `jointIntents` entry via the documented helpers
-     * (`buildSpineCurve` / `buildHipFlexion`) or `declareJointIntent`, so no bare ROM
-     * `localRotation.set` remains. This pins that the ROM carriers are live for the migrated families.
+     * The last 5 bare ROM writes are now carrier-backed. Every ROM-bearing joint (spine/neck/hip)
+     * records a `jointIntents` entry via the documented helpers (`buildSpineCurve` /
+     * `buildHipFlexion`) or `declareJointIntent`, so no bare ROM `localRotation.set` remains. This pins
+     * that the ROM carriers are live for the migrated families.
      */
     @Test
     fun romCarriersLiveAfterB4a() {
@@ -159,7 +155,7 @@ class Section11CarriersTest {
         val pt = PelvicTiltPose().build(PoseContext(0.5f, Side.LEFT, def))
         assertTrue("PelvicTilt must record NECK_END ROM intent", pt.jointIntents.any { it.joint == Joint.NECK_END })
         // KneePushUp exercises the knee-pivot branch, which records the HIP_F flexion ROM intent
-        // (via buildHipFlexion) at BasePushUpPose.kt:118.
+        // (via buildHipFlexion) in `BasePushUpPose`.
         val pu = KneePushUpPose().build(PoseContext(0.5f, Side.LEFT, def))
         assertTrue("KneePushUp must record HIP_F ROM intent", pu.jointIntents.any { it.joint == Joint.HIP_F })
     }

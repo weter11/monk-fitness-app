@@ -7,29 +7,27 @@ import org.junit.Test
 import java.lang.reflect.Method
 
 /**
- * Level 6 Family Upgrade guard for the Squat family (RFC_MONKENGINE_EXECUTION_MODES L6:
- * "Consistency across all members").
+ * Family-consistency guard for the Squat family: consistency across all members.
  *
- * Before this upgrade, SumoSquatPose / JumpSquatPose / DeepSquatHoldPose each duplicated the entire
- * BaseSquatPose.build() pipeline (~40 lines of boilerplate), which let them drift from the shared
- * realization. This test locks in the consolidation:
+ * Before this consolidation, SumoSquatPose / JumpSquatPose / DeepSquatHoldPose each duplicated the
+ * entire BaseSquatPose.build() pipeline (~40 lines of boilerplate), which let them drift from the
+ * shared realization. This test locks in the consolidation:
  *   1. Every squat variant's build() is the single BaseSquatPose pipeline (no variant overrides it).
- *   2. Each variant's realized vertical travel matches its established baseline (no silent
- *      geometry regression in the shared realization).
+ *   2. Each variant's realized vertical travel matches its established baseline (no silent geometry
+ *      regression in the shared realization).
  */
 class SquatFamilyConsistencyTest {
 
-    // Established travel baselines (measured 2026-07-20, before L6 consolidation; byte-stable after).
+    // Established travel baselines (byte-stable since the consolidation).
     //
-    // 2026-09-11 (B-7, `ColdStartHeadPlacementTest`): SquatPose / AirSquatPose / JumpSquatPose were
-    // re-measured after the gaze-intent origin fix in `BasePose.buildGaze`. MotionProbe warms the
-    // pipeline at progress 0.3 and then samples progress 0..1, so the pre-fix head at the p=0 sample
-    // was authored from the *warm-up* build's neck world position — a downward/backward offset of the
-    // head equal to the trunk's motion between p=0.3 and p=0, which shrank the measured Y travel.
-    // With the origin taken from the current build the head realizes the authored gaze at that sample,
-    // so each of the three upright variants gains the offset it was losing (+1.0 / +1.7 / +2.5 units).
-    // The epsilon is unchanged (0.5) and every variant is still pinned individually; SumoSquat and
-    // DeepSquatHold did not move.
+    // SquatPose / AirSquatPose / JumpSquatPose were re-measured after the gaze-intent origin fix in
+    // `BasePose.buildGaze`. MotionProbe warms the pipeline at progress 0.3 and then samples progress
+    // 0..1, so the pre-fix head at the p=0 sample was authored from the *warm-up* build's neck world
+    // position — an offset equal to the trunk's motion between p=0.3 and p=0, which shrank the measured
+    // Y travel. With the origin taken from the current build the head realizes the authored gaze at
+    // that sample, so each of the three upright variants gains the offset it was losing
+    // (+1.0 / +1.7 / +2.5 units). The epsilon is unchanged (0.5) and every variant is still pinned
+    // individually; SumoSquat and DeepSquatHold did not move.
     private val baselineTravel = mapOf(
         "SquatPose" to 192.3f,
         "AirSquatPose" to 185.5f,
@@ -44,9 +42,9 @@ class SquatFamilyConsistencyTest {
         val failures = mutableListOf<String>()
         for (name in baselineTravel.keys) {
             val cls = Class.forName("com.monkfitness.app.poses.$name")
-            // Carrier hygiene (2026-08-23): BasePose.build() is now a final template method
-            // (reset + onBuild), so a variant physically cannot override build(); the drift
-            // guard therefore checks onBuild(), the pipeline realization subclasses author.
+            // BasePose.build() is a final template method (reset + onBuild), so a variant physically
+            // cannot override build(); the drift guard therefore checks onBuild(), the pipeline
+            // realization subclasses author.
             val own = cls.declaredMethods.any { it.name == "onBuild" && it.returnType == SkeletonPose::class.java }
             if (own) failures.add("$name re-implements onBuild() instead of using BaseSquatPose.onBuild()")
             // sanity: it really is a BaseSquatPose and the inherited method resolves

@@ -25,20 +25,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The Program management surface (§4, §21, §22): what each UI action does, measured through the state
- * holder on the real engine.
+ * The Program management surface: what each UI action does, measured through the state holder on the
+ * real engine.
  *
- * The rules the suite holds apart are the ones §6, §4 and §29 make easy to get wrong by accident:
- *
- * ```text
- * selection          moves through the lifecycle service, is re-read afterwards and is not duplicated here
- * rename             changes a name and creates no revision (§6)
- * archive            is a stamp, not a lifecycle state, and is refused for the selection (§3)
- * delete             is the cascade with §3's Standard-Program fallback
- * the Standard one   may be selected, copied and shared, and is refused for edit and delete (§4)
- * the editor         saves through §7's service: one revision, or none
- * Share              is the export service's bytes handed to the platform boundary (§11)
- * ```
+ * Selection moves through the lifecycle service and is re-read afterwards; rename changes a name and
+ * creates no revision; archive is a stamp rather than a lifecycle state; delete is the cascade with
+ * the Standard-Program fallback; the Standard Program may be selected, copied and shared but not
+ * edited or deleted; the editor saves one revision or none; Share is the export service's bytes handed
+ * to the platform boundary.
  */
 class ProgramsControllerTest {
 
@@ -48,8 +42,6 @@ class ProgramsControllerTest {
     fun tearDown() {
         rig.close()
     }
-
-    // ---------------------------------------------------------------- the list (§21)
 
     @Test
     fun theListIsTheLifecycleServicesOwnProjection() = runBlocking {
@@ -75,8 +67,6 @@ class ProgramsControllerTest {
         assertTrue(rig.state.isEmpty)
         assertEquals(emptyList<ProgramRowUi>(), rig.state.rows)
     }
-
-    // ---------------------------------------------------------------- select, rename (§6)
 
     @Test
     fun selectingMovesTheOneGlobalSelectionAndRefreshesTheList() = runBlocking {
@@ -128,8 +118,6 @@ class ProgramsControllerTest {
         assertEquals(StandardProgram.NAME, rig.storedProgram(StandardProgram.programId)?.name)
     }
 
-    // ---------------------------------------------------------------- archive (§3, §29)
-
     @Test
     fun archivingIsAStampAndNotALifecycleState() = runBlocking {
         val created = rig.createProgramThroughTheUi("Archivable")!!
@@ -164,8 +152,6 @@ class ProgramsControllerTest {
         assertFalse(rig.storedProgram(ProgramId(created))!!.isArchived)
     }
 
-    // ---------------------------------------------------------------- delete (§3, §29)
-
     @Test
     fun deletingUsesTheServicesCascadeAndFallsBackToTheStandardProgram() = runBlocking {
         rig.seedStandardProgram()
@@ -197,11 +183,11 @@ class ProgramsControllerTest {
     }
 
     /**
-     * BLOCKER 1's contract: a refused Delete keeps the user where they are.
+     * A refused Delete keeps the user where they are.
      *
-     * The session is a **real** `IN_PROGRESS` session on the Program's own opportunity — the same rows the
-     * session runtime writes — so §29's guard is the lifecycle layer's own decision and not a mock boolean.
-     * The screen's half of the contract (leaving only on a completed delete) is asserted in
+     * The session is a **real** `IN_PROGRESS` session on the Program's own opportunity — the same rows
+     * the session runtime writes — so the lifecycle layer's guard is its own decision and not a mock
+     * boolean. The screen's half of the contract (leaving only on a completed delete) is asserted in
      * [ProgramsArchitectureTest], because this project has no Compose test harness.
      */
     @Test
@@ -250,8 +236,7 @@ class ProgramsControllerTest {
     }
 
     /**
-     * BLOCKER 2's contract: a Scheduler **failure** is a system failure, never the ordinary absence of a
-     * next date (§15, §28, §33).
+     * A Scheduler **failure** is a system failure, never the ordinary absence of a next date.
      *
      * The failure is planted in the real engine: the Scheduler's pass reads the Program's stored
      * opportunities through the production DAO, and the rig's fault makes that read throw, so
@@ -297,16 +282,16 @@ class ProgramsControllerTest {
 
     /**
      * The third state, so the two above cannot be satisfied by one collapsed branch: a Scheduler
-     * **refusal** is a normal absence. A Program that has never been given a date to plan from is refused
-     * with `NoSchedulingAnchor`, and that must render as the ordinary line — not as a failure.
+     * **refusal** is a normal absence. A Program that has never been given a date to plan from is
+     * refused with `NoSchedulingAnchor`, and that must render as the ordinary line — not as a failure.
      */
     @Test
     fun aSchedulingRefusalIsAnOrdinaryAbsenceAndNotAFailure() = runBlocking {
         val created = rig.createProgramThroughTheUi("No date yet")!!
-        // Setup revised with P1: a creation now always carries a planned start date, so an *anchorless*
-        // Program can no longer be produced through the UI — it is planted directly here, because the
-        // subject of this test is what the **Detail** does with the Scheduler's `NoSchedulingAnchor`
-        // refusal, and that refusal must stay renderable as an ordinary absence.
+        // A creation now always carries a planned start date, so an *anchorless* Program can no longer
+        // be produced through the UI — it is planted directly here, because the subject is what the
+        // **Detail** does with the Scheduler's `NoSchedulingAnchor` refusal, which must stay renderable
+        // as an ordinary absence.
         val stored = rig.storedProgram(ProgramId(created))!!
         rig.transfer.programRepository.updateProgram(
             stored.copy(plannedStartDate = null, actualStartDate = null)
@@ -364,17 +349,14 @@ class ProgramsControllerTest {
         )
     }
 
-    // ---------------------------------------------------------------- the lifecycle (§3)
-
     @Test
     fun theLifecycleActionsReachTheServiceAndAreReported() = runBlocking {
         val created = rig.createProgramThroughTheUi("Lifecycle")!!
 
-        // Revised (not relaxed) by §30 step 21: Start is now a *composed* operation. The editor's
-        // save states no target authoring, so the controlled invocation has no source to plan from
-        // and reports that as its own notice — the Program still started, which is what the next
-        // two assertions measure. The success notice is asserted by the case below, which does
-        // state an authoring.
+        // Start is a *composed* operation. The editor's save states no target authoring, so the
+        // controlled invocation has no source to plan from and reports that as its own notice — the
+        // Program still started, which is what the next two assertions measure. The success notice is
+        // asserted by the case below, which does state an authoring.
         rig.controller.start(created)
         assertEquals(ProgramNotice.TARGET_SCHEDULING_UNAVAILABLE, rig.state.notice)
         assertEquals(LifecycleStatus.RUNNING, rig.storedProgram(ProgramId(created))!!.lifecycleStatus)
@@ -402,16 +384,14 @@ class ProgramsControllerTest {
         assertEquals(LifecycleStatus.COMPLETED, rig.storedProgram(ProgramId(created))!!.lifecycleStatus)
     }
 
-    // ---------------------------------------------------------------- §30 step 21: the composed Start
-
     /**
-     * The screen's half of the stage: Start is one application operation, and the target rows it
-     * produces are the application's, not the screen's.
+     * Start is one application operation, and the target rows it produces are the application's, not
+     * the screen's.
      *
      * The Program is created through the editor exactly as above, an explicit target authoring is
      * stored against its current revision, and Start is tapped. The screen builds no window, no
-     * selection, no source map, no as-of date and no pause window — so the fact that thirty
-     * occurrences exist is a statement about the application boundary's stated policy.
+     * selection, no source map, no as-of date and no pause window — so thirty occurrences existing is a
+     * statement about the application boundary's stated policy.
      */
     @Test
     fun aStartWithATargetAuthoringPlansTheTargetScheduleAndSaysSo() = runBlocking {
@@ -439,9 +419,8 @@ class ProgramsControllerTest {
     }
 
     /**
-     * And the other half of the stage's failure semantics, measured through the screen: a Program
-     * with no target authoring still starts, and the operation says so rather than reporting the
-     * start's own success.
+     * The other half of the failure semantics, measured through the screen: a Program with no target
+     * authoring still starts, and the operation says so rather than reporting the start's own success.
      */
     @Test
     fun aStartWithNoTargetAuthoringStartsTheProgramAndReportsTheTargetRefusal() = runBlocking {
@@ -463,17 +442,11 @@ class ProgramsControllerTest {
         assertEquals("and no target row was fabricated", 0 to 0, rig.targetRowCounts())
     }
 
-    // ---------------------------------------------------------------- the editor (§7)
-
     /**
-     * The remediation's central claim, measured through the UI's own path: a Save that creates a
-     * Program creates §27's whole unit, not a bare graph.
+     * A Save that creates a Program creates the whole creation unit, not a bare graph.
      *
-     * The previous version of this test pinned the *defect*: `plannedStartDate == null` with the
-     * reason *"a Program created this way names no planned date of its own"* — which is exactly why
-     * the Scheduler then refused to plan it. The claim is revised, not relaxed: creation is now
-     * anchored (an explicit choice, else today from the injected clock and calendar) and carries the
-     * Scheduler's initial opportunities, while still starting nothing and selecting nothing.
+     * Creation is now anchored (an explicit choice, else today from the injected clock and calendar) and
+     * carries the Scheduler's initial opportunities, while still starting nothing and selecting nothing.
      */
     @Test
     fun creatingThroughTheUiSavesTheWholeCreationUnit() = runBlocking {
@@ -645,7 +618,7 @@ class ProgramsControllerTest {
             "and the draft it produced holds real work, not an empty plan",
             generated!!.days.isNotEmpty() && generated.days.any { it.elements.isNotEmpty() }
         )
-        // §7: Generate and Regenerate only ever alter a draft. Nothing was persisted by the pass.
+        // Generate and Regenerate only ever alter a draft: nothing was persisted by the pass.
         assertEquals(
             "the pass wrote nothing: it created no Program and no revision, so Save remains the " +
                 "only route to persistence (§6, §7)",
@@ -666,8 +639,8 @@ class ProgramsControllerTest {
     @Test
     fun aRefusedGenerationIsReportedAndLeavesTheUsersOwnDraftIntact() = runBlocking {
         // The shipped classification serves every focus, so a refusal is unreachable through it — the
-        // rig re-wires the same port a future Goals & Focus editor would replace, stating PULL only
-        // for the catalogue's bar and band exercises. With nothing declared, nothing can serve it.
+        // rig re-wires the same port a future Goals & Focus editor would replace, stating PULL only for
+        // the catalogue's bar and band exercises. With nothing declared, nothing can serve it.
         val needsEquipment = rig.barOrBandExercises()
         rig.withFocusSource { exerciseId ->
             if (exerciseId in needsEquipment) setOf(Focus.PULL) else null
@@ -687,7 +660,7 @@ class ProgramsControllerTest {
         val before = rig.state.draft
 
         // The user asked for a focus the library cannot serve with the equipment they declared. The
-        // pass is refused, not failed, and not turned into a plan of nothing (§33).
+        // pass is refused, not failed, and not turned into a plan of nothing.
         rig.controller.setDraftFocus(FocusPlan.focused(listOf(Focus.PULL)))
 
         assertFalse("nothing could serve this configuration", rig.controller.generateDraft())
@@ -707,9 +680,9 @@ class ProgramsControllerTest {
 
     @Test
     fun aCatalogueThatStatesNoFocusAtAllIsReportedAsUnavailableAndChangesNothing() = runBlocking {
-        // The other refusal, and the one the P23 gap produced: nothing in the catalogue states a
-        // focus, so there is nothing to plan from. The user keeps their draft and is told why —
-        // §33 forbids answering it with an empty plan that reads as a success.
+        // The other refusal: nothing in the catalogue states a focus, so there is nothing to plan from.
+        // The user keeps their draft and is told why — answering with an empty plan that reads as a
+        // success is forbidden.
         rig.withFocusSource { null }
         rig.controller.openCreateDraft(ProgramMode.GENERATED)
         rig.controller.setDraftName("Hand arranged")
@@ -774,12 +747,10 @@ class ProgramsControllerTest {
         assertEquals(emptyList<ExerciseOptionUi>(), rig.state.exerciseOptions)
     }
 
-    // ---------------------------------------------------------------- draft recreation (P2 UI-03)
-
     /**
-     * The recreation contract: a screen re-composing its destination re-runs its seed, and a seed
-     * must never overwrite the draft the user is working on. Rotation, configuration changes and the
-     * screen simply reappearing all funnel through [ProgramsController.seedEditor] with the same key.
+     * The recreation contract: a screen re-composing its destination re-runs its seed, and a seed must
+     * never overwrite the draft the user is working on. Rotation, configuration changes and the screen
+     * simply reappearing all funnel through [ProgramsController.seedEditor] with the same key.
      */
     @Test
     fun aRecreatedEditorFlowKeepsTheWorkingDraft() = runBlocking {
@@ -789,7 +760,6 @@ class ProgramsControllerTest {
         rig.controller.setDraftName("Half done")
         rig.controller.setDraftDescription("typed before rotating")
 
-        // The configuration change: same destination, same key, the seed runs again…
         rig.controller.seedEditor("createMANUAL") {
             rig.controller.openCreateDraft(ProgramMode.MANUAL)
         }
@@ -797,7 +767,6 @@ class ProgramsControllerTest {
         assertEquals("the name survives recreation", "Half done", rig.state.draft?.name)
         assertEquals("and so does the description", "typed before rotating", rig.state.draft?.description)
 
-        // …and editing after the recreation continues the SAME draft rather than a fresh one.
         rig.controller.setDraftName("Half done, continued")
         assertEquals("Half done, continued", rig.state.draft?.name)
     }
@@ -842,8 +811,6 @@ class ProgramsControllerTest {
         )
         assertEquals("", rig.state.draft?.name)
     }
-
-    // ---------------------------------------------------------------- Program Detail (§22)
 
     @Test
     fun theDetailIsReadFromTheServicesAndShowsTheSchedulersOwnNextOpportunity() = runBlocking {
@@ -895,8 +862,6 @@ class ProgramsControllerTest {
         assertEquals(ProgramNotice.PROGRAM_NOT_FOUND, rig.state.notice)
         assertNull(rig.state.detail)
     }
-
-    // ---------------------------------------------------------------- Share (§11)
 
     @Test
     fun shareIsTheExportServicesBytesHandedToThePlatformBoundary() = runBlocking {

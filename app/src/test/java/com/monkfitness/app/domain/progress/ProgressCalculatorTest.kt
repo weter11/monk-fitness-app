@@ -31,28 +31,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The facts the Progress suites are computed over, written out by hand.
- *
- * Every expectation in `ProgressCalculatorTest` is derived from **these** literals, not from the
- * calculator: the plan of Program A is five opportunities in five different states, its attempts include a
- * completed workout, a cancelled one and one still running, and Program B contributes a completed workout
- * of the **same exercise** as A (which is what makes an aggregate comparison meaningful) plus a missed
- * opportunity of its own.
- *
- * ```text
- * Program A                                     Program B
- *   a1  09-14 COMPLETED  session-a1              b1  09-14 COMPLETED  session-b1
- *   a2  09-15 MISSED     (attempt session-a3)    b2  09-16 MISSED     (no attempt)
- *   a3  09-16 PLANNED    (attempt session-a6)
- *   a4  09-17 SUPERSEDED
- *   a5  09-18 COMPLETED  session-a5
- *
- * session-a1  start 09-14 07:30Z  finish 07:30→08:00Z  1800 s  COMPLETED   pushup 12,10  plank 30,45
- * session-a3  start 09-15 07:00Z  finish 07:00→07:10Z   600 s  CANCELLED   pushup 5
- * session-a5  start 09-18 23:30Z  finish →09-19 00:15Z 2700 s  COMPLETED   pushup 8,6    plank 30
- * session-a6  start 09-20 07:00Z  (no finish)                IN_PROGRESS pushup 3
- * session-b1  start 09-14 09:00Z  finish 09:00→09:12Z   720 s  COMPLETED   pushup 20
- * ```
+ * The facts the Progress suites are computed over, written out by hand: every expectation is derived
+ * from **these** literals, not from the calculator. Program A is five opportunities in five different
+ * states and its attempts include a completed workout, a cancelled one and one still running; Program
+ * B contributes a completed workout of the **same exercise** as A — which is what makes an aggregate
+ * comparison meaningful — plus a missed opportunity of its own.
  */
 internal object ProgressFixture {
 
@@ -219,25 +202,21 @@ internal object ProgressFixture {
 }
 
 /**
- * `ProgressCalculator`: the §21 measures of §30 step 9, and the four prohibitions that shape them — a
- * missed opportunity is not a zero, a cancelled attempt is not a completed workout, no measure mixes two
+ * `ProgressCalculator`: the Progress measures, and the four prohibitions that shape them — a missed
+ * opportunity is not a zero, a cancelled attempt is not a completed workout, no measure mixes two
  * exercises or two units, and no measure reads "today" unless it is a rate.
  *
- * Every number asserted here is derivable by hand from `ProgressFixture`'s literals, and the comments say
- * how.
+ * Every number asserted here is derivable by hand from `ProgressFixture`'s literals.
  */
 class ProgressCalculatorTest {
 
     private val utc = ProgressCalculator(ZoneId.of("UTC"))
 
-    /** The seven calendar dates ending on `2026-09-20`: `2026-09-14 .. 2026-09-20`. */
     private val week = ProgressWindow.ofLastDays(7, LocalDate.parse("2026-09-20"))
 
     private val programA = ProgressFixture.factsOf(ProgressFixture.PROGRAM_A)
     private val programB = ProgressFixture.factsOf(ProgressFixture.PROGRAM_B)
     private val allPrograms = ProgressFixture.allProgramsFacts()
-
-    // ------------------------------------------------------------------ calendar
 
     @Test
     fun theCalendarIsChronologicalAndCountsEachStatusAsItsOwnFact() {
@@ -298,8 +277,6 @@ class ProgressCalculatorTest {
         assertEquals(0, calendar.missed)
         assertEquals("2026-01-01", calendar.entries.single().plannedFor.toString())
     }
-
-    // ------------------------------------------------------------------ history
 
     @Test
     fun historyIsOneEntryPerAttemptInStartOrderWithItsOwnExposure() {
@@ -362,8 +339,6 @@ class ProgressCalculatorTest {
         assertEquals(1, item.performedSets)
         assertEquals("a skipped occurrence observed nothing, and is not a zero-valued one", 1, item.exposedExercises)
     }
-
-    // ------------------------------------------------------------------ frequency, duration
 
     @Test
     fun frequencyCountsCompletedWorkoutsOnTheDatesTheyActuallyStarted() {
@@ -467,8 +442,6 @@ class ProgressCalculatorTest {
             utc.calendar(facts).missed
         )
     }
-
-    // ------------------------------------------------------------------ comparability
 
     @Test
     fun performanceIsPerExerciseAndUnitAndTheTwoAreNeverOneSeries() {
@@ -590,8 +563,6 @@ class ProgressCalculatorTest {
         }
     }
 
-    // ------------------------------------------------------------------ streak
-
     @Test
     fun theStreakRunsOverTakenOpportunitiesAndTreatsTheTwoUndecidedStatesAsTransparent() {
         val streak = utc.training(programA, week).streakOf(ProgressFixture.PROGRAM_A)!!
@@ -659,8 +630,6 @@ class ProgressCalculatorTest {
             streakOf().current
         )
     }
-
-    // ------------------------------------------------------------------ aggregate
 
     @Test
     fun theAggregateIsTheSumOfProgramScopedFactsAndHoldsNoIdentityOfItsOwn() {
@@ -730,8 +699,6 @@ class ProgressCalculatorTest {
             1e-12
         )
     }
-
-    // ------------------------------------------------------------------ empty, time, deferred
 
     @Test
     fun anEmptyHistoryYieldsZeroesAndEmptyCollectionsOfTheRightType() {

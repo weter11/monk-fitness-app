@@ -262,11 +262,8 @@ class TargetSchedulePolicyTest {
 
     @Test
     fun aHistoricalOccurrenceNeedsNoActualResultsToBePreserved() {
-        // Phase 17 revised this test rather than relaxing it. It used to plant `ActualResult`s and
-        // assert they survived the pass identically, which was true only because the target input
-        // borrowed a type that carried them. Target scheduling reads identity and execution and
-        // nothing else, so the same case is now stated as what the value *is*: a completed
-        // occurrence with no performance payload at all is preserved whole.
+        // Target scheduling reads identity and execution and nothing else, so the case is stated as what
+        // the value *is*: a completed occurrence with no performance payload at all is preserved whole.
         val historical = existing(planned("historical", AS_OF), OccurrenceExecution.COMPLETED)
 
         val result = decide(plan(emptyList(), listOf(historical)), listOf(historical), listOf(PAUSE))

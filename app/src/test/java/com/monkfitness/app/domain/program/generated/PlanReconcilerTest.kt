@@ -17,20 +17,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §7's reconciliation, pinned level by level.
+ * The reconciliation, pinned level by level.
  *
  * The precedence is the whole contract — `PINNED > EXPLICIT USER OVERRIDE > COMPATIBLE USER CHANGE >
  * PURE GENERATED CONTENT` — so every level gets its own test, and the tests that matter most are the
  * negative ones: a regeneration that keeps an element it may replace is a *bug*, and a regeneration
- * that replaces an element it may not is the silent overwrite §33 forbids.
+ * that replaces an element it may not is a silent overwrite.
  *
  * Identity is asserted throughout, because a draft's identities are what tells a user (and a screen)
  * which elements survived: a preserved element keeps its handle, and a replaced one is recognisably
  * new.
  */
 class PlanReconcilerTest {
-
-    // ------------------------------------------------------------------ PINNED
 
     @Test
     fun aPinnedElementIsNeverAutomaticallyChanged() {
@@ -77,8 +75,6 @@ class PlanReconcilerTest {
         assertEquals(PreservationLevel.PINNED, reconciled.report.conflicts.single().level)
     }
 
-    // ------------------------------------------------------------------ EXPLICIT USER OVERRIDE
-
     @Test
     fun anElementTheUserAuthoredIsNeverSilentlyReplaced() {
         val plan = plan()
@@ -110,8 +106,6 @@ class PlanReconcilerTest {
             reconciled.days.first().exercises.map { it.exerciseId }
         )
     }
-
-    // ------------------------------------------------------------------ COMPATIBLE USER CHANGE
 
     @Test
     fun aUsersCompatibleChoiceIsPreservedRatherThanReplacedBecauseWeRegenerated() {
@@ -180,8 +174,6 @@ class PlanReconcilerTest {
             reconciled.days.first().exercises.take(2).map { it.exerciseId }
         )
     }
-
-    // ------------------------------------------------------------------ PURE GENERATED CONTENT
 
     @Test
     fun anUnchangedGeneratedPlanComesBackUnchangedWithTheSameIdentities() {
@@ -338,7 +330,7 @@ class PlanReconcilerTest {
         val plan = plan()
         val first = plan.slots.first().elements.first()
         // Two identical generated occurrences where the plan wants one: an occurrence is its own
-        // element (§9), and the plan's own count is what tells a surplus occurrence from a wanted one.
+        // element, and the plan's own count is what tells a surplus occurrence from a wanted one.
         val draft = draftOf(
             day(
                 element("occurrence-1", first.exerciseId, first.prescription, ProgramExerciseOrigin.GENERATED),
@@ -374,8 +366,6 @@ class PlanReconcilerTest {
             identities.distinct().size
         )
     }
-
-    // ------------------------------------------------------------------ days, not just elements
 
     @Test
     fun aDayThePlanNoLongerFillsIsRemovedAndOneItAddsIsAdded() {
@@ -467,7 +457,7 @@ class PlanReconcilerTest {
 
     @Test
     fun aReconciliationLeavesADifferentPlanAloneOnlyWhereItMay() {
-        // The negative half of §7's precedence, asserted as counts: the pure generated content of a
+        // The negative half of the precedence, asserted as counts: the pure generated content of a
         // plan that changed wholesale is replaced, and everything the user owns is untouched.
         val plan = plan()
         val draft = draftOf(
@@ -532,8 +522,6 @@ class PlanReconcilerTest {
                 .toSet()
         )
     }
-
-    // ------------------------------------------------------------------ fixtures
 
     /** The plan the generated planner produces for the rig's balanced request. */
     private fun plan(): GeneratedPlan = GeneratedPlanner.plan(GeneratedPlannerRig.request())

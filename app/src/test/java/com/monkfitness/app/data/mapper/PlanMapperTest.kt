@@ -19,9 +19,8 @@ import org.junit.Test
 import java.time.DayOfWeek
 
 /**
- * The plan rows ⇄ `ProgramRevision`, pinned for the things a plan can actually get wrong: order,
- * occurrence identity, per-set prescriptions, the rest day, the two duration forms and the two
- * schedule forms.
+ * The plan rows ⇄ `ProgramRevision`, pinned for what a plan can actually get wrong: order, occurrence
+ * identity, per-set prescriptions, the rest day, and the two duration and two schedule forms.
  */
 class PlanMapperTest {
 
@@ -352,7 +351,6 @@ class PlanMapperTest {
         assertTrue(withAGap.message!!.contains("numbered 1.."))
     }
 
-    // ------------------------------------------------------------------ Goals & Focus (§6, §8)
 
     @Test
     fun theBalancedConfigurationIsStoredAsTheGoalItStates() {

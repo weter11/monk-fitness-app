@@ -13,16 +13,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The language policy, exercised without Android.
+ * The language policy, exercised without Android: the manager is the app's one owner of language
+ * selection, so its behaviour is stated here rather than inferred from a screen. With no stored
+ * choice the app follows the system, an explicit choice is exactly that locale, and a pre-localization
+ * choice is handed to the platform once — and only while it is still there to hand over.
  *
- * The manager is the app's one owner of language selection, so its behaviour is stated here rather than
- * inferred from a running screen: with no stored choice the app follows the system, an explicit choice is
- * exactly that locale, and the selection a pre-localization install stored is handed to the platform once
- * — and only while it is still there to hand over.
- *
- * [RecordingLocaleStore] and [FakeLegacyLanguageStore] stand in for the platform's storage. They are the
- * reason the manager takes its two stores as collaborators: the rules are about *when* a locale is written
- * and *what* is written, and both are observable without a device.
+ * [RecordingLocaleStore] and [FakeLegacyLanguageStore] make *when* a locale is written and *what* is
+ * written observable without a device, which is why the manager takes its stores as collaborators.
  */
 class AppLanguageManagerTest {
 
@@ -81,7 +78,7 @@ class AppLanguageManagerTest {
 
     @Test
     fun aLocaleTheAppNoLongerShipsReadsAsTheSystemDefault() {
-        // What the app is doing in that case really is "resolving through Android's own fallback".
+        // What the app does in that case really is "resolving through Android's own fallback".
         val store = RecordingLocaleStore(applied = listOf("fr"))
         val manager = AppLanguageManager(store, FakeLegacyLanguageStore())
 
@@ -99,8 +96,6 @@ class AppLanguageManagerTest {
         assertNull(AppLanguage.fromTag(""))
         assertNull(AppLanguage.fromTag(null))
     }
-
-    // ---- the one-time hand-off of a pre-localization choice ----------------------------------------
 
     @Test
     fun anInstallWithNoStoredLanguageIsLeftOnTheSystemLanguage() {
@@ -165,9 +160,7 @@ class AppLanguageManagerTest {
         val manager = AppLanguageManager(store, legacy)
 
         runBlocking { manager.migrateLegacySelection() }
-        // The user then picks Italian through the published picker…
         manager.select(AppLanguage.ITALIAN)
-        // …and the next start runs the same hand-off again.
         val secondRun = runBlocking { manager.migrateLegacySelection() }
 
         assertNull("the legacy value was removed by the first run", secondRun)
@@ -179,8 +172,6 @@ class AppLanguageManagerTest {
         )
     }
 
-    // ---- the system's own screen ------------------------------------------------------------------
-
     @Test
     fun theSystemLanguageScreenIsOfferedOnlyWhereThePlatformHasOne() {
         assertFalse("Android 12 and below have no per-app language screen", AppLanguageSettings.isSystemPickerAvailable(32))
@@ -191,10 +182,9 @@ class AppLanguageManagerTest {
 
     @Test
     fun theHandOffRemovesTheStoredValueBeforeItAppliesTheLocale() {
-        // Found on a device, not in this suite: applying a locale restarts the process on Android 13+, so a
-        // hand-off that cleared the key *after* applying it never cleared it — the app locale was applied,
-        // the key survived, and the next start handed the same stale value over again, over a language the
-        // user had chosen since. The order is therefore part of the behaviour, not an implementation detail.
+        // Applying a locale restarts the process on Android 13+, so a hand-off that cleared the key
+        // *after* applying it never cleared it: the key survived and the next start handed the same
+        // stale value over, on top of a language the user had chosen since. The order is behaviour.
         val events = mutableListOf<String>()
         val store = RecordingLocaleStore(events = events)
         val legacy = FakeLegacyLanguageStore(tag = "ru", events = events)

@@ -19,21 +19,16 @@ import java.time.Instant
 import java.time.LocalDate
 
 /**
- * The session and snapshot foundation.
- *
- * The centre of gravity here is the distinction the architecture draws between *what should be
- * presented* and *what was presented*: an effective workout is recomputed as adjustments supersede one
- * another, while the snapshot a session captured is frozen and is the only thing that session may run
- * from. Both halves are asserted behaviourally — recompute an effective workout after a new adjustment
- * and show the snapshot did not move — rather than by restating the field names.
+ * The distinction between *what should be presented* and *what was presented*: an effective workout
+ * is recomputed as adjustments supersede one another, while the snapshot a session captured is frozen
+ * and is the only thing that session may run from. Both halves are asserted behaviourally — recompute
+ * after a new adjustment and show the snapshot did not move — not by restating field names.
  */
 class SessionFoundationTest {
 
     private val planned = LocalDate.parse("2026-09-18")
     private val computedAt: Instant = Instant.parse("2026-09-18T08:00:00Z")
     private val capturedAt: Instant = Instant.parse("2026-09-18T08:05:00Z")
-
-    // ------------------------------------------------------------------ vocabulary
 
     @Test
     fun sessionStatusHasExactlyThreeValues() {
@@ -45,8 +40,6 @@ class SessionFoundationTest {
         assertTrue(SessionStatus.COMPLETED.isCompleted)
         assertFalse(SessionStatus.CANCELLED.isCompleted)
     }
-
-    // ------------------------------------------------------------------ effective vs snapshot
 
     @Test
     fun recomputingTheEffectiveWorkoutDoesNotMoveTheSnapshotThatCapturedIt() {
@@ -106,8 +99,6 @@ class SessionFoundationTest {
         // A rest day presents nothing, which is not an error.
         assertTrue(workout.copy(exercises = emptyList()).exercises.isEmpty())
     }
-
-    // ------------------------------------------------------------------ the session's own invariants
 
     @Test
     fun aSessionIsBoundToTheSnapshotItStartedUnder() {
@@ -193,8 +184,6 @@ class SessionFoundationTest {
         assertTrue(session.isCompleted)
     }
 
-    // ------------------------------------------------------------------ sets
-
     @Test
     fun confirmedSetsAccumulateWithoutGapsAndInOneUnit() {
         val oneSet = sessionExercise(id = "occurrence-1")
@@ -224,8 +213,6 @@ class SessionFoundationTest {
         // Skipping with no results is the honest shape, and needs no work record to say so.
         assertTrue(oneSet.copy(results = emptyList(), skipped = true).results.isEmpty())
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun effectiveWorkout(reps: Int = 10) = EffectiveWorkout(
         slotId = SlotId("slot-1"),

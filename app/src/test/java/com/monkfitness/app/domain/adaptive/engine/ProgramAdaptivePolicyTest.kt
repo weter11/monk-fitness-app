@@ -12,21 +12,19 @@ import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.signals
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.window
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §15: the target adaptive policy's rules, each measured on its own.
+ * The target adaptive policy's rules, each measured on its own.
  *
  * The suite states one window per claim and asserts the **reason** as well as the state and the action,
- * because a `HOLD` that cannot say which of §15's hold situations it is would make every claim below
- * about a test that passes for the wrong reason. The signals are built directly rather than derived, so
- * a policy claim is never entangled with the calculator's arithmetic — that separation is asserted by
- * `ProgramAdaptiveSignalCalculatorTest` instead.
+ * because a `HOLD` that cannot say which hold situation it is would make every claim below pass for the
+ * wrong reason. The signals are built directly rather than derived, so a policy claim is never entangled
+ * with the calculator's arithmetic — that separation is asserted by `ProgramAdaptiveSignalCalculatorTest`.
  *
- * What the suite is for: §7's progression requires confirmation, §7's regression requires sustained
- * negative evidence, §14's recovery outranks both and exits only to a hold, and the cooldown bounds a
- * change without ever inventing one.
+ * What the suite is for: progression requires confirmation, regression requires sustained negative
+ * evidence, recovery outranks both and exits only to a hold, and the cooldown bounds a change without
+ * ever inventing one.
  */
 class ProgramAdaptivePolicyTest {
 
@@ -40,7 +38,7 @@ class ProgramAdaptivePolicyTest {
 
     /**
      * The reading of a family that fell short early in the window and completed everything since: the
-     * whole window still carries a shortfall, and the recent end carries none — which is what §7's
+     * whole window still carries a shortfall, and the recent end carries none — which is what
      * progression actually requires.
      */
     private val improvementSignals = signals(
@@ -57,8 +55,6 @@ class ProgramAdaptivePolicyTest {
         olderHalf = exposure(exposures = 2, prescribedSets = 6, completedSets = 6),
         newerHalf = exposure(exposures = 2, prescribedSets = 6, completedSets = 3)
     )
-
-    // ------------------------------------------------------------------ evidence
 
     @Test
     fun insufficientEvidenceHoldsAndSaysSo() {
@@ -111,8 +107,6 @@ class ProgramAdaptivePolicyTest {
         assertEquals(AdaptiveState.HOLD, decision.state)
         assertEquals(ProgramAdaptiveReason.MIXED_EVIDENCE, decision.reason)
     }
-
-    // ------------------------------------------------------------------ progression
 
     @Test
     fun confirmedPositiveEvidenceProgresses() {
@@ -216,8 +210,6 @@ class ProgramAdaptivePolicyTest {
         )
     }
 
-    // ------------------------------------------------------------------ regression
-
     @Test
     fun confirmedNegativeEvidenceRegresses() {
         val decision = policy.evaluate(
@@ -256,8 +248,6 @@ class ProgramAdaptivePolicyTest {
         assertEquals(AdaptiveState.HOLD, decision.state)
         assertEquals(ProgramAdaptiveReason.AWAITING_CONFIRMATION, decision.reason)
     }
-
-    // ------------------------------------------------------------------ recovery
 
     @Test
     fun recoveryIsEnteredOnUnabsorbedLoadAndOutranksTheCooldown() {
@@ -349,8 +339,6 @@ class ProgramAdaptivePolicyTest {
         assertNotEquals("a cautious context is not a regression", AdaptiveState.REGRESS, decision.state)
     }
 
-    // ------------------------------------------------------------------ the two judgements
-
     @Test
     fun confidenceIsASeparateJudgementFromEvidence() {
         val lowConfidence = policy.evaluate(
@@ -376,8 +364,6 @@ class ProgramAdaptivePolicyTest {
         )
     }
 
-    // ------------------------------------------------------------------ unsupported
-
     @Test
     fun aRestAdaptationIsReportedUnsupportedRatherThanFaked() {
         val decision = policy.evaluate(
@@ -391,8 +377,6 @@ class ProgramAdaptivePolicyTest {
         assertEquals(AdaptiveAction.HOLD, decision.action)
         assertEquals(ProgramAdaptiveReason.REST_CHANGE_UNSUPPORTED, decision.reason)
     }
-
-    // ------------------------------------------------------------------ the policy's own values
 
     @Test
     fun theReasonVocabularyIsExactlyTheRulesThatEmitIt() {

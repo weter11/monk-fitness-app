@@ -20,18 +20,12 @@ import org.junit.Test
 import java.time.LocalDate
 
 /**
- * §27's production Save, against a real SQLite engine and the production DAOs — the remediation's
- * core claims, each measured on rows rather than argued from the code's shape:
+ * The production Save, against a real SQLite engine and the production DAOs — each claim measured on
+ * rows rather than argued from the code's shape.
  *
- * ```text
- * Create/Copy → Program + Revision + plan + initial Slots, anchored to the request's date, atomic,
- *               selecting nothing
- * Save Editor → new Revision + future-slot reconciliation — completed history survives, idempotent
- * ```
- *
- * The suite is organised as the brief states the rules: the creation date, the Scheduler's own slots,
- * atomicity under a planted engine failure, and the reconciliation pair that production previously
- * never ran.
+ * Create/Copy gives Program + Revision + plan + initial Slots, anchored to the request's date,
+ * atomic, selecting nothing. Save Editor gives a new Revision plus future-slot reconciliation:
+ * completed history survives, and the pass is idempotent.
  */
 class ProgramSaveServiceTest {
 
@@ -41,8 +35,6 @@ class ProgramSaveServiceTest {
     fun tearDown() {
         rig.close()
     }
-
-    // ---------------------------------------------------------------- the creation date
 
     @Test
     fun anExactPlannedStartDateIsStoredVerbatimAndIsNotReplacedByToday() = runBlocking {
@@ -93,8 +85,6 @@ class ProgramSaveServiceTest {
         assertEquals(LocalDate.parse("2026-10-01"), rig.storedProgram(second.programId).plannedStartDate)
     }
 
-    // ---------------------------------------------------------------- the Scheduler's own slots
-
     @Test
     fun initialSlotsAreTheSchedulersOwnDecisionStoredWhole() = runBlocking {
         val outcome = savedOutcome(rig.service.save(rig.draftOf("Scheduled")))
@@ -144,8 +134,6 @@ class ProgramSaveServiceTest {
         assertEquals("one first revision", 1, rig.revisionCount(stored.programId))
     }
 
-    // ---------------------------------------------------------------- atomicity
-
     @Test
     fun aFailedCreationLegLeavesNoProgramNoRevisionAndNoSlot() = runBlocking {
         val before = rig.tableCounts()
@@ -171,10 +159,10 @@ class ProgramSaveServiceTest {
      * A failure out of the Scheduler's own decision, planted in the Scheduler's own clock, leaves
      * nothing behind: the slots are decided before the write, so the write never happens.
      *
-     * The Scheduler's *refusal* branch ([com.monkfitness.app.domain.program.ProgramSchedulingRefusal
+     * The refusal branch ([com.monkfitness.app.domain.program.ProgramSchedulingRefusal
      * .NoSchedulingAnchor]) is unreachable through this path by construction — every creation carries
-     * a non-null planned start date — and is therefore asserted where it is reachable, at the
-     * Scheduler's own boundary, rather than fabricated here.
+     * a non-null planned start date — so it is asserted where it is reachable, at the Scheduler's own
+     * boundary, rather than fabricated here.
      */
     @Test
     fun aSchedulerFailureLeavesNoPartiallyCreatedProgram() = runBlocking {
@@ -238,8 +226,6 @@ class ProgramSaveServiceTest {
         assertEquals("before any identity reaches storage (§7)", before, rig.tableCounts())
     }
 
-    // ---------------------------------------------------------------- future-slot reconciliation
-
     @Test
     fun aStructuralSaveReconcilesFutureOpportunities() = runBlocking {
         rig.createGraph()
@@ -261,7 +247,7 @@ class ProgramSaveServiceTest {
         assertEquals(2, rig.revisionCount(programId))
 
         // The future Tuesday the M/W/F revision no longer presents is superseded — an existing row,
-        // its status changed, never deleted or re-pointed (§20).
+        // its status changed, never deleted or re-pointed.
         assertEquals(SlotStatus.SUPERSEDED, rig.slot(tuesday.slotId)!!.status)
 
         // The dates the revision does present keep their identity untouched.
@@ -341,8 +327,6 @@ class ProgramSaveServiceTest {
         )
     }
 
-    // ---------------------------------------------------------------- the shape of the layer
-
     @Test
     fun theSaveServiceIsWiredWithExactlyTheOwnersItsTwoLinesNeed() {
         val collaborators = ProgramSaveService::class.java.declaredConstructors
@@ -350,12 +334,11 @@ class ProgramSaveServiceTest {
             .parameterTypes
             .map { type -> type.simpleName }
 
-        // Stage 19 revised this claim rather than relaxing it: the explicit target-source repository
-        // joined the list, because §30 step 19's authoring path is applied here — the creation /
-        // revision-save boundary that owns the transaction the source has to share. The absences are
-        // unchanged and still load-bearing: no lifecycle service (a creation cannot move a selection,
-        // §9), no target orchestrator or planner (the contour is still separately callable), and no
-        // bridge (nothing consumes a stored source into a scheduling pass yet).
+        // The explicit target-source repository is on the list because the authoring path is applied
+        // here: the creation / revision-save boundary owns the transaction the source has to share.
+        // The absences are load-bearing: no lifecycle service (a creation cannot move a selection), no
+        // target orchestrator or planner (the contour is separately callable), and no bridge (nothing
+        // consumes a stored source into a scheduling pass yet).
         assertEquals(
             "the editor (structure), the repository (the creation primitive), the Scheduler " +
                 "(opportunities), the target-source repository (the revision's explicit stated " +
@@ -368,8 +351,6 @@ class ProgramSaveServiceTest {
             collaborators
         )
     }
-
-    // ---------------------------------------------------------------- the mechanism
 
     private fun savedOutcome(result: ProgramEditorResult<ProgramSaveOutcome>): ProgramSaveOutcome.RevisionSaved {
         assertTrue("the save succeeded, got: $result", result is ProgramEditorResult.Success)

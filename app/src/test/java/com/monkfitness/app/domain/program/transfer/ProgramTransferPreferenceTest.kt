@@ -6,32 +6,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §30 step 28's **exercise preference in the transfer format**, and the format-version consequence it
- * carries.
+ * **Exercise preference in the transfer format**, and the format-version consequence it carries: export
+ * writes the user's exact order and states an absent preference as `[]`; a v2 file with a preference
+ * imports with that exact order; a version-1 file is REFUSED as unsupported, never read as "a program
+ * with no preference".
  *
- * Two directions, because a format change is only honest if both ends are measured:
- *
- * ```text
- * export   the user's exact order reaches the file, and an absent preference is a stated `[]`
- * import   a v2 file with a preference imports with that exact order
- * v1       a version-1 file is REFUSED as unsupported — never read as "a program with no preference"
- * ```
- *
- * ### Why the version bump is the point, not a detail
- *
- * `ProgramTransferFormat`'s own KDoc states the rule — *"adding a field is therefore a version bump"* —
- * and §5 requires that an unknown or unsupported version be **rejected**. So a version-1 file, which has
- * no `preferredExercises` key at all, is a different document and this reader does not know how to read
- * it. Reading it as "no preference" would be a guess about what its author meant: the file did not say
- * *nothing is preferred*, it simply predates the field, and those are not the same claim.
+ * The version bump is the point, not a detail. The format's own rule is *"adding a field is therefore a
+ * version bump"*, and an unknown or unsupported version must be **rejected**. A version-1 file has no
+ * `preferredExercises` key at all, so it is a different document and this reader does not know how to
+ * read it. Reading it as "no preference" would be a guess about what its author meant: the file did not
+ * say *nothing is preferred*, it simply predates the field, and those are not the same claim.
  *
  * The refusal is asserted as an **unsupported version**, not as a bag of schema findings, so the two
- * answers stay distinguishable — that is the same distinction the format made before this stage, and it is
- * what lets a user be told *why* their file was refused instead of *what was wrong with* it.
+ * answers stay distinguishable — what lets a user be told *why* their file was refused instead of *what
+ * was wrong with* it.
  */
 class ProgramTransferPreferenceTest {
-
-    // ------------------------------------------------------------------ export
 
     @Test
     fun theExactOrderedPreferenceIsWrittenAndAnAbsentOneIsAStatedEmptyArray() {
@@ -60,7 +50,7 @@ class ProgramTransferPreferenceTest {
 
     @Test
     fun theReversedOrderProducesDifferentBytes() {
-        // Determinism is the format's own rule (§11), and this is the case where it matters most: the two
+        // Determinism is the format's own rule, and this is the case where it matters most: the two
         // documents name the same two exercises and differ only in what the user said they would rather
         // train first. A writer that sorted, or a `Set` anywhere on the path, would emit identical bytes.
         val forwards = ProgramTransferJson.write(
@@ -89,8 +79,6 @@ class ProgramTransferPreferenceTest {
             )
         )
     }
-
-    // ------------------------------------------------------------------ import
 
     @Test
     fun aVersionTwoFileImportsWithTheExactOrderItStated() {
@@ -127,9 +115,9 @@ class ProgramTransferPreferenceTest {
 
     @Test
     fun aPreferredExerciseIsAReferenceAndIsValidatedWithTheRest() {
-        // §5's *"Unknown exerciseId is rejected"* covers every id the document names, not only the ones a
-        // day plans. A preference names exercises the plan may not contain, so a file naming one the
-        // receiving app does not ship is a file whose preference could never be honoured.
+        // *"Unknown exerciseId is rejected"* covers every id the document names, not only the ones a day
+        // plans. A preference names exercises the plan may not contain, so a file naming one the receiving
+        // app does not ship is a file whose preference could never be honoured.
         val document = ProgramTransferReader.read(
             ProgramTransferFixture.document(preferredExercises = """["pullups", "an-exercise-nobody-ships"]""")
         )
@@ -177,13 +165,11 @@ class ProgramTransferPreferenceTest {
         }
     }
 
-    // ------------------------------------------------------------------ the version consequence
-
     @Test
     fun aVersionOneFileIsRefusedAsUnsupportedAndNeverReadAsHavingNoPreference() {
         // A version-1 document with the field removed is what a file shared before this stage looks like.
         // The two candidate answers are both wrong in different ways: reading it would invent a claim, and
-        // reading it as "no preference" would be a specific guess. §5's answer is to reject it.
+        // reading it as "no preference" would be a specific guess. The answer is to reject it.
         val versionTwo = ProgramTransferFixture.edited(
             "\"formatVersion\": 2,",
             "\"formatVersion\": 1,"

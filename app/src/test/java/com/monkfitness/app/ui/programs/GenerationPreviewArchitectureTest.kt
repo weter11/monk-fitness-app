@@ -10,26 +10,19 @@ import java.io.File
 import java.lang.reflect.Modifier
 
 /**
- * P26's architecture gate: **§7's Preview is a projection of one generation pass, and the UI layer is
- * still nowhere near the generated domain.**
+ * The architecture gate: **Preview is a projection of one generation pass, and the UI layer is still
+ * nowhere near the generated domain.**
  *
  * A Preview is unusually easy to build wrong, because every failure below still produces a screen that
- * looks finished and a plan that looks right:
- *
- * ```text
- * UI → generated domain      a Composable receiving a GeneratedPlan / ReconciliationReport / limitation
- * a second generation path   a preview assembled somewhere other than ProgramGenerationService
- * a hidden Save              a preview (or an Apply) reaching a repository, a DAO or the scheduler
- * a second current draft     a preview holding an editable draft of its own
- * a UI-built plan            a screen sorting, ranking or re-counting the plan's own figures
- * a developer-facing sentence Text(text = limitation.message) — §33's silent substitution, localized
- * a hidden conflict          a preview that drops or "resolves" a preserved user choice
- * a hidden limitation        a preview that swallows what the planner could not do
- * ```
+ * looks finished and a plan that looks right: a Composable receiving a GeneratedPlan / reconciliation
+ * report / limitation; a preview assembled somewhere other than ProgramGenerationService; a preview
+ * (or an Apply) reaching a repository, a DAO or the scheduler; a preview holding an editable draft of
+ * its own; a screen sorting or re-counting the plan's own figures; a developer-facing sentence; a
+ * dropped conflict; a swallowed limitation.
  *
  * Each is asserted against the **source** (comments stripped, whole tokens) or against the compiled
- * shape, because this project has no Compose test harness (§17) and the screen's behaviour is measured
- * in [ProgramsGenerationPreviewTest] instead.
+ * shape, because this project has no Compose test harness and the screen's behaviour is measured in
+ * [ProgramsGenerationPreviewTest] instead.
  */
 class GenerationPreviewArchitectureTest {
 
@@ -95,8 +88,6 @@ class GenerationPreviewArchitectureTest {
         assertEquals("$because — found: $offenders", emptyList<String>(), offenders)
     }
 
-    // ---------------------------------------------------------------- the UI reaches no generated domain
-
     @Test
     fun noComposableReceivesAGeneratedDomainValue() {
         assertNoToken(
@@ -142,8 +133,6 @@ class GenerationPreviewArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- no second generation path
-
     @Test
     fun theControllerReachesGenerationOnlyThroughTheOneService() {
         val text = collapsed(controller)
@@ -172,8 +161,8 @@ class GenerationPreviewArchitectureTest {
 
     @Test
     fun theServiceGivesPreviewItsOwnBodyOfItsOwn() {
-        // `preview` must be one call into the shared private pass. A preview with its own body — even a
-        // body that happens to call the planner — is a second path, and the two would drift.
+        // `preview` must be one call into the shared private pass. A preview with its own body — even
+        // one that happens to call the planner — is a second path, and the two would drift.
         val body = collapsed(generationService)
         val declaration = Regex(
             """fun preview\([^)]*\):\s*ProgramGenerationResult = edit\(draft, availableEquipment\)"""
@@ -235,8 +224,6 @@ class GenerationPreviewArchitectureTest {
             )
     }
 
-    // ---------------------------------------------------------------- the controller owns the mapping
-
     @Test
     fun theControllerBuildsTheWholePresentationFromTheDraftEdit() {
         val text = collapsed(controller)
@@ -289,8 +276,6 @@ class GenerationPreviewArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- the preview is temporary
-
     @Test
     fun thePendingPreviewIsInvalidatedByEveryDraftChange() {
         val text = collapsed(controller)
@@ -313,8 +298,8 @@ class GenerationPreviewArchitectureTest {
             "private fun editDraft(change: (ProgramEditorDraft) -> ProgramEditorDraft)" in text
         )
         // `previewOf` is deliberately absent from this scan: it is the state holder's *pre-existing*
-        // private helper that reads the Scheduler's next-opportunity preview (§20), and banning the
-        // name would refuse a collaborator the layer is required to keep.
+        // private helper that reads the Scheduler's next-opportunity preview, and banning the name would
+        // refuse a collaborator the layer is required to keep.
         assertFalse(
             "and no second identity system is introduced to re-decide staleness: no hash, no timestamp " +
                 "and no revision pointer beside the preview",
@@ -392,8 +377,6 @@ class GenerationPreviewArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- §14: no developer-facing sentence
-
     @Test
     fun theUiNeverReadsADomainSentenceOrAnEnumName() {
         assertNoToken(
@@ -451,8 +434,6 @@ class GenerationPreviewArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- persistence
-
     /** Every production source declaring a Room entity, as repository-relative paths, sorted. */
     private fun entitiesFiles(): List<String> = mainSourceRoot.walkTopDown()
         .filter { file -> file.isFile && file.extension == "kt" }
@@ -469,12 +450,10 @@ class GenerationPreviewArchitectureTest {
             .filter { file -> "@Dao" in code(file.readText()) }
             .count()
 
-        // **Revised, not relaxed, by P31.** These are ABSOLUTE censuses of the whole main source set,
-        // so any later stage that legitimately adds storage moves them. P31 added exactly one entity and
-        // one DAO — the progression relation catalogue — and neither belongs to a Preview or to a Focus
-        // configuration, so the *claim* this test carries is unchanged and is now stated positively:
-        // neither stage added a table, and the one table P31 did add is named here so a future reader can
-        // see exactly what moved the number rather than having to diff it.
+        // These are ABSOLUTE censuses of the whole main source set, so any later stage that legitimately
+        // adds storage moves them: the catalogue's own entity and DAO belong to a ladder, not to a
+        // Preview or a Focus configuration, so the *claim* is unchanged and the number is named here so
+        // a future reader sees what moved it.
         //
         // The count is KEPT, not replaced by a membership list: dropping it would let the schema grow
         // silently, which is the failure this gate exists to catch.

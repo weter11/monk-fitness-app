@@ -15,21 +15,12 @@ import kotlin.math.sqrt
 /**
  * Shoulder CARs (`shoulder_cars_standard`) — the exercise's own biomechanics on the PUBLISHED frame.
  *
- * ## Stated intent (its own copy — the only specification in the repository; there is no BPS)
- *
- * `desc` *"A controlled shoulder circle that trains active range without momentum … own every part of
- * the arc."* — `steps` *"1. Stand tall and brace your ribs down. 2. Lift one arm straight in front of
- * you. 3. Rotate and circle the arm overhead and behind the body as far as you can control. 4. Reverse
- * the path back to the start. 5. Repeat, then switch arms."* — `tech` *"Move one shoulder at a time.
- * Keep the torso quiet. Make the circle smooth, not fast."* — `mistakes` *"Twisting through the spine.
- * Bending the elbow to cheat the range. Speeding through the sticky spots."*
- *
- * The assertions below measure the CAR directly, clause by clause: **one arm** circles (the other arm
- * and the whole body are static), the hand's locus is **one circle centred on its own shoulder** whose
- * radius never changes (so the elbow's interior angle cannot change — there is no "bending the elbow
- * to cheat the range" left to express), the arc visits **all four quadrants** (front → overhead →
- * behind), the **azimuth is monotone** and advances *slowest through the posterior quadrant* (the
- * sticky spot), and the athlete stays on a planted, quiet stance.
+ * The pose's own copy is the only specification here (there is no BPS): one arm at a time, torso
+ * quiet, a smooth controlled circle without momentum, no bending the elbow to cheat the range, no
+ * speeding through the sticky spots. The assertions measure that clause by clause: the hand's locus
+ * is one circle centred on its own shoulder at constant radius (so the elbow's interior angle cannot
+ * change either), the arc visits all four quadrants in order with a monotone azimuth that advances
+ * slowest through the posterior quadrant, and the athlete stays on a planted, quiet stance.
  *
  * Every reading is taken through [PoseFrameSweep] (the pipeline entered exactly as `SkeletonRenderer`
  * enters it), never on a raw `build()` result.
@@ -390,7 +381,7 @@ class ShoulderCarsPoseTest {
         }
     }
 
-    /** The declared base of support is the one the published frame carries (R8/B-5, the hero's model). */
+    /** The declared base of support must be the one the published frame carries. */
     @Test
     fun theDeclaredSupportReachesThePublishedFrame() {
         val f = frames()

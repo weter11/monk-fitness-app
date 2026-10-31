@@ -7,14 +7,13 @@ import org.junit.Test
 import java.io.File
 
 /**
- * P31's architecture: the persisted progression catalogue is an **app-owned definition**, and
- * everything that could turn it into an inferred ladder is absent.
+ * The persisted progression catalogue is an **app-owned definition**, and everything that could turn it
+ * into an inferred ladder is absent.
  *
- * Each rule here corresponds to a way this stage could have gone wrong while still compiling and still
- * passing its own behavioural tests — a second ladder type beside the domain's, a serialized blob, a
- * Program-scoped key, a heuristic level, a read of family *state* as if it were a hierarchy. The gates
- * are source scans with comments stripped, so prose *about* a forbidden thing cannot trip them and a
- * real use of it cannot hide in a comment.
+ * Each rule is a way this could have gone wrong while still compiling and passing its behavioural tests
+ * — a second ladder type, a serialized blob, a Program-scoped key, a heuristic level, family *state*
+ * read as a hierarchy. The gates scan source with comments stripped, so prose *about* a forbidden thing
+ * cannot trip them and a real use cannot hide in a comment.
  */
 class ProgressionRelationPersistenceArchitectureTest {
 
@@ -38,12 +37,10 @@ class ProgressionRelationPersistenceArchitectureTest {
     /**
      * The entity's declared `val` constructor fields, in declaration order.
      *
-     * `RegexOption.DOT_MATCHES_ALL` is **load-bearing** here, and the reason is worth recording: the
-     * constructor spans several lines, so a `.` without DOTALL matches only within one line, the regex
-     * finds nothing, and a `!!` on the result turns the whole assertion into a `NullPointerException`.
-     * That failure names neither the expected value nor the field list, so it reads as a production
-     * defect when it is a gate that never ran. The helper asserts its own match, so the same mistake
-     * next time names the entity instead of throwing.
+     * `DOT_MATCHES_ALL` is **load-bearing**: the constructor spans several lines, so a `.` without
+     * DOTALL finds nothing and the `!!` turns the assertion into a bare `NullPointerException` that
+     * reads as a production defect when it is a gate that never ran. The helper asserts its own match,
+     * so the same mistake names the entity instead of throwing.
      */
     private fun declaredFields(): List<String> {
         val body = entity.readText()
@@ -64,34 +61,26 @@ class ProgressionRelationPersistenceArchitectureTest {
     /**
      * Whole-token matching, so `ProgramAdaptiveRepository` is not found inside a longer name.
      *
-     * The trailing lookahead is what makes it whole-token — and that is also its one trap. A ban written
-     * on a *prefix* of the real symbol can never match it: `PilotProgression` does not match inside
-     * `PilotProgressionProfiles`, because the very next character is a word character. A gate written
-     * that way reports "the retired pilot is not consulted" while being unable to see the one name it is
-     * meant to catch. So the pilot is banned by [pilotReference] instead, which matches a leading
-     * `PilotProgression` in any casing and any suffix — the shape the retired generation actually has.
+     * The trailing lookahead is also the trap: a ban written on a *prefix* of the real symbol can never
+     * match it (`PilotProgression` is not inside `PilotProgressionProfiles`), so such a gate reports
+     * "not consulted" while blind to the one name it means to catch. The pilot is therefore banned by
+     * [pilotReference], which matches a leading `PilotProgression` in any casing and any suffix.
      */
     private fun names(body: String, token: String): Boolean =
         Regex("(?<![A-Za-z0-9_])${Regex.escape(token)}(?![A-Za-z0-9_])").containsMatchIn(body)
 
     /**
-     * Any reference to the retired Stage-1 pilot's progression vocabulary.
-     *
-     * Matched as a leading `PilotProgression` rather than as a whole token, because the real type is
-     * longer than any prefix worth banning — a whole-token form of this rule would be green on a tree
-     * that names `PilotProgressionProfiles` directly.
+     * Any reference to the retired pilot's progression vocabulary: matched as a leading
+     * `PilotProgression`, since a whole-token rule would be green on a tree naming
+     * `PilotProgressionProfiles` directly.
      */
     private fun pilotReference(body: String): Boolean =
         Regex("(?<![A-Za-z0-9_])[Pp]ilotProgression").containsMatchIn(body)
 
-    // ================================================================ the shape of the persisted row
-
     /**
-     * **The persisted row is exactly the five facts of a ladder rung** — and nothing that belongs to a
-     * plan, a history or a policy.
-     *
-     * Asserted against the entity's declared fields, because a column added later would be a claim the
-     * stage document does not make and the schema does not model.
+     * The persisted row is exactly the five facts of a ladder rung — nothing belonging to a plan, a
+     * history or a policy. Asserted on the declared fields, because a column added later would be a
+     * claim the schema does not model.
      */
     @Test
     fun thePersistedRowIsExactlyAFamilyLevelExerciseAndPrescription() {
@@ -165,28 +154,20 @@ class ProgressionRelationPersistenceArchitectureTest {
     }
 
     /**
-     * **One row per progression variant — the ladder is normalized, not a serialized blob.**
+     * One row per progression variant: the ladder is normalized, not a serialized blob.
      *
-     * The two halves of the storage are deliberately *different kinds of thing* and this gate keeps
-     * them apart, because conflating them would forbid the wrong one:
-     *
-     * ```text
-     * the ladder          = a SET of rows, one per declared variant
-     * the prescription    = an ordered list of per-set targets, in one column,
-     *                      via the schema's existing lossless converter
-     * ```
-     *
-     * So what is asserted is structural, not textual: every rung is its own row carrying its own
-     * family, level, exercise and targets — which is what makes ordering, contiguity and per-rung
-     * identity answerable by the database rather than by parsing a string. A column holding a *whole
-     * ladder* as text is what would break that, and only that is refused.
+     * The two halves are different kinds of thing and conflating them would forbid the wrong one — the
+     * ladder is a SET of rows, while a rung's prescription is an ordered list of targets in one column
+     * via the schema's existing lossless converter. So the assertion is structural: every rung is its
+     * own row carrying its own family, level, exercise and targets, which is what makes ordering,
+     * contiguity and per-rung identity answerable by the database rather than by parsing a string. A
+     * column holding a *whole ladder* as text is what would break that, and only that is refused.
      */
     @Test
     fun theCatalogueIsNormalizedRowsAndNotASerializedBlob() {
         val body = code(entity)
         val fields = declaredFields()
 
-        // Positive: the ladder is a set of rows, one row per variant.
         assertTrue(
             "the row is keyed by the family and the exercise it declares, so each variant is its own " +
                 "row rather than an element of a stored list",
@@ -198,16 +179,15 @@ class ProgressionRelationPersistenceArchitectureTest {
             fields.map { field -> field.removePrefix("val ").substringBefore(":") }
         )
 
-        // And the per-set targets stay a LIST type, so the schema's existing lossless converter is
-        // what carries them. This is the half that must NOT be forbidden: storing an ordered target
-        // list in one TEXT column is the schema's established, already-proven representation.
+        // The per-set targets stay a LIST, carried by the schema's existing lossless converter. This is
+        // the half that must NOT be forbidden: an ordered target list in one TEXT column is the
+        // established representation; a single Int here would be the defect.
         assertTrue(
             "the per-set targets are declared as the whole ordered list, which the schema's existing " +
                 "converter already stores losslessly — a single Int here would be the defect",
             fields.any { it.trim() == "val perSetTargets: List<Int>" }
         )
 
-        // Negative: nothing on this row holds a *ladder* as one serialized value.
         for (forbidden in listOf(
             "ladderJson",
             "variantsJson",
@@ -230,18 +210,14 @@ class ProgressionRelationPersistenceArchitectureTest {
         )
     }
 
-    // ================================================================ one repository, one provider
-
     /** **Exactly one production relation repository exists**, and it is not the adaptive one. */
     @Test
     fun thereIsExactlyOneRelationRepositoryAndItIsNotTheAdaptiveRepository() {
         val repositories = File(appRoot, "data/repository").listFiles()!!.map { it.name }
 
-        // **Sorted**, because the comparison is against a `.sorted()` on the actual side — and the
-        // expected list is written in the order `sorted()` produces rather than the order the two
-        // concepts are introduced in. An entry in the wrong position fails with a diff that reads like
-        // a missing file when both files are present, which is the classic way this gate gets "fixed"
-        // by deleting an entry that was never wrong.
+        // **Sorted**, matching the `.sorted()` on the actual side. An entry in the wrong position fails
+        // with a diff that reads like a missing file when both files are present, which is how this
+        // gate gets "fixed" by deleting an entry that was never wrong.
         assertEquals(
             "P31 adds exactly one repository, and it is named for the catalogue",
             listOf("ProgressionRelationRepository.kt"),
@@ -275,11 +251,9 @@ class ProgressionRelationPersistenceArchitectureTest {
     /** **Exactly one production provider**, and it is a projection over the one repository. */
     @Test
     fun thereIsExactlyOneProductionRelationProviderOverTheOneRepository() {
-        // Matched on the *superclass position* — `class X ... : ProgressionRelationProvider` — and
-        // not on the bare token. Four files name the port: the port's own declaration, the two call
-        // sites that receive it as a constructor parameter, and the one class that implements it. A
-        // substring test cannot tell those apart, so it reported the integration and the target-slot
-        // port as "a second provider" — which they are not; they are the port's own readers.
+        // Matched on the *superclass position*, not the bare token: four files name the port — its
+        // declaration, two call sites taking it as a parameter, and the one implementor — and a
+        // substring test cannot tell those apart, so it reports readers as "a second provider".
         val providers = File(appRoot, "domain")
             .walkTopDown().filter { it.isFile && it.extension == "kt" }
             .filter { source ->
@@ -303,11 +277,9 @@ class ProgressionRelationPersistenceArchitectureTest {
         )
     }
 
-    // ================================================================ what the provider must not do
-
     /**
-     * **The provider fabricates nothing.** Every forbidden answer below would convert *"this family has
-     * no declared ladder"* into a rung nobody authored.
+     * The provider fabricates nothing: every forbidden answer below would convert *"this family has no
+     * declared ladder"* into a rung nobody authored.
      */
     @Test
     fun theProviderContainsNoDefaultNoInferenceAndNoFallback() {
@@ -357,20 +329,13 @@ class ProgressionRelationPersistenceArchitectureTest {
     }
 
     /**
-     * **The provider reads only the repository.** Its one collaborator, and the absence of every other
-     * source a ladder could plausibly be invented from.
-     */
-    /**
-     * **Inverted by P32, deliberately.** P31 asserted this exact import set, including
-     * `kotlinx.coroutines.runBlocking`, because the port was synchronous and the provider had to bridge
-     * the suspending repository read with a blocking call.
+     * The provider reads only the repository — its one collaborator, and no other source a ladder could
+     * be invented from.
      *
-     * P32 made `ProgressionRelationProvider.relationOf` `suspend`, so the bridge is not merely unused —
-     * it is the defect the stage removed. The assertion is therefore **replaced, not deleted**: the
-     * provider still imports exactly the relation type, the port and the one repository, and the
-     * blocking bridge is now *forbidden* by name. Pinning the removal as an exact import set means a
-     * re-introduced `runBlocking` fails this gate whether or not it is called, and any *other* added
-     * import — a static definitions object, a catalogue, a legacy pilot type — fails it too.
+     * `relationOf` is now `suspend`, so the `runBlocking` bridge is not merely unused but the defect
+     * removed. Pinning an exact import set forbids it by name: a re-introduced bridge fails this gate
+     * whether or not it is called, and any other added import — a static definitions object, a
+     * catalogue, a legacy pilot type — fails it too.
      */
     @Test
     fun theProviderImportsNoLadderSourceOtherThanTheRepository() {
@@ -393,12 +358,8 @@ class ProgressionRelationPersistenceArchitectureTest {
     }
 
     /**
-     * **No blocking bridge anywhere in the progression-relation provider path.**
-     *
-     * The import gate above pins the provider's own imports; this one is the behavioural claim the
-     * import list cannot make on its own — that no `runBlocking` survives in the port, the provider or
-     * the function that reads a relation for the integration. P31 recorded the bridge as a gap it did
-     * not own; P32 owns it, and this is the gate that says so.
+     * The behavioural half the import gate cannot make: no `runBlocking` survives in the port, the
+     * provider or the function that reads a relation for the integration.
      */
     @Test
     fun theProgressionRelationProviderPathContainsNoBlockingBridge() {
@@ -410,10 +371,8 @@ class ProgressionRelationPersistenceArchitectureTest {
 
         val offenders = path
             .filter { it.isFile }
-            // Scanned on CODE with the comments stripped, not on raw text: both files *discuss*
-            // `runBlocking` in their KDoc — the port because it records what it replaced, the provider
-            // because it records the gap it closed — and a text scan would fail this gate on its own
-            // explanation of itself.
+            // Code with comments stripped, not raw text: both files *discuss* `runBlocking` in their
+            // KDoc, and a text scan would fail this gate on its own explanation of itself.
             .filter { code(it).contains("runBlocking") }
             .map { it.name }
 
@@ -425,12 +384,10 @@ class ProgressionRelationPersistenceArchitectureTest {
         )
     }
 
-    // ================================================================ the storage boundary adds no rules
-
     /**
-     * **The repository validates nothing of its own.** Every rule a ladder has — duplicate exercise,
-     * contiguity, canonical order, a non-empty variant list — belongs to the domain's constructor, and a
-     * second copy here would be a second copy that can drift.
+     * The repository validates nothing of its own: every rule a ladder has — duplicate exercise,
+     * contiguity, canonical order, non-empty variants — belongs to the domain's constructor, and a
+     * second copy here is one that can drift.
      */
     @Test
     fun theRepositoryInventsNoRuleTheDomainAlreadyOwns() {
@@ -487,8 +444,8 @@ class ProgressionRelationPersistenceArchitectureTest {
     }
 
     /**
-     * **No heuristic prescription.** A column or a mapper that reduced a target list to a scalar would
-     * satisfy "the prescription is stored" while losing the load-bearing part of §10.
+     * A column or mapper reducing a target list to a scalar would satisfy "the prescription is stored"
+     * while losing the load-bearing part.
      */
     @Test
     fun noLayerCollapsesAPerSetPrescriptionToOneNumber() {
@@ -509,8 +466,8 @@ class ProgressionRelationPersistenceArchitectureTest {
     }
 
     /**
-     * **No new converter semantics.** The per-set column goes through the schema's existing
-     * `ProgramTypeConverters` pair, which was already lossless for exactly this column type.
+     * No new converter semantics: the per-set column goes through the schema's existing
+     * `ProgramTypeConverters` pair, already lossless for exactly this column type.
      */
     @Test
     fun thePerSetColumnUsesTheSchemasExistingConverterAndDeclaresNoNewOne() {
@@ -528,10 +485,9 @@ class ProgressionRelationPersistenceArchitectureTest {
             converters.contains("fun toPerSetTargets(targets: List<Int>): String") &&
                 converters.contains("fun fromPerSetTargets(value: String): List<Int>")
         )
-        // Positively, not by a double negative: the invariant is "the per-set list is converted by
-        // exactly the existing pair", so it is measured by counting the converters that handle a
-        // `List<Int>` of targets and naming them. An `assertFalse` over a disjunction is satisfied by
-        // almost any tree and fails for reasons unrelated to what it claims.
+        // Positively, not by a double negative: count the converters handling a `List<Int>` of targets
+        // and name them. An `assertFalse` over a disjunction is satisfied by almost any tree and fails
+        // for reasons unrelated to what it claims.
         val targetConverters = listOf("ProgramTypeConverters.kt", "AdaptiveTypeConverters.kt")
             .map { it to file("data/local/$it") }
             .filter { (_, source) ->
@@ -549,21 +505,14 @@ class ProgressionRelationPersistenceArchitectureTest {
     }
 
     /**
-     * **The catalogue path reads no ladder-adjacent source at all.**
+     * Every token below looks like it could stand in for a ladder and is a different kind of wrong:
+     * a family's **current** position is one rung, so standing it up as a hierarchy fabricates the
+     * others; what was decided once is not what a family may do next; the retired pilot generation is
+     * scoped to the legacy program's axis; a generator's difficulty inference is not an authored ladder;
+     * and a plan id is the scope leak.
      *
-     * Every token below names something that *looks* like it could stand in for a ladder, and every one
-     * of them is a different kind of wrong:
-     *
-     *  * `FamilyProgressionState` / `currentExerciseId` / `progressionLevel` — a family's **current**
-     *    position is ONE rung, so standing it up as a hierarchy fabricates all the others;
-     *  * `AdaptiveDecision` / adjustment — what was decided once is not what a family may do next;
-     *  * `PilotProgression` — the retired Stage-1 generation, scoped to the legacy program's axis;
-     *  * `WorkoutGenerator` / `difficulty` — a generator's difficulty inference is not an authored ladder;
-     *  * `programId` / `revisionId` — the scope leak, kept here as well as in the entity rule so the
-     *    repository and the provider are covered by it too.
-     *
-     * The check is a whole-token scan over **comment-stripped** source, so prose *about* the ban cannot
-     * trip it and a real use of one of these cannot hide inside a comment.
+     * A whole-token scan over **comment-stripped** source, so prose *about* the ban cannot trip it and a
+     * real use cannot hide inside a comment.
      */
     @Test
     fun theCataloguePathReadsNoLadderAdjacentSource() {
@@ -597,8 +546,6 @@ class ProgressionRelationPersistenceArchitectureTest {
             )
         }
     }
-
-    // ================================================================ scope and dependencies
 
     /** **No Program or revision dependency anywhere in the catalogue's own path.** */
     @Test
@@ -647,20 +594,11 @@ class ProgressionRelationPersistenceArchitectureTest {
     }
 
     /**
-     * **Inverted by P32 — the stage's central deliverable.**
-     *
-     * P31 asserted the *empty* production state: `NoDeclaredProgression` wired, the provider and the
-     * repository not wired at all, because P31 authored no ladder content. P32 authors four ladders,
-     * seeds them and serves them, so every one of those assertions is now false **by design** and would
-     * forbid the very thing this stage was asked to deliver.
-     *
-     * It is therefore **replaced, not deleted**, and replaced with strictly stronger claims: the
-     * stored provider must be constructed, it must be the value the integration receives, the empty
-     * source must be gone from the production wiring, and the repository must be reachable. A test
-     * that merely deleted these lines would leave the wiring unpinned in both directions, which is the
-     * one outcome a stage gate must never allow.
-     *
-     * The DAO assertion below is **unchanged**: P31 created the table and P32 does not touch it.
+     * Inverted deliberately: asserting the *empty* production state would forbid the very
+     * content now delivered. Replaced, not deleted, with strictly stronger claims — the stored provider
+     * must be constructed, must be the value the integration receives, the empty source must be gone,
+     * and the repository must be reachable. Deleting these lines would leave the wiring unpinned in both
+     * directions, which a stage gate must never allow.
      */
     @Test
     fun productionWiresTheStoredProgressionProviderAndNotTheEmptyLadderSource() {
@@ -691,11 +629,9 @@ class ProgressionRelationPersistenceArchitectureTest {
         )
     }
 
-    // ================================================================ the sweep really swept
-
     /**
-     * **The scan covered what it claims to cover.** Without a floor, a renamed package would make every
-     * offender list empty and this whole class green without having looked at anything.
+     * The scan covered what it claims to cover: without a floor, a renamed package would make every
+     * offender list empty and this class green without having looked at anything.
      */
     @Test
     fun everyFileThisClassRulesOverExists() {

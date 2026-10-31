@@ -15,20 +15,14 @@ import kotlin.math.sqrt
 /**
  * Chin Tucks (`chin_tuck_standard`) — the exercise's own cervical biomechanics on the PUBLISHED frame.
  *
- * ## Stated intent (its own copy — the only specification in the repository; there is no BPS)
+ * The copy is the only specification (no BPS): draw the chin straight back as if making a double
+ * chin, hold briefly without tipping the head up or down — and don't tilt the head toward the floor,
+ * poke the chin forward, or shrug.
  *
- * `desc` *"A posture drill that trains the deep neck flexors and stacks the head over the ribcage. The
- * move is small but precise."* — `steps` *"1. Stand tall or lie on your back. 2. Look straight ahead.
- * 3. Gently draw the chin straight back as if making a double chin. 4. Hold the end position briefly
- * without tipping the head up or down. 5. Relax and repeat."* — `tech` *"Think back, not down …"* —
- * `mistakes` *"Tilting the head toward the floor. Poking the chin forward between reps. Shrugging the
- * shoulders."*
- *
- * The assertions below measure a **retraction**: the neck's own bone turns posteriorly by the authored
- * angle while the head's bone stays the chain's vertical axis, the head therefore travels straight back
- * and never forward, and **nothing outside the cervical chain moves at all** (the whole body is still —
- * that is the "without translating the whole body" property of a neck drill, and it is the misreading
- * this class exists to catch: a whole-body "nod" or a shoulder shrug).
+ * The assertions measure a retraction: the neck's own bone turns posteriorly by the authored angle
+ * while the head's bone stays the chain's vertical axis, so the head travels straight back and never
+ * forward, and nothing outside the cervical chain moves at all — that last property is the
+ * misreading this class exists to catch: a whole-body "nod" or a shoulder shrug.
  *
  * Every reading is taken through [PoseFrameSweep] (the pipeline entered exactly as `SkeletonRenderer`
  * enters it), never on a raw `build()` result.
@@ -66,8 +60,8 @@ class ChinTuckPoseTest {
         val f = frames()
         // The drill is symmetric about the rep's seam (p = 0 ≡ 1) and its hold plateau repeats, so the
         // rhythm's own frame count is asserted — measured 5 of the 9 samples. A sweep that collapsed to
-        // ONE frame would be the T-7 aliasing signature and every travel assertion below would be
-        // vacuous; a rhythm change (a moving hold) must be re-measured here rather than absorbed.
+        // ONE frame would be the aliasing signature and every travel assertion below would be vacuous;
+        // a rhythm change (a moving hold) must be re-measured here rather than absorbed.
         assertEquals(
             "the published frames of the cycle changed — re-measure the rhythm",
             5, PoseFrameSweep.distinctFrameCount(f)
@@ -266,7 +260,7 @@ class ChinTuckPoseTest {
         }
     }
 
-    /** The declared base of support is the one the published frame carries (R8/B-5, the hero's model). */
+    /** The declared base of support must be the one the published frame carries. */
     @Test
     fun theDeclaredSupportReachesThePublishedFrame() {
         val f = frames()

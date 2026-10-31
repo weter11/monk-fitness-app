@@ -12,15 +12,13 @@ import java.io.File
  * platform type at all, and every `domain.adaptive` type the adapter hands the mapper is defined in this
  * package.
  *
- * This runs on the JVM against the sources themselves, so it fails the build the moment a future
- * edit reintroduces a `data.model.Exercise` import into the mapper or anywhere else in this package
- * — the exact regression the PR #268 review caught — or lets the configuration validator reach for
- * Android, Room, DataStore or a ViewModel instead of the metadata its caller supplies.
+ * This runs on the JVM against the sources themselves, so it fails the build the moment an edit
+ * reintroduces a `data.model.Exercise` import into the mapper or anywhere else in this package, or lets
+ * the configuration validator reach for Android, Room, DataStore or a ViewModel instead of the metadata
+ * its caller supplies.
  *
- * §30 step 11 revised the scan: it used to read only the package's own top-level files, and the target
- * adaptive engine is the first thing to live in a nested package (`domain/adaptive/engine`). Reading the
- * whole subtree is strictly stronger than reading one level of it — a nested package is fenced exactly
- * like a top-level one, and a *future* nested package cannot sit outside the fence by accident.
+ * Reading the whole subtree rather than one level is strictly stronger: a nested package is fenced
+ * exactly like a top-level one, and a *future* nested package cannot sit outside the fence by accident.
  */
 class AdaptiveDomainPurityTest {
 
@@ -80,10 +78,8 @@ class AdaptiveDomainPurityTest {
 
     @Test
     fun thePurePresentationValueTheTargetRuntimeConsumesLivesInTheDomain() {
-        // §30 step 15 replaced this probe's subject. `PlannedExercise` was the Stage-1 mapper's pure
-        // type and is retired with it; the target runtime's equivalent — the presentation composed from
-        // a revision plus its standing adjustments — is `domain.workout.EffectiveExercise`, and the
-        // claim is the same one: it is a domain type, not something re-exported from the data layer.
+        // The claim: `EffectiveExercise` — the presentation composed from a revision plus its standing
+        // adjustments — is a domain type, not something re-exported from the data layer.
         val resolved = Class.forName("com.monkfitness.app.domain.workout.EffectiveExercise")
         assertEquals(
             "the presented element must live in the domain, not in the data layer",

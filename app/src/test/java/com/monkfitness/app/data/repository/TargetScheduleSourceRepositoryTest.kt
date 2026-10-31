@@ -22,21 +22,12 @@ import java.time.LocalDate
  * `TargetScheduleSourceRepository`: a revision's **explicit** target schedule source, stored and read
  * back on a real SQLite engine.
  *
- * The claims under test are about **fidelity, refusal and honesty of absence**, and they are measured
- * against the engine through the DAOs' own SQL rather than a mock's bookkeeping:
- *
- *  * every cadence form round-trips exactly, form *and* payload, including the forms that are easy to
- *    normalize into one another (`EveryNDays(3)` and `FixedWeekdays` of three days are different
- *    schedules, and `SessionsPerWeek(3)` is a frequency, not a weekday set);
- *  * ordering is a stored read order, so two reads are equality-identical;
- *  * a claim the source cannot honestly hold — a blank identity, two rules about one rule identity,
- *    two bindings about one workout, a binding to another revision's plan day — is refused, and
- *    nothing is written;
- *  * a saved revision's source is immutable: an identical repeat writes nothing, a different one is
- *    refused;
- *  * a revision with no stated source reads as a typed absence, and stored rows that do not read back
- *    as a valid source read as a typed failure — neither is turned into an empty or plausible source;
- *  * the legacy `ProgramSchedule` is not an input and not an output: changing it changes nothing here.
+ * The claims are about **fidelity, refusal and honesty of absence**, measured against the engine through
+ * the DAOs' own SQL rather than a mock's bookkeeping. The trap they exist for is normalisation: the forms
+ * are easy to collapse into one another, yet `EveryNDays(3)` and `FixedWeekdays` of three days are
+ * different schedules and `SessionsPerWeek(3)` is a frequency, not a weekday set. A missing source reads
+ * as a typed absence and unreadable rows as a typed failure — neither becomes an empty or plausible
+ * source — and the legacy `ProgramSchedule` is neither an input nor an output.
  */
 class TargetScheduleSourceRepositoryTest {
 
@@ -49,7 +40,6 @@ class TargetScheduleSourceRepositoryTest {
         rig.close()
     }
 
-    // ------------------------------------------------------------------ round trips
 
     @Test
     fun oneRuleAndOneBindingComeBackExactlyAsTheyWentIn() = runBlocking {
@@ -92,9 +82,9 @@ class TargetScheduleSourceRepositoryTest {
     @Test
     fun aFrequencyIsNotNormalizedIntoAnotherCadence() = runBlocking {
         rig.createGraph()
-        // 3 sessions a week and every 3 days are genuinely different schedules, and a `FixedWeekdays`
-        // set of three days is a third. A storage layer that collapsed any of them into another would
-        // round-trip "successfully" and mean something else entirely.
+        // 3 sessions a week and every 3 days are different schedules, and a `FixedWeekdays` set of three
+        // days is a third. A layer that collapsed any of them into another would round-trip
+        // "successfully" and mean something else entirely.
         val frequencies = listOf(1, 2, 3, 4, 5, 6, 7).map { sessions ->
             rule("rule-$sessions", "workout-$sessions", ScheduleCadence.SessionsPerWeek(sessions))
         }
@@ -132,9 +122,9 @@ class TargetScheduleSourceRepositoryTest {
             )
         )
 
-        // The read order is by stored rule identity, which is lexical — so the comparison is keyed by
-        // the rule the cadence belongs to rather than by position. Comparing two lists positionally
-        // here would be asserting the *ordering* twice and the *values* not at all.
+        // The read order is by stored rule identity, which is lexical, so the comparison is keyed by rule
+        // rather than by position. Positionally, it would assert the *ordering* twice and the *values* not
+        // at all.
         val byRule = storedSource(revisionId).rules.associate { it.ruleId to it.cadence }
         intervals.forEach { rule ->
             assertEquals(
@@ -188,8 +178,8 @@ class TargetScheduleSourceRepositoryTest {
     @Test
     fun anAnchorDateSurvivesExactly() = runBlocking {
         rig.createGraph()
-        // Deliberately not a round-ish date: a stored anchor read back as the first of its month, or
-        // shifted by a zone, would plan a whole schedule one day out.
+        // Deliberately not a round-ish date: an anchor read back as the first of its month, or shifted by
+        // a zone, would plan a whole schedule one day out.
         val anchor = LocalDate.parse("2027-03-17")
         val source = source(
             rules = listOf(rule("rule-a", "workout-a", ScheduleCadence.Daily, anchor)),
@@ -201,13 +191,12 @@ class TargetScheduleSourceRepositoryTest {
         assertEquals(anchor, storedSource(revisionId).rules.single().anchorDate)
     }
 
-    // ------------------------------------------------------------------ ordering and repeatability
 
     @Test
     fun severalRulesReadBackInOneDeterministicOrder() = runBlocking {
         rig.createGraph()
-        // Presented deliberately out of identity order: a storage layer that kept the caller's order
-        // would return this list, and one that sorted case-insensitively would return a different one.
+        // Presented out of identity order: a layer that kept the caller's order would return this list,
+        // and one that sorted case-insensitively would return a different one.
         val rules = listOf(
             rule("rule-zulu", "workout-z", ScheduleCadence.Daily),
             rule("rule-alpha", "workout-a", ScheduleCadence.Daily),
@@ -271,8 +260,6 @@ class TargetScheduleSourceRepositoryTest {
             (second as TargetScheduleSourceRead.Source).source
         )
     }
-
-    // ------------------------------------------------------------------ refusals
 
     @Test
     fun aBlankRuleIdentityIsRefusedAndNothingIsWritten() = runBlocking {
@@ -339,9 +326,9 @@ class TargetScheduleSourceRepositoryTest {
     @Test
     fun aBindingToAnotherRevisionsPlanDayIsRefused() = runBlocking {
         rig.createGraph()
-        // A second Program whose revision has its own plan days. The day exists — a foreign key is
-        // satisfied — but presenting this revision's target schedule against another revision's plan
-        // is exactly the confusion the binding's revision scope exists to prevent.
+        // A second Program with its own plan days. The day exists — a foreign key is satisfied — but
+        // presenting this revision's target schedule against another revision's plan is exactly the
+        // confusion the binding's revision scope exists to prevent.
         val other = ProgramGraphFixture.graph("target-source-other")
         rig.programRepository.createProgram(other.program, other.revision, other.slots)
         val foreignDay = ProgramDayId(ProgramGraphFixture.dayId("target-source-other", 1))
@@ -361,8 +348,8 @@ class TargetScheduleSourceRepositoryTest {
     @Test
     fun aBindingToAPlanDayThatDoesNotExistIsRefusedByTheEngineItself() = runBlocking {
         rig.createGraph()
-        // The repository's own membership check refuses this too, so the engine is only reached if the
-        // check were removed; asserting the engine's refusal as well keeps both halves honest.
+        // The repository's membership check refuses this too, so the engine is only reached if that check
+        // were removed; asserting the engine's refusal as well keeps both halves honest.
         val missing = ProgramDayId("day-that-was-never-stored")
         refusal(TargetScheduleSourceException.ProgramDayOutsideRevision::class.java) {
             rig.targetScheduleSourceRepository.store(
@@ -374,8 +361,6 @@ class TargetScheduleSourceRepositoryTest {
         }
         assertNothingWritten()
     }
-
-    // ------------------------------------------------------------------ immutability
 
     @Test
     fun anIdenticalRepeatWritesNothing() = runBlocking {
@@ -442,8 +427,6 @@ class TargetScheduleSourceRepositoryTest {
         assertEquals(0, rig.database.count("program_target_program_day_binding"))
     }
 
-    // ------------------------------------------------------------------ absence and invalid data
-
     @Test
     fun aRevisionWithNoStatedSourceReadsAsATypedAbsence() = runBlocking {
         rig.createGraph()
@@ -476,8 +459,8 @@ class TargetScheduleSourceRepositoryTest {
         val repository = rig.targetScheduleSourceRepository
         assertEquals(TargetScheduleSourceRead.Missing(revisionId), repository.sourceOf(revisionId))
 
-        // The legacy schedule is a fact about this revision, and it is free to change through the
-        // revision's own path. Neither change may manufacture a target rule.
+        // The legacy schedule is free to change through the revision's own path; neither change may
+        // manufacture a target rule.
         rig.database.exec(
             "UPDATE `program_revision` SET `scheduleType` = 'FLEXIBLE_PER_WEEK', " +
                 "`scheduleWeekdays` = NULL, `scheduleSessionsPerWeek` = 4 " +
@@ -497,8 +480,8 @@ class TargetScheduleSourceRepositoryTest {
                 bindings = listOf(TargetProgramDayBinding("workout-a", dayId(1)))
             )
         )
-        // Written with raw SQL because the entity refuses to be constructed in this shape: the point
-        // is that the *read* is what must notice, not that the write is impossible from every angle.
+        // Raw SQL because the entity refuses this shape: the point is that the *read* must notice, not
+        // that the write is impossible from every angle.
         rig.database.exec(
             "UPDATE `program_target_schedule_rule` SET `cadenceType` = 'EVERY_THIRD_DAY' " +
                 "WHERE `revisionId` = '${revisionId.value}'"
@@ -518,10 +501,9 @@ class TargetScheduleSourceRepositoryTest {
 
     @Test
     fun aCadenceFormAndItsPayloadCannotDisagreeInStoredData() {
-        // The entity's own guard holds the discriminator and its payload consistent, so the
-        // self-contradicting row is not merely *reported* on read — it is unrepresentable at all. That
-        // is the stronger property, and it is what makes "read form-first" structural rather than a
-        // discipline the mapper has to maintain.
+        // The entity's own guard keeps the discriminator and its payload consistent, so a
+        // self-contradicting row is unrepresentable rather than merely *reported* on read — which makes
+        // "read form-first" structural rather than a discipline the mapper maintains.
         assertRefused(
             "a DAILY rule carrying an interval",
             cadenceType = "DAILY",
@@ -580,14 +562,12 @@ class TargetScheduleSourceRepositoryTest {
         assertEquals(revisionId, failure.revisionId)
     }
 
-    // ------------------------------------------------------------------ isolation
-
     @Test
     fun twoRevisionsHoldTheirOwnSourcesIndependently() = runBlocking {
         rig.createGraph()
-        // A second revision of the *same* Program: a structural change saves a new revision (§6), and
-        // that new revision has new plan-day rows of its own — which is why a binding cannot be shared
-        // between revisions even when the rule identity is.
+        // A second revision of the *same* Program: a structural change saves a new revision, which has new
+        // plan-day rows of its own — which is why a binding cannot be shared between revisions even when
+        // the rule identity is.
         val other = ProgramGraphFixture.nextRevision("target-source")
         rig.programPlanRepository.saveNewRevision(other, ProgramGraphFixture.FINISHED)
         val otherRevisionId = other.revisionId
@@ -651,8 +631,8 @@ class TargetScheduleSourceRepositoryTest {
     fun identitiesAreReadExactlyAsStoredRatherThanParsedOutOfAnything() = runBlocking {
         rig.createGraph()
         // Every part of this identity could be mistaken for a rule, a workout, a date or a weekday, and
-        // the cadence is a weekday set as well. If any of them were parsed, trimmed or normalized, the
-        // read-back below would not equal what was stored.
+        // the cadence is a weekday set too. Parsed, trimmed or normalised anywhere, the read-back would
+        // not equal what was stored.
         val awkwardRule = "  rule/with\\separators  "
         val awkwardWorkout = " work out : 2026-10-05 MONDAY "
         val source = source(
@@ -673,8 +653,6 @@ class TargetScheduleSourceRepositoryTest {
         assertEquals(awkwardWorkout, read.rules.single().workoutId)
         assertEquals(awkwardWorkout, read.programDayBindings.single().workoutId)
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun dayId(position: Int) = ProgramDayId(ProgramGraphFixture.dayId("target-source", position))
 

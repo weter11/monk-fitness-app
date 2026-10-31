@@ -27,20 +27,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §5's import half, §6's validation, §9's identity and selection rules, and §27's creation unit — driven
- * against the real SQLite engine through the production repositories, the production Scheduler and the
+ * The import half, validation, identity and selection rules, and the creation unit — driven against
+ * the real SQLite engine through the production repositories, the production Scheduler and the
  * production selection owner.
  *
- * ```text
  * the pipeline        bytes → parse → formatVersion → schema → exerciseId → semantic → Import Draft
  * the save            Program + Revision + ProgramDays + ProgramExercises + initial Slots, in one unit
  * the identities      fresh, fresh, fresh — and nothing that came from the file or the draft's handles
  * the ownership       IMPORTED, NOT_STARTED, planned to start the day it arrived, not selected unless asked
  * the absences        no session, no set, no adaptive row, no second revision, no source-side change
- * ```
  *
- * Every refusal test states one thing wrong with one document and asserts *which* answer came back — the
- * point of §13's contract is not that an import fails but that it fails with the right name.
+ * Every refusal test states one thing wrong with one document and asserts *which* answer came back —
+ * the point of the contract is not that an import fails but that it fails with the right name.
  */
 class ProgramImportServiceTest {
 
@@ -48,8 +46,6 @@ class ProgramImportServiceTest {
 
     @After
     fun tearDown() = rig.close()
-
-    // ================================================================ the pipeline (§5)
 
     @Test
     fun aValidFileIsReviewedIntoADraftBeforeAnythingIsWritten() = runBlocking {
@@ -94,8 +90,6 @@ class ProgramImportServiceTest {
             first.days.map { it.programDayId } != second.days.map { it.programDayId }
         )
     }
-
-    // ------------------------------------------------------------------ the refusals, one each
 
     @Test
     fun malformedJsonIsRejectedAsNotAProgramFile() = runBlocking {
@@ -361,8 +355,6 @@ class ProgramImportServiceTest {
         )
     }
 
-    // ================================================================ the save (§27)
-
     @Test
     fun savingCreatesTheProgramItsFirstRevisionAndItsInitialOpportunities() = runBlocking {
         val imported = rig.save(ProgramTransferFixture.VALID_BYTES)
@@ -618,8 +610,6 @@ class ProgramImportServiceTest {
         )
     }
 
-    // ================================================================ selection (§9)
-
     @Test
     fun theDefaultLeavesTheSelectionExactlyAsItWas() = runBlocking {
         rig.storeSourceProgram()
@@ -667,8 +657,6 @@ class ProgramImportServiceTest {
         )
         assertNotNull(imported.programId)
     }
-
-    // ================================================================ atomicity (§27)
 
     @Test
     fun aFailureWhereThePlanIsWrittenLeavesNoProgramNoRevisionAndNoOpportunity() = runBlocking {
@@ -748,8 +736,6 @@ class ProgramImportServiceTest {
             rig.tableCounts()
         )
     }
-
-    // ================================================================ helpers
 
     /** Which tables grew, and by how much — the census every "writes nothing else" claim is made against. */
     private fun movedTables(before: Map<String, Int>, after: Map<String, Int>): Map<String, Int> =

@@ -15,21 +15,16 @@ import kotlin.math.sqrt
 /**
  * Hip Circles (`hip_circles_hold`) — the exercise's own biomechanics on the PUBLISHED frame.
  *
- * ## Stated intent (there is no BPS and no copy for this exercise)
+ * There is no BPS and no copy: `WorkoutGenerator` passes `R.string.ex_hip_circles` as *every* field,
+ * so the catalog entry is the title and nothing else. The movement's identity is derived from the two
+ * channels that do state it: `values-ru`/`values-uk` *"Круговые движения тазом"* / *"Обертання
+ * тазом"* — the circling subject is the **pelvis** — and `ex_hip_cars_desc` claims the leg-circle for
+ * the *other* exercise, so this pose may not be a second leg circle.
  *
- * `WorkoutGenerator` passes `R.string.ex_hip_circles` as *every* field, so the catalog entry is the
- * title and nothing else. The movement's identity is derived (and recorded in the pose's KDoc) from
- * the two channels that do state it:
- *
- *  * `values-ru` `ex_hip_circles` = *"Круговые движения тазом"*, `values-uk` = *"Обертання тазом"* —
- *    the circling subject is the **pelvis**;
- *  * `ex_hip_cars_desc` claims the leg-circle for the *other* exercise (*"A slow hip circle … not a
- *    swing"*), so this pose may not be a second leg circle.
- *
- * The assertions below therefore measure a **pelvic circle**: the pelvis's horizontal locus is a
- * circle traversed through a full turn, while both feet stay planted and the trunk stays upright.
- * Every reading is taken through [PoseFrameSweep] (the pipeline entered exactly as `SkeletonRenderer`
- * enters it), never on a raw `build()` result.
+ * The assertions measure a pelvic circle: the pelvis's horizontal locus is a circle traversed
+ * through a full turn, while both feet stay planted and the trunk stays upright. Every reading is
+ * taken through [PoseFrameSweep] (the pipeline entered exactly as `SkeletonRenderer` enters it),
+ * never on a raw `build()` result.
  */
 class HipCirclesPoseTest {
 

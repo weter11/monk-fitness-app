@@ -21,25 +21,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §30 step 10's **Editor integration**, decided by the real thing.
+ * The **Editor integration**, decided by the real thing.
  *
- * Everything here runs over the production editor service on the production DAOs against a real
- * SQLite engine, so the claims are about behaviour rather than about shape: `Generate` and
- * `Regenerate` write nothing at all, `Save` remains the only thing that creates a revision, and a
- * generated plan that is saved and reloaded describes exactly what the user was shown.
+ * Everything here runs over the production editor service on the production DAOs against a real SQLite
+ * engine, so the claims are about behaviour rather than about shape: `Generate` and `Regenerate` write
+ * nothing at all, `Save` remains the only thing that creates a revision, and a generated plan that is
+ * saved and reloaded describes exactly what the user was shown.
  *
  * The state that matters most is the one asserted first: **generation is a draft operation**. A
- * generate that persisted, or that moved a revision pointer, would break the whole §7 boundary, and
- * it is measured by comparing the row count of every table — the fifteen target tables and the ten
- * the app already shipped — before and after.
+ * generate that persisted, or that moved a revision pointer, would break the whole draft boundary, and
+ * it is measured by comparing the row count of every table — the fifteen target tables and the ten the
+ * app already shipped — before and after.
  */
 class ProgramGeneratedEditorTest {
 
     /** The identity source a generated draft is built with, taken from the rig so it is readable. */
     private val ProgramEditorRig.draftIds: DraftIdSource
         get() = DraftIdSource { ids.newId() }
-
-    // ------------------------------------------------------------------ generation persists nothing
 
     @Test
     fun generateAndRegenerateWriteNothingAtAll() {
@@ -94,14 +92,12 @@ class ProgramGeneratedEditorTest {
         }
     }
 
-    // ------------------------------------------------------------------ Save is what persists
-
     @Test
     fun aGeneratedPlanSavesAsExactlyOneRevisionAndComesBackWhole() {
         val rig = ProgramEditorRig("generated")
         try {
             runBlocking {
-                // §7's `Build for me` entry path: a Program does not exist yet, so the generated plan
+                // The `Build for me` entry path: a Program does not exist yet, so the generated plan
                 // is its first revision and nothing of anybody else's is in it.
                 val generated = ProgramGeneratedEditor(draftFor(rig), rig.draftIds)
                     .generate(GeneratedPlannerRig.request())
@@ -238,7 +234,7 @@ class ProgramGeneratedEditorTest {
 
                 // The generated plan, with its **goal changed and nothing else** — no regeneration:
                 // the same days, the same exercises, the same prescriptions, one configuration fact
-                // different. §6 lists goals/focus among the structural changes.
+                // different. Goals and focus are structural changes.
                 val refocused = generated.draft.copy(
                     focus = FocusPlan.focused(setOf(Focus.PUSH, Focus.PULL))
                 )
@@ -298,10 +294,8 @@ class ProgramGeneratedEditorTest {
 
                 // The Program's own plan is the *user's*: generating into it reconciles rather than
                 // replacing, so the plan's days keep their content and the plan's own elements are
-                // arranged around it. (An owner decision — see
-                // `docs/PROGRAM_GENERATED_PLANNER.md`: `Generate` and `Regenerate` are one
-                // reconciliation, so which button the user pressed cannot decide whose content
-                // survives.)
+                // arranged around it. `Generate` and `Regenerate` are one reconciliation, so which
+                // button the user pressed cannot decide whose content survives.
                 val generated = ProgramGeneratedEditor(
                     rig.service.editDraft(programId).value(),
                     rig.draftIds
@@ -418,7 +412,7 @@ class ProgramGeneratedEditorTest {
 
                 // Saving the stale draft now is measured against what is *stored*, not against the
                 // revision it was opened from, and the answer is a revision rather than a refusal:
-                // §6 and §7 keep editing a policy about stored state, and no RevisionConflict exists.
+                // editing is a policy about stored state, and no RevisionConflict exists.
                 val outcome = rig.service.save(stale).value()
                 assertTrue(
                     "a stale generated draft saves relative to the current revision, with no " +
@@ -442,8 +436,6 @@ class ProgramGeneratedEditorTest {
             rig.close()
         }
     }
-
-    // ------------------------------------------------------------------ the draft, not the plan
 
     @Test
     fun aGeneratedDraftIsValidAndSaveableWithNothingAddedByHand() {
@@ -522,8 +514,6 @@ class ProgramGeneratedEditorTest {
             rig.close()
         }
     }
-
-    // ------------------------------------------------------------------ helpers
 
     /** A draft a user would generate into: named, generated, and not yet planned. */
     private fun draftFor(@Suppress("UNUSED_PARAMETER") rig: ProgramEditorRig): ProgramEditorDraft = ProgramEditorDraft(

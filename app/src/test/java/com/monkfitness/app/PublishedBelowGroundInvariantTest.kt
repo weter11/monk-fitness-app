@@ -8,88 +8,48 @@ import org.junit.Test
 import java.io.File
 
 /**
- * **T2 — the published below-ground invariant: no joint of a published frame may pass through the
- * ground plane its own pose declares.**
+ * The published below-ground invariant: no joint of a published frame may pass through the ground
+ * plane its own pose declares.
  *
- * Engine contract (`docs/ENGINE.md` §4 Coordinate Systems): *"Y is up. Ground level is a Y value
- * (`GroundDefinition.level`, default 0). **'Below ground' means `y < level`**"* — a statement about
- * the whole body, not about the multi-joint subset a pose happens to declare. Every entry of
- * [Joint] is a physical body point (the spine model's `LUMBAR` segment, the `CLAVICLE_*`/`SCAPULA_*`
- * girdle bones, the derived `PALM_*`/`KNUCKLES_*`/`FINGERTIPS_*`/`HEEL_*`/`TOE_*` chains), so the
- * contract applies to **all 33 published joints of every production pose**.
+ * Engine contract: "below ground" means `y < level` for the whole body, not for the multi-joint
+ * subset a pose happens to declare. Every entry of [Joint] is a physical body point (the spine
+ * model's `LUMBAR` segment, the `CLAVICLE_*`/`SCAPULA_*` girdle bones, the derived
+ * `PALM_*`/`KNUCKLES_*`/`FINGERTIPS_*`/`HEEL_*`/`TOE_*` chains), so the rule covers all 33
+ * published joints of every production pose.
  *
- * ## Why this file exists — the two existing floor instruments and what they cannot see (measured)
+ * Why this file exists: neither floor instrument already in the repo can see this class of defect.
+ * `ExerciseValidator.validateFeetGroundPenetration` keys on the 6 foot joints only (and only when
+ * `allowFootGroundPenetration = false`); `EnvironmentPenetrationTest` keys on a pose's declared
+ * support contacts, and for every pinned pose the offending joint is OUTSIDE that family
+ * ([theBelowGroundClassIsInvisibleToTheDeclarationKeyedInstrument] pins that fact). The poses whose
+ * below-ground hand chains the declared-contact instrument misses are exactly those declaring NO
+ * support at all — a declaration-keyed gate can only ever be blind to them.
  *
- * This is the P11 whole-system audit's §4 class, taken to the whole body: the audit's floor findings
- * all describe *"no invariant covers them"* — the M8/M9/M10 record closes with *"(d)
- * `GluteBridgePose`/`PelvicTiltPose` publish their elbows `−30.69`/`−33.35` BELOW their own mat
- * (measured … no declared contact, so no invariant covers them) — the supine arm authoring, recorded
- * as open"*, and the M15 record names the same blindness ("the corpus invariant it owns is a Y-band
- * on **declared contacts**").
+ * The invariant is a lower bound only: a planted contact is authored and derived *onto* the plane,
+ * and the Finalizer's extremity derivation flattens it there exactly — measured `HAND_A = 0.000000`
+ * for the whole floor-planted push-up family, a planted toe at `25.000000` and knee at `15.000000`
+ * (the definition's own contact radii). That is why no upper bound is asserted. Geometry below
+ * `y = 0` is allowed if the pose declares its plane: the plane every consumer reads is
+ * `metadata.environment.ground.level`, so a pose working below zero declares that level and is
+ * judged against it — no new metadata, no per-joint exemption vocabulary, nothing hardcoded to
+ * zero. (`PoseMetadata.groundHeight` is a second, unread field — zero production readers — and is
+ * deliberately not resurrected here.)
  *
- * Measured over the whole production corpus (51 classes × 5 progress × 2 frame conditions, on the
- * published pipeline path `SkeletonPipeline.produceFrame(pose, ctx)`, `origin/main` @ `07dfe38`):
+ * Non-vacuity: the corpus is every concrete pose class in `poses/` (base classes and the registry
+ * excluded), discovered from the source tree, so a new pose cannot escape the gate; the evaluation
+ * count is reconciled as `corpus × Joint.entries × samples × frame conditions` and every pose must
+ * contribute, including the poses that declare no support (the silent-`continue` hole this
+ * invariant cannot have by construction, since it reads no declaration). Frames are captured BY
+ * VALUE: `produceFrame(...).pose` is the Finalizer's reused output buffer, so holding pose
+ * references aliases every sample to the last one. Both frame conditions are sampled: the genuinely
+ * cold first frame of a fresh pose on a fresh pipeline, and the frame an advancing pipeline
+ * publishes.
  *
- * | instrument | what it keys on | below-ground pose/joint pairs it reports |
- * |---|---|---|
- * | `ExerciseValidator.validateFeetGroundPenetration` (default config) | the **6 foot joints only** (`FEET_JOINTS`), and only when `allowFootGroundPenetration = false` | **12 issues in 1 of 6 poses** — `CatCowPose`'s feet (`HEEL_*` worst `−2.422398`). The other 5 poses report **0** |
- * | `EnvironmentPenetrationTest` (B-6) | the joints of a pose's **declared support contacts** | **0 of 30** — for every one of the 6 offending poses the offending joint is OUTSIDE its declared support family ([theBelowGroundClassIsInvisibleToTheDeclarationKeyedInstrument] pins that fact) |
- * | this file | **every joint of every published frame** | **30 pose/joint pairs over 6 poses** (the `DynamicWorldsGreatestStretchPose` back-knee pair left the table with the B2 correction, the `DiamondPushUpPose` elbow pair with the B1 correction, the `IsometricSidePlankPose` support-knee pair with the B3 correction, the `GluteBridgePose`/`PelvicTiltPose` elbow pairs with the B4 correction, and `PelvicTiltPose`'s trunk pairs with B4's trunk half — see [knownBelowGround]) |
- *
- * The 4 poses whose below-ground hand chains are invisible to the declared-contact instrument are
- * exactly the classes that declare NO support at all (`BirdDogPose`, `AlternatingBirdDogPose`,
- * `StaticBirdDogHoldPose`, `QuadrupedThoracicRotationsPose`) — the "flag for assignment" group in
- * `docs/STABILIZATION_AUDIT.md` §4. A declaration-keyed gate can only ever be blind to them.
- *
- * ## What this invariant distinguishes (the three categories the mission names)
- *
- *  1. **Legitimate support / contact geometry.** The invariant is a **lower bound only**:
- *     `y >= declaredGroundLevel − [groundBand]`. A planted contact is authored and derived *onto*
- *     the plane, and the Finalizer's extremity derivation flattens it there **exactly** — measured
- *     `HAND_A = 0.000000` for the whole floor-planted push-up family and a planted toe at
- *     `25.000000`/knee at `15.000000` (the definition's own contact radii, which is why the engine
- *     declares no per-contact rest height and this file asserts **no upper bound**. See
- *     [aPlantedSupportJointRestingOnTheDeclaredPlaneIsNotReported], which witnesses the exact
- *     flattening and that nothing passes under it).
- *  2. **Geometry a pose is *allowed* to publish below `y = 0`.** The repository HAS a channel for
- *     this, and it is the pose's own declaration: the plane every consumer reads is
- *     `metadata.environment.ground.level` (`SkeletonPoseFinalizer`, `SkeletonRenderer`,
- *     `SkeletonSnapshotRenderer`, `ExerciseValidator` all resolve it from the pose's environment).
- *     This invariant is measured against **that declared plane**, so a pose that legitimately works
- *     below `y = 0` declares its plane and is judged against it — no new metadata, no per-joint
- *     exemption vocabulary, and nothing hardcoded to zero ([theInvariantJudgesAgainstThePosesOwnDeclaredPlane];
- *     all 51 production poses declare `level = 0.0` today, measured). `PoseMetadata.groundHeight`
- *     exists as a second, **unread** field (grep: zero production readers) and is deliberately not
- *     resurrected here.
- *  3. **Genuine ground penetration.** A published joint below the pose's own plane by more than
- *     [groundBand] — 30 pose/joint pairs today, attributed in [knownBelowGround].
- *
- * ## Non-vacuity (the B-6 lesson, applied to the whole body)
- *
- *  * The corpus is **every** concrete production pose class in `poses/` (base classes and the
- *    registry excluded), discovered from the source tree, so a new pose cannot escape the gate.
- *  * The evaluation count is reconciled: `corpus × Joint.entries × samples × frame conditions`, and
- *    every pose must contribute — **including the poses that declare no support**, which is the
- *    silent-`continue` hole this invariant cannot have by construction (it reads no declaration;
- *    [everyPublishedJointOfEveryProductionPoseIsEvaluated] asserts it explicitly).
- *  * The frames are captured **by value**: `produceFrame(...).pose` is the Finalizer's reused output
- *    buffer, so holding pose references aliases every sample to the last one (the T-7 trap).
- *  * Both frame conditions are sampled: the genuinely cold first frame of a fresh pose on a fresh
- *    pipeline, and the frame an advancing pipeline publishes — the same shape the sibling B-6
- *    invariant uses.
- *  * The attribution table is exact and self-guarding: an unattributed violation fails, a pinned
- *    entry that no longer violates fails (so fixing a pose **forces** its entry out in the same
- *    change), a magnitude that moves fails, and every pinned pose must carry an attribution entry.
- *
- * ## Scope — this is an instrument, not a fix (deliberate)
- *
- * The below-ground geometry measured here is **not** fixed by this change; none of it is caused by
- * this file (no production file is touched: whole-tree diff = this test file + the audit record).
- * The pinned entries are the *open* items the audit already names, each with its owning pass, and
- * each entry is an exit criterion for that pass — not a tolerance, and not a license:
- * [groundBand] is unchanged and applies to every observation, and the table can only shrink by
- * fixing the pose (a stale entry fails). [attribution] documents, per pose, why the entry is open
- * and which record already owns it.
+ * The pin table is self-guarding: an unattributed violation fails, a pinned entry that no longer
+ * violates fails (so fixing a pose FORCES its entry out in the same change), a magnitude that
+ * moves fails, and every pinned pose must carry an attribution entry. The pinned entries are open
+ * items with owning passes, not tolerances and not a licence: [groundBand] applies to every
+ * observation and the table can only shrink by fixing the pose.
  */
 class PublishedBelowGroundInvariantTest {
 
@@ -101,13 +61,13 @@ class PublishedBelowGroundInvariantTest {
     /**
      * The clearance a joint must keep below its pose's declared ground plane.
      *
-     * Not a tuned threshold: the engine places a derived contact ON the plane **exactly** (measured
+     * Not a tuned threshold: the engine places a derived contact ON the plane exactly (measured
      * `0.000000` for the plant's planted hand across the push-up family at every sampled progress
      * and both frame conditions), and `ExerciseValidator`'s own foot rule uses `0.01`, so this band
      * only has to absorb float noise on a joint authored *at* the plane. Measured separation over
      * the whole corpus: the closest legitimate reading is `−1e-4`-scale or `0.000000`, the smallest
-     * genuine violation is `−0.8409` (`QuadrupedThoracicRotationsPose` `FINGERTIPS_A`) — i.e. the
-     * band sits three orders of magnitude below the smallest defect it must catch.
+     * genuine violation is `−0.8409` (`QuadrupedThoracicRotationsPose` `FINGERTIPS_A`) — the band
+     * sits three orders of magnitude below the smallest defect it must catch.
      */
     private val groundBand = 0.05f
 
@@ -133,10 +93,6 @@ class PublishedBelowGroundInvariantTest {
         val delta: Float get() = y - ground
         val key: Pair<String, Joint> get() = pose to joint
     }
-
-    // ------------------------------------------------------------------------------------------
-    // Corpus + scan (the sibling corpus invariants' enumeration, unchanged in shape)
-    // ------------------------------------------------------------------------------------------
 
     private fun context(p: Float) = PoseContext(
         progress = p, side = Side.RIGHT, definition = def,
@@ -181,16 +137,16 @@ class PublishedBelowGroundInvariantTest {
 
     /**
      * All observations of one pose under both frame conditions, through the production pipeline.
-     * Note the pose's DECLARED plane is read from its metadata — never assumed to be zero.
+     * The pose's DECLARED plane is read from its metadata — never assumed to be zero.
      *
-     * @param fresh builds a fresh, independent instance (the cold leg needs a genuinely cold pose;
-     *   the twin's instance cannot be produced by name reflection).
+     * `fresh` builds a fresh, independent instance: the cold leg needs a genuinely cold pose, and
+     * the twin's instance cannot be produced by name reflection.
      */
     private fun scan(fresh: () -> PoseBuilder, name: String): List<Observation> {
         val ground = fresh().metadata.environment.ground.level
         val out = mutableListOf<Observation>()
 
-        // COLD — the genuinely cold first frame: a fresh pose instance on a fresh pipeline.
+        // COLD: the genuinely cold first frame, a fresh pose instance on a fresh pipeline.
         for (p in samples) {
             val cold = SkeletonPipeline(def).produceFrame(fresh(), context(p)).pose
             out.addAll(measure(snapshot(cold), name, FrameCondition.COLD, p, ground))
@@ -212,10 +168,6 @@ class PublishedBelowGroundInvariantTest {
     /** The observation count the corpus implies: every joint of every pose, every sample, both conditions. */
     private fun expectedObservationCount(corpus: List<Pair<String, PoseBuilder>>): Int =
         corpus.size * Joint.entries.size * samples.size * FrameCondition.entries.size
-
-    // ------------------------------------------------------------------------------------------
-    // The rule
-    // ------------------------------------------------------------------------------------------
 
     /** The worst (most negative) delta of every pose/joint pair. */
     private fun worstByPoseJoint(observations: List<Observation>): Map<Pair<String, Joint>, Float> =
@@ -243,56 +195,17 @@ class PublishedBelowGroundInvariantTest {
     private fun declaredJointFamily(builder: PoseBuilder): Set<Joint> =
         builder.metadata.support.contacts.flatMap { SupportMath.jointsFor(it.point) }.toSet()
 
-    // ------------------------------------------------------------------------------------------
-    // The invariant — every joint of every published frame, against its pose's own declared plane
-    // ------------------------------------------------------------------------------------------
-
     /**
-     * Pre-existing, measured, **NOT fixed by T2**: the production poses that publish joints below
+     * Pre-existing, measured, NOT fixed by this file: the production poses that publish joints below
      * their own declared ground plane on the published pipeline path, with the worst measured depth
-     * per joint (worst over both frame conditions and all five samples).
+     * per joint (worst over both frame conditions and all five samples; the depths are identical
+     * under both conditions — the geometry is not frame-condition sensitive here).
      *
-     * An entry is an **open item with an owning pass** ([attribution]), not an exemption from the
-     * rule: [groundBand] is unchanged and applies to every observation.
-     *  * an entry that is no longer violating (a pose got fixed) makes the suite FAIL, forcing the
-     *    entry's removal in that same change;
-     *  * an entry whose magnitude moves fails;
-     *  * a below-ground pose/joint pair that is not listed fails.
-     *
-     * Measured on `origin/main` @ `07dfe38`, 5 progress samples × 2 frame conditions; the depths are
-     * identical under both conditions for every entry (the geometry is not frame-condition
-     * sensitive here).
-     *
-     * **Entries leave this table only by the pose being FIXED.** Five have now left it, each in the
-     * change that corrected it — and the stale-pin guard fired on each, listing exactly the corrected
-     * pairs, so the entries could not outlive their exit criterion:
-     *  * `DynamicWorldsGreatestStretchPose`'s `KNEE_B −46.1056` by B2 (`fix/b2-wgs-back-knee-plane`,
-     *    the pose-side back-leg stance + a pole derived from the leg's own chord); the corrected pose
-     *    publishes `KNEE_B y = +13.1629` at every phase on the same pipeline path;
-     *  * `DiamondPushUpPose`'s `ELBOW_A`/`ELBOW_P −19.9130` by B1 (`fix/b1-diamond-pushup-elbow-plane`,
-     *    the elbow bend re-authored onto the pose's own trunk long axis); the corrected pose measures
-     *    `ELBOW_A/P` worst `+16.3014` and is now a planted control in
-     *    [aPlantedSupportJointRestingOnTheDeclaredPlaneIsNotReported]'s family;
-     *  * `IsometricSidePlankPose`'s `KNEE_B −25.8897` by B3 (`fix/b3-sideplank-knee-plane`, the support
-     *    leg's residual knee bend authored out of the mat); the corrected pose publishes
-     *    `KNEE_B y = +44.8145 … +57.7449` and its gate is `IsometricSidePlankKneePlaneTest`;
-     *  * `GluteBridgePose`'s `ELBOW_A`/`ELBOW_P −30.6914` and `PelvicTiltPose`'s
-     *    `ELBOW_A`/`ELBOW_P −33.3501` by B4 (`fix/b4-glute-bridge-pelvic-tilt-elbow-plane`, the supine
-     *    arms' bend side re-authored onto the poses' own lateral axis); both corrected poses publish
-     *    `ELBOW_A/P y = +7.0594 … +12.7988` (measured over the dense sweep) and their gate is
-     *    `SupineArmElbowPlaneTest`. `GluteBridgePose` leaves this table entirely (the elbow pair was
-     *    its only entry); `PelvicTiltPose` kept its trunk entries at that point;
-     *  * `PelvicTiltPose`'s `CHEST`/`SHOULDER_A`/`SHOULDER_P −0.3659`, `NECK_END −2.5295` and
-     *    `HEAD_POS −2.5384` by B4's TRUNK half (the tilt's direction re-authored out of the mat — the
-     *    pose was rotating its rigid trunk past the flat supine orientation, carrying the chain
-     *    `120/138·sin(0.12)` below a pelvis whose resting layer is only `14`); the corrected pose
-     *    publishes `CHEST/SHOULDER_A/P +28.3650`, `NECK_END +30.5198` and `HEAD_POS +30.5197` at the top
-     *    of the rep, and its gate is `PelvicTiltTrunkPlaneTest`. That entry was the pose's last one, so
-     *    `PelvicTiltPose` now leaves this table entirely.
-     *
-     * The instrument-table counts and the pinned-pair census are therefore `30` pairs over `6` poses
-     * (from `43`/`11` on `07dfe38`, `39`/`8` on the B2+B1+B3 tree, `35`/`7` on the B4-elbow tree),
-     * re-measured on the tree that carries all five corrections.
+     * An entry is an open item with an owning pass ([attribution]), not an exemption from the rule:
+     * [groundBand] applies to every observation. An entry that stops violating (a pose got fixed)
+     * makes the suite FAIL, forcing the entry's removal in that same change; an entry whose
+     * magnitude moves fails; a below-ground pose/joint pair that is not listed fails. Entries leave
+     * this table only by the pose being FIXED.
      */
     private val knownBelowGround: Map<String, Map<Joint, Float>> = mapOf(
         "AlternatingBirdDogPose" to mapOf(
@@ -391,14 +304,10 @@ class PublishedBelowGroundInvariantTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // Non-vacuity — the whole corpus, every joint, and the poses a declaration-keyed gate skips
-    // ------------------------------------------------------------------------------------------
-
     /**
      * The corpus is every concrete production pose class, every one of its 33 published joints is
-     * measured at every sampled progress under both frame conditions, and **the poses that declare
-     * no support are measured too** — the invariant reads no declaration, so it cannot inherit the
+     * measured at every sampled progress under both frame conditions, and the poses that declare no
+     * support are measured too — the invariant reads no declaration, so it cannot inherit the
      * silent `continue` a declaration-keyed corpus has.
      */
     @Test
@@ -465,19 +374,12 @@ class PublishedBelowGroundInvariantTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // The three categories, each witnessed
-    // ------------------------------------------------------------------------------------------
-
     /**
-     * **Category (a) — legitimate support geometry is not a violation.** A planted contact is
-     * derived ONTO the plane: the floor-planted push-up family's lowest published joint is exactly
-     * `0.000000` at every sample and under both conditions, i.e. the body touches the plane and
-     * (`DiamondPushUpPose` joined this list when B1 corrected its elbow pole: it was the one
-     * floor-planted push-up whose realized elbow used to pass below the same plane, and with the
-     * elbow above the hand its derived hand chain flattens onto the plane like its siblings'.)
+     * Legitimate support geometry is not a violation. A planted contact is derived ONTO the plane:
+     * the floor-planted push-up family's lowest published joint is exactly `0.000000` at every
+     * sample and under both conditions, i.e. the body touches the plane and never passes under it.
      *
-     * This is also why the invariant asserts **no upper bound**: a planted toe at `25.000000` and a
+     * This is also why the invariant asserts no upper bound: a planted toe at `25.000000` and a
      * planted knee at `15.000000` are the definition's own contact radii, not defects.
      */
     @Test
@@ -507,9 +409,9 @@ class PublishedBelowGroundInvariantTest {
     }
 
     /**
-     * **Category (c) — a joint sunk under the plane is reported**, whatever kind of joint it is: a
-     * declared contact joint, an IK-realised joint, and a trunk joint are all covered, because the
-     * invariant iterates [Joint.entries] and not a contact family.
+     * A joint sunk under the plane is reported, whatever kind of joint it is: a declared contact
+     * joint, an IK-realised joint and a trunk joint are all covered, because the invariant iterates
+     * [Joint.entries] and not a contact family.
      */
     @Test
     fun aJointSunkBelowTheDeclaredPlaneIsReported() {
@@ -548,12 +450,12 @@ class PublishedBelowGroundInvariantTest {
     }
 
     /**
-     * **Category (b) — geometry below `y = 0` is allowed if the pose declares its plane.** The
-     * repository's existing channel is the pose's own `metadata.environment.ground.level`; every
-     * consumer resolves the plane from there. This twin is the production bird dog (which declares
-     * no support, so nothing in its geometry is derived from the plane) with the plane lowered: its
-     * published geometry is byte-identical (measured), it is a pinned violation at level 0, and it
-     * is not a violation at `-25` or `-50`.
+     * Geometry below `y = 0` is allowed if the pose declares its plane. The repository's existing
+     * channel is the pose's own `metadata.environment.ground.level`; every consumer resolves the
+     * plane from there. This twin is the production bird dog (which declares no support, so nothing
+     * in its geometry is derived from the plane) with the plane lowered: its published geometry is
+     * byte-identical (measured), it is a pinned violation at level 0, and it is not a violation at
+     * `-25` or `-50`.
      */
     @Test
     fun theInvariantJudgesAgainstThePosesOwnDeclaredPlane() {
@@ -585,18 +487,12 @@ class PublishedBelowGroundInvariantTest {
     }
 
     /**
-     * **The counterfactual the mission asks for — a declaration-keyed gate sees NONE of these.**
-     * For every pinned violation, the offending joint is outside the pose's own declared support
-     * family (`metadata.support.contacts` → the B-4 canonical mapping, the exact channel
+     * The counterfactual: a declaration-keyed gate sees NONE of these. For every pinned violation,
+     * the offending joint is outside the pose's own declared support family
+     * (`metadata.support.contacts` → the canonical mapping, the exact channel
      * `EnvironmentPenetrationTest` keys on). Measured on the pinned table: 30 of 30 — which is why
-     * the B-6 invariant, the sole owner of the floor on the declaration channel, is green today
-     * with all 30 pairs present. (`DiamondPushUpPose`'s pair left the table with the B1 correction:
-     * its elbows were never inside its declared family either, and the pose is now a planted
-     * control in [aPlantedSupportJointRestingOnTheDeclaredPlaneIsNotReported];
-     * `DynamicWorldsGreatestStretchPose`'s with the B2 correction,
-     * `IsometricSidePlankPose`'s with the B3 correction, and the supine poses' elbow pairs with the
-     * B4 correction — `GluteBridgePose` and `PelvicTiltPose` both leave this table entirely, the
-     * latter with B4's trunk half.)
+     * that invariant, the sole owner of the floor on the declaration channel, is green today with
+     * all 30 pairs present.
      */
     @Test
     fun theBelowGroundClassIsInvisibleToTheDeclarationKeyedInstrument() {
@@ -617,8 +513,8 @@ class PublishedBelowGroundInvariantTest {
             emptyList<String>(), covered
         )
 
-        // And the identical statement about the INSTRUMENTS: the validator's floor rule covers the
-        // 6 foot joints only, so 6 of the 7 poses cannot be seen by it at all.
+        // And the same statement about the INSTRUMENTS: the validator's floor rule covers the 6 foot
+        // joints only, so 6 of the 7 poses cannot be seen by it at all.
         val footJoints = setOf(Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
         val validatorVisible = knownBelowGround.filterValues { joints -> joints.keys.any { it in footJoints } }
         assertEquals(
@@ -627,10 +523,6 @@ class PublishedBelowGroundInvariantTest {
             listOf("CatCowPose"), validatorVisible.keys.toList()
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // Sensitivity controls for the table itself
-    // ------------------------------------------------------------------------------------------
 
     /** A pair the table does not name is reported as unattributed (the table cannot absorb it). */
     @Test
@@ -671,10 +563,6 @@ class PublishedBelowGroundInvariantTest {
             setOf(oneFixed), stalePins(partially)
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // Twin
-    // ------------------------------------------------------------------------------------------
 
     /** The production bird dog (which declares NO support) with its declared ground plane lowered. */
     private class LoweredPlaneBirdDog(level: Float) : PoseBuilder by BirdDogPose() {

@@ -14,14 +14,12 @@ import java.lang.reflect.Proxy
  * The deployable half of the adaptive persistence contract: the schema a version-6 device receives
  * when it upgrades, and the stored representation of the adaptive vocabulary.
  *
- * This repository has no Robolectric, no `androidx.test` and no instrumentation source set, so Room's
- * own migration test helpers are not available here. What is available is the migration itself, which
- * is a plain function over `SupportSQLiteDatabase` — an interface, so it can be driven on the JVM by a
- * recording proxy that captures exactly the statements a device would execute. The DDL is then
- * compared token-for-token against the SQL Room generates for the two entities, and the entity
- * registration and database version are read from the source that declares them. Between them these
- * checks prove what a migration test would: the upgrade is additive, it creates the schema Room
- * expects to find, no existing table is touched, and history cannot be rewritten through the DAO.
+ * There is no Robolectric, no `androidx.test` and no instrumentation source set here, so Room's
+ * migration test helpers are unavailable. What is available is the migration itself, a plain function
+ * over `SupportSQLiteDatabase` — an interface, so it is driven on the JVM by a recording proxy that
+ * captures exactly the statements a device would execute. Between them these checks prove what a
+ * migration test would: the upgrade is additive, it creates the schema Room expects to find, no
+ * existing table is touched, and history cannot be rewritten through the DAO.
  */
 class AdaptivePersistenceSchemaTest {
 
@@ -30,7 +28,6 @@ class AdaptivePersistenceSchemaTest {
         if (dir.isDirectory) dir else File("app/$dir")
     }
 
-    /** Every statement one migration executes, in order. */
     private fun migrateRecording(): List<String> {
         val statements = mutableListOf<String>()
         val database = Proxy.newProxyInstance(
@@ -45,10 +42,7 @@ class AdaptivePersistenceSchemaTest {
         return statements
     }
 
-    /**
-     * The statement with every whitespace run collapsed, and whitespace around punctuation removed, so
-     * that a multi-line DDL and Room's single-line DDL are comparable token for token.
-     */
+    /** Whitespace-collapsed, so a multi-line DDL and Room's single-line DDL compare token for token. */
     private fun normalized(sql: String): String = sql
         .replace(Regex("\\s+"), " ")
         .replace("( ", "(")
@@ -58,8 +52,6 @@ class AdaptivePersistenceSchemaTest {
 
     private fun statementsFor(table: String): String =
         migrateRecording().single { it.contains("`$table`") }
-
-    // ---- the migration ---------------------------------------------------------------------------
 
     @Test
     fun theMigrationMovesTheDatabaseFromVersion6ToVersion7() {
@@ -114,8 +106,8 @@ class AdaptivePersistenceSchemaTest {
     @Test
     fun theMigrationCreatesTheSchemaRoomExpectsForTheTwoEntities() {
         // Room validates a migrated schema against its own expectations when it opens the database, so
-        // the hand-written DDL has to be the SQL Room generates for these entities. These two literals
-        // are that SQL, read from the KSP-generated `createAllTables` for this build.
+        // the hand-written DDL has to be exactly the SQL Room generates. These literals are that SQL,
+        // read from the KSP-generated `createAllTables` for this build.
         val expectedStateTable =
             "CREATE TABLE IF NOT EXISTS `family_progression_state` (`familyId` TEXT NOT NULL, " +
                 "`progressionLevel` INTEGER NOT NULL, `currentExerciseId` TEXT, `adaptationState` " +
@@ -165,17 +157,10 @@ class AdaptivePersistenceSchemaTest {
         assertTrue("the program revision is stored too", ddl.contains("`programRevision` INTEGER NOT NULL"))
     }
 
-    // ---- the database declaration ------------------------------------------------------------------
-
     @Test
     fun theDatabaseDeclaresOnlyTheRetainedAndTheTargetSchema() {
         val source = File(mainSources, "data/local/AppDatabase.kt").readText()
 
-        // The version is the last step of the chain, and the chain is what a device runs. Phase 8
-        // added the target-occurrence identity seam at 13; §30 step 14 added the target occurrence's
-        // semantic tables at 14; Stage 18 added the revision-owned explicit target schedule source at
-        // 15; §30 step 28 added the user's exercise preference column at 16; P29 added the historical
-        // focus columns at 17, so 17 is what the schema declares.
         assertTrue(
             "the database version moves with the schema: 13 is Phase 8's additive target-occurrence " +
                 "identity seam, 14 is §30 step 14's target-occurrence semantic payload, 15 is " +
@@ -213,21 +198,20 @@ class AdaptivePersistenceSchemaTest {
                 "ProgramDayEntity",
                 "ProgramExerciseEntity",
                 "ProgramWorkoutSlotEntity",
-                // §30 step 14: the target occurrence's semantic payload, declared immediately after the
-                // slot whose occurrence they are. They are **new storage**, not a replacement for any
-                // retired table — the retired ones below are still absent because MIGRATION_11_12 drops
-                // them, and nothing here was renamed into their place.
+                // The target occurrence's semantic payload, declared immediately after the slot whose
+                // occurrence they are. **New storage**, not a replacement for any retired table — the
+                // retired ones below are still absent because MIGRATION_11_12 drops them, and nothing
+                // here was renamed into their place.
                 "ProgramTargetOccurrenceEntity",
                 "ProgramTargetOccurrenceComponentEntity",
-                // Stage 18: the revision-owned explicit target schedule source, declared immediately
-                // after the target occurrence's own tables — they are the semantic *configuration* the
-                // occurrence's presentation reads, and they are new storage, not a replacement for
-                // anything retired.
+                // The revision-owned explicit target schedule source, declared immediately after the
+                // target occurrence's own tables: the semantic *configuration* the occurrence's
+                // presentation reads, and new storage rather than a replacement for anything retired.
                 "ProgramTargetScheduleRuleEntity",
                 "ProgramTargetProgramDayBindingEntity",
-                // P31: the app-owned progression relation catalogue — new storage for a family's
-                // declared ladder, declared immediately after the target schedule source it sits beside
-                // as a *definition* rather than a revision's own state.
+                // The app-owned progression relation catalogue: new storage for a family's declared
+                // ladder, declared beside the target schedule source as a *definition* rather than a
+                // revision's own state.
                 "ProgressionRelationVariantEntity",
                 "WorkoutSessionEntity",
                 "SessionSnapshotEntity",
@@ -265,7 +249,6 @@ class AdaptivePersistenceSchemaTest {
             assertTrue("$migration is registered", migrations.contains(migration))
         }
 
-        // The retained and target accessors are reachable from the database...
         for (accessor in listOf(
             "fun nutritionDao(): NutritionDao",
             "fun postureProgressDao(): PostureProgressDao",
@@ -274,8 +257,7 @@ class AdaptivePersistenceSchemaTest {
             assertTrue("$accessor is reachable from the database", source.contains(accessor))
         }
 
-        // ...and the retired ones are not declared at all. This is the §33 half of the claim: a
-        // schema that dropped a table must not still hand out a DAO over it.
+        // A schema that dropped a table must not still hand out a DAO over it.
         for (retired in listOf(
             "fun progressDao(): ProgressDao",
             "fun familyProgressionStateDao(): FamilyProgressionStateDao",
@@ -298,15 +280,15 @@ class AdaptivePersistenceSchemaTest {
             )
         }
 
-        // A family's current state is a *position*, so it is replaced rather than accumulated — and it is
-        // never deleted through this DAO either.
+        // A family's current state is a *position*, so it is replaced rather than accumulated — and it
+        // is never deleted through this DAO either.
         assertTrue(
             "a family state is upserted",
             familyStateDao.contains("@Insert(onConflict = OnConflictStrategy.REPLACE)")
         )
         assertFalse("a family state DAO does not delete", familyStateDao.contains("@Delete"))
 
-        // The one place either table is cleared is §16's Full reset, and it says so in one file.
+        // The one place either table is cleared is the Full reset, and it says so in one file.
         val maintenanceDao = File(mainSources, "data/local/MaintenanceDao.kt").readText()
         assertTrue(
             "the reset clears the target decision rows",
@@ -317,8 +299,6 @@ class AdaptivePersistenceSchemaTest {
             maintenanceDao.contains("DELETE FROM `program_family_progression_state`")
         )
     }
-
-    // ---- the stored vocabulary ----------------------------------------------------------------------
 
     @Test
     fun everyAdaptationStateRoundTripsThroughItsStoredName() {
@@ -340,9 +320,6 @@ class AdaptivePersistenceSchemaTest {
         val converters = AdaptiveTypeConverters()
 
         assertThrows(IllegalArgumentException::class.java) { converters.adaptiveStateFromName("PROMOTED") }
-        // The action and reason-code halves of this probe belonged to the Stage-1 vocabulary and its
-        // converter pair, both retired by §30 step 15; what a *stored name* must do — resolve or fail
-        // loudly — is asserted for the vocabulary that survives.
         assertThrows(IllegalArgumentException::class.java) {
             converters.adaptiveStateFromName("RECOVERY_LOAD")
         }
@@ -352,9 +329,9 @@ class AdaptivePersistenceSchemaTest {
     fun theStoredVocabularyIsTheExactTokenEarlierBuildsWrote() {
         val converters = AdaptiveTypeConverters()
 
-        // The token per value, spelled out. A renamed enum member must fail here rather than silently
-        // orphan every row an earlier build wrote under the old name — which is what makes a record
-        // written before a schema evolution still readable after it.
+        // The token per value, spelled out: a renamed enum member must fail here rather than silently
+        // orphan every row an earlier build wrote under the old name, which is what keeps a record
+        // written before a schema evolution readable after it.
         assertEquals(
             mapOf(
                 AdaptiveState.HOLD to "HOLD",

@@ -14,14 +14,11 @@ import kotlin.math.sqrt
  * Band Pull-Aparts (`band_pull_aparts_standard`) — the exercise's own biomechanics on the PUBLISHED
  * frame.
  *
- * Stated intent (the only in-repo specification for this exercise; no BPS exists for it):
- * `ex_band_pull_aparts_desc` "reinforces scapular retraction and shoulder alignment";
- * `steps` §1 "Hold a light resistance band at shoulder height with straight arms", §2 "Pull the band
- * apart by moving the hands out to the sides", §3 "Finish when the band reaches the chest and the
- * shoulder blades squeeze together", §4 "Return to the start under control and repeat";
- * `tech` "Keep the ribs stacked over the pelvis and avoid arching the back… Think about moving from
- * the upper back, not the wrists"; `mistakes` "Bent wrists, shrugged shoulders, and letting the lower
- * back overextend to finish the rep".
+ * The copy is the only in-repo specification (no BPS): hold a light band at shoulder height with
+ * straight arms, pull it apart by moving the hands out to the sides, finish when the band reaches the
+ * chest and the shoulder blades squeeze together, return under control — ribs stacked over the
+ * pelvis, moving from the upper back rather than the wrists, no bent wrists, no shrugged shoulders,
+ * no arching the lower back to finish the rep.
  */
 class BandPullApartPoseTest {
 
@@ -177,7 +174,7 @@ class BandPullApartPoseTest {
     }
 
     /**
-     * The standing family's own reachability reading: the M8-corrected standing poses author their
+     * The standing family's own reachability reading: the standing poses author their
      * limbs at the chain roots they own, and the leg chain sits exactly at its extension cap (measured
      * `0.047` for this family). The validator's own flag threshold is `0.1`.
      */

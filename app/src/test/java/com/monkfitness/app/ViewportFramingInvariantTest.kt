@@ -23,63 +23,31 @@ import org.junit.Test
 import java.io.File
 
 /**
- * **C1 — the viewport containment invariant: every frame of every production pose is drawn WHOLE on
- * the surface it is drawn on.**
+ * The viewport containment invariant: every frame of every production pose is drawn WHOLE on the
+ * surface it is drawn on.
  *
- * ## The defect this pins (measured, on the production path)
+ * The defect this pins: `Camera` maps world units onto pixels one-for-one (times the pose's authored
+ * zoom) and anchors the world origin at a hardcoded `centerY = 0.7`, so a pose's drawn size is
+ * independent of the surface. The authored zoom (`1.2`-`1.3`) is composed for a tall canvas, so on
+ * the hero canvas the app actually uses (`ExerciseHeroMedia`, `861x531` px) a standing pose — and any
+ * pose with the arms overhead — is taller than the surface and loses its head off the top edge.
+ * Measured over this file's own sweep (every production pose × `5` phases × `5` view angles, straight
+ * ahead to the `+-90`° the rotation gesture allows): `1282` of `2805` frames clip on `861x531` (`26`
+ * of `51` poses), `854` on `1280x720`, `885` on `1440x700`, `15` on `1000x1000`, `0` on `1080x1920`.
+ * The poses are fine and the framing is not: the same frames that clip a phone-sized canvas pass an
+ * oversized one, which is why the defect survived a suite whose only viewport was oversized.
  *
- * `Camera` maps world units onto pixels one-for-one (times the pose's authored zoom) and anchors the
- * world origin at a hardcoded `centerY = 0.7`, so a pose's drawn size is *independent of the
- * surface*. The authored zoom (`1.2`-`1.3`) is composed for a tall canvas: at the hero canvas the
- * app actually uses (`ExerciseHeroMedia`, `861x531` px) a standing pose — and any pose with the arms
- * overhead — is taller than the surface and loses its head off the top edge. Measured with the
- * authored camera over this file's own sweep (every production pose × `5` phases × `5` view angles
- * from straight ahead to the `+-90`° the rotation gesture allows):
+ * The rule under test: [CameraFraming] derives the frame from the frame's own drawn bounds — the zoom
+ * is the largest one, not exceeding the pose's authored zoom, at which the whole drawn silhouette
+ * lies inside the viewport, anchored where the pose anchored it. The silhouette measured here is the
+ * one the renderers actually stroke ([silhouette]), so the invariant is checked against what is
+ * drawn, not against a model of it.
  *
- * | canvas | frames clipped | poses |
- * |---|---|---|
- * | `861x531` (the hero canvas) | 1282 of 2805 | 26 of 51 |
- * | `1280x720` | 854 of 2805 | 22 |
- * | `1440x700` | 885 of 2805 | 22 |
- * | `1000x1000` | 15 of 2805 | 2 |
- * | `1080x1920` | 0 of 2805 | 0 |
- *
- * — i.e. the poses are fine and the framing is not: the same frames that clip a phone-sized canvas
- * pass an oversized one, which is why the defect survived a suite whose only viewport was oversized.
- *
- * ## The rule under test
- *
- * [CameraFraming] derives the frame from the frame's own drawn bounds: **the zoom is the largest one,
- * not exceeding the pose's authored zoom, at which the whole drawn silhouette lies inside the
- * viewport, anchored where the pose anchored it.** The silhouette measured here is the one the
- * renderers actually stroke — see [silhouette] — so the invariant is checked against what is drawn,
- * not against a model of it.
- *
- * ## What each test is for
- *
- *  * [everyFrameOfEveryPoseIsDrawnWholeOnTheRealHeroCanvas] — the gate: containment for the whole
- *    corpus on the hero canvas and on two other realistic surfaces, at every reachable view angle.
- *  * [thePosesTheAuthoredFrameClipsAreDrawnWholeAtEveryPhaseOfTheirRep] — the previously-clipped
- *    standing poses, densely (`51` phases × both frame conditions), so a frame that only fits at the
- *    sampled phases cannot hide.
- *  * [theAuthoredFrameReallyDoesClip] — the non-vacuity anchor: the pre-C1 path must still measure as
- *    clipping, the clipped inventory is pinned by name, and the oversized canvases the old suite used
- *    must still measure as fitting (that is why the defect survived).
- *  * [framesThatAlreadyFitAreLeftBitIdentical] — no regression: any frame whose authored silhouette
- *    already fits is projected bit-identically, with the wide/supine/prone families named explicitly.
- *  * [anOversizedCanvasIsUnaffected] — the surfaces the old suite used are unchanged.
- *  * [theFitIsPureIdempotentAndOnlyEverShrinks] — the fit is a fixed point measured against the
- *    AUTHORED zoom, so it cannot ratchet down as a rep's frames are drawn, and never enlarges.
- *  * [theViewpointRemainsThePosesOwn] — the fit owns the scale alone: yaw, pitch and the anchor stay
- *    exactly what `PoseMetadata.camera` authored (`docs/ENGINE.md` §10).
- *
- * ## Deliberately NOT asserted
- *
- * The ground grid, the contact shadows and the environment props (box, step, bench, wall) are the
- * floor and the pose's furniture, laid out to a horizon that leaves the frame by construction — they
- * are not the subject, and C1 does not move them. How *large* a full-standing pose should read on a
- * very small canvas (here it is shrunk to fit, which is containment but not composition) is a
- * presentation decision this instrument does not take.
+ * Deliberately NOT asserted: the ground grid, the contact shadows and the environment props (box,
+ * step, bench, wall) are the floor and the pose's furniture, laid out to a horizon that leaves the
+ * frame by construction — they are not the subject, and the fit does not move them. How large a
+ * full-standing pose should read on a very small canvas (here it is shrunk to fit, which is
+ * containment but not composition) is a presentation decision this instrument does not take.
  */
 class ViewportFramingInvariantTest {
 
@@ -101,12 +69,8 @@ class ViewportFramingInvariantTest {
     /** Containment is closed-form, so the only slack is float noise at the boundary. */
     private val pixelSlack = 0.01f
 
-    // ------------------------------------------------------------------------------------------
-    // The production view setup
-    // ------------------------------------------------------------------------------------------
-
     /**
-     * The view setup after C1, exactly as `SkeletonRenderer`'s canvas block performs it: the pipeline
+     * The view setup after the fit, exactly as `SkeletonRenderer`'s canvas block performs it: the pipeline
      * publishes the frame, [CameraFraming] derives the frame's zoom from its own drawn bounds, and the
      * projector maps it through the camera.
      */
@@ -116,7 +80,7 @@ class ViewportFramingInvariantTest {
     }
 
     /**
-     * The view setup BEFORE C1 — the pose's authored camera, projected as authored. This file's
+     * The view setup BEFORE the fit — the pose's authored camera, projected as authored. This file's
      * non-vacuity and no-regression instruments measure against it.
      */
     private fun authoredView(camera: Camera, pose: SkeletonPose, width: Float, height: Float): ProjectedSkeleton {
@@ -131,24 +95,17 @@ class ViewportFramingInvariantTest {
             if (zoom != null) it.zoom = zoom
         }
 
-    // ------------------------------------------------------------------------------------------
-    // The drawn silhouette — the instrument
-    // ------------------------------------------------------------------------------------------
-
     /**
      * The bounds of everything the renderers actually stroke, read off the buffers they iterate:
      *
-     *  * **bones** — `SkeletonRenderer` 127-128 (`drawLinearBone(..., item.thickness + outline * 2f,
-     *    …)` over `item.thickness = b.thickness * scaleBuffer.thicknessScale`) and
-     *    `SkeletonSnapshotRenderer` 337-345; the drawn half-width is `thickness / 2 + outline`, where
+     *  * **bones** — the drawn half-width is `thickness / 2 + outline`, where
      *    `outline = style.outlineWidth * scaleBuffer.outlineScale`;
-     *  * **indicator discs** — `SkeletonRenderer` 134-135 / `SkeletonSnapshotRenderer` 356-360
-     *    (`drawCircle(..., item.radius + outline, …)` with `outline = 2f * scaleBuffer.outlineScale`);
-     *  * **torso faces** — `SkeletonRenderer` 150 (`drawPath(path, strokeC, Stroke(width =
-     *    style.outlineWidth))`), a stroke centred on the path edge.
+     *  * **indicator discs** — `radius + outline`, with `outline = 2f * scaleBuffer.outlineScale`;
+     *  * **torso faces** — a stroke of `style.outlineWidth` centred on the path edge, so half of it
+     *    extends past the edge.
      *
      * The ground grid, the contact shadows and the environment props are deliberately excluded: they
-     * are the floor and the pose's furniture, not the subject (see the class KDoc).
+     * are the floor and the pose's furniture, not the subject.
      */
     private fun silhouette(buffer: ProjectedSkeleton, zoom: Float): FloatArray {
         var minX = Float.MAX_VALUE
@@ -226,10 +183,6 @@ class ViewportFramingInvariantTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 1 — the gate
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun everyFrameOfEveryPoseIsDrawnWholeOnTheRealHeroCanvas() {
         assertTrue("the corpus sweep is empty", SWEEP.isNotEmpty())
@@ -253,10 +206,6 @@ class ViewportFramingInvariantTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 2 — the previously-clipped standing poses, densely
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun thePosesTheAuthoredFrameClipsAreDrawnWholeAtEveryPhaseOfTheirRep() {
         val densePhases = (0 until 51).map { it / 50f }
@@ -267,9 +216,9 @@ class ViewportFramingInvariantTest {
                 val advancing = SkeletonPipeline(DEF)
                 for (progress in densePhases) {
                     val frame = when (condition) {
-                        // COLD — a genuinely cold first frame: a fresh pose on a fresh pipeline.
+                        // COLD: a genuinely cold first frame, a fresh pose on a fresh pipeline.
                         FrameCondition.COLD -> publishedFrameOf(name, SkeletonPipeline(DEF), progress)
-                        // PLAYING — one publisher advancing 0 -> 1 across the rep.
+                        // PLAYING: one publisher advancing 0 -> 1 across the rep.
                         FrameCondition.PLAYING -> publishedFrameOf(name, advancing, progress)
                     }
                     val sample = Sample(name, progress, 0f, frame, MotionProbe.build(name).metadata.camera)
@@ -291,10 +240,6 @@ class ViewportFramingInvariantTest {
             evaluations
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 3 — the defect is real (the non-vacuity anchor and the clipped inventory)
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theAuthoredFrameReallyDoesClip() {
@@ -330,10 +275,6 @@ class ViewportFramingInvariantTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 4 — no regression: frames that already fit are left bit-identical
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun framesThatAlreadyFitAreLeftBitIdentical() {
         var compared = 0
@@ -364,7 +305,7 @@ class ViewportFramingInvariantTest {
 
         assertTrue("no already-fitting frame found — the instrument is blind", compared > 0)
 
-        // the families the mission names explicitly, asserted by name on the hero canvas
+        // the families that must stay untouched, asserted by name on the hero canvas
         for (name in WIDE_SUPINE_PRONE_FAMILIES) {
             val sample = SWEEP.first { it.pose == name && it.progress == 0.5f && it.yawOffset == 0f }
             val authoredCamera = cameraOf(sample)
@@ -384,10 +325,6 @@ class ViewportFramingInvariantTest {
             assertSameProjection(authored, fitted, "$name must be projected bit-identically")
         }
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 5 — the surfaces the old suite used are unaffected
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun anOversizedCanvasIsUnaffected() {
@@ -416,10 +353,6 @@ class ViewportFramingInvariantTest {
             )
         }
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 6 — the fit is pure: idempotent, never enlarging, never history-dependent
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theFitIsPureIdempotentAndOnlyEverShrinks() {
@@ -452,10 +385,6 @@ class ViewportFramingInvariantTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 7 — the fit owns the scale alone
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theViewpointRemainsThePosesOwn() {
         for (sample in SWEEP) {
@@ -475,10 +404,6 @@ class ViewportFramingInvariantTest {
             assertTrue("the fit may not enlarge", camera.zoom <= authoredZoom)
         }
     }
-
-    // ------------------------------------------------------------------------------------------
-    // Corpus, sweep and pins
-    // ------------------------------------------------------------------------------------------
 
     /** One sampled frame of the corpus, captured BY VALUE (the pipeline reuses its output buffer). */
     private class Sample(
@@ -510,40 +435,8 @@ class ViewportFramingInvariantTest {
 
         /**
          * The production poses the AUTHORED frame clips on the hero canvas, measured — the inventory of
-         * the defect this gate was built for, not a list of exceptions (the fit is per-bound and applies
-         * to all poses identically).
-         *
-         * **Re-measured by the animation-coverage phase, batch 1** (`feat/animation-coverage-01`): the four
-         * pose classes the batch added (`AnkleMobilityPose`, `CalfStretchPose`, `HorseStancePose`,
-         * `WallSitPose`) join the inventory, like 26 of the 49 pre-existing production poses. They carry the
-         * family's own `CameraDefinition`; NO camera or framing behaviour is changed by the phase, so this is
-         * the defect's record extended by four more authored frames.
-         *
-         * **Re-measured by the animation-coverage phase, batch 2** (`feat/animation-coverage-02`, off the
-         * #258 merge `6887738`): three of the four pose classes the batch added (`BandPullApartPose`,
-         * `DipsPose`, `RowsPose` — the standing banded sweep and the two bar-supported members, whose authored
-         * cameras are the standing/plank families' own) join the inventory; the fourth (`YTRaisesPose`, the
-         * prone drill — the family's flat layout) fits the hero canvas as authored, so the inventory is
-         * `30 → 33` frames. Again: NO camera or framing behaviour is changed by the phase.
-         *
-         * **Re-measured by the animation-coverage phase, batch 3** (`feat/animation-coverage-03`, off the #259
-         * merge `139daf9`): the standing `HipCirclesPose` and `LegSwingsPose` (both `33 -> 35`) join the
-         * inventory, while the batch's two floor poses — the seated `NinetyNinetyHipsPose` and the supine
-         * `PiriformisStretchPose` — fit the hero canvas as authored and stay out of it. The pin is the defect's
-         * own record; **no camera or framing behaviour is changed by this batch.**
-         *
-         * **Re-measured by the animation-coverage phase, batch 4** (`feat/animation-coverage-04`, off the #260
-         * merge `7fed307`): the batch's two upright standing poses (`ChinTuckPose`, `NeckCirclesPose` — the
-         * standing family's own camera) join the inventory (`35 -> 37`); they clip on the authored frame exactly
-         * like the other 35 standing/overhead members, and again **no camera or framing behaviour is changed.**
-         *
-         * **Re-measured by the animation-coverage phase, batch 5** (`feat/animation-coverage-05`, off the #261
-         * merge `b0e4edd` — the phase's tail): all three of the batch's pose classes join the inventory
-         * (`37 -> 40`) — the standing `ShoulderCarsPose` (whose arm tours a whole revolution about its shoulder,
-         * so its authored frame is taller than the hero canvas), the ballistic `JumpingJacksPose` (whose wide
-         * stance and overhead hands both exceed it) and the kneeling `ChildPose` (whose body lies the full
-         * width of the mat from the toes to the reaching hands). Each carries the family's own `CameraDefinition`
-         * and **no camera or framing behaviour is changed by this batch.**
+         * the defect this gate was built for, not a list of exceptions (the fit is per-bound and
+         * applies to all poses identically).
          */
         val CLIPPED_AT_HERO = setOf(
             "AirSquatPose", "AlternatingForwardLungesPose", "AlternatingReverseLungesPose",
@@ -568,8 +461,8 @@ class ViewportFramingInvariantTest {
         )
 
         /**
-         * The wide / supine / prone families the mission requires to be unaffected. They fit the hero
-         * canvas as authored, so C1 must leave them bit-identical.
+         * The wide / supine / prone families that must be unaffected. They fit the hero canvas as
+         * authored, so the fit must leave them bit-identical.
          */
         val WIDE_SUPINE_PRONE_FAMILIES = listOf(
             "StandardPushUpPose", "WidePushUpPose", "KneePushUpPose", "MilitaryPushUpPose",

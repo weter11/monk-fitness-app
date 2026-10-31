@@ -8,13 +8,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * PR-04 — Global contact-constraint / root-repositioning layer.
+ * Global contact-constraint / root-repositioning layer.
  *
- * These exercises drive the *production* path (build → IkStage → SkeletonPoseFinalizer, which runs
- * the [ConstraintSolver]) so the fixed contacts registered by the validation poses are honored:
- * the root/pelvis is derived from the contacts rather than a fixed authored value, and every
- * non-contact limb follows rigidly. The four reference poses must hold their contacts without
- * penetration or fold, and the solver must be deterministic (no flicker).
+ * These exercises drive the *production* path (build → IkStage → SkeletonPoseFinalizer, which runs the
+ * [ConstraintSolver]) so the fixed contacts registered by the validation poses are honored: the
+ * root/pelvis is derived from the contacts rather than a fixed authored value, and every non-contact
+ * limb follows rigidly. The four reference poses must hold their contacts without penetration or fold,
+ * and the solver must be deterministic (no flicker).
  */
 class ConstraintSolverTest {
 
@@ -22,12 +22,10 @@ class ConstraintSolverTest {
     private val context = PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)
 
     private fun finalized(pose: BaseValidationPose): SkeletonPose {
-        // P12 WP-I: the production path for a built carrier is the PIPELINE
-        // (build → IkStage → ConstraintSolver → Finalizer). Before activation the authoring bake
-        // realized the limbs inside `build()` and the solver was the only missing stage, so
-        // `build()` + `finalize()` was an equivalent replication; under state 3 the limbs are
-        // realized by the engine-owned stage, which only the pipeline drives (§12.7a) — a direct
-        // finalize would observe a frame whose limbs were never realized.
+        // The production path for a built carrier is the PIPELINE
+        // (build → IkStage → ConstraintSolver → Finalizer). The limbs are realized by the
+        // engine-owned stage, which only the pipeline drives — a direct finalize would observe a frame
+        // whose limbs were never realized.
         return SkeletonPipeline(def).produceFrame(pose, context).pose
     }
 
@@ -43,9 +41,9 @@ class ConstraintSolverTest {
         val pose = finalized(MiddleSplitPose())
         assertFinite(pose, "MiddleSplit")
 
-        // Issue A fix: the global solver must NOT float the pelvis to fake straight legs. The
-        // pelvis is derived from the ground contacts and stays near the authored ground level
-        // (previously it was pushed up to ~210 into a floating "V").
+        // Issue A fix: the global solver must NOT float the pelvis to fake straight legs. The pelvis is
+        // derived from the ground contacts and stays near the authored ground level (previously it was
+        // pushed up to ~210 into a floating "V").
         val pelvisY = pose.getJoint(Joint.PELVIS).y
         assertTrue("pelvis must rest near the ground, not float (was $pelvisY)", pelvisY < 60f)
 

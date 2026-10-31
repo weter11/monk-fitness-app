@@ -13,25 +13,16 @@ import org.junit.Test
 /**
  * The production focus classification, measured against the **real** shipped catalogue.
  *
- * P23 refused to infer membership from `ExerciseCategory`, `ExerciseSubCategory` or
- * `exerciseToFamiliesMap`, and left the gap open for this stage to close. Closing it means *stating*
- * the membership, and the failure mode of a stated table is the opposite of a computed one: not that
- * a rule fabricates a focus, but that a table quietly goes stale, admits an id the catalogue does not
- * have, or states nothing at all for a shipped exercise. Each of those is silent — a plan still
- * appears — so each is asserted here against `WorkoutGenerator().getExerciseLibrary()` rather than
- * about a fixture.
- *
- * The census is **measured, never hardcoded**: the exercise count is read from the catalogue, so
- * adding or removing an exercise makes the coverage assertions move with it rather than needing an
- * edit here.
+ * Membership is a *stated* table, not a computed rule, so it fails silently — a stale entry, an id
+ * the catalogue does not have, or a shipped exercise with no entry, and a plan still appears. Hence
+ * every claim is asserted against `WorkoutGenerator().getExerciseLibrary()`, never a fixture, and
+ * the census is read from the catalogue so coverage moves with it.
  */
 class ProductionFocusClassificationTest {
 
-    /** The real shipped catalogue. Read through the same call production reads it through. */
+    /** The real shipped catalogue, read through the same call production reads it through. */
     private val shipped: List<com.monkfitness.app.data.model.Exercise> =
         WorkoutGenerator().getExerciseLibrary()
-
-    // ------------------------------------------------------------------ coverage of the real catalogue
 
     @Test
     fun everyShippedExerciseStatesTheFocusesItTrains() {
@@ -115,13 +106,10 @@ class ProductionFocusClassificationTest {
         )
     }
 
-    // ------------------------------------------------------------------ it is data, not a rule
-
     @Test
     fun theClassificationIsDeterministicAndOrderedByTheVocabulary() {
-        // Determinism in two senses, because a plan is only reproducible if both hold: the same id
-        // yields the same set on every call, and the set's iteration order is the vocabulary's own
-        // rather than a hash's.
+        // Determinism in both senses: the same id yields the same set on every call, and the set's
+        // iteration order is the vocabulary's own rather than a hash's.
         ProductionFocusClassification.classifiedExerciseIds.forEach { id ->
             val first = ProductionFocusClassification.focusesOf(id)
             repeat(5) {
@@ -141,10 +129,10 @@ class ProductionFocusClassificationTest {
 
     @Test
     fun theClassificationIsNotDerivedFromTheCataloguesOwnGroupings() {
-        // The falsifiable half of "this is explicit data". If membership were a function of the
-        // category, then exercises sharing a category would share a focus set exactly — and the real
-        // catalogue has exercises of one category that train different things, so a classifier built
-        // on the category would have to give one of them a wrong focus.
+        // The falsifiable half of "this is explicit data": if membership were a function of the
+        // category, exercises sharing a category would share a focus set exactly — and the real
+        // catalogue has one-category exercises that train different things, so a category classifier
+        // would have to give one of them a wrong focus.
         val byCategory = shipped.groupBy { it.category }
         val mixedCategory = byCategory.filter { (_, exercises) ->
             exercises.map { it.id }
@@ -170,8 +158,8 @@ class ProductionFocusClassificationTest {
 
     @Test
     fun theClassificationCrossesTheCataloguesVocabulariesRatherThanFollowingOne() {
-        // The three focuses the catalogue never names (P23's finding) must nonetheless be planned for,
-        // and the two categories that *share a name* with a focus must not have absorbed it. If the
+        // The three focuses the catalogue never names must nonetheless be planned for, and the two
+        // categories that *share a name* with a focus must not have absorbed it. If the
         // classification were a lookup, PUSH and PULL could not appear at all.
         val stated = ProductionFocusClassification.classifiedExerciseIds.flatMap {
             ProductionFocusClassification.focusesOf(it).orEmpty()
@@ -183,7 +171,7 @@ class ProductionFocusClassificationTest {
             Focus.entries.toSet(),
             stated
         )
-        // And the category that shares a *name* with a focus did not decide membership: several
+        // The category that shares a *name* with a focus did not decide membership: several
         // POSTURE-category exercises are pulling or conditioning work as well, and a
         // `when (category)` classifier would have had to call them posture-only.
         val postureCategory = shipped.filter { it.category.name == "POSTURE" }
@@ -196,8 +184,6 @@ class ProductionFocusClassificationTest {
             alsoSomethingElse.isNotEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ the port contract
 
     @Test
     fun anUnknownIdIsStatedAsUnclassifiedRatherThanGivenAFocus() {
@@ -213,7 +199,7 @@ class ProductionFocusClassificationTest {
 
     @Test
     fun theClassificationIsThePortsOwnContractAndIsSubstitutable() {
-        // The service reaches it through P23's port, so a test — or a future user-facing Goals &
+        // The service reaches it through the port, so a test — or a future user-facing Goals &
         // Focus editor — can state a different classification without touching this one.
         val port: GenerationFocusSource = ProductionFocusClassification
         val pushups = port.focusesOf("pushups")

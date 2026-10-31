@@ -17,33 +17,30 @@ import org.junit.Test
 import java.io.File
 
 /**
- * P12 WP-F — B-4 validation-path reconciliation: ownership + probe re-certification contract.
+ * Validation-path ownership + probe re-certification contract.
  *
  * The validation family (`BaseValidationPose` + its four instruments) is the ONLY production
- * author of `straight = true` (plan §12.3 B-4). Under state 3 the validation bake may not
- * silently realize the same frozen responsibility set that [com.monkfitness.app.animation.IkStage]
- * owns; the probes' readings must therefore come from the ACTIVE implementation in each
- * configuration, and the instruments must stay faithful (docs/VALIDATION.md §2 — the probe says
- * "want a straight limb here, show me what the runtime does").
- *
- * Contract properties tested (RED baseline: property 1 fails on the pre-WP-F tree):
+ * author of `straight = true`. Under the active stage the validation bake may not silently
+ * realize the same frozen responsibility set that [com.monkfitness.app.animation.IkStage] owns;
+ * the probes' readings must therefore come from the ACTIVE implementation in each configuration,
+ * and the instruments must stay faithful (the probe says "want a straight limb here, show me
+ * what the runtime does").
  *
  *  1. [freshBuildWindowCarriesNoPreviousRealization] — the carrier's build-window bookkeeping
- *     (F2 re-arm) is REGISTRATION-window state, not realization, so it must run in BOTH
- *     configurations exactly like the member/package bakes: a second build() of the reused
- *     instrument carrier under the ACTIVE stage must not carry the previous frame's solver
- *     readings (stale `straightIntentDropped` would be a fabricated probe result — the reading
- *     would name a solve that never happened this cycle).
+ *     (re-arm) is REGISTRATION-window state, not realization, so it must run in BOTH
+ *     configurations: a second build() of the reused instrument carrier under the ACTIVE stage
+ *     must not carry the previous frame's readings (a stale `straightIntentDropped` would be a
+ *     fabricated probe result naming a solve that never happened this cycle).
  *  2. [validationBakeRegistersIntentUnderActiveStage] — under the active stage the validation
  *     bake still registers its declared intent: every limb reaches the stage as a lossless
  *     [com.monkfitness.app.animation.WorldTarget] (declared lengths + constraint — the straight
  *     instruments' `fullyExtended` constraints ride the declaration, no definition recovery),
- *     and every fixed support still registers its ContactSpec for Phase-2 settlement.
+ *     and every fixed support still registers its ContactSpec for settlement.
  *  3. [straightProbeReadingComesFromActiveImplementation] — MiddleSplit (bent-fallback probe)
  *     and DeadHang/PikeSit/DOH (settled-contact instruments) produce IDENTICAL published
  *     semantics through the pipeline under both flags; under flag-ON the build window alone
- *     carries no realization reading — the stage is the producer (ownership, not coincidence).
- *  4. [validatorNeverSolvesOrWritesGeometry] — R9 static audit: the production validator path
+ *     carries no realization reading — the stage is the producer.
+ *  4. [validatorNeverSolvesOrWritesGeometry] — static audit: the production validator path
  *     contains no limb-solver invocation and no carrier geometry writes.
  */
 class ValidationOwnershipReCertificationTest {
@@ -57,8 +54,6 @@ class ValidationOwnershipReCertificationTest {
     }
 
     private fun ctx() = PoseContext(0.5f, Side.LEFT, def)
-
-    // ------------------------------------- 1 — fresh-window bookkeeping is configuration-neutral
 
     @Test
     fun freshBuildWindowCarriesNoPreviousRealization() {
@@ -89,8 +84,6 @@ class ValidationOwnershipReCertificationTest {
         }
     }
 
-    // ------------------------------------------- 2 — registration completeness under flag-ON
-
     @Test
     fun validationBakeRegistersIntentUnderActiveStage() {
         val original = IK_STAGE_ACTIVE
@@ -104,8 +97,8 @@ class ValidationOwnershipReCertificationTest {
                 assertTrue("${t.joint}: straight probe intent carried", t.straight)
             }
             // The straight instruments opt into full-extension constraints — the declaration
-            // must carry them (B-3 losslessness applies to the validation family exactly like
-            // the production one; the stage may not recover definition defaults here).
+            // must carry them (losslessness applies here exactly as in production; the stage may
+            // not recover definition defaults).
             assertTrue(
                 "MiddleSplit's authored straight constraints (fullyExtended) must survive on " +
                     "the declared targets — the validation family is the ONLY production " +
@@ -135,24 +128,20 @@ class ValidationOwnershipReCertificationTest {
         }
     }
 
-    // ------------------------------------ 3 — probe semantics across configurations
-
     @Test
     fun straightProbeReadingComesFromActiveImplementation() {
         val original = IK_STAGE_ACTIVE
         try {
             // (a) MiddleSplit: the bent-fallback drop is published identically through the
-            // pipeline in BOTH configurations — the reading is the same because both
-            // implementations execute the same frozen responsibility set with the same
-            // declared inputs, not because either path is skipped.
+            // pipeline in BOTH configurations — both implementations execute the same frozen
+            // responsibility set with the same declared inputs, neither path is skipped.
             IK_STAGE_ACTIVE = false
             val legacy = SkeletonPipeline(def).produceFrame(MiddleSplitPose(), ctx()).pose
             IK_STAGE_ACTIVE = true
             val activated = SkeletonPipeline(def).produceFrame(MiddleSplitPose(), ctx()).pose
             assertTrue("legacy config: the authoring solver produces the drop", legacy.straightIntentDropped)
             assertTrue("activated config: the engine stage produces the drop", activated.straightIntentDropped)
-            // Published transforms + stamps byte-identical across the ownership swap
-            // (the §12.9 property, restricted here to the validation instruments).
+            // Published transforms + stamps byte-identical across the ownership swap.
             for (j in com.monkfitness.app.animation.Joint.entries) {
                 val a = legacy.getJoint(j); val b = activated.getJoint(j)
                 assertEquals(
@@ -186,9 +175,9 @@ class ValidationOwnershipReCertificationTest {
                 assertEquals(factory.first, l.boneLengthsVerified, a2.boneLengthsVerified)
             }
 
-            // (c) Under the activated configuration, the drop reading exists ONLY after a
-            // stage window — never during the build window (producer identity, §12.8: probes
-            // must not depend on authoring bake realization once ownership has moved).
+            // (c) Under the activated configuration the drop reading exists ONLY after a stage
+            // window — never during the build window: probes must not depend on authoring bake
+            // realization once ownership has moved.
             IK_STAGE_ACTIVE = true
             val midBuild = MiddleSplitPose().build(ctx())
             assertFalse("the activated build window carries no realization reading", midBuild.straightIntentDropped)
@@ -199,14 +188,11 @@ class ValidationOwnershipReCertificationTest {
         }
     }
 
-    // ------------------------------------------------------- 4 — R9 observational audit
-
     @Test
     fun validatorNeverSolvesOrWritesGeometry() {
-        // R9: ExerciseValidator reads Published Pose State / intent ranges / Frame Context; it
-        // never writes the carrier, never derives geometry, never drives execution. The
-        // validation FAMILY (instruments) are PoseBuilder fixtures — authoring-side — but the
-        // validator itself must stay solver-free and write-free after P12's gate changes.
+        // ExerciseValidator reads Published Pose State / intent ranges / Frame Context; it never
+        // writes the carrier, never derives geometry, never drives execution. The instruments
+        // are authoring-side PoseBuilder fixtures, so only the validator itself is scanned.
         val root = productionJavaRoot()
         val validatorFiles = File(root, "validation")
             .walkTopDown().filter { it.isFile && it.extension == "kt" }
@@ -233,8 +219,6 @@ class ValidationOwnershipReCertificationTest {
             emptyList<String>(), offenders
         )
     }
-
-    // --------------------------------------------------------------- helpers
 
     private fun findNode(
         node: com.monkfitness.app.animation.SkeletonNode,

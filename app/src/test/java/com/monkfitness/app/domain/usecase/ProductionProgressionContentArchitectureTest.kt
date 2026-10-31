@@ -7,23 +7,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P32's **architecture gates**: the rules the authored content and the activated provider must hold to.
+ * Architecture gates for the authored content and the activated provider.
  *
- * These extend the P31 gates rather than replacing them. P31's ownership graph and anti-fabrication rules
- * — one table, one repository, one provider, family-level ownership, no Program/revision ownership, no
- * serialized ladder, no state shortcut, no heuristic level, no generated content — are **still asserted
- * here**, and P31's own suite still asserts them too. What P32 inverts is only the small set of
- * assertions whose owned invariant genuinely changed: the production provider is now wired, and the port
- * is now suspending.
- *
- * ### Why a content stage needs structural gates at all
- *
- * The failure mode this stage is most exposed to is not doing too little — it is authoring content that
- * *looks* authored while being derived. A level computed from a catalogue index, a prescription read out
- * of `Exercise.durationSeconds`, a rung count widened by "one more per family", a seed that quietly
- * covers a fifth family: each of these produces a ladder that passes a behavioural test and fails the
- * architecture. These gates read the production **source**, so the derivation is caught whether or not
- * it happens to be right today.
+ * The failure mode here is not doing too little but authoring content that *looks* authored while being
+ * derived: a level computed from a catalogue index, a prescription read out of `Exercise.durationSeconds`,
+ * a rung count widened by "one more per family", a seed quietly covering a fifth family. Each produces a
+ * ladder that passes a behavioural test and fails the architecture, and these gates read the production
+ * **source**, so the derivation is caught whether or not it happens to be right today.
  */
 class ProductionProgressionContentArchitectureTest {
 
@@ -49,22 +39,17 @@ class ProductionProgressionContentArchitectureTest {
         .filter { it.isFile && it.extension == "kt" }
         .toList()
 
-    // ================================================================ one content source, and it is data
-
     /**
-     * **Exactly one production source of progression content.**
-     *
-     * Two sources would mean two answers to "what does this family declare", and the one the provider
-     * reads would be whichever one won the wiring. Matched on the type name rather than the file name, so
+     * Exactly one production source of progression content: two would mean two answers to "what does this
+     * family declare", and the provider would read whichever won the wiring. Matched on the type name, so
      * a second source under a different name is still caught.
      */
     @Test
     fun thereIsExactlyOneProductionProgressionContentSource() {
-        // An **authoring** site is a file that states a ladder as a literal: it constructs
-        // `ProgramProgressionVariant`s with a quoted exercise id *and* a quoted family id in the same
-        // declaration. The mapper and the generated planner both build domain values and both mention
-        // prescriptions, but neither states a family id alongside a variant — so requiring **both** is
-        // what separates authored content from derived or translated content.
+        // An **authoring** site states a ladder as a literal: variants with a quoted exercise id *and* a
+        // quoted family id in the same declaration. The mapper and the planner both build domain values
+        // and mention prescriptions but never a family id beside a variant, so requiring **both** is what
+        // separates authored content from derived or translated content.
         val carriers = allProduction()
             .filter { it != definitions }
             .filter { source ->
@@ -85,10 +70,8 @@ class ProductionProgressionContentArchitectureTest {
     }
 
     /**
-     * **The content source is DATA: no derivation of any kind.**
-     *
-     * Each forbidden construct is named, and each is a way a ladder could be *computed* rather than
-     * authored. This is the gate that keeps the claim "this is data" true rather than aspirational.
+     * The content source is DATA: each forbidden construct is a way a ladder could be *computed* rather
+     * than authored, which is what keeps "this is data" true rather than aspirational.
      */
     @Test
     fun theContentSourceInfersNothing() {
@@ -123,10 +106,8 @@ class ProductionProgressionContentArchitectureTest {
     }
 
     /**
-     * **Every rung carries an explicit domain prescription**, and only the domain's two subtypes.
-     *
      * `RepPrescription`/`TimePrescription` spelled out per rung is what makes the content *declared*; a
-     * scalar, a shared constant or a computed value would all make a rung's target a derivation.
+     * scalar, a shared constant or a computed value would make a rung's target a derivation.
      */
     @Test
     fun everyRungCarriesAnExplicitDomainPrescription() {
@@ -151,13 +132,9 @@ class ProductionProgressionContentArchitectureTest {
         )
     }
 
-    // ================================================================ the authorised set, and what is excluded
-
     /**
-     * **Exactly four authorised families, and the file declares them as four separate relations.**
-     *
-     * Counted from the declarations rather than restated, so a fifth relation added to this file — which
-     * is exactly where a stage would add one — fails here instead of silently widening the seed.
+     * Counted from the declarations rather than restated, so a fifth relation added here — exactly where
+     * one would be added — fails instead of silently widening the seed.
      */
     @Test
     fun exactlyFourFamiliesAreAuthorised() {
@@ -177,11 +154,9 @@ class ProductionProgressionContentArchitectureTest {
     }
 
     /**
-     * **The two families P32 deliberately left undeclared appear nowhere in the content source.**
-     *
      * `plank` and `glute_bridge` are absent **by decision**, and a one-rung "ladder" would convert that
      * honest absence into a claim that the family declares a hierarchy. Asserted on the content source
-     * rather than on the seeded rows, because this is a statement about *what was authored*.
+     * rather than the seeded rows, because this is a statement about *what was authored*.
      */
     @Test
     fun plankAndGluteBridgeAreNotAuthored() {
@@ -203,10 +178,8 @@ class ProductionProgressionContentArchitectureTest {
     }
 
     /**
-     * **`pushups_military` and `deep_squat` are excluded from the ladders**, for the stated reasons.
-     *
      * Both are real catalogue exercises of an authorised family, so "they are in the catalogue" is not a
-     * reason for them to appear in a ladder — the gate is that they do not.
+     * reason to appear in a ladder — the gate is that they do not.
      */
     @Test
     fun theExcludedExercisesAppearInNoRung() {
@@ -226,24 +199,17 @@ class ProductionProgressionContentArchitectureTest {
         )
     }
 
-    // ================================================================ the bootstrap boundary
-
     /**
-     * **Seeded content enters the catalogue at exactly one boundary, and it is the bootstrap.**
-     *
-     * Named files are the ones allowed to write built-in content. Anything else that stores a
+     * Seeded content enters the catalogue at exactly one boundary. Anything else that stores a
      * `ProgramProgressionRelation` in production is a second seed path — the shape from which a ladder
      * reappears without anybody deciding it should.
      */
     @Test
     fun theBootstrapIsTheOnlyPlaceBuiltInContentIsSeeded() {
-        // The content source itself and the architecture **test** may name the definitions; no other
-        // production file may. The container wires the bootstrap (which reads them), so it is excluded
-        // too — what is forbidden is a *second consumer of the authored ladders*, not the wiring.
-        // `ProductionProgressionRelationDefinitions` may appear in the content source (it is defined
-        // there), in the bootstrap (it reads the ladders) and in the container (it wires the bootstrap).
-        // Any **fourth** production file naming it would be a second consumer of the authored ladders,
-        // which is what this gate forbids.
+        // `ProductionProgressionRelationDefinitions` may appear where it is defined, in the bootstrap
+        // that reads the ladders and in the container that wires the bootstrap. Any **fourth** production
+        // file naming it is a second consumer of the authored ladders, which is what this gate forbids —
+        // not the wiring.
         val seeders = allProduction()
             .filter { it != bootstrap && it != container && it != definitions }
             .filter { code(it).contains("ProductionProgressionRelationDefinitions") }
@@ -258,11 +224,9 @@ class ProductionProgressionContentArchitectureTest {
     }
 
     /**
-     * **The bootstrap runs at application start, before any adaptive pass can read the catalogue.**
-     *
-     * The ordering guarantee is structural — the provider never seeds — and this gate pins the other
-     * half: that the bootstrap is actually *invoked* from the application, so "no consumer exists yet"
-     * is a fact about the wiring rather than a hope.
+     * The provider never seeds; this gate pins the other half of the ordering guarantee — that the
+     * bootstrap is actually *invoked* from the application, so "no consumer exists yet" is a fact about
+     * the wiring rather than a hope.
      */
     @Test
     fun theBootstrapIsInvokedFromApplicationStart() {
@@ -275,11 +239,9 @@ class ProductionProgressionContentArchitectureTest {
     }
 
     /**
-     * **The bootstrap depends on the content source and the persistence boundary, and nothing else.**
-     *
-     * Pinned by its declared fields: a second collaborator is where a clock, a scope, a DAO or an
-     * engine would appear, and any of those would let the seed behave differently depending on when or
-     * from where it ran.
+     * Pinned by its declared fields: a second collaborator is where a clock, a scope, a DAO or an engine
+     * would appear, and any of those would let the seed behave differently depending on when or from
+     * where it ran.
      */
     @Test
     fun theBootstrapHoldsExactlyTheContentSourceAndTheRepository() {
@@ -305,9 +267,7 @@ class ProductionProgressionContentArchitectureTest {
         )
     }
 
-    /**
-     * **The bootstrap is absent-only: it never overwrites and never widens its own scope.**
-     */
+    /** The bootstrap is absent-only: it never overwrites and never widens its own scope. */
     @Test
     fun theBootstrapFillsAbsencesOnlyAndSeedsNothingElse() {
         val body = code(bootstrap)
@@ -330,14 +290,10 @@ class ProductionProgressionContentArchitectureTest {
         )
     }
 
-    // ================================================================ the provider
-
     /**
-     * **The production provider holds exactly one collaborator: the repository.**
-     *
-     * Asserted on declared fields rather than on source text, because a collaborator list is where a
-     * default ladder, a static content read or a clock would hide — none of which a behavioural test over
-     * a populated catalogue could distinguish from correct behaviour.
+     * Asserted on declared fields rather than source text: a collaborator list is where a default ladder,
+     * a static content read or a clock would hide, none of which a behavioural test over a populated
+     * catalogue could distinguish from correct behaviour.
      */
     @Test
     fun theProviderHoldsExactlyOneCollaboratorAndItIsTheRepository() {
@@ -353,11 +309,9 @@ class ProductionProgressionContentArchitectureTest {
     }
 
     /**
-     **The provider reads the repository and NOT the static content.**
-     *
-     * This is the assertion that keeps the persisted catalogue authoritative. A provider that also read
-     * the definitions would be holding two answers to "what does this family declare", and they could
-     * disagree the moment a stored ladder was replaced.
+     * Keeps the persisted catalogue authoritative: a provider that also read the definitions would hold
+     * two answers to "what does this family declare", and they could disagree the moment a stored ladder
+     * was replaced.
      */
     @Test
     fun theProviderDoesNotReadTheStaticContentSource() {
@@ -380,10 +334,8 @@ class ProductionProgressionContentArchitectureTest {
     }
 
     /**
-     * **No blocking bridge anywhere on the provider path — the port is suspending.**
-     *
-     * P31's recorded gap, now closed. Scanned on code with comments stripped, because both files
-     * *discuss* `runBlocking` in their KDoc and a text scan would fail this gate on its own explanation.
+     * Scanned on code with comments stripped, because both files *discuss* `runBlocking` in their KDoc
+     * and a text scan would fail this gate on its own explanation.
      */
     @Test
     fun theProviderPathHasNoBlockingBridge() {
@@ -402,10 +354,8 @@ class ProductionProgressionContentArchitectureTest {
     }
 
     /**
-     * **The provider never writes: a deleted ladder stays deleted.**
-     *
-     * Structural, and it is the load-bearing half of the ordering guarantee. A provider that seeded on
-     * read would make its own answer depend on when it was asked.
+     * The load-bearing half of the ordering guarantee: a provider that seeded on read would make its own
+     * answer depend on when it was asked, so a deleted ladder would come back.
      */
     @Test
     fun theProviderPerformsNoWrite() {
@@ -422,14 +372,10 @@ class ProductionProgressionContentArchitectureTest {
         )
     }
 
-    // ================================================================ storage: P31's rules, still in force
-
     /**
-     * **The storage shape is P31's, unchanged by this stage.**
-     *
-     * P32 adds content, not schema. The `(familyId, exerciseId)` primary key is re-asserted here as well
-     * as in P31's suite because this stage is the one that would be tempted to widen it to author a
-     * ladder the domain cannot represent — and it does not need to, since the content was authored to fit.
+     * This stage adds content, not schema. The `(familyId, exerciseId)` key is re-asserted here because
+     * this is the stage that would be tempted to widen it to author a ladder the domain cannot represent
+     * — and it does not need to, since the content was authored to fit.
      */
     @Test
     fun theStorageShapeIsUnchangedAndTheIdentityRuleIsNotWeakened() {
@@ -442,8 +388,8 @@ class ProductionProgressionContentArchitectureTest {
             "and this stage added no Program or revision ownership to the ladder table",
             Regex("""programId|revisionId""").containsMatchIn(code(entity))
         )
-        // Matched on a *declared column*, not on the word "ladder": the entity's own KDoc discusses
-        // ladders at length, and a word match would fail this gate on its explanation of the table.
+        // Matched on a *declared column*, not the word "ladder": the entity's KDoc discusses ladders at
+        // length, and a word match would fail this gate on its explanation of the table.
         assertFalse(
             "no serialized ladder blob and no content column: the five declared columns are the " +
                 "authored ones",
@@ -453,9 +399,7 @@ class ProductionProgressionContentArchitectureTest {
         )
     }
 
-    /**
-     * **The repository still decides nothing and still lets the domain enforce its own rules.**
-     */
+    /** The repository still decides nothing and still lets the domain enforce its own rules. */
     @Test
     fun theRepositoryAddsNoSemanticRuleOfItsOwn() {
         val body = code(repository)
@@ -476,13 +420,9 @@ class ProductionProgressionContentArchitectureTest {
         )
     }
 
-    // ================================================================ production wiring
-
     /**
-     **Production wires the stored provider, and the empty ladder source is gone.**
-     *
-     * The inverse of P31's gate, and strictly stronger than it: P31 required `NoDeclaredProgression` to be
-     * wired, which this stage forbids.
+     * The inverse and strictly stronger: where `NoDeclaredProgression` was once required to
+     * be wired, and is now forbidden.
      */
     @Test
     fun productionWiresTheStoredProviderAndNotTheEmptySource() {
@@ -509,10 +449,8 @@ class ProductionProgressionContentArchitectureTest {
     }
 
     /**
-     * **The catalogue repository is still separate from the adaptive history repository.**
-     *
-     * P31's ownership claim, re-asserted: a ladder is a global definition and adaptive history is
-     * per-revision state, so folding them together would give one class two unrelated lifetimes.
+     * A ladder is a global definition and adaptive history is per-revision state, so folding them
+     * together would give one class two unrelated lifetimes.
      */
     @Test
     fun theCatalogueRepositoryRemainsSeparateFromAdaptiveHistory() {
@@ -525,11 +463,8 @@ class ProductionProgressionContentArchitectureTest {
     }
 
     /**
-     * **No generation, UI, scheduler or import/export dependency was introduced.**
-     *
-     * P32's exclusion list, enforced. Read over the whole production tree from the content source, the
-     * bootstrap and the provider, because the way such a dependency arrives is by being *used*, and only
-     * a scan sees a use that no single test happens to exercise.
+     * Read over the content source, the bootstrap and the provider, because such a dependency arrives by
+     * being *used*, and only a scan sees a use that no single test happens to exercise.
      */
     @Test
     fun theStageIntroducesNoGenerationUiSchedulerOrImportDependency() {
@@ -556,10 +491,8 @@ class ProductionProgressionContentArchitectureTest {
     }
 
     /**
-     * **The adaptive engine and policy are untouched by this stage.**
-     *
-     * Structural rather than behavioural: P32's whole claim is that it supplied *data*, and the only
-     * mechanical way to show that is that the two files that own the semantics did not change.
+     * Structural rather than behavioural: the whole claim is that this stage supplied *data*, and the
+     * only mechanical way to show that is that the two files owning the semantics did not change.
      */
     @Test
     fun theEngineAndThePolicyAreNotModifiedByThisStage() {
@@ -578,11 +511,9 @@ class ProductionProgressionContentArchitectureTest {
         )
     }
 
-    // ================================================================ the sweep really swept
-
     /**
-     * **The gates above are not vacuous.** Without this floor, a renamed package would empty every
-     * offender list and this whole class would go green without having read anything.
+     * Without this floor, a renamed package would empty every offender list and this class would go green
+     * without having read anything.
      */
     @Test
     fun everyFileThisClassRulesOverExists() {

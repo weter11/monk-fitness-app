@@ -19,26 +19,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P32's **content proof**: the four authored ladders, persisted through the real P31 table, read back
+ * **Content proof**: the four authored ladders, persisted through the real catalogue table, read back
  * through the real repository, and served by the real production provider.
  *
- * ```text
- * ProductionProgressionRelationDefinitions
- *        ↓  BuiltInProgressionCatalogueBootstrap
- * progression_relation_variant
- *        ↓  ProgressionRelationRepository
- * StoredProgressionRelationProvider
- * ```
+ * Every assertion runs against a **real migrated database**, not a double. The claim is a round-trip
+ * claim — the exact authored levels, exercise ids, dimensions and per-set target lists survive
+ * definition → Room → repository → provider — and a fake repository could only prove that the objects
+ * are equal to themselves.
  *
- * Every assertion here runs against a **real migrated database**, not a double. The claim being made is
- * a round-trip claim — that the exact authored levels, exercise ids, dimensions and per-set target
- * lists survive definition → Room → repository → provider — and a fake repository could only prove that
- * the objects are equal to themselves.
- *
- * The **negative** assertions carry equal weight. A stage that adds seeded content is exactly the stage
- * from which a fabricated ladder leaks: one rung manufactured for an undeclared family, a seeded
- * `plank`, a family outside the authorised four. So the absence claims below are measured on the same
- * database that holds the seeded rows, not on a separate empty one.
+ * The **negative** assertions carry equal weight: a stage that seeds content is exactly where a
+ * fabricated ladder leaks (a rung for an undeclared family, a seeded `plank`, a fifth family). So the
+ * absence claims are measured on the same database that holds the seeded rows, not on a separate
+ * empty one.
  */
 class ProductionProgressionCatalogueTest {
 
@@ -52,27 +44,23 @@ class ProductionProgressionCatalogueTest {
     /**
      * Runs the built-in bootstrap against this rig's database.
      *
-     * A **statement**, not a factory returning the object: an earlier shape of this helper returned the
-     * bootstrap and relied on the caller to invoke it, which is a way for a test to read as though it
-     * seeded content while seeding nothing — the assertion then measures an empty catalogue and fails
-     * for a reason that has nothing to do with the content. Suspending, so it can be called directly
-     * from a `runBlocking` test body.
+     * A **statement**, not a factory returning the object: a helper that returned the bootstrap and
+     * relied on the caller to invoke it lets a test read as though it seeded content while seeding
+     * nothing — the assertion then measures an empty catalogue and fails for a reason unrelated to the
+     * content.
      */
     private suspend fun bootstrap() = BuiltInProgressionCatalogueBootstrap(repository()).bootstrap()
 
     private fun provider(): StoredProgressionRelationProvider =
         StoredProgressionRelationProvider(repository())
 
-    // ================================================================ the four authorised ladders
-
     /**
-     * **Each authorised family is served from persisted content, and the served value is the authored
-     * one — equal as a domain value.**
+     * **Each authorised family is served from persisted content as the authored value.**
      *
      * Asserted through the production provider rather than the repository, because the provider is what
-     * production actually asks, and an equality assertion on the whole relation covers levels, exercise
-     * ids, dimensions and target lists at once: the stored rows reconstruct exactly the value that was
-     * authored, so nothing was dropped, reordered or flattened in the round trip.
+     * production asks, and equality on the whole relation covers levels, exercise ids, dimensions and
+     * target lists at once: the stored rows reconstruct exactly the authored value, so nothing was
+     * dropped, reordered or flattened in the round trip.
      */
     @Test
     fun everyAuthorisedFamilyIsServedFromPersistedContentAsTheAuthoredValue() = runBlocking {
@@ -95,10 +83,10 @@ class ProductionProgressionCatalogueTest {
      * **The exact per-rung content of each ladder, spelled out independently of the definitions file.**
      *
      * The equality assertions above compare the provider's answer to the *same source* the provider
-     * ultimately depends on, so on their own they would not catch the definitions file itself holding the
-     * wrong ladder — a wrong level or a wrong target would be faithfully persisted and faithfully read
-     * back. This test states the four ladders as literals in the test, so an accidental edit to the
-     * content source cannot move a rung, swap two levels or change one number without failing here.
+     * depends on, so alone they would not catch the definitions file itself holding the wrong ladder —
+     * a wrong level or target would be faithfully persisted and read back. Stating the ladders as
+     * literals here means an accidental edit to the content source cannot move a rung, swap two levels
+     * or change one number without failing.
      */
     @Test
     fun eachLadderHasExactlyTheAuthoredRungsLevelsAndTargetLists() = runBlocking {
@@ -162,9 +150,6 @@ class ProductionProgressionCatalogueTest {
         }
     }
 
-    /**
-     * **The prescription dimensions are exact** — `REP_BASED` everywhere except the `hang` entry rung.
-     */
     @Test
     fun everyRungCarriesItsAuthoredPrescriptionDimension() = runBlocking {
         bootstrap()
@@ -185,12 +170,11 @@ class ProductionProgressionCatalogueTest {
     }
 
     /**
-     * **The time → repetition transition survives the whole round trip as a transition.**
+     * **The time → repetition transition survives the round trip as a transition.**
      *
      * Asserted as the *types* as well as the values, because the crossing is the claim: rung `-2` is a
-     * [TimePrescription] and rung `-1` a [RepPrescription]. If the round trip collapsed the dimension to
-     * a string and rebuilt it from the wrong dimension, the target numbers could still match while the
-     * prescription type had changed.
+     * [TimePrescription] and rung `-1` a [RepPrescription]. A round trip that collapsed the dimension to
+     * a string and rebuilt it from the wrong one would still match the target numbers.
      */
     @Test
     fun thePullUpLadderPreservesTheTimeToRepetitionDimensionTransition() = runBlocking {
@@ -215,9 +199,8 @@ class ProductionProgressionCatalogueTest {
     /**
      * **No per-set target list is flattened, and no set is lost.**
      *
-     * The three-set ladders are the ones this can catch: a single scalar column would still store "8"
-     * correctly while silently dropping the other two sets, so the assertion checks both the length and
-     * every element of every rung.
+     * A single scalar column would still store "8" correctly while silently dropping the other two sets,
+     * so this checks both the length and every element of every rung.
      */
     @Test
     fun everyRungKeepsItsFullPerSetPrescriptionThroughRoom() = runBlocking {
@@ -242,16 +225,13 @@ class ProductionProgressionCatalogueTest {
         }
     }
 
-    // ================================================================ the two deliberate absences
-
     /**
-     * **`plank` and `glute_bridge` remain undeclared** — the two absences this stage decided rather than
-     * ran out of time.
+     * **`plank` and `glute_bridge` remain undeclared.**
      *
-     * Both are asserted *after* the bootstrap ran on this very database, because the failure mode being
-     * guarded against is a seed that quietly fills a family it had no business filling. An absent family
-     * that a seed manufactures would make the engine hold at a fabricated ceiling, which looks like a
-     * working ladder and is not one.
+     * Both are asserted *after* the bootstrap ran on this very database, because the failure mode is a
+     * seed that quietly fills a family it had no business filling. An absent family a seed manufactures
+     * would make the engine hold at a fabricated ceiling, which looks like a working ladder and is not
+     * one.
      */
     @Test
     fun theTwoUnauthorisedFamiliesRemainUndeclaredAfterBootstrapping() = runBlocking {
@@ -279,8 +259,7 @@ class ProductionProgressionCatalogueTest {
      * **No family outside the four authorised ones is seeded at all.**
      *
      * Measured by the catalogue's own declared-family list rather than by probing families one at a
-     * time: a seed that reached a fifth family would show up here even if no test happened to ask about
-     * that family. The catalogue's own answer is the complete set of what was written.
+     * time: a seed that reached a fifth family shows up here even if no test asks about that family.
      */
     @Test
     fun theCatalogueDeclaresExactlyTheFourAuthorisedFamiliesAndNoOther() = runBlocking {
@@ -306,18 +285,16 @@ class ProductionProgressionCatalogueTest {
     }
 
     /**
-     * **An unauthorised family is answered `null` by the production provider** — including a family the
-     * catalogue genuinely holds exercises for, which is the case a nearest-family or state-derived
-     * fallback would fail.
+     * **An unauthorised family is answered `null`** — including a family the catalogue genuinely holds
+     * exercises for, which is the case a nearest-family or state-derived fallback would fail.
      */
     @Test
     fun anUnauthorisedCatalogueFamilyIsAnsweredNullRatherThanAPlausibleLadder() = runBlocking {
         bootstrap()
         val provider = provider()
 
-        // `rows`, `burpees`, `pelvic_control` and `ankle_mobility` are real shipped families with real
-        // exercises and no authored ladder. Each would be answered by any fallback keyed on "some
-        // family exists".
+        // Real shipped families with real exercises and no authored ladder. Each would be answered by
+        // any fallback keyed on "some family exists".
         listOf("rows", "burpees", "pelvic_control", "ankle_mobility", "cat_cow", "superman")
             .forEach { familyId ->
                 assertNull(
@@ -336,14 +313,11 @@ class ProductionProgressionCatalogueTest {
         )
     }
 
-    // ================================================================ persistence shape
-
     /**
      * **Exactly 17 stored rows: 4 + 4 + 4 + 5.**
      *
      * Counted in the database rather than derived from the definitions, so a family that stored a
-     * different number of rungs than it declares would be caught here rather than read back as a
-     * plausible ladder.
+     * different number of rungs than it declares is caught rather than read back as a plausible ladder.
      */
     @Test
     fun theSeededCatalogueIsExactlySeventeenRowsAcrossFourFamilies() = runBlocking {
@@ -366,9 +340,9 @@ class ProductionProgressionCatalogueTest {
     /**
      * **The stored columns are exactly the authored ones, read back row by row.**
      *
-     * The provider-level equality elsewhere proves the domain value round-trips; this proves the
-     * *columns* did, by reading the table directly. It is what would catch a dimension stored under the
-     * wrong token or a target list stored as a scalar and re-split by luck.
+     * The provider-level equality elsewhere proves the domain value round-trips; reading the table
+     * directly proves the *columns* did — it catches a dimension stored under the wrong token or a
+     * target list stored as a scalar and re-split by luck.
      */
     @Test
     fun theStoredRowsHoldTheAuthoredColumnsVerbatim() = runBlocking {
@@ -380,8 +354,8 @@ class ProductionProgressionCatalogueTest {
         )
 
         // Sorted to match the query's `ORDER BY familyId ASC, level ASC`: the authored list is in
-        // authoring order (pushups, squats, lunges, pullups), which is not alphabetical, so comparing
-        // the two directly would be asserting a difference the stage never introduced.
+        // authoring order, not alphabetical, so comparing the two directly would assert a difference
+        // that was never introduced.
         assertEquals(
             "one row per declared variant, in canonical read order",
             ProductionProgressionRelationDefinitions.definitions
@@ -412,8 +386,7 @@ class ProductionProgressionCatalogueTest {
      * **Reads are canonical: level ascending, then exercise id.**
      *
      * The ordering is a read contract of the DAO, not a property of insertion order, so it is asserted
-     * on the raw query rather than on the reconstructed domain value — the domain would have re-sorted a
-     * mis-ordered read and hidden it.
+     * on the raw query — the domain would re-sort a mis-ordered read and hide it.
      */
     @Test
     fun theStoredCatalogueIsReadInCanonicalOrder() = runBlocking {
@@ -433,9 +406,8 @@ class ProductionProgressionCatalogueTest {
      * **A family never leaks into another.**
      *
      * Seeded ladders share no exercise ids, so an insert that attributed a rung to the wrong family
-     * would either be refused by the domain or produce a family holding another family's exercise. This
-     * asserts the attribution directly: every declared rung belongs to its own family, and the four
-     * families share nothing.
+     * would be refused by the domain or produce a family holding another family's exercise. This
+     * asserts the attribution directly: every rung belongs to its own family and the four share nothing.
      */
     @Test
     fun noFamilyLeaksIntoAnother() = runBlocking {
@@ -462,13 +434,11 @@ class ProductionProgressionCatalogueTest {
         }
     }
 
-    // ================================================================ the provider reads, and only reads
-
     /**
      * **A provider read does not write.** Asserted by counting rows before and after, because a
-     * read-mutates bug is exactly what an "idempotent" seed is supposed to hide — and this database
-     * already holds its full content, so a self-healing provider would have nothing to heal and would
-     * pass by doing nothing.
+     * read-mutates bug is exactly what an "idempotent" seed hides — and this database already holds its
+     * full content, so a self-healing provider would have nothing to heal and would pass by doing
+     * nothing.
      */
     @Test
     fun providerReadsDoNotMutateTheStoredContent() = runBlocking {
@@ -499,10 +469,10 @@ class ProductionProgressionCatalogueTest {
     /**
      * **A deleted ladder is NOT silently restored by a read.**
      *
-     * This is the claim that separates a bootstrap from a self-healing provider. The family is removed
-     * through the repository, and the provider then answers `null` — restoring the row on read would
-     * make a consumer's answer depend on when it asked, and would quietly rewrite content under an
-     * adaptive evaluation.
+     * This is what separates a bootstrap from a self-healing provider. The family is removed through
+     * the repository and the provider answers `null` — restoring the row on read would make a
+     * consumer's answer depend on when it asked, and would quietly rewrite content under an adaptive
+     * evaluation.
      */
     @Test
     fun aDeletedLadderIsNotSilentlyRestoredByAProviderRead() = runBlocking {
@@ -529,15 +499,12 @@ class ProductionProgressionCatalogueTest {
         )
     }
 
-    // ================================================================ round-trip through the domain
-
     /**
      * **A stored ladder reconstructs the equal domain value, including a same-level shape.**
      *
-     * The seeded ladders all give each level exactly one exercise, so nothing in the persisted content
-     * exercises the *other* valid domain shape — several variants at one level. This proves the storage
-     * boundary represents that too, since it is a legitimate declaration (§15's variant change) and the
-     * `(familyId, exerciseId)` key admits it.
+     * The seeded ladders give each level exactly one exercise, so nothing in the persisted content
+     * exercises the *other* valid domain shape — several variants at one level. It is a legitimate
+     * declaration and the `(familyId, exerciseId)` key admits it, so the storage boundary must too.
      */
     @Test
     fun aStoredLadderWithTwoVariantsAtOneLevelRoundTrips() = runBlocking {
@@ -563,9 +530,9 @@ class ProductionProgressionCatalogueTest {
     /**
      * **A ladder stored over a seeded family replaces it, as one unit.**
      *
-     * Asserted because the seeded content makes this reachable in production: a future user-authored or
-     * edited ladder writes through the same repository, and a partial write that left the seeded rungs
-     * behind would produce a family declaring six positions where four were authored.
+     * Reachable in production: a user-authored or edited ladder writes through the same repository, and
+     * a partial write that left the seeded rungs behind would produce a family declaring six positions
+     * where four were authored.
      */
     @Test
     fun storingOverASeededFamilyReplacesItsRows() = runBlocking {

@@ -13,24 +13,13 @@ import java.time.Instant
 /**
  * The lifecycle suite's rig: the data-access rig's real SQLite engine and production DAOs, plus the
  * [ProgramLifecycleService] built over them exactly as [com.monkfitness.app.di.AppContainer] builds it.
+ * The service is constructed with a [MovableClock] and a [SequentialIds] generator so every timestamp
+ * and every new identity in a test is a value the test chose.
  *
- * Everything a lifecycle test needs to state is reachable from here:
- *
- *  * [service] — the behaviour under test, constructed with a [MovableClock] and a [SequentialIds]
- *    generator so every timestamp and every new identity in a test is a value the test chose.
- *  * [database] and the rig's repositories — for creating the Programs and sessions a test starts
- *    from, and for reading the rows back through a second object so a claim is about storage and not
- *    about a cache.
- *  * [graph] and [standardGraph] — the two Programs every suite needs: a user Program with a real
- *    three-day plan, and the built-in Standard Program the §3 fallback selects.
- *
- * ### Why the Standard Program is seeded here and not in production
- *
- * §4's built-in Program is the fallback the selection moves to when the selected Program is deleted
- * (§3), and the delete path refuses to run without it ([StandardProgramNotSeeded]). A Program without
- * a plan is not a representable state, so this rig seeds one with the fixture's plan — which is what
- * a later stage will do with the app's own content. Production's seeding is §30 steps 6–10; the rig's
- * is the smallest graph that makes the rules testable.
+ * The Standard Program is seeded here because the built-in Program is the fallback the selection moves
+ * to when the selected Program is deleted, and the delete path refuses to run without it
+ * ([StandardProgramNotSeeded]). A Program without a plan is not a representable state, so the rig seeds
+ * one with the fixture's plan — the smallest graph that makes the rules testable.
  */
 internal class ProgramLifecycleRig(key: String = "a") {
 
@@ -40,7 +29,7 @@ internal class ProgramLifecycleRig(key: String = "a") {
     /** The engine, for direct SQL and row counts. */
     val database: SqliteTestDatabase = data.database
 
-    /** A clock the test moves, because `actualStartDate` is a fact the test states (§3). */
+    /** A clock the test moves, because `actualStartDate` is a fact the test states. */
     val clock: MovableClock = MovableClock(ProgramGraphFixture.STARTED)
 
     /** Deterministic identity, so a copied Program's id is readable in a failure message. */
@@ -75,10 +64,9 @@ internal class ProgramLifecycleRig(key: String = "a") {
     val sessionRepository get() = data.workoutSessionRepository
     val appStateRepository get() = data.appStateRepository
 
-    /** Creates the user Program's whole graph the way a creation path will. */
     suspend fun createGraph() = data.createGraph()
 
-    /** Creates the Standard Program, so §3's fallback has something to select. */
+    /** Creates the Standard Program, so the fallback has something to select. */
     suspend fun createStandardProgram() =
         data.programRepository.createProgram(standardGraph.program, standardGraph.revision, emptyList())
 
@@ -96,12 +84,11 @@ internal class ProgramLifecycleRig(key: String = "a") {
     /** The global state row, or `null` when none was written. */
     suspend fun state(): AppState? = data.appStateRepository.state()
 
-    /** Whether the single state row names a selected Program — the §3 fallback's postcondition. */
+    /** Whether the single state row names a selected Program — the fallback's postcondition. */
     fun selectionIsAValidPointer(): Boolean =
         database.scalar("SELECT COUNT(*) FROM `app_state` WHERE `selectedProgramId` IS NOT NULL")
             ?.toInt() == 1
 
-    /** Closes the engine. */
     fun close() = data.close()
 
     /** The built-in Program's graph: the fixture plan with a built-in source and the standard id. */
@@ -115,8 +102,8 @@ internal class ProgramLifecycleRig(key: String = "a") {
             actualStartDate = null
         )
         val revision = graph.revision.copy(
-            // A new identity, because two Programs may not share one plan row (§6, §23): the
-            // built-in Program's plan is the same structure, stored as its own revision.
+            // A new identity, because two Programs may not share one plan row: the built-in
+            // Program's plan is the same structure, stored as its own revision.
             revisionId = com.monkfitness.app.domain.common.RevisionId("revision-standard"),
             programId = standardProgramId,
             days = graph.revision.days.map { day ->
@@ -141,8 +128,7 @@ internal class ProgramLifecycleRig(key: String = "a") {
 
 /**
  * A clock a test moves: the instant it returns is a value the test sets, so "the Program started when
- * the user started it" is measured against an instant the test chose rather than against the wall
- * clock (§26 — the clock is injected; §3 — the start is factual).
+ * the user started it" is measured against an instant the test chose rather than against the wall clock.
  */
 internal class MovableClock(var instant: Instant) : Clock {
     override fun now(): Instant = instant
@@ -150,7 +136,7 @@ internal class MovableClock(var instant: Instant) : Clock {
 
 /**
  * Deterministic identity: a counter with a tag, so a copied Program's id and its first revision's id
- * are both readable in a failure message and reproducible across runs (§26).
+ * are both readable in a failure message and reproducible across runs.
  */
 internal class SequentialIds(private val tag: String = "id") : IdGenerator {
 

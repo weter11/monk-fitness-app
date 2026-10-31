@@ -6,21 +6,17 @@ import org.junit.Test
 import kotlin.math.sqrt
 
 /**
- * Covers the three engine tickets, exercising only the production API surface (no parallel
- * rotation channels; wrist/ankle/hip articulation flows through the joint's single
- * [SkeletonNode.localRotation], the same path every other joint uses):
- *  - UNI-8: wrist/ankle 2-DOF combined articulation — two anatomical axes are composed into one
- *    exact rotation by [SkeletonMath.composeRotations] (reused by [SkeletonMath.buildWristRotation]
- *    / [SkeletonMath.buildAnkleRotation]) that the author writes into `localRotation`.
- *  - UNI-9: degenerate straight-limb bake guard (a too-close straight target no longer writes a
- *    zero-length second bone; both bone lengths are preserved via a triangle fallback).
- *  - UNI-10: hip 3-DOF ball-joint authoring composer ([SkeletonMath.buildHipRotation]).
+ * Wrist, ankle and hip articulation, exercised only through the production API surface (no parallel
+ * rotation channels; the articulation flows through the joint's single [SkeletonNode.localRotation],
+ * the same path every other joint uses): the 2-DOF wrist/ankle composition
+ * ([SkeletonMath.composeRotations], reused by [SkeletonMath.buildWristRotation] /
+ * [SkeletonMath.buildAnkleRotation]), the degenerate straight-limb bake guard (a too-close straight
+ * target must not write a zero-length second bone; both bone lengths are preserved via a triangle
+ * fallback), and the hip 3-DOF ball-joint composer ([SkeletonMath.buildHipRotation]).
  */
 class WristAnkleHipArticulationTest {
 
     private fun mag(v: Vector3) = sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
-
-    // ---------------------------------------------------------------- UNI-8: composeRotations
 
     @Test
     fun composeRotationsEqualsSequentialApplication() {
@@ -56,8 +52,6 @@ class WristAnkleHipArticulationTest {
         assertEquals(expected.z, actual.z, 1e-4f)
     }
 
-    // ---------------------------------------------------------------- UNI-8: wrist 2-DOF
-
     @Test
     fun wristCombinesFlexionAndDeviation() {
         // Composed into `out` (which the author writes into the wrist's localRotation).
@@ -90,8 +84,6 @@ class WristAnkleHipArticulationTest {
         assertEquals(0f, out.angle, 1e-4f)
     }
 
-    // ---------------------------------------------------------------- UNI-8: ankle 2-DOF
-
     @Test
     fun ankleDorsiflexionOnlyMatchesSagittalRotation() {
         val out = JointRotation()
@@ -119,8 +111,6 @@ class WristAnkleHipArticulationTest {
         assertEquals(seq.y, viaComposed.y, 1e-4f)
         assertEquals(seq.z, viaComposed.z, 1e-4f)
     }
-
-    // ---------------------------------------------------------------- UNI-10: hip 3-DOF
 
     @Test
     fun hipFlexionOnlyIsSagittal() {
@@ -162,8 +152,6 @@ class WristAnkleHipArticulationTest {
         assertEquals(seq.y, viaComposed.y, 1e-4f)
         assertEquals(seq.z, viaComposed.z, 1e-4f)
     }
-
-    // ---------------------------------------------------------------- UNI-9: degenerate guard
 
     @Test
     fun straightLimbTooCloseKeepsBothBoneLengths() {
