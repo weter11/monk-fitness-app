@@ -1,5 +1,6 @@
 package com.monkfitness.app.domain.usecase
 
+import com.monkfitness.app.domain.adaptive.AdaptiveState
 import com.monkfitness.app.domain.adaptive.FamilyProgressionState
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveReason
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveInputGap
@@ -334,6 +335,35 @@ class ProgramAdaptiveIntegrationTest {
                 rig.storedFamilyState()?.recoveryQualifyingWindows,
                 rig.storedFamilyState()?.qualifyingWindowsSinceLastChange
             )
+        )
+    }
+
+    /**
+     * The cooldown is a count of the windows the family could have changed level in. A window it spends
+     * in recovery is not one of them: §14's safety state outranks progression, so the count holds there
+     * instead of being spent on the family's behalf.
+     */
+    @Test
+    fun cooldownDoesNotElapseWhileTheFamilyIsInRecovery() = runBlocking {
+        rig.createGraph()
+        rig.seedFamilyState(
+            level = 1,
+            adaptationState = AdaptiveState.RECOVERY,
+            qualifyingWindowsSinceLastChange = 1
+        )
+        val trigger = rig.seedHistoryAndTrigger()
+
+        rig.completeWithAdaptive(trigger.sessionId)
+
+        assertEquals(
+            "the family stays in recovery while its exit gate is unmet",
+            AdaptiveState.RECOVERY,
+            rig.storedFamilyState()?.adaptationState
+        )
+        assertEquals(
+            "a window the family spent in recovery does not spend the cooldown",
+            1,
+            rig.storedFamilyState()?.qualifyingWindowsSinceLastChange
         )
     }
 
