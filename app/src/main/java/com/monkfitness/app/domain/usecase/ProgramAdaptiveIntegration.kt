@@ -13,6 +13,7 @@ import com.monkfitness.app.domain.adaptive.AdaptiveState
 import com.monkfitness.app.domain.adaptive.ConfidenceLevel
 import com.monkfitness.app.domain.adaptive.DensityLoad
 import com.monkfitness.app.domain.adaptive.EvidenceLevel
+import com.monkfitness.app.domain.adaptive.ExerciseRangeSource
 import com.monkfitness.app.domain.adaptive.ExposureLevel
 import com.monkfitness.app.domain.adaptive.ExposureLoad
 import com.monkfitness.app.domain.adaptive.ExposureObservation
@@ -145,6 +146,9 @@ import java.time.ZoneId
  *   `systemDefault()` call inside the load assembly.
  * @param window how far back the decision window reaches (§8's lookback rule, owned by the integration).
  * @param policy the adaptive policy every threshold, count and tolerance is read from (§15).
+ * @param exerciseRanges where the element's exercise's own progression range is read from, when the
+ *   caller states one. It is a caller fact like [classification]: this layer owns no catalogue, and
+ *   [ExerciseRangeSource.NONE] is the default for a caller that states no ranges at all.
  */
 class ProgramAdaptiveIntegration(
     private val planRepository: ProgramPlanRepository,
@@ -157,7 +161,8 @@ class ProgramAdaptiveIntegration(
     private val idGenerator: IdGenerator,
     private val zone: ZoneId,
     private val window: AdaptiveWindowRule = AdaptiveWindowRule.V1,
-    private val policy: ProgramAdaptivePolicy = ProgramAdaptivePolicy.V1
+    private val policy: ProgramAdaptivePolicy = ProgramAdaptivePolicy.V1,
+    private val exerciseRanges: ExerciseRangeSource = ExerciseRangeSource.NONE
 ) {
 
     /**
@@ -327,6 +332,7 @@ class ProgramAdaptiveIntegration(
                 window = windowOf(familyId, element.exerciseId, stored, relation),
                 availableExerciseIds = availableExerciseIdsOf(revision),
                 familyOfExercise = familyOfExercise,
+                range = exerciseRanges.rangeOf(element.exerciseId),
                 supersedesAdjustmentId = supersededBy(standing, element.presentation.programExerciseId.value),
                 policy = policy
             )

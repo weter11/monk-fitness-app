@@ -4,6 +4,7 @@ import com.monkfitness.app.domain.adaptive.AdaptiveInputSnapshot
 import com.monkfitness.app.domain.adaptive.AdaptiveScope
 import com.monkfitness.app.domain.adaptive.AdaptiveState
 import com.monkfitness.app.domain.adaptive.DensityLoad
+import com.monkfitness.app.domain.adaptive.ExerciseRange
 import com.monkfitness.app.domain.adaptive.ExposureLoad
 import com.monkfitness.app.domain.adaptive.IntensityEntry
 import com.monkfitness.app.domain.adaptive.IntensityLoad
@@ -16,7 +17,10 @@ import com.monkfitness.app.domain.adaptive.decision.AdaptiveTarget
 import com.monkfitness.app.domain.adaptive.decision.DecisionOutcome
 import com.monkfitness.app.domain.common.AdjustmentId
 import com.monkfitness.app.domain.common.DecisionId
+import com.monkfitness.app.domain.prescription.Prescription
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
+import com.monkfitness.app.domain.prescription.RepPrescription
+import com.monkfitness.app.domain.prescription.TimePrescription
 import com.monkfitness.app.domain.workout.EffectiveExercise
 import java.time.Instant
 
@@ -50,6 +54,12 @@ import java.time.Instant
  * @property window the family's maintained facts: its position, state, counts and cooldown position.
  * @property familyOfExercise the caller's exercise-to-family classification.
  * @property availableExerciseIds the exercises the user's configuration enables.
+ * @property range the element's exercise's own progression range, when the caller states one. It is the
+ *   clamp a same-exercise prescription step is held to; `null` means the caller declares no range, and
+ *   such a step is then unavailable rather than left unclamped.
+ * @property prescriptionStep a caller-decided re-prescription of the same exercise, or `null` for the
+ *   ordinary policy-driven decision. It is a request fact rather than a policy one: the caller that
+ *   measured the situation owns the target and the reason, and the engine's only addition is the range.
  * @property supersedesAdjustmentId the adjustment this one replaces for the slot, or `null`. An
  *   adjustment supersedes by reference: the earlier row is never rewritten (§16).
  * @property policy the adaptive policy, thresholds and guard tolerances included.
@@ -64,6 +74,8 @@ data class ProgramAdaptiveRequest(
     val window: ProgramAdaptiveWindow,
     val availableExerciseIds: Set<String>,
     val familyOfExercise: Map<String, String> = emptyMap(),
+    val range: ExerciseRange? = null,
+    val prescriptionStep: ProgramPrescriptionStep? = null,
     val supersedesAdjustmentId: AdjustmentId? = null,
     val policy: ProgramAdaptivePolicy = ProgramAdaptivePolicy.V1
 ) {
@@ -79,6 +91,40 @@ data class ProgramAdaptiveRequest(
         }
         require(supersedesAdjustmentId != adjustmentId) {
             "an adjustment cannot supersede itself"
+        }
+    }
+}
+
+/**
+ * A caller's request to re-prescribe the element's **own** exercise, held to that exercise's range.
+ *
+ * This is the vocabulary a caller uses when it has already decided that the same movement should be
+ * shown with a different amount — a lighter week after a gap, for instance — and it is deliberately not
+ * a policy action: the target sequence and the rule that answered are the caller's facts, and the
+ * engine's share is the one mechanical constraint it owns here, the catalogue range clamp.
+ *
+ * Its action is the reason's own action, and only a regression qualifies: a step that re-prescribes the
+ * same exercise is a lowering of what is presented, so the change it produces is a `REGRESS`. That is
+ * also what keeps the result's own invariant (`reason.action == decision.action`) true without this
+ * path inventing a second action vocabulary.
+ *
+ * A target may ask for less than the range's bottom: the clamp answers with the bottom, and when the
+ * element already prescribes that bottom there is no change to make — the engine reports the floor
+ * rather than producing an adjustment that changes nothing.
+ *
+ * @property target the per-set amounts the caller asks for, in the element's own dimension. Sets are
+ *   the caller's too: this step changes amounts, not the shape of the prescription's set sequence.
+ * @property reason the change reason the produced decision carries. Must accompany a `REGRESS`.
+ */
+data class ProgramPrescriptionStep(
+    val target: Prescription,
+    val reason: ProgramAdaptiveReason
+) {
+
+    init {
+        require(reason.action == AdaptiveAction.REGRESS) {
+            "a prescription step lowers the same exercise, so its reason accompanies a regression: " +
+                "reason=$reason action=${reason.action}"
         }
     }
 }
@@ -284,12 +330,14 @@ object ProgramAdaptiveEngine {
             reason = reason
         )
 
+        val requestedAction = request.prescriptionStep?.reason?.action ?: policyDecision.action
+
         return ProgramAdaptiveResult(
             decision = decision,
             adjustment = adjustment,
             state = stateAfter(policyDecision.state, change),
             reason = reason,
-            requestedAction = policyDecision.action,
+            requestedAction = requestedAction,
             signals = signals,
             guard = guardVerdict,
             verdict = policyDecision.verdict
@@ -338,6 +386,10 @@ object ProgramAdaptiveEngine {
         request: ProgramAdaptiveRequest,
         policyDecision: ProgramPolicyDecision
     ): Resolution {
+        // A caller that has already decided a same-exercise step does not go through the family's
+        // ladder: the target is the caller's own, and the only rule this stage adds is the range clamp.
+        request.prescriptionStep?.let { step -> return stepWithinRange(request, step) }
+
         if (policyDecision.action == AdaptiveAction.HOLD) {
             return realignment(request) ?: Resolution.None(policyDecision.reason)
         }
@@ -389,6 +441,71 @@ object ProgramAdaptiveEngine {
             target = AdaptiveTarget.Family(relation.familyId),
             after = presentationOf(request.element.presentation, variant),
             reason = if (up) ProgramAdaptiveReason.SUSTAINED_POSITIVE else ProgramAdaptiveReason.SUSTAINED_NEGATIVE
+        )
+    }
+
+    /**
+     * The element's **own** exercise, re-prescribed within its catalogue range.
+     *
+     * This path exists beside [step] and does not replace it: [step] moves along the family's hierarchy,
+     * which changes the exercise, while this one keeps the exercise and changes only the amounts. It is
+     * reached only through [ProgramAdaptiveRequest.prescriptionStep], so a request that does not ask for
+     * it resolves exactly as before.
+     *
+     * The rules are mechanical, and each has one owner:
+     *
+     *  * the range must be stated for the element's exercise, and in the element's own dimension — a
+     *    range the caller does not state, or one written in the other unit, makes the step unavailable
+     *    rather than unclamped;
+     *  * the caller's per-set targets are clamped to that range, each in its own set position, so an
+     *    amount below the range's bottom becomes the bottom and an amount above its top becomes the top;
+     *  * when the clamp produces the prescription already presented there is no change to make. If the
+     *    caller asked below the bottom, that is the floor — the same bounded answer [step] gives at the
+     *    family's own floor — and no adjustment is produced.
+     *
+     * Everything else — the reason, the target scope and the action — is the caller's or the reason's;
+     * this function invents neither a second action vocabulary nor a rule name.
+     */
+    private fun stepWithinRange(
+        request: ProgramAdaptiveRequest,
+        step: ProgramPrescriptionStep
+    ): Resolution {
+        val before = request.element.presentation
+        val dimension = before.prescription.dimension
+        val amounts = request.range?.amountsFor(dimension)
+            ?: return Resolution.None(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE)
+        if (step.target.dimension != dimension) {
+            return Resolution.None(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE)
+        }
+
+        val clamped = step.target.perSetTargets.map { amount -> amount.coerceIn(amounts.first, amounts.last) }
+        val afterPrescription = when (dimension) {
+            PrescriptionDimension.REP_BASED -> RepPrescription(clamped)
+            PrescriptionDimension.TIME_BASED -> TimePrescription(clamped)
+            else -> return Resolution.None(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE)
+        }
+        val after = EffectiveExercise(
+            programExerciseId = before.programExerciseId,
+            exerciseId = before.exerciseId,
+            prescription = afterPrescription,
+            focus = before.focus
+        )
+        if (after == before) {
+            val askedBelowTheFloor = step.target.perSetTargets.any { amount -> amount < amounts.first }
+            return Resolution.None(
+                if (askedBelowTheFloor) {
+                    ProgramAdaptiveReason.FLOOR_REACHED
+                } else {
+                    ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE
+                }
+            )
+        }
+
+        return Resolution.Change(
+            action = step.reason.action,
+            target = AdaptiveTarget.Exercise(before.exerciseId),
+            after = after,
+            reason = step.reason
         )
     }
 

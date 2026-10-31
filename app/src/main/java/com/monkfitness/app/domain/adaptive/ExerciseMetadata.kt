@@ -1,5 +1,7 @@
 package com.monkfitness.app.domain.adaptive
 
+import com.monkfitness.app.domain.prescription.PrescriptionDimension
+
 /**
  * The **metadata vocabulary** a plan element is described with: which training domain an exercise
  * serves, which body region it trains, and the facts about it a planner may consume.
@@ -117,5 +119,87 @@ data class ExerciseMetadata<E>(
             "an exercise that states a progression range is also stated with the set count its " +
                 "catalogue definition carries, '${id}' stated $sets"
         }
+    }
+}
+
+/**
+ * One exercise's own progression span, as the adaptive stage is allowed to see it.
+ *
+ * This is the pure-domain carrier of [ExerciseMetadata]'s `repRange` / `timeRange`: the metadata type
+ * also states a training domain, a body region, equipment and a set count, none of which a
+ * prescription step has any use for, and it is generic over the caller's equipment type. Carrying the
+ * range alone keeps the adaptive layer's input free of the catalogue's unrelated vocabulary — and,
+ * because this file is inside `domain/adaptive`, it is the shape `ProgramDomainPurityTest` fences:
+ * no data layer, no platform, no mutable state.
+ *
+ * A range is stated in **one** dimension, exactly as a prescription is written in one. A repetition
+ * range and a time range cannot both be stated, because no exercise progresses in both units at once;
+ * an exercise that states no range at all is `null` at the call site rather than an empty range here.
+ *
+ * @property repRange the repetitions an exercise progresses through, when it is repetition-based.
+ * @property timeRange the seconds an exercise progresses through, when it is time-based.
+ */
+data class ExerciseRange(
+    val repRange: IntRange? = null,
+    val timeRange: IntRange? = null
+) {
+
+    init {
+        require((repRange == null) != (timeRange == null)) {
+            "an exercise range is stated in exactly one dimension: repRange=$repRange " +
+                "timeRange=$timeRange"
+        }
+        val stated = repRange ?: timeRange!!
+        require(!stated.isEmpty()) {
+            "an exercise range spans at least one value, was $stated"
+        }
+        require(stated.first >= 1) {
+            "an exercise range starts at a performed amount, was $stated"
+        }
+    }
+
+    /**
+     * The span [dimension] is measured in, or `null` when this range is the other dimension's — or a
+     * dimension the prescription vocabulary reserves but the domain cannot express yet.
+     */
+    fun amountsFor(dimension: PrescriptionDimension): IntRange? = when (dimension) {
+        PrescriptionDimension.REP_BASED -> repRange
+        PrescriptionDimension.TIME_BASED -> timeRange
+        PrescriptionDimension.SET_BASED,
+        PrescriptionDimension.DIFFICULTY_BASED,
+        PrescriptionDimension.REST_BASED -> null
+    }
+}
+
+/**
+ * The exercise range of this metadata, or `null` when the catalogue states none.
+ *
+ * The bridge between the catalogue's metadata vocabulary and the adaptive input: a caller that already
+ * holds [ExerciseMetadata] passes its range on without restating the catalogue. Nothing else about the
+ * metadata travels — the adaptive stage has no use for a body region or an equipment requirement.
+ */
+fun ExerciseMetadata<*>.toExerciseRange(): ExerciseRange? = when {
+    repRange != null -> ExerciseRange(repRange = repRange)
+    timeRange != null -> ExerciseRange(timeRange = timeRange)
+    else -> null
+}
+
+/**
+ * Where the adaptive layer reads one exercise's range from — a caller fact, like the family
+ * classification beside it.
+ *
+ * The domain owns no catalogue, so a range arrives as an input. [NONE] is the honest default for a
+ * caller that states no ranges at all: the layer then has no range to clamp a prescription step to,
+ * which is exactly today's behaviour.
+ */
+fun interface ExerciseRangeSource {
+
+    /** The range [exerciseId] states, or `null` when this caller declares none. */
+    fun rangeOf(exerciseId: String): ExerciseRange?
+
+    companion object {
+
+        /** No ranges are declared at all. */
+        val NONE: ExerciseRangeSource = ExerciseRangeSource { null }
     }
 }
