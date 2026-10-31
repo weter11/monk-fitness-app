@@ -651,7 +651,14 @@ class AdaptiveGapFactsAndRangeWiringTest {
             (starts.lastOrNull() ?: Instant.parse("2026-10-01T07:00:00Z")).plus(Duration.ofDays(1)),
             "pushups"
         )
-        return usualIntervalOf(history + completing, completing.sessionId, ::familyOf, FAMILY, sessionsToConsider)
+        return usualIntervalOf(
+            history + completing,
+            completing.sessionId,
+            ::familyOf,
+            FAMILY,
+            sessionsToConsider = sessionsToConsider,
+            minimumSessions = ProgramAdaptivePolicy.V1.sessionsBeforeAnIntervalIsUsual
+        )
     }
 
     /** The caller's exercise→family classification, as production states it. */
