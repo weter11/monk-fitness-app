@@ -10,22 +10,13 @@ import java.io.File
 import java.lang.reflect.Modifier
 
 /**
- * Stage 19 — the boundaries of the explicit target schedule authoring path, asserted against the
- * sources themselves.
+ * The boundaries of the explicit target schedule authoring path, asserted against the sources
+ * themselves.
  *
- * The stage's claim is a set of prohibitions, and a prohibition that lives only in a KDoc erodes the
- * first time a convenient import appears. So each is checked here as a **token or a shape in real
- * code**, with comments stripped first — which is what lets these files' own explanations say "never
- * reads `ProgramSchedule`" without tripping the rule about reading it.
- *
- * ```text
- * 1. no ProgramSchedule -> TargetSchedule inference, anywhere on the authoring path
- * 2. the authoring reads no Scheduler state
- * 3. the authoring reads no resolved occurrence, slot, session or performance state
- * 4. the stored target source stays caller-owned configuration
- * 5. the editor and the save layer hold no second target-scheduling policy
- * 6. production consumers still do not run a target pass
- * ```
+ * The claim is a set of prohibitions, and a prohibition that lives only in a KDoc erodes the first time
+ * a convenient import appears. So each is checked here as a **token or a shape in real code**, with
+ * comments stripped first — which is what lets these files' own explanations say "never reads
+ * `ProgramSchedule`" without tripping the rule about reading it.
  */
 class TargetScheduleAuthoringArchitectureTest {
 
@@ -63,8 +54,6 @@ class TargetScheduleAuthoringArchitectureTest {
                 .map { line -> "${source.name}: $line" }
         }
 
-    // ---------------------------------------------------------------- the files exist
-
     @Test
     fun theAuthoringPathAddsExactlyTheFilesItClaims() {
         assertTrue(
@@ -75,8 +64,6 @@ class TargetScheduleAuthoringArchitectureTest {
         assertTrue("the Stage 18 target-source DAO is still there and is still insert-and-read only",
             targetDaoFile.isFile)
     }
-
-    // ---------------------------------------------------------------- 1. no legacy -> target inference
 
     @Test
     fun theAuthoringPathNamesNoLegacyScheduleVocabularyAtAll() {
@@ -102,7 +89,7 @@ class TargetScheduleAuthoringArchitectureTest {
     fun theSaveBoundaryNamesNoLegacyScheduleVocabularyEither() {
         val saveService = code(saveServiceFile)
         // Whole-token, with `_` a word character, because `ProgramScheduler` *contains*
-        // `ProgramSchedule` — and the save layer legitimately holds §20's Scheduler, which decides the
+        // `ProgramSchedule` — and the save layer legitimately holds the Scheduler, which decides the
         // initial opportunities. A substring scan would refuse the collaborator this stage must keep.
         for (token in listOf("ProgramSchedule", "scheduleType", "scheduleWeekdays", "scheduleSessionsPerWeek")) {
             val pattern = Regex("(?<![A-Za-z0-9_])$token(?![A-Za-z0-9_])")
@@ -116,8 +103,8 @@ class TargetScheduleAuthoringArchitectureTest {
 
     @Test
     fun noProductionSourceMapsALegacyScheduleOntoATargetSchedule() {
-        // The same absence claim Stage 18 states over the whole production tree, restated because this
-        // stage adds the second place such a mapping could have grown: the authoring path.
+        // Restated from the whole-tree sweep because the authoring path is the second place such a
+        // mapping could have grown.
         val offenders = mainDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .mapNotNull { source ->
@@ -159,8 +146,6 @@ class TargetScheduleAuthoringArchitectureTest {
                 .any { field -> field.name.contains("target", ignoreCase = true) }
         )
     }
-
-    // ---------------------------------------------------------------- 2./3. no state is read
 
     @Test
     fun theAuthoringReadsNoSchedulerState() {
@@ -246,8 +231,6 @@ class TargetScheduleAuthoringArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- 4. caller-owned configuration
-
     @Test
     fun theSourceIsCallerOwnedConfigurationAndNothingElse() {
         // The only *transformation* the authoring performs is a value substitution plus the re-pointing
@@ -317,8 +300,6 @@ class TargetScheduleAuthoringArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- 5. no second policy in the editor/save layer
-
     @Test
     fun theEditorAndSaveLayerHoldNoTargetSchedulingPolicyOfTheirOwn() {
         // A *second* policy is what a cadence branch, a window, a date computation or a pass would be
@@ -343,17 +324,13 @@ class TargetScheduleAuthoringArchitectureTest {
 
     @Test
     fun theEditorReachesNoTargetSchedulingPolicyAndTheOneTargetNameItHoldsIsItsOwnReturnType() {
-        // Revised, not relaxed — §30 step 22. The claim used to be *"the editor names no target-stage
-        // type at all"*, which was true because target scheduling could not yet change a revision
-        // without a structural edit. That made the absence an accident of what existed rather than a
-        // rule, and step 22 had to change it: a target-only change mints a revision, and §6 gives the
-        // **editor** sole ownership of revision minting, so the editor necessarily names the value it
-        // hands back for that mint.
+        // A target-only change mints a revision, and the **editor** has sole ownership of revision
+        // minting, so the editor necessarily names the value it hands back for that mint.
         //
-        // What is still forbidden is unchanged and is what the assertion now says: the editor holds no
-        // target *scheduling policy* — no source value, no authoring, no repository, no cadence
-        // vocabulary, no pass, no adapter. The one target name it is allowed is its own return type,
-        // which holds a Program, a revision and a correspondence and nothing about scheduling.
+        // What is forbidden is a target *scheduling policy*: no source value, no authoring, no
+        // repository, no cadence vocabulary, no pass, no adapter. The one target name it may use is its
+        // own return type, which holds a Program, a revision and a correspondence and nothing about
+        // scheduling.
         val forbidden = listOf(
             "TargetScheduleSource", "TargetScheduleAuthoring", "TargetScheduleDefinition",
             "TargetProgramDayBinding", "TargetScheduleRevisionChange", "TargetScheduleSourceRead",
@@ -414,15 +391,11 @@ class TargetScheduleAuthoringArchitectureTest {
                 saveService.contains("ProgramTargetScheduleRuleEntity") ||
                 saveService.contains("ProgramTargetProgramDayBindingEntity")
         )
-        // Revised, not relaxed — §30 step 22. The claim used to be a count of **one** `store(` call
-        // site, which said "a second application path cannot appear beside this one unnoticed". Step
-        // 22 added the legs the new contract has — a creation, a structural edit, and a target-only
-        // change — and each needs its own call, so counting *sites* no longer states the claim.
-        //
-        // What the claim actually protects is that every write goes through the same repository and
-        // that no leg can reach a DAO. Both are now asserted directly: the number of `store(` sites
-        // is pinned at the three legs the contract has (so a *fourth* application path is still
-        // refused), and every one of them is a `targetSourceRepository.store(`.
+        // What the claim protects is that every write goes through the same repository and that no leg
+        // can reach a DAO. Both are asserted directly: the number of `store(` sites is pinned at the
+        // three legs the contract has — a creation, a structural edit and a target-only change — so a
+        // *fourth* application path is still refused, and every one of them is a
+        // `targetSourceRepository.store(`.
         assertEquals(
             "the target source is written from exactly the three legs this contract has — a " +
                 "creation, a structural edit and a target-only change — and no fourth application " +
@@ -443,20 +416,14 @@ class TargetScheduleAuthoringArchitectureTest {
         }
     }
 
-    // ---------------------------------------------------------------- 6. no cutover
-
     @Test
     fun theSaveBoundaryStillRunsNoTargetPassAndTheOnlyTargetConsumerIsTheStageTwentyNode() {
         // The authoring path makes a target source *authorable*; it must not make the target contour
-        // *reachable* from production scheduling. §30 step 19 deferred the cutover explicitly.
+        // *reachable* from production scheduling.
         //
-        // §30 step 20 renamed this claim rather than relaxing it. It used to end with "the bridge is
-        // consumed by nobody", which was a construction-site absence that Stage 20 made false by
-        // construction: the first production consumer holds the bridge, and a scan for `Bridge(` would
-        // have kept reading empty while saying so. The claim that is now true is a **closed consumer
-        // list** — one entry, the Stage 20 consumer — plus the whole negative half below, which is
-        // what the deferral was actually about and which is unchanged: the save boundary, the editor
-        // and the legacy contour still run no target pass.
+        // A scan for `Bridge(` would keep reading empty while the first production consumer holds it, so
+        // the claim is a **closed consumer list** — one entry, that consumer — plus the negative half
+        // below: the save boundary, the editor and the legacy contour still run no target pass.
         val saveService = code(saveServiceFile)
         for (pass in listOf("TargetScheduleOrchestrator", "TargetPlanner", "TargetSchedulePolicy",
             "TargetScheduleApplicationService", "TargetScheduleInputAdapter")) {
@@ -489,7 +456,7 @@ class TargetScheduleAuthoringArchitectureTest {
     @Test
     fun theLegacySchedulerIsStillProductionsSchedulingOwner() {
         // The one thing this stage must not have done is give the legacy contour a reason to know about
-        // target semantics. §20's ownership is unchanged and the assertion is mechanical.
+        // target semantics. Ownership is unchanged and the assertion is mechanical.
         for (legacy in listOf(
             File(usecaseDir, "ProgramScheduler.kt"),
             File(mainDir, "domain/program/SlotPlanner.kt"),
@@ -509,10 +476,10 @@ class TargetScheduleAuthoringArchitectureTest {
 
     @Test
     fun theImportExportContractIsUntouchedByThisStage() {
-        // §30 step 13's transfer model carries no target field and §30 step 19 preserved that decision:
-        // the authoring exists, but no *transferable* representation of it was established, so the
-        // transfer format is deliberately not widened here. Checked over the whole transfer package, so
-        // a new field added to any document type is caught and not only one added to the root.
+        // The transfer model carries no target field: the authoring exists, but no *transferable*
+        // representation of it was established, so the format is deliberately not widened here. Checked
+        // over the whole transfer package, so a new field on any document type is caught, not only one
+        // on the root.
         val transferDir = File(mainDir, "domain/program/transfer")
         val sources = transferDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
         assertTrue("the transfer package is still there", sources.isNotEmpty())

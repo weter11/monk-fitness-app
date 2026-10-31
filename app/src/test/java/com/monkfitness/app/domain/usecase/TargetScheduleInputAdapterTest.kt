@@ -27,18 +27,15 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 
 /**
- * Phase 13 behaviour: the adapter converts explicitly stated caller definitions into a target
- * scheduling request and forwards every other value without reinterpretation.
+ * The adapter converts explicitly stated caller definitions into a target scheduling request and
+ * forwards every other value without reinterpretation.
  *
- * The suite is written to fail on the *kinds* of shortcut this boundary exists to prevent, so most
- * of it is negative: a legacy schedule that changes nothing here, a ProgramDay that is not the
- * source of a target identity, a persisted slot that is not an occurrence, and an adapter that
- * starts deciding.
+ * Most of the suite is negative, because it fails on the *kinds* of shortcut this boundary exists to
+ * prevent: a legacy schedule that changes nothing here, a ProgramDay that is not the source of a
+ * target identity, a persisted slot that is not an occurrence, and an adapter that starts deciding.
  */
 class TargetScheduleInputAdapterTest {
     private val adapter = TargetScheduleInputAdapter()
-
-    // ------------------------------------------------------------------ 1. explicit conversion
 
     @Test
     fun oneExplicitDefinitionBecomesTheExactTargetSchedule() {
@@ -79,8 +76,6 @@ class TargetScheduleInputAdapterTest {
         assertEquals(cadences, request.schedules.map { it.cadence })
     }
 
-    // ------------------------------------------------------------------ 2. several definitions, caller order
-
     @Test
     fun multipleDefinitionsKeepTheOrderTheCallerStatedThem() {
         val definitions = listOf(
@@ -101,8 +96,6 @@ class TargetScheduleInputAdapterTest {
 
         assertEquals(emptyList<TargetSchedule>(), request.schedules)
     }
-
-    // ------------------------------------------------------------------ 3. exact pass-through
 
     @Test
     fun everyCallerOwnedValueReachesTheRequestUnchanged() {
@@ -146,8 +139,6 @@ class TargetScheduleInputAdapterTest {
         )
     }
 
-    // ------------------------------------------------------------------ 4. explicit ProgramDay binding
-
     @Test
     fun theProgramDayBindingIsPreservedExactlyAsStated() {
         val bindings = listOf(
@@ -169,8 +160,6 @@ class TargetScheduleInputAdapterTest {
         assertEquals("day-7", request.programDayBindings.first { it.workoutId == "strength-workout" }.programDayId.value)
         assertEquals("day-2", request.programDayBindings.first { it.workoutId == "mobility-workout" }.programDayId.value)
     }
-
-    // ------------------------------------------------------------------ 5. no target identity inference
 
     @Test
     fun changingTheProgramDayNeverChangesTheWorkoutIdentity() {
@@ -208,8 +197,6 @@ class TargetScheduleInputAdapterTest {
         assertEquals("declared-workout", request.schedules.single().workoutId)
     }
 
-    // ------------------------------------------------------------------ 6. no legacy schedule inference
-
     @Test
     fun theLegacyScheduleIsNotAnInputAndChangingItChangesNothing() {
         // The input type has no ProgramSchedule property at all, which is the structural claim; this
@@ -227,8 +214,6 @@ class TargetScheduleInputAdapterTest {
         assertEquals(first, second)
         assertEquals(ScheduleCadence.Daily, first.schedules.single().cadence)
     }
-
-    // ------------------------------------------------------------------ 7. duplicate target rule identity
 
     @Test
     fun twoDefinitionsClaimingOneRuleIdentityAreRefused() {
@@ -256,8 +241,6 @@ class TargetScheduleInputAdapterTest {
             adapter.adapt(input(definitions = definitions))
         }
     }
-
-    // ------------------------------------------------------------------ 8. blank target identity
 
     @Test
     fun aBlankRuleIdentityIsRefused() {
@@ -301,8 +284,6 @@ class TargetScheduleInputAdapterTest {
         assertTrue(failure is TargetScheduleInputException)
         assertTrue(failure.message!!.contains("blank rule identity"))
     }
-
-    // ------------------------------------------------------------------ 9. input immutability
 
     @Test
     fun noCallerCollectionIsModified() {
@@ -349,8 +330,6 @@ class TargetScheduleInputAdapterTest {
         assertEquals(0, TargetScheduleInputAdapter::class.java.declaredConstructors.single().parameterCount)
     }
 
-    // ------------------------------------------------------------------ 10. determinism
-
     @Test
     fun theSameInputAlwaysProducesAnEqualRequest() {
         val first = adapter.adapt(richInput())
@@ -366,8 +345,6 @@ class TargetScheduleInputAdapterTest {
     fun aSecondAdapterInstanceIsInterchangeable() {
         assertEquals(TargetScheduleInputAdapter().adapt(richInput()), adapter.adapt(richInput()))
     }
-
-    // ------------------------------------------------------------------ 11. existing occurrences are caller-owned
 
     @Test
     fun existingOccurrencesAreForwardedEvenWhenTheyCouldNeverBeRebuilt() {
@@ -394,10 +371,9 @@ class TargetScheduleInputAdapterTest {
 
     @Test
     fun anExecutionClassificationIsForwardedUnchangedAndReinterpretedNowhere() {
-        // Phase 17 revised this test rather than relaxing it. It used to assert an `ActualResult`
-        // list survived the adaptation, which was a statement about a payload the target scheduling
-        // input no longer carries. The surviving claim is the one the boundary still owns: the
-        // execution classification crosses the boundary by value and is decided nowhere here.
+        // The claim the boundary owns: the execution classification crosses the boundary by value
+        // and is decided nowhere here. The target scheduling input carries no `ActualResult` list to
+        // preserve, so the adaptation makes no statement about one.
         val completed = existing(strengthOn(DAY), OccurrenceExecution.COMPLETED)
 
         val request = adapter.adapt(input(existing = listOf(completed)))
@@ -406,8 +382,6 @@ class TargetScheduleInputAdapterTest {
         assertEquals(OccurrenceExecution.COMPLETED, request.existing.single().execution)
         assertEquals(strengthOn(DAY), request.existing.single().occurrence)
     }
-
-    // ------------------------------------------------------------------ 12. sources are caller-owned
 
     @Test
     fun resolvedSourcesAreForwardedWithoutBeingRebuiltOrRecomputed() {
@@ -449,8 +423,6 @@ class TargetScheduleInputAdapterTest {
         assertEquals(emptyMap<String, ResolvedScheduleSource>(), request.sources)
     }
 
-    // ------------------------------------------------------------------ 13. pauses are caller-owned
-
     @Test
     fun pausesAreForwardedAndNotClassified() {
         val past = ProgramPauseWindow(DAY.minusDays(10), DAY.minusDays(5))
@@ -478,8 +450,6 @@ class TargetScheduleInputAdapterTest {
         assertEquals(DAY.plusDays(6), request.window.through)
         assertEquals(7, request.window.dates().size)
     }
-
-    // ------------------------------------------------------------------ 14. no orchestration
 
     @Test
     fun theAdapterBuildsARequestAndRunsNothing() {
@@ -535,8 +505,6 @@ class TargetScheduleInputAdapterTest {
             request
         )
     }
-
-    // ------------------------------------------------------------------ fixtures
 
     private fun input(
         definitions: List<TargetScheduleDefinition> = listOf(

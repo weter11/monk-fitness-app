@@ -13,12 +13,10 @@ import kotlin.math.sqrt
 /**
  * Calf Stretch (`calf_stretch_hold`) — the standing wall calf stretch on the published frame.
  *
- * Stated intent (the only in-repo specification; no BPS exists for this exercise):
- * `ex_calf_stretch_steps` "Face a wall and place both hands on it. Step one leg back with the heel
- * flat. Bend the front knee and shift forward until the back calf stretches. Keep the back leg
- * straight and the foot pointed ahead. Hold, then switch sides."  `ex_calf_stretch_tech` "Drive the
- * back heel into the floor. Square the hips toward the wall."  `ex_calf_stretch_mistakes` "Letting
- * the back heel lift. Turning the back foot out."
+ * The copy is the only in-repo specification (no BPS): hands on the wall, one leg stepped back with
+ * the heel flat, front knee bent and body shifted forward until the back calf stretches — back leg
+ * straight, foot pointed ahead, hips square to the wall, back heel never lifting, back foot never
+ * turning out.
  */
 class CalfStretchPoseTest {
 

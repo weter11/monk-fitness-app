@@ -5,19 +5,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * B0 (RFC_BRANCH_B_IMPLEMENTATION §2) — IntentBuilder substrate.
+ * IntentBuilder substrate.
  *
- * B0 is purely additive: it introduces [SkeletonPose.IntentBuilder] as the **sole mutator** of the
- * §1.1 intent carriers and locks their public setters to `private set`. No engine stage consumes the
- * dead carriers yet, and no pose is changed, so this test only asserts the substrate is correct:
- *  1. the builder populates every §1.1 carrier it declares;
+ * [SkeletonPose.IntentBuilder] is the sole mutator of the intent carriers, and their public setters
+ * are locked to `private set`. This test asserts the substrate is correct:
+ *  1. the builder populates every carrier it declares;
  *  2. the builder is the only path that may write those carriers (the compile guard — a direct
- *     `pose.spineIntent = …` / `pose.postureIntent = …` / `pose.headTarget = …` assignment outside
- *     the builder is now a compile error, enforced by `private set` on [SkeletonPose]);
+ *     `pose.spineIntent = …` / `pose.postureIntent = …` / `pose.headTarget = …` assignment outside the
+ *     builder is a compile error, enforced by `private set` on [SkeletonPose]);
  *  3. clearing via [SkeletonPose.IntentBuilder.reset] restores the defaults.
  *
- * This does NOT assert byte-identity (there is no behavior change in B0) and does NOT flip any
- * `Section11CarriersTest` dead→live assertion (that is B1/B2's job).
+ * It does NOT assert byte-identity (the substrate alone changes no behaviour) and does NOT assert that
+ * anything consumes the carriers — that is the finalizer consumers' contract.
  */
 class IntentBuilderSubstrateTest {
 

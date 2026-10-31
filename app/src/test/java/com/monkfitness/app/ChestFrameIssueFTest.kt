@@ -7,17 +7,17 @@ import kotlin.math.PI
 import kotlin.math.abs
 
 /**
- * Issue F — `SkeletonPoseFinalizer.reconstructChestFrame` must NOT overwrite an explicitly
- * authored chest rotation, and the fallback reconstruction (for chests whose rotation is left
- * unauthored / identity) must build a correct, orthonormal chest frame.
+ * `SkeletonPoseFinalizer.reconstructChestFrame` must NOT overwrite an explicitly authored chest
+ * rotation, and the fallback reconstruction (for chests whose rotation is left unauthored / identity)
+ * must build a correct, orthonormal chest frame.
  *
  * Regression coverage:
- *  - An authored thoracic twist (chest-local +Y) survives finalization instead of being
- *    discarded and re-derived from the (symmetric) shoulder line.
+ *  - An authored thoracic twist (chest-local +Y) survives finalization instead of being discarded and
+ *    re-derived from the (symmetric) shoulder line.
  *  - An authored chest flex (chest-local +Z) survives finalization.
  *  - The identity-chest fallback derives a spine-aligned frame whose world rotation equals the
- *    FK-derived (correct) frame — i.e. it no longer produces the degenerate-matrix / wrong-angle
- *    result caused by the single-argument `Vector3.cross(v)` overload (Issue F).
+ *    FK-derived (correct) frame — i.e. it no longer produces the degenerate-matrix / wrong-angle result
+ *    caused by the single-argument `Vector3.cross(v)` overload.
  */
 class ChestFrameIssueFTest {
 

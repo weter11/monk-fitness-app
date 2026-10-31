@@ -8,30 +8,14 @@ import java.io.File
 import java.lang.reflect.Modifier
 
 /**
- * The mechanical boundaries of §30 step 16, checked against the sources themselves.
+ * The mechanical boundaries of the occurrence-execution policy, checked against the sources themselves.
  *
- * Almost everything this phase must not do is a prohibition: no repository, no DAO, no clock, no
- * planner, no `ProgramDay`, no parsed occurrence key, no `ActualResult` — and, above all, no *second*
- * place that decides an occurrence's execution. A prohibition living only in a KDoc erodes the first
- * time a convenient import appears, so each is asserted here as a **token or a shape in real
- * code**, with comments stripped first, which is what lets the policy explain the absences in prose
- * without tripping the rules about them.
- *
- * The ten gates, in the order the phase states them:
- *
- * ```text
- *  1. the policy is a pure value in the target domain package
- *  2. it has no repository dependency
- *  3. it has no DAO / Room dependency
- *  4. it has no clock, IdGenerator or randomness
- *  5. it depends on no planner / resolver / composer / reconciler / presenter / materializer /
- *     persister / legacy scheduler
- *  6. it does not read ProgramDay or the current ProgramRevision
- *  7. it does not parse the occurrence key
- *  8. it constructs no ActualResult
- *  9. it introduces no execution precedence outside the single policy owner
- * 10. it is pure over the Phase 15 record
- * ```
+ * Almost everything it must not do is a prohibition: no repository, no DAO, no clock, no planner, no
+ * `ProgramDay`, no parsed occurrence key, no `ActualResult` — and, above all, no *second* place that
+ * decides an occurrence's execution. A prohibition living only in a KDoc erodes the first time a
+ * convenient import appears, so each is asserted here as a **token or a shape in real code**, with
+ * comments stripped first, which is what lets the policy explain the absences in prose without
+ * tripping the rules about them.
  */
 class TargetOccurrenceExecutionPolicyArchitectureTest {
 
@@ -40,10 +24,10 @@ class TargetOccurrenceExecutionPolicyArchitectureTest {
     }
     private val targetDir = File(mainDir, "domain/program/target")
 
-    /** The policy and the decision type — the whole of this phase's production code. */
+    /** The policy and the decision type — the whole of this stage's production code. */
     private val policyFile = File(targetDir, "TargetOccurrenceExecutionPolicy.kt")
 
-    /** The Phase 15 record this phase consumes, unchanged. */
+    /** The execution record the policy consumes, unchanged. */
     private val recordFile = File(targetDir, "TargetOccurrenceExecutionRead.kt")
 
     private fun code(source: File): String = source.readText()
@@ -75,8 +59,6 @@ class TargetOccurrenceExecutionPolicyArchitectureTest {
         return codeLines(source).filter { line -> regex.containsMatchIn(line) }
     }
 
-    // ---- 1. it is a pure value in the target domain package ---------------------------------------
-
     @Test
     fun thePolicyLivesInThePureTargetPackageAndIsThePhasesWholeProductionCode() {
         assertTrue(
@@ -96,8 +78,6 @@ class TargetOccurrenceExecutionPolicyArchitectureTest {
                 .findAll(code(policyFile)).map { it.groupValues[1] }.toList()
         )
     }
-
-    // ---- 2. no repository dependency -----------------------------------------------------------------
 
     @Test
     fun thePolicyHasNoRepositoryDependency() {
@@ -120,8 +100,6 @@ class TargetOccurrenceExecutionPolicyArchitectureTest {
         )
     }
 
-    // ---- 3. no DAO / Room ---------------------------------------------------------------------------
-
     @Test
     fun thePolicyHasNoStorageDependency() {
         val imports = codeLines(policyFile).filter { it.startsWith("import ") }
@@ -139,8 +117,6 @@ class TargetOccurrenceExecutionPolicyArchitectureTest {
         )
     }
 
-    // ---- 4. no clock, id generator or randomness ----------------------------------------------------
-
     @Test
     fun thePolicyAcquiresNoAmbientTimeAndNoRandomness() {
         val forbidden = listOf(
@@ -157,8 +133,6 @@ class TargetOccurrenceExecutionPolicyArchitectureTest {
             found.isEmpty()
         )
     }
-
-    // ---- 5. no engine stage -------------------------------------------------------------------------
 
     @Test
     fun thePolicyDependsOnNoEngineStageAndNoRuntime() {
@@ -180,8 +154,6 @@ class TargetOccurrenceExecutionPolicyArchitectureTest {
             found.isEmpty()
         )
     }
-
-    // ---- 6. no ProgramDay, no current revision ------------------------------------------------------
 
     @Test
     fun thePolicyReadsNoPlanDayAndNoCurrentRevision() {
@@ -205,8 +177,6 @@ class TargetOccurrenceExecutionPolicyArchitectureTest {
         )
     }
 
-    // ---- 7. no occurrence-key parsing ----------------------------------------------------------------
-
     @Test
     fun thePolicyDoesNotParseTheOccurrenceKey() {
         val split = listOf(
@@ -228,8 +198,6 @@ class TargetOccurrenceExecutionPolicyArchitectureTest {
         )
     }
 
-    // ---- 8. no ActualResult -------------------------------------------------------------------------
-
     @Test
     fun thePolicyConstructsNoActualResultAndInventsNoWorkMapping() {
         for (forbidden in listOf(
@@ -249,8 +217,6 @@ class TargetOccurrenceExecutionPolicyArchitectureTest {
                 .all { code(policyFile).contains(it) }
         )
     }
-
-    // ---- 9. no second precedence ---------------------------------------------------------------------
 
     @Test
     fun noSecondExecutionPrecedenceExistsAnywhereElse() {
@@ -297,8 +263,6 @@ class TargetOccurrenceExecutionPolicyArchitectureTest {
             Regex("val execution = when \\{").findAll(code).count()
         )
     }
-
-    // ---- 10. pure over the Phase 15 record ------------------------------------------------------------
 
     @Test
     fun thePolicyIsPureOverThePhaseFifteenRecord() {

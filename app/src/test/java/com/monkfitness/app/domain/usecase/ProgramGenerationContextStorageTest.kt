@@ -31,24 +31,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P27's production context **over real storage** — the wiring the composition root performs, measured
- * end to end through the actual SQLite engine.
+ * The production context **over real storage** — the wiring the composition root performs, measured end
+ * to end through the actual SQLite engine.
  *
- * `ProgramGenerationContextTest` states what the source *decides* from a stated history. This suite
- * states the two claims that only storage can decide:
+ * `ProgramGenerationContextTest` states what the source *decides* from a stated history; this suite
+ * states the two claims only storage can decide: the read is the **repository's own**
+ * `sessionsOfProgram`, so the exercises it reports are the ones a completed workout actually recorded
+ * across the session and set-log tables rather than a live plan, and the **Program scope survives the
+ * database**, so neither of two Programs in one file reaches the other's request.
  *
- *  * the read is the **repository's own** `sessionsOfProgram`, so the exercises it reports are the ones
- *    a completed workout actually recorded — reconstructed from `workout_session`, `session_snapshot`,
- *    `session_snapshot_exercise`, `session_exercise` and `program_set_log`, not from a live plan;
- *  * the **Program scope survives the database**: two Programs with genuinely different performed
- *    exercises live in one file, and neither one's history reaches the other's request.
+ * The second claim is the one a fixture cannot make: answering from a map in memory, "another
+ * Program's history never enters" is a statement about a lookup, whereas here it is a statement about
+ * a `WHERE programId = :programId` over real rows, which is where a scope actually has to hold.
  *
- * The second claim is the one a fixture cannot make. Answering from a map in memory, "another
- * Program's history never enters" is a statement about a lookup; here it is a statement about a
- * `WHERE programId = :programId` over real rows, which is where a scope actually has to hold.
- *
- * Two rigs share one database file, exactly as §30 step 14's own suites do: the second rig does not
- * migrate, so a value that comes back was stored rather than remembered.
+ * Two rigs share one database file: the second rig does not migrate, so a value that comes back was
+ * stored rather than remembered.
  */
 class ProgramGenerationContextStorageTest {
 
@@ -71,8 +68,6 @@ class ProgramGenerationContextStorageTest {
         name = "Existing",
         mode = ProgramMode.GENERATED
     )
-
-    // ------------------------------------------------------------------ the real read, end to end
 
     @Test
     fun theContextReportsTheExercisesACompletedWorkoutActuallyRecorded() = runBlocking {
@@ -201,8 +196,6 @@ class ProgramGenerationContextStorageTest {
         )
     }
 
-    // ------------------------------------------------------------------ the neutral answers, over storage
-
     @Test
     fun aProgramWithStoredRowsButNoPerformedSetGetsTheNeutralContext() = runBlocking {
         rig.createGraph()
@@ -302,8 +295,6 @@ class ProgramGenerationContextStorageTest {
             (previewed as ProgramGenerationResult.Generated).edit.plan
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     /** The service as the composition root wires it, over the real repository read. */
     private fun serviceOver(repository: com.monkfitness.app.data.repository.WorkoutSessionRepository) =

@@ -11,7 +11,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Mechanical boundary for the Phase 13 target scheduling input adapter.
+ * Mechanical boundary for the target scheduling input adapter.
  *
  * The adapter is the one place where caller-owned Program data becomes a target scheduling request,
  * so the properties worth pinning are the ones a behavioural test cannot see: where the file lives,
@@ -24,8 +24,6 @@ class TargetScheduleInputAdapterArchitectureTest {
     private val adapterFile = File(mainDir, "domain/usecase/TargetScheduleInputAdapter.kt")
     private val targetDir = File(mainDir, "domain/program/target")
 
-    // ------------------------------------------------------------------ placement
-
     @Test
     fun theAdapterLivesInDomainUsecaseAndNotInTheTargetPackage() {
         assertTrue(adapterFile.isFile)
@@ -37,36 +35,29 @@ class TargetScheduleInputAdapterArchitectureTest {
     @Test
     fun thePureTargetPackageGainedNoProductionFile() {
         // The adapter is an application boundary: putting it in the pure package would give the
-        // package a caller-shaped concern, and Stage 2..9's file census is what keeps that package's
-        // contents closed.
+        // package a caller-shaped concern, and the file census is what keeps that package's contents
+        // closed.
         val sources = targetDir.listFiles { file -> file.isFile && file.extension == "kt" }
             .orEmpty().map { it.name }.sorted()
 
         assertEquals(
             listOf(
-                // §30 step 17: the target scheduling input occurrence — the planned payload plus the
-                // one execution classification the scheduling rules read. It is a pure value in this
-                // package for the same reason as the entries above (schedule semantics, no storage,
-                // no clock, no id generator) and it is deliberately narrower than the domain's
-                // `ExistingOccurrence`: it carries no ActualResult, no performed work and no
-                // session or slot state. The list stays closed: a twelfth file still fails here.
+                // The target scheduling input occurrence: the planned payload plus the one execution
+                // classification the scheduling rules read. Deliberately narrower than the domain's
+                // `ExistingOccurrence` — no ActualResult, no performed work, no session or slot state.
+                // The list stays closed: a twelfth file still fails here.
                 "TargetExistingOccurrence.kt",
                 "TargetOccurrenceComposer.kt",
-                // §30 step 16: the occurrence-execution *precedence*, and the single owner of it. It
-                // belongs in this pure package for the same reason as the two entries below — schedule
-                // semantics over an already-read record — and it holds no storage, no clock and no id
-                // generator. Unlike the read-back below it does hold a verdict, which is exactly why it
-                // is a *named* owner rather than an incidental member of a record or a repository.
+                // The execution *precedence*, and its single owner. Unlike the read-back below it holds
+                // a verdict, which is why it is a *named* owner rather than an incidental member of a
+                // record or a repository.
                 "TargetOccurrenceExecutionPolicy.kt",
-                // §30 step 15: the target occurrence's stored execution read-back value, its pure
-                // aggregation and its typed refusals. It is a pure value in this package for the same
-                // reason as the Phase 14 entry below — the same semantic facts, read back — and it
-                // holds no storage, no clock, no id generator and, deliberately, no execution verdict.
+                // The stored execution read-back, its pure aggregation and its typed refusals: the same
+                // semantic facts read back, with deliberately no execution verdict of its own.
                 "TargetOccurrenceExecutionRead.kt",
-                // §30 step 14: the target occurrence's persisted semantic value and its typed
-                // conflict. It is a pure value in this package because it is schedule *semantics* —
-                // the same kind of thing the reconciler already holds — with no storage, no clock and
-                // no id generator of its own. The list stays closed: an eleventh file still fails here.
+                // The persisted semantic value and its typed conflict: schedule *semantics*, the same
+                // kind of thing the reconciler holds. The list stays closed: an eleventh file fails
+                // here.
                 "TargetOccurrencePersistence.kt",
                 "TargetOccurrencePresenter.kt",
                 "TargetOccurrenceReconciler.kt",
@@ -78,8 +69,6 @@ class TargetScheduleInputAdapterArchitectureTest {
             sources
         )
     }
-
-    // ------------------------------------------------------------------ allowed dependencies
 
     @Test
     fun everyImportIsAPureDomainValueOrJvm() {
@@ -150,8 +139,6 @@ class TargetScheduleInputAdapterArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ forbidden dependencies
-
     @Test
     fun theAdapterNamesNoPlanningPolicyPresentationOrPersistenceComponent() {
         val forbidden = listOf(
@@ -207,8 +194,6 @@ class TargetScheduleInputAdapterArchitectureTest {
         assertTrue("no ambient input: $offenders", offenders.isEmpty())
     }
 
-    // ------------------------------------------------------------------ no legacy inference
-
     @Test
     fun theAdapterContainsNoLegacySchedulingVocabulary() {
         // The whole point of the stage. Each of these is a way a mapper could appear without anyone
@@ -235,9 +220,9 @@ class TargetScheduleInputAdapterArchitectureTest {
 
     @Test
     fun noProductionSourceMapsALegacyScheduleOntoATargetSchedule() {
-        // Stage 13's absence claim, asserted over the whole production tree rather than over the one
-        // new file: a mapper is exactly the kind of thing that arrives in whichever file looks
-        // convenient, so the guard cannot be scoped to the adapter.
+        // Asserted over the whole production tree rather than the one new file: a mapper is exactly the
+        // kind of thing that arrives in whichever file looks convenient, so the guard cannot be scoped
+        // to the adapter.
         val offenders = productionSources().filter { (_, text) ->
             listOf("ProgramSchedule", "LegacySchedule", "LegacyScheduleMapper").any { text.contains(it) } &&
                 listOf("TargetSchedule(", "TargetSchedule.daily", "TargetSchedule.everyNDays",
@@ -277,8 +262,6 @@ class TargetScheduleInputAdapterArchitectureTest {
                 .contains("object LegacyScheduleMapper")
         )
     }
-
-    // ------------------------------------------------------------------ the conversion itself
 
     @Test
     fun theRequestIsBuiltInOneExpressionPerFieldWithNoBranch() {
@@ -363,8 +346,6 @@ class TargetScheduleInputAdapterArchitectureTest {
         assertTrue(IllegalArgumentException::class.java.isAssignableFrom(TargetScheduleInputException::class.java))
     }
 
-    // ------------------------------------------------------------------ composition root
-
     @Test
     fun appContainerWiresTheAdapterWithNoCollaborator() {
         val container = code(File(mainDir, "di/AppContainer.kt").readText())
@@ -385,17 +366,12 @@ class TargetScheduleInputAdapterArchitectureTest {
 
     @Test
     fun theAdapterHasExactlyOneProductionConsumerAndItIsTheStageTwentyNode() {
-        // Stage 20 inverted this claim rather than relaxing it. While nothing consumed the adapter,
-        // the pin was a *construction-site* absence: the composition root built it and no other
-        // source even named it, which is what "the target contour is separately callable and
-        // unreachable" meant in a test. That is false by construction now — the first production
-        // consumer exists — and a construction-site scan would have gone on reading empty and
-        // claiming so. The pin is therefore a **consumer** list: the files outside the composition
-        // root and the adapter itself that name the type at all, which is exactly one.
+        // A construction-site scan would read empty and keep claiming so now that a production consumer
+        // exists, so the pin is a **consumer** list instead: the files outside the composition root and
+        // the adapter itself that name the type at all, which is exactly one.
         //
-        // The negative half is what still matters and is kept whole: the consumer is a graph node
-        // nobody above the composition root calls, and the adapter is still not constructed a second
-        // time anywhere.
+        // The negative half is what matters: the consumer is a graph node nobody above the composition
+        // root calls, and the adapter is still not constructed a second time anywhere.
         val consumers = productionSources()
             .filterNot { (path, _) -> path == "di/AppContainer.kt" || path == "domain/usecase/TargetScheduleInputAdapter.kt" }
             .filter { (_, text) -> text.contains("TargetScheduleInputAdapter") }
@@ -422,8 +398,8 @@ class TargetScheduleInputAdapterArchitectureTest {
 
     @Test
     fun theOrchestratedPipelineIsUnchangedByThisStage() {
-        // The adapter sits *before* the orchestrator; it does not replace or reorder anything after
-        // it. The Stage 12 pass still runs planner -> policy -> application.
+        // The adapter sits *before* the orchestrator; it does not replace or reorder anything after it.
+        // The existing pass still runs planner -> policy -> application.
         val orchestrator = code(File(mainDir, "domain/usecase/TargetScheduleOrchestrator.kt").readText())
 
         assertEquals(1, occurrences(orchestrator, "TargetPlanner.plan("))
@@ -435,8 +411,6 @@ class TargetScheduleInputAdapterArchitectureTest {
                 .filter { it.contains("InputAdapter") || it.contains("TargetScheduleInput") }
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun productionSources(): List<Pair<String, String>> = File(mainDir.path)
         .walkTopDown()

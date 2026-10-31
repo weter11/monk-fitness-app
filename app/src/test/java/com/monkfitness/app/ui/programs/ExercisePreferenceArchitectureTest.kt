@@ -7,24 +7,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §30 step 28's architecture gate: **the exercise preference is an authoring surface over one existing
- * value**, and every way this could go wrong is a way a *second source of truth* appears.
+ * The architecture gate: **the exercise preference is an authoring surface over one existing value**,
+ * and every way this could go wrong is a way a *second source of truth* appears.
  *
- * A preference editor is unusually easy to build wrong, because each of the failures below still produces
- * a screen that looks finished:
- *
- * ```text
- * a second copy of the ranking     the UI holds an editable list of its own
- * a hidden ranking                the screen sorts, or picks a position, on the user's behalf
- * a business decision in a Composable  it decides what may be added or moved
- * UI → generated domain            the screen reaches the planner instead of the service
- * UI → storage / context          the screen reaches a repository, a DAO or the context source
- * a second validation             the UI decides what the domain's own constructor refuses
- * UI → persistence                a new entity or DAO for a value that has one
- * ```
+ * A preference editor is unusually easy to build wrong, because each failure still produces a screen
+ * that looks finished: a second copy of the ranking held by the UI; the screen sorting or picking a
+ * position on the user's behalf; a business decision in a Composable; the screen reaching the planner
+ * instead of the service; the screen reaching a repository, a DAO or the context source; a second
+ * validation the domain's own constructor already refuses; a new entity or DAO for a value that has
+ * one.
  *
  * Each is asserted against the **source** (comments stripped, whole tokens) or the **compiled shape**,
- * because this project has no Compose test harness (§17) and the screen's behaviour is measured in
+ * because this project has no Compose test harness and the screen's behaviour is measured in
  * [ProgramsExercisePreferencesTest] instead.
  */
 class ExercisePreferenceArchitectureTest {
@@ -52,14 +46,12 @@ class ExercisePreferenceArchitectureTest {
 
     private fun codeOf(file: File): String = code(source(file))
 
-    // ---------------------------------------------------------------- the UI reaches nothing
-
     @Test
     fun theScreenAndItsRulesReachNoRepositoryNoContextAndNoPlanner() {
         // The **screen** and the pure authoring rules only. `ProgramsController` is deliberately not in
         // this list: it legitimately holds `ProgramGenerationService` and calls `Generate` — that is the
-        // whole point of the state holder, and P25's gate scopes its ban to the screen for the same
-        // reason. What matters here is that the preference's own surface reaches neither.
+        // whole point of the state holder. What matters here is that the preference's own surface
+        // reaches neither.
         val banned = listOf(
             "Repository",
             "Dao",
@@ -97,12 +89,11 @@ class ExercisePreferenceArchitectureTest {
         )
         // **Each operation counted on its own**, rather than one regex over all four.
         //
-        // A single alternation is the weaker oracle here and it fails for a reason that has nothing to do
-        // with the contract: `prefer` is a prefix of nothing while `promote`/`demote` share a suffix, so a
-        // pattern written loosely either misses one operation or matches a different pair. Worse, an
-        // alternation that matched `promote` twice and `demote` not at all would still report the expected
-        // total. Per-operation counting cannot express that failure, because each expected value is 1 and a
-        // missing call site reads as 0.
+        // A single alternation is the weaker oracle and fails for a reason that has nothing to do with
+        // the contract: `promote`/`demote` share a suffix, so a loose pattern either misses one
+        // operation or matches a different pair — and an alternation that matched `promote` twice and
+        // `demote` not at all would still report the expected total. Per-operation counting cannot
+        // express that failure, because each expected value is 1 and a missing call site reads as 0.
         for (operation in listOf(
             "preferDraftExercise",
             "unpreferDraftExercise",
@@ -118,8 +109,6 @@ class ExercisePreferenceArchitectureTest {
             )
         }
     }
-
-    // ---------------------------------------------------------------- no second copy, no hidden rank
 
     @Test
     fun theScreenHoldsNoSecondCopyOfTheRanking() {
@@ -212,16 +201,14 @@ class ExercisePreferenceArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- no second persistence, no second lifecycle
-
     @Test
     fun thePreferenceAddedNoEntityAndNoDaoAndNoRevisionMechanism() {
         // The value already had a home: `program_revision` owns Program configuration, and Goals & Focus
         // established that a second table for a handful of tokens belonging to one immutable revision
         // would model a relation that does not exist.
         // Scoped to *entities* — a file whose `@Entity(tableName = ...)` names a preference table would be
-        // a second owner. Scanning file NAMES alone would fire on any file that mentions the word, which is
-        // not the claim.
+        // a second owner. Scanning file NAMES alone would fire on any file that mentions the word, which
+        // is not the claim.
         val entityTables = File(mainSourceRoot, "data/model").listFiles { file -> file.extension == "kt" }
             ?.map { file -> Regex("""@Entity\(\s*tableName\s*=\s*"([^"]+)"""").find(file.readText())?.groupValues?.get(1) }
             ?.filterNotNull()
@@ -247,7 +234,7 @@ class ExercisePreferenceArchitectureTest {
 
     @Test
     fun thePreferenceIsStructuralAndSaysSoInTheDomainsOwnVocabulary() {
-        // §6's rule is that *program-behavior* changes create a Revision. A preference-only Save must
+        // The rule is that *program-behavior* changes create a Revision. A preference-only Save must
         // therefore mint one, and the only place that can be decided is the domain's own aspect list.
         assertTrue(
             "the preference is a structural aspect of its own, so a preference-only change creates a " +
@@ -264,8 +251,8 @@ class ExercisePreferenceArchitectureTest {
 
     @Test
     fun theGeneratedPackageIsUntouchedAndTheRequestGainedNoField() {
-        // §30 step 28's headline constraint: the preference uses the field that already existed. The
-        // generated package keeps holding no repository, no DAO, no clock and no Android type.
+        // The headline constraint: the preference uses the field that already existed. The generated
+        // package keeps holding no repository, no DAO, no clock and no Android type.
         val generatedDir = File(mainSourceRoot, "domain/program/generated")
         val files = generatedDir.listFiles { file -> file.extension == "kt" }?.map { it.name }?.sorted()
             .orEmpty()

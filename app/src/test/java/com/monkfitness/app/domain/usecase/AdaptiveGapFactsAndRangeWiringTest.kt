@@ -45,21 +45,14 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 
 /**
- * P33's two deliveries and P34's return rule, pinned where each of them is decided.
+ * The production range source, the gap facts, and the return rule that reads them — each pinned where it
+ * is decided.
  *
- * ```text
- * 1. the production range source   → answers the catalogue's own span, and `null` for what it does not
- *                                    hold; and the composition root wires it instead of `NONE`
- * 2. the gap facts                 → the last confirmed set is found outside the decision window, the
- *                                    stretch before this window is measured to the session before it, and
- *                                    the usual interval comes from the family's own whole history
- * 3. the return after a gap         → a long gap against the user's own rhythm lands lighter, a missed
- *                                    session or two does not, a pending confirmation is reset, and the
- *                                    floor, the fallback and the performed amount each answer as stated
- * ```
- *
- * Sections 1 and 2 are about **facts**; section 3 is about the one rule that reads two of them, and about
- * the three ways it can end (a lighter week, the floor, or nothing at all).
+ * The range source answers the catalogue's own span and `null` for what it does not hold, and the
+ * composition root wires it instead of `NONE`. The gap facts find the last confirmed set even outside the
+ * decision window, measure the stretch to the session before it, and take the usual interval from the
+ * family's whole history. The return rule then ends one of three ways: a lighter week, the floor, or
+ * nothing at all.
  */
 class AdaptiveGapFactsAndRangeWiringTest {
 
@@ -69,16 +62,11 @@ class AdaptiveGapFactsAndRangeWiringTest {
         const val FAMILY = "push-family"
     }
 
-    // ------------------------------------------------------------------ 1. the production range source
-
     /**
-     * The source answers the span the exercise's **own definition** states.
-     *
      * The expected value is derived from the catalogue entry the same way the source derives it
-     * (`toConfigurationMetadata()` → `toExerciseRange()`), which is the claim worth pinning: the source
-     * holds no second copy of any bound, so it cannot disagree with the catalogue it reads. The literal
-     * spans are asserted beside it so a source that answered some *other* range consistently would still
-     * fail.
+     * (`toConfigurationMetadata()` → `toExerciseRange()`): the source holds no second copy of any bound,
+     * so it cannot disagree with the catalogue it reads. The literal spans are asserted beside it so a
+     * source answering some *other* range consistently would still fail.
      */
     @Test
     fun theProductionRangeSourceAnswersTheCatalogueSpanOfAKnownExercise() {
@@ -134,8 +122,8 @@ class AdaptiveGapFactsAndRangeWiringTest {
     }
 
     /**
-     * An id the catalogue does not hold is answered `null`, which is the port's stated answer for *"this
-     * caller declares no range"* — never a synthesised span.
+     * An id the catalogue does not hold is answered `null` — the port's stated answer for "this caller
+     * declares no range", never a synthesised span.
      */
     @Test
     fun theProductionRangeSourceAnswersNothingForAnUnknownExercise() {
@@ -149,13 +137,10 @@ class AdaptiveGapFactsAndRangeWiringTest {
     }
 
     /**
-     * The composition root hands the integration **this** source, and no longer leaves the port at its
-     * honest-but-empty default.
-     *
-     * Asserted on the wiring because that is the defect the brief names: the engine already accepted a
-     * range, and production supplied none, so the fact never reached it. The wiring is read the same way
-     * the neighbouring architecture gates read it — the slice between the integration's node and the next
-     * one — so a later edit that moved the argument elsewhere would fail here rather than pass silently.
+     * Asserted on the wiring because that is the defect: the engine already accepted a range and
+     * production supplied none, so the fact never reached it. Read as the slice between the integration's
+     * node and the next one, so an edit moving the argument elsewhere fails here rather than passing
+     * silently.
      */
     @Test
     fun theCompositionRootWiresTheCatalogueRangeSourceIntoTheIntegration() {
@@ -179,15 +164,11 @@ class AdaptiveGapFactsAndRangeWiringTest {
         )
     }
 
-    // ------------------------------------------------------------------ 2. the gap facts
-
     /**
-     * The last confirmed set is found **outside the decision window**.
-     *
-     * The history holds one session 40 days before the moment of the pass, and the window reaches back
-     * only 28 — so the window's own observations contain nothing, while the fact still names the day the
-     * user last trained. That difference is the whole point of the fact: a family nobody has touched for
-     * six weeks has no exposure *in* the window and still has a date.
+     * The history holds one session 40 days before the moment of the pass and the window reaches back only
+     * 28, so the window's observations contain nothing while the fact still names the day the user last
+     * trained. That is the point of the fact: a family untouched for six weeks has no exposure *in* the
+     * window and still has a date.
      */
     @Test
     fun theLastConfirmedSetIsFoundEvenWhenItIsOlderThanTheWindow() {
@@ -241,8 +222,8 @@ class AdaptiveGapFactsAndRangeWiringTest {
     }
 
     /**
-     * A family with no confirmed set states **no date**, and another family's sets do not stand in for
-     * it: absence is a fact here, not a zero and not a neighbour's reading.
+     * A family with no confirmed set states **no date**, and another family's sets do not stand in for it:
+     * absence is a fact here, not a zero and not a neighbour's reading.
      */
     @Test
     fun theLastConfirmedSetIsAbsentForAFamilyThatWasNeverTrained() {
@@ -263,7 +244,7 @@ class AdaptiveGapFactsAndRangeWiringTest {
 
     /**
      * Fewer than three sessions is **no usual interval**: two sessions are one interval, and one interval
-     * is not a habit. The policy is what answers an absent habit with its documented fallback.
+     * is not a habit. The policy answers an absent habit with its documented fallback.
      */
     @Test
     fun theUsualIntervalIsAbsentWithFewerThanThreeSessions() {
@@ -278,8 +259,8 @@ class AdaptiveGapFactsAndRangeWiringTest {
     }
 
     /**
-     * From three sessions the interval is stated, as the **median** of the gaps: one long break must not
-     * drag the usual interval the way a mean would.
+     * From three sessions the interval is the **median** of the gaps: one long break must not drag the
+     * usual interval the way a mean would.
      */
     @Test
     fun theUsualIntervalIsTheMedianOfTheRecentGaps() {
@@ -303,12 +284,9 @@ class AdaptiveGapFactsAndRangeWiringTest {
     }
 
     /**
-     * The usual interval is read from the **whole stored history**, not from the decision window.
-     *
-     * This is the fact a gap breaks: a family the user has not touched for six weeks has no exposure in a
-     * 28-day window at all, so a habit measured over the window would be measured over the absence. The
-     * fixture is five sessions ten days apart, and the first of them is outside the window the pass would
-     * have used.
+     * A habit measured over the window would be measured over the absence: a family untouched for six
+     * weeks has no exposure in a 28-day window at all. The fixture is five sessions ten days apart, the
+     * first outside the window the pass would have used.
      */
     @Test
     fun theUsualIntervalIsReadFromTheWholeHistoryAndNotFromTheWindow() {
@@ -351,11 +329,9 @@ class AdaptiveGapFactsAndRangeWiringTest {
     }
 
     /**
-     * The session the pass is about is **not** one of the sessions the habit is measured over.
-     *
-     * The stretch that led to it is the gap itself: counting it as one of two intervals would let the
-     * absence define the rhythm it interrupted, and a user who trained every three days and then missed
-     * two weeks would come back to an app that believes they train every nine.
+     * The stretch that led to the completing session is the gap itself: counting it as one of two
+     * intervals would let the absence define the rhythm it interrupted, and a user who trained every
+     * three days and then missed two weeks would come back to an app believing they train every nine.
      */
     @Test
     fun theUsualIntervalSkipsTheSessionThePassIsAbout() {
@@ -375,8 +351,8 @@ class AdaptiveGapFactsAndRangeWiringTest {
     }
 
     /**
-     * And the stretch itself is stated as its own fact: [`daysAway`] is measured to the last confirmed set
-     * **before** the completing session, because that session's sets are already facts when the pass runs.
+     * `daysAway` is measured to the last confirmed set **before** the completing session, because that
+     * session's sets are already facts when the pass runs.
      */
     @Test
     fun theGapFactsStateTheStretchTheUserIsReturningFrom() {
@@ -412,17 +388,11 @@ class AdaptiveGapFactsAndRangeWiringTest {
         )
     }
 
-    // ------------------------------------------------------------------ 3. the return after a gap
-
     /**
-     * The same 15-day gap is a **different week** for a user who trains twice a week and one who trains
-     * four times a week, because the gap is measured against each of their own rhythms and the amount
-     * taken away grows with it.
-     *
-     * ```text
-     * twice a week     usual 3.5 d -> 4 d   15 d is 3 of their intervals   range 6..15, 12 performed -> 10
-     * four times a week usual 1.75 d -> 2 d  15 d is 7 of theirs (capped 6)                        ->  8
-     * ```
+     * The same 15-day gap is a **different week** for a user training twice a week (usual 3.5 d → 4 d, so
+     * 15 d is 3 of their intervals) and one training four times (1.75 d → 2 d, so 15 d is 7, capped at 6),
+     * because the amount taken away grows with the gap against their own rhythm: on a 6..15 range with 12
+     * performed that is 10 for the former and 8 for the latter.
      */
     @Test
     fun theSameGapLandsLowerForTheUserWhoseOwnRhythmItIsLongerAgainst() {
@@ -442,13 +412,10 @@ class AdaptiveGapFactsAndRangeWiringTest {
     }
 
     /**
-     * One or two missed sessions are **not** a return: they are what the user's own rhythm already
-     * contains, and lightening the week of somebody who missed a session would make the rule noise.
-     *
-     * ```text
-     * twice a week      one missed = 7 d, two = 10-11 d   threshold 12 d (3 · 4)
-     * four times a week one missed = 4 d, two = 6 d      threshold  6 d (3 · 2), and the 10-day floor
-     * ```
+     * One or two missed sessions are **not** a return: they are what the rhythm already contains, and
+     * lightening the week of somebody who missed a session would make the rule noise. At twice a week one
+     * missed is 7 d and two is 10-11 d against a 12 d threshold (3 · 4); at four times a week 4 d and 6 d
+     * against 6 d (3 · 2), plus the 10-day floor.
      */
     @Test
     fun oneOrTwoMissedSessionsAreNotAReturn() {
@@ -489,7 +456,7 @@ class AdaptiveGapFactsAndRangeWiringTest {
      *
      * The control run is the point: the same window without the gap is exactly the confirmation a family
      * one window into a two-window gate was waiting for. With the gap the policy answers `REGRESS` and
-     * reports **no direction qualified**, which is what the caller advances its counters from (§15) — so
+     * reports **no direction qualified**, which is what the caller advances its counters from — so
      * pre-gap evidence cannot confirm anything on the way back in.
      */
     @Test
@@ -536,8 +503,7 @@ class AdaptiveGapFactsAndRangeWiringTest {
 
     /**
      * A history too short to state a habit is answered with the policy's **fallback interval**, not with a
-     * rule that never fires: a user who has trained twice and then missed a fortnight is exactly the case
-     * this must not drop.
+     * rule that never fires: a user who trained twice and then missed a fortnight must not be dropped.
      */
     @Test
     fun aHistoryTooShortToStateAHabitFallsBackToThePolicysUsualInterval() {
@@ -564,8 +530,8 @@ class AdaptiveGapFactsAndRangeWiringTest {
 
     /**
      * The amount comes from what the user **performed**, not from what the plan prescribed: the plan asked
-     * for 14, the user performed 9, and the lighter week is nine less the gap's share — not fourteen less
-     * it, and not the range's floor either.
+     * for 14 and the user performed 9, so the lighter week is nine less the gap's share — not fourteen
+     * less it, and not the range's floor either.
      */
     @Test
     fun theReturningAmountComesFromWhatWasPerformedAndNotFromWhatWasPrescribed() {
@@ -601,15 +567,13 @@ class AdaptiveGapFactsAndRangeWiringTest {
         )
     }
 
-    // ------------------------------------------------------------------ fixtures
-
     /** A gap the return rule is measured on: how long the user was away, and how often they usually train. */
     private fun gap(daysAway: Long?, usualInterval: Duration?): ProgramGapFacts =
         ProgramGapFacts(daysAway = daysAway, usualInterval = usualInterval)
 
     /**
      * The engine's answer for a returning family: one performed exposure of three sets at [performed], an
-     * element presenting [element], and the gap facts above. The range is the catalogue-like span 6..15.
+     * element presenting [element], and the gap facts above. The range is the span 6..15.
      */
     private fun decideAfterGap(
         usualInterval: Duration?,
@@ -644,7 +608,7 @@ class AdaptiveGapFactsAndRangeWiringTest {
         val history = starts.mapIndexed { index, startedAt ->
             performedSession("interval-$index", startedAt, "pushups")
         }
-        // The pass is about a session of its own, one day after the last of them: it is not one of the
+        // The pass is about its own session, one day after the last of them, so it is not one of the
         // sessions the habit is measured over.
         val completing = performedSession(
             "interval-completing",
@@ -664,9 +628,8 @@ class AdaptiveGapFactsAndRangeWiringTest {
     /**
      * A complete, legal stored session that confirmed [sets] sets of eight repetitions of [exerciseId].
      *
-     * The occurrence is presented by its own snapshot (a session may only run what it presented), and each
-     * set carries its own `performedAt`, which is what makes *"the date of the last confirmed set"* a
-     * statement about a set rather than about a session.
+     * The occurrence is presented by its own snapshot, and each set carries its own `performedAt` — which
+     * is what makes "the date of the last confirmed set" a statement about a set, not a session.
      */
     private fun performedSession(
         key: String,

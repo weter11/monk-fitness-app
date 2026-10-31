@@ -6,15 +6,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §6's **semantic validation**, over documents the schema layer accepts.
+ * **Semantic validation**, over documents the schema layer accepts.
  *
  * The separation this suite pins is the one that matters: every document below is *well-shaped* — the
  * reader reads all of them — and every one of them is a program this app cannot hold. Each rule is
  * decided here rather than left to the domain's constructors, which is what makes the mapping step total
  * and what turns "a corrupt file" into a finding about a file instead of a crash.
  *
- * Two rules are checked through the *domain's own* validation rather than restated here — a Program needs a
- * name, and it needs days that are numbered in order — because §6 asks for exactly that reuse. They are
+ * Two rules are checked through the *domain's own* validation rather than restated here — a Program needs
+ * a name, and it needs days that are numbered in order — because that reuse is the point. They are
  * covered end to end in `ProgramImportServiceTest`; this suite covers the rules the transfer layer owns.
  */
 class ProgramTransferValidationTest {
@@ -29,8 +29,6 @@ class ProgramTransferValidationTest {
             ProgramTransferValidation.issuesIn(document)
         )
     }
-
-    // ------------------------------------------------------------------ duration, schedule, focus
 
     @Test
     fun aFixedDurationOfNoDaysIsRefused() {
@@ -133,8 +131,6 @@ class ProgramTransferValidationTest {
         assertTrue("${outOfOrder.first().message}", outOfOrder.first().message.contains("own order"))
     }
 
-    // ------------------------------------------------------------------ the plan
-
     @Test
     fun aPlanElementThatNamesNoExerciseIsRefused() {
         val issues = issuesOf(ProgramTransferFixture.edited("\"exerciseId\": \"plank\"", "\"exerciseId\": \"   \""))
@@ -214,8 +210,6 @@ class ProgramTransferValidationTest {
             ProgramTransferValidation.issuesIn(document)
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun issuesOf(text: String): List<ProgramTransferIssue> {
         val document = ProgramTransferReader.read(text)

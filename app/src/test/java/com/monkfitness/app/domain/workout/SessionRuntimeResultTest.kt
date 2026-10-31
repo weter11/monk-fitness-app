@@ -17,18 +17,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The values §30 step 8 reports with — and what they are structurally incapable of carrying.
- *
- * Every operation of the session runtime answers with one of three things (§28): a value, a *rule* that
- * refused it, or a failure. What matters about the envelope is not that it has three cases but what it
- * does **not** have: no case that reports a workout as a score, no refusal that carries an amount of
- * work, no completion that could describe a decision the runtime did not receive. That is asserted here,
- * on the compiled values, because a field added to one of them is exactly how a measurement would creep
- * into a layer that owns only the state of an attempt.
+ * Every operation of the session runtime answers with a value, a *rule* that refused it, or a
+ * failure. What matters about the envelope is what it does **not** have: no case reporting a workout
+ * as a score, no refusal carrying an amount of work, no completion describing a decision the runtime
+ * did not receive — a field added to one of them is exactly how a measurement would creep into a
+ * layer that owns only the state of an attempt.
  */
 class SessionRuntimeResultTest {
-
-    // ------------------------------------------------------------------ the envelope
 
     @Test
     fun anOperationAnswersWithExactlyThreeShapes() {
@@ -84,8 +79,6 @@ class SessionRuntimeResultTest {
             refusal.message.isNotBlank() && refusal.message.contains("REP_BASED")
         )
     }
-
-    // ------------------------------------------------------------------ the completion
 
     @Test
     fun aCompletionIsTheSessionTheSlotAndWhatTheAdaptiveHalfWrote() {
@@ -188,8 +181,6 @@ class SessionRuntimeResultTest {
             )
         }
     }
-
-    // ------------------------------------------------------------------ fixtures
 
     private fun completedSlot() = WorkoutSlot(
         slotId = SlotId("slot-1"),

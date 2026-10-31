@@ -24,31 +24,20 @@ import kotlin.math.abs
 import kotlin.math.max
 
 /**
- * **B-4 — the declared support contact is consumed on the side it names, through the production
- * published path.**
+ * The declared support contact is consumed on the side it names, through the production published
+ * path: every assertion here is measured on the frame the production pipeline publishes
+ * (`SkeletonPose` snapshotted by value), never on a helper production does not call. The observable
+ * is the support plane's effect on the extremity: when an extremity's declared support resolves, its
+ * heel/toe (or palm/fingertips) are projected into that plane; when it does not, the extremity keeps
+ * the neutral derivation and the heel/toe deviate from the ankle (`17.572` units on this geometry —
+ * the same value measured for an undeclared foot).
  *
- * Every assertion here is measured on the frame the production pipeline publishes (`SkeletonPose`
- * snapshotted by value), never on a helper production does not call. The observable is the support
- * plane's effect on the extremity: when an extremity's declared support resolves, its heel/toe (or
- * palm/fingertips) are projected into that plane; when it does not, the extremity keeps the neutral
- * derivation and the heel/toe deviate from the ankle (`17.572` units on this geometry — the same
- * value B-3 measured for an undeclared foot).
- *
- * ## RED evidence (measured on `origin/main` `fa81cb6`, published frames)
- *
- * | case | pre-fix | post-fix |
- * | --- | --- | --- |
- * | push-up, declares `LEFT_TOES` only | `devF = 17.572` (LEFT foot **not** flattened) · `devB = 0.000` (**RIGHT** foot flattened) | `devF = 0.000` · `devB = 17.572` |
- * | push-up, declares `RIGHT_TOES` only | `devF = 0.000` · `devB = 17.572` | `devF = 17.572` · `devB = 0.000` |
- * | `side_plank_standard` (declares `RIGHT_FOOT`, planted foot = B) | `HEEL_B y = 7.82`, `TOE_B y = 32.57`, `devB = 17.572` — the planted foot was left un-flattened while the TOP foot claimed the declaration | `HEEL_B = TOE_B = ANKLE_B = 15.00`, `devB = 0.000` |
- * | whole corpus (49 pose classes × 5 progress × every joint) | — | **only `side_plank_standard` changed, and only its `HEEL_B`/`TOE_B`** |
- *
- * The `side_plank_standard` row's `17.572` is that measurement on the pose **as it then was**: B3
- * (`fix/b3-sideplank-knee-plane`, off `2fb6079`) re-authors that pose's support leg so its residual
- * knee bend leaves the mat, and the engine's neutral derivation for the re-authored leg already lies
- * in the plane (`devB = 0.0000` for the declaration-free twin) — the row's post-fix outcome, the
- * planted foot in its own plane, is unchanged (the production pose's `HEEL_B`/`TOE_B` move by `< 3e-5`
- * through the correction).
+ * Pre-fix, a push-up declaring `LEFT_TOES` only read `devF = 17.572` (LEFT foot not flattened) with
+ * `devB = 0.000` (RIGHT foot flattened); `side_plank_standard` (declares `RIGHT_FOOT`, planted foot =
+ * B) read `HEEL_B y = 7.82`, `TOE_B y = 32.57`, `devB = 17.572` — the planted foot left un-flattened
+ * while the TOP foot claimed the declaration — and now reads `HEEL_B = TOE_B = ANKLE_B = 15.00`,
+ * `devB = 0.000`. Across the whole corpus (49 pose classes × 5 progress × every joint) only
+ * `side_plank_standard` changed, and only its `HEEL_B`/`TOE_B`.
  *
  * The hand path is the internal cross-check: it already followed the canonical convention
  * (`LEFT_HAND` flattened the A hand pre-fix), so the pre-fix tree flattened the LEFT hand and the
@@ -90,10 +79,6 @@ class SupportPointSideConsumptionTest {
         return worst
     }
 
-    // ------------------------------------------------------------------
-    // B.1 — the side decision, on a production pose whose declaration varies per side
-    // ------------------------------------------------------------------
-
     /**
      * The decisive case: a real production push-up whose declared foot contact is narrowed to ONE
      * side. The declared side's foot must be the one flattened, for BOTH kinds (`*_TOES` and
@@ -101,8 +86,8 @@ class SupportPointSideConsumptionTest {
      * limb family for a hand and the opposite for a foot.
      *
      * This single test fails on the pre-fix tree on all four foot scenarios (the declared side was
-     * flattened on the opposite foot) while the two hand scenarios pass there — which is exactly the
-     * contradiction B-4 removed.
+     * flattened on the opposite foot) while the two hand scenarios pass there — the contradiction
+     * these tests now forbid.
      */
     @Test
     fun aOneSidedDeclarationFlattensThatSideForBothArmsAndLegs() {
@@ -154,19 +139,14 @@ class SupportPointSideConsumptionTest {
         }
     }
 
-    // ------------------------------------------------------------------
-    // B.2 — the B-4 residual case: IsometricSidePlankPose
-    // ------------------------------------------------------------------
-
     /**
      * `IsometricSidePlankPose` declares `RIGHT_FOOT` + `RIGHT_FOREARM` — the down-side limbs. Its own
      * authoring comments name them (`SHOULDER_P / HIP_B` drop to the support side; `HIP_B` rests on
-     * the mat), and the declaration survives verbatim (B-2/B-3). The declared `RIGHT_FOOT` must
-     * therefore resolve to the **B** foot — the bottom, load-bearing one — and that foot must be
-     * flattened into its declared plane. Pre-fix the declaration resolved to the F foot (the stacked
-     * TOP foot), so the top foot got the plane and the planted foot was left at `17.572` units of
-     * deviation while its heel/toe sat at `y = 7.82 / 32.57` instead of the support surface at
-     * `y = 15.00`.
+     * the mat). The declared `RIGHT_FOOT` must therefore resolve to the **B** foot — the bottom,
+     * load-bearing one — and that foot must be flattened into its declared plane. Pre-fix the
+     * declaration resolved to the F foot (the stacked TOP foot), so the top foot got the plane and
+     * the planted foot was left at `17.572` units of deviation while its heel/toe sat at
+     * `y = 7.82 / 32.57` instead of the support surface at `y = 15.00`.
      */
     @Test
     fun theIsometricSidePlankPlantsTheBottomFootItDeclares() {
@@ -220,27 +200,6 @@ class SupportPointSideConsumptionTest {
         }
     }
 
-    // The former `theSidePlanksDeclaredSideIsWhatSelectsTheFoot` twin (this pose with `LEFT_FOOT`
-    // declared, asserting the OTHER foot keeps the neutral derivation) was RETIRED by the B3
-    // correction: it witnessed the side decision through the side plank's undeclared B foot, and that
-    // foot no longer carries an off-plane derivation to witness. B3 re-authors the pose's support leg
-    // (the residual knee bend leaves the mat instead of passing through it), and the engine's derived
-    // foot for that leg follows the shank: measured `devB = 0.0000` for a twin that declares NOTHING,
-    // where the same twin measured `devB = 17.5716` (`HEEL_B y = 7.82`, `TOE_B y = 32.57`) before the
-    // correction. Both feet of this pose now lie in the support plane whatever is declared, so no
-    // assertion on this vehicle can distinguish the declared side from the other one — a test there
-    // would be green by geometry, not by the side decision.
-    //
-    // The rule it witnessed is not left unwatched: the `*_FOOT` kind is witnessed on BOTH sides by
-    // [aOneSidedDeclarationFlattensThatSideForBothArmsAndLegs]'s push-up twins (`LEFT_FOOT`/`RIGHT_FOOT`
-    // with `other > offPlane`, that pose's undeclared foot still measuring `17.572`), the corpus-wide
-    // form by [everyOneSidedFootDeclarationInTheCorpusFlattensTheDeclaredSide], and this pose's own
-    // `RIGHT_FOOT` → B-foot resolution by [theIsometricSidePlankPlantsTheBottomFootItDeclares].
-
-    // ------------------------------------------------------------------
-    // B.3 — the production corpus follows the declared side
-    // ------------------------------------------------------------------
-
     /**
      * Every production pose that declares foot support on exactly ONE side must flatten that side's
      * foot. This is the corpus-wide form of the rule, run over the production registry
@@ -281,10 +240,6 @@ class SupportPointSideConsumptionTest {
             examined.contains("side_plank_standard")
         )
     }
-
-    // ------------------------------------------------------------------
-    // B.4 — the explicit convention witness: BirdDogPose
-    // ------------------------------------------------------------------
 
     /**
      * `BirdDogPose` is the clearest authored statement of the side convention: *"RIGHT side -> left
@@ -372,13 +327,11 @@ class SupportPointSideConsumptionTest {
         }
     }
 
-    // ------------------------------------------------------------------
-
     private val LEFT_FOOT_POINTS = setOf(SupportPoint.LEFT_FOOT, SupportPoint.LEFT_TOES)
     private val RIGHT_FOOT_POINTS = setOf(SupportPoint.RIGHT_FOOT, SupportPoint.RIGHT_TOES)
 
     /**
-     * A production pose with its support DECLARATION replaced — the same rig B-3 used: it delegates
+     * A production pose with its support DECLARATION replaced: it delegates
      * `build()` to the real pose (production geometry, production authoring path) and varies exactly
      * one thing (`metadata.support.contacts`), so a published-frame difference can only come from
      * the declaration.

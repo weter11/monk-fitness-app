@@ -16,17 +16,15 @@ import java.time.Instant
 
 /**
  * The structural comparison is what decides whether a Save creates a revision, so this suite pins it
- * in both directions: every dimension §6 says *is* structural must show up as a difference, and
- * everything §6 says is *not* — a name, a description, a planned start date, a lifecycle, a selection,
- * an archive, and above all **identity** — must not.
+ * in both directions: every dimension that *is* structural must show up as a difference, and everything
+ * that is *not* — a name, a description, a planned start date, a lifecycle, a selection, an archive,
+ * and above all **identity** — must not.
  *
  * The identity half is the one worth stating out loud. A draft addresses its days and elements by id,
  * a saved revision re-identifies every one of them, and the editor's whole no-op guarantee rests on the
  * comparison ignoring that. [anIdentityIsNotStructure] is therefore the load-bearing test of the file.
  */
 class ProgramStructureTest {
-
-    // ------------------------------------------------------------------ identity is not content
 
     @Test
     fun anIdentityIsNotStructure() {
@@ -81,8 +79,6 @@ class ProgramStructureTest {
             draft.structure.differencesFrom(revision.structure)
         )
     }
-
-    // ------------------------------------------------------------------ every dimension §6 names
 
     @Test
     fun theVocabularyIsEveryStructuralDimensionOfSectionSix() {
@@ -223,8 +219,6 @@ class ProgramStructureTest {
         )
     }
 
-    // ------------------------------------------------------------------ the plan's own totals
-
     @Test
     fun theTotalsCountThePlanTheSameWayTheReviewPresentsIt() {
         val plan = structure(days())
@@ -273,18 +267,9 @@ class ProgramStructureTest {
         assertEquals(7, planStructure.setCount)
     }
 
-    // ------------------------------------------------------------------ helpers
-
     /**
-     * A two-day plan:
-     *
-     * ```text
-     * day 1  TRAINING  pushup 12/10/8/6 (user), pike_pushup 8/8 (user), pushup 1 (user)
-     * day 2  REST      no elements
-     * ```
-     *
-     * The repeated `pushup` is deliberate: an occurrence is an element, and the structure has to say
-     * so (§9).
+     * A two-day plan — a training day with three elements and a rest day with none — where the repeated
+     * `pushup` is deliberate: an occurrence is an element, and the structure has to say so.
      */
     private fun days(
         dayId: String = "day-1",

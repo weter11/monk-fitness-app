@@ -14,37 +14,30 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * **The spinal wave of Cat-Cow is carried by the SPINE, not by the root.**
+ * The spinal wave of Cat-Cow is carried by the SPINE, not by the root.
  *
- * `CatCowPose`'s published motion used to be a rigid trunk/root bob: the pelvis's tilt was the whole
- * authored arc (`declarePelvisTilt(pelvis, …, spineTilt)` and nothing else), the canonical
- * `PELVIS -> LUMBAR -> CHEST` spine published **no articulation at all** — the `LUMBAR`'s world
- * rotation was bit-identical to the `PELVIS`'s and the `CHEST`'s `localRotation` was `≡ 0` at every
- * sampled phase — and the trunk's own chord swept `2.386°` across the whole rep while the body
- * translated `5` u at the pelvis and `10` u at the chest (all measured through
- * `SkeletonPipeline.produceFrame`). The exercise's identity is spinal flexion/extension, so a rigid
- * trunk cannot represent it (BPS `Cat-Cow (Reps)` §1/§5: "it mobilizes the entire vertebral column,
- * particularly the thoracic and lumbar regions"; "the motion is a sequential wave from the
- * pelvis/coccyx through the lumbar, thoracic, and cervical segments").
+ * The defect: `CatCowPose`'s published motion used to be a rigid trunk/root bob — the pelvis's tilt
+ * was the whole authored arc, the canonical `PELVIS -> LUMBAR -> CHEST` spine published no
+ * articulation at all (the `LUMBAR`'s world rotation bit-identical to the `PELVIS`'s, the `CHEST`'s
+ * `localRotation` `≡ 0` at every sampled phase), and the trunk's own chord swept `2.386°` across the
+ * whole rep while the body translated `5` u at the pelvis and `10` u at the chest. The exercise's
+ * identity is spinal flexion/extension, so a rigid trunk cannot represent it.
  *
- * The authored wave this file pins (`CAT_FLEXION` … `COW_EXTENSION`, the pelvis's own tilt share and
- * the thoracic share) is the pose's declaration, restated here as the contract:
+ * The authored wave this file pins, as the contract:
  *
  *  * the pelvis→chest chord's flexion `= lerp(A, −0.0417, progress)`, `A = asin(5/120) ≈ 0.0417` —
  *    the Cat end's shoulder end rises `torsoLength · sin(A) = 5.00` u above the pelvis, the Cow end
- *    sinks
- *    `torsoLength · sin(0.0417) = 5.00` u below it;
- *  * the PELVIS's own tilt reverses with the wave (BPS §3/§7/§9: posterior "tail tuck" in Cat,
- *    anterior "tail lift" in Cow) and is a fraction of the wave, never the whole of it;
+ *    sinks `5.00` u below it;
+ *  * the PELVIS's own tilt reverses with the wave (posterior "tail tuck" in Cat, anterior "tail lift"
+ *    in Cow) and is a fraction of the wave, never the whole of it;
  *  * the LUMBAR carries the remainder of the chord's motion — the visible flexion/extension — and the
  *    CHEST carries the thoracic share;
  *  * nothing else moves: the pelvis's placement schedule (which the leg chain, the floor relationship
  *    and the four-point base resolve against), the leg targets/poles, the planted hands, the gaze
  *    sweep and the cycle/phase timing are the pose's authored ones, unchanged.
  *
- * Every measurement is taken on the **published frame** (`SkeletonPipeline.produceFrame(pose, ctx)`,
- * the production entry point), captured BY VALUE — the pipeline hands back a reused mutable buffer
- * (the T-7 aliasing trap), so a stored `.pose` reference would silently alias every sample.
+ * Every measurement is taken on the published frame, captured BY VALUE — the pipeline hands back a
+ * reused mutable buffer, so a stored `.pose` reference would silently alias every sample.
  */
 class CatCowSpineWaveTest {
 
@@ -144,10 +137,6 @@ class CatCowSpineWaveTest {
         return atan2(chest.y - pel.y, -(chest.x - pel.x))
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 1. The defect itself — which joint carries the rep
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theSpinalWaveIsCarriedByTheCanonicalSpineSegmentsNotByThePelvis() {
         val frames = playingFrames()
@@ -216,9 +205,8 @@ class CatCowSpineWaveTest {
         // The floors are the MEASUREMENT band (the articulations must exceed the tolerance they are
         // compared in and differ from one another), not an absolute angle calibrated to an amplitude:
         // under the strict pre-fix envelope (`CAT_FLEXION = asin(5/120) ≈ 0.0417` rad) the thoracic
-        // share is `0.0104` rad, i.e. `2.1 ×` this band, which is the owner-decided amplitude's own
-        // consequence. The primary assertion above (each segment EQUALS its authored share) is
-        // unchanged and is the real contract.
+        // share is `0.0104` rad, i.e. `2.1 ×` this band. The primary assertion above (each segment
+        // EQUALS its authored share) is unchanged and is the real contract.
         val cat = frames.first().second
         val catPelvis = zAngle(cat, Joint.PELVIS) - quadrupedPitch
         val catLumbar = zAngle(cat, Joint.LUMBAR) - zAngle(cat, Joint.PELVIS)
@@ -231,10 +219,6 @@ class CatCowSpineWaveTest {
                 abs(catLumbar - catPelvis) > angleBand && abs(catLumbar - catChest) > angleBand
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 2. The wave's own arc (the exercise's visible identity)
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theTrunkChordSweepsTheAuthoredCatAndCowArc() {
@@ -276,10 +260,6 @@ class CatCowSpineWaveTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 3. The distribution: the pelvis keeps its few degrees, the spine carries the range
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theFlexionPropagatesThroughTheLumbarAndThoracicSegments() {
         val frames = playingFrames()
@@ -311,12 +291,12 @@ class CatCowSpineWaveTest {
                 "${f(abs(authoredThoracic(0f)))} rad, the comparison band ${f(angleBand)} rad)",
             // The floor is the comparison band (2×), not an absolute angle calibrated to an older
             // amplitude: under the strict pre-fix envelope the total thoracic swing is
-            // `2 · 0.25 · asin(5/120) = 0.0208` rad = `2.1 ×` the band. The exact-share assertion is
-            // the wave test's own (`theSpinalWaveIsCarriedByTheCanonicalSpineSegmentsNotByThePelvis`).
+            // `2 · 0.25 · asin(5/120) = 0.0208` rad = `2.1 ×` the band. The exact-share assertion is the
+            // wave test's own.
             thoracicSwing > angleBand * 2f
         )
 
-        // The pelvis's tilt REVERSES with the wave (BPS §3/§7/§9): posterior in Cat, anterior in Cow.
+        // The pelvis's tilt REVERSES with the wave: posterior in Cat, anterior in Cow.
         assertTrue(
             "the pelvis must tilt posteriorly at the Cat end (measured ${deg(zAngle(cat, Joint.PELVIS) - quadrupedPitch)}°)",
             zAngle(cat, Joint.PELVIS) - quadrupedPitch > angleBand
@@ -341,10 +321,6 @@ class CatCowSpineWaveTest {
             wrong.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 4. Sagittal-only, rigid bones (BPS §5/§11) — no rotation, no lateral flexion
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theWaveStaysSagittalAndTheBonesKeepTheirLengths() {
@@ -386,10 +362,6 @@ class CatCowSpineWaveTest {
         assertTrue("the trunk/neck/head bones must keep the definition's lengths:\n" + wrongBones.take(6).joinToString("\n"), wrongBones.isEmpty())
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 5. Everything else the pose is: support, planting, placement, cycle
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theFourPointBaseThePlantingAndThePlacementAreUnchanged() {
         val declared = CatCowPose().metadata.support.contacts.map { it.point }.toSet()
@@ -405,8 +377,8 @@ class CatCowSpineWaveTest {
         val relocated = mutableListOf<String>()
 
         for ((p, frame) in playingFrames()) {
-            // The declaration reaches the published frame (R8/B-5), and the pose's own placement
-            // schedule is untouched: the pelvis stays at (50, lerp(45, 40, p) + ankleHeight).
+            // The declaration reaches the published frame, and the pose's own placement schedule is
+            // untouched: the pelvis stays at (50, lerp(45, 40, p) + ankleHeight).
             if (frame.supportedPoints.toSet() != declared) {
                 wrongPlacement.add("p=$p published supportedPoints=${frame.supportedPoints}")
             }
@@ -414,8 +386,8 @@ class CatCowSpineWaveTest {
             if (abs(pelvis.x - pelvisX) > posBand || abs(pelvis.y - pelvisY(p)) > posBand) {
                 wrongPlacement.add("p=$p pelvis=(${f(pelvis.x)}, ${f(pelvis.y)})")
             }
-            // The hands stay planted flat on the mat, directly under their shoulders (BPS §6/§8/§11),
-            // and realize the declared target (no solver relocation).
+            // The hands stay planted flat on the mat, directly under their shoulders, and realize the
+            // declared target (no solver relocation).
             for ((hand, shoulder) in listOf(Joint.HAND_A to Joint.SHOULDER_A, Joint.HAND_P to Joint.SHOULDER_P)) {
                 val h = frame.getJoint(hand); val s = frame.getJoint(shoulder)
                 if (abs(h.y - matLevel) > posBand || abs(h.x - s.x) > posBand || abs(h.z - s.z) > posBand) {
@@ -431,8 +403,8 @@ class CatCowSpineWaveTest {
                 }
             }
             // The leg chain's published geometry is the pose's own planted quadruped base and does not
-            // react to the spinal wave: each leg joint's offset from its own hip is phase-invariant,
-            // and it is the value the tree published before this correction (the leg authoring is the
+            // react to the spinal wave: each leg joint's offset from its own hip is phase-invariant and
+            // equal to the value the tree published before this correction (the leg authoring is the
             // pose's own and is deliberately untouched).
             for ((joint, hip, want) in LEG_OFFSETS) {
                 val got = Vector3().set(frame.getJoint(joint)).subtract(frame.getJoint(hip))
@@ -459,17 +431,16 @@ class CatCowSpineWaveTest {
     }
 
     /**
-     * The leg chain's published offsets from their own hip — the pose's planted quadruped base, as the
-     * pre-correction tree published it. The authored ankle target `(50, ankleHeight, ±hipWidth)` is
-     * projected onto the leg chain's reachable annulus along its own ray (which is exactly the −Y
-     * direction from the hip at every phase), so the whole chain rides the pelvis rigidly: the values
-     * are constant across the sweep, and every one of them is unchanged by this correction — the
-     * spinal wave moves the trunk, never the planted base (BPS §7/§8/§11: "knees under hips … the
-     * thighs do not splay", "the four-point base remains in contact throughout"). Measured on the
-     * batch's whole-corpus A/B (`68` classes × `5` samples × every joint XYZ, pristine `origin/main`
-     * @ `9cf4c32` vs the corrected tree): the leg chain's rows differ by at most `3.052e-05` u — the
-     * float re-association of the bake's parent frame, whose rotation the correction changes — which
-     * is why the band here is the pose's positional tolerance rather than a bit-exact comparison.
+     * The leg chain's published offsets from their own hip — the pose's planted quadruped base. The
+     * authored ankle target `(50, ankleHeight, ±hipWidth)` is projected onto the leg chain's reachable
+     * annulus along its own ray (exactly the −Y direction from the hip at every phase), so the whole
+     * chain rides the pelvis rigidly: the values are constant across the sweep and unchanged by this
+     * correction — the spinal wave moves the trunk, never the planted base ("knees under hips … the
+     * thighs do not splay", "the four-point base remains in contact throughout"). Measured on a
+     * whole-corpus A/B (`68` classes × `5` samples × every joint XYZ, pristine tree vs the corrected
+     * one): the leg chain's rows differ by at most `3.052e-05` u — the float re-association of the
+     * bake's parent frame, whose rotation the correction changes — which is why the band here is the
+     * pose's positional tolerance rather than a bit-exact comparison.
      */
     private val LEG_OFFSETS: List<Triple<Joint, Joint, Vector3>> by lazy {
         val knee = Vector3(-69.2675f, -54.2957f, -69.2675f)
@@ -530,10 +501,6 @@ class CatCowSpineWaveTest {
             wrongGaze.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 6. Frame-condition invariance (the B-8 cold-frame defect class)
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theWaveIsFrameConditionInvariant() {

@@ -24,22 +24,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §30 step 12's integration suite, on a real SQLite database and the production repositories: the
- * whole flow from a completed Session to the change a future opportunity will present.
+ * The integration suite, on a real SQLite database and the production repositories: the whole flow from a
+ * completed Session to the change a future opportunity will present.
  *
- * ```text
- * stored Program facts → completed Session → observations and the family's state
- *     → future target Slot → AdaptiveInputSnapshot + ProgramAdaptiveRequest
- *     → ProgramAdaptiveEngine (pure) → ProgramAdaptiveResult
- *     → the completion transaction → the future Slot's presentation
- * ```
+ * Every assertion is made on rows or on values read back through **fresh repositories**, so "this was
+ * stored" is a claim about storage rather than about a cache, and "nothing was written" is a
+ * whole-database census rather than a list of tables the test happened to think of.
  *
- * Every assertion is made on rows or on values read back through **fresh repositories**, so *"this
- * was stored"* is a claim about storage rather than about a cache, and *"nothing was written"* is a
- * whole-database census rather than a list of tables the test happened to think of. The scenario the
- * rig builds and the window it produces are documented on [ProgramAdaptiveIntegrationRig]; the
- * arithmetic the policy then reads is stated there too, because a test that moved it would be
- * measuring a different window.
+ * The scenario the rig builds and the window arithmetic the policy then reads are documented on
+ * [ProgramAdaptiveIntegrationRig]: a test that moved them would be measuring a different window.
  */
 class ProgramAdaptiveIntegrationTest {
 
@@ -48,12 +41,10 @@ class ProgramAdaptiveIntegrationTest {
     @After
     fun close() = rig.close()
 
-    // ================================================================ the flow (§4, §6, §16, §27)
-
     /**
-     * The complete path, end to end: a completed Session produces a decision about the **next future**
-     * opportunity, the decision and its adjustment are stored with the family's state, and the
-     * opportunity the change is for is the one the user will start next.
+     * The complete path: a completed Session produces a decision about the **next future** opportunity,
+     * the decision and its adjustment are stored with the family's state, and the opportunity the change
+     * is for is the one the user will start next.
      */
     @Test
     fun aCompletedSessionAdaptsTheNextFutureOpportunityAndStoresAllThreeLegs() = runBlocking {
@@ -124,8 +115,8 @@ class ProgramAdaptiveIntegrationTest {
     }
 
     /**
-     * The pass **writes nothing**: everything it produces travels as a value, and §27's completion is
-     * what persists it.
+     * The pass **writes nothing**: everything it produces travels as a value, and the completion is what
+     * persists it.
      */
     @Test
     fun theAdaptivePassAloneWritesNothingAtAll() = runBlocking {
@@ -141,7 +132,7 @@ class ProgramAdaptiveIntegrationTest {
         assertEquals(SessionStatus.IN_PROGRESS, rig.requireStored(trigger.sessionId).status)
     }
 
-    /** A past opportunity is never the target, however startable it is (§4). */
+    /** A past opportunity is never the target, however startable it is. */
     @Test
     fun theDecisionsTargetIsNeverAPastOpportunityOfTheSameRevision() = runBlocking {
         rig.createGraph()
@@ -201,11 +192,9 @@ class ProgramAdaptiveIntegrationTest {
         assertEquals("nothing adaptive was written", before, rig.counts())
     }
 
-    // ================================================================ revision and program scope
-
     /**
      * A completion under one revision never adapts another revision's opportunities, even when a newer
-     * revision is the Program's current one (§4, §18).
+     * revision is the Program's current one.
      */
     @Test
     fun aCompletionNeverAdaptsAnotherRevisionsOpportunity() = runBlocking {
@@ -295,8 +284,6 @@ class ProgramAdaptiveIntegrationTest {
         )
     }
 
-    // ================================================================ the family's own bookkeeping
-
     /** A window that held still advances the family's bookkeeping, and stores no decision. */
     @Test
     fun aHeldWindowAdvancesTheBookkeepingAndWritesNoDecision() = runBlocking {
@@ -339,9 +326,9 @@ class ProgramAdaptiveIntegrationTest {
     }
 
     /**
-     * The cooldown is a count of the windows the family could have changed level in. A window it spends
-     * in recovery is not one of them: §14's safety state outranks progression, so the count holds there
-     * instead of being spent on the family's behalf.
+     * The cooldown counts the windows the family could have changed level in. A window spent in recovery
+     * is not one of them: the safety state outranks progression, so the count holds instead of being
+     * spent on the family's behalf.
      */
     @Test
     fun cooldownDoesNotElapseWhileTheFamilyIsInRecovery() = runBlocking {
@@ -391,11 +378,9 @@ class ProgramAdaptiveIntegrationTest {
         )
     }
 
-    // ================================================================ §18's filter (§13, §20)
-
     /**
-     * A change the aggregate load guard refuses is kept as an explicit `NOT_APPLIED` decision — with
-     * its **reason** — and produces no adjustment.
+     * A change the aggregate load guard refuses is kept as an explicit `NOT_APPLIED` decision — with its
+     * **reason** — and produces no adjustment.
      */
     @Test
     fun aGuardRefusalIsStoredWithItsDecisionAndItsReasonAndNoAdjustment() = runBlocking {
@@ -438,9 +423,8 @@ class ProgramAdaptiveIntegrationTest {
     }
 
     /**
-     * The reason is what survives a restart — not a re-derivation from the row. The stored token is the
-     * engine's own answer, unchanged when the facts are read again, and a later decision under a
-     * different policy never rewrites it.
+     * The reason survives a restart rather than being re-derived from the row: the stored token is the
+     * engine's own answer, and a later decision under a different policy never rewrites it.
      */
     @Test
     fun theDecisionReasonSurvivesARestartAndIsNeverReDerived() = runBlocking {
@@ -480,11 +464,9 @@ class ProgramAdaptiveIntegrationTest {
         )
     }
 
-    // ================================================================ §14/§16: the chain
-
     /**
      * Two decisions about one future opportunity: the second **supersedes the first by reference**, and
-     * the first row is never rewritten (§16).
+     * the first row is never rewritten.
      */
     @Test
     fun aSecondDecisionSupersedesTheFirstByReferenceAndNeverRewritesIt() = runBlocking {
@@ -533,8 +515,7 @@ class ProgramAdaptiveIntegrationTest {
 
     /**
      * The future opportunity **consumes** the adjustment when its session starts, and the captured
-     * presentation is frozen there: a later adjustment and a later revision change neither of them
-     * move it (§16, §19).
+     * presentation is frozen there: neither a later adjustment nor a later revision change moves it.
      */
     @Test
     fun theFutureOpportunityConsumesTheAdjustmentIntoAnImmutableSnapshot() = runBlocking {
@@ -562,10 +543,9 @@ class ProgramAdaptiveIntegrationTest {
             started.snapshot.workout.appliedAdjustmentIds
         )
 
-        // A later decision (under a cooldown that has since been served) and a §6 Save: neither may
-        // re-explain this Session, because its presentation was captured when it started. The later
-        // decision is about the *next* opportunity, because the one this Session consumed is no longer
-        // a future opportunity at all — its snapshot has been taken.
+        // A later decision (under a served cooldown) and a later Save: neither may re-explain this
+        // Session, because its presentation was captured when it started. The later decision is about the
+        // *next* opportunity — the one consumed is no longer future, its snapshot already taken.
         rig.seedFamilyState(
             level = 2,
             precedingProgressQualifyingWindows = 1,
@@ -607,12 +587,10 @@ class ProgramAdaptiveIntegrationTest {
                 rig.storedDecisions().count { it.slotId == rig.slot(6) }
             )
         )
-        // The later decision was refused rather than applied, and the refusal is the guard's own
-        // one-step rule read on the *presented* variants: the family's position had already moved to
-        // the second variant while the next opportunity's element still presented the first, so a step
-        // from there would travel two declared levels at once (§18). It is recorded as filtered, which
-        // is §18's contract, and the consumed opportunity is untouched — which is what this test is
-        // about.
+        // The later decision was refused rather than applied, by the guard's one-step rule read on the
+        // *presented* variants: the family had moved to the second variant while the next opportunity's
+        // element still presented the first, so a step from there would travel two declared levels at
+        // once. Recorded as filtered, and the consumed opportunity is untouched.
         assertEquals(
             "and the later decision is kept as a refusal rather than dropped",
             ProgramAdaptiveReason.AGGREGATE_LOAD_GUARD,
@@ -620,9 +598,7 @@ class ProgramAdaptiveIntegrationTest {
         )
     }
 
-    // ================================================================ §19/§15: whose element
-
-    /** An element the user authored is not adapted at all (§15, §18). */
+    /** An element the user authored is not adapted at all. */
     @Test
     fun anElementTheUserAuthoredIsNeverAdapted() = runBlocking {
         rig.createGraph()
@@ -670,7 +646,7 @@ class ProgramAdaptiveIntegrationTest {
         assertEquals(0, rig.database.count("adaptive_adjustment"))
     }
 
-    /** A `MANUAL` revision is not adapted at all — §19's mode rule, before any element is considered. */
+    /** A `MANUAL` revision is not adapted at all — the mode rule, before any element is considered. */
     @Test
     fun aManualRevisionIsRefusedBeforeAnyElementIsConsidered() = runBlocking {
         rig.createGraph()
@@ -686,9 +662,7 @@ class ProgramAdaptiveIntegrationTest {
         assertEquals("nothing adaptive was written", before, rig.counts())
     }
 
-    // ================================================================ the capability boundaries
-
-    /** No declared ladder is a typed no-decision, never a fabricated progression (§10). */
+    /** No declared ladder is a typed no-decision, never a fabricated progression. */
     @Test
     fun noDeclaredProgressionIsATypedNoDecision() = runBlocking {
         rig.createGraph()
@@ -724,9 +698,8 @@ class ProgramAdaptiveIntegrationTest {
      * The window is built from the Sessions' **own stored facts**: a completion whose prescription was
      * never confirmed exposes no family at all, however much the plan asked for.
      *
-     * The falsification is exact — a window built from the plan's prescribed values instead of the
-     * confirmed sets would find the family exposed here and decide something about it, and the gap
-     * asserted below is what says it did not.
+     * The falsification is exact: a window built from prescribed values would find the family exposed and
+     * decide something, and the gap asserted below is what says it did not.
      */
     @Test
     fun anUnconfirmedPrescriptionExposesNoFamilyAtAll() = runBlocking {
@@ -749,12 +722,10 @@ class ProgramAdaptiveIntegrationTest {
         assertEquals("and nothing adaptive was written", before, rig.counts())
     }
 
-    // ================================================================ §27: one unit of work
-
     /**
-     * §27's completion is one unit: a failure at **any** leg — the session, the opportunity, the
-     * decision, the adjustment or the family's state — leaves the pre-completion state exactly as it
-     * was, so no half-completed workout, no orphan decision and no partially advanced family can exist.
+     * The completion is one unit: a failure at **any** leg — the session, the opportunity, the decision,
+     * the adjustment or the family's state — leaves the pre-completion state exactly as it was, so no
+     * half-completed workout, no orphan decision and no partially advanced family can exist.
      */
     @Test
     fun aFailureAtAnyLegOfTheCompletionLeavesAllFourLegsUnchanged() = runBlocking {
@@ -812,11 +783,9 @@ class ProgramAdaptiveIntegrationTest {
         }
     }
 
-    // ================================================================ isolation from Stage 1
-
     /**
-     * The whole flow touches the target tables and **no** Stage-1 adaptive table: the two generations
-     * share a database and nothing else (§30 step 11's boundary, kept by step 12).
+     * The whole flow touches the target tables and **no** legacy adaptive table: the two generations
+     * share a database and nothing else.
      */
     @Test
     fun theFlowNeverTouchesTheStageOneAdaptiveTables() = runBlocking {
@@ -835,9 +804,8 @@ class ProgramAdaptiveIntegrationTest {
                 rig.database.count("program_family_progression_state")
             )
         )
-        // §30 step 15 inverted this half. It used to assert the Stage-1 tables were *untouched* by a
-        // target pass — the point of the coexisting generations. They are gone, so the claim is that the
-        // pass wrote nothing outside the target schema at all: every retained global table is empty too.
+        // This half is inverted: the legacy tables are gone, so the claim is that the pass wrote nothing
+        // outside the target schema at all — every retained global table is empty too.
         assertEquals(
             "and nothing outside the target schema was written",
             listOf(0, 0),
@@ -848,12 +816,9 @@ class ProgramAdaptiveIntegrationTest {
         )
     }
 
-    // ================================================================ the element choice, in the open
-
     /**
-     * The change is applied to an element of the **target opportunity's own** plan day, and the ladder
-     * it resolves against is that element's family's — never another day's, another revision's or
-     * another Program's.
+     * The change is applied to an element of the **target opportunity's own** plan day, and the ladder it
+     * resolves against is that element's family's — never another day's, revision's or Program's.
      */
     @Test
     fun theChangedElementBelongsToTheTargetOpportunitysOwnPlanDay() = runBlocking {

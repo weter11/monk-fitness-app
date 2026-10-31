@@ -15,33 +15,27 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P27's **one coherent context snapshot per generation operation**.
+ * **One coherent context snapshot per generation operation.**
  *
  * The rule is short and completely invisible to a test that supplies a well-behaved source: a generation
  * pass must read its facts **once**, hold that one value, and plan from it. A source that answers
  * differently on each call is what makes the rule observable — it turns "read once" from a claim about
- * the code into a claim about a *count*, and it turns "Generate and Preview agree" from an equality that
- * a stateless double would satisfy for free into an equality worth measuring.
- *
- * ### Why a double that misbehaves is the right instrument
+ * the code into a claim about a *count*, and it turns "Generate and Preview agree" from an equality a
+ * stateless double would satisfy for free into one worth measuring.
  *
  * A `GenerationContextSource` returning `GenerationPreferences.NONE` on every call cannot distinguish
- * "read once" from "read five times", and cannot distinguish "the same snapshot" from "two coincidentally
- * equal snapshots". [CountingSource] answers with a *different* recency list per call, so:
- *
- *  * a second read inside one pass would give the request a list no single read ever produced;
- *  * a Preview that read separately from the Generate it is previewing would disagree with it by
- *    construction rather than by luck.
+ * "read once" from "read five times", nor "the same snapshot" from "two coincidentally equal
+ * snapshots". [CountingSource] answers with a *different* recency list per call, so a second read inside
+ * one pass would give the request a list no single read ever produced, and a Preview reading separately
+ * from the Generate it previews would disagree with it by construction rather than by luck.
  *
  * Both failure modes are silent in production — nothing crashes, the plan is merely *slightly* different
- * — which is precisely the class of defect this stage's neutral-answer discipline exists to keep out.
+ * — which is the class of defect the neutral-answer discipline exists to keep out.
  *
  * The suite adds no generation semantics and changes no planner: it drives the real service over the
  * real shipped catalogue and reads back what the request was given.
  */
 class ProgramGenerationContextSnapshotTest {
-
-    // ------------------------------------------------------------------ one read per operation
 
     @Test
     fun oneGenerateReadsTheContextExactlyOnce() = runBlocking {
@@ -114,13 +108,11 @@ class ProgramGenerationContextSnapshotTest {
         )
     }
 
-    // ------------------------------------------------------------------ the snapshot is the one that was planned from
-
     @Test
     fun thePlanIsBuiltFromTheSnapshotThatWasReadAndNotFromAnother() = runBlocking {
         // The strong form of the claim. `CountingSource` states a *different* recency list per call, and
-        // §9's recency axis is read by the planner — so a request carrying call N's list must produce
-        // call N's plan. With a one-focus configuration and one usable candidate family the selector
+        // the planner reads the recency axis — so a request carrying call N's list must produce call N's
+        // plan. With a one-focus configuration and one usable candidate family the selector
         // has nothing to choose between, so the fixture states the snapshot as the whole answer it can
         // observe and proves the pass consumed *that* value rather than any other.
         val source = CountingSource()
@@ -148,8 +140,8 @@ class ProgramGenerationContextSnapshotTest {
 
     @Test
     fun theSnapshotReachesTheRequestThroughTheBoundaryUnchanged() = runBlocking {
-        // The boundary forwards `preferences` verbatim (P23's contract), so a context value handed to
-        // the service arrives at the request identical. Asserted on the request itself rather than on
+        // The boundary forwards `preferences` verbatim, so a context value handed to the service
+        // arrives at the request identical. Asserted on the request itself rather than on
         // the plan, because the request is where the claim lives and the plan is downstream of it.
         val stated = GenerationPreferences(recentExerciseIds = listOf("squats", "rows"))
         val service = serviceOver(FixedSource(stated))
@@ -172,8 +164,6 @@ class ProgramGenerationContextSnapshotTest {
             request.preferences
         )
     }
-
-    // ------------------------------------------------------------------ Generate and Preview agree
 
     @Test
     fun generateAndPreviewOverTheSameSourceStateSeeTheSameSnapshot() = runBlocking {
@@ -229,10 +219,10 @@ class ProgramGenerationContextSnapshotTest {
             "and the second pass really did see different input than the first",
             source.answers[0] != source.answers[1]
         )
-        // Whether the two PLANS differ is a planner matter and is deliberately not asserted here: §8
-        // only lets recency act as a tie-breaker, so two different snapshots may legitimately yield the
-        // same plan. What is asserted is that the snapshots differed and that the service took both —
-        // the caching bug is closed without claiming a planner effect this stage does not own.
+        // Whether the two PLANS differ is a planner matter and is deliberately not asserted here:
+        // recency only acts as a tie-breaker, so two different snapshots may legitimately yield the same
+        // plan. What is asserted is that the snapshots differed and that the service took both — the
+        // caching bug is closed without claiming a planner effect this stage does not own.
         assertTrue(
             "and the second pass still planned a real plan rather than reusing a stored one",
             second.edit.plan.slots.isNotEmpty()
@@ -243,8 +233,6 @@ class ProgramGenerationContextSnapshotTest {
             second.edit.draft.programId
         )
     }
-
-    // ------------------------------------------------------------------ fixtures
 
     private fun serviceOver(source: GenerationContextSource): SnapshotProbe = SnapshotProbe(source)
 
@@ -302,8 +290,8 @@ class ProgramGenerationContextSnapshotTest {
      *
      * The varying answer is the whole instrument: with a constant answer, "read once" and "read many
      * times" and "Generate and Preview agree" are indistinguishable. The lists are real
-     * [recentExerciseIds] values ordered most-recent-first, so a snapshot that reached the request is a
-     * snapshot §9's recency axis could actually act on.
+     * [recentExerciseIds] values ordered most-recent-first, so a snapshot that reached the request is
+     * one the recency axis could actually act on.
      */
     private class CountingSource : GenerationContextSource {
 

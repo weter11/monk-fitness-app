@@ -19,42 +19,19 @@ import kotlin.math.abs
 import kotlin.math.sin
 
 /**
- * **B-4 — the `SupportPoint ↔ Joint` mapping has ONE production authority, and it is the canonical
- * A/F ↔ LEFT · P/B ↔ RIGHT convention.**
+ * The `SupportPoint ↔ Joint` mapping has ONE production authority, and it is the canonical
+ * A/F ↔ LEFT · P/B ↔ RIGHT convention.
  *
- * Before B-4 the repository defined this relation three times with two contradictory conventions:
- * `SupportMath.jointsForContactMap` (LEFT = B/P family) and
- * `SkeletonPoseFinalizer.footSupportPointFor`/`toesSupportPointFor` (RIGHT_FOOT = the F foot) on one
- * side, `SkeletonPoseFinalizer.contactJointsFor` + `declaredHandSupportPoint` (LEFT = A/F family) on
- * the other. The finalizer's two foot maps were inverses of *each other's* consumers: a declaration
- * for one physical foot gated the support plane of the other, and its plane was derived from the
- * other foot's joints.
+ * The contradiction this guards: the relation was once defined in three places with two opposite
+ * conventions, and the finalizer's two foot maps were inverses of each other's consumers — a
+ * declaration for one physical foot gated the support plane of the other, and that plane was
+ * derived from the other foot's joints.
  *
- * The authority decision (evidence, in priority order — see the B-4 record in
- * `docs/STABILIZATION_AUDIT.md`):
- * 1. **`docs/ENGINE.md` §4 "Joint naming: A/P and F/B"** (ACTIVE architecture doc): "A = active /
- *    foreground limb (left), P = passive / background limb (right) for the arms and hands. F =
- *    foreground, B = background for the legs and feet."
- * 2. Authored geometry: `BasePose.buildShoulders` puts SHOULDER_A at −Z and SHOULDER_P at +Z,
- *    `buildPelvis` puts HIP_F at −Z and HIP_B at +Z, so **A and F are one physical side** and **P
- *    and B the other**; the production `Camera` (yaw 1.19, Z → screen X) renders the −Z (A/F) family
- *    on screen-left, i.e. the near/foreground limb the convention calls left.
- * 3. Pose witnesses: `BirdDogPose` ("right side -> left arm (A) + right leg (B)"),
- *    `PikePushUpPose` ("Right-Side (Side B)"), `WidePushUpPose` ("LEFT_HAND (HAND_A)"),
- *    `IsometricSidePlankPose` (the down-side support limbs are SHOULDER_P/HIP_B and it declares
- *    RIGHT_FOREARM/RIGHT_FOOT), `ARCHITECTURAL_AUDIT_SKELETON_MODEL.md`, and `ConstraintSolver`'s
- *    HAND_A → SHOULDER_A/ELBOW_A chain map.
- * 4. The engine's own hand path (`declaredHandSupportPoint` + `contactJointsFor`) already followed
- *    this convention — the *feet* were the outlier, so the hand path is the internal cross-check.
- *
- * Groups: **A** canonical mapping · **C** contradiction guard (static, by structure/content) ·
- * **D** side semantics. Group B (production behaviour) lives in `SupportPointSideConsumptionTest`.
+ * The convention itself: `BasePose.buildShoulders` puts SHOULDER_A at −Z and SHOULDER_P at +Z,
+ * `buildPelvis` puts HIP_F at −Z and HIP_B at +Z, so A and F are one physical side and P and B the
+ * other; the production `Camera` (yaw 1.19, Z → screen X) renders the −Z (A/F) family screen-left.
  */
 class SupportPointMappingAuthorityTest {
-
-    // ------------------------------------------------------------------
-    // A. THE canonical mapping, family by family
-    // ------------------------------------------------------------------
 
     /**
      * The two legs: `*_FOOT` is the whole-foot support (anchored at the ankle) and `*_TOES` the
@@ -171,7 +148,7 @@ class SupportPointMappingAuthorityTest {
 
     /**
      * The declaration family an ankle/hand resolves over is the canonical map's inverse — that is
-     * what makes B-3's "declaration family" resolution unable to disagree with the side convention.
+     * what makes the declaration-family resolution unable to disagree with the side convention.
      * Precedence (whole kind first) is the order the extremity derivation has always used.
      */
     @Test
@@ -221,10 +198,6 @@ class SupportPointMappingAuthorityTest {
         }
     }
 
-    // ------------------------------------------------------------------
-    // D. Side semantics — WHICH physical limb LEFT_*/RIGHT_* denote
-    // ------------------------------------------------------------------
-
     /**
      * The semantic decision, encoded (not read back out of the implementation): the A/F limb family
      * is one physical side of the authored body and the P/B family the other, the production
@@ -264,7 +237,6 @@ class SupportPointMappingAuthorityTest {
             screenLeft < screenRight
         )
 
-        // And the mapping that carries that meaning.
         assertEquals(Joint.ANKLE_F, SupportMath.anchorJointFor(SupportPoint.LEFT_FOOT))
         assertEquals(Joint.KNEE_F, SupportMath.anchorJointFor(SupportPoint.LEFT_KNEE))
         assertEquals(Joint.HAND_A, SupportMath.anchorJointFor(SupportPoint.LEFT_HAND))
@@ -274,10 +246,6 @@ class SupportPointMappingAuthorityTest {
         assertEquals(Joint.HAND_P, SupportMath.anchorJointFor(SupportPoint.RIGHT_HAND))
         assertEquals(Joint.ELBOW_P, SupportMath.anchorJointFor(SupportPoint.RIGHT_FOREARM))
     }
-
-    // ------------------------------------------------------------------
-    // C. Contradiction guard — static, by structure/content
-    // ------------------------------------------------------------------
 
     /**
      * **Exactly one production file may define a `SupportPoint ↔ Joint` pair.** The detector is
@@ -347,8 +315,6 @@ class SupportPointMappingAuthorityTest {
             offenders.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
 

@@ -7,26 +7,12 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The mechanical boundary of §30 step 20 — the first production consumer of the target contour.
+ * The mechanical boundary of the first production consumer of the target contour.
  *
  * A consumer's obligations are almost entirely about what it must **not** do, and a prohibition that
- * lives only in a KDoc erodes the first time a convenient import appears. So each is asserted here as a
- * token or a shape in real code, with comments stripped first — which is what lets this stage's own
+ * lives only in a KDoc erodes the first time a convenient import appears. So each is asserted here as
+ * a token or a shape in real code, with comments stripped first — which is what lets this file's own
  * prose say "never reads the legacy schedule" without tripping the rule about reading it.
- *
- * ```text
- *  1. the consumer is an application boundary, and the pure target package gained no file
- *  2. its collaborator set is exactly the seven the read/assembly/run boundary needs
- *  3. it names no legacy scheduling vocabulary, so it cannot manufacture a rule from one
- *  4. it reimplements no target stage: the adapter converts and the orchestrator runs
- *  5. it decides no execution state: no occurrence value, no slot status, no aggregation
- *  6. it holds no clock, no identity, no ambient state, and translates no failure
- *  7. the absent source is a return, and no branch manufactures an empty one
- *  8. the five caller-owned values are forwarded, not defaulted, sorted or filtered
- *  9. the result vocabulary is exactly the six outcomes the stage names
- * 10. the composition root wires it once, and nothing above the root calls it
- * 11. the legacy planning path is unchanged and uncalled by the consumer
- * ```
  */
 class TargetScheduleProductionConsumerArchitectureTest {
 
@@ -37,8 +23,6 @@ class TargetScheduleProductionConsumerArchitectureTest {
     private val targetDir = File(mainDir, "domain/program/target")
     private val consumerFile = File(usecaseDir, "TargetScheduleProductionConsumer.kt")
     private val containerFile = File(mainDir, "di/AppContainer.kt")
-
-    // ---- 1. placement -------------------------------------------------------------------------------
 
     @Test
     fun theConsumerIsAnApplicationBoundaryAndThePureTargetPackageGainedNoFile() {
@@ -70,8 +54,6 @@ class TargetScheduleProductionConsumerArchitectureTest {
             sources
         )
     }
-
-    // ---- 2. collaborators ---------------------------------------------------------------------------
 
     @Test
     fun theCollaboratorSetIsExactlyTheReadAssemblyAndRunBoundary() {
@@ -142,8 +124,6 @@ class TargetScheduleProductionConsumerArchitectureTest {
         )
     }
 
-    // ---- 3. no legacy inference ---------------------------------------------------------------------
-
     @Test
     fun theConsumerNamesNoLegacySchedulingVocabulary() {
         // Each of these is a way a mapper could appear without anyone adding a file: a `ProgramSchedule`
@@ -187,8 +167,6 @@ class TargetScheduleProductionConsumerArchitectureTest {
         assertTrue("no implicit legacy-schedule -> target-rule mapping may exist: $offenders", offenders.isEmpty())
     }
 
-    // ---- 4. no second target policy -----------------------------------------------------------------
-
     @Test
     fun theConsumerReimplementsNoTargetStage() {
         // The adapter converts and the orchestrator runs. A consumer that reached past them would be a
@@ -223,8 +201,6 @@ class TargetScheduleProductionConsumerArchitectureTest {
         )
     }
 
-    // ---- 5. no second execution policy --------------------------------------------------------------
-
     @Test
     fun theConsumerDecidesNoExecutionStateAndAggregatesNothing() {
         val forbidden = listOf(
@@ -256,8 +232,6 @@ class TargetScheduleProductionConsumerArchitectureTest {
             }
         )
     }
-
-    // ---- 6. no ambient input, no translation --------------------------------------------------------
 
     @Test
     fun theConsumerReadsNoAmbientStateAndTranslatesNoFailure() {
@@ -294,8 +268,6 @@ class TargetScheduleProductionConsumerArchitectureTest {
         )
     }
 
-    // ---- 7. the absent source is a return ------------------------------------------------------------
-
     @Test
     fun aMissingSourceIsAReturnAndNoBranchManufacturesAnEmptyOne() {
         val source = code(consumerFile.readText())
@@ -318,8 +290,6 @@ class TargetScheduleProductionConsumerArchitectureTest {
             occurrences(run, "TargetScheduleRunResult.SourceMalformed(read.revisionId, read.reason)")
         )
     }
-
-    // ---- 8. the caller keeps its five values ---------------------------------------------------------
 
     @Test
     fun theRunContextDeclaresTheFiveCallerOwnedValuesWithNoDefaults() {
@@ -383,8 +353,6 @@ class TargetScheduleProductionConsumerArchitectureTest {
         }
     }
 
-    // ---- 9. the result vocabulary -------------------------------------------------------------------
-
     @Test
     fun theResultCarriesExactlyTheOutcomesTheStageNames() {
         assertEquals(
@@ -406,8 +374,6 @@ class TargetScheduleProductionConsumerArchitectureTest {
             }
         )
     }
-
-    // ---- 10. the wiring ------------------------------------------------------------------------------
 
     @Test
     fun theCompositionRootWiresTheConsumerOnceAndExactlyOneApplicationBoundaryCallsIt() {
@@ -444,22 +410,20 @@ class TargetScheduleProductionConsumerArchitectureTest {
             wiringOffenders.isEmpty()
         )
 
-        // The caller half, revised rather than relaxed by §30 step 21: the node used to have no
-        // caller at all, and it now has exactly one — the composed Start. The claim is therefore a
-        // **closed one-element list** rather than an absence, because an absence would be false by
-        // construction the moment production reaches this class, and a second caller has to keep
-        // failing here. What the deferral was actually about is kept whole below: no screen, no
-        // view model, the save boundary, the import boundary, the bootstrap and the session runtime
-        // are all still off the target path, and the legacy planner still owns every slot the
-        // application trains from.
+        // The node has exactly one caller — the composed Start — so the claim is a **closed
+        // one-element list** rather than an absence: an absence would be false by construction the
+        // moment production reaches this class, and a second caller has to keep failing here. What the
+        // deferral was about is kept whole below: no screen, no view model, the save boundary, the
+        // import boundary, the bootstrap and the session runtime are all still off the target path,
+        // and the legacy planner still owns every slot the application trains from.
         val callers = productionSources()
             .filterNot { (path, _) -> path == "di/AppContainer.kt" }
             .filter { (path, _) -> !path.contains("TargetScheduleProductionConsumer.kt") }
             // Keyed on the *type*, not on the container's property name: a caller receives the
-            // consumer as a constructor parameter and calls it, so a scan for `targetSchedule…`
-            // would have read empty on a tree where the composed Start demonstrably holds it —
-            // the §8b failure, one generation on. The consumer's own file and the composition root
-            // are excluded by path, so what remains is the caller list and only the caller list.
+            // consumer as a constructor parameter and calls it, so a scan for `targetSchedule…` would
+            // have read empty on a tree where the composed Start demonstrably holds it. The consumer's
+            // own file and the composition root are excluded by path, so what remains is the caller
+            // list and only the caller list.
             .filter { (_, text) -> text.contains("TargetScheduleProductionConsumer") }
             .map { (path, _) -> path }
         assertEquals(
@@ -489,8 +453,6 @@ class TargetScheduleProductionConsumerArchitectureTest {
 
         assertTrue("no screen and no view model runs a target pass: $offenders", offenders.isEmpty())
     }
-
-    // ---- 11. legacy isolation -----------------------------------------------------------------------
 
     @Test
     fun theLegacyPlannerIsStillProductionsSchedulerAndTheConsumerNeverNamesIt() {
@@ -528,8 +490,6 @@ class TargetScheduleProductionConsumerArchitectureTest {
                 .findAll(containerFile.readText()).count()
         )
     }
-
-    // ---- helpers ------------------------------------------------------------------------------------
 
     private fun productionSources(): List<Pair<String, String>> = File(mainDir.path)
         .walkTopDown()

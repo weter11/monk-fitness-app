@@ -12,35 +12,21 @@ import kotlin.math.abs
 import kotlin.math.max
 
 /**
- * **B-3 — the declared contact KIND is consumed by the extremity derivation.**
+ * The declared contact KIND must be consumed by the extremity derivation.
  *
- * The Finalizer orients each extremity against the surface of the support contact the pose declared
- * (`SkeletonPoseFinalizer` → `isSupported` + `supportPlaneNormalFor`). That resolution used to ask
- * ONLY for the `*_FOOT` / `*_HAND` family member, so a pose that declared its planted contact as
- * `*_TOES` (the whole plank/push-up family) or `*_FOREARM` (a forearm plank) resolved to `null`
- * support, produced no support plane, and the extremity was never oriented against its surface
- * (`adjustFootOrientation` / `adjustHandOrientation` both returned with the neutral derivation).
+ * The Finalizer orients each extremity against the surface of the declared support contact
+ * (`isSupported` + `supportPlaneNormalFor`). That resolution used to ask ONLY for the `*_FOOT` /
+ * `*_HAND` family member, so a pose declaring `*_TOES` (the whole plank/push-up family) or
+ * `*_FOREARM` (a forearm plank) resolved to `null` support, produced no support plane, and the
+ * extremity was never oriented against its surface. Measured pre-fix on `StandardPushUpPose`:
+ * `TOE_F − ANKLE_F = +17.57`, `HEEL_F − ANKLE_F = −7.18` at every sampled progress — the declared
+ * floor contact floated above its surface and pointed upward; post-fix `0.000` for both feet. A
+ * `*_FOREARM`-only declaration likewise left the hand unoriented (`FINGERTIPS − HAND` off-plane).
  *
- * The fix resolves the extremity's declared support over its **declaration family** — the declared
- * [SupportPoint] itself is used verbatim, never aliased to another kind: `*_TOES` and `*_FOOT` name
- * the same physical support in the engine's own contact→joint map (`contactJointsFor` maps both to
- * the identical `{ankle, heel, toe}` triple), exactly as `*_FOREARM` does for a forearm-planted
- * hand. No side convention is touched (that is the separate, still-open B-4 finding).
- *
- * ## RED evidence (measured on `origin/main` `dc4cc27`, published frames)
- *
- * * `StandardPushUpPose` (declares `LEFT_TOES`/`RIGHT_TOES`): `TOE_F − ANKLE_F = +17.57`,
- *   `HEEL_F − ANKLE_F = −7.18` at every sampled progress — the declared floor contact floated
- *   above its surface and pointed upward, while only the `*_HAND`-declared hands reached the plane.
- *   Post-fix: `0.000` for both feet at every sampled progress.
- * * The same shape for `Wide`/`Military`/`Diamond`/`Decline` push-ups.
- * * A `*_FOREARM`-only declaration left the hand unoriented (`FINGERTIPS − HAND` off-plane) because
- *   the hand path asked only for `*_HAND`; post-fix the hand is laid in its support plane.
- *
- * The kind-sensitivity controls at the bottom are what makes these assertions meaningful: the same
- * pose with the declaration REMOVED must keep its off-plane geometry (pre-fix behaviour), so a fix
- * that simply flattened every extremity unconditionally — or a regression that stops consuming the
- * new kinds again — fails here.
+ * The fix resolves over the extremity's declaration family, the declared [SupportPoint] used
+ * verbatim and never aliased: `*_TOES` and `*_FOOT` name the same physical support in the engine's
+ * own contact→joint map (`contactJointsFor` maps both to the identical `{ankle, heel, toe}` triple),
+ * exactly as `*_FOREARM` does for a forearm-planted hand.
  */
 class SupportContactKindConsumptionTest {
 
@@ -87,10 +73,6 @@ class SupportContactKindConsumptionTest {
             abs(pose.getJoint(Joint.FINGERTIPS_P).y - pose.getJoint(Joint.HAND_P).y)
         )
     )
-
-    // ------------------------------------------------------------------
-    // B-3 #5 — a *_TOES declaration is consumed by the foot derivation.
-    // ------------------------------------------------------------------
 
     /**
      * The push-up family declares its planted foot as TOES and authors no ankle articulation, so the
@@ -139,10 +121,6 @@ class SupportContactKindConsumptionTest {
         }
     }
 
-    // ------------------------------------------------------------------
-    // B-3 #6 — a *_FOREARM declaration is consumed by the hand derivation.
-    // ------------------------------------------------------------------
-
     /**
      * A forearm-planted pose declares `*_FOREARM` (the hand at the end of the planted forearm is the
      * extremity this derivation orients). The fixture is the production push-up with the declaration
@@ -171,10 +149,6 @@ class SupportContactKindConsumptionTest {
             )
         }
     }
-
-    // ------------------------------------------------------------------
-    // The controls: the orientation is DRIVEN by the declaration.
-    // ------------------------------------------------------------------
 
     /** With the declaration removed the extremity keeps its off-plane geometry (pre-fix behaviour). */
     @Test
@@ -213,7 +187,7 @@ class SupportContactKindConsumptionTest {
     /**
      * The declared support plane is the BASE direction the derivation orients; a pose-authored ankle
      * articulation is composed on top of it (never overridden). `PikePushUpPose` authors plantar
-     * flexion through the §1.3 extremity-articulation carrier, so its foot must stay pitched rather
+     * flexion through the extremity-articulation carrier, so its foot must stay pitched rather
      * than being flattened by the new TOES consumption.
      */
     @Test
@@ -233,10 +207,6 @@ class SupportContactKindConsumptionTest {
             sawPitch
         )
     }
-
-    // ------------------------------------------------------------------
-    // B-3 #7 — the declared kinds stay semantically distinct (never aliased).
-    // ------------------------------------------------------------------
 
     @Test
     fun declaredContactKindsSurviveVerbatimOnThePublishedFrame() {

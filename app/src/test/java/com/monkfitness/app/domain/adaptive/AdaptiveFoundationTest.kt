@@ -50,8 +50,6 @@ class AdaptiveFoundationTest {
         AdaptiveInputSnapshot::class.java
     )
 
-    // ------------------------------------------------------------------ vocabularies
-
     @Test
     fun evidenceAndConfidenceAreSeparateQualitativeLevels() {
         assertEquals(
@@ -92,8 +90,6 @@ class AdaptiveFoundationTest {
             floating.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ the load model
 
     @Test
     fun loadProfileHasExactlyTheFourNamedChannels() {
@@ -181,8 +177,6 @@ class AdaptiveFoundationTest {
         assertTrue(ExposureLoad(opportunities = 2, completedOpportunities = 0).completedOpportunities == 0)
     }
 
-    // ------------------------------------------------------------------ the frozen window
-
     @Test
     fun aSnapshotIsAFrozenRecordOfOneWindowAndNothingElse() {
         val snapshot = snapshot()
@@ -243,8 +237,6 @@ class AdaptiveFoundationTest {
         // A window with no observations is a legitimate window: nothing was trained in it.
         assertTrue(snapshot().copy(exposures = emptyList()).exposures.isEmpty())
     }
-
-    // ------------------------------------------------------------------ helper
 
     private fun snapshot() = AdaptiveInputSnapshot(
         programId = ProgramId("program-1"),

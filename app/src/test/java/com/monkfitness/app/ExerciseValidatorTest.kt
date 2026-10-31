@@ -14,7 +14,6 @@ class ExerciseValidatorTest {
         val pose = SkeletonPose()
         val pelvisY = 210f
 
-        // 1. Spine
         pose.setJoint(Joint.PELVIS, Vector3(0f, pelvisY, 0f))
         pose.setJoint(Joint.CHEST, Vector3(0f, pelvisY + def.torsoLength, 0f))
         pose.setJoint(Joint.NECK_END, Vector3(0f, pelvisY + def.torsoLength + def.neckLength, 0f))
@@ -25,7 +24,7 @@ class ExerciseValidatorTest {
         pose.setJoint(Joint.SHOULDER_A, Vector3(0f, pelvisY + def.torsoLength, -def.shoulderWidth))
         pose.setJoint(Joint.SHOULDER_P, Vector3(0f, pelvisY + def.torsoLength, def.shoulderWidth))
 
-        // 2. Legs (bent slightly so distance is 200f, less than max extension 205.8f)
+        // Legs (bent slightly so distance is 200f, less than max extension 205.8f)
         val kneeX = 31.93f
         val kneeY = 102.65f
         val ankleY = 10f
@@ -40,8 +39,6 @@ class ExerciseValidatorTest {
         pose.setJoint(Joint.HEEL_B, Vector3(def.foot.footLength * def.foot.heelRatio, ankleY, def.hipWidth))
         pose.setJoint(Joint.TOE_B, Vector3(-def.foot.footLength * def.foot.toeRatio, ankleY, def.hipWidth))
 
-        // 3. Arms (bent slightly so each segment matches the true bone lengths; total
-        // shoulder->hand distance stays well under the max extension).
         val elbowX = 23.70f
         val elbowY = 253.59f
         val handY = 192f
@@ -68,7 +65,6 @@ class ExerciseValidatorTest {
         val validator = ExerciseValidator()
         val pose = createValidBasePose(defaultDefinition)
 
-        // Valid pose
         val reportValid = validator.validate(pose, defaultDefinition, defaultEnv, defaultCamera, 1000f, 1000f)
         assertTrue(reportValid.isValid)
 
@@ -101,7 +97,6 @@ class ExerciseValidatorTest {
         val validator = ExerciseValidator()
         val pose = createValidBasePose(defaultDefinition)
 
-        // Head inside
         val reportIn = validator.validate(pose, defaultDefinition, defaultEnv, defaultCamera, 1080f, 1920f)
         val viewportInResults = reportIn.results.first { it.ruleId == "HEAD_VIEWPORT" }
         assertTrue(viewportInResults.isValid)
@@ -119,7 +114,6 @@ class ExerciseValidatorTest {
         val validator = ExerciseValidator(ValidatorConfig(allowFootGroundPenetration = false))
         val pose = createValidBasePose(defaultDefinition)
 
-        // Let's set ground level to 0
         val env = EnvironmentDefinition(ground = GroundDefinition(level = 0f))
 
         // Move a foot below ground

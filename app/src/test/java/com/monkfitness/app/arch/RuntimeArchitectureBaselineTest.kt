@@ -15,78 +15,57 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Phase 0 of IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md — baseline & characterization harness.
+ * Baseline & characterization harness — NOT an enforcement suite: this is the regression net
+ * every later change is checked against. Values are captured from CURRENT behavior, including
+ * known-defective readings, and are consciously updated only by changes that intentionally
+ * alter them.
  *
- * NOT an R-rule enforcement phase: this is the regression net every later implementation
- * phase is checked against. Values below are captured from CURRENT behavior, including any
- * known-defective readings (plan source-verification items V1/V2/V12); they are consciously
- * updated only by the phases that intentionally change them.
- *
- * Fixtures (context: progress=0.5, side=RIGHT, definition=SkeletonDefinition.DEFAULT_ADULT,
- * dt=1/60, cycleDuration=2500):
+ * Fixtures (progress=0.5, side=RIGHT, definition=SkeletonDefinition.DEFAULT_ADULT, dt=1/60,
+ * cycleDuration=2500):
  *  - PUSHUP:        StandardPushUpPose          — contact pose (hands/toes support)
  *  - SQUAT_POSTURE: SquatPose + IntentBuilder.posture(STANDING) — posture-driven
  *                   (solver entered via `postureDriven`, no contacts)
- *  - ARMCIRCLES:    ArmCirclesPose              — posture-driven: declares STANDING
- *                   in-build (ArmCirclesPose ~:73), so the solver RUNS via the postureDriven
- *                   branch despite zero Contact Declarations (contact-guard stays empty)
- *                   [fixture description corrected in Phase 1 — see stamp note below]
+ *  - ARMCIRCLES:    ArmCirclesPose              — posture-driven: declares STANDING in-build,
+ *                   so the solver RUNS via the postureDriven branch despite zero Contact
+ *                   Declarations (contact guard stays empty)
  *
- * ## Intent-timing note (characterization caveat, NOT an architectural invariant)
+ * Intent-timing note (a characterization caveat, not an architectural invariant).
  *
  * SQUAT_POSTURE writes its posture intent AFTER [SquatPose.build] returns (via
  * [SkeletonPose.IntentBuilder.posture], the sole mutation surface outside the animation
- * package), because the current production squat path declares CUSTOM in-build
- * ([BaseSquatPose] `declarePosture(CUSTOM)`) and never enters the postureDriven branch on
- * its own. This is a test-side workaround, disclosed here per the Phase-0 audit.
+ * package), because the current production squat path declares CUSTOM in-build and never
+ * enters the postureDriven branch on its own. This is a test-side workaround.
  *
- * Why post-build writes are behaviorally equivalent to in-build authoring under the
- * CURRENT consumer set (verified by repo-wide search at commit 181c4f0): `postureIntent`
- * has exactly three production read sites, all evaluated at or after pipeline injection —
- * SkeletonPipeline.produceFrame (~line 125, solver-entry gate) and
- * ConstraintSolver (~lines 217, 449, solve-time gate and posture regularization).
- * No `build()` implementation reads `postureIntent`; authoring writes it, the pipeline
- * consumes it. Because every consumer observes the field only after the pose reaches
- * produceFrame, a write anywhere in the pre-injection window — inside build() or
- * immediately after its return — is indistinguishable downstream.
+ * Post-build writes are behaviorally equivalent to in-build authoring under the CURRENT
+ * consumer set: `postureIntent` has exactly three production read sites, all evaluated at or
+ * after pipeline injection — SkeletonPipeline.produceFrame (solver-entry gate) and
+ * ConstraintSolver (solve-time gate and posture regularization). No `build()` implementation
+ * reads it, so a write anywhere in the pre-injection window is indistinguishable downstream.
  *
- * Scope of this claim: it holds for the consumers listed above as of Phase 0. If a future
- * phase introduces a build-time or pre-injection reader of `postureIntent`, this fixture's
- * equivalence argument must be re-validated and the workaround re-examined. This note is
- * documentation of a characterization limitation, not proof of an architectural rule.
+ * Scope: this holds for those consumers only. A future build-time or pre-injection reader of
+ * `postureIntent` invalidates this fixture's equivalence argument.
  *
- * ## Golden-update policy for known-compromised stamp families
+ * Golden-update policy for known-compromised stamp families.
  *
- * Transform goldens (7 joints per fixture) are the PRIMARY Phase-0 regression baseline.
- * The following Validation Stamp families are characterization data, NOT frozen semantic
- * truth; they encode current behavior including known defects, and legitimate corrections
- * in later phases are EXPECTED to change them (update the golden in the same change, and
- * name the responsible phase here or in the change description):
+ * Transform goldens (7 joints per fixture) are the PRIMARY regression baseline. The following
+ * Validation Stamp families are characterization data, NOT frozen semantic truth — they encode
+ * current behavior including known defects, and legitimate corrections are EXPECTED to change
+ * them (update the golden in the same change and name the responsible cause):
  *
- *  - `straightIntentDropped` (all fixtures, currently `false`): Architecture-declared,
- *    currently vacuous in production — no production writer of the straight intent exists
- *    (V1), so the assertion cannot fail today and pins nothing about engine behavior;
- *    carried forward to the phase that owns stamp semantics.
- *  - `boneLengthsVerified` (all fixtures, currently `true`): the read sits downstream of
- *    the solver's erase-and-re-AND of the stamp (V2, ConstraintSolver ~line 236), so the
- *    value coincides with correct behavior only because all fixture bakes pass; the
- *    field's semantics are defective until the V2-owning phase corrects it.
+ *  - `straightIntentDropped` (all fixtures, currently `false`): currently vacuous in
+ *    production — no production writer of the straight intent exists, so the assertion cannot
+ *    fail today and pins nothing about engine behavior.
+ *  - `boneLengthsVerified` (all fixtures, currently `true`): the read sits downstream of the
+ *    solver's erase-and-re-AND of the stamp, so the value coincides with correct behavior only
+ *    because all fixture bakes pass.
  *  - `rootTranslationDelta` on ARMCIRCLES (currently `235.0`): produced by the
- *    ConstraintSolver's UNI-6 root-displacement computation (reset ~:231, compute ~:403),
- *    reached because this fixture enters the solver via its in-build STANDING posture.
- *    CORRECTED in Phase 1: an earlier revision of this note attributed the value to the
- *    Finalizer's `enforceContactNoMove` strengthen (`max()` merge, ~:303); that attribution
- *    was FALSE — with zero Contact Declarations the contact guard snapshot is empty, the
- *    strengthen loop runs zero iterations, and the site early-returns, so it cannot have
- *    produced this fixture's value (verified against source during the Phase-1 self-audit).
- *    Whether that strengthen write site conflicts with the RFC §4.4 sole-producer rule
- *    (V12) remains OPEN clarification debt; this note assigns no provenance to it. The
- *    235.0 value characterizes current solver displacement behavior — its existence and
- *    stability are recorded; it is NOT certified as intended semantics.
+ *    ConstraintSolver's root-displacement computation, reached because this fixture enters the
+ *    solver via its in-build STANDING posture — NOT by the Finalizer's contact strengthen, whose
+ *    loop runs zero iterations against an empty contact guard. Whether that strengthen write
+ *    site conflicts with the sole-producer rule remains OPEN clarification debt. The value
+ *    characterizes current displacement behavior; it is NOT certified as intended semantics.
  *
- * Transform goldens are unaffected by the above and must only change when the pipeline's
- * numeric output intentionally changes. Any golden change caused by an intentional
- * architecture correction must be explicitly documented with the responsible phase.
+ * Transform goldens must only change when the pipeline's numeric output intentionally changes.
  */
 class RuntimeArchitectureBaselineTest {
 
@@ -101,9 +80,8 @@ class RuntimeArchitectureBaselineTest {
     )
 
     /** Production squat authoring with a non-CUSTOM posture intent, so the solver enters via
-     *  the posture-driven branch. Intent re-declared through the sole-mutator surface
-     *  ([SkeletonPose.IntentBuilder]) because intent setters are `private set` outside the
-     *  animation package and concrete pose classes are final. */
+     *  the posture-driven branch. Intent is re-declared through [SkeletonPose.IntentBuilder]
+     *  because intent setters are `private set` outside the animation package. */
     private fun postureDrivenFrame(): SkeletonPose {
         val pose = SquatPose().build(context())
         SkeletonPose.IntentBuilder(pose).posture(PostureIntent.Kind.STANDING)
@@ -120,21 +98,13 @@ class RuntimeArchitectureBaselineTest {
         return pipeline.produceFrame(pose).pose
     }
 
-    // ------------------------------------------------------------------
-    // Golden values — captured from unmodified source at Phase 0.
-    // ------------------------------------------------------------------
-
     private object PushUpGolden {
         val pelvis = floatArrayOf(60.00885f, 53.970253f, 0.0f)
-        // B-8 (cold-frame limb realization) — GOLDEN UPDATE, responsible change named per the
-        // fixture's golden-update policy. This fixture publishes the COLD FIRST frame of a fresh
-        // pose on a fresh pipeline (`produceFrame(builder.build(context()))`), which is exactly the
-        // frame B-8 corrected: the arm chain now realizes in the trunk frame the pose itself
-        // declares (and publishes) instead of the pelvis-only frame that the Finalizer's Phase-3
-        // fallback replaced after the realization. handA/handP therefore moved from
-        // (-6.0209026, 55.639805, ±68.99999) — floating 55.6 units above the floor — onto their
-        // authored target (-58.3216, 0, ±69). Pelvis/feet are unchanged, and the SETTLED rep is
-        // unchanged (byte-identical, see ColdFrameLimbRealizationTest).
+        // This fixture publishes the COLD FIRST frame of a fresh pose on a fresh pipeline, so the
+        // arm chain realizes in the trunk frame the pose itself declares rather than a
+        // pelvis-only frame replaced after realization: handA/handP sit on their authored target
+        // instead of floating 55.6 units above the floor. Pelvis/feet and the SETTLED rep are
+        // unchanged (see ColdFrameLimbRealizationTest).
         val handA = floatArrayOf(-58.321594f, 7.6293945E-6f, -68.99999f)
         val handP = floatArrayOf(-58.321594f, 7.6293945E-6f, 68.99999f)
         val ankleF = floatArrayOf(268.00098f, 25.0f, -22.0f)
@@ -155,18 +125,14 @@ class RuntimeArchitectureBaselineTest {
     }
 
     private object SquatPostureGolden {
-        // First reach-band cleanup batch (`AirSquatPose` + `SquatPose`) — GOLDEN UPDATE, responsible
-        // change named per the fixture's golden-update policy. `SquatPose`'s authored arm target is
-        // now projected onto its chain's reachable annulus (R2/R4): at this fixture's phase the
-        // declared hand target sits `10.2` u from the shoulder against the arm chain's
-        // `minReach = 40.134` at build time, so the solver used to relocate the realized hand onto
-        // the minimum-flexion circle (`maxIkClampAmount` `30.000000`). The projection's margin
-        // (`BaseSquatPose.REACH_MARGIN = 1e-4` of the chain's span, `0.004` u here) moves handA/handP
-        // by `<= 0.0036` u and takes the stamp to exactly `0.000000`; the leg fixtures (this pose's
-        // leg target is INSIDE its band at `p = 0.5`: `120.5` of `[56.009, 205.800]`) and every other
-        // golden in this fixture — pelvis, ankleF/B, toeF/B, all stamps except `maxIkClampAmount`, the
-        // hipRom maps — are byte-identical. Cold-frame fixture: this is the same frame the pose's own
-        // build publishes.
+        // `SquatPose`'s authored arm target is projected onto its chain's reachable annulus: the
+        // declared hand target sits `10.2` u from the shoulder against `minReach = 40.134` at build
+        // time, so the solver used to relocate the hand onto the minimum-flexion circle
+        // (`maxIkClampAmount` `30.000000`). The projection margin (`REACH_MARGIN = 1e-4` of the
+        // chain's span, `0.004` u here) moves handA/handP by `<= 0.0036` u and takes the stamp to
+        // `0.000000`; the leg target is INSIDE its band here (`120.5` of `[56.009, 205.800]`), so
+        // every other golden — pelvis, ankleF/B, toeF/B, other stamps, hipRom maps — is
+        // byte-identical. Cold frame: the same frame the pose's own build publishes.
         val pelvis = floatArrayOf(0.0f, 235.0f, 0.0f)
         val handA = floatArrayOf(8.881805f, 342.44965f, -81.834946f)
         val handP = floatArrayOf(8.881805f, 342.44965f, 81.834946f)
@@ -174,8 +140,6 @@ class RuntimeArchitectureBaselineTest {
         val ankleB = floatArrayOf(-7.6293945E-6f, 115.000015f, 33.0f)
         val toeF = floatArrayOf(23.105614f, 115.000015f, -23.853815f)
         val toeB = floatArrayOf(23.105614f, 115.000015f, 23.853815f)
-        // moved 30.0f -> 0.0f by the same reach-band projection (the pose authors an in-band target
-        // now, so no relocation is recorded) — see the note above.
         const val maxIkClampAmount = 0.0f
         const val straightIntentDropped = false
         const val boneLengthsVerified = true
@@ -190,22 +154,14 @@ class RuntimeArchitectureBaselineTest {
     }
 
     private object ArmCirclesGolden {
-        // M8 (support declaration + authored-frame correction) — GOLDEN UPDATE, responsible change
-        // named per the fixture's golden-update policy. Two intentional corrections move this
-        // fixture's numbers, both on the POSE side (no engine change):
-        //  · the pose now authors its limb targets in the chain root's own frame instead of the
-        //    floor-anchored frame its pre-B3 root no longer provides at build time, so the solver no
-        //    longer relocates every effector along an upward direction: ankleF/B moved 288.7445 →
-        //    29.24701 (a leg-span below the pinned pelvis), toeF/B 297.8015 → 29.24701, and
-        //    maxIkClampAmount 124.935135 → 0.047027588 (the residual float-level stance-width term,
-        //    inside the engine's own 0.1 reachability flag). hipRom* follow the realized leg.
-        //  · the pose declares its planted feet on the canonical support channel, which drives the
-        //    Finalizer's declaration-derived foot derivation (the foot's long axis in the declared
-        //    surface plane) — the toes now sit level with the ankles.
-        // The fixture's ROLE is unchanged: it is still the posture-driven, zero-Contact-Declaration
-        // representative (the solver still enters via `postureDriven`, the contact guard is still
-        // empty, rootTranslationDelta is still 235.0) — the Support Declaration is Frame Context,
-        // not a Contact Declaration.
+        // Two pose-side corrections (no engine change) move these numbers: the pose authors its
+        // limb targets in the chain root's own frame instead of a floor-anchored one, so the solver
+        // no longer relocates every effector upward (ankleF/B and toeF/B land at 29.24701, and
+        // maxIkClampAmount 124.935135 → 0.047027588 — the residual float-level stance-width term,
+        // inside the engine's own 0.1 reachability flag); and the pose declares its planted feet on
+        // the canonical support channel, so the toes sit level with the ankles. The fixture's ROLE
+        // is unchanged: still the posture-driven, zero-Contact-Declaration representative — a
+        // Support Declaration is Frame Context, not a Contact Declaration.
         val pelvis = floatArrayOf(0.0f, 235.0f, 0.0f)
         val handA = floatArrayOf(-128.47998f, 355.0f, -56.0f)
         val handP = floatArrayOf(-128.47998f, 355.0f, 56.0f)
@@ -226,10 +182,6 @@ class RuntimeArchitectureBaselineTest {
         val hipRomAxial = mapOf("HIP_B" to 0.0f, "HIP_F" to -0.0f)
     }
 
-    // ------------------------------------------------------------------
-    // Fixtures
-    // ------------------------------------------------------------------
-
     @Test
     fun contactPoseStandardPushUpMatchesBaseline() {
         assertGolden("PUSHUP", frame(StandardPushUpPose()), PushUpGolden)
@@ -245,9 +197,7 @@ class RuntimeArchitectureBaselineTest {
         assertGolden("ARMCIRCLES", frame(ArmCirclesPose()), ArmCirclesGolden)
     }
 
-    // ------------------------------------------------------------------
-    // Assertion helpers — exact float equality (no delta), per Phase 0 spec.
-    // ------------------------------------------------------------------
+    // Assertion helpers — exact float equality (no delta): this is a characterization baseline.
 
     private fun assertJoint(label: String, pose: SkeletonPose, joint: Joint, expected: FloatArray) {
         val v = pose.getJoint(joint)

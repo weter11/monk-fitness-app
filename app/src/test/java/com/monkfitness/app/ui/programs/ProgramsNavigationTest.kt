@@ -7,17 +7,14 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The navigation rules §3 and §16 state, checked against the sources rather than trusted.
+ * The navigation rules, checked against the sources rather than trusted.
  *
  * The app has **one** navigation graph, one `NavController` and one place where destinations are
- * declared, and every rule below is a way this stage could quietly break that:
- *
- * ```text
- * a second NavHost or NavController      §3's "keep the single-navigation-graph architecture"
- * an unreachable Program destination     the acceptance flow walks Settings → Programs → My Programs → …
- * a domain object in a route argument    §16: a stable identifier or a simple value, never an object
- * the legacy route as the primary path   §7: the target Program System is the user-facing authority
- * ```
+ * declared, and every rule below is a way this could quietly break that: a second NavHost or
+ * NavController; an unreachable Program destination (the acceptance flow walks Settings → Programs → My
+ * Programs → …); a domain object in a route argument, where a stable identifier or a simple value
+ * belongs; the legacy route as the primary path, when the target Program System is the user-facing
+ * authority.
  */
 class ProgramsNavigationTest {
 
@@ -39,8 +36,6 @@ class ProgramsNavigationTest {
     private val activity get() = code(source("MainActivity.kt"))
 
     private val viewModel get() = code(source("viewmodel/MainViewModel.kt"))
-
-    // ---- one graph -----------------------------------------------------------------------------
 
     @Test
     fun theAppStillHasExactlyOneNavigationGraph() {
@@ -64,8 +59,6 @@ class ProgramsNavigationTest {
             graphs
         )
     }
-
-    // ---- the destinations are reachable ----------------------------------------------------------
 
     @Test
     fun everyProgramDestinationIsDeclaredInThatOneGraph() {
@@ -118,8 +111,6 @@ class ProgramsNavigationTest {
         assertTrue("Create → GENERATED", activity.contains("ProgramMode.GENERATED.name"))
     }
 
-    // ---- what a route may carry ------------------------------------------------------------------
-
     @Test
     fun navigationArgumentsAreStableIdentifiersAndSimpleValues() {
         val arguments = Regex("""navArgument\("([^"]+)"\)""").findAll(activity)
@@ -142,8 +133,6 @@ class ProgramsNavigationTest {
             )
         }
     }
-
-    // ---- the legacy path is no longer the entry point (§7) ---------------------------------------
 
     private fun primaryScreens(): List<String> {
         val declaration = Regex("""val screens = listOf\((.*?)\n\s*\)""", RegexOption.DOT_MATCHES_ALL)

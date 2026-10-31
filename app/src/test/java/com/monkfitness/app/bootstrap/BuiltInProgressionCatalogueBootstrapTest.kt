@@ -14,19 +14,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P32's **bootstrap-lifecycle proof**: the built-in catalogue is established exactly once, on every kind
- * of database, and never established from a read.
+ * The bootstrap-lifecycle proof: the built-in catalogue is established exactly once, on every kind of
+ * database, and never established from a read.
  *
- * ```text
- * open → bootstrap → the four authorised ladders exist
- * ```
- *
- * The claims here are the ones a seed is easiest to get subtly wrong, and none of them is visible in a
- * single fresh run:
+ * The claims are the ones a seed is easiest to get subtly wrong, and none is visible in a single fresh
+ * run:
  *
  *  * **fresh** — an empty database ends up with the content;
- *  * **existing at schema 18** — a database that already ran the P31 migration and holds *user* ladder
- *    rows keeps them, because P32 adds content and no migration;
+ *  * **existing at schema 18** — a database that already holds *user* ladder rows keeps them, because
+ *    this stage adds content and no migration;
  *  * **repeated** — bootstrapping three times changes nothing the second or third time;
  *  * **read** — a provider read never seeds, so a consumer's answer cannot depend on when it asked.
  *
@@ -53,8 +49,6 @@ class BuiltInProgressionCatalogueBootstrapTest {
         rig.database.rows(
             "SELECT * FROM `progression_relation_variant` ORDER BY `familyId` ASC, `level` ASC"
         )
-
-    // ================================================================ a fresh database
 
     /**
      * **A fresh, fully-migrated database gains exactly the four authorised ladders and nothing else.**
@@ -87,9 +81,6 @@ class BuiltInProgressionCatalogueBootstrapTest {
         )
     }
 
-    /**
-     * **The fresh database's content equals the authored definitions, family by family.**
-     */
     @Test
     fun aFreshDatabaseReceivesTheAuthoredValuesVerbatim() = runBlocking {
         val rig = newRig("p32-bootstrap-values")
@@ -105,15 +96,13 @@ class BuiltInProgressionCatalogueBootstrapTest {
         }
     }
 
-    // ================================================================ an existing schema-18 database
-
     /**
      * **An existing schema-18 database that already holds ladder rows keeps them.**
      *
-     * This is the "existing user database upgraded to v18" case. P32 adds **content** and **no
-     * migration**, so the database is simply opened at the schema it already has and the bootstrap runs
-     * against it. The rows written *before* the bootstrap are the ones a user-authored or previously
-     * edited ladder would occupy — which is precisely why the seed must not overwrite them.
+     * The "existing user database upgraded" case. This stage adds **content** and **no migration**, so
+     * the database is opened at the schema it already has and the bootstrap runs against it. The rows
+     * written *before* the bootstrap are the ones a user-authored or previously edited ladder would
+     * occupy — which is precisely why the seed must not overwrite them.
      */
     @Test
     fun anExistingSchemaEighteenDatabaseIsBootstrappedWithoutAMigration() = runBlocking {
@@ -171,7 +160,6 @@ class BuiltInProgressionCatalogueBootstrapTest {
         val existing = newRig("p32-existing-compare")
 
         bootstrapFor(fresh).bootstrap()
-        // `existing` is a second, already-migrated database that simply has not been bootstrapped.
         assertEquals(0, existing.database.count("progression_relation_variant"))
         bootstrapFor(existing).bootstrap()
 
@@ -181,8 +169,6 @@ class BuiltInProgressionCatalogueBootstrapTest {
             rowsOf(existing)
         )
     }
-
-    // ================================================================ repeated initialization
 
     /**
      * **Bootstrapping repeatedly changes nothing after the first time.**
@@ -218,7 +204,7 @@ class BuiltInProgressionCatalogueBootstrapTest {
     }
 
     /**
-     **A partial catalogue is completed, not skipped.**
+     * **A partial catalogue is completed, not skipped.**
      *
      * The bootstrap's check is *per family*, so a database that somehow lost one authorised ladder gets
      * that family back while the other three are left untouched. A single "has anything been seeded"
@@ -247,15 +233,12 @@ class BuiltInProgressionCatalogueBootstrapTest {
         )
     }
 
-    // ================================================================ the seed never seeds
-
     /**
-     * **The provider is not a seed.** The heart of the ordering guarantee: a read may only ever report
-     * what is stored.
+     * **The provider is not a seed.** A read may only ever report what is stored.
      *
-     * A deleted ladder stays deleted across many reads of every family, including the deleted one. If the
-     * provider self-healed, the row would be back after the first read — and a consumer's answer would
-     * depend on whether it happened to look before or after a seed.
+     * A deleted ladder stays deleted across many reads of every family, including the deleted one. If
+     * the provider self-healed, the row would be back after the first read — and a consumer's answer
+     * would depend on whether it happened to look before or after a seed.
      */
     @Test
     fun aProviderReadNeverSeedsAndNeverRestoresDeletedContent() = runBlocking {
@@ -288,9 +271,6 @@ class BuiltInProgressionCatalogueBootstrapTest {
         )
     }
 
-    /**
-     * **The bootstrap is the only thing that writes built-in content, and it writes only the four.**
-     */
     @Test
     fun noFamilyOutsideTheAuthorisedFourIsEverSeeded() = runBlocking {
         val rig = newRig("p32-bootstrap-scope")
@@ -350,16 +330,14 @@ class BuiltInProgressionCatalogueBootstrapTest {
     /**
      * **A second database open does not duplicate content.**
      *
-     * Models the repeated-launch case: the same file-backed database is reopened and bootstrapped again.
-     * Room's migration chain runs on open (a no-op at schema 18 for this content) and the bootstrap runs
-     * again, and the row set must be unchanged.
+     * Models the repeated-launch case: the same file-backed database is reopened and bootstrapped again,
+     * and the row set must be unchanged.
      */
     @Test
     fun reopeningTheDatabaseDoesNotDuplicateRows() = runBlocking {
         // A **file**-backed database, because "a second process of a restart" needs a second connection
-        // over the same rows and an in-memory database is private to its own connection. Reusing the
-        // closed in-memory object instead would not model a reopen at all — it would reuse a dead
-        // connection, which is why this test drives a real file.
+        // over the same rows and an in-memory database is private to its own connection — reusing the
+        // closed in-memory object would reuse a dead connection, not model a reopen.
         val file = java.io.File.createTempFile("p32-reopen", ".db").also { it.delete() }
         val first = ProgramDataAccessRig("p32-reopen", SqliteTestDatabase.at(file.absolutePath))
             .also { it.database.migrate(AppDatabase.MIGRATION_17_18) }
@@ -369,7 +347,6 @@ class BuiltInProgressionCatalogueBootstrapTest {
         assertEquals("the first open stored the content", 17, once.size)
         first.close()
 
-        // A second open of the same file: the same rows, a fresh bootstrap over them.
         val second = ProgramDataAccessRig("p32-reopen-again", SqliteTestDatabase.at(file.absolutePath))
         rigs += second
         bootstrapFor(second).bootstrap()
@@ -383,11 +360,10 @@ class BuiltInProgressionCatalogueBootstrapTest {
     }
 
     /**
-     * **The database the whole stage rides on is still schema 18, and P31's migration still creates the
-     * table with no rows.**
+     * **The database is still schema 18, and the creating migration still seeds no rows.**
      *
-     * P32 adds content and **no migration**. If a future edit added one, this gate is what says the stage
-     * quietly stopped being a data bootstrap and started being a schema change.
+     * This stage adds content and **no migration**. If a future edit added one, this gate is what says
+     * the stage quietly stopped being a data bootstrap and started being a schema change.
      */
     @Test
     fun theSchemaIsUnchangedAndTheCreatingMigrationStillSeedsNothing() {
@@ -396,8 +372,7 @@ class BuiltInProgressionCatalogueBootstrapTest {
 
         // Read the declared version from the production source rather than restating it. Room's
         // `@Database` is a SOURCE-retention annotation, so there is nothing to reflect on at runtime —
-        // which is why this reads the file. The point stands: if a future stage bumps the schema to
-        // ship *content*, this fails.
+        // hence the file read. If a future stage bumps the schema to ship *content*, this fails.
         val databaseSource = java.io.File("src/main/java/com/monkfitness/app/data/local/AppDatabase.kt")
             .readText()
         assertEquals(
@@ -408,8 +383,7 @@ class BuiltInProgressionCatalogueBootstrapTest {
         )
         // Matched on the *declaration* (`internal val MIGRATION_n_m`) rather than the bare name: the
         // builder's `addMigrations(...)` list mentions MIGRATION_17_18 a second time, and counting names
-        // would make this a test of how often the identifier is typed rather than of how many
-        // migrations exist.
+        // would test how often the identifier is typed rather than how many migrations exist.
         assertEquals(
             "and the migration chain still ends at P31's 17->18 — this stage adds no migration, because " +
                 "it adds content and not schema",

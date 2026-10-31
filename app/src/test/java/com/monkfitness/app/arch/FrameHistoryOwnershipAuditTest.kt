@@ -7,39 +7,29 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Phase 5 (R10) — ownership audit: the ConstraintSolver must hold NO persistent inter-frame
- * state (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md §P5 "Enforcement mechanism: compile-level
- * absence of the map"; RFC_RUNTIME_SKELETON_ARCHITECTURE §5 R10, §3 scratch-isolation rule).
+ * Ownership audit: the ConstraintSolver must hold NO persistent inter-frame state.
  *
- * Two complementary prongs, per the repo's sole-producer/sole-state audit pattern (P3/P4):
- *
- *  1. A SOURCE scan of `ConstraintSolver.kt` (comments stripped, per the P4 pitfall-18 rule)
- *     fails if anyone reintroduces:
- *      - a `WeakHashMap` / `IdentityHashMap` (the deleted V3 cache types),
+ *  1. A SOURCE scan of `ConstraintSolver.kt` (comments stripped) fails if anyone reintroduces:
+ *      - a `WeakHashMap` / `IdentityHashMap` (the old cache types),
  *      - any `Map<…SkeletonPose…>`-typed state (identity-keyed pose cache in any form),
- *      - a field named like the deleted `lastSolvedRoot` / a retained "previous/last solved
- *        root" property,
- *      - a `static`-equivalent (object-level) mutable `SkeletonPose`-typed field — holding a
- *        pose reference across calls is the identity-cache pattern wearing a different hat.
- *  2. A REFLECTION scan of the `ConstraintSolver` singleton's actual runtime fields: no field
- *     whose generic signature mentions `SkeletonPose` (no pose retained), no Map-typed field
- *     whatsoever (the solver legitimately keeps only scratch vectors/nodes/arrays), and no
- *     non-final field of `SkeletonPose` type. This is the runtime trip-wire: a source scan
- *     can be evaded by renaming the file's identifiers, but the object's field layout cannot
+ *      - a field named like `lastSolvedRoot` / a retained "previous/last solved root"
+ *        property,
+ *      - an object-level mutable `SkeletonPose`-typed field — holding a pose reference across
+ *        calls is the identity-cache pattern wearing a different hat.
+ *  2. A REFLECTION scan of the `ConstraintSolver` singleton's actual fields: no field whose
+ *     generic signature mentions `SkeletonPose`, no Map-typed field whatsoever (the solver
+ *     legitimately keeps only scratch vectors/nodes/arrays), and no non-final `SkeletonPose`
+ *     field. A source scan can be evaded by renaming identifiers; the field layout cannot
  *     hide a retained pose/cache from reflection.
- *
- *  3. Plus the call-site prong: the temporal argument to `ConstraintSolver.solve` is supplied
- *     by the Frame History owner — production code outside `SkeletonPipeline.kt` must not call
- *     `solve(` at all (IkStage/BasePose only use `chainForEnd`), keeping the pipeline the sole
- *     supplier of smoothing history. The `solve` signature itself (a third, nullable `Vector3`
- *     history parameter) is pinned by reflection so the explicit-input contract cannot silently
- *     regress into hidden state.
+ *  3. The call-site prong: the temporal argument to `ConstraintSolver.solve` is supplied by
+ *     the Frame History owner — production code outside `SkeletonPipeline.kt` must not call
+ *     `solve(` at all (IkStage/BasePose only use `chainForEnd`). The `solve` signature (a
+ *     third, nullable `Vector3` history parameter) is pinned by reflection so the
+ *     explicit-input contract cannot regress into hidden state.
  */
 class FrameHistoryOwnershipAuditTest {
 
     private val sources: Map<String, List<String>> by lazy { productionSources() }
-
-    // --------------------------------------------------------------- source scan (prong 1)
 
     @Test
     fun constraintSolverSourceHasNoIdentityKeyedOrPreviousRootState() {
@@ -66,10 +56,9 @@ class FrameHistoryOwnershipAuditTest {
 
     @Test
     fun constraintSolverHoldsNoMapFieldsAtAllAndSolveTakesSuppliedHistory() {
-        // Prong 2: runtime field layout of the singleton. The solver legitimately holds scratch
-        // (Vector3 / JointRotation / arrays / node refs reset per call) — but NEVER a collection
-        // (the deleted cache was a Map field) and NEVER a SkeletonPose reference (identity
-        // retention). Reflection reads the real object, so a rename cannot evade it.
+        // Prong 2: the solver legitimately holds scratch (Vector3 / JointRotation / arrays /
+        // node refs reset per call) — but NEVER a collection and NEVER a SkeletonPose reference
+        // (identity retention). Reflection reads the real object, so a rename cannot evade it.
         val fields = ConstraintSolver::class.java.declaredFields.filter { !it.isSynthetic }
         val maps = fields.filter { java.util.Map::class.java.isAssignableFrom(it.type) }
         assertTrue(
@@ -86,9 +75,8 @@ class FrameHistoryOwnershipAuditTest {
             poseFields.isEmpty()
         )
 
-        // Prong 3a: the temporal input is an explicit parameter — solve(pose, definition,
-        // previousRootWorld: Vector3?, …). If the parameter were dropped in favor of hidden
-        // state, this signature check fails at the API level.
+        // Prong 3a: solve(pose, definition, previousRootWorld: Vector3?, …) — the temporal
+        // input is explicit. Dropping the parameter for hidden state fails here, at the API.
         val solve = ConstraintSolver::class.java.declaredMethods
             .firstOrNull { it.name == "solve" && it.parameterTypes.size >= 3 }
             ?: error("R10 regression: ConstraintSolver.solve lost its explicit history parameter — " +
@@ -101,11 +89,9 @@ class FrameHistoryOwnershipAuditTest {
 
     @Test
     fun onlyTheFrameHistoryOwnerCallsTheSolverInProduction() {
-        // Prong 3b: the smoothing history is supplied by SkeletonPipeline (the RFC §4.5 Frame
-        // History owner). Production code outside SkeletonPipeline.kt must not call
-        // `ConstraintSolver.solve` — an external caller would either re-hide history or create
-        // a second temporal wiring site outside the owner. (chainForEnd/bake registrations are
-        // fine and unaffected — only `solve(` is pinned.)
+        // Prong 3b: the smoothing history is supplied by SkeletonPipeline (the Frame History
+        // owner). An external caller would either re-hide history or create a second temporal
+        // wiring site outside the owner. (chainForEnd/bake are fine — only `solve(` is pinned.)
         val callers = mutableListOf<String>()
         for ((path, lines) in sources) {
             val file = path.substringAfterLast('/')
@@ -126,8 +112,6 @@ class FrameHistoryOwnershipAuditTest {
         val pipelineCalls = callers.count { it.startsWith("SkeletonPipeline.kt") }
         assertEquals("the pipeline must invoke solve from its single stage-chain site", 1, pipelineCalls)
     }
-
-    // ------------------------------------------------------------------ shared plumbing
 
     private fun solverSourceStripped(): List<String> =
         solverSourceRaw().map { stripComment(it) }.filter { it.isNotBlank() }

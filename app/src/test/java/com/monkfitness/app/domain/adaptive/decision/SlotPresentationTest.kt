@@ -24,12 +24,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §16's composition, on its own.
+ * The composition of a slot presentation, on its own.
  *
- * `standingAdjustments` and `presentedWorkout` are pure functions, so everything §16 claims about a
- * presentation can be measured without a database: which adjustment is in effect, what the presentation
- * is once it is applied, and what the composition refuses rather than guessing. The suite is deliberately
- * free of storage — the end-to-end path (a session capturing this presentation) is `SessionRuntimeTest`'s.
+ * `standingAdjustments` and `presentedWorkout` are pure functions, so everything a presentation claims
+ * can be measured without a database: which adjustment is in effect, what the presentation is once it
+ * is applied, and what the composition refuses rather than guessing. The suite is deliberately free of
+ * storage — the end-to-end path (a session capturing this presentation) is `SessionRuntimeTest`'s.
  */
 class SlotPresentationTest {
 
@@ -89,8 +89,6 @@ class SlotPresentationTest {
         createdAt = computedAt,
         supersedesAdjustmentId = supersedes?.let { AdjustmentId("adjustment-$it") }
     )
-
-    // ------------------------------------------------------------------ which adjustment is in effect
 
     @Test
     fun theStandingAdjustmentOfAChainIsTheOneNothingSupersedes() {
@@ -155,8 +153,6 @@ class SlotPresentationTest {
             failure != null && failure.message!!.contains("appears once")
         )
     }
-
-    // ------------------------------------------------------------------ what the slot presents
 
     @Test
     fun anOpportunityWithNoAdjustmentPresentsItsRevisionsOwnPlan() {

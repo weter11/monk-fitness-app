@@ -7,28 +7,22 @@ import org.junit.Test
 import kotlin.math.*
 
 /**
- * B-1 regression gate — the **published frame** of the kneeling push-up must realize the plank
- * geometry `PushUpPlank.solve` declares for the `PivotType.KNEES` pivot.
+ * The published frame of the kneeling push-up must realize the plank geometry `PushUpPlank.solve`
+ * declares for the `PivotType.KNEES` pivot.
  *
- * Why this test exists (P11 whole-system audit §B-1, `docs/AUDIT_P11_WHOLE_SYSTEM.md`):
- * `PushUpPlank.solve` computes `kneeHeight`, `kneeX` and `pelvisHeight` for the knee pivot, and
- * `BasePushUpPose.onBuild` published a frame that used none of them — the KNEES branch placed the
- * knee from `ankleHeight` with a pure-X offset instead. The measured produced frame therefore had
- * `KNEE_F.y = 84.30` (the ankle height, 69.30 above the declared knee height 15), a horizontal
- * shin (0° instead of the declared `SHIN_PITCH_ANGLE = 45°`), the pelvis ~129u above the solver's
- * declared plank height, and `|shoulder→hand|` pinned at the clamped maximum at *every* progress
- * (the elbow never flexed: the target was out of reach, so `clampTargetToReach` relocated it).
+ * Why it exists: `PushUpPlank.solve` computes `kneeHeight`, `kneeX` and `pelvisHeight` for the knee
+ * pivot, and `BasePushUpPose.onBuild` published a frame that used none of them — the KNEES branch
+ * placed the knee from `ankleHeight` with a pure-X offset. The measured frame had `KNEE_F.y = 84.30`
+ * (the ankle height, 69.30 above the declared knee height 15), a horizontal shin (0° instead of the
+ * declared `SHIN_PITCH_ANGLE = 45°`), the pelvis ~129u above the solver's declared plank height, and
+ * `|shoulder→hand|` pinned at the clamped maximum at *every* progress (the target was out of reach,
+ * so `clampTargetToReach` relocated it, and the elbow never flexed). The neighbouring instruments
+ * stayed green because each asserts something else: the solver's own outputs, penetration only, or
+ * chest travel alone.
  *
- * The instruments that stayed green while production was broken, and why this one does not:
- * * `PushUpPlankTest` asserts the solver's own outputs (`kneeHeight == 15`) — that value never
- *   reached the skeleton, so the assertion was true about a dead computation.
- * * `EnvironmentPenetrationTest` covers this pose but asserts penetration only (`y < surface - 2`),
- *   and it explicitly disclaims float — a knee 84u in the air is not a penetration.
- * * `PushUpMotionTest` asserts chest travel, which the broken trunk pitch supplied on its own.
- *
- * Every assertion below is made on the frame the production pipeline publishes (`produceFrame`) and
- * is compared against either the solver's own declared geometry or the engine's own reach band —
- * never against a re-derivation of the pose's internals, and never against solver-only values.
+ * Every assertion is made on the frame the production pipeline publishes and compared against either
+ * the solver's declared geometry or the engine's own reach band — never against a re-derivation of
+ * the pose's internals.
  */
 class KneePushUpPlankGeometryTest {
 
@@ -49,7 +43,7 @@ class KneePushUpPlankGeometryTest {
      * Frames the engine actually publishes, sampled across the rep (pipeline warmed first).
      *
      * Each frame is snapshotted: `produceFrame` publishes a REUSED buffer, so holding the returned
-     * poses aliases every sample to the last frame (the trap documented in the pose-QA notes).
+     * poses aliases every sample to the last frame (the buffer-aliasing trap).
      */
     private fun publishedFrames(): List<Pair<Float, SkeletonPose>> {
         val pipe = SkeletonPipeline(def)
@@ -92,9 +86,6 @@ class KneePushUpPlankGeometryTest {
     /** p=0 is the declared top of the rep: the solver's own top-of-rep ratios apply there. */
     private fun frameAtTop() = publishedFrames().first().second
 
-    // ---------------------------------------------------------------------------------------
-    // 1. The pivot contact is ON its declared support surface (the B-1 core).
-    // ---------------------------------------------------------------------------------------
     @Test
     fun kneesRestOnTheirDeclaredSupportSurface() {
         val rows = mutableListOf<String>()
@@ -130,9 +121,6 @@ class KneePushUpPlankGeometryTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------------
-    // 2. The pelvis realizes the solver's declared plank height (the previously dead output).
-    // ---------------------------------------------------------------------------------------
     @Test
     fun pelvisRealizesTheSolverDeclaredPlankHeight() {
         val solverTopHeight = solverTop().pelvisHeight
@@ -165,9 +153,6 @@ class KneePushUpPlankGeometryTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------------
-    // 3. The shins hold the declared kneeling pitch (the engine's own SHIN_PITCH_ANGLE).
-    // ---------------------------------------------------------------------------------------
     @Test
     fun shinsHoldTheDeclaredKneelingPitch() {
         val declaredPitch = Math.toDegrees(PushUpPlank.SHIN_PITCH_ANGLE.toDouble()).toFloat()
@@ -191,10 +176,6 @@ class KneePushUpPlankGeometryTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------------
-    // 4. The hands are on the floor and the arm chain stays inside its reachable band — i.e. the
-    //    pressed hand target is NOT silently relocated by clampTargetToReach.
-    // ---------------------------------------------------------------------------------------
     @Test
     fun handsRestOnTheFloorInsideTheReachableBand() {
         val lo = SkeletonMath.minReach(def.upperArmLength, def.forearmLength, def.armIKConstraint) * 1.02f
@@ -226,9 +207,6 @@ class KneePushUpPlankGeometryTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------------
-    // 5. The rep actually presses (elbow travels) and the body moves between top and bottom.
-    // ---------------------------------------------------------------------------------------
     @Test
     fun repExpressesTheElbowPressAndMovesBetweenTopAndBottom() {
         val pipe = SkeletonPipeline(def)
@@ -260,10 +238,6 @@ class KneePushUpPlankGeometryTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------------
-    // 6. The top of the rep is the declared kneeling plank: one straight knee→hip→shoulder line
-    //    (BPS §3/§7/§11 — the femur is in line with the trunk at the top).
-    // ---------------------------------------------------------------------------------------
     @Test
     fun topOfRepIsTheDeclaredStraightKneeHipShoulderLine() {
         val top = frameAtTop()
@@ -278,12 +252,10 @@ class KneePushUpPlankGeometryTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------------
-    // 7. The rep closes at the loop seam. The pose loops (`LoopMode.LOOP`) over a full-cycle depth
-    //    curve, so the top of the rep published at progress 0 and at progress 1 must be the same
-    //    plank: the solver's offsets are declared as top-of-rep / bottom-of-rep ratios, and feeding
-    //    it the linear animation phase instead of the rep's depth phase pops the chest at the seam.
-    // ---------------------------------------------------------------------------------------
+    // The pose loops over a full-cycle depth curve, so the top of the rep published at progress 0
+    // and at progress 1 must be the same plank: the solver's offsets are top-of-rep / bottom-of-rep
+    // ratios, and feeding it the linear animation phase instead of the rep's depth phase pops the
+    // chest at the seam.
     @Test
     fun repClosesAtTheLoopSeam() {
         val frames = publishedFrames()

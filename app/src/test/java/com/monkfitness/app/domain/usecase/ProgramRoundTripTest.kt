@@ -24,35 +24,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §22 — the round-trip identity test: **one of P13's primary acceptance tests**.
+ * The round-trip identity test: **one of the primary acceptance tests**.
  *
- * ```text
- * Program A
- *   ↓ export
- * JSON
- *   ↓ import
- * Program B
- * ```
+ * Program A → export → JSON → import → Program B, and then, in one place, everything that must hold
+ * of the pair at once: A's transferable definition equals B's — proven at its strongest by the two
+ * files being byte-identical, which is what determinism makes meaningful; A.programId != B.programId,
+ * every revision, day and occurrence id differs, and no id in B is an id of A; A's history and
+ * adaptive state are unchanged while B's are empty; and A's selection is unchanged unless the import
+ * explicitly asked to take it.
  *
- * and then, in one place, everything that must be true of the pair at once:
- *
- * ```text
- * the definition       A's transferable definition == B's — proven at its strongest, by the two files
- *                      being byte-identical, which is what §11's determinism makes meaningful
- * the identity         A.programId != B.programId, revision ids differ, every day id differs, every
- *                      occurrence id differs, and no id in B is an id of A
- * A's history          unchanged: same rows, same values, same slots, same session, same sets
- * B's history          empty: no session, no set, no adaptive row, no second revision
- * A's adaptive state   unchanged
- * B's adaptive state   empty
- * A's selection        unchanged unless the import explicitly asked to take it
- * ```
- *
- * The round trip is run over the fixture's **whole shape space** rather than over one plan: a `MANUAL`
+ * The round trip is run over the fixture's **whole shape space** rather than one plan: a `MANUAL`
  * fixed-weekday program built for a `CUSTOM` focus, a `GENERATED` indefinite one with a flexible
- * frequency and no stated focus, and one built around named focuses. If a variant's configuration were
- * lossy, the byte comparison would find it — and a round trip that only worked for one shape would be a
- * round trip that worked by accident.
+ * frequency and no stated focus, and one built around named focuses. If a variant's configuration
+ * were lossy the byte comparison would find it — a round trip that only worked for one shape would be
+ * a round trip that worked by accident.
  */
 class ProgramRoundTripTest {
 
@@ -91,8 +76,8 @@ class ProgramRoundTripTest {
         val source = rig.storeSourceProgram()
 
         shapes.forEachIndexed { index, (description, shape) ->
-            // Each shape is one more revision of the same Program, so each one becomes the current
-            // configuration an export carries (§17) — and the Program's identity stays where it was.
+            // Each shape is one more revision of the same Program, so each becomes the current
+            // configuration an export carries — and the Program's identity stays where it was.
             rig.storeRevision(
                 source = source,
                 revisionNumber = index + 2,
@@ -290,8 +275,6 @@ class ProgramRoundTripTest {
         )
     }
 
-    // ------------------------------------------------------------------ helpers
-
     /** One configuration to round-trip. */
     private data class Shape(
         val mode: ProgramMode,
@@ -301,12 +284,10 @@ class ProgramRoundTripTest {
     )
 
     /**
-     * A revision's **transferable structure**, as one comparable value.
-     *
-     * It is the domain's own `structure` — mode, duration, schedule, focus, and the days with their
-     * elements' exercise, prescription, authorship and pinning, with every identity dropped — which is
-     * exactly the projection the format carries. Comparing it is how "every defined fact is equal" is
-     * stated without listing the facts a second time.
+     * A revision's **transferable structure**, as one comparable value: the domain's own `structure`
+     * — mode, duration, schedule, focus, and the days with their elements' exercise, prescription,
+     * authorship and pinning, every identity dropped — which is exactly the projection the format
+     * carries. Comparing it states "every defined fact is equal" without listing the facts twice.
      */
     private fun ProgramRevision.structureForTest() = structure
 

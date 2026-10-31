@@ -11,80 +11,40 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * **B4 (trunk half) — `PelvicTiltPose` must not publish its trunk through the mat it declares.**
+ * `PelvicTiltPose` must not publish its trunk through the mat it declares.
  *
- * `PelvicTiltPose` is a supine (lying-on-the-back) production pose: a static pelvis at the pose's own
- * resting layer (`y = 14`, the pose's comment *"Pelvis Y remains static on the floor (14f)"*) and a
- * rigid authored trunk chain on top of it (`PELVIS → CHEST(= torsoLength 120) → NECK_END(= 18) →
- * HEAD_POS(= 18)`, plus the shoulders), laid flat by the pose's declared supine tilt
- * (`declarePelvisTilt(..., Vector3(0, 0, 1), torsoAngle)`) and then rotated through the rep by the
- * authored tilt arc (`angleOffset = lerp(0, 0.12, progress)`).
+ * The pose is supine: a static pelvis at its own resting layer (`y = 14`, the pose's *"Pelvis Y
+ * remains static on the floor (14f)"*) with a rigid authored trunk chain on top of it
+ * (`PELVIS -> CHEST(= torsoLength 120) -> NECK_END(= 18) -> HEAD_POS(= 18)`, plus the shoulders), laid
+ * flat by the declared supine tilt and then rotated through the rep by the authored tilt arc
+ * (`angleOffset = lerp(0, 0.12, progress)`).
  *
- * **Measured on the tree that carries B1/B2/B3/B4-elbow (`origin/main` @ `7012ccb`), on the published
- * path `SkeletonPipeline.produceFrame(pose, ctx)`:** the authored tilt is `torsoAngle = 1.5708 +
- * angleOffset`, i.e. the pelvis's superior axis tips PAST the flat supine orientation on every phase
- * of the rep, so every trunk joint is carried BELOW the pose's own declared ground plane
- * (`metadata.environment.ground.level = 0`) from `p ≈ 0.846` onward (the chest crosses at
- * `p ≈ 0.974`) — at `p = 1.0`: `CHEST −0.3659`, `SHOULDER_A/P −0.3659`, `NECK_END −2.5295`,
- * `HEAD_POS −2.5384`; the whole-body minimum is `HEAD_POS −2.5384`. Those five pairs are pinned as
- * attributed open items by `PublishedBelowGroundInvariantTest.knownBelowGround` (T2); that table's
- * stale-pin guard is this correction's exit criterion, so the entries cannot outlive it.
+ * The defect: the authored tilt `torsoAngle = 1.5708 + angleOffset` tips the pelvis's superior axis
+ * PAST the flat supine orientation on every phase of the rep, so every trunk joint is carried BELOW
+ * the pose's own declared plane (`metadata.environment.ground.level = 0`) from `p ≈ 0.846` (the chest
+ * crosses at `p ≈ 0.974`) — at `p = 1.0`: `CHEST −0.3659`, `SHOULDER_A/P −0.3659`, `NECK_END −2.5295`,
+ * `HEAD_POS −2.5384`.
  *
- * **The root cause is the tilt's DIRECTION, never its magnitude (the B1/B4 shape: reproduce the
- * published geometry from the pose's own authoring).** The trunk is a rigid chain hanging off the
- * pose's static pelvis, so a published trunk joint is exactly
- * `pelvis + Rz(θ)·(0, chainLength, 0)` with `Rz(θ)·(0, L, 0) = (−L·sin θ, L·cos θ)`. The chain is
- * `CHEST 120`, `NECK_END 138`, `HEAD_POS` at the flat orientation (the neck's authored articulation
- * `∓angleOffset` cancels the trunk's tilt exactly, so the head chain keeps the supine orientation
- * `1.5708`). The tilt's `+0.12` therefore spends itself on `sin`: the chain's Y drops by
- * `chainLength · sin(0.12)` — the model gives `14.3655` at the chest and `16.5203` at
- * `NECK_END`/`HEAD_POS` (`14.3655 / 16.5290 / 16.5378` measured off the three joints' own layers) — against a
- * pelvis that only has `14` of resting layer above the mat. The deficit is the measurement:
- * `CHEST ≈ 14 − 120·sin(0.12)` and `HEAD_POS ≈ 14 − 138·sin(0.12)` (the published `−0.3659` /
- * `−2.5384` sit `0.0004` / `0.0175` lower, the pose's own `1.5708f`-vs-`π/2` literal and the head
- * chain's flat-offset residue), reproduced here
- * from the pose's own authors (see [thePublishedTrunkIsTheAuthoredTiltAndTheSignIsTheDefect]).
+ * The root cause is the tilt's DIRECTION, never its magnitude. The trunk is a rigid chain hanging off
+ * the static pelvis, so a published trunk joint is exactly `pelvis + Rz(θ)·(0, L, 0)` with
+ * `Rz(θ)·(0, L, 0) = (−L·sin θ, L·cos θ)`, and the tilt's `+0.12` spends itself on `sin`: the chain's
+ * Y drops by `chainLength · sin(0.12)` (`CHEST ≈ 14 − 120·sin(0.12)`, `HEAD_POS ≈ 14 −
+ * 138·sin(0.12)`) against a pelvis that has only `14` of resting layer above the mat. Bounding the
+ * amplitude instead would need `sin(offset) ≤ 14 / 138`, which puts the trunk's centres on the mat
+ * while its volume sinks into the floor; authoring the tilt out of the mat keeps the authored
+ * `0.12 rad` (the same arc, mirrored) and a healthy clearance.
  *
- * **The correction is pose-side tilt-direction authoring only** (no solver/engine/phase/ownership
- * change, no tolerance moved, no assertion weakened): the tilt becomes `torsoAngle = 1.5708 −
- * angleOffset`, i.e. the pelvis's superior axis tips AWAY from the mat by the same authored `0.12 rad`,
- * and the neck's articulation flips with it (`+angleOffset`) so the head chain keeps the SAME world
- * supine orientation it always had (the neck's world rotation is `1.5708` before and after). The
- * trunk then swings in the half-space the pose's resting layer allows: at `p = 1.0`
- * `CHEST +28.3650`, `SHOULDER_A/P +28.3650`, `NECK_END +30.5198`, `HEAD_POS +30.5197`, and the pose's
- * whole body measures `min y = 0.000000` at every phase. The pelvis keeps its authored static base,
- * the arms keep the B4 elbow correction (elbow `+12.7988 … +18.5614`, bow IN the floor plane), the
- * legs stay quiet (identical published positions at every phase), and the rep's authored amplitude,
- * start configuration and shape are untouched.
+ * The fix is pose-side tilt-direction authoring only — `torsoAngle = 1.5708 − angleOffset`, with the
+ * neck's articulation flipped (`+angleOffset`) so the head chain keeps the same world supine
+ * orientation. No solver/engine/ownership change, no tolerance moved, no assertion weakened.
  *
- * **The direction, not the amplitude, is the fix — and the amplitude could not rescue it.** Bounding
- * `angleOffset` so that the DOWNWARD arc stops at the plane needs `sin(offset) ≤ 14 / 138`, which
- * puts the trunk's spine centres (its resting layer is 14 above the mat) on the mat's own surface —
- * a knife-edge reading that sinks the trunk's volume into the floor while keeping the centres legal,
- * with a travel of at most 14 (the pose's mobility floor is 12). Authoring the tilt out of the mat
- * keeps the authored `0.12 rad` (travel `16.5203`, the same arc, mirrored) and a healthy clearance.
- *
- * **What this file asserts (all on the PUBLISHED frame, captured by value — `produceFrame(...).pose`
- * is the Finalizer's reused output buffer, the T-7 trap), over a DENSE 51-sample sweep in both frame
- * conditions:**
- *  1. no published joint of the pose passes below the plane the pose itself declares
- *     ([noPublishedJointPassesBelowThePosesOwnDeclaredPlane]);
- *  2. the trunk keeps the pose's own resting layer instead of tipping through it, the tilt arc keeps
- *     the authored amplitude, and the trunk chain's published geometry is reproduced from the pose's
- *     authors — including the demonstration that the MIRRORED tilt (the pre-fix direction) is exactly
- *     what puts `CHEST`/`HEAD_POS` below the plane
- *     ([theTrunkKeepsThePosesRestingLayerInsteadOfTippingThroughIt],
- *     [thePublishedTrunkIsTheAuthoredTiltAndTheSignIsTheDefect]);
- *  3. the authored rep is preserved — the rep starts at the pose's resting supine configuration, the
- *     pelvis stays the static base, the head travels through the authored range, and the sweep
- *     publishes distinct frames ([theAuthoredTiltRepAndTheRestingConfigurationArePreserved]);
- *  4. the B4 elbow correction is NOT undone — the elbows clear the mat, lie in the floor plane, bow
- *     outboard, stay real solutions of their own chain, and keep the declared
- *     `(0, 0, ∓1)` bend side ([theB4ElbowCorrectionIsNotUndone]);
- *  5. the legs stay quiet and the pose's own declaration (both feet, declared plane) is unchanged
- *     ([theLegsStayQuietAndTheDeclarationIsUnchanged]);
- *  6. the trunk geometry is not frame-condition sensitive (the B-8 cold-frame defect class)
- *     ([theTrunkGeometryIsFrameConditionInvariant]).
+ * Asserted on the PUBLISHED frame, captured by value (`produceFrame(...).pose` is the Finalizer's
+ * reused output buffer), over a DENSE 51-sample sweep in both frame conditions: no published joint
+ * passes below the pose's own declared plane; the trunk keeps its resting layer instead of tipping
+ * through it and the tilt arc keeps the authored amplitude, with the published geometry reproduced
+ * from the pose's own authors and the MIRRORED tilt shown to be exactly what sinks `CHEST`/`HEAD_POS`;
+ * the authored rep and the static pelvis are preserved; the elbow correction is not undone; the legs
+ * stay quiet and the declaration is unchanged; and the trunk geometry is not frame-condition sensitive.
  */
 class PelvicTiltTrunkPlaneTest {
 
@@ -95,14 +55,13 @@ class PelvicTiltTrunkPlaneTest {
     /** A DENSE sweep: the crossing is a function of the tilt, so 5 samples could step over it. */
     private val sweep = (0..50).map { it * 0.02f }
 
-    /** The T2 band: a joint the pose authors ON its layer reads its layer value exactly. */
+    /** The published-plane band: a joint the pose authors ON its layer reads its layer value exactly. */
     private val planeBand = 0.05f
 
     /**
      * Cosine tolerance for "the declared target still lies on the pose's authored ray" — the property
-     * the R2/R4 reach projection preserves (fourth reach-band batch). The projection is exact
-     * (the same float expression from the same root), so `1e-5` is float slack, five orders below the
-     * relocations being corrected.
+     * the reach projection preserves. The projection is exact (the same float expression from the same
+     * root), so `1e-5` is float slack, five orders below the relocations being corrected.
      */
     private val rayTolerance = 1f - 1e-5f
 
@@ -129,10 +88,10 @@ class PelvicTiltTrunkPlaneTest {
     private val handX = -35f
     private val handY = 12f
 
-    /** A real floor for the realized elbow — an order of magnitude above [planeBand] (the B4 band). */
+    /** A real floor for the realized elbow — an order of magnitude above [planeBand]. */
     private val elbowClearanceFloor = 1.0f
 
-    /** How far the elbow's residual bow may leave its chord's plane (the B4 band). */
+    /** How far the elbow's residual bow may leave its chord's plane. */
     private val flatBand = 2.0f
 
     /** The trunk joints the pose authors: the pelvis is the chain's root, the rest hang off it. */
@@ -152,7 +111,7 @@ class PelvicTiltTrunkPlaneTest {
     private fun snapshot(frame: SkeletonPose): SkeletonPose =
         SkeletonPose().apply { copyFrom(frame) }
 
-    /** A genuinely COLD frame: a fresh pose instance on a fresh pipeline (the T2 COLD leg). */
+    /** A genuinely COLD frame: a fresh pose instance on a fresh pipeline. */
     private fun coldFrame(p: Float): SkeletonPose =
         snapshot(SkeletonPipeline(def).produceFrame(MotionProbe.build(pose), ctx(p)).pose)
 
@@ -171,7 +130,7 @@ class PelvicTiltTrunkPlaneTest {
         return frames
     }
 
-    /** The plane is READ from the pose's own declaration, never assumed to be zero (the T2 channel). */
+    /** The plane is READ from the pose's own declaration, never assumed to be zero. */
     private fun ground(): Float = MotionProbe.build(pose).metadata.environment.ground.level
 
     private fun f(v: Float) = String.format(Locale.US, "%.4f", v)
@@ -202,10 +161,6 @@ class PelvicTiltTrunkPlaneTest {
             Joint.PELVIS to pelvis, Joint.CHEST to chest, Joint.NECK_END to neck, Joint.HEAD_POS to head
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 1. The invariant this fix exists for — every published joint against the pose's own plane
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun noPublishedJointPassesBelowThePosesOwnDeclaredPlane() {
@@ -239,10 +194,6 @@ class PelvicTiltTrunkPlaneTest {
             frames.size * Joint.entries.size >= 3300
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 2. The root cause — the trunk's layer, the arc's amplitude, and the authored model
-    // ------------------------------------------------------------------------------------------
 
     /**
      * The trunk keeps the pose's own resting layer: no trunk joint may descend below the layer the
@@ -288,15 +239,15 @@ class PelvicTiltTrunkPlaneTest {
     }
 
     /**
-     * **The defect is the SIGN, provably** (the B1/B4 "re-derive from the pose's own authors" shape).
+     * The defect is the SIGN, provably.
      *
      * (a) The corrected authoring reproduces the published trunk EXACTLY:
      * `pelvis + Rz(1.5708 ∓ offset)·(0, chainLength, 0)`, with the head chain at the flat supine
      * orientation (the neck's `±offset` articulation cancels the trunk's tilt, so the neck's world
      * rotation is `1.5708` both before and after this change).
-     * (b) The MIRRORED tilt — the pre-fix `1.5708 + offset` — puts the same chain below the pose's
-     * own plane at the top of the rep, and the depths are the ticket's: `CHEST = 14 − 120·sin(0.12) =
-     * −0.3659`, `HEAD_POS = 14 − 138·sin(0.12) = −2.5384`.
+     * (b) The MIRRORED tilt — the pre-fix `1.5708 + offset` — puts the same chain below the pose's own
+     * plane at the top of the rep: `CHEST = 14 − 120·sin(0.12) = −0.3659`,
+     * `HEAD_POS = 14 − 138·sin(0.12) = −2.5384`.
      *
      * So nothing else (solver, finalizer, frames, amplitudes) contributes: the authored tilt's
      * direction is the whole cause.
@@ -356,17 +307,13 @@ class PelvicTiltTrunkPlaneTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 3. The authored rep — nothing about the exercise's motion may be lost
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theAuthoredTiltRepAndTheRestingConfigurationArePreserved() {
         val frames = playingFrames()
         val atRest = frames.first().second
         val atEnd = frames.last().second
 
-        // p = 0.0 is the pose's own supine resting configuration (BPS §3: back on the floor).
+        // p = 0.0 is the pose's own supine resting configuration (back on the floor).
         for (joint in trunkChain) {
             assertEquals(
                 "$joint: the rep must start at the pose's resting supine configuration (its layer)",
@@ -403,16 +350,12 @@ class PelvicTiltTrunkPlaneTest {
             travel >= 12f
         )
 
-        // Anti-vacuity (T-7): the sweep must publish DISTINCT frames (no buffer aliasing).
+        // Anti-vacuity: the sweep must publish DISTINCT frames (no buffer aliasing).
         assertEquals(
             "every sampled frame must be an independent capture (the buffer-aliasing trap)",
             sweep.size, frames.map { System.identityHashCode(it.second) }.distinct().size
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 4. The B4 elbow correction must NOT be undone by this change
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theB4ElbowCorrectionIsNotUndone() {
@@ -487,10 +430,6 @@ class PelvicTiltTrunkPlaneTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 5. The legs stay quiet; the pose's declaration is the pose's own
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theLegsStayQuietAndTheDeclarationIsUnchanged() {
         val feet = listOf(Joint.HIP_F, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F,
@@ -505,8 +444,8 @@ class PelvicTiltTrunkPlaneTest {
             for (joint in feet) {
                 val now = frame.getJoint(joint)
                 val start = first.getJoint(joint)
-                // BPS §7: "the legs remain quiet; only the pelvis rotates" — the pelvis's tilt must
-                // not leak into the leg chain (the leg IK's root, target and pole are all static).
+                // The pelvis's tilt must not leak into the leg chain (the leg IK's root, target and
+                // pole are all static).
                 if (dist(now, start) > planeBand) {
                     drifting.add("p=$p $joint start=(${f(start.x)}, ${f(start.y)}) now=(${f(now.x)}, ${f(now.y)})")
                 }
@@ -515,12 +454,12 @@ class PelvicTiltTrunkPlaneTest {
         }
         // The legs' DECLARED stance — the pose's own authoring, not this fix's subject.
         //
-        // The fourth (final) reach-band batch moved this declaration ALONG the pose's own ray
-        // (`45, ankleHeight, ±hipWidth` seen from the hip) onto the leg chain's own annulus: the
-        // authored stance already folded the knee to an interior `23.52°` against the constraint's
-        // `30°` stop and the solver published the boundary point it could reach, so the projection
-        // re-declares exactly that published stance (`56.0008, 15.2445, ±22`) and leaves the realized
-        // legs byte-identical. What the pose MEANS is the ray, so that is what is pinned here.
+        // The declaration was moved ALONG the pose's own ray (`45, ankleHeight, ±hipWidth` seen from
+        // the hip) onto the leg chain's own annulus: the authored stance already folded the knee to an
+        // interior `23.52°` against the constraint's `30°` stop and the solver published the boundary
+        // point it could reach, so the projection re-declares exactly that published stance
+        // (`56.0008, 15.2445, ±22`) and leaves the realized legs byte-identical. What the pose MEANS is
+        // the ray, so that is what is pinned here.
         for ((joint, hip, sign) in listOf(
             Triple(Joint.ANKLE_F, Joint.HIP_F, -1f), Triple(Joint.ANKLE_B, Joint.HIP_B, 1f)
         )) {
@@ -553,10 +492,6 @@ class PelvicTiltTrunkPlaneTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 6. Cold-frame invariance (the B-8 class must not be re-opened here)
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theTrunkGeometryIsFrameConditionInvariant() {
         // The position drift of the engine's chest-frame reconstruction on a genuinely cold first
@@ -581,11 +516,7 @@ class PelvicTiltTrunkPlaneTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // helpers
-    // ------------------------------------------------------------------------------------------
-
-    /** The elbow's signed Y offset from its own shoulder→hand chord (the B4 in-plane bow measure). */
+    /** The elbow's signed Y offset from its own shoulder→hand chord (the in-plane bow measure). */
     private fun bowOffsetY(shoulder: Vector3, elbow: Vector3, hand: Vector3): Float {
         val cx = hand.x - shoulder.x; val cy = hand.y - shoulder.y; val cz = hand.z - shoulder.z
         val vx = elbow.x - shoulder.x; val vy = elbow.y - shoulder.y; val vz = elbow.z - shoulder.z

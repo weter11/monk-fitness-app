@@ -10,31 +10,25 @@ import java.io.File
 import kotlin.math.abs
 
 /**
- * **B-5 — the Frame Context is a declared property of the pose, and no production entry point may
- * silently drop it.**
+ * The Frame Context is a declared property of the pose, and no production entry point may silently
+ * drop it.
  *
- * The stabilization audit measured the renderer entry point
- * (`SkeletonPipeline.produceFrame(builtPose, environment = ∅, supportedPoints = ∅)`) as
- * "caller-supplied and defaulted to empty": every pose's declaration-derived Frame Context
- * (`RFC_RUNTIME_SKELETON_ARCHITECTURE` §5 R8 — the External Environment Definition plus the
- * Production Metadata Support Declaration) was dropped on that path, and every caller had to
- * re-derive it by hand (`exercise` UI) or silently lose it (validation viewer, snapshot renderer).
+ * The renderer entry point used to be "caller-supplied and defaulted to empty": every pose's
+ * declaration-derived Frame Context (the External Environment Definition plus the Production Metadata
+ * Support Declaration) was dropped on that path, and every caller had to re-derive it by hand or
+ * silently lose it.
  *
- * What this suite pins:
- *  1. Re-entering a produced frame through the renderer entry point WITHOUT arguments preserves the
- *     Frame Context the frame already carries — it neither rewrites the caller's frame nor
- *     re-publishes it declaration-free. (RED before the B-5 fix: 24 of the 49 registered poses
- *     carry a Support Declaration and every one of them was erased.)
- *  2. The omitted default IS the frame's own Frame Context (behavioural, not merely set equality).
- *  3. The two production entry points publish identical geometry when fed identical runtime inputs
- *     (the builder path's derived context vs the renderer path's explicitly supplied one) — and they
- *     become DISTINGUISHABLE when the declaration is dropped, so the equality is not vacuous.
- *  4. An explicit argument still wins, including an explicitly empty model: the fix removes the
- *     silent rewrite, not the caller's ability to choose.
- *  5. The Support Declaration has exactly ONE production resolution
- *     (`SupportDefinition.supportPoints`), and every production call site of the renderer path
- *     resolves it (a source-level guard: the call sites themselves are Compose/Android surfaces that
- *     a JVM unit test cannot execute).
+ * Pinned here: re-entering a produced frame through the renderer entry point WITHOUT arguments
+ * preserves the Frame Context the frame already carries (24 of the 49 registered poses carry a Support
+ * Declaration and every one of them was erased before the fix); the omitted default IS the frame's own
+ * Frame Context (behavioural, not merely set equality); the two production entry points publish
+ * identical geometry when fed identical runtime inputs — and become DISTINGUISHABLE when the declaration
+ * is dropped, so the equality is not vacuous; an explicit argument still wins, including an explicitly
+ * empty model, because the fix removes the silent rewrite and not the caller's ability to choose; and
+ * the Support Declaration has exactly ONE production resolution
+ * (`SupportDefinition.supportPoints`), which every production call site of the renderer path resolves
+ * (a source-level guard — the call sites themselves are Compose/Android surfaces a JVM unit test cannot
+ * execute).
  */
 class RuntimeContextDeclarationTest {
 
@@ -70,8 +64,6 @@ class RuntimeContextDeclarationTest {
         return max to worst
     }
 
-    // ---------------------------------------------------------------- 1. no silent erasure
-
     @Test
     fun rendererEntryPointNeverErasesTheFrameContextItIsHanded() {
         val erased = ArrayList<String>()
@@ -101,8 +93,6 @@ class RuntimeContextDeclarationTest {
         )
     }
 
-    // ---------------------------------------------------------------- 2. the default IS the frame's context
-
     @Test
     fun omittedFrameContextIsTheContextTheFrameCarries() {
         var checked = 0
@@ -111,7 +101,7 @@ class RuntimeContextDeclarationTest {
             val declaration = shared.metadata.support
             if (declaration.supportPoints.isEmpty()) continue
 
-            // Builder path: §5 R8 resolves the declaration onto the carrier.
+            // Builder path: the declaration is resolved onto the carrier.
             val (_, fromBuilder) = published(id, 0.5f)
             assertEquals(
                 "$id: the builder path must publish exactly its declared support model",
@@ -139,8 +129,6 @@ class RuntimeContextDeclarationTest {
         assertTrue("the sweep must cover the declaration-carrying poses (checked $checked)", checked >= 20)
     }
 
-    // ---------------------------------------------------------------- 3. entry points agree on identical inputs
-
     @Test
     fun builderAndRendererEntryPointsAgreeOnIdenticalRuntimeInputs() {
         var compared = 0
@@ -151,7 +139,7 @@ class RuntimeContextDeclarationTest {
             for (p in listOf(0f, 0.5f, 1f)) {
                 val (_, fromBuilder) = published(id, p)
 
-                // The renderer path fed the SAME resolved context (§5 R8) the builder path derived.
+                // The renderer path fed the SAME resolved context the builder path derived.
                 val builder = fresh(shared)
                 val built = builder.build(context(p))
                 val fromRenderer = SkeletonPipeline(def)
@@ -186,8 +174,6 @@ class RuntimeContextDeclarationTest {
         )
     }
 
-    // ---------------------------------------------------------------- 4. an explicit argument still wins
-
     @Test
     fun explicitFrameContextStillOverridesWhatTheFrameCarries() {
         val id = productionIds().first {
@@ -209,8 +195,6 @@ class RuntimeContextDeclarationTest {
             emptyEnvironment, overridden.environment
         )
     }
-
-    // ---------------------------------------------------------------- 5. one production resolution
 
     /** All production Kotlin sources, keyed by path relative to `src/main/java`. */
     private fun mainSources(): Map<String, String> {

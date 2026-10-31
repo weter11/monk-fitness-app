@@ -7,14 +7,14 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
- * R1 — Foot extremity derivation invariants (see docs/ENGINE_DEFECT_REMEDIATION_PLAN.md).
+ * Foot extremity derivation invariants.
  *
- * These lock in the two facets fixed in R1:
- *  - R1a: the pitch clamp must never shrink the foot direction below unit length, so the
- *    derived heel/toe bones keep their full `footLength * ratio` magnitude (the 29% short-bone
- *    defect was `applyPitchClamp` collapsing a purely-vertical direction to |sin 45| = 0.707).
- *  - R1b: a NEUTRAL (un-articulated) foot must lie flat — its toe/heel must not derive below the
- *    ankle purely from shank geometry (the ground-penetration defect on Burpee / Kettlebell).
+ * Two facets are locked in:
+ *  - the pitch clamp must never shrink the foot direction below unit length, so the derived heel/toe
+ *    bones keep their full `footLength * ratio` magnitude (the 29% short-bone defect was
+ *    `applyPitchClamp` collapsing a purely-vertical direction to |sin 45| = 0.707).
+ *  - a NEUTRAL (un-articulated) foot must lie flat — its toe/heel must not derive below the ankle
+ *    purely from shank geometry (the ground-penetration defect on Burpee / Kettlebell).
  */
 class FootDerivationTest {
 
@@ -33,7 +33,7 @@ class FootDerivationTest {
         return heel to toe
     }
 
-    /** R1a: bone lengths are exact for a horizontal neutral foot with identity articulation. */
+    /** Bone lengths are exact for a horizontal neutral foot with identity articulation. */
     @Test
     fun horizontalFootHasExactBoneLengths() {
         val (heel, toe) = deriveWith(Vector3(1f, 0f, 0f), JointRotation())
@@ -43,9 +43,9 @@ class FootDerivationTest {
     }
 
     /**
-     * R1a regression: a purely VERTICAL neutral direction hits the pitch clamp. Before the fix
-     * the clamped direction was non-unit (0.707), shrinking the bones ~29%. Bone lengths must
-     * still be exact regardless of the clamp firing.
+     * Regression: a purely VERTICAL neutral direction hits the pitch clamp. Before the fix the clamped
+     * direction was non-unit (0.707), shrinking the bones ~29%. Bone lengths must still be exact
+     * regardless of the clamp firing.
      */
     @Test
     fun verticalFootDirectionStillYieldsExactBoneLengths() {
@@ -58,8 +58,8 @@ class FootDerivationTest {
     }
 
     /**
-     * R1b: the pitch clamp output is unit length for a vertical direction (the direct math
-     * assertion behind the bone-length symptom).
+     * The pitch clamp output is unit length for a vertical direction (the direct math assertion behind
+     * the bone-length symptom).
      */
     @Test
     fun pitchClampPreservesUnitLengthOnVerticalDirection() {

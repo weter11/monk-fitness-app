@@ -10,32 +10,18 @@ import org.junit.Test
 /**
  * The composition root's fences, checked against the sources themselves.
  *
- * §26's rules are the kind that a reviewer reads once and a later change erodes: *"AppContainer is
- * composition root, not Service Locator"*, *"ViewModels never create DB/repositories"*, *"Database
- * instance is created once and shared"*. Prose in a KDoc does not keep any of them true, so each one
- * is asserted mechanically, on code with its comments stripped — this file's own KDoc has to be able
- * to *name* `AppDatabase.getDatabase` and `Room.databaseBuilder` while explaining why production must
- * not call them twice.
+ * The rules are the kind a reviewer reads once and a later change erodes: *"AppContainer is composition
+ * root, not Service Locator"*, *"ViewModels never create DB/repositories"*, *"Database instance is
+ * created once and shared"*. Prose in a KDoc does not keep any of them true, so each is asserted
+ * mechanically, on code with its comments stripped — this file's own KDoc has to be able to *name*
+ * `AppDatabase.getDatabase` and `Room.databaseBuilder` while explaining why production must not call
+ * them twice.
  *
- * Every rule below is a way the wiring can be lost while all of the behavioural suites still pass:
- *
- *  * the database acquired in a second place (`AppDatabase.getDatabase` from a repository, a view
- *    model, or a new screen's state holder), which is how "created once and shared" becomes "usually
- *    the same instance";
- *  * a second `Room.databaseBuilder` — a genuinely different database, with its own connection, its
- *    own in-memory caches and its own view of the same file;
- *  * the application exposing the container through a `get()` accessor, so every read composes a fresh
- *    graph and re-asks for the database;
- *  * a Program System repository constructed outside the composition root — a service locator by
- *    another name, and a second owner of the object that must have exactly one;
- *  * a DAO taken from the database somewhere else, which is how a second reader of a table appears;
- *  * a view model or a screen reaching into the data layer or into the composition root at all;
- *  * a decision creeping into the wiring: a policy, a generator, a calendar decision, or the
- *    vocabulary of the Scheduler's own decision — since §30 step 7 the container *wires* the Scheduler,
- *    and this file pins that it wires it as one graph node with the documented collaborators and
- *    nothing about scheduling beside it;
- *  * a production call that overrides the container's transaction runner, or a port implemented
- *    somewhere other than the two files that own the device's time and randomness.
+ * Every rule below is a way the wiring can be lost while all of the behavioural suites still pass: a
+ * second database acquisition, a second `Room.databaseBuilder` (a genuinely different database over the
+ * same file), the container exposed through a `get()` accessor, a repository constructed outside the
+ * composition root, a DAO taken somewhere else, a view model or screen reaching into the data layer, a
+ * decision creeping into the wiring, or a production call that overrides the transaction runner.
  */
 class CompositionRootArchitectureTest {
 
@@ -54,17 +40,17 @@ class CompositionRootArchitectureTest {
     private val targetAccessors = listOf(
         "programDao", "appStateDao", "programRevisionDao", "programDayDao", "programExerciseDao",
         "programWorkoutSlotDao", "programTargetOccurrenceDao",
-        // Stage 18: a revision's explicitly stated target schedule source is taken once, in the
-        // composition root, like every other node — which is what keeps it from becoming a second
-        // reader acquired somewhere convenient.
+        // A revision's explicitly stated target schedule source is taken once, in the composition
+        // root, like every other node — which keeps it from becoming a second reader acquired
+        // somewhere convenient.
         "programTargetScheduleSourceDao",
         "workoutSessionDao", "sessionSnapshotDao",
         "sessionSnapshotExerciseDao", "sessionExerciseDao", "programSetLogDao", "programPauseDao",
         "programFamilyProgressionStateDao", "programAdaptiveDecisionDao", "adaptiveAdjustmentDao",
-        // P32: the progression relation catalogue's DAO joins the graph now that P32 wires a provider
-        // over it. Listed here so the "taken once, in the composition root, nowhere else" rule below
-        // applies to it exactly as it applies to every other node — which is the invariant that
-        // actually matters, and the count alone would not catch a second acquisition site.
+        // The progression relation catalogue's DAO joins the graph now that a provider is wired over
+        // it. Listed so the "taken once, in the composition root, nowhere else" rule below applies to
+        // it exactly as to every other node — the count alone would not catch a second acquisition
+        // site.
         "progressionRelationVariantDao"
     )
 
@@ -123,8 +109,6 @@ class CompositionRootArchitectureTest {
 
     private fun filesConstructing(name: String): List<String> =
         allSources().filter { constructionSites(code(it.readText()), name) > 0 }.map { relative(it) }
-
-    // ---- one database, acquired in one place ------------------------------------------------------
 
     @Test
     fun onlyTheCompositionRootAcquiresTheAppsDatabase() {
@@ -206,8 +190,6 @@ class CompositionRootArchitectureTest {
         )
     }
 
-    // ---- one place a repository is constructed -----------------------------------------------------
-
     @Test
     fun onlyTheCompositionRootConstructsAProgramSystemRepository() {
         targetRepositories.forEach { name ->
@@ -262,10 +244,8 @@ class CompositionRootArchitectureTest {
 
     @Test
     fun theShippedStageOneGenerationHasNoConstructionSiteLeft() {
-        // §30 step 15 inverted this claim rather than relaxing it. Until then the pin was a *closed
-        // list* — three sites, none of them new — because the Stage-1 generation was still wired
-        // beside the target one. Now the class itself is gone, so the closed list is the empty one and
-        // the claim is stronger: no source can construct a Stage-1 adapter, because there is none.
+        // The class itself is gone, so no source can construct a Stage-1 adapter: the closed list is
+        // the empty one and the claim is stronger than "no new sites".
         assertEquals(
             "nothing constructs `AdaptiveRepository` any more: the Stage-1 generation is retired, not " +
                 "merely unwired",
@@ -278,9 +258,9 @@ class CompositionRootArchitectureTest {
             filesContaining("class AdaptiveRepository(")
         )
 
-        // The view model's three shipped constructions are gone with the session they belonged to, so
-        // the pin is that they cannot come back — a `WorkoutRepository(db)` line in the view model was
-        // the §26 violation this whole stage closes.
+        // The view model's shipped constructions are gone with the session they belonged to, so the pin
+        // is that they cannot come back — a `WorkoutRepository(db)` line in the view model was the
+        // violation this whole stage closes.
         val viewModel = codeOf("viewmodel/MainViewModel.kt")
         for (retired in listOf(
             "WorkoutRepository(", "SessionAdaptivePlanReader.of(", "AdaptiveSessionDecisionRecorder.of(",
@@ -294,8 +274,6 @@ class CompositionRootArchitectureTest {
             )
         }
     }
-
-    // ---- nothing above the composition root reaches down --------------------------------------------
 
     @Test
     fun noViewModelOrUiSourceReachesTheDatabaseOrTheProgramSystemGraph() {
@@ -351,8 +329,6 @@ class CompositionRootArchitectureTest {
         }
     }
 
-    // ---- wiring is not behaviour --------------------------------------------------------------------
-
     @Test
     fun theCompositionRootDecidesNothing() {
         val text = codeOf("di/AppContainer.kt")
@@ -362,10 +338,9 @@ class CompositionRootArchitectureTest {
             "FocusPlanner", "ProgramCalendar", "SettingsManager", "NotificationScheduler",
             "System.currentTimeMillis", "Instant.now", "LocalDate", "Random", "UUID", "runBlocking",
             "lifecycleStatus", "ProgramMaintenance", "ProgressDao", "Room.",
-            // §30 step 7 revised this rule rather than relaxing it. It used to forbid the token
-            // "Scheduler" outright, because no stage could wire one yet; the Scheduler now exists and
-            // *wiring it is not deciding with it*, so the token is replaced by the vocabulary of the
-            // decision it must not contain — the planner, its request, its plan, its window, its
+            // Forbidding the token "Scheduler" outright no longer works: the Scheduler now exists and
+            // *wiring it is not deciding with it*. The token is therefore replaced by the vocabulary of
+            // the decision it must not contain — the planner, its request, its plan, its window, its
             // horizon, its pauses, the amount-free facts a slot is made of — which is stricter about
             // what the container may say about scheduling than a name match ever was. What the
             // container *may* do is pinned immediately below, exactly.

@@ -11,30 +11,16 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * The retained **daily-track calendar**, and the one thing it must not change: which day a stored date is.
+ * The retained **daily-track calendar**, and the one thing it must not change: which day a stored
+ * date is. The arithmetic moved out of the retired shipped-program calendar, but its *answers* must
+ * not, because rows recorded under the old calendar are read back under the new one.
  *
- * ### Why this test exists at all
+ * The expected values are computed in this file from the formula the feature has always had — day 1
+ * is the anchor, day 56 is `anchor + 55`, the next cycle starts at `anchor + 56` — because a test
+ * that called [TrackCalendar] to compute its own expectation would prove nothing.
  *
- * §30 step 15 retired the shipped 56-day program's calendar (`domain/usecase/ProgramCalendar`). Two
- * **retained global features** used to read their position out of it — the posture/mobility track, whose
- * completed sessions are stored one per track day, and the nutrition planner's meal-phase offset — and
- * they keep the rhythm they always had. The arithmetic moved to [TrackCalendar] and its *owner* changed;
- * its *answers* must not, because rows recorded under the old calendar are read back under the new one.
- *
- * ### The oracle is written out, not imported
- *
- * The retired functions cannot be called (they are gone), so the expected values here are derived from
- * the formula the feature has always had — **day 1 is the anchor, day 56 is `anchor + 55`, and the next
- * cycle starts at `anchor + 56`** — computed independently in this file rather than read from the code
- * under test. A test that called `TrackCalendar` to compute its own expectation would prove nothing.
- *
- * ### And the persisted anchor is not a second source of truth
- *
- * The other half of the claim is about storage: an install that predates this stage already has a start
- * date, and it must keep the position it had rather than being silently moved to "today". That is a
- * property of `SettingsManager`'s two keys, and since this project has no Robolectric harness the
- * DataStore object itself cannot be constructed here — so the *source* is asserted, which is the strongest
- * available form of the claim: the legacy key is read, and never written.
+ * The persisted anchor is not a second source of truth: the legacy key is read and never written,
+ * asserted on the *source*, since with no Robolectric harness the DataStore cannot be built here.
  */
 class TrackCalendarTest {
 
@@ -119,8 +105,6 @@ class TrackCalendarTest {
         assertEquals(56, TrackCalendar.cappedDay(anchor, anchor.plusDays(500)))
     }
 
-    // ---- the persisted anchor -------------------------------------------------------------------
-
     private val settingsSource: String = File("src/main/java/com/monkfitness/app/data/local/SettingsManager.kt")
         .let { if (it.isFile) it else File("app/src/main/java/com/monkfitness/app/data/local/SettingsManager.kt") }
         .readText()
@@ -148,7 +132,8 @@ class TrackCalendarTest {
                 .containsMatchIn(code)
         )
         // The one-write half: the legacy key may be read, and must never be written. A write would make the
-        // old key live again and give the anchor two homes — the second source of truth §6 forbids.
+        // old key live again and give the anchor two homes — the second source of truth the architecture
+        // forbids.
         assertFalse(
             "the legacy key is never assigned to",
             Regex("""preferences\[LEGACY_START_DATE_KEY\]\s*=""").containsMatchIn(code)

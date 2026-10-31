@@ -14,21 +14,16 @@ import kotlin.math.sqrt
 
 /**
  * Piriformis Stretch (`piriformis_stretch_hold`) — the exercise's own biomechanics on the PUBLISHED
- * frame.
+ * frame. Its copy is the only in-repo specification (no BPS exists): lie supine, cross one ankle over
+ * the opposite thigh, pull the uncrossed leg toward the chest, keep the tailbone heavy while the
+ * outer hip opens, hold, then change sides — flexing the crossed foot to protect the knee, pulling
+ * only until the hip stretches, and never twisting the pelvis off the floor.
  *
- * ## Stated intent (the exercise's own copy — the only in-repo specification; no BPS exists)
- *
- * `steps` §1 *"Lie on your back with both knees bent"*, §2 *"Cross one ankle over the opposite
- * thigh"*, §3 *"Pull the uncrossed leg toward your chest"*, §4 *"Keep the tailbone heavy as the outer
- * hip opens up"*, §5 *"Hold, then change sides"*; `desc` *"keep the low back quiet"*; `tech` *"Flex the
- * crossed foot to protect the knee. Pull the legs in only until the hip stretches."*; `mistakes`
- * *"Yanking the knee toward the chest … Twisting the pelvis off the floor."*
- *
- * The assertions below therefore measure the **figure-4 configuration** and its hold, not just travel:
- * the body is supine (the ventral basis faces up), the crossed ankle rides on the opposite thigh, the
- * pull is the authored entry→hold hip flexion, the plateau really is a hold, the tailbone stays down
- * and the pelvis never twists. Every reading is a PUBLISHED frame via [PoseFrameSweep] (the pipeline
- * entered exactly as `SkeletonRenderer` enters it), never a raw `build()` result.
+ * The assertions measure the figure-4 configuration and its hold, not just travel: the body is
+ * supine (the ventral basis faces up), the crossed ankle rides on the opposite thigh, the pull is the
+ * authored entry→hold hip flexion, the plateau really is a hold, the tailbone stays down and the
+ * pelvis never twists. Every reading is a PUBLISHED frame via [PoseFrameSweep] (the pipeline entered
+ * exactly as `SkeletonRenderer` enters it), never a raw `build()` result.
  */
 class PiriformisStretchPoseTest {
 
@@ -67,10 +62,10 @@ class PiriformisStretchPoseTest {
     }
 
     /**
-     * §1 — "Lie on your back": the body's own basis says SUPINE. The ventral direction is the spine ×
-     * lateral cross product on the published frame (`monk-pose-qa`'s body-orientation forensics), and
-     * `facing.y > 0` is what distingushes a face-up body from a face-down one. A pose that merely
-     * *looks* flat can be lying on the wrong side; this measures it.
+     * "Lie on your back": the body's own basis says SUPINE. The ventral direction is the spine ×
+     * lateral cross product on the published frame, and `facing.y > 0` is what distinguishes a
+     * face-up body from a face-down one. A pose that merely *looks* flat can be lying on the wrong
+     * side; this measures it.
      */
     @Test
     fun theBodyIsSupineNotProne() {

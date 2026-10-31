@@ -30,16 +30,11 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * §30 step 22 on a real SQLite engine: **target schedule is revisioned Program behaviour**.
- *
- * ```text
- * no structural change + no target change   → no Revision
- * structural change + target unchanged      → new Revision, source carried forward
- * structural change + target replaced       → new Revision, new source on it
- * target-only change                        → new Revision, same Program, same structure
- * target explicitly cleared                 → new Revision with no target source
- * previous Revision                         → immutable, its source untouched
- * ```
+ * **Target schedule is revisioned Program behaviour**, on a real SQLite engine: no change of either kind
+ * means no Revision; a structural change carries the source forward or attaches a replaced one to the
+ * new Revision; a target-only change mints a Revision with the same Program and structure, or one
+ * stating no source when the target is cleared; and a previous Revision is immutable with its source
+ * untouched.
  *
  * Everything runs over the data-access rig's real engine with production repositories, the production
  * editor, the production Scheduler and the production save boundary. Only the clock, the identity
@@ -47,21 +42,6 @@ import java.time.ZoneId
  * "the new revision is current", "the previous revision's source is byte-identical", "the new revision
  * got fresh plan-day identities" and "a failed source write rolled the revision back" are statements
  * about storage, not about a mock's call log.
- *
- * ```text
- *  A. a target-only replacement creates a new revision with the new source, leaving the old one intact
- *  B. a target-only clear creates a new revision stating no source, leaving the old one intact
- *  C. a structural edit with Keep carries the source forward, re-identified
- *  D. a structural edit with Replace attaches the new source to the new revision only
- *  E. a structural edit with no explicit target change does not erase the source
- *  F. a no-op edit with Keep creates no revision
- *  G. a target-only Replace that states the same semantics creates no revision
- *  H. a failing source write rolls the new revision back
- *  I. a new revision gets fresh plan-day identities
- *  J. Start after a target-only revision reads the new current revision
- *  K. a target revision change leaves the legacy slots alone
- *  L. two Programs own structurally identical target sources independently
- * ```
  */
 class TargetScheduleRevisionSemanticsIntegrationTest {
 
@@ -74,8 +54,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
     fun close() {
         rig.close()
     }
-
-    // ---------------------------------------------------------------- A. target-only replacement
 
     @Test
     fun aTargetOnlyReplacementMintsANewRevisionAndLeavesThePreviousSourceIntact() = runBlocking {
@@ -132,8 +110,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
         )
     }
 
-    // ---------------------------------------------------------------- B. target-only clear
-
     @Test
     fun aTargetOnlyClearMintsARevisionThatStatesNoSourceAndLeavesTheOldOneIntact() = runBlocking {
         val programId = createdProgramWithSource("B")
@@ -163,8 +139,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
             rig.database.count("program_target_schedule_rule")
         )
     }
-
-    // ---------------------------------------------------------------- C. structural edit + Keep
 
     @Test
     fun aStructuralEditWithKeepCarriesTheSourceForwardReIdentifiedOntoTheNewDays() = runBlocking {
@@ -208,8 +182,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
         )
     }
 
-    // ---------------------------------------------------------------- D. structural edit + Replace
-
     @Test
     fun aStructuralEditWithReplaceAttachesTheNewSourceToTheNewRevisionOnly() = runBlocking {
         val programId = createdProgramWithSource("D")
@@ -247,16 +219,14 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
         )
     }
 
-    // ---------------------------------------------------------------- E. omission on an edit
-
     @Test
     fun aStructuralEditThatSaysNothingAboutTargetSchedulingDoesNotEraseIt() = runBlocking {
         val programId = createdProgramWithSource("E")
         val firstRevision = rig.currentRevision(programId)!!.revisionId
         val firstSource = rig.storedTargetSource(firstRevision).source()
 
-        // No `targetChange` at all: this is the defect Stage 22 fixes. Under Stage 19 the absent
-        // authoring meant "no source", and the Program silently lost its target scheduling here.
+        // No `targetChange` at all: an absent authoring must not mean "no source", or the Program
+        // silently loses its target scheduling here.
         val outcome = rig.service.save(editedDraft(programId)).saved()
 
         val secondRevision = outcome.revision.revisionId
@@ -273,8 +243,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
             carried.programDayBindings.single().workoutId
         )
     }
-
-    // ---------------------------------------------------------------- F. no-op + Keep
 
     @Test
     fun aNoOpEditWithKeepCreatesNoRevisionAndTouchesNothing() = runBlocking {
@@ -310,8 +278,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
         assertEquals("the revision is unchanged", revisionBefore, rig.currentRevision(programId)!!.revisionId)
         assertEquals("and its target source is where it was", sourceBefore, rig.storedTargetSource(revisionBefore).source())
     }
-
-    // ---------------------------------------------------------------- G. an identical Replace
 
     @Test
     fun aTargetOnlyReplacementThatStatesTheSameSemanticsCreatesNoRevision() = runBlocking {
@@ -385,8 +351,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
         assertTrue("and the day really was re-identified by the previous change", day != stored.programDayBindings.firstOrNull()?.programDayId)
     }
 
-    // ---------------------------------------------------------------- H. atomicity
-
     @Test
     fun aFailingSourceWriteRollsTheTargetOnlyRevisionBackWithIt() = runBlocking {
         val programId = createdProgramWithSource("H")
@@ -445,8 +409,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
         assertEquals("rule-h", rig.storedTargetSource(landed.revision.revisionId).source().rules.single().ruleId)
     }
 
-    // ---------------------------------------------------------------- I. fresh identities
-
     @Test
     fun everyNewRevisionGetsFreshPlanDayIdentitiesAndNoOldBindingIdentityIsReused() = runBlocking {
         val programId = createdProgramWithSource("I")
@@ -482,8 +444,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
         )
     }
 
-    // ---------------------------------------------------------------- J. Start sees the new revision
-
     @Test
     fun aStartAfterATargetOnlyRevisionReadsTheNewCurrentRevisionSource() = runBlocking {
         val programId = createdProgramWithSource("J")
@@ -507,9 +467,9 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
             rig.currentRevision(programId)!!.revisionId
         )
 
-        // Stage 21's path, unchanged: ProgramStartService → TargetScheduleProductionConsumer. It
-        // must now see the *new* revision's source, and the new revision's plan days, because that is
-        // what the Program's current revision names.
+        // The Start path, unchanged: ProgramStartService → TargetScheduleProductionConsumer. It must see
+        // the *new* revision's source and plan days, because that is what the Program's current revision
+        // names.
         val started = startService().start(programId).started()
         assertEquals(
             "the pass planned against the revision the target-only change created",
@@ -533,8 +493,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
                 .map { it.revisionId }.distinct()
         )
     }
-
-    // ---------------------------------------------------------------- K. legacy isolation
 
     @Test
     fun aTargetRevisionChangeLeavesTheLegacySlotsExactlyAsTheyWere() = runBlocking {
@@ -563,8 +521,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
             rig.slotsOfRevision(rig.currentRevision(programId)!!.revisionId).size
         )
     }
-
-    // ---------------------------------------------------------------- L. cross-Program isolation
 
     @Test
     fun twoProgramsOwnStructurallyIdenticalTargetSourcesIndependently() = runBlocking {
@@ -610,8 +566,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
         )
         assertEquals("and so is the second's", 2, rig.revisionCount(second))
     }
-
-    // ---------------------------------------------------------------- Create and Copy are untouched
 
     @Test
     fun aCreationThatStatesNoAuthoringStillMeansNoTargetSource() = runBlocking {
@@ -718,8 +672,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
         assertEquals("the Program still points at the revision it had", revisionBefore, rig.currentRevision(programId)!!.revisionId)
         assertEquals("and its source is still readable", sourceBefore, rig.storedTargetSource(revisionBefore).source())
     }
-
-    // ---------------------------------------------------------------- M. an unreadable stored source is a third fact
 
     /**
      * [TargetScheduleSourceRead.Malformed] is neither "this revision states a source" nor "this
@@ -872,8 +824,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
         assertEquals("and not one row was written", countsBefore, rig.tableCounts())
     }
 
-    // ---------------------------------------------------------------- the fixtures
-
     /**
      * Corrupts the stored source of [revisionId] so it reads back as
      * [TargetScheduleSourceRead.Malformed], and returns the read as it was left.
@@ -936,11 +886,9 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
     private suspend fun unchangedDraft(programId: ProgramId): ProgramEditorDraft =
         rig.editor.editDraft(programId).let { (it as ProgramEditorResult.Success).value }
 
-    /** A draft whose only change is the Program's name — §6's facts-only save. */
+    /** A draft whose only change is the Program's name — a facts-only save. */
     private suspend fun renamedDraft(programId: ProgramId, name: String): ProgramEditorDraft =
         unchangedDraft(programId).copy(name = name)
-
-    // ---- the Stage 21 Start path, composed exactly as the composition root composes it -----------
 
     private fun startService() = ProgramStartService(
         lifecycle = ProgramLifecycleService(
@@ -982,8 +930,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
         zone = ZONE
     )
 
-    // ---- narrowings, so a refusal names itself ---------------------------------------------------
-
     private fun ProgramEditorResult<ProgramSaveOutcome>.saved(): ProgramSaveOutcome.RevisionSaved {
         val value = (this as? ProgramEditorResult.Success)?.value
             ?: throw AssertionError("expected a saved revision, got $this")
@@ -998,8 +944,6 @@ class TargetScheduleRevisionSemanticsIntegrationTest {
     private fun ProgramStartResult.started(): ProgramStartResult.Started =
         this as? ProgramStartResult.Started
             ?: throw AssertionError("expected a started Program, got $this")
-
-    // ---- the caller's own statements -------------------------------------------------------------
 
     private fun authoring(
         rules: List<TargetScheduleDefinition>,

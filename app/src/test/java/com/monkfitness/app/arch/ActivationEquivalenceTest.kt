@@ -64,80 +64,66 @@ import org.junit.Test
 import java.io.File
 
 /**
- * P12 WP-H — **§12.9 cross-configuration equivalence harness** (R5 Activation / Limb-Solver
- * Ownership Transition).
- *
- * ---------------------------------------------------------------------------------------------
- * WHAT THIS HARNESS PROVES
- * ---------------------------------------------------------------------------------------------
+ * Cross-configuration equivalence harness for the limb-solver ownership transition.
  *
  * > The engine-owned Active Limb Solver path preserves the relevant observable semantics of the
  * > pre-activation authoring-owned path.
  *
- * Both configurations are executed through the **complete canonical pipeline** on the **same
- * declared intent**, with an **independent fresh build per configuration** (never the OFF output
- * fed into the ON run), and the comparison reaches the **finalized/published observable
- * boundary** — not `IkStage.apply` and not an intermediate pre-finalizer pose:
+ * Both configurations run through the complete canonical pipeline on the SAME declared intent, with
+ * an independent fresh build per configuration (never the OFF output fed into the ON run), and the
+ * comparison reaches the finalized/published boundary — not `IkStage.apply` and not an intermediate
+ * pre-finalizer pose.
  *
- * ```text
- *   Configuration OFF   build()  ->  SkeletonPipeline.produceFrame  ->  published pose
- *   Configuration ON    build()  ->  SkeletonPipeline.produceFrame  ->  published pose
- *                       ^ same declared intent, fresh instances, one pipeline per observation
- * ```
+ * THE EQUIVALENCE RELATION (explicit — no blanket "approximately equal everything"):
+ *  - `INTENT.limbTargets` (joint, world, pole, straight, declared lengths/constraint/contact) —
+ *    RAW-BIT exact: intent is ownership-neutral, both bakes register above the realization gate,
+ *    and the declared solve inputs must be the authoring bake's own values. A difference here is
+ *    either a registration regression or a lossy decode.
+ *  - `INTENT.contacts` (every ContactSpec field) — RAW-BIT exact: Contact Declarations are
+ *    settlement intent, not realization (`contacts.add` sits above the realization gate).
+ *  - `INTENT.contactPrecedence`, `INTENT.posture` — exact: raw declarations the solver reads
+ *    unchanged.
+ *  - `ROOT.authored` — RAW-BIT exact: Author Intent is frozen at build return.
+ *  - `ROOT.published` (local + world) — RAW-BIT exact: the root-authority output; the engine stage
+ *    may move only `middle`/`end` limb locals.
+ *  - `PUBLISHED.transforms` (all 33 joints, world position + rotation) and `PUBLISHED.nodes` (tree
+ *    structure + every local transform) — RAW-BIT exact: both implementations execute the same
+ *    frozen responsibility set with the same declared inputs; `nodes` also catches a structural
+ *    difference independently of FK. Where ownership legitimately moves raw bits the case is
+ *    adjudicated in [ADJUDICATIONS] instead of loosened globally.
+ *  - `STAMPS` (the complete stamp set) — RAW-BIT exact: each stamp's producer and merge rule is
+ *    fixed, and the Active Limb Solver is the FIRST writer of the three solver-family stamps in
+ *    both configurations. A stamp that changes only because realization is *recorded* differently
+ *    is an adjudicated entry, never a tolerance.
+ *  - `SETTLEMENT` (presence, settled root, declared-contact list, conflict outcome, published
+ *    position of every settled contact) — RAW-BIT exact: membership is fixed and settled contacts
+ *    must survive finalization.
+ *  - `PUBLISH` (a distinct carrier instance / frame was published) — exact: the returned Finalized
+ *    Pose is the buffer the Finalizer publishes from, never the input carrier.
+ *  - `KINEMATIC` (`isTransformsUpdated`) — exact: this was the ONE published field the observation
+ *    did not compare, and it DID diverge — the engine stage consumes the build-window marker, so
+ *    the finalizer's FK-refresh branch ran on every activated frame and wrote the truthful marker
+ *    only onto its INPUT carrier, publishing a stale value. The bookkeeping was corrected and the
+ *    dimension added so the claim covers the complete published state.
  *
- * ---------------------------------------------------------------------------------------------
- * THE EQUIVALENCE RELATION (explicit — no blanket "approximately equal everything")
- * ---------------------------------------------------------------------------------------------
- *
- * | # | Dimension (section)                                     | Rule                 | Why |
- * |---|---------------------------------------------------------|----------------------|-----|
- * | 1 | `INTENT.limbTargets` — declared Limb Targets (joint, world, pole, straight, declared lengths, declared constraint, declared contact) | **RAW-BIT exact** | Intent is ownership-neutral: §12.5 acceptance requires registration effects to run in BOTH configurations (`BasePose.bakeIkLimb` / `BaseValidationPose.bakeIkLimb` register above the realization gate), and §12.4/B-3 requires the declared solve inputs to be the authoring bake's own values. A difference here is either a registration regression or a lossy decode. |
- * | 2 | `INTENT.contacts` — declared ContactSpecs (end/root/parentRotation/middle joints, target, pole, lengths, straight, constraint, contact) | **RAW-BIT exact** | Contact Declarations are Phase-2 settlement intent, not realization (WP-D gate-placement rule: `contacts.add` sits above the realization gate). The Phase-2 contact re-solve is R3 settlement ownership, which consumes exactly these declarations (RFC §5 R3). |
- * | 3 | `INTENT.contactPrecedence`, `INTENT.posture` | **exact** | Raw §1.1 declarations; the Solver's conflict-resolution and posture entry read them unchanged. |
- * | 4 | `ROOT.authored` — pelvis local transform as authored (captured before the frame) | **RAW-BIT exact** | Author Intent is frozen at build return (RFC §5 R1). |
- * | 5 | `ROOT.published` — published pelvis local + world transform | **RAW-BIT exact** | The published root is the R2 root-authority output; §12.7d requires the engine stage to move only `middle`/`end` limb locals, and the Pipeline's own Phase-1 check asserts the pelvis is bit-identical across the limb stage. |
- * | 6 | `PUBLISHED.transforms` — all 33 joints, world position + world rotation | **RAW-BIT exact** | RFC §6 Phase 4: publication completes with these transforms. Both implementations execute the same frozen responsibility set with the same declared inputs (R5: "two implementations of the same frozen responsibility set"), so the published frame is expected bit-exact — this is the strongest form of the claim, and where ownership legitimately moved raw bits the case is adjudicated in [ADJUDICATIONS] instead of loosened globally. |
- * | 7 | `PUBLISHED.nodes` — node tree structure + every node local transform | **RAW-BIT exact** | Detects a structural difference (a missing/extra node) as well as a differently-realized limb local, independent of FK. |
- * | 8 | `STAMPS` — the complete §4.4 set: Clamp Stamp, Straight-Intent-Dropped, Bone-Lengths-Verified, Root Translation Delta, Root Rotation Delta, Hip ROM stamp ×2 (4 angles each), Bilateral Symmetry Delta, Bilateral Opposite Bend | **RAW-BIT exact** | §4.4 fixes each stamp's producer and merge rule. The Active Limb Solver is the FIRST writer of the three solver-family stamps in both configurations; the ConstraintSolver (max/OR/AND, merge-once) and the Finalizer (sole producers) are configuration-independent. A stamp that changes only because realization is *recorded* differently is an adjudicated entry, never a tolerance. |
- * | 9 | `SETTLEMENT` — Settlement Result presence, settled root world transform, declared-contact joint list, conflict outcome, and the PUBLISHED world position of every settled contact end-effector | **RAW-BIT exact** | RFC §5 R3 (Settled-Contact Guarantee) + §4.3: the Settlement Result's membership is fixed and the settled contacts must survive Phase 3 finalization. This is the contact/settlement coverage. |
- * | 10 | `PUBLISH` — the published instance is a distinct carrier instance / frame published | **exact** | R11 transfer chain: the returned Finalized Pose is the buffer the Finalizer publishes from, never the input carrier. |
- * | 11 | `KINEMATIC` — the published kinematic-state marker (`isTransformsUpdated`) | **exact** | Added at WP-I: this was the ONE published field the observation did not compare, and it DID diverge — the engine stage consumes the build-window marker (§12.7a), so the finalizer's FK-refresh branch ran on every activated frame and wrote the truthful marker only onto its INPUT carrier (`copyFrom` had already captured the stale value into the published one). WP-I corrected the finalizer's bookkeeping (one write, no geometry change) and added this dimension so the equivalence claim covers the complete published state; a future divergence of the marker across configurations now fails here instead of hiding. |
- *
- * **Execution evidence is deliberately NOT an equivalence dimension.** The realization counters
- * (`limbSolverExecutions`, `limbRealizedLimbs`, `limbDuplicateRealizations`) are *per-configuration
- * instrumentation* — the bake's authoring window in one configuration, the stage window in the
+ * **Execution evidence is deliberately NOT an equivalence dimension.** The realization counters are
+ * per-configuration instrumentation — the bake's window in one configuration, the stage's in the
  * other — so they are asserted as per-configuration PREMISES instead (exactly one window, never a
- * duplicate realization, in both configurations; §12.7a/§12.7b). Comparing them as if they were
- * observable output would be comparing the ownership mechanism with itself.
+ * duplicate, in both). Comparing them as observable output would compare the ownership mechanism
+ * with itself.
  *
- * There is exactly ONE tolerance-bearing place in this file and it is not a corpus comparison: the
- * §9 ConstraintSolver boundary test's contact-target distance is *not* compared at all — nothing in
- * the corpus is compared with a tolerance. [ADJUDICATIONS] is the only relaxation mechanism and it
- * starts EMPTY: any non-identical dimension is a failure until it is adjudicated here with a named
- * invariant, a named tolerance and a named reason (and an entry must also explain why it cannot
- * hide a real ownership regression — see the class KDoc of each adjudication).
+ * Nothing in the corpus is compared with a tolerance. [ADJUDICATIONS] is the only relaxation
+ * mechanism and it starts EMPTY: any non-identical dimension fails until it is adjudicated here with
+ * a named invariant, tolerance and reason — plus why it cannot hide a real ownership regression.
  *
- * ---------------------------------------------------------------------------------------------
- * TDD SEQUENCE (this file is the RED artefact)
- * ---------------------------------------------------------------------------------------------
- *
- * RED was executed first, against unmodified production source, with every assertion strict. Every
- * resulting mismatch was classified (defect of this harness / genuine P12 ownership defect /
- * adjudicated legitimate difference); the classification and its evidence are recorded in the WP-H
- * report. GREEN then fixed only genuine P12 ownership/equivalence defects — no assertion was
- * loosened to make a comparison pass.
- *
- * ---------------------------------------------------------------------------------------------
- * LEAKAGE DISCIPLINE (§7 of the WP-H brief)
- * ---------------------------------------------------------------------------------------------
- *
+ * LEAKAGE DISCIPLINE:
  *  - a fresh `SkeletonPipeline` per observation (no Frame History reuse between observations);
  *  - a fresh pose instance per build (`factory()` is invoked inside the run lambda) — the OFF
  *    output is never the ON input;
  *  - realization evidence is read BEFORE the frame and settlement AFTER it, because
  *    `SkeletonPipeline.runStages` resets the evidence at frame end (by design);
  *  - `observationIsIndependentOfConfigurationOrder` runs every corpus case in BOTH directions
- *    (`OFF→ON` and `ON→OFF`) and requires the per-configuration observations to be identical;
+ *    (`OFF→ON` and `ON→OFF`) and requires identical per-configuration observations;
  *  - the flag is restored in `@After` and in every test's `finally`.
  */
 class ActivationEquivalenceTest {
@@ -145,15 +131,12 @@ class ActivationEquivalenceTest {
     private val def = SkeletonDefinition.DEFAULT_ADULT
     private val originalStage = IK_STAGE_ACTIVE
 
-    // P12 WP-I (§12.8 disposition): this harness is CONFIGURATION-AGNOSTIC by construction — every
-    // test sets the flag explicitly for each observation and restores it in `finally` / `@After` —
-    // so its former WP-H premise ("the deployed default must still be flag-OFF") is gone. That
-    // state-2 pin now lives in exactly ONE place: the §12.10 activation gate
-    // (`ActivationGateTest.productionConfigurationIsStateThree`), which owns the deployed-state
-    // claim. The corpus remains the §12.9 proof FOR THE ACTIVATED CONFIGURATION as well: with the
-    // production default `true` it still compares flag-OFF (the legacy authoring configuration, a
-    // valid R5-selectable configuration) against flag-ON and requires raw-bit identity of the
-    // complete published observation.
+    // CONFIGURATION-AGNOSTIC by construction: every test sets the flag explicitly per observation
+    // and restores it in `finally` / `@After`. The deployed-state claim lives in exactly ONE place
+    // (`ActivationGateTest.productionConfigurationIsStateThree`). The corpus is also the proof for
+    // the activated configuration: with the production default `true` it still compares flag-OFF (a
+    // valid selectable configuration) against flag-ON and requires raw-bit identity of the complete
+    // published observation.
 
     @After
     fun restoreStage() {
@@ -162,23 +145,17 @@ class ActivationEquivalenceTest {
 
     private fun ctx(progress: Float) = PoseContext(progress, Side.LEFT, def)
 
-    // =====================================================================================
-    // 1. The explicit equivalence relation
-    // =====================================================================================
-
     /**
      * The only relaxation mechanism in this file. EMPTY by construction: with no entry, every
-     * dimension is compared under its declared rule (raw-bit exact / exact) and any difference
-     * fails the harness. An entry is admissible only when it names (a) the invariant that
-     * survives, (b) the tolerance, (c) the architectural justification and (d) why it cannot
-     * hide a real ownership regression.
+     * dimension is compared under its declared rule (raw-bit exact / exact) and any difference fails
+     * the harness. An entry is admissible only when it names (a) the invariant that survives, (b) the
+     * tolerance, (c) the architectural justification and (d) why it cannot hide a real ownership
+     * regression.
      *
-     * WP-H RED/GREEN outcome: **no entry was required** — every corpus case in every progress is
-     * raw-bit identical across the ownership configurations, so no case had to be relaxed. The
-     * mechanism exists so that a future legitimate representation change is *adjudicated* here
-     * rather than silently tolerated by a broad tolerance. It is asserted empty by
-     * [equivalenceRelationHasNoUnusedRelaxation], so adding a relaxation without a matching
-     * comment block that documents the four points above is itself a test failure.
+     * No entry is required today — every corpus case at every progress is raw-bit identical across
+     * the configurations. The mechanism exists so a future legitimate representation change is
+     * *adjudicated* here rather than silently tolerated by a broad tolerance; it is asserted empty by
+     * [equivalenceRelationHasNoUnusedRelaxation].
      */
     private val adjudications: List<Adjudication> = emptyList()
 
@@ -190,9 +167,7 @@ class ActivationEquivalenceTest {
         val justification: String
     )
 
-    // =====================================================================================
-    // 2. Corpus (§12.9 representative cases; reachable branches, no fuzzing)
-    // =====================================================================================
+    // Corpus: representative cases over reachable branches, no fuzzing.
 
     private class Evidence(
         val windows: Int,
@@ -224,14 +199,14 @@ class ActivationEquivalenceTest {
         val progresses: List<Float>,
         val frames: Int = 1,
         /**
-         * Whether the build template returns the CARRIER the authoring bake registered its
-         * realization evidence on. Every production build returns `jointsBuffer` itself except
+         * Whether the build template returns the CARRIER the authoring bake registered its evidence
+         * on. Every production build returns `jointsBuffer` itself except
          * `BaseThoracicPose.finalizeThoracicPose`, which returns an independent snapshot
-         * (`out.copyFrom(jointsBuffer)`) so that two samples of one builder cannot alias — and the
-         * evidence fields are deliberately absent from `copyFrom` (P3 suppression: Published Pose
-         * State never inherits instrumentation). For those three templates the flag-OFF authoring
-         * window is therefore not observable on the returned carrier; FINDING F-1 in the class KDoc
-         * records that limitation, and [snapshotReturningTemplatesCarryNoAuthoringEvidence] pins it.
+         * (`out.copyFrom(jointsBuffer)`) so two samples of one builder cannot alias — and the
+         * evidence fields are deliberately absent from `copyFrom` (Published Pose State never
+         * inherits instrumentation). For those three templates the flag-OFF authoring window is
+         * therefore not observable on the returned carrier; FINDING F-1 records the limitation and
+         * [snapshotReturningTemplatesCarryNoAuthoringEvidence] pins it.
          */
         val authoringEvidenceObservable: Boolean = true,
         val run: (SkeletonPipeline, PoseContext) -> BuiltFrame
@@ -251,11 +226,11 @@ class ActivationEquivalenceTest {
     }
 
     /**
-     * The canonical observation path: `build()` (fresh instance) → runtime-context injection with
-     * the pose's own metadata (exactly what the pipeline's builder overload does, see
+     * The canonical observation path: `build()` (fresh instance) → runtime-context injection with the
+     * pose's own metadata (what the builder overload does, see
      * [explicitInjectionPathMatchesTheBuilderEntryPoint]) → the complete stage chain → published
-     * pose. The built carrier is retained so the settlement evidence and the pre-frame realization
-     * evidence can be observed (the pipeline resets the evidence at frame end by design).
+     * pose. The built carrier is retained so settlement and pre-frame realization evidence can be
+     * observed (the pipeline resets the evidence at frame end).
      */
     private fun runBuilder(pipeline: SkeletonPipeline, context: PoseContext, builder: PoseBuilder): BuiltFrame {
         val built = builder.build(context)
@@ -268,7 +243,6 @@ class ActivationEquivalenceTest {
     }
 
     private fun corpus(): List<CorpusEntry> = listOf(
-        // ---- §12.9 baseline fixtures (the plan's "3 baseline fixtures × reps") -----------------
         standard(
             "BASELINE.StandardPushUp",
             "contact pose (metadata support) entering Phase-2 settlement + support flattening",
@@ -295,7 +269,6 @@ class ActivationEquivalenceTest {
             FIVE
         ) { ArmCirclesPose() },
 
-        // ---- A. reachable / BENT limb intent (arm) -------------------------------------------
         standard("BENT-ARM.FacePull", "bent arm intent realized through the registered bake") { FacePullPose() },
         standard("BENT-ARM.WallSlides", "bent arm intent (WP-C capture-only family)") { WallSlidesPose() },
         standard("BENT-ARM.HipCars", "bent arm intent (WP-C capture-only family)") { HipCarsPose() },
@@ -303,13 +276,12 @@ class ActivationEquivalenceTest {
         standard("BENT-ARM.ScapularRetraction", "bent arm intent (WP-C reset family)") { ScapularRetractionPose() },
         standard("BENT-ARM.Burpee", "bent arm intent (WP-C capture-only family)") { BurpeePose() },
 
-        // ---- A. reachable / BENT limb intent (leg) -------------------------------------------
+        // ---- reachable / BENT limb intent (leg) ----------------------------------------------
         standard("BENT-LEG.AirSquat", "bent leg intent (squat family)") { AirSquatPose() },
         standard("BENT-LEG.CossackSquat", "bent leg intent (lunge family, asymmetric)") { CossackSquatPose() },
         standard("BENT-LEG.ForwardLunge", "bent leg intent (alternating lunge)") { AlternatingForwardLungesPose() },
         standard("BENT-LEG.BirdDog", "bent leg + bent arm intent (quadruped family)") { BirdDogPose() },
 
-        // ---- B. STRAIGHT-limb intent (the validation instruments are the only straight authors)
         standard(
             "STRAIGHT-ARM.DeadHang",
             "straight-limb intent + straight-intent drop reading (settled-contact instrument)",
@@ -331,7 +303,6 @@ class ActivationEquivalenceTest {
             FIVE
         ) { DeepOverheadSquatPose() },
 
-        // ---- C. CONTACT / SETTLEMENT, including multi-frame (Frame History) sequences ---------
         standard(
             "CONTACT.Sequence.StandardPushUp",
             "3-frame sequence on ONE pipeline: settlement + support flatten + Frame History",
@@ -345,11 +316,9 @@ class ActivationEquivalenceTest {
             frames = 3
         ) { MiddleSplitPose() },
 
-        // ---- planning-solve-derived intent (§12.4b, B-1 family) -------------------------------
         standard("PLAN.CouchStretch", "target composed from the sanctioned §12.4b planning solve") { CouchStretchPose() },
         standard("PLAN.HalfKneelingStretch", "target composed from the sanctioned §12.4b planning solve") { HalfKneelingStretchPose() },
 
-        // ---- WP-D representation migrations (adjudicated differential; see class KDoc §10) -----
         standard("WPD.LatStretch", "hierarchy-built pose (authored-hierarchy conversion, parent frame)") { LatStretchPose() },
         standard("WPD.DeadBug", "world-position-built pose -> authored hierarchy (WP-D conversion)") { DeadBugPose() },
         standard("WPD.MountainClimber", "hierarchy-built pose (never a direct-solveIK consumer)") { MountainClimberPose() },
@@ -364,7 +333,6 @@ class ActivationEquivalenceTest {
         standard("WPD.DynamicWorldsGreatestStretch", "BaseThoracicPose arm bake via the package bake", authoringEvidenceObservable = false) { DynamicWorldsGreatestStretchPose() },
         standard("WPD.ProneCobraStretch", "prone pose with bent arm intent") { ProneCobraStretchPose() },
 
-        // ---- existing R-rule / production corpus (IkStageTest's production set) ---------------
         standard("BASE.StandardPullUp", "hanging arm intent (vertical pull family)") { StandardPullUpPose() },
         standard("BASE.StaticForearmPlank", "plank posture + forearm support") { StaticForearmPlankPose() },
         standard("BASE.HamstringStretch", "hip-hinge pose with bent leg intent") { HamstringStretchPose() },
@@ -372,14 +340,9 @@ class ActivationEquivalenceTest {
         standard("BASE.PikePushUp", "push-up family with overhead intent") { PikePushUpPose() }
     )
 
-    // =====================================================================================
-    // 3. Observation model
-    // =====================================================================================
-
     /**
-     * One raw scalar per line (`key=value`, floats as `toRawBits()` integers) so that
-     * (a) comparison is exact and (b) the deliberate-regression proofs can perturb a single
-     * declared value deterministically instead of comparing tolerances.
+     * One raw scalar per line (`key=value`, floats as `toRawBits()` integers) so comparison is exact
+     * and the deliberate-regression proofs can perturb a single value deterministically.
      */
     private class Observation(
         val caseKey: String,
@@ -429,7 +392,7 @@ class ActivationEquivalenceTest {
     private fun sections(f: BuiltFrame): Map<String, List<String>> {
         val sections = LinkedHashMap<String, List<String>>()
 
-        // 1. INTENT — declared Limb Targets (ownership-neutral, §12.5 acceptance).
+        // 1. INTENT — declared Limb Targets (ownership-neutral: registered in both configurations).
         sections["INTENT.limbTargets"] = f.built.limbTargets.mapIndexed { i, t ->
             listOf(
                 "target.$i.joint=${t.joint.name}",
@@ -443,7 +406,7 @@ class ActivationEquivalenceTest {
             )
         }.flatten()
 
-        // 2. INTENT — declared ContactSpecs (Phase-2 settlement intent, R3).
+        // 2. INTENT — declared ContactSpecs (settlement intent, not realization).
         sections["INTENT.contacts"] = f.built.contacts.mapIndexed { i, c ->
             listOf(
                 "contact.$i.end=${c.endJoint.name}",
@@ -485,16 +448,13 @@ class ActivationEquivalenceTest {
         }
         sections["PUBLISHED.nodes"] = f.published.roots.flatMap { nodeLines(it) }
 
-        // 8. STAMPS — the complete §4.4 set.
+        // 8. STAMPS — the complete Validation Stamp set.
         sections["STAMPS"] = stampLines(f.published)
 
-        // 8b. KINEMATIC — the published carrier's kinematic-state marker. Added at WP-I: this was
-        // the ONE published field the OFF/ON observation did not compare, and it DID diverge —
-        // the engine stage consumes the build-window marker (`isTransformsUpdated`) and the
-        // finalizer's refresh branch wrote the truth only onto its INPUT carrier, so a
-        // flag-ON frame published `false` where a flag-OFF frame published `true`. WP-I corrected
-        // the finalizer (bookkeeping only, no geometry) and extended this observation so the
-        // equivalence claim covers the complete published state instead of the observed subset.
+        // 8b. KINEMATIC — the published carrier's kinematic-state marker: the one published field
+        // the OFF/ON observation did not compare, and it DID diverge (a flag-ON frame published
+        // `false` where flag-OFF published `true`, because the finalizer's refresh branch wrote the
+        // truth only onto its INPUT carrier). Now compared so the claim covers the complete state.
         sections["KINEMATIC"] = listOf(
             "published.isTransformsUpdated=${f.published.isTransformsUpdated}"
         )
@@ -599,10 +559,6 @@ class ActivationEquivalenceTest {
     private fun contactKey(c: ContactConstraint?): String = if (c == null) "null" else
         "normal=${vecBits(c.normal)},point=${vecBits(c.point)}"
 
-    // =====================================================================================
-    // 4. Comparison
-    // =====================================================================================
-
     private data class Delta(val caseKey: String, val frameIndex: Int, val dimension: String, val detail: String) {
         override fun toString() = "$caseKey frame $frameIndex §$dimension :: $detail"
     }
@@ -628,10 +584,6 @@ class ActivationEquivalenceTest {
         }
         return "byte-identical lists with different sizes (${a.size} vs ${b.size})"
     }
-
-    // =====================================================================================
-    // 5. The harness itself
-    // =====================================================================================
 
     @Test
     fun corpusIsEquivalentAcrossOwnershipConfigurations() {
@@ -699,10 +651,9 @@ class ActivationEquivalenceTest {
     }
 
     /**
-     * Per-configuration PREMISES (never equivalence dimensions): the §12.7a/§12.7b ownership
-     * contract must hold in each configuration, so a green comparison cannot be produced by two
-     * equally-broken configurations. Returns the failure messages instead of throwing, so one run
-     * collects the whole corpus.
+     * Per-configuration PREMISES (never equivalence dimensions): the ownership contract must hold in
+     * each configuration, so a green comparison cannot be produced by two equally-broken ones.
+     * Returns the failure messages instead of throwing, so one run collects the whole corpus.
      */
     private fun assertEvidencePremises(off: Observation, on: Observation, entry: CorpusEntry): List<String> {
         val failures = mutableListOf<String>()
@@ -735,7 +686,7 @@ class ActivationEquivalenceTest {
         }
         expect(off.evidence.duplicates == 0, "${entry.name} (flag-OFF): no limb may be realized twice")
 
-        // ON: the bake is gated (§12.7a) — the build window realizes nothing; the stage owns it.
+        // ON: the bake is gated — the build window realizes nothing; the stage owns it.
         expect(
             on.evidence.windows == 0,
             "${entry.name} (flag-ON): the gated authoring bake must not realize anything (§12.7a) — " +
@@ -815,18 +766,15 @@ class ActivationEquivalenceTest {
         }
     }
 
-    // =====================================================================================
-    // 6. Deliberate-regression proofs (§11 — the harness must be able to fail)
-    // =====================================================================================
+    // Deliberate-regression proofs: the harness must be able to fail.
 
     /**
-     * Test-only pose with the B-1 authoring-dependency shape WP-B eliminated from production:
-     * the second Limb Target is composed from the FIRST limb's realized node inside `build()`.
-     * Under flag-OFF that node holds the solved offset; under flag-ON the bake is gated (§12.7a)
-     * and the node still holds the authored value — so the two configurations declare *different
-     * intent* and must produce different published frames. This is a genuine production-path
-     * divergence, not a mutated snapshot: it proves the comparator sees real cross-configuration
-     * behaviour, which is exactly the class of defect §12.9 exists to detect.
+     * Test-only pose with the authoring-dependency shape eliminated from production: the second Limb
+     * Target is composed from the FIRST limb's realized node inside `build()`. Under flag-OFF that
+     * node holds the solved offset; under flag-ON the bake is gated and the node still holds the
+     * authored value — so the two configurations declare *different intent* and must produce
+     * different published frames. A genuine production-path divergence, not a mutated snapshot: it
+     * proves the comparator sees real cross-configuration behaviour.
      */
     private class AuthoringDependentProbe : BasePose() {
         override fun onBuild(context: PoseContext): SkeletonPose {
@@ -844,7 +792,7 @@ class ActivationEquivalenceTest {
                 PROBE_POLE, definition.legIKConstraint, nodes.pelvis.worldRotation,
                 nodes.kneeF, nodes.ankleF, SkeletonMath.IKResult()
             )
-            // The B-1 dependency: compose the second limb's target from the FIRST limb's node.
+            // The authoring dependency: compose the second limb's target from the FIRST limb's node.
             val realizedKnee = nodes.kneeF.localPosition
             val composed = Vector3(realizedKnee.x + 60f, 220f + realizedKnee.y - 40f, realizedKnee.z)
             bakeIkLimb(
@@ -908,7 +856,7 @@ class ActivationEquivalenceTest {
             clampDeltas.single().detail.contains("maxIkClampAmount")
         )
 
-        // (b) the straight-intent flag (the §12.9 diagnostic stamp the plan calls out explicitly);
+        // (b) the straight-intent flag (the diagnostic stamp);
         val droppedTampered = on.perturb("STAMPS") { lines ->
             lines.map { if (it.startsWith("straightIntentDropped=")) "straightIntentDropped=${1 - it.substringAfter('=').toInt()}" else it }
         }
@@ -952,7 +900,7 @@ class ActivationEquivalenceTest {
             rootDeltas.single().detail.contains("pelvis.local.y")
         )
 
-        // (b) the settled root (the R2/R3 root-authority output inside the Settlement Result);
+        // (b) the settled root (the root-authority output inside the Settlement Result);
         val settledDeltas = compare(off, on.perturbRawBits("SETTLEMENT", "settledRootWorld.y", PERTURBATION_BITS))
         assertEquals(
             "exactly the settlement dimension must be reported for a settled-root perturbation",
@@ -972,45 +920,39 @@ class ActivationEquivalenceTest {
     }
 
     /**
-     * FINDING F-1 (raised at WP-H) — **adjudicated at WP-I: the snapshot boundary is INTENTIONAL
-     * and is now codified.** Authoring realization evidence is carrier-local, and one build template
-     * returns a snapshot instead of its carrier.
+     * FINDING F-1 — the snapshot boundary is INTENTIONAL and codified. Authoring realization
+     * evidence is carrier-local, and one build template returns a snapshot instead of its carrier.
      *
      * `BaseThoracicPose.finalizeThoracicPose` returns `out.copyFrom(jointsBuffer)` (not the carrier)
-     * so that two samples of one builder cannot alias. The realization evidence fields are
-     * deliberately absent from `copyFrom` (P3 suppression: Published Pose State never inherits
-     * instrumentation — pinned by `RuntimeSolverOwnershipAuditTest`), so the returned carrier of the
-     * three `BaseThoracicPose` templates carries ZERO authoring evidence in the flag-OFF
-     * configuration even though the authoring bake did realize their limbs. Consequence: in
-     * flag-OFF the pipeline's `count == 0 && !IK_STAGE_ACTIVE` disjunct is what admits those
-     * frames, i.e. §12.7b's "exactly one window, proven by the counter" does not *prove* anything
-     * for that family in the legacy diagnostic configuration.
+     * so two samples of one builder cannot alias. The evidence fields are deliberately absent from
+     * `copyFrom` (Published Pose State never inherits instrumentation — pinned by
+     * `RuntimeSolverOwnershipAuditTest`), so the returned carrier of the three `BaseThoracicPose`
+     * templates carries ZERO authoring evidence under flag-OFF even though the bake did realize
+     * their limbs. Consequence: in flag-OFF the pipeline's `count == 0 && !IK_STAGE_ACTIVE`
+     * disjunct is what admits those frames, so "exactly one window, proven by the counter" does not
+     * *prove* anything for that family in the legacy configuration.
      *
-     * **WP-I disposition (option A — codified, not silently fixed).** The boundary is the
-     * architectural consequence of two deliberate decisions, and correcting it would *create* the
-     * thing §15 forbids (a second evidence-mutation path):
-     *  - the instrumentation must NOT cross `copyFrom` (P3 suppression pattern; the published pose
-     *    is produced through `copyFrom`, so propagating the counter would make enforcement state
-     *    Published Pose State);
-     *  - the evidence is by construction carrier-local to the implementation that realized ON that
-     *    carrier: the thoracic bake realizes on `jointsBuffer`, so that is the carrier that must
-     *    carry (and does carry) its evidence — transporting it onto the returned snapshot would be
-     *    evidence transported between carriers, i.e. a second evidence path.
+     * The boundary is codified rather than fixed, because correcting it would *create* what the
+     * ownership rules forbid (a second evidence-mutation path):
+     *  - the instrumentation must NOT cross `copyFrom` (the published pose is produced through it,
+     *    so propagating the counter would make enforcement state Published Pose State);
+     *  - the evidence is carrier-local to the implementation that realized ON that carrier: the
+     *    thoracic bake realizes on `jointsBuffer`, so that is the carrier that carries its evidence —
+     *    transporting it onto the snapshot would be a second evidence path.
      *
-     * It cannot invalidate state-3 ownership, and that is proved rather than asserted:
-     *  - with the engine stage ACTIVE the bake is gated (§12.7a), so no authoring realization exists
-     *    to hide — the stage registers its window and its per-limb mask on the very carrier the
-     *    pipeline inspects (`check(count == 1)`, the flag-OFF disjunct being unreachable), which is
-     *    why the acceptance below is evidence-backed;
+     * It cannot invalidate the activated ownership, and that is proved rather than asserted:
+     *  - with the engine stage ACTIVE the bake is gated, so no authoring realization exists to hide —
+     *    the stage registers its window and per-limb mask on the very carrier the pipeline inspects,
+     *    which is why the acceptance below is evidence-backed;
      *  - the flag-OFF admission cannot mask a second solver in the deployed state, and the family's
-     *    activated path is additionally subjected to the §14 double-realization rejection
+     *    activated path is additionally subjected to the double-realization rejection
      *    (`ActivationGateTest.f1SnapshotFamilyCannotHideASecondRealization`);
-     *  - the *semantic* result of the family's realization is preserved across the boundary by
-     *    design — clamp / dropped / verified stamps ride `copyFrom` and the published frame is
-     *    raw-bit identical across configurations (this corpus).
+     *  - the *semantic* result of the family's realization is preserved across the boundary: clamp /
+     *    dropped / verified stamps ride `copyFrom` and the published frame is raw-bit identical
+     *    across configurations (this corpus).
      *
      * Corollary for any new family: **evidence is carrier-local** — a build template that returns a
-     * copy hides its own realization evidence, so it must be covered by the activated-configuration
+     * copy hides its own realization evidence, so it must be covered by activated-configuration
      * enforcement (engine-side evidence on the inspected carrier), never by the flag-OFF disjunct.
      */
     @Test
@@ -1050,9 +992,9 @@ class ActivationEquivalenceTest {
             // The ACTIVATED configuration is fully covered: the pipeline's own enforcement admits a
             // frame only when exactly one engine realization window was registered on the carrier
             // it inspects (`check(count == 1 …)` in runStages), so ACCEPTANCE of these frames at
-            // flag-ON is the evidence that state 3 covers this template. No direct stage call is
+            // flag-ON is the evidence that the activated configuration covers this template. No direct stage call is
             // needed — and none is made (the harness observes only through the pipeline boundary,
-            // pinned by the WP-H static audit).
+            // pinned by the static audit above).
             IK_STAGE_ACTIVE = true
             for (factory in exporters) {
                 val built = factory().build(ctx(0.5f))
@@ -1075,7 +1017,7 @@ class ActivationEquivalenceTest {
     @Test
     fun equivalenceRelationHasNoUnusedRelaxation() {
         // The relation must stay explicit: an adjudication entry that no corpus case needs would
-        // silently permit a future divergence. Empty is the WP-H outcome (see the KDoc above);
+        // silently permit a future divergence. Empty is the current outcome (see the KDoc above);
         // this test makes re-introducing a blanket relaxation a deliberate, reviewable act.
         assertTrue(
             "adjudications must name case + dimension + rule + invariant + justification, and must " +
@@ -1085,16 +1027,11 @@ class ActivationEquivalenceTest {
     }
 
     /**
-     * §12.8 disposition pin — the WP-H form of this test pinned the state-2-only probes as *still
-     * present and unconditional* (nothing deleted, `@Ignore`d, `assume`d or flag-conditionalized
-     * just to make the harness green) while WP-I still owned their retirement. WP-I has now retired
-     * them (same commit as the flip), so the pin asserts the DISPOSITION instead:
-     *  - the frozen plan keeps naming the retirement classification (§12.8) — it is not amended;
-     *  - the three state-2-only probes are GONE from `IkStageTest` (retired, not hidden: no
-     *    `@Ignore`, no `assume`, nothing left asserting that state 2 is the default);
-     *  - each retired probe's coverage has a replacement that describes state 3:
-     *    the byte-identity parity pair → the §12.9 cross-configuration corpus (this class),
-     *    `flagDefaultsFalse` → the §12.7 configuration-surface audit + the §12.10 activation gate.
+     * Disposition pin: the three state-2-only probes are GONE from `IkStageTest` — retired, not
+     * hidden (no `@Ignore`, no `assume`, nothing left asserting the legacy default) — and
+     * each one's coverage has a replacement describing the activated configuration:
+     *  - the byte-identity parity pair → the cross-configuration corpus (this class),
+     *  - `flagDefaultsFalse` → the configuration-surface audit + the activation gate.
      */
     @Test
     fun retiredAndStateTwoOnlyProbesAreExplicitlyClassified() {
@@ -1154,9 +1091,7 @@ class ActivationEquivalenceTest {
         }
     }
 
-    // =====================================================================================
-    // 7. §9 — the ConstraintSolver settlement boundary is not an R5 realization
-    // =====================================================================================
+    // The ConstraintSolver settlement boundary is not a limb-solver realization.
     @Test
     fun constraintSolverSettlementIsNotASecondLimbRealizationPath() {
         try {
@@ -1217,7 +1152,7 @@ class ActivationEquivalenceTest {
                 )
 
                 // Settled-contact invariant at the published boundary: the settled root is the
-                // published root (R2/R3 — the Solver is the last subsystem to move the root).
+                // published root (the Solver is the last subsystem to move the root).
                 val publishedPelvis = findPelvis(built)!!
                 assertEquals(
                     "settlement $stage: the settled root world transform must be the published root " +
@@ -1239,16 +1174,14 @@ class ActivationEquivalenceTest {
         }
     }
 
-    // =====================================================================================
-    // 8. §14 — validation re-certification probe matrix
-    // =====================================================================================
+    // Validation re-certification probe matrix.
 
     @Test
     fun validationProbesAreReCertifiedInBothOwnershipConfigurations() {
-        // The four validation instruments are the ONLY production authors of `straight = true`
-        // (plan §12.3 B-4) and therefore the only probes whose readings can differ by which
-        // implementation realized the limb. Each probe must EXECUTE, OBSERVE and PASS in BOTH
-        // configurations, and the probe reading must come from the ACTIVE implementation.
+        // The four validation instruments are the ONLY production authors of `straight = true`, so
+        // they are the only probes whose readings can differ by which implementation realized the
+        // limb. Each must EXECUTE, OBSERVE and PASS in BOTH configurations, with the reading coming
+        // from the ACTIVE implementation.
         data class Probe(val name: String, val factory: () -> PoseBuilder)
         val probes = listOf(
             Probe("MiddleSplit", { MiddleSplitPose() }),
@@ -1278,7 +1211,7 @@ class ActivationEquivalenceTest {
                 val on = observations.getValue(true)
                 // (a) the probe OBSERVES: both configurations carry the same published reading;
                 // (b) the probe is not a second solver: the activated build window is empty
-                //     (this is the §12.7a premise asserted in the corpus, restated here per probe);
+                //     (the corpus premise, restated per probe);
                 assertEquals(
                     "${probe.name}: the probe reading must be produced in both configurations",
                     off.sections.getValue("STAMPS"), on.sections.getValue("STAMPS")
@@ -1306,10 +1239,6 @@ class ActivationEquivalenceTest {
         )
         writeReport(report.toString(), suffix = "-probes")
     }
-
-    // =====================================================================================
-    // helpers
-    // =====================================================================================
 
     private fun reportPath(suffix: String = "") =
         File(System.getProperty("java.io.tmpdir"), "p12-wph-equivalence-report$suffix.txt").absolutePath

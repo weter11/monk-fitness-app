@@ -34,9 +34,9 @@ import java.lang.reflect.Modifier
 /**
  * The Program System's adaptive rows ⇄ the target adaptive vocabulary.
  *
- * The pins are the three links the schema deliberately keeps single: a scope that agrees with its target
- * id, an applied decision that really has its adjustment, and an adjustment whose before/after are both
- * stored — plus the shape of the family state, which must not acquire the Stage-1 pilot's counters.
+ * Pinned: the three links the schema keeps single — a scope that agrees with its target id, an applied
+ * decision that really has its adjustment, and an adjustment whose before/after are both stored — plus
+ * the family state's shape, which must not acquire the Stage-1 pilot's counters.
  */
 class AdaptiveMapperTest {
 

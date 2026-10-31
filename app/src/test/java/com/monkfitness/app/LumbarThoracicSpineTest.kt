@@ -8,14 +8,14 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Issue E — verifies the spine is modelled as two real segments (PELVIS -> LUMBAR -> CHEST)
- * with independent lower-spine (lumbar / pelvis-tilt) and thoracic DOF, and that the LUMBAR
- * defaults to a pass-through so existing single-bend poses are unchanged.
+ * The spine is modelled as two real segments (PELVIS -> LUMBAR -> CHEST) with independent
+ * lower-spine (lumbar / pelvis-tilt) and thoracic DOF, and the LUMBAR defaults to a pass-through so
+ * existing single-bend poses are unchanged.
  *
- * Assertions are position/geometry based: the finalizer's chest-frame reconstruction derives a
- * single chest orientation (Issue F territory) and is deliberately left unchanged here, so this
- * test proves Issue E via the world positions the two segments produce, which is what the
- * renderer and downstream chain consume.
+ * Assertions are position/geometry based: the finalizer's chest-frame reconstruction derives a single
+ * chest orientation and is deliberately left unchanged here, so this test proves the two-segment model
+ * via the world positions the segments produce — which is what the renderer and the downstream chain
+ * consume.
  */
 class LumbarThoracicSpineTest {
 

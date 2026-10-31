@@ -16,8 +16,8 @@ import java.time.DayOfWeek
  * exercises, and every value is chosen so a test can name it. What it does have is the shape the
  * planner reads — several focuses with more than one exercise each (so selection has a real choice),
  * families that differ from the exercise ids (so family diversity is observable), an exercise whose
- * equipment is not always available (so §9's hard constraint is testable), and a candidate in a
- * dimension §10 names without implementing (so the refusal path is testable).
+ * equipment is not always available (so the equipment constraint is testable), and a candidate in a
+ * dimension the architecture names without implementing (so the refusal path is testable).
  */
 internal enum class RigEquipment { NONE, DUMBBELLS, PULL_UP_BAR, BENCH, MAT }
 
@@ -51,7 +51,7 @@ internal object GeneratedPlannerRig {
         // One exercise that trains two focuses, so a slot's elements can be observed serving the
         // focuses the allocation assigned rather than the focuses a single exercise implies.
         candidate("push-plank", "push-horizontal", focuses = setOf(Focus.PUSH, Focus.CORE)),
-        // And one in a dimension §10 names without implementing: the refusal path, not a prescription.
+        // And one in a dimension the architecture names without implementing: the refusal path.
         candidate(
             "core-weighted-plank",
             "core-stability",

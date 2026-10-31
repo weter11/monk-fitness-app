@@ -21,44 +21,38 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Phase 4 (R5) configuration / ownership audit — P12 §12.7 RETARGETED FORM, WP-G-strengthened.
- * (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md §P4 enforcement, §12.0 state 3, §12.7, §12.8 item 4.)
- *
- * The P4 shape pinned "flag-ON is unreachable" (zero production writes + a stage-only counter).
- * P12 activates the stage, so the contract this audit enforces is the strengthened ownership
- * contract, in two halves:
+ * Configuration / ownership audit — the strengthened ownership contract, in two halves.
  *
  * **A. Static (source-structure) checks.**
  *  1. `IK_STAGE_ACTIVE` remains a CONFIGURATION SURFACE: its only production write is the
- *     declaration itself, whose default WP-I flipped once (state 3 — the deployed value is asserted
- *     statically here and at runtime by `ActivationGateTest.productionConfigurationIsStateThree`).
- *     Reads are confined to the
- *     realization-decision sites (the engine stage gate, the three registered bake gates, the
- *     pipeline's enforcement block).
+ *     declaration itself, whose default is the deployed state-3 value (asserted statically here
+ *     and at runtime by `ActivationGateTest.productionConfigurationIsStateThree`). Reads are
+ *     confined to the realization-decision sites (the engine stage gate, the three registered bake
+ *     gates, the pipeline's enforcement block).
  *  2. The realization evidence has exactly ONE registration path —
  *     `SkeletonPose.registerLimbRealization` — called at exactly the four registered realization
  *     points (member bake, package bake, validation bake, engine stage). No realization site
- *     writes the evidence fields directly any more.
- *  3. §12.7d: in every registered implementation the configuration gate precedes BOTH the
- *     registration and the solve, and the authored realization blocks are the only ones that
- *     write limb node locals (file-level confinement, with the two non-solver writers — the
- *     Phase-2 contact re-solve and the Finalizer's FK/derivation pass — classified explicitly).
- *  4. §12.7d: no `isArm`-style joint-name heuristic and no direct `solveIK` call outside the
- *     classified implementation files has appeared after WP-D.
+ *     writes the evidence fields directly.
+ *  3. In every registered implementation the configuration gate precedes BOTH the registration and
+ *     the solve, and the authored realization blocks are the only ones that write limb node locals
+ *     (file-level confinement, with the two non-solver writers — the Phase-2 contact re-solve and
+ *     the Finalizer's FK/derivation pass — classified explicitly).
+ *  4. No `isArm`-style joint-name heuristic and no direct `solveIK` call outside the classified
+ *     implementation files.
  *
  * **B. Execution-ownership checks (the invariant itself, not a flag or a symbol).** For every
- * registered realization path: the AUTHORING configuration (`IK_STAGE_ACTIVE=false`, R5's
+ * registered realization path: the AUTHORING configuration (`IK_STAGE_ACTIVE=false`, the
  * non-deployed rollout selection) executes exactly ONE authoring realization and zero engine-side
- * ones; the DEPLOYED activated configuration (`IK_STAGE_ACTIVE=true`, §12.0 state 3) executes
- * exactly ONE engine-side realization and zero authoring ones; and a counterfactual
- * two-realization cycle is rejected deterministically on the registered evidence.
+ * ones; the DEPLOYED activated configuration executes exactly ONE engine-side realization and zero
+ * authoring ones; and a counterfactual two-realization cycle is rejected deterministically on the
+ * registered evidence.
  *
- * LIMITS (stated so the checks are not over-read): these are source-structure and behaviour
- * checks over the current file set, not a proof of the whole codebase. The local-write
- * confinement pins WHICH files may write node locals and verifies the registered blocks are
- * gated; it does not prove that every write inside an allow-listed file is authored layout rather
- * than realization. The behavioural half is what closes that gap: a realization that happened
- * where it should not would register evidence and be rejected.
+ * LIMITS (stated so the checks are not over-read): these are source-structure and behaviour checks
+ * over the current file set, not a proof of the whole codebase. The local-write confinement pins
+ * WHICH files may write node locals and verifies the registered blocks are gated; it does not prove
+ * that every write inside an allow-listed file is authored layout rather than realization. The
+ * behavioural half closes that gap: a realization that happened where it should not would register
+ * evidence and be rejected.
  */
 class RuntimeSolverOwnershipAuditTest {
 
@@ -66,19 +60,15 @@ class RuntimeSolverOwnershipAuditTest {
     private val def = SkeletonDefinition.DEFAULT_ADULT
     private val originalFlag = IK_STAGE_ACTIVE
 
-    // P12 WP-I (§12.8 disposition): the former P4 premise ("the deployed configuration is flag-OFF")
-    // is retired together with the state-2 default it pinned. Every behavioural case in this audit
-    // sets the configuration it is about explicitly, and the deployed-state claim now lives in
-    // exactly two authoritative places: the configuration-surface test below (the DECLARATION's
-    // default, statically) and `ActivationGateTest.productionConfigurationIsStateThree` (the loaded
-    // runtime value).
+    // Every behavioural case sets the configuration it is about explicitly: the deployed-state claim
+    // lives in exactly two authoritative places — the configuration-surface test below (the
+    // DECLARATION's default, statically) and ActivationGateTest.productionConfigurationIsStateThree
+    // (the loaded runtime value).
 
     @After
     fun restoreFlag() {
         IK_STAGE_ACTIVE = originalFlag
     }
-
-    // ================================================================ A. static contract
 
     @Test
     fun ikStageFlagIsDeclarationOnlyAndReadOnlyAtRealizationDecisionSites() {
@@ -106,11 +96,9 @@ class RuntimeSolverOwnershipAuditTest {
             0, writes
         )
         assertEquals("the flag must be declared exactly once", 1, declarations)
-        // §12.8 disposition of the retired `IkStageTest.flagDefaultsFalse`: the configuration
-        // SURFACE owns the deployed default now (this static half) together with the runtime gate
-        // (`ActivationGateTest.productionConfigurationIsStateThree`). Asserting the declaration's
-        // default here is what makes the flip reviewable: a state-2 default cannot come back
-        // unnoticed, and it is the same single declaration the write/read audit above counts.
+        // Asserting the declaration's default here is what makes a default flip reviewable: a
+        // state-2 default cannot come back unnoticed, and it is the same single declaration the
+        // write/read audit above counts.
         val declarationLine = sources.entries.first { it.key.endsWith("/IkStage.kt") }.value
             .map { stripComment(it).trim() }
             .single { it.startsWith("var IK_STAGE_ACTIVE") }
@@ -120,7 +108,7 @@ class RuntimeSolverOwnershipAuditTest {
             "true", declarationLine.substringAfter("=").trim()
         )
         // Reads are legal only at the realization-decision sites: the stage gate, the three
-        // registered bake realization gates, and the pipeline's R5 window check.
+        // registered bake realization gates, and the pipeline's window check.
         assertEquals(
             "flag reads must stay at the realization gates + the R5 window check " +
                 "(IkStage, the bake paths, SkeletonPipeline)",
@@ -132,9 +120,9 @@ class RuntimeSolverOwnershipAuditTest {
 
     @Test
     fun realizationEvidenceIsRegisteredAtTheCanonicalSitesAndNowhereElse() {
-        // WP-G: the evidence registration is ONE function called at exactly the four registered
+        // The evidence registration is ONE function called at exactly the four registered
         // realization points. A fifth call site — or a realization branch that realizes without
-        // registering — re-opens the P4 blindness (that was the §12.7b vacuity this closes).
+        // registering — makes the instrument blind to it again.
         val callSites = mutableListOf<String>()
         val declarations = mutableListOf<String>()
         for ((path, lines) in sources) {
@@ -164,9 +152,9 @@ class RuntimeSolverOwnershipAuditTest {
         assertEquals("the validation bake registers once",
             1, callSites.count { it.startsWith("BaseValidationPose.kt") })
 
-        // The evidence FIELDS are now touched by the single registration helper (PoseDefinition),
+        // The evidence FIELDS are touched only by the single registration helper (PoseDefinition),
         // the stage's window instantiation, and the pipeline's check/reset — never by a bake site
-        // directly. This is the "one authoritative execution-evidence path" contract.
+        // directly: the "one authoritative execution-evidence path" contract.
         val evidenceFields = Regex(
             """\blimbSolverExecutions\b|\blimbSolverRealizationToken\b|\blimbRealizedLimbs\b|\blimbDuplicateRealizations\b"""
         )
@@ -186,8 +174,8 @@ class RuntimeSolverOwnershipAuditTest {
             setOf("PoseDefinition.kt", "IkStage.kt", "SkeletonPipeline.kt"),
             perFile.keys
         )
-        // The only remaining direct counter write is the stage's window instantiation (WP-G moved
-        // the two authoring sites behind the helper).
+        // The only remaining direct counter write is the stage's window instantiation; the
+        // authoring sites write through the helper.
         val windowIncrement = sources.values.sumOf { lines ->
             lines.count { stripComment(it).contains("limbSolverExecutions++") }
         }
@@ -213,14 +201,12 @@ class RuntimeSolverOwnershipAuditTest {
         }
     }
 
-    // -------------------------------------------------------------- §12.7d static audit
-
     @Test
     fun authoringBakesRealizeOnlyBelowTheirConfigurationGate() {
-        // §12.7d: "no authoring realization branch runs while activation is ON". Proven
-        // structurally per registered bake: inside the bake's own body, the configuration gate
-        // precedes BOTH the evidence registration and the realization (solve + limb writes). This
-        // is not a file-wide grep — every assertion is scoped to the function it audits.
+        // No authoring realization branch may run while activation is ON. Proven structurally per
+        // registered bake: inside the bake's own body the configuration gate precedes BOTH the
+        // evidence registration and the realization (solve + limb writes). Not a file-wide grep —
+        // every assertion is scoped to the function it audits.
         val sites = listOf(
             Triple("BasePose.kt", "protected fun bakeIkLimb(", "member bake"),
             Triple("BasePose.kt", "fun bakeIkLimb(", "package bake"),
@@ -260,8 +246,8 @@ class RuntimeSolverOwnershipAuditTest {
 
     @Test
     fun engineStageRealizesOnlyBelowItsConfigurationGate() {
-        // §12.7d: "no engine realization branch runs while activation is OFF". The stage's entry
-        // gate must precede its window instantiation, its per-target registration and its solve.
+        // No engine realization branch may run while activation is OFF: the stage's entry gate
+        // must precede its window instantiation, its per-target registration and its solve.
         val body = bodyOf("IkStage.kt") { it.contains("fun apply(pose: SkeletonPose") }
         val gate = body.indexOfFirst { stripComment(it).trim() == "if (!IK_STAGE_ACTIVE) return" }
         val window = body.indexOfFirst { stripComment(it).contains("limbSolverExecutions++") }
@@ -279,10 +265,9 @@ class RuntimeSolverOwnershipAuditTest {
 
     @Test
     fun limbRealizationWritesStayInsideTheRegisteredImplementations() {
-        // §12.7d: "no middleNode/endNode localPosition writes outside the two registered
-        // implementations." The realization write idiom is the solver's framed write into a limb
-        // node's local offset. Pinned per file, with the one classified non-solver writer —
-        // the Phase-2 Contact Re-Solve — anchored structurally rather than by name.
+        // No middleNode/endNode localPosition writes outside the registered implementations. The
+        // realization write idiom is the solver's framed write into a limb node's local offset.
+        // Pinned per file, with the classified non-solver writers anchored structurally, not by name.
         val idiom = Regex("""toLocalDirection\([^)]*\.localPosition\)""")
         val perFile = mutableMapOf<String, Int>()
         for ((path, lines) in sources) {
@@ -306,11 +291,11 @@ class RuntimeSolverOwnershipAuditTest {
             ),
             perFile
         )
-        // The classified writer, anchored: both ConstraintSolver limb writes are inside the
-        // contacts re-solve loop — the settlement pass that re-bakes ALREADY-realized contact
-        // limbs to honour their declared ContactSpecs (R3). It registers no limb realization
-        // because it is not an Active Limb Solver implementation: its inputs are the registered
-        // ContactSpecs, and it adds no limb the frame had not already declared.
+        // The classified writer, anchored: both ConstraintSolver limb writes sit inside the contacts
+        // re-solve loop — the settlement pass that re-bakes ALREADY-realized contact limbs to honour
+        // their declared ContactSpecs. It registers no limb realization because it is not an Active
+        // Limb Solver implementation: its inputs are the registered ContactSpecs, and it adds no
+        // limb the frame had not already declared.
         val solverLines = sources.entries.first { it.key.endsWith("/ConstraintSolver.kt") }.value
         val solveCall = Regex("""SkeletonMath\.solve(IK|StraightLimb)\(""")
         val reSolveRanges = solverLines.withIndex()
@@ -331,22 +316,21 @@ class RuntimeSolverOwnershipAuditTest {
             solverWrites.all { write -> reSolveRanges.any { write in it } }
         )
 
-        // The second classified writer, anchored. The bar-support family's flat-grip authoring writes the
-        // DISTAL hand chain (palm → knuckles → fingertips) of a MANUAL_OVERRIDE hand — never the middle/end
-        // node of an IK chain, and never a realization. Why a pose must author that geometry at all:
-        // `SkeletonPoseFinalizer` completes a hand's distal joints ONLY while the extremity is AUTOMATIC
-        // (`if (pose.isExtremityAutomatic(Extremity.HAND_A))` gates `adjustHandOrientation`), so a pose that
-        // declares `overrideExtremityOrientation` (W1 MANUAL_OVERRIDE) owns that geometry verbatim and the
-        // factory ships those nodes with zero offsets. Measured on the row's own published frames: with the
-        // authored offsets the chain is `22 u` long and lies `0.000 u` off the bar's top plane at all five
-        // sampled phases; with the authoring helper neutered it collapses to a zero-length chain at the
-        // wrist; and under the engine's AUTOMATIC derivation (override dropped, no authored grip) the same
-        // chain tilts out of that plane by up to `20.927 u` at the bottom of the rep.
+        // The second classified writer: the bar-support family's flat-grip authoring writes the
+        // DISTAL hand chain (palm → knuckles → fingertips) of a MANUAL_OVERRIDE hand — never the
+        // middle/end node of an IK chain, and never a realization. Why a pose must author it: the
+        // Finalizer completes a hand's distal joints ONLY while the extremity is AUTOMATIC, so a pose
+        // declaring `overrideExtremityOrientation` owns that geometry verbatim while the factory
+        // ships those nodes with zero offsets. Measured on the row's own published frames: with the
+        // authored offsets the chain is `22 u` long and lies `0.000 u` off the bar's top plane at all
+        // five sampled phases; with the helper neutered it collapses to zero length at the wrist; and
+        // under AUTOMATIC derivation it tilts out of that plane by up to `20.927 u` at the bottom of
+        // the rep.
         //
-        // NOTE (open, recorded not resolved): whether a pose should be able to state a
-        // `MANUAL_OVERRIDE` extremity through this offset idiom at all — versus the wrist-articulation
-        // channel `PikePushUpPose` uses — is an ownership question for the architecture owner; the corpus
-        // has no other pose-side writer of this idiom, and this guard is where it would be decided.
+        // NOTE (open, recorded not resolved): whether a pose should state a `MANUAL_OVERRIDE`
+        // extremity through this offset idiom at all — versus the wrist-articulation channel
+        // `PikePushUpPose` uses — is an ownership question for the architecture owner; the corpus has
+        // no other pose-side writer of this idiom, and this guard is where it would be decided.
         val barLines = sources.entries.first { it.key.endsWith("/BaseBarSupportPose.kt") }.value
         val barWrites = barLines.withIndex()
             .filter { idiom.containsMatchIn(stripComment(it.value)) }
@@ -388,7 +372,7 @@ class RuntimeSolverOwnershipAuditTest {
         // authoring/derivation surfaces: (a) authoring pose files declaring their own layout,
         // (b) the standard-skeleton authoring helpers in BasePose, (c) the validation family's
         // authoring helpers, (d) the Finalizer's head/neck FK derivation, (e) the legacy
-        // `fromJointPositions` reconstruction that has zero production consumers (WP-D).
+        // `fromJointPositions` reconstruction, which has zero production consumers.
         val pattern = Regex("""\blocalPosition\.set\(""")
         val writers = mutableMapOf<String, Int>()
         for ((path, lines) in sources) {
@@ -400,10 +384,9 @@ class RuntimeSolverOwnershipAuditTest {
                 }
             }
         }
-        // The classified direct-write surfaces: (b) the authoring layout helpers of the two
-        // registered authoring bases, (d) the Finalizer's FK derivation, (e) the legacy
-        // reconstruction. Everything else that writes node locals directly must be an authoring
-        // pose file declaring its own layout.
+        // The classified direct-write surfaces: the authoring layout helpers of the two registered
+        // authoring bases, the Finalizer's FK derivation, and the legacy reconstruction. Everything
+        // else that writes node locals directly must be an authoring pose file.
         val classified = mapOf(
             "BasePose.kt" to 5,
             "BaseValidationPose.kt" to 4,
@@ -467,9 +450,9 @@ class RuntimeSolverOwnershipAuditTest {
 
     @Test
     fun noJointNameHeuristicOrUnregisteredLimbSolvePathRemains() {
-        // §12.7d: (a) the `isArm` heuristic (B-3) must be absent; (b) no direct limb solve outside
-        // the classified implementation files may appear after WP-D — the permit-list is asserted
-        // WITH per-file counts, so a new direct solve inside an allow-listed file also surfaces.
+        // (a) the `isArm` heuristic must be absent; (b) no direct limb solve outside the classified
+        // implementation files — the permit-list is asserted WITH per-file counts, so a new direct
+        // solve inside an allow-listed file also surfaces.
         val isArm = sources.filterValues { lines ->
             lines.any { stripComment(it).contains(Regex("""\bisArm\b""")) }
         }.keys.map { it.substringAfterLast('/') }
@@ -486,11 +469,11 @@ class RuntimeSolverOwnershipAuditTest {
                 }
             }
         }
-        // Classified on the WP-D basis (LimbSolverOwnershipActivationContractTest sweeps pose files
-        // for the bypass family): the three registered implementations and the Phase-2 contact
-        // re-solve. Counts are pinned so a NEW direct solve inside an allow-listed file surfaces
-        // here instead of hiding behind the allow-list. BasePose's extra calls are the sanctioned
-        // §12.4b planning solve + the two bake sites (straight/bent branch each).
+        // Classified: the three registered implementations and the Phase-2 contact re-solve
+        // (LimbSolverOwnershipActivationContractTest sweeps pose files for the bypass family). Counts
+        // are pinned so a NEW direct solve inside an allow-listed file surfaces here instead of
+        // hiding behind the allow-list. BasePose's extra calls are the sanctioned planning solve plus
+        // the two bake sites (straight/bent branch each).
         assertEquals(
             "production limb-solve call sites must match the classified implementation set: $perFile",
             mapOf(
@@ -511,11 +494,11 @@ class RuntimeSolverOwnershipAuditTest {
     }
 
     /**
-     * WP-H §8 — the sanctioned §12.4b **planning solve** is composition intent, never realization:
-     * it writes no nodes, registers no evidence, produces no stamp readings and counts into no
-     * solver window, so it cannot become a second Active Limb Solver by accident. Verified
-     * structurally (both helper bodies) and behaviourally (the one admitted family), with the
-     * cross-configuration equivalence of those families owned by `ActivationEquivalenceTest`.
+     * The sanctioned **planning solve** is composition intent, never realization: it writes no
+     * nodes, registers no evidence, produces no stamp readings and counts into no solver window, so
+     * it cannot become a second Active Limb Solver by accident. Verified structurally (both helper
+     * bodies) and behaviourally (the one admitted family); cross-configuration equivalence of that
+     * family is owned by `ActivationEquivalenceTest`.
      */
     @Test
     fun planningSolveComposesIntentOnlyAndIsNeverRealizationEvidence() {
@@ -574,20 +557,18 @@ class RuntimeSolverOwnershipAuditTest {
         }
     }
 
-    // ------------------------------------------------- WP-H §15 audit extension
     @Test
     fun equivalenceHarnessIntroducesNoSolverPathNoEvidenceWriterAndNoLegacyReconstruction() {
-        // WP-H §15 — additive audit extension (the WP-G checks above are unchanged and unweakened).
-        // Four WP-H-specific structural claims:
-        //  (1) the §12.9 equivalence harness observes ONLY through the public pipeline boundary —
-        //      no direct solver call, no direct stage call, no evidence registration, and no
-        //      geometry reconstruction; the two allow-listed authoring-side fixtures are counted;
+        // Additive audit extension (the checks above are unchanged). Four structural claims:
+        //  (1) the equivalence harness observes ONLY through the public pipeline boundary — no direct
+        //      solver call, no direct stage call, no evidence registration, no geometry
+        //      reconstruction; the two allow-listed authoring-side fixtures are counted;
         //  (2) no `setJoint(solvedResult…) -> fromJointPositions` path has returned: the legacy
         //      reconstruction has zero production consumers outside its declaration file;
         //  (3) the ConstraintSolver settlement boundary is intact: the Phase-2 contact re-solve
-        //      neither registers R5 evidence nor reads the Limb Targets nor references the stage;
+        //      neither registers realization evidence nor reads the Limb Targets nor references the stage;
         //  (4) no additional evidence mutation path exists: the four evidence fields stay confined
-        //      to the files the WP-G audit pins, including in the new test sources.
+        //      to the pinned files, including in the new test sources.
         val harnessFile = "ActivationEquivalenceTest.kt"
         val harness = testSources().entries.firstOrNull { it.key.endsWith("/$harnessFile") }
             ?: error("the WP-H equivalence harness must exist in the arch test package")
@@ -614,16 +595,16 @@ class RuntimeSolverOwnershipAuditTest {
         //  - `bakeIkLimb(` ×2: the REGRESSION-A probe is an authoring fixture (it declares limbs
         //    through the registered member bake exactly like any pose; the flag gates realization),
         //    and no corpus case calls a solver directly;
-        //  - `ConstraintSolver.solve(` ×1: the §9 settlement-boundary adjudication invokes the
-        //    Phase-2 settlement pass to prove it is NOT an R5 realization path.
+        //  - `ConstraintSolver.solve(` ×1: the settlement-boundary adjudication invokes the
+        //    Phase-2 settlement pass to prove it is NOT a limb realization path.
         assertEquals("only the test-only authoring probe may call the registered bake", 2, bakeCalls)
         assertEquals("only the §9 boundary test may invoke the settlement pass", 1, settlementCalls)
 
-        // WP-I §14 addition — the §12.10 ACTIVATION GATE is audited by the same rules, with exactly
-        // ONE allow-listed intent mutation: the duplicated Limb Target it injects to prove that the
-        // PRODUCTION enforcement path rejects a real second realization of one limb (the injection
-        // must be registered intent, never a fabricated evidence value). Everything else stays
-        // forbidden, so the gate's failure proofs cannot come from a direct solver or stage call.
+        // The ACTIVATION GATE is audited by the same rules, with exactly ONE allow-listed intent
+        // mutation: the duplicated Limb Target it injects to prove the PRODUCTION enforcement path
+        // rejects a real second realization of one limb (the injection must be registered intent,
+        // never a fabricated evidence value). Everything else stays forbidden, so the gate's failure
+        // proofs cannot come from a direct solver or stage call.
         val gateFile = "ActivationGateTest.kt"
         val gate = testSources().entries.firstOrNull { it.key.endsWith("/$gateFile") }
             ?: error("the §12.10 activation gate must exist in the arch test package")
@@ -662,7 +643,7 @@ class RuntimeSolverOwnershipAuditTest {
                 .any { stripComment(it).contains("fun fromJointPositions(") }
         )
 
-        // (3) the ConstraintSolver settlement boundary (static half of the §9 adjudication).
+        // (3) the ConstraintSolver settlement boundary (static half of the settlement adjudication).
         val solver = sources.entries.first { it.key.endsWith("/ConstraintSolver.kt") }.value
             .map { stripComment(it) }
         assertTrue(
@@ -684,7 +665,7 @@ class RuntimeSolverOwnershipAuditTest {
             solver.any { it.contains("for (spec in contacts)") }
         )
 
-        // (4) the evidence fields stay confined to the WP-G-pinned files, test sources included.
+        // (4) the evidence fields stay confined to the pinned files, test sources included.
         val evidenceFields = Regex(
             """\blimbSolverExecutions\b|\blimbSolverRealizationToken\b|\blimbRealizedLimbs\b|\blimbDuplicateRealizations\b"""
         )
@@ -699,10 +680,9 @@ class RuntimeSolverOwnershipAuditTest {
                 "SingleActiveSolverEnforcementTest.kt", "DefaultPoleOwnershipTest.kt",
                 "StraightIntentFallbackTest.kt", "ValidationOwnershipReCertificationTest.kt",
                 "LimbSolverOwnershipActivationContractTest.kt",
-                // P12 §12.7 — the lifecycle suite reads the same execution evidence to state the
-                // "one realization per declared limb" invariant and the double-realization trap.
-                // It is a READER only: the write-count assertion below covers it like every other
-                // test source, so extending this set cannot legalise a fabricated evidence value.
+                // The lifecycle suite reads the same evidence to state the "one realization per
+                // declared limb" invariant and the double-realization trap. READER only: the
+                // write-count assertion below covers it like every other test source.
                 "SingleActiveSolverLifecycleTest.kt"),
             testWriters
         )
@@ -720,7 +700,6 @@ class RuntimeSolverOwnershipAuditTest {
         )
     }
 
-    // ====================================================== B. execution-ownership checks
     /** The four registered realization paths, built under the current configuration. */
     private fun registeredPathMatrix(): List<Pair<String, SkeletonPose>> {
         val ctx = PoseContext(0f, Side.LEFT, def)
@@ -765,7 +744,7 @@ class RuntimeSolverOwnershipAuditTest {
         for ((label, pose) in registeredPathMatrix()) {
             val declared = pose.limbTargets.map { it.joint }.toSet()
             assertTrue("$label: the fixture must declare limbs (anti-vacuity)", declared.isNotEmpty())
-            // Registration is configuration-neutral (§12.5) — only realization moved.
+            // Registration is configuration-neutral — only realization moved.
             assertEquals("$label: the gated bake realizes nothing", 0, pose.limbSolverExecutions)
             assertEquals("$label: no authoring realization event", 0, pose.limbDuplicateRealizations)
             assertEquals("$label: the bake must have written no limb geometry", emptySet<Joint>(), realizedJoints(pose))
@@ -783,13 +762,13 @@ class RuntimeSolverOwnershipAuditTest {
     @Test
     fun counterfactualDoubleExecutionIsRejectedDeterministically() {
         // Two realizations in one cycle must fail on the REGISTERED evidence, in both
-        // configurations, without any output difference being involved.
+        // configurations, with no output difference involved.
         IK_STAGE_ACTIVE = false
         val authoring = runCatching {
             val pipeline = SkeletonPipeline(def)
             val ctx = PoseContext(0f, Side.LEFT, def)
-            // Two build passes over ONE carrier without an intervening frame: each pass realizes
-            // its limbs, and the second pass re-realizes them — one cycle, two executions per limb.
+            // Two build passes over ONE carrier without an intervening frame: the second pass
+            // re-realizes the limbs — one cycle, two executions per limb.
             val pose = SquatPose().build(ctx)
             pose.registerLimbRealization(Joint.ANKLE_F, authoringWindow = true)
             pipeline.produceFrame(pose)
@@ -806,8 +785,8 @@ class RuntimeSolverOwnershipAuditTest {
             val pipeline = SkeletonPipeline(def)
             val ctx = PoseContext(0f, Side.LEFT, def)
             val pose = SquatPose().build(ctx)
-            // The stage realizes the declared limbs (pipeline window), and a leaked second
-            // realization of one of them is injected through the SAME registered evidence path.
+            // The stage realizes the declared limbs; a leaked second realization of one of them is
+            // injected through the SAME registered evidence path.
             IkStage.apply(pose, def)
             pose.registerLimbRealization(Joint.ANKLE_F, authoringWindow = false)
             pipeline.produceFrame(pose)
@@ -819,8 +798,6 @@ class RuntimeSolverOwnershipAuditTest {
             engine is IllegalStateException && engine.message.orEmpty().contains("R5 violation")
         )
     }
-
-    // ====================================================================== helpers
 
     /** Brace-matched body of the block starting at the first line matching [predicate]. */
     private fun bodyOf(file: String, predicate: (String) -> Boolean): List<String> {
@@ -867,9 +844,9 @@ class RuntimeSolverOwnershipAuditTest {
     private fun productionSources(): Map<String, List<String>> = sourcesUnder("src/main/java")
 
     /**
-     * WP-H §15 — the test sources, scanned by the same rules as the production sources so the
-     * equivalence harness itself is auditable (it must observe only through the pipeline boundary
-     * and must never write realization evidence).
+     * The test sources, scanned by the same rules as the production ones so the equivalence harness
+     * itself is auditable: it must observe only through the pipeline boundary and must never write
+     * realization evidence.
      */
     private fun testSources(): Map<String, List<String>> = sourcesUnder("src/test/java")
 

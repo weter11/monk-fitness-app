@@ -31,7 +31,6 @@ class DeclinePushUpPoseTest {
         )
         val validator = ExerciseValidator(config)
 
-        // Sample progress from 0 to 1 in 100 steps
         val frameCount = 100
         val dt = 0.0166f // ~16.6ms frame time at 60fps
         val poses = ArrayList<SkeletonPose>()
@@ -77,7 +76,6 @@ class DeclinePushUpPoseTest {
             previousPose = currentPose
         }
 
-        // Print summary of issues
         println("=== VALIDATION ISSUE SUMMARY ===")
         println("Total issues collected: ${collectedIssues.size}")
         val uniqueRuleIds = collectedIssues.map { it.ruleId }.distinct()
@@ -220,7 +218,7 @@ class DeclinePushUpPoseTest {
             val pose = pipeline.produceFrame(rawPose).pose
 
             // Get shoulder and target hand (during build loop we solve armA using shoulderAW and targetHandA)
-            // Let's re-calculate shoulderAW and targetHandA as they are computed in build
+            // Recompute shoulderAW and targetHandA as build does.
             val chestW = pose.getJoint(Joint.CHEST)
             val shoulderAW = Vector3(chestW.x, chestW.y, chestW.z - def.shoulderWidth)
             val legTargetLen = (def.shinLength + def.thighLength) * 0.99757f // post-fix d

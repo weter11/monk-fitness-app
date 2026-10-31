@@ -8,17 +8,16 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Localization for the Program UI, checked mechanically instead of by eye (§14).
+ * Localization for the Program UI, checked mechanically instead of by eye.
  *
- * Three rules, each of which an edit can break silently:
+ * Four rules, each of which an edit can break silently:
  *
  *  * **no hardcoded user-visible copy** — the feature's own Kotlin sources contain no string literal
- *    carrying letters. Every word the user reads comes from `R.string`. (Comments are stripped before the
- *    scan: a sentence about the code is not text the user reads, and this suite's own KDoc quotes the
- *    briefs it implements.)
- *  * **every referenced resource exists in every supported locale** — `values`, `values-ru` and
- *    `values-uk` are the three the app ships, and a key that exists only in English shows English to a
- *    Russian or a Ukrainian user.
+ *    carrying letters; every word the user reads comes from `R.string`. (Comments are stripped before
+ *    the scan: a sentence about the code is not text the user reads, and this suite's own KDoc quotes
+ *    the briefs it implements.)
+ *  * **every referenced resource exists in every supported locale** — a key that exists only in English
+ *    shows English to a Russian or a Ukrainian user.
  *  * **the translations are translations** — the Russian and Ukrainian values of this feature's own keys
  *    differ from the English ones, so a copied placeholder cannot pass as a translation.
  *  * **every declared key is shown somewhere** — a `programs_` string nothing references is a second
@@ -46,9 +45,9 @@ class ProgramsLocalizationTest {
         "ui/screens/ProgramDetailScreen.kt",
         "ui/screens/ProgramEditorScreen.kt",
         "ui/screens/ProgramImportScreen.kt",
-        // §30 step 15: Home and the workout session screen became part of the Program UI — Home starts a
-        // workout from the selected Program's next opportunity, and the session screen is the target
-        // runtime's only presentation. Their copy is this feature's copy, so its rules cover them.
+        // Home and the workout session screen became part of the Program UI — Home starts a workout
+        // from the selected Program's next opportunity, and the session screen is the target runtime's
+        // only presentation. Their copy is this feature's copy, so its rules cover them.
         "ui/screens/HomeScreen.kt",
         "ui/screens/ProgramSessionScreen.kt"
     ).map { path -> File(mainSourceRoot, path) }
@@ -63,7 +62,7 @@ class ProgramsLocalizationTest {
         featureSources + listOf(File(mainSourceRoot, "MainActivity.kt"), File(mainSourceRoot, "ui/screens/SettingsScreen.kt"))
 
     /**
-     * The app's locales, taken from the one policy that declares them (§9): the default table plus every
+     * The app's locales, taken from the one policy that declares them: the default table plus every
      * language the app ships. The stage that added the four new languages added them to that policy, so this
      * suite grew from three locales to seven without a second list being written here.
      */
@@ -100,8 +99,6 @@ class ProgramsLocalizationTest {
             .flatMap { file -> pattern.findAll(code(file.readText())).map { it.groupValues[1] }.toList() }
             .toSet()
     }
-
-    // ---- the feature's sources --------------------------------------------------------------------
 
     @Test
     fun theFeatureSourcesExist() {
@@ -189,7 +186,7 @@ class ProgramsLocalizationTest {
 
     @Test
     fun theAddedLanguagesTranslateTheFeaturesCopy() {
-        // §15: the four languages this stage added are held to the same rule the rest of the app's copy is —
+        // The four languages this stage added are held to the same rule the rest of the app's copy is —
         // not "every word must differ" (a program mode really is "Manual" in Portuguese, and "%1$d" is a
         // format), but "no copied block", which is what an untranslated feature looks like.
         val english = stringsByLocale.getValue("en")

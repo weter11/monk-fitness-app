@@ -44,59 +44,37 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 
 /**
- * The §30 step 12 suite's rig: a real migrated SQLite database, the production repositories on their
- * own DAOs, the production [SessionRuntime] and the production [ProgramAdaptiveIntegration] — the
- * whole flow from *"a Session was completed"* to *"the next opportunity presents something else"*,
- * with nothing simulated above the engine.
+ * The integration suite's rig: a real migrated SQLite database, the production repositories on their own
+ * DAOs, the production [SessionRuntime] and [ProgramAdaptiveIntegration] — the whole flow from *"a Session
+ * was completed"* to *"the next opportunity presents something else"*, with nothing simulated above the
+ * engine.
  *
- * ### The Program it builds
+ * The data-access fixture's graph is a `MANUAL` Program with a pinned element, refused adaptation
+ * entirely (its own test), so this rig **creates its own** Program through the production creation path:
+ * one `GENERATED` revision with one training day presenting three elements of one family (`pushup`,
+ * `pike_pushup`, `decline_pushup`, two sets of eight each, the first being the element the ladder
+ * resolves), and six opportunities on 09-16, 09-18, 09-19, 09-20, 09-22 and 09-23. Slot 5 (09-22) is the
+ * next *future* opportunity and therefore the adaptive target; slot 6 (09-23) must not be chosen instead,
+ * and the past-but-startable slots 3 (`MISSED`) and 4 must not be either.
  *
- * The data-access fixture's own graph is a `MANUAL` Program with a pinned element, which §19 refuses
- * to adapt at all — deliberately, and it has its own test. This rig therefore **creates its own**
- * Program, through the production creation path, shaped so that one ladder, one window and one
- * adjustment are all exactly measurable:
+ * The ladder is `push-family`: level 1 `pushup`, level 2 `pike_pushup`, level 3 `decline_pushup`, every
+ * level prescribing two sets of eight unless a test asks for the volume-adding variants, which is what
+ * makes the load guard refuse a change.
  *
- * ```text
- * revision-p12   GENERATED, one training day presenting three elements of ONE family:
- *                plan-ex-p12-1  pushup          2 sets of 8   (the element the ladder resolves)
- *                plan-ex-p12-2  pike_pushup     2 sets of 8
- *                plan-ex-p12-3  decline_pushup  2 sets of 8
+ * [seedHistoryAndTrigger] writes the history a positive progression window needs: one partial exposure on
+ * 09-18 (one set of the first element only), three full ones on 09-20, and three on the trigger of 09-21.
+ * Seven comparable exposures split 3/4 — the older half prescribed 6 sets and completed 5, the newer
+ * prescribed 8 and completed 8, a measured positive trend with no shortfall on the recent end. The plan
+ * prescribed 24 sets / 192 repetitions over the window's four opportunities against 13 sets / 104
+ * performed, so the recent context is not elevated, the context reads `FAVORABLE`, and attendance (2 of 4)
+ * is the medium bucket rather than the low one.
  *
- * slots          slot-p12-1  2026-09-16  a past opportunity nothing happened on
- *                slot-p12-2  2026-09-18  the opportunity the trigger Session takes
- *                slot-p12-3  2026-09-19  a past opportunity, `MISSED` and still startable
- *                slot-p12-4  2026-09-20  a past opportunity with history on it
- *                slot-p12-5  2026-09-22  the next *future* opportunity — the adaptive target
- *                slot-p12-6  2026-09-23  a later opportunity, which must not be chosen instead
- * ```
+ * [attempt] takes how many sets to confirm and on how many occurrences, so a test can add a later
+ * completion (a second full attempt, 19 sets performed) without pushing the window's work past what the
+ * plan asked for — which the recent-context rule would read as *"already carrying more than the plan
+ * prescribes"* and refuse the change for.
  *
- * The family's ladder is `push-family`: level 1 `pushup`, level 2 `pike_pushup`, level 3
- * `decline_pushup`, every level prescribing two sets of eight unless a test asks for the elevated
- * variants [VariantLevels.EXCESSIVE], which is what makes §18's guard refuse a change.
- *
- * ### The window it can produce
- *
- * [seedHistoryAndTrigger] writes the history a positive progression window needs, and the arithmetic is exact:
- *
- * ```text
- * 2026-09-18  slot 2  a cancelled attempt: ONE set on the first element      (1 exposure, partial)
- * 2026-09-20  slot 4  a cancelled attempt: both sets on all three elements   (3 exposures, full)
- * 2026-09-21  slot 2  the trigger: both sets on all three elements           (3 exposures, full)
- * ```
- *
- * Seven comparable exposures in the window, split 3/4: the older half prescribed 6 sets and completed
- * 5, the newer half prescribed 8 and completed 8 — a measured positive trend with no shortfall on the
- * recent end, which is §7's progression reading. The plan's own prescription over the window's four
- * opportunities (24 sets, 192 repetitions) is *above* what was performed (13 sets, 104 repetitions), so
- * the recent context is not elevated and §14's context is `FAVORABLE`; attendance is 2 of 4
- * opportunities, which is the medium bucket and not the low one.
- *
- * [attempt] takes how many sets to confirm and how many of the occurrences to confirm them on, so a
- * test can add a later completion (a second full attempt, 19 sets performed) without pushing the
- * window's work past what the plan asked for — which §18's recent-context rule would read as
- * *"already carrying more than the plan prescribes"* and refuse the change for.
- *
- * @param excessiveLevels ask the ladder for variants whose prescriptions *add* volume, so §18's guard
+ * @param excessiveLevels ask the ladder for variants whose prescriptions *add* volume, so the guard
  *   refuses the change and the decision is kept as `NOT_APPLIED`.
  */
 internal class ProgramAdaptiveIntegrationRig private constructor(
@@ -107,16 +85,16 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
 
     val database: SqliteTestDatabase get() = data.database
 
-    /** The clock every session operation and every pass reads — a value the test set (§26). */
+    /** The clock every session operation and every pass reads — a value the test sets. */
     val clock = MovableClock(COMPLETION_ATTEMPT)
 
     /** Deterministic identity, so a minted session, occurrence, set, decision and adjustment read. */
     val ids = SequentialIds("p12")
 
-    /** The fault points a test plants, so §27's unit is measured and not argued. */
+    /** The fault points a test plants, so the unit is measured and not argued. */
     val faults get() = data.faults
 
-    /** The two capability boundaries §30 step 12 wires: replaced per test where that is the subject. */
+    /** The two capability boundaries the integration wires: replaced per test where that is the subject. */
     var relations: ProgressionRelationProvider = ladder(excessiveLevels)
     var classification: ExerciseFamilyClassification = pushFamilies()
     val window: AdaptiveWindowRule = AdaptiveWindowRule.V1
@@ -172,10 +150,6 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
         inTransaction = data.transaction
     )
 
-    // ---------------------------------------------------------------------------------------------
-    // The graph
-    // ---------------------------------------------------------------------------------------------
-
     /** Persists the Program, its `GENERATED` revision and the five opportunities, atomically. */
     suspend fun createGraph() = data.programRepository.createProgram(program(), revision(1), slots())
 
@@ -194,9 +168,9 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
     )
 
     /**
-     * One `GENERATED` revision of the rig's Program: one training day presenting the family's three
-     * variants, and nothing else. `GENERATED` is what §19 makes adapt-able, and a `MANUAL` revision is
-     * refused by the integration entirely — its own test asserts that.
+     * One `GENERATED` revision: one training day presenting the family's three variants, and nothing
+     * else. `GENERATED` is what makes a revision adapt-able; a `MANUAL` one is refused entirely by the
+     * integration.
      */
     fun revision(number: Int): ProgramRevision = ProgramRevision(
         revisionId = RevisionId(revisionId(number)),
@@ -247,9 +221,8 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
     fun plannedForOf(position: Int): LocalDate = SLOT_DATES[position - 1]
 
     /**
-     * Saves a **second** revision of the same Program, with its own day, its own opportunities and its
-     * own (empty) adaptive state — what §6's Save produces and what "a new revision starts from its own
-     * baseline" is measured on.
+     * A **second** revision of the same Program, with its own day, its own opportunities and its own
+     * (empty) adaptive state — what "a new revision starts from its own baseline" is measured on.
      */
     suspend fun saveSecondRevision(): ProgramRevision {
         val revision = revision(2)
@@ -271,10 +244,6 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
 
     /** One opportunity of the second revision, by its 1-based position. */
     fun secondRevisionSlot(position: Int): SlotId = SlotId("$SECOND_REVISION_SLOT_PREFIX$position")
-
-    // ---------------------------------------------------------------------------------------------
-    // The sessions
-    // ---------------------------------------------------------------------------------------------
 
     /**
      * Starts an attempt at [slot], confirms [setsPerOccurrence] sets of every occurrence it runs, and
@@ -322,17 +291,10 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
     enum class SessionEnd { CANCELLED, COMPLETED, IN_PROGRESS }
 
     /**
-     * The history a positive progression window needs, and the trigger Session that follows it:
-     *
-     * ```text
-     * 09-18  slot-p12-1  cancelled, one of two sets on each of the three elements
-     * 09-19  slot-p12-2  cancelled, both sets on each of the three elements
-     * 09-21  slot-p12-1  the trigger: completed, both sets on each element — the completed Session
-     * ```
+     * The history a positive progression window needs, and the trigger Session that follows it.
      *
      * The trigger's own opportunity is the first slot, so the adaptive target has to be a *future* one
-     * (09-22), and the two past-but-startable opportunities (09-19 `MISSED`, 09-20) must never be
-     * chosen.
+     * (09-22), and the two past-but-startable opportunities (09-19 `MISSED`, 09-20) must never be chosen.
      */
     suspend fun seedHistoryAndTrigger(): WorkoutSession {
         attempt(slot = slot(2), at = HISTORY_ONE, setsPerOccurrence = 1, occurrences = 1)
@@ -349,10 +311,9 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
     }
 
     /**
-     * A second completion after [seedHistoryAndTrigger] has run: a full attempt at the opportunity the
-     * history is already on, so a test can produce a **second** decision about the same future
-     * opportunity — §16's supersession chain — without exceeding what the plan prescribed for the
-     * window.
+     * A full attempt at the opportunity the history is already on, so a test can produce a **second**
+     * decision about the same future opportunity — the supersession chain — without exceeding what the
+     * plan prescribed for the window.
      */
     suspend fun secondCompletion(): WorkoutSession = attempt(
         slot = slot(4),
@@ -361,7 +322,7 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
         end = SessionEnd.IN_PROGRESS
     ).also { clock.instant = COMPLETION_MOMENT }
 
-    /** The previous window's bookkeeping, as a prior pass would have written it (§11). */
+    /** The previous window's bookkeeping, as a prior pass would have written it. */
     suspend fun seedFamilyState(
         level: Int = 1,
         precedingProgressQualifyingWindows: Int = 1,
@@ -384,24 +345,16 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
         return state
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // The pass, and the completion that carries it
-    // ---------------------------------------------------------------------------------------------
-
-    /** The adaptive pass alone: what §30 step 12 prepares, before anything is written. */
+    /** The adaptive pass alone, before anything is written. */
     suspend fun adapt(sessionId: SessionId): AdaptiveIntegrationResult = integration().adaptAfter(sessionId)
 
-    /** The pass, then §27's completion transaction carrying its outcome. */
+    /** The pass, then the completion transaction carrying its outcome. */
     suspend fun completeWithAdaptive(sessionId: SessionId): Pair<AdaptiveIntegrationOutcome, SessionCompletion> {
         val outcome = outcomeOf(adapt(sessionId))
         clock.instant = COMPLETION_MOMENT
         val completion = value(runtime.finishSession(sessionId, outcome.completion))
         return outcome to completion
     }
-
-    // ---------------------------------------------------------------------------------------------
-    // What the tests read back
-    // ---------------------------------------------------------------------------------------------
 
     /** The outcome a result carries, failing the test with the reason when it carries none. */
     fun outcomeOf(result: AdaptiveIntegrationResult): AdaptiveIntegrationOutcome = when (result) {
@@ -510,8 +463,7 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
             "program_day",
             "program_exercise",
             "program",
-            // the retained global tables: §30 step 15 dropped the shipped program's tables this
-            // census used to include
+            // the retained global tables: the shipped program's tables are no longer in this census
             "posture_session_progress",
             "body_weight_log",
             "meal_cycles",
@@ -530,10 +482,10 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
         /**
          * The family's ladder: level 1 `pushup`, level 2 `pike_pushup`, level 3 `decline_pushup`.
          *
-         * Every level prescribes two sets of eight by default, so a level move changes *which variant
-         * the family is on* and adds no volume — which is what §18's guard tolerates (v1 allows no
-         * automatic volume increase). [excessive] asks for the other case: level 2 prescribes three
-         * sets, so the change adds one and the guard refuses it.
+         * Every level prescribes two sets of eight by default, so a level move changes *which variant the
+         * family is on* and adds no volume — which the guard tolerates, since v1 allows no automatic
+         * volume increase. [excessive] asks for the other case: level 2 prescribes three sets, so the
+         * change adds one and the guard refuses it.
          */
         fun ladder(excessive: Boolean = false): ProgressionRelationProvider {
             val levelTwo = if (excessive) listOf(8, 8, 8) else listOf(8, 8)
@@ -548,7 +500,7 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
             return ProgressionRelationProvider { familyId -> relation.takeIf { it.familyId == familyId } }
         }
 
-        /** A ladder whose second level adds volume, so §18 refuses the change. */
+        /** A ladder whose second level adds volume, so the guard refuses the change. */
         fun excessiveLadder(): ProgressionRelationProvider = ladder(excessive = true)
 
         /** A ladder source that declares nothing — the production boundary's own value. */

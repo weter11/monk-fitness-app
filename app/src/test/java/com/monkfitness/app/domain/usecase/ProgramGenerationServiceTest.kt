@@ -29,8 +29,7 @@ import org.junit.Test
 import kotlinx.coroutines.runBlocking
 
 /**
- * §30 step 24's production Generate flow, measured on the real catalogue and through the real
- * generated editor.
+ * The production Generate flow, measured on the real catalogue and through the real generated editor.
  *
  * The class under test is the one node that knows **in what order** the boundary, the planner and the
  * reconciler run, so its claims are about the *facts handed to each of them* — the configuration
@@ -47,10 +46,10 @@ class ProgramGenerationServiceTest {
     /**
      * The service as the composition root wires it, minus the id source's randomness.
      *
-     * The context is a stated value here rather than a read, because this suite's subject is the
-     * *orchestration*: which facts reach which component. P27's own claim — that the read produces
-     * those facts from stored history — is measured in `ProgramGenerationContextTest`, and wiring the
-     * production source over a real database is measured in `ProgramGenerationContextStorageTest`.
+     * The context is a stated value rather than a read, because the subject here is the
+     * *orchestration*: which facts reach which component. That the read produces those facts from
+     * stored history is measured in `ProgramGenerationContextTest`, and wiring the production source
+     * over a real database in `ProgramGenerationContextStorageTest`.
      */
     private fun serviceOver(
         exercises: List<Exercise>,
@@ -85,8 +84,6 @@ class ProgramGenerationServiceTest {
         requiredEquipment = equipment
     )
 
-    // ------------------------------------------------------------------ the real catalogue
-
     @Test
     fun theRealShippedCatalogueReachesThePlannerAsClassifiedCandidates() = runBlocking {
             val service = serviceOver(WorkoutGenerator().getExerciseLibrary())
@@ -119,10 +116,10 @@ class ProgramGenerationServiceTest {
 
     @Test
     fun theRealCatalogueWithNoEquipmentStillPlansFromTheExercisesThatNeedNone() = runBlocking {
-            // The P24 reading: an empty declared set means the user owns nothing, so bar and band work is
-            // reported unusable rather than offered. The plan must therefore be built from bodyweight
-            // exercises, and it must not be empty — which is also why PULL is servable here at all
-            // (lat_stretch needs nothing).
+            // An empty declared set means the user owns nothing, so bar and band work is reported
+            // unusable rather than offered. The plan must therefore be built from bodyweight exercises
+            // and must not be empty — which is also why PULL is servable here at all (lat_stretch
+            // needs nothing).
             val result = serviceOver(WorkoutGenerator().getExerciseLibrary())
                 .generate(draft(), emptySet())
 
@@ -136,8 +133,6 @@ class ProgramGenerationServiceTest {
                 requiredEquipment.all { it.requiredEquipment.isEmpty() }
             )
     }
-
-    // ------------------------------------------------------------------ the configuration is the draft's
 
     @Test
     fun theDraftsOwnFocusScheduleAndDurationReachTheRequestUnchanged() = runBlocking {
@@ -192,8 +187,6 @@ class ProgramGenerationServiceTest {
             )
     }
 
-    // ------------------------------------------------------------------ equipment is forwarded, never filtered
-
     @Test
     fun availableEquipmentReachesTheRequestUnchangedAndIsNeverNormalised() = runBlocking {
             val declared = setOf(Equipment.BAR)
@@ -218,8 +211,8 @@ class ProgramGenerationServiceTest {
     @Test
     fun theWholeCatalogueReachesThePlannerAndTheConstraintIsTheRequestsOwn() = runBlocking {
             // The catalogue is not filtered before the request is built: an exercise the user cannot
-            // perform is *reported* by the planner, not removed from the library view, so the fact that it
-            // was unavailable survives into the result (§9's hard constraints are never silently dropped).
+            // perform is *reported* by the planner, not removed from the library view, so the fact that
+            // it was unavailable survives into the result — hard constraints are never silently dropped.
             val classified = ProductionGenerationBoundary
                 .catalogueOfShippedExercises(ProductionFocusClassification)
             val request = ProductionGenerationBoundary.generationRequest(
@@ -243,19 +236,12 @@ class ProgramGenerationServiceTest {
             )
     }
 
-    // ------------------------------------------------------------------ preferences and policy
-
     @Test
     fun noAdaptiveSignalIsComputedAndTheNeutralRepresentationReachesTheRequest() = runBlocking {
-            // REVISED by P27, not relaxed. The claim used to be "no signal is computed at all", which
-            // was true while there was no production source for any of them. P27 added one — the
-            // Program's own performed exercises — and the claim is now the narrower and more useful
-            // one: the *default* is still the neutral representation, so a caller that supplies no
-            // context states no signal, and the boundary itself still derives nothing.
-            //
-            // What P27 replaced is the service's hard-wired neutrality, and that is measured where the
-            // read happens (`ProgramGenerationContextTest`) and where it is wired
-            // (`ProgramGenerationContextStorageTest`).
+            // The *default* is the neutral representation: a caller that supplies no context states no
+            // signal, and the boundary itself derives nothing. That the production read does produce
+            // signals is measured where the read happens (`ProgramGenerationContextTest`) and where it
+            // is wired (`ProgramGenerationContextStorageTest`).
             val classified = ProductionGenerationBoundary
                 .catalogueOfShippedExercises(ProductionFocusClassification)
             val request = ProductionGenerationBoundary.generationRequest(
@@ -278,8 +264,6 @@ class ProgramGenerationServiceTest {
                 request.policy
             )
     }
-
-    // ------------------------------------------------------------------ the pass reaches the reconciler
 
     @Test
     fun thePassReachesProgramGeneratedEditorAndPlanReconcilerSoPinnedContentSurvives() = runBlocking {
@@ -352,8 +336,6 @@ class ProgramGenerationServiceTest {
             )
     }
 
-    // ------------------------------------------------------------------ only the draft changes
-
     @Test
     fun thePassProducesTheNextImmutableDraftAndMutatesNothingItWasGiven() = runBlocking {
             val start = draft()
@@ -374,8 +356,8 @@ class ProgramGenerationServiceTest {
 
     @Test
     fun aCatalogueThatStatesNothingIsRefusedRatherThanGeneratedAround() = runBlocking {
-            // The Stage-1-shaped source: it states nothing, so the whole catalogue is unclassified. The
-            // pass must refuse, naming the gap, and must not widen a focus to make a plan appear.
+            // A source that states nothing, so the whole catalogue is unclassified. The pass must
+            // refuse, naming the gap, and must not widen a focus to make a plan appear.
             val result = serviceOver(
                 exercises = WorkoutGenerator().getExerciseLibrary(),
                 focusSource = { null }
@@ -446,8 +428,6 @@ class ProgramGenerationServiceTest {
                 (result as ProgramGenerationResult.Failed).cause.message!!.contains("planted")
             )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun draft(
         focus: FocusPlan = FocusPlan.Balanced,

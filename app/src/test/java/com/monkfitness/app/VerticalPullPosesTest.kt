@@ -129,11 +129,8 @@ class VerticalPullPosesTest {
                 previous = pose
             }
 
-            // Hands are on the bar.
             assertTrue("${c.name} hands drift off the bar (maxDev=$maxHandYDev)", maxHandYDev < 1.0f)
-            // No IK unreachable / clamp.
             assertTrue("${c.name} IK clampAmount $maxClamp (hands detached from bar)", maxClamp < 0.1f)
-            // Limb symmetry.
             assertTrue("${c.name} arm asymmetry $maxArmAsym", maxArmAsym < 15f)
             assertTrue("${c.name} leg asymmetry $maxLegAsym", maxLegAsym < 15f)
 

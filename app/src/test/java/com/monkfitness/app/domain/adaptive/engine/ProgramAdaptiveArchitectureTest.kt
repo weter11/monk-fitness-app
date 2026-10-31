@@ -18,12 +18,9 @@ import java.io.File
 import java.lang.reflect.Modifier
 
 /**
- * §30 step 11's boundaries, pinned mechanically instead of by convention — both the ones that keep the
- * engine pure and the ones that keep the two adaptive generations apart.
- *
- * The stage's brief is explicit that this PR must not collapse the two generations, and that the target
- * engine must be callable as a pure domain component. Both are rules about *reachability*, so both are
- * asserted against the sources and the compiled shape:
+ * The adaptive engine's boundaries, pinned mechanically instead of by convention — both the ones that
+ * keep the engine pure and the ones that keep the two adaptive generations apart. Both are rules about
+ * *reachability*, so both are asserted against the sources and the compiled shape:
  *
  *  * the engine's sources reach no DAO, no Room type, no Android type, no UI type, no ViewModel and no
  *    composition root;
@@ -35,7 +32,7 @@ import java.lang.reflect.Modifier
  *  * its values are pure and its operations stateless, so the same request always produces the same
  *    decision;
  *  * nothing is wired: the composition root, the session runtime and the UI never mention it, because
- *    §30 step 12 owns the integration and this stage deliberately has no consumer.
+ *    the integration is a later stage and this one deliberately has no consumer.
  */
 class ProgramAdaptiveArchitectureTest {
 
@@ -57,9 +54,9 @@ class ProgramAdaptiveArchitectureTest {
     /**
      * The Stage-1 adaptive implementation this stage must leave exactly where it is.
      *
-     * `AdaptiveSessionDecisionRecorder` is listed where it actually lives — `data/repository` — rather
-     * than where an earlier note put it: it is a shipped writer over the legacy decision table, and the
-     * point of the list is that every one of these files is still present and still untouched.
+     * `AdaptiveSessionDecisionRecorder` is listed where it actually lives — `data/repository` — since it
+     * is a shipped writer over the legacy decision table; the point of the list is that every one of
+     * these files is still present and still untouched.
      */
     private val legacySources = listOf(
         "domain/adaptive/AdaptivePolicy.kt",
@@ -79,8 +76,6 @@ class ProgramAdaptiveArchitectureTest {
         "domain/adaptive/AdaptiveSignalCalculatorTest.kt",
         "domain/adaptive/ProgressionResolverTest.kt"
     )
-
-    // ------------------------------------------------------------------ layering
 
     @Test
     fun theEngineReachesNoDaoNoRoomNoAndroidAndNoUi() {
@@ -123,8 +118,6 @@ class ProgramAdaptiveArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ determinism
-
     @Test
     fun nothingInTheEngineReadsAClockARandomSourceOrTheFilesystem() {
         val forbidden = listOf(
@@ -144,8 +137,6 @@ class ProgramAdaptiveArchitectureTest {
             offenders.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ no state, no invented arithmetic
 
     @Test
     fun noEngineSourceDeclaresMutableStateOrFloatingPoint() {
@@ -188,10 +179,6 @@ class ProgramAdaptiveArchitectureTest {
             )
         }
     }
-
-    // ------------------------------------------------------------------ the legacy boundary
-
-    // ------------------------------------------------------------------ the pure half
 
     @Test
     fun everyAdaptiveValueMentionsOnlyKotlinJavaAndTheDomain() {
@@ -272,8 +259,6 @@ class ProgramAdaptiveArchitectureTest {
             adaptivePurity.readText().contains("walkTopDown")
         )
     }
-
-    // ------------------------------------------------------------------ not wired
 
     @Test
     fun theStageIsNotWiredIntoAnythingBecauseNothingConsumesItYet() {
@@ -383,7 +368,7 @@ class ProgramAdaptiveArchitectureTest {
 
     @Test
     fun theEngineComposesTheFoundationsOwnPresentationAndTargetTypes() {
-        // §12 of the stage's brief: the effective presentation is the domain's, not a second one.
+        // The effective presentation is the domain's, not a second one.
         assertEquals(
             "an adaptive element presents the domain's own effective exercise",
             EffectiveExercise::class.java.name,
@@ -433,8 +418,6 @@ class ProgramAdaptiveArchitectureTest {
             )
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     /** The code lines of each source, with comments removed: the rules above are rules about code. */
     private fun codeLines(sources: List<String>): List<Pair<String, String>> = sources.flatMap { source ->

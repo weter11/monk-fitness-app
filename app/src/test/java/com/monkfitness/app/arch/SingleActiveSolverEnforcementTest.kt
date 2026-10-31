@@ -23,7 +23,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P12 WP-G (§12.7b/§12.7c) — **single-active-solver enforcement** for the R5 ownership invariant:
+ * **Single-active-solver enforcement** for the ownership invariant:
  *
  * > For one build cycle, exactly one Active Limb Solver may realize limb constraints for a given
  * > configuration. `IK_STAGE_ACTIVE=false` ⇒ the authoring bake is that solver and the engine
@@ -33,23 +33,12 @@ import org.junit.Test
  * The invariant is enforced on **execution evidence**, never on the produced pose: the realization
  * sites register each realized limb on the carrier (`SkeletonPose.registerLimbRealization`), and
  * `SkeletonPipeline.runStages` rejects a frame whose cycle recorded a limb twice or a second solver
- * window. The counterfactual below is therefore deliberately constructed so that BOTH realizations
- * produce a byte-identical frame — the failure comes from the two observed executions, not from any
- * difference in output:
+ * window. The counterfactual below is deliberately constructed so that BOTH realizations produce a
+ * byte-identical frame — the failure comes from the two observed executions, not from any
+ * difference in output (identical declared inputs ⇒ identical writes, so the second realization is
+ * a no-op on output and a genuine second execution).
  *
- * ```text
- *   build cycle N                       (getter: identical declared inputs every time)
- *     realization #1  bakeIkLimb(... ANKLE_F ...)  -> knee/ankle locals
- *     realization #2  bakeIkLimb(... ANKLE_F ...)  -> identical locals (no-op on output)
- *   final pose == the single-realization pose (all 33 joints raw-bit identical, stamps identical)
- *   execution evidence: 2 realization events for ONE limb -> R5 violation
- * ```
- *
- * RED evidence for this file (WP-G RED gate, branch tip `23ff2ae`, run 2026-09-10T21:39:48): with
- * the evidence at build-cycle granularity the two counterfactual cases reported the SAME evidence
- * as a single realization (`limbSolverExecutions=1`, no violation raised) and the tests failed at
- * the final assertion — see the WP-G report. Nothing in this file is a workaround for that gap:
- * the assertions read the registered evidence directly.
+ * The assertions read the registered evidence directly; nothing here works around that gap.
  */
 class SingleActiveSolverEnforcementTest {
 
@@ -61,8 +50,6 @@ class SingleActiveSolverEnforcementTest {
     fun restoreFlag() {
         IK_STAGE_ACTIVE = originalFlag
     }
-
-    // ------------------------------------------------------------------ fixture
 
     /**
      * Test-only authoring probe: builds the standard skeleton and realizes ONE limb
@@ -84,10 +71,9 @@ class SingleActiveSolverEnforcementTest {
             nodes.ankleF.localPosition.set(definition.shinLength, 0f, 0f)
             nodes.roots.forEach { it.updateWorldTransforms(Vector3(), JointRotation()) }
 
-            // REALIZATION LOOP — the registered realization entry point (BasePose.bakeIkLimb, the
-            // Active Limb Solver while the engine stage is off). Identical declared inputs on every
-            // iteration ⇒ identical writes ⇒ every realization after the first is a no-op on the
-            // OUTPUT and a genuine second EXECUTION of the solver.
+            // The registered realization entry point (BasePose.bakeIkLimb, the Active Limb Solver
+            // while the engine stage is off): identical declared inputs every iteration ⇒ identical
+            // writes, so each realization after the first is a genuine second EXECUTION.
             repeat(realizations) {
                 solverInvocations++
                 bakeIkLimb(
@@ -162,11 +148,9 @@ class SingleActiveSolverEnforcementTest {
         assertTrue("declared lengths present (not the shorthand surface)", !a.length1.isNaN() && !a.length2.isNaN())
     }
 
-    // ------------------------------------------------- 1. OFF: one authoring solver
-
     @Test
     fun inactiveConfigurationHasExactlyOneActiveSolver() {
-        IK_STAGE_ACTIVE = false // R5 authoring configuration (NOT the deployed one): the bake realizes
+        IK_STAGE_ACTIVE = false // authoring configuration (NOT the deployed one): the bake realizes
 
         val pose = LimbRealizationProbe(1).build(ctx)
 
@@ -190,8 +174,6 @@ class SingleActiveSolverEnforcementTest {
         SkeletonPipeline(def).produceFrame(LimbRealizationProbe(1).build(ctx))
     }
 
-    // ---------------------------------------------------- 2. ON: one engine solver
-
     @Test
     fun activeConfigurationHasExactlyOneActiveSolver() {
         IK_STAGE_ACTIVE = true // activated configuration: the engine stage realizes
@@ -214,8 +196,6 @@ class SingleActiveSolverEnforcementTest {
         // ... and the frame is accepted by the pipeline's enforcement.
         SkeletonPipeline(def).produceFrame(LimbRealizationProbe(1).build(ctx))
     }
-
-    // ------------------------------------------- 3. counterfactual: two executions
 
     @Test
     fun doubleRealizationFailsEvenWithIdenticalPose() {
@@ -278,8 +258,6 @@ class SingleActiveSolverEnforcementTest {
         assertR5Violation(stageViolation, "flag-ON: ANKLE_F realized twice inside one stage window")
     }
 
-    // ------------------------------------------------------ 4. per-build-cycle scope
-
     @Test
     fun executionEvidenceResetsPerBuildCycle() {
         IK_STAGE_ACTIVE = false
@@ -323,8 +301,6 @@ class SingleActiveSolverEnforcementTest {
         SkeletonPipeline(def).produceFrame(rebuiltInstrument) // accepted: fresh window, no duplicates
     }
 
-    // ------------------------------------- 5. the validation instrument is not a solver
-
     @Test
     fun validationFixtureDoesNotBecomeSecondRuntimeSolver() {
         // A validation instrument (BaseValidationPose family) authors Limb Targets and realizes
@@ -354,8 +330,6 @@ class SingleActiveSolverEnforcementTest {
         assertEquals(1, withContacts.limbSolverExecutions)
         SkeletonPipeline(def).produceFrame(withContacts)
     }
-
-    // ------------------------------------------------------------ premise & anchors
 
     @Test
     fun doubleRealizationIsObservationallyEquivalentToSingleRealization() {
@@ -411,10 +385,10 @@ class SingleActiveSolverEnforcementTest {
 
     @Test
     fun secondSolverWindowIsRejectedByTheSameEnforcement() {
-        // Anti-vacuity anchor: the enforcement is NOT dead code — the shape it was originally built
-        // for (two realizations in two DIFFERENT windows, here: an extra direct stage call plus the
-        // pipeline's own window) is still rejected. This isolates the WP-G gap to GRANULARITY
-        // (per-window vs per-execution), not to a missing check.
+        // Anti-vacuity anchor: the enforcement is NOT dead code — the shape it was built for (two
+        // realizations in two DIFFERENT windows: an extra direct stage call plus the pipeline's
+        // own window) is still rejected. The gap is GRANULARITY (per-window vs per-execution),
+        // not a missing check.
         IK_STAGE_ACTIVE = true
         val violation = runCatching {
             val carrier = LimbRealizationProbe(1).build(ctx)
@@ -432,8 +406,6 @@ class SingleActiveSolverEnforcementTest {
         assertTrue("the joint enumeration must fit one Long", Joint.entries.maxOf { it.index } < 64)
         assertFalse("no realized limb before any realization", LimbRealizationProbe(0).build(ctx).let { realizedJoints(it).isNotEmpty() })
     }
-
-    // ------------------------------------------------------------------ fixture constants
 
     private companion object {
         // Bent, reachable leg target (d ≈ 128 < 0.9·(L1+L2) ≈ 189 on DEFAULT_ADULT) so the solve

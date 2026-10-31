@@ -17,20 +17,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The Progress vocabulary as *values*: what each type refuses to be, and what each derives rather than
- * stores.
- *
- * §21 and its constraints are mostly prohibitions — a missed opportunity that is not a zero, a volume that
- * cannot be summed across contexts, an average of nothing that is not zero seconds, a deferred measure that
- * is not a `0` — and a prohibition is only real if the model makes the forbidden state unrepresentable.
- * These tests are that, one `assertThrows` per shape the rest of the layer would otherwise have to remember
- * not to build.
+ * The Progress vocabulary as *values*: what each type refuses to be, and what each derives rather
+ * than stores. The constraints are mostly prohibitions — a missed opportunity that is not a zero, a
+ * volume that cannot be summed across contexts, an average of nothing that is not zero seconds, a
+ * deferred measure that is not a `0` — and a prohibition is only real if the model makes the
+ * forbidden state unrepresentable. Hence one `assertThrows` per shape.
  */
 class ProgressFoundationTest {
 
     private val calculator = ProgressCalculator(ZoneId.of("UTC"))
-
-    // ------------------------------------------------------------------ scope
 
     @Test
     fun aScopeIsEitherOneProgramOrTheAggregateAndTheAggregateHasNothingToIdentify() {
@@ -83,8 +78,6 @@ class ProgressFoundationTest {
         assertTrue(ProgressFacts.empty(ProgressScope.AllPrograms).isEmpty)
     }
 
-    // ------------------------------------------------------------------ window
-
     @Test
     fun aWindowIsAnInclusiveRangeOfCalendarDates() {
         val window = ProgressWindow.ofLastDays(7, LocalDate.parse("2026-09-20"))
@@ -113,8 +106,6 @@ class ProgressFoundationTest {
             ProgressWindow.ofLastDays(0, LocalDate.parse("2026-09-20"))
         }
     }
-
-    // ------------------------------------------------------------------ duration
 
     @Test
     fun aDurationIsActualElapsedTimeAndARunningAttemptHasNone() {
@@ -167,8 +158,6 @@ class ProgressFoundationTest {
         assertThrows(IllegalArgumentException::class.java) { frequency.copy(completedSessions = -1) }
     }
 
-    // ------------------------------------------------------------------ calendar
-
     @Test
     fun theCalendarCountsItsOwnEntriesSoItCannotContradictTheHistoryItDescribes() {
         val progress = calculator.calendar(ProgressFixture.factsOf(ProgressFixture.PROGRAM_A))
@@ -190,8 +179,6 @@ class ProgressFoundationTest {
         }
     }
 
-    // ------------------------------------------------------------------ history
-
     @Test
     fun aHistoryEntryCannotClaimADurationItDoesNotHave() {
         val running = calculator.history(ProgressFixture.factsOf(ProgressFixture.PROGRAM_A)).last()
@@ -209,8 +196,6 @@ class ProgressFoundationTest {
         assertTrue(completed.isCompleted)
         assertTrue(!running.isCompleted)
     }
-
-    // ------------------------------------------------------------------ comparability
 
     @Test
     fun aComparableContextNamesAnExerciseAndAUnitAndNothingElse() {
@@ -295,8 +280,6 @@ class ProgressFoundationTest {
         assertThrows(IllegalArgumentException::class.java) { ContextVolume(seconds, 3, 44, null) }
     }
 
-    // ------------------------------------------------------------------ streak
-
     @Test
     fun aStreakCannotClaimARunLongerThanItsLongest() {
         val streak = ProgramStreak(ProgressFixture.PROGRAM_A, current = 2, longest = 3, takenOpportunities = 5, decidedOpportunities = 7)
@@ -306,8 +289,6 @@ class ProgressFoundationTest {
         assertThrows(IllegalArgumentException::class.java) { streak.copy(takenOpportunities = 8) }
         assertThrows(IllegalArgumentException::class.java) { streak.copy(longest = -1) }
     }
-
-    // ------------------------------------------------------------------ deferred
 
     @Test
     fun aDeferredMeasureSaysWhyItIsDeferredAndThereAreThreeOfThem() {
@@ -322,8 +303,6 @@ class ProgressFoundationTest {
         }
         assertTrue(ProgressCalculator.DEFERRED_MEASURES.all { it.reason.contains("§") })
     }
-
-    // ------------------------------------------------------------------ composed value
 
     @Test
     fun trainingProgressRefusesToContradictItsOwnParts() {
@@ -350,8 +329,6 @@ class ProgressFoundationTest {
             training.scope
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun observation(
         sessionId: String,

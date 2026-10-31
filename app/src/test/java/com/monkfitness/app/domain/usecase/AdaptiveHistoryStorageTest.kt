@@ -32,27 +32,25 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P29's historical focus **over real storage** — the two columns, on a real SQLite engine, through the
+ * Historical focus **over real storage** — the two columns, on a real SQLite engine, through the
  * composition root's own wiring.
  *
- * `AdaptiveHistoryContextTest` states what the context source decides from a stated history. This suite
- * states the three claims that only storage can decide, and each is a claim a fixture cannot make:
+ * `AdaptiveHistoryContextTest` states what the context source decides from a stated history; this suite
+ * states the three claims only storage can decide, each one a claim a fixture cannot make:
  *
- *  * **the focus survives the round trip, exactly.** §11's determinism rule says one representation per
- *    value: a `Focus` stored by name and read back must be the same enum value, not a lookalike, and not
- *    reordered or defaulted on the way back.
+ *  * **the focus survives the round trip exactly.** One representation per value: a `Focus` stored by
+ *    name and read back must be the same enum value, not a lookalike, and not reordered or defaulted.
  *  * **absence survives the round trip as absence.** A row written before the column existed — or a
  *    user-authored element — must read back as `null`, because that is the statement *"no focus was ever
- *    recorded"* and generation then reads it as absence rather than as a zero. This is the claim a
- *    `focus ?: Focus.PUSH` in a mapper would quietly destroy, and it cannot be observed anywhere except
- *    here.
- *  * **history survives a later revision.** A workout's stored focus is frozen; a *new* revision that
- *    presents the same exercise under a different focus must not re-label the old snapshot. This is the
- *    §19 invariant that the second column exists for, and it is only meaningful against real rows,
- *    because the whole failure mode is a stale value surviving in a table.
+ *    recorded"* and generation reads it as absence rather than as a zero. This is the claim a
+ *    `focus ?: Focus.PUSH` in a mapper would quietly destroy, and it cannot be observed anywhere else.
+ *  * **history survives a later revision.** A workout's stored focus is frozen; a *new* revision
+ *    presenting the same exercise under a different focus must not re-label the old snapshot. That
+ *    invariant is what the second column exists for, and it is only meaningful against real rows,
+ *    because the failure mode is a stale value surviving in a table.
  *
- * Two rigs share one database file, exactly as §30 step 14's own suites do: the second does not migrate,
- * so a value that comes back was stored rather than remembered.
+ * Two rigs share one database file: the second does not migrate, so a value that comes back was stored
+ * rather than remembered.
  */
 class AdaptiveHistoryStorageTest {
 
@@ -79,8 +77,6 @@ class AdaptiveHistoryStorageTest {
         name = "Existing",
         mode = ProgramMode.GENERATED
     )
-
-    // ------------------------------------------------------------------ the round trip
 
     @Test
     fun theRecordedFocusSurvivesTheRoundTripThroughStorage() = runBlocking {
@@ -122,9 +118,9 @@ class AdaptiveHistoryStorageTest {
 
     @Test
     fun everyFocusInTheVocabularySurvivesTheRoundTrip() = runBlocking {
-        // One session presenting the whole vocabulary, one element each. §8's seven values is a small
-        // enough set to state exhaustively, which matters here: a mapper that collapsed two values, or
-        // truncated one, would pass a single-focus fixture and fail this one.
+        // One session presenting the whole vocabulary, one element each: seven values is a small enough
+        // set to state exhaustively, and a mapper that collapsed two values or truncated one would pass
+        // a single-focus fixture and fail this one.
         val work = Focus.entries.map { focus -> reps("exercise-$focus", sets = 1, tag = focus.name) }
         rig.createGraph()
         rig.startSessionWithSets(sessionOf("all", rig.graph.slotFor(1), work, Focus.entries.toList()))
@@ -145,7 +141,7 @@ class AdaptiveHistoryStorageTest {
 
     @Test
     fun aGeneratedElementsFocusSurvivesTheSaveIntoThePlan() = runBlocking {
-        // The **plan** column, over real storage — the link P29's row 3 mutation removes.
+        // The **plan** column, over real storage — the link a snapshot-only suite would never read.
         //
         // Without this, dropping `focus` from `ProgramExercise.toEntity` is invisible: nothing downstream
         // of a *saved* revision re-reads that column, because the snapshot copy is taken from the session
@@ -227,8 +223,8 @@ class AdaptiveHistoryStorageTest {
 
     @Test
     fun aRowThatPredatesTheColumnReadsAsAbsenceRatherThanADefault() = runBlocking {
-        // The upgrade case, produced by writing rows the way a pre-P29 device would have: no `focus` in
-        // the INSERT at all. This is exactly what `MIGRATION_16_17` leaves behind for an existing row,
+        // The upgrade case, produced by writing rows the way a device from before the column existed
+        // would have: no `focus` in the INSERT at all. This is exactly what `MIGRATION_16_17` leaves behind for an existing row,
         // and the claim is that the column's own no-default means it stays absent — never that a
         // migration backfilled a training claim onto history nobody recorded.
         //
@@ -307,13 +303,11 @@ class AdaptiveHistoryStorageTest {
         )
     }
 
-    // ------------------------------------------------------------------ history is not relabelled
-
     @Test
     fun aNewerRevisionCannotRelabelAnOlderSession() = runBlocking {
-        // The §19 invariant, on real rows, which is the only place it can be falsified: an old session's
-        // stored focus stays whatever the snapshot froze, while a *new* session on the newer revision
-        // records its own. Both live in one file, so a join-to-current-revision implementation would
+        // The frozen-history invariant on real rows, which is the only place it can be falsified: an old
+        // session's stored focus stays whatever the snapshot froze, while a *new* session on the newer
+        // revision records its own. Both live in one file, so a join-to-current-revision implementation would
         // report the newer focus for both — and this test would fail with a real, plausible wrong map.
         // Two different start instants, because "the newer revision's session" is only meaningful if the
         // engine really does order them: two fixtures sharing one instant would make the ordering an
@@ -368,8 +362,6 @@ class AdaptiveHistoryStorageTest {
         )
     }
 
-    // ------------------------------------------------------------------ scope survives the database
-
     @Test
     fun twoProgramsInOneDatabaseNeverSeeEachOthersFocusHistory() = runBlocking {
         // Both Programs performed real work under different focuses, so a leak produces a plausible wrong
@@ -400,8 +392,6 @@ class AdaptiveHistoryStorageTest {
             rig.freshSessionRepository().sessionsOfProgram(alpha).size
         )
     }
-
-    // ------------------------------------------------------------------ the neutral answers, over storage
 
     @Test
     fun theUnfilledSignalsStayNeutralOverRealStorageToo() = runBlocking {
@@ -459,8 +449,6 @@ class AdaptiveHistoryStorageTest {
         )
     }
 
-    // ------------------------------------------------------------------ helpers
-
     /** The service as the composition root wires it, over the real repository read. */
     private fun serviceOver(repository: WorkoutSessionRepository) = ProgramGenerationService(
         catalogue = SHIPPED_EXERCISE_CATALOGUE,
@@ -484,8 +472,8 @@ class AdaptiveHistoryStorageTest {
         /**
          * One performed occurrence of [sets] sets, presented under [focus].
          *
-         * `tag` distinguishes two occurrences of the same exercise, because §9 allows the repetition and
-         * each occurrence is its own plan element with its own recorded focus.
+         * `tag` distinguishes two occurrences of the same exercise: the repetition is allowed and each
+         * occurrence is its own plan element with its own recorded focus.
          */
         fun reps(
             exerciseId: String,

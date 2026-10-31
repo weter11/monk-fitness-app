@@ -150,7 +150,6 @@ class SquatPosesTest {
             println("- Rule $rule: $count issues")
         }
 
-        // Print a clean table of bilateral knee/elbow symmetry to check alignment manually!
         println("\n=== SUMO SQUAT KNEE & ELBOW BILATERAL SYMMETRY ===")
         val progressValues = arrayOf(0.0f, 0.25f, 0.5f, 0.75f, 1.0f)
         for (progress in progressValues) {

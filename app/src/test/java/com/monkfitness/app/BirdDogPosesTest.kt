@@ -36,10 +36,10 @@ class BirdDogPosesTest {
         val pose = StaticBirdDogHoldPose()
         assertNotNull(pose.metadata)
 
-        // P12 WP-I: production limb realization runs in the engine-owned stage, so a choreography
-        // assertion observes the PUBLISHED frame of the production pipeline. `build()` alone
-        // registers the declared intent — it no longer realizes limbs (§12.7a), which is why these
-        // readings were taken from the pipeline entry point instead of the half-built carrier.
+        // Production limb realization runs in the engine-owned stage, so a choreography assertion
+        // observes the PUBLISHED frame of the production pipeline. `build()` alone registers the
+        // declared intent — it no longer realizes limbs, which is why these readings are taken from
+        // the pipeline entry point instead of the half-built carrier.
         val result0 = SkeletonPipeline(SkeletonDefinition.DEFAULT_ADULT).produceFrame(pose, context0).pose
         assertNotNull(result0)
         val pelvis0 = result0.getJoint(Joint.PELVIS)

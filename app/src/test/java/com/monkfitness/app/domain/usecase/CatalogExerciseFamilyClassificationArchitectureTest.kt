@@ -9,16 +9,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P30's architecture, pinned mechanically.
+ * The architecture of the catalogue family classification, pinned mechanically.
  *
- * P30's whole claim is that §9's family membership is **closed by a read of a fact the app already
- * states**, not by a new classification source. That claim is invisible to a behavioural test: a
- * classification that inferred families from `ExerciseCategory` answers the shipped catalogue correctly
- * for every entry, because the catalogue was *authored* with categories and families in agreement. Only a
- * source-level assertion can tell a stored fact from a rule that reproduces it, which is why every test
- * here reads source or compiled shape and none of them asserts an answer.
+ * The claim is that family membership is **closed by a read of a fact the app already states**, not by a
+ * new classification source — and that is invisible to a behavioural test: a classification inferring
+ * families from `ExerciseCategory` answers the shipped catalogue correctly for every entry, because the
+ * catalogue was *authored* with categories and families in agreement. Only a source-level assertion can
+ * tell a stored fact from a rule that reproduces it, so every test here reads source or compiled shape
+ * and none asserts an answer.
  *
- * The eight rules below are the ones a future edit could break while leaving every other suite green.
+ * These are the rules a future edit could break while leaving every other suite green.
  */
 class CatalogExerciseFamilyClassificationArchitectureTest {
 
@@ -49,15 +49,12 @@ class CatalogExerciseFamilyClassificationArchitectureTest {
         .filter { it.isFile && it.extension == "kt" }
         .toList()
 
-    // ------------------------------------------------------------------ 1. exactly one production source
-
     /**
      * **Exactly one** production implementation of the classification, and it is this file.
      *
-     * The failure this forbids is a second opinion: a second class implementing the port, or a second
-     * place that reads a catalogue's `familyId` on the adaptive path. Both would let the app disagree
-     * with itself about which family an exercise is in, and neither would fail a behavioural test while
-     * the two happened to agree.
+     * The failure this forbids is a second opinion — a second class implementing the port, or a second
+     * place reading a catalogue's `familyId` on the adaptive path. Both let the app disagree with itself
+     * about which family an exercise is in, and neither fails a behavioural test while the two agree.
      */
     @Test
     fun thereIsExactlyOneProductionFamilyClassificationSource() {
@@ -70,17 +67,16 @@ class CatalogExerciseFamilyClassificationArchitectureTest {
             ExerciseFamilyClassification::class.java.isAssignableFrom(type)
         )
 
-        // No other production class *implements* the port. Naming the port as a parameter type is not
-        // implementing it — `adaptiveTargetElementOf` and `ProgramAdaptiveIntegration` legitimately
-        // take one — so what is forbidden is a second *implementation*. `NoExerciseFamilyClassification`
-        // is the domain's own *absence* value, declared in the port's own file, and is excluded so that
-        // supplying a real classification does not read as deleting the honest empty case.
+        // Naming the port as a parameter type is not implementing it — `adaptiveTargetElementOf` and
+        // `ProgramAdaptiveIntegration` legitimately take one — so what is forbidden is a second
+        // *implementation*. `NoExerciseFamilyClassification` is the domain's own *absence* value in the
+        // port's file, excluded so supplying a real classification does not read as deleting the honest
+        // empty case.
         //
-        // The pattern is anchored on the declaration keyword because a supertype is introduced by a
-        // colon that follows the *type's own name* — `class Catalogue : ExerciseFamilyClassification`.
-        // A bare `\s*:` alternative is not enough: it also matches
-        // `classification: ExerciseFamilyClassification`, which is a **parameter** declaring what a
-        // consumer accepts, and would condemn the pure domain for taking the port it defines.
+        // The pattern is anchored on the declaration keyword: a supertype is introduced by a colon after
+        // the *type's own name*, while a bare `\s*:` also matches `classification:
+        // ExerciseFamilyClassification` — a **parameter** — and would condemn the pure domain for taking
+        // the port it defines.
         val implementsThePort = Regex(
             """^\s*(?:internal\s+|private\s+|public\s+|abstract\s+|open\s+|final\s+)*""" +
                 """(?:class|object|interface)\s+\w+[^:]*:\s*ExerciseFamilyClassification\b"""
@@ -101,15 +97,10 @@ class CatalogExerciseFamilyClassificationArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ 2. reads the catalogue fact only
-
     /**
-     * The source reads the **catalogue's own stored field** and nothing else about an exercise.
-     *
-     * The projection is asserted positively — `WorkoutGenerator().getExerciseLibrary()` and
-     * `id to familyId` — so the rule is not merely "some forbidden token is absent" but "the one
-     * intended read is present", which is what distinguishes a stored fact from an empty file that
-     * happens to avoid a forbidden import.
+     * The projection is asserted positively — the library accessor and `id to familyId` — so the rule is
+     * not merely "some forbidden token is absent" but "the one intended read is present", which
+     * distinguishes a stored fact from an empty file that happens to avoid a forbidden import.
      */
     @Test
     fun theSourceReadsTheCatalogueFactAndNothingElse() {
@@ -136,14 +127,11 @@ class CatalogExerciseFamilyClassificationArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ 3. no category / subcategory / training-style inference
-
     /**
-     * **No inference from any classification-shaped field.** This is the rule P23 refused for Focus and
-     * P30 refuses again for family: `ExerciseCategory`, `ExerciseSubCategory` and
-     * `exerciseToFamiliesMap` are three vocabularies that *look* like family membership and are not —
-     * the catalogue was authored with them broadly in agreement, so a source that inferred from them
-     * would pass every behavioural test in this repository and be wrong on the first exercise edited.
+     * **No inference from any classification-shaped field.** `ExerciseCategory`, `ExerciseSubCategory` and
+     * `exerciseToFamiliesMap` are vocabularies that *look* like family membership and are not: the
+     * catalogue was authored with them broadly in agreement, so a source inferring from them would pass
+     * every behavioural test here and be wrong on the first exercise edited.
      */
     @Test
     fun noFamilyIsInferredFromCategorySubcategoryOrTrainingStyle() {
@@ -171,13 +159,11 @@ class CatalogExerciseFamilyClassificationArchitectureTest {
         }
     }
 
-    // ------------------------------------------------------------------ 4. no persistence dependency
-
     /**
-     * **No persistence, no clock, no id source** — and the strongest form of the claim is the compiled
-     * one: the class declares **no constructor parameter at all** and holds no field but the projection.
-     * A source that took a repository could not satisfy that, so this does not enumerate the ways to
-     * persist; it removes the possibility.
+     * **No persistence, no clock, no id source** — stated in its strongest form, the compiled one: the
+     * class declares **no constructor parameter at all** and holds no field but the projection. A source
+     * taking a repository could not satisfy that, so this removes the possibility rather than enumerating
+     * the ways to persist.
      */
     @Test
     fun theSourceHasNoPersistenceAndNoCollaboratorOfAnyKind() {
@@ -226,11 +212,9 @@ class CatalogExerciseFamilyClassificationArchitectureTest {
         }
     }
 
-    // ------------------------------------------------------------------ 5. no generation-domain dependency
-
     /**
-     * **The dependency direction does not invert.** The app boundary implements the pure domain's port;
-     * the pure generated domain reaches neither the catalogue nor this source. Both directions are
+     * **The dependency direction does not invert.** The app boundary implements the pure domain's port,
+     * and the pure generated domain reaches neither the catalogue nor this source. Both directions are
      * asserted, because either alone is satisfiable by a file that imports the other way round.
      */
     @Test
@@ -260,14 +244,10 @@ class CatalogExerciseFamilyClassificationArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ 6. AppContainer is the only construction site
-
     /**
      * **The composition root is the only construction site**, and no ViewModel or UI source builds it.
-     *
-     * Counted over every production file, so a second `AppContainer` node — or a service building its
-     * own classification so a caller can pass a different one per call — fails here rather than in
-     * review.
+     * Counted over every production file, so a second node — or a service building its own classification
+     * so a caller can pass a different one per call — fails here rather than in review.
      */
     @Test
     fun appContainerIsTheOnlyConstructionSite() {
@@ -323,15 +303,13 @@ class CatalogExerciseFamilyClassificationArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ 7. no new family vocabulary
-
     /**
      * **No new family vocabulary is introduced.** The families the classification can answer are exactly
-     * the families the catalogue's own `families` list declares, and exactly the families its exercise
-     * entries state — measured against the production catalogue, not a hand-written list.
+     * those the catalogue declares and those its exercise entries state — measured against the production
+     * catalogue, not a hand-written list.
      *
-     * A source that answered `"pushups"` for an unknown id, or that carried its own family constants,
-     * would add a vocabulary the rest of the app does not have, and the two halves would drift.
+     * A source answering `"pushups"` for an unknown id, or carrying its own family constants, would add a
+     * vocabulary the rest of the app does not have, and the two halves would drift.
      */
     @Test
     fun noNewFamilyVocabularyIsIntroduced() {
@@ -371,29 +349,23 @@ class CatalogExerciseFamilyClassificationArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ 8. no legacy Stage-1 adaptive source
-
     /**
-     // **The Stage-1 adaptive source is not consulted** — neither the pilot's progression profiles nor
-          * any legacy adaptive repository or adapter. §30 step 11 forbids this generation reaching for them,
-          * and P30 adds a *new* consumer of the family concept, which is exactly where a "helpful" reuse
-          * would appear: the pilot already has a family vocabulary, and borrowing it would have been faster
-          * and wrong.
-          *
-          * The scan is restricted to **this stage's own sources** — the classification and the container
-          * wiring it is constructed in. A repo-wide sweep for `LoadProfile` is wrong rather than strict:
-          * `LoadProfile` is the *current* engine's own load value (§12), used by `ProgramAdaptiveEngine`
-          * itself, so banning it everywhere would condemn the target generation rather than the legacy one.
-          * What is forbidden is the **pilot's** vocabulary reaching the classification path.
+     * **The legacy adaptive source is not consulted** — neither the pilot's progression profiles nor any
+     * legacy adaptive repository or adapter. A *new* consumer of the family concept is exactly where a
+     * "helpful" reuse appears: the pilot already has a family vocabulary, and borrowing it would have been
+     * faster and wrong.
+     *
+     * Restricted to this stage's own sources. A repo-wide sweep for `LoadProfile` would be wrong rather
+     * than strict: that is the *current* engine's own load value, so banning it everywhere would condemn
+     * the target generation instead of the legacy one.
           */
          @Test
          fun noLegacyStageOneAdaptiveSourceIsConsulted() {
-             // Matched **case-insensitively on a prefix**, because the concrete spelling a later session
-             // would use is not knowable in advance: the deleted pilot file was `PilotProgressionProfiles.kt`,
-             // a reconstructed stand-in is as likely to be `PILOT_PROGRESSION_PROFILES` or `PilotProfile`, and a
-             // case-sensitive whole-token rule catches only the spelling its author happened to choose. The
-             // claim is about the *vocabulary*, so the pattern has to be about the vocabulary too — while
-             // still anchored on a word boundary so `pilot` does not fire on an unrelated substring.
+             // Matched **case-insensitively on a prefix**, because the spelling a later session would use
+             // is not knowable: a reconstructed stand-in is as likely to be `PILOT_PROGRESSION_PROFILES` or
+             // `PilotProfile`, and a case-sensitive whole-token rule catches only the spelling its author
+             // chose. The claim is about the *vocabulary*, so the pattern is too — still word-anchored so
+             // `pilot` does not fire on an unrelated substring.
              val pilotVocabulary = Regex(
                  """(?<![A-Za-z0-9_])(?:pilot\w*|\w*pilot\w*|legacyAdaptive|AdaptiveSessionDecisionRecorder)""",
                  RegexOption.IGNORE_CASE
@@ -410,20 +382,14 @@ class CatalogExerciseFamilyClassificationArchitectureTest {
              )
          }
 
-    // ------------------------------------------------------------------ the integration's own wiring
-
     /**
-     * The integration reaches classification **before** it can refuse for want of a relation, and it is
-     * still wired with a real classification. Asserted on the wiring, because the ordering itself lives
-     * in `adaptiveTargetElementOf` and this pins that the production wiring feeds it a classification.
+     * The integration reaches classification **before** it can refuse for want of a relation. Asserted on
+     * the wiring, because the ordering lives in `adaptiveTargetElementOf` and this pins that production
+     * feeds it a classification.
      *
-     * **The second half of this gate inverted in P32, and that is the whole point of it being here.**
-     * P30 asserted production wired the *empty* ladder source, because P30 authored no ladder. P32
-     * authors four and serves them from the persisted catalogue, so asserting `NoDeclaredProgression`
-     * here would now forbid the stage's central deliverable. It is therefore **replaced, not deleted**:
-     * the classification assertion is untouched, and the ladder assertion is inverted to require the
-     * stored provider and to forbid the empty one — a strictly stronger claim than P30's, because the
-     * empty source can no longer pass.
+     * The ladder half is **inverted, not deleted**: requiring `NoDeclaredProgression` would
+     * now forbid the authored ladders, so it is replaced by requiring the stored provider and forbidding
+     * the empty one — strictly stronger, because the empty source can no longer pass.
      */
     @Test
     fun theIntegrationIsWiredWithAClassificationAndWithTheStoredProgressionProvider() {
@@ -454,9 +420,8 @@ class CatalogExerciseFamilyClassificationArchitectureTest {
     }
 
     /**
-     * The integration's own source did not gain a family rule: it asks the port and it still has no
-     * ladder of its own. A classification is a *fact*, not a policy, so no branch that decides a
-     * family may appear in the use case.
+     * The integration gained no family rule: it asks the port. A classification is a *fact*, not a
+     * policy, so no branch that decides a family may appear in the use case.
      */
     @Test
     fun theIntegrationAsksThePortAndDecidesNoFamilyOfItsOwn() {

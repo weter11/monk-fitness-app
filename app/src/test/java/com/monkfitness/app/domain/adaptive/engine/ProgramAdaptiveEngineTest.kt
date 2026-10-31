@@ -31,19 +31,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §30 step 11: the Adaptive Engine end to end — one request in, one auditable decision out.
- *
- * The suite is the stage's own contract, so it states the things the architecture asks for by name:
- * the ceiling and the floor (§15), the user's own selection as the authority on what a step may be
- * (§9), §15's bounded variant change, §18's aggregate load guard refusing an automatic increase
- * without inventing a regression, the user's own content never being adapted at all, and §16's
- * adjustment — one occurrence, before and after, superseded by reference and never rewritten.
+ * The Adaptive Engine end to end — one request in, one auditable decision out: the ceiling and the
+ * floor, the user's own selection as the authority on what a step may be, the bounded variant change,
+ * the aggregate load guard refusing an automatic increase without inventing a regression, the user's
+ * own content never being adapted at all, and the adjustment — one occurrence, before and after,
+ * superseded by reference and never rewritten.
  */
 class ProgramAdaptiveEngineTest {
 
     private val engine = ProgramAdaptiveEngine
-
-    // ------------------------------------------------------------------ progression and regression
 
     @Test
     fun aConfirmedProgressionMovesTheElementToTheNextDeclaredVariant() {
@@ -178,8 +174,6 @@ class ProgramAdaptiveEngineTest {
         )
     }
 
-    // ------------------------------------------------------------------ the user's own content
-
     @Test
     fun anElementTheUserOwnsIsNeverAdaptedAtAll() {
         val pinned = engine.decide(
@@ -218,8 +212,6 @@ class ProgramAdaptiveEngineTest {
         assertEquals(ProgramAdaptiveReason.USER_AUTHORED_ELEMENT, authored.reason)
         assertNull(authored.adjustment)
     }
-
-    // ------------------------------------------------------------------ the aggregate load guard
 
     @Test
     fun anIncreasePastTheToleranceIsFilteredAndBecomesAHold() {
@@ -272,8 +264,6 @@ class ProgramAdaptiveEngineTest {
         assertEquals(ProgramGuardReason.RECENT_LOAD_UNMET_OPPORTUNITY, verdict.reason)
     }
 
-    // ------------------------------------------------------------------ HOLD and the vocabulary
-
     @Test
     fun aStableWindowHoldsAndProducesNoAdjustment() {
         val result = engine.decide(request(snapshot = snapshot(exposures = plateau())))
@@ -303,8 +293,6 @@ class ProgramAdaptiveEngineTest {
         assertEquals(ProgramAdaptiveReason.REST_CHANGE_UNSUPPORTED, result.reason)
         assertNull(result.adjustment)
     }
-
-    // ------------------------------------------------------------------ §16, the adjustment
 
     @Test
     fun anAdjustmentSupersedesByReferenceAndTheEarlierOneIsNeverRewritten() {

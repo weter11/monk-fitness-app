@@ -18,14 +18,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Phase 10 (R13) — Spine Intent default-axis ownership.
+ * Spine Intent default-axis ownership: the default axis is defined by the Skeleton
+ * Definition's anatomical axes, not by call-site defaults; an explicit `axis` argument
+ * remains an override.
  *
- * RFC §5 R13: "The default axis of Spine Intent is defined by the Skeleton Definition's
- * anatomical axes, not by call-site defaults; call-site defaults derive from the definition."
- * Plan §Phase 10: the axis-less `buildSpineCurve` default must resolve through the authoring
- * `PoseContext.definition`; an explicit `axis` argument remains an override.
- *
- * Scenarios:
  *  A. Custom definition with `anatomicalForward` = unit +X (raw-bit distinct from +Z): an
  *     axis-less build through the real authoring path must record `spineIntent.axis` exactly
  *     equal to the definition's forward — by raw bits, because an ownership test that admits
@@ -39,11 +35,9 @@ import org.junit.Test
  */
 class SpineDefaultAxisTest {
 
-    // --- Fixture definitions ------------------------------------------------------
-
     /**
-     * Minimal custom definition: everything except the R13-owned anatomical forward mirrors
-     * the human baseline (this phase adds exactly one definition-level property).
+     * Everything except the anatomical forward mirrors the human baseline, isolating the one
+     * definition-level property under audit.
      */
     private class ForwardXDefinition : SkeletonDefinition {
         private val human = HumanSkeletonDefinition()
@@ -63,8 +57,6 @@ class SpineDefaultAxisTest {
         override val legIKConstraint: IKConstraint = human.legIKConstraint
         override val anatomicalForward: Vector3 = Vector3(1f, 0f, 0f)
     }
-
-    // --- Fixture probes over the real authoring paths ------------------------------
 
     /** Exercise family: axis-less `buildSpineCurve` inside the final `build` template. */
     private class AxislessSpineProbe : BasePose() {
@@ -108,8 +100,6 @@ class SpineDefaultAxisTest {
         assertExactAxis(expected, intent!!.rotation.axis, "$context ($joint jointIntent axis)")
     }
 
-    // --- A. Definition-owned spine default ----------------------------------------
-
     @Test
     fun exerciseAxislessSpineCurveDefaultsToDefinitionAnatomicalForward() {
         val pose = AxislessSpineProbe().build(PoseContext(0f, Side.LEFT, forwardX))
@@ -142,8 +132,6 @@ class SpineDefaultAxisTest {
         )
     }
 
-    // --- B. Explicit axis remains an override --------------------------------------
-
     @Test
     fun explicitAxisArgumentOverridesDefinitionDefault() {
         val pose = ExplicitAxisProbe().build(PoseContext(0f, Side.LEFT, forwardX))
@@ -157,12 +145,10 @@ class SpineDefaultAxisTest {
         assertNotEquals("explicit must not equal the old +Z hardcoded default", 1f.toRawBits(), pose.spineIntent.axis.z.toRawBits())
     }
 
-    // --- C. Standard-definition compatibility ---------------------------------------
-
     @Test
     fun humanDefinitionAnatomicalForwardEqualsHistoricalAxisZ() {
-        // Plan §Phase 10 no-drift gate: verify forward equals the current hardcoded axisZ,
-        // bit-exact, so standard definitions keep byte-identical axis-less authoring.
+        // No-drift gate: forward must equal the current hardcoded axisZ, bit-exact, so
+        // standard definitions keep byte-identical axis-less authoring.
         assertExactAxis(Vector3(0f, 0f, 1f), human.anatomicalForward, "HumanSkeletonDefinition.anatomicalForward")
     }
 
@@ -173,8 +159,6 @@ class SpineDefaultAxisTest {
         val vpose = AxislessValidationSpineProbe().build(PoseContext(0f, Side.LEFT, human))
         assertExactAxis(Vector3(0f, 0f, 1f), vpose.spineIntent.axis, "standard-definition validation axis-less default")
     }
-
-    // --- D. No stale-definition leak across rebuilds --------------------------------
 
     @Test
     fun definitionDefaultRebindsAcrossRebuilds() {

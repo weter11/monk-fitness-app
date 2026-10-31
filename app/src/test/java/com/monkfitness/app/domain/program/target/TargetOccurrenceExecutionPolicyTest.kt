@@ -26,31 +26,17 @@ import java.time.Instant
 import java.time.LocalDate
 
 /**
- * §30 step 16's precedence, exercised on real [TargetOccurrenceExecutionRecord]s.
+ * The execution precedence, exercised on real [TargetOccurrenceExecutionRecord]s.
  *
- * The records are built in memory rather than read back through the Phase 15 reader, and that is
- * deliberate: this phase's entire input is the record, so a suite that reached for a database would
- * be testing the *reader* again — and the cases this phase must judge are ones a storage contract
- * forbids anyway. A `COMPLETED` slot with a later cancelled attempt, or a `MISSED` slot holding a
- * completed attempt, are exactly the states the real write paths keep apart, and the policy has to
- * answer for every combination of them whether or not the current writer can produce it. The
- * reader's own end-to-end coverage is Phase 15's suite; what is proven here is that the decision
- * depends on nothing but the record.
- *
- * The claims under test, in the order the phase states them:
- *
- * ```text
- *  1. the full precedence table, one case per row
- *  2. the whole matrix of mixed attempt histories
- *  3. the verdict does not depend on attempt order
- *  4. slot status is an opportunity fact and never an execution state
- *  5. the policy neither repairs nor reorders the record it is given
- *  6. equal records give equal decisions, and nothing ambient leaks in
- * ```
+ * The records are built in memory rather than read back through the reader, and that is deliberate:
+ * the policy's entire input is the record, so a suite that reached for a database would be testing the
+ * *reader* again — and the cases it must judge are ones a storage contract forbids anyway. A
+ * `COMPLETED` slot with a later cancelled attempt, or a `MISSED` slot holding a completed attempt, are
+ * exactly the states the real write paths keep apart, and the policy has to answer for every
+ * combination of them whether or not the current writer can produce it. What is proven here is that the
+ * decision depends on nothing but the record.
  */
 class TargetOccurrenceExecutionPolicyTest {
-
-    // ---- 1. the precedence table -------------------------------------------------------------------
 
     @Test
     fun anOccurrenceWithNoAttemptIsPlanned() {
@@ -136,8 +122,6 @@ class TargetOccurrenceExecutionPolicyTest {
         assertEquals(OccurrenceExecution.COMPLETED, decide(record).execution)
     }
 
-    // ---- 2. the mixed matrix -----------------------------------------------------------------------
-
     @Test
     fun aCancelledAndAStartedAttemptReadAsStarted() {
         val record = record(
@@ -191,8 +175,6 @@ class TargetOccurrenceExecutionPolicyTest {
         assertEquals(OccurrenceExecution.COMPLETED, decide(record).execution)
     }
 
-    // ---- 3. the verdict is order-independent --------------------------------------------------------
-
     @Test
     fun arbitraryAttemptOrderDoesNotChangeTheVerdict() {
         val attempts = listOf(
@@ -229,8 +211,6 @@ class TargetOccurrenceExecutionPolicyTest {
             verdicts
         )
     }
-
-    // ---- 4. slot status is an opportunity fact ------------------------------------------------------
 
     @Test
     fun aMissedSlotWithACancelledAttemptStillReadsAsCancelled() {
@@ -342,8 +322,6 @@ class TargetOccurrenceExecutionPolicyTest {
         )
     }
 
-    // ---- 5. the policy neither repairs nor reorders ------------------------------------------------
-
     @Test
     fun thePolicyChoosesNoRepresentativeAttempt() {
         val record = record(
@@ -418,8 +396,6 @@ class TargetOccurrenceExecutionPolicyTest {
         assertEquals(2, record.attempts.size)
     }
 
-    // ---- 6. determinism ----------------------------------------------------------------------------
-
     @Test
     fun equalRecordsProduceEqualityIdenticalDecisions() {
         val first = decide(
@@ -473,8 +449,6 @@ class TargetOccurrenceExecutionPolicyTest {
         assertEquals(OccurrenceExecution.COMPLETED, completed.execution)
         assertEquals("a prior call leaves nothing behind", planned, plannedAgain)
     }
-
-    // ---- fixtures ----------------------------------------------------------------------------------
 
     /** The verdict for [record], the way a caller reads it. */
     private fun decide(record: TargetOccurrenceExecutionRecord) =

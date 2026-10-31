@@ -24,12 +24,10 @@ import org.junit.Test
 import java.time.LocalDate
 
 /**
- * §30 step 14's two claims about the **boundary**, measured on a real SQLite engine:
+ * Two claims about the **boundary**, measured on a real SQLite engine:
  *
- * ```text
  * 1. the target slot and the target occurrence it presents are one atomic operation, and
  * 2. the occurrence's semantic payload is stored, not reconstructed.
- * ```
  *
  * Claim 1 is measured by planting a failure on the **second** leg of the unit — the component insert,
  * which runs after the slot row and the occurrence's own parent row have both been written. A fault
@@ -39,8 +37,7 @@ import java.time.LocalDate
  *
  * Claim 2 is measured by reading the semantic record back through
  * [com.monkfitness.app.data.repository.TargetScheduleOccurrenceRepository] after a pass, and by the
- * last test here, which is the one a later revision path depends on: a slot's existence is not
- * evidence that the occurrence's payload is unchanged.
+ * last test here: a slot's existence is not evidence that the occurrence's payload is unchanged.
  */
 class TargetScheduleOccurrenceAtomicityTest {
 
@@ -422,9 +419,9 @@ class TargetScheduleOccurrenceAtomicityTest {
     /**
      * One occurrence carrying real components.
      *
-     * `PlannedOccurrence` requires a non-empty component list (§9: an occurrence with no work is not
-     * an occurrence), and this phase does not weaken that to make a fixture convenient. The default is
-     * therefore a *real* component, not an empty one.
+     * `PlannedOccurrence` requires a non-empty component list — an occurrence with no work is not an
+     * occurrence — and that is not weakened to make a fixture convenient, so the default is a *real*
+     * component, not an empty one.
      */
     private fun occurrence(
         key: String,

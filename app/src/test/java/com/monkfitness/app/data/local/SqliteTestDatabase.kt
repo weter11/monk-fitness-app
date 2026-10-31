@@ -11,30 +11,27 @@ import java.lang.reflect.Proxy
 /**
  * A **real** SQLite database the unit tests can drive.
  *
- * The migration and ownership claims of the Program System schema are statements about SQLite
- * itself — which tables exist, which foreign keys the engine records, what a `DELETE` actually
- * removes, what a `SET NULL` actually nulls. A string comparison over the DDL the migration carries
- * cannot decide any of them: it only restates the input. This class therefore runs the statements
- * and the queries on a genuine SQLite engine (`org.xerial:sqlite-jdbc`, test-scope only — the app
- * itself never loads it), which is the same engine Room's own `RoomOpenHelper` opens on a device.
+ * The schema claims are statements about SQLite itself — which tables exist, which foreign keys the
+ * engine records, what a `DELETE` removes, what a `SET NULL` nulls. A string comparison over the DDL
+ * cannot decide any of them: it only restates the input. So the statements run on a genuine SQLite
+ * engine (`org.xerial:sqlite-jdbc`, test-scope only — the app never loads it), the same engine Room's
+ * `RoomOpenHelper` opens on a device.
  *
- * `androidx.room.migration.Migration.migrate` takes an **interface** (`SupportSQLiteDatabase`), so
- * the production migration object is executed unchanged, through a proxy that forwards `execSQL` to
- * this connection. Nothing about the migration is re-implemented or simulated here: the bytes the
- * device would execute are the bytes that run.
+ * `Migration.migrate` takes an **interface** (`SupportSQLiteDatabase`), so the production migration
+ * object runs unchanged through a proxy that forwards `execSQL` here: the bytes the device would
+ * execute are the bytes that run.
  *
- * Foreign keys are enforced (`PRAGMA foreign_keys = ON`) because that is what Room opens a database
- * with on Android, and the cascade/`SET NULL` behaviour under test only exists when the pragma is on.
+ * Foreign keys are enforced (`PRAGMA foreign_keys = ON`) because that is how Room opens a database on
+ * Android, and the cascade/`SET NULL` behaviour under test only exists when the pragma is on.
  */
 internal class SqliteTestDatabase private constructor(private val connection: Connection) {
 
-    /** Executes one statement, failing the test if SQLite rejects it. */
     fun exec(sql: String) {
         connection.createStatement().use { statement -> statement.execute(sql) }
     }
 
     /**
-     * Executes one statement with bound arguments, failing the test if SQLite rejects it.
+     * Executes one statement with bound arguments.
      *
      * The parameterized form exists for the repository suites, which drive the production DAO SQL —
      * queries with named parameters — on this engine. Binding rather than interpolating keeps the
@@ -49,20 +46,16 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
 
     /**
      * Runs [block] inside one SQLite transaction: committed when it returns, rolled back when it
-     * throws — the same all-or-nothing unit Room's `withTransaction` provides on a device.
+     * throws — the same all-or-nothing unit Room's `withTransaction` provides on a device. The runner
+     * performs a real `COMMIT`/`ROLLBACK`, so atomicity is the engine's rather than the test's
+     * bookkeeping and a failing insert mid-creation leaves no half-written graph behind.
      *
-     * This is what makes a repository's atomicity provable on the JVM: the test supplies a runner that
-     * performs a real `COMMIT`/`ROLLBACK`, so a failing insert in the middle of a creation leaves no
-     * half-written graph behind, and the rollback is the engine's rather than the test's bookkeeping.
-     *
-     * **Nesting is supported**, because the production runner nests: `RoomDatabase.withTransaction`
-     * opens an inner unit inside an outer one (the editor's edit path writes a Program's facts in the
-     * same unit as the revision, and the revision's own write opens a unit of its own), and a rig that
-     * refused the second call — or committed the first one behind the outer's back — would decide the
-     * composition differently from the device. An inner unit is therefore a `SAVEPOINT`: it commits
-     * into the enclosing unit and rolls back to its own boundary when it throws, leaving the outer
-     * unit's outcome to the outer unit. That is exactly the semantics SQLite's own nested
-     * transactions give Room.
+     * **Nesting is supported**, because the production runner nests: `withTransaction` opens an inner
+     * unit inside an outer one (a Program's facts and its revision are written in one unit while the
+     * revision's own write opens a unit of its own). A rig that refused the second call — or committed
+     * the first behind the outer's back — would decide the composition differently from the device. An
+     * inner unit is therefore a `SAVEPOINT`: it commits into the enclosing unit and rolls back to its
+     * own boundary when it throws, leaving the outer unit's outcome to the outer unit.
      */
     suspend fun <T> transaction(block: suspend () -> T): T {
         if (depth > 0) return nestedTransaction(block)
@@ -84,7 +77,6 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
     /** How many transaction units are currently open; `0` means the next one is the outermost. */
     private var depth: Int = 0
 
-    /** An inner unit: a `SAVEPOINT` that releases into the enclosing unit, or rolls back to itself. */
     private suspend fun <T> nestedTransaction(block: suspend () -> T): T {
         val savepoint = "nested_unit_$depth"
         depth += 1
@@ -102,7 +94,6 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
         }
     }
 
-    /** Executes a batch of statements in order. */
     fun execAll(statements: List<String>) {
         statements.forEach { exec(it) }
     }
@@ -138,7 +129,6 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
             }
         } as SupportSQLiteDatabase
 
-    /** Every row of one column, in the order the query returns them. */
     fun strings(sql: String, vararg args: Any?): List<String?> {
         val rows = mutableListOf<String?>()
         connection.prepareStatement(sql).use { statement ->
@@ -150,23 +140,21 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
         return rows
     }
 
-    /** The single value of a query, or `null` when the query returns no row. */
     fun scalar(sql: String, vararg args: Any?): String? = strings(sql, *args).firstOrNull()
 
-    /** The number of rows a query returns. */
     fun count(table: String): Int = scalar("SELECT COUNT(*) FROM `$table`")!!.toInt()
 
     /**
      * The number of rows of [table] whose row text [contains] [needle].
      *
-     * A **test-harness** convenience, added by P32 for the claims that are about which rows exist rather
-     * than what they say — "the seeded catalogue holds four `lunges` rows and thirteen others", "no row
-     * mentions `plank`". Those are assertions over a *set* of rows, and without this they would each need
-     * a bespoke `SELECT ... WHERE` written inline, which is a place for a subtly wrong predicate to hide.
+     * For the claims that are about which rows exist rather than what they say — "the seeded catalogue
+     * holds four `lunges` rows and thirteen others", "no row mentions `plank`". Those are assertions
+     * over a *set* of rows, and inline they would each need a bespoke `SELECT ... WHERE`, a place for a
+     * subtly wrong predicate to hide.
      *
-     * It deliberately matches the **rendered row text** rather than a named column: the point is "no row
-     * mentions this family anywhere", which is stronger than "the `familyId` column does not equal it",
-     * and it is what makes a leaked exercise id in the wrong family visible.
+     * It deliberately matches the **rendered row text** rather than a named column: "no row mentions
+     * this family anywhere" is stronger than "the `familyId` column does not equal it", and it is what
+     * makes a leaked exercise id in the wrong family visible.
      */
     fun count(table: String, contains: (String) -> Boolean): Int =
         rows("SELECT * FROM `$table`")
@@ -175,18 +163,14 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
     /**
      * The number of `progression_relation_variant` rows belonging to [familyId].
      *
-     * Scoped to the **`familyId` column** rather than to the whole row text. Row-text matching cannot
-     * answer "how many rows does this family hold", because an exercise id can legitimately contain a
-     * family id as a substring — and `pullups` is both a family and a member of `pullups`, so a text
-     * match conflates the family with its own rung. Where the broader `count(table) { }` form is the
-     * right tool it is a deliberate *"no row mentions this anywhere"* claim; this one is the precise
-     * per-family count.
+     * Scoped to the **`familyId` column**, because row-text matching cannot answer "how many rows does
+     * this family hold": an exercise id can contain a family id as a substring, and `pullups` is both a
+     * family and a member of `pullups`, so a text match conflates the family with its own rung.
      */
     fun countFamilyRows(familyId: String): Int =
         rows("SELECT `familyId` FROM `progression_relation_variant`")
             .count { it["familyId"] == familyId }
 
-    /** `sqlite_master`'s DDL for every table and index, keyed by name. */
     fun masterSql(): Map<String, String> {
         val result = mutableMapOf<String, String>()
         connection.createStatement().use { statement ->
@@ -198,22 +182,18 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
         return result
     }
 
-    /** Every table (not view, not index) the schema contains, sorted. */
     fun tableNames(): List<String> =
         strings("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
             .map { it!! }
 
-    /** The declared columns of one table, in declaration order. */
     fun columnNames(table: String): List<String> =
         pragmaRows(table).map { it["name"]!! }
 
-    /** The declared column type of one column, as SQLite records it. */
     fun columnType(table: String, column: String): String? =
         query("SELECT type FROM pragma_table_info('$table') WHERE name = ?", column)
             .firstOrNull()
             ?.get("type")
 
-    /** The primary-key columns of one table, in key order. */
     fun primaryKey(table: String): List<String> =
         pragmaRows(table)
             .filter { (it["pk"] ?: "0") != "0" }
@@ -224,13 +204,12 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
      * The foreign keys SQLite records for one table: child columns, parent table, parent columns and
      * the delete action — read from the engine's own metadata, not from the DDL text.
      *
-     * SQLite's `pragma_foreign_key_list` reports **one row per column**, with the columns of a single
-     * key sharing an `id` and ordered by `seq`. A composite key — such as a target occurrence's
-     * components, which reference the occurrence by the whole `(programId, occurrenceKey)` pair — is
-     * therefore several rows, and reading them as separate keys would both misreport that table's
-     * ownership graph and make a two-column key indistinguishable from two independent one-column
-     * ones. Rows are grouped by `id` so one declared key is one recorded key, with its columns in
-     * declaration order.
+     * `pragma_foreign_key_list` reports **one row per column**, with one key's columns sharing an `id`
+     * and ordered by `seq`. A composite key — a target occurrence's components reference the occurrence
+     * by the whole `(programId, occurrenceKey)` pair — is therefore several rows, and reading them as
+     * separate keys would misreport that table's ownership graph and make a two-column key
+     * indistinguishable from two independent one-column ones. Rows are grouped by `id` so one declared
+     * key is one recorded key.
      */
     fun foreignKeys(table: String): List<ForeignKey> {
         val grouped = LinkedHashMap<Int, MutableList<Map<String, String?>>>()
@@ -260,9 +239,8 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
     /**
      * The unique indexes of one table: index name to its column list, in index order.
      *
-     * SQLite's own automatic index for a `TEXT` primary key (`sqlite_autoindex_*`) is excluded: it is
-     * the engine's implementation of the key, not a declared index, and the contract is about what this
-     * schema declares.
+     * SQLite's automatic index for a composite primary key (`sqlite_autoindex_*`) is excluded: it is the
+     * engine's implementation of the key, not a declared index.
      */
     fun uniqueIndexes(table: String): Map<String, List<String>> {
         val unique = mutableMapOf<String, List<String>>()
@@ -280,7 +258,6 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
         return unique
     }
 
-    /** The columns of one index, in index order. */
     fun indexColumns(index: String): List<String> {
         val columns = mutableListOf<String>()
         connection.createStatement().use { statement ->
@@ -291,7 +268,6 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
         return columns
     }
 
-    /** Rows of one table as maps, for the preservation assertions. */
     fun rows(sql: String, vararg args: Any?): List<Map<String, String?>> =
         query(sql, *args)
 
@@ -342,10 +318,8 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
     /**
      * One foreign key as the engine records it.
      *
-     * The columns are lists because the engine's own metadata is per-column: one declared composite
-     * key is several `pragma_foreign_key_list` rows, grouped back into one key by
-     * [foreignKeys] so that "one ownership edge" and "one engine row" do not have to be the same
-     * number.
+     * The columns are lists because the engine's metadata is per-column: one declared composite key is
+     * several `pragma_foreign_key_list` rows, grouped back into one key by [foreignKeys].
      */
     data class ForeignKey(
         val childColumns: List<String>,
@@ -372,12 +346,12 @@ internal class SqliteTestDatabase private constructor(private val connection: Co
          *
          * An in-memory database is private to its connection, so a second view of the same rows — the
          * second process of a restart test, or the second racer of a concurrency test — needs a file.
-         * Everything else is identical to [inMemory]: the same SQLite engine, the same
-         * `PRAGMA foreign_keys = ON`, and no schema of its own — a caller opens one connection, runs the
-         * deployed migration chain on it, and every further connection sees what that one wrote.
+         * Everything else matches [inMemory]: same engine, same `PRAGMA foreign_keys = ON`, no schema of
+         * its own — one connection runs the deployed chain and every further connection sees what it
+         * wrote.
          *
          * Sessions are **not** shared and no locking mode is set: two connections over one file is
-         * exactly how two writers contend, which is what makes "the second write cannot both succeed"
+         * exactly how two writers contend, which makes "the second write cannot both succeed"
          * measurable rather than argued.
          */
         fun at(path: String): SqliteTestDatabase {

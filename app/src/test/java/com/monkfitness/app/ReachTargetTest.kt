@@ -6,11 +6,11 @@ import org.junit.Test
 import kotlin.math.sqrt
 
 /**
- * R2 — Reach target authoring invariants (see docs/ENGINE_DEFECT_REMEDIATION_PLAN.md).
+ * Reach-target authoring invariants.
  *
  * `clampTargetToReach` projects an authored IK target onto the reachable annulus
- * `[minReach, maxReach]` so poses are reachable-by-construction and the solver records zero
- * clamp (the IK_TARGET_UNREACHABLE signal stays honest — we fix the target, not the validator).
+ * `[minReach, maxReach]` so poses are reachable-by-construction and the solver records zero clamp
+ * (the IK_TARGET_UNREACHABLE signal stays honest — we fix the target, not the validator).
  */
 class ReachTargetTest {
 

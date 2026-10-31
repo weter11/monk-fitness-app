@@ -32,52 +32,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P29's **focus-keyed generation signals**, read from the historical record that P29 made readable.
+ * The focus-keyed generation signals, read from the historical record.
  *
- * P27 left `recentExposureByFocus` and `recentLoadByFocus` neutral and recorded why. This suite is the
- * other side of that record: the two signals are filled, from a fact the session's own snapshot froze at
- * start, and every claim about *how* they are filled is stated as a test that would fail for a specific
- * wrong answer.
+ * The two signals are filled from a fact the session's own snapshot froze at start, and each wrong answer
+ * is closed by a named test: counting **workouts** instead of focus assignments, counting **repetitions**
+ * or **seconds** instead of confirmed sets, turning an **absence** into a `0`. Three moves are forbidden
+ * outright — reading the **current revision** for a past workout's focus, **classifying** an exercise
+ * through the catalogue, and promoting `currentExerciseId` to an adaptive preference.
  *
- * ### The four ways to be wrong, and the test that closes each
- *
- * | wrong answer | test |
- * | --- | --- |
- * | count **workouts** instead of focus assignments | `exposureCountsAssignmentsAndNotWorkouts` |
- * | count **repetitions** instead of confirmed sets | `loadCountsConfirmedSetsAndNeverRepetitions` |
- * | count **seconds** as though they were sets | `timedWorkContributesItsConfirmedSetsAndNotItsSeconds` |
- * | turn an **absence** into a `0` | `anUnrecordedFocusIsAbsentAndNeverZero`, `aSkippedOccurrenceIsNotAZeroExposure` |
- *
- * ### And the three it is forbidden to do at all
- *
- * | fabrication | test |
- * | --- | --- |
- * | read the **current revision** for a past workout's focus | `aCurrentRevisionCannotRelabelAnOlderSession` |
- * | **classify** an exercise through the catalogue | `focusIsNeverReconstructedFromTheExerciseCatalogue` |
- * | promote `currentExerciseId` to an adaptive preference | `adaptivePreferenceRemainsNeutralAndIsNeverReadFromFamilyState` |
- *
- * The last one is worth stating plainly: P29 gave two of §8's six signals an owner, and the temptation
- * a stage faces after filling two is to go looking for the remaining four. That is exactly the wrong move
- * — a filled signal proves the *pipeline* works, not that the unfilled ones have an owner.
+ * Filling two of six signals is not licence to go looking for the other four: a filled signal proves the
+ * *pipeline* works, not that the unfilled ones have an owner.
  */
 class AdaptiveHistoryContextTest {
 
-    // ------------------------------------------------------------------ exposure: assignments, not workouts
-
     @Test
     fun exposureCountsAssignmentsAndNotWorkouts() = runBlocking {
-        // One workout that trained **two PUSH assignments and one PULL**, and a second that trained one
-        // CORE. That shape is what makes the distinction measurable rather than asserted:
+        // One workout that trained **two PUSH assignments and one PULL**, plus a second that trained one
+        // CORE: counting assignments gives {PUSH: 2, PULL: 1, CORE: 1}, counting workouts gives
+        // {PUSH: 1, PULL: 1, CORE: 1}.
         //
-        // ```text
-        // counting assignments   {PUSH: 2, PULL: 1, CORE: 1}   ← 4 assignments over 2 workouts
-        // counting workouts      {PUSH: 1, PULL: 1, CORE: 1}   ← one workout, one count per focus
-        // ```
-        //
-        // The earlier form of this fixture (one PUSH per workout) produced the *same* map either way, so
-        // it could not have failed a workout-counting implementation at all — a test that cannot fail the
-        // bug it is written for is decoration. A focus trained twice inside one session is the smallest
-        // case where the two readings diverge.
+        // A fixture with one PUSH per workout produces the *same* map either way, so it could not
+        // fail a workout-counting implementation at all — a test that cannot fail the bug it is written
+        // for is decoration. A focus trained twice inside one session is the smallest divergence.
         val read = FocusRecordingHistory(
             mapOf(
                 PROGRAM to listOf(
@@ -148,8 +124,8 @@ class AdaptiveHistoryContextTest {
 
     @Test
     fun partialExecutionContributesOneExposureAndOnlyItsConfirmedSets() = runBlocking {
-        // A prescribed-and-presented occurrence the user abandoned after two of three sets. The
-        // occurrence IS exposure — it happened — and its load is exactly what was confirmed.
+        // A presented occurrence the user abandoned after two of three sets: it IS exposure, and its load
+        // is exactly what was confirmed.
         val read = FocusRecordingHistory(
             mapOf(
                 PROGRAM to listOf(
@@ -177,12 +153,10 @@ class AdaptiveHistoryContextTest {
         )
     }
 
-    // ------------------------------------------------------------------ load: sets, in one dimension only
-
     @Test
     fun loadCountsConfirmedSetsAndNeverRepetitions() = runBlocking {
-        // 4 sets of 12 repetitions. The load unit is a set (§10's `perSetTargets`, §19's `SetResult`
-        // rows), so the answer is 4 — not 48, which is the same work counted in a different dimension.
+        // 4 sets of 12 repetitions. The load unit is a set, so the answer is 4 — not 48, which is the
+        // same work counted in a different dimension.
         val read = FocusRecordingHistory(
             mapOf(
                 PROGRAM to listOf(
@@ -208,8 +182,8 @@ class AdaptiveHistoryContextTest {
 
     @Test
     fun timedWorkContributesItsConfirmedSetsAndNotItsSeconds() = runBlocking {
-        // A time-based prescription: 2 confirmed sets of 45 and 60 seconds. Seconds are never summed and
-        // never converted — the unit is the set, and §10's dimensions are never compared with each other.
+        // A time-based prescription: 2 confirmed sets of 45 and 60 seconds. Seconds are never summed or
+        // converted — the unit is the set, and the dimensions are never compared with each other.
         val read = FocusRecordingHistory(
             mapOf(
                 PROGRAM to listOf(
@@ -239,9 +213,9 @@ class AdaptiveHistoryContextTest {
 
     @Test
     fun loadAndExposureAreKeyedByEachOccurrencesOwnRecordedFocus() = runBlocking {
-        // Two occurrences of the SAME exercise in one day, presented under two different focuses (§9
-        // allows the repetition, and each occurrence is its own element with its own assignment). A
-        // source that keyed by exercise id — the obvious shortcut — would collapse them.
+        // Two occurrences of the SAME exercise in one day under two different focuses (the repetition is
+        // allowed, and each occurrence is its own element with its own assignment). A source keyed by
+        // exercise id — the obvious shortcut — would collapse them.
         val read = FocusRecordingHistory(
             mapOf(
                 PROGRAM to listOf(
@@ -276,13 +250,11 @@ class AdaptiveHistoryContextTest {
         )
     }
 
-    // ------------------------------------------------------------------ what is NOT exposure
-
     @Test
     fun aSkippedOccurrenceIsNotAZeroExposure() = runBlocking {
-        // `skipped` is the user's explicit "not this one" and is exactly equivalent to having no
-        // results (§12). The snapshot *does* record a focus for this element — that is the trap: a
-        // source that counted elements rather than performed occurrences would state an exposure.
+        // `skipped` is the user's explicit "not this one", equivalent to having no results. The snapshot
+        // *does* record a focus for this element — that is the trap: a source counting elements rather
+        // than performed occurrences would state an exposure.
         val read = FocusRecordingHistory(
             mapOf(
                 PROGRAM to listOf(
@@ -313,8 +285,8 @@ class AdaptiveHistoryContextTest {
 
     @Test
     fun anOccurrenceWithNoConfirmedSetContributesNothingAtAll() = runBlocking {
-        // Presented, never worked. This is the case that separates "no history" from "history that
-        // observed no work", and it is exactly where a fabricated zero appears.
+        // Presented, never worked: separates "no history" from "history that observed no work", and is
+        // exactly where a fabricated zero appears.
         val read = FocusRecordingHistory(
             mapOf(
                 PROGRAM to listOf(
@@ -352,9 +324,9 @@ class AdaptiveHistoryContextTest {
 
     @Test
     fun aCancelledSessionWithConfirmedWorkStillContributesItsSets() = runBlocking {
-        // §19 preserves the partial work a cancelled attempt recorded, so dropping it would invent a rule
-        // about which attempts count that no domain statement owns. The session's own `status` is
-        // deliberately not a filter.
+        // The partial work a cancelled attempt recorded is preserved, so dropping it would invent a rule
+        // about which attempts count that no domain statement owns. The session's `status` is deliberately
+        // not a filter.
         val read = FocusRecordingHistory(
             mapOf(
                 PROGRAM to listOf(
@@ -404,13 +376,10 @@ class AdaptiveHistoryContextTest {
         )
     }
 
-    // ------------------------------------------------------------------ absence is not a zero, and not a guess
-
     @Test
     fun anUnrecordedFocusIsAbsentAndNeverZero() = runBlocking {
-        // The case this whole stage exists to keep honest: a performed occurrence whose snapshot recorded
-        // NO focus — a manual program, a user-authored element, or a workout from before this column
-        // existed. It is real performed work, and its focus is genuinely unknown.
+        // A performed occurrence whose snapshot recorded NO focus — a manual program, a user-authored
+        // element, or a workout predating the column. Real performed work, focus genuinely unknown.
         val read = FocusRecordingHistory(
             mapOf(
                 PROGRAM to listOf(
@@ -449,8 +418,8 @@ class AdaptiveHistoryContextTest {
 
     @Test
     fun aProgramWhoseHistoryRecordedNoFocusStatesBothMapsEmpty() = runBlocking {
-        // A Program whose every occurrence predates the column. The whole vocabulary is absent — and the
-        // answer is two empty maps, not seven zeros.
+        // Every occurrence predates the column: the whole vocabulary is absent, so the answer is two empty
+        // maps, not seven zeros.
         val read = FocusRecordingHistory(
             mapOf(
                 PROGRAM to listOf(
@@ -487,17 +456,14 @@ class AdaptiveHistoryContextTest {
 
     @Test
     fun focusIsNeverReconstructedFromTheExerciseCatalogue() = runBlocking {
-        // `ProductionFocusClassification` knows what every shipped exercise trains, and it would produce a
-        // confident answer for every occurrence below — including the ones whose focus was genuinely
-        // never recorded. That is the reconstruction this stage forbids: it answers a different question
-        // ("what does this exercise train?") with the name of a field that asks "which focus was this
-        // occurrence assigned?", and an exercise that trains two focuses is not two assignments.
+        // The catalogue knows what every shipped exercise trains and would answer confidently for
+        // occurrences whose focus was never recorded. That reconstruction answers "what does this exercise
+        // train?" in the place of "which focus was this occurrence assigned?", and an exercise training
+        // two focuses is not two assignments.
         //
-        // The claim is behavioural, and it is the strongest available form: the catalogue *does*
-        // classify these exercises, and the source still states absence. The exercises are chosen to make
-        // the trap sharp — `pullups` is classified `PULL`, and `burpees` is classified
-        // `PUSH + LEGS + CONDITIONING`, which is precisely the case where a reconstruction would either
-        // drop two focuses or invent three assignments.
+        // The claim is behavioural and at its strongest: the catalogue *does* classify these exercises and
+        // the source still states absence. `pullups` is `PULL`, `burpees` is `PUSH + LEGS + CONDITIONING` —
+        // exactly the case where a reconstruction would drop two focuses or invent three assignments.
         assertEquals(
             "the shipped catalogue really does classify these exercises, so this is not a fixture where " +
                 "reconstruction would coincidentally be impossible",
@@ -540,21 +506,18 @@ class AdaptiveHistoryContextTest {
         )
     }
 
-    // ------------------------------------------------------------------ history is immutable
-
     @Test
     fun aCurrentRevisionCannotRelabelAnOlderSession() = runBlocking {
-        // The critical historical invariant, stated as one read: an old session's focus is whatever its
-        // OWN snapshot froze. Regenerating the program into a different FocusPlan, and re-scheduling the
-        // same slots, cannot change what that workout was presented for — and the context source never
-        // consults a revision, so there is no path by which it could.
+        // An old session's focus is whatever its OWN snapshot froze. Regenerating the program into a
+        // different FocusPlan and re-scheduling the same slots cannot change what that workout was
+        // presented for — and the context source never consults a revision.
         val old = session(
             "old",
             exercises = listOf(performed("bench-press", sets = 3, focus = Focus.PUSH))
         )
-        // "A regenerated program" is expressed the only way it can be here: it is a *different* stored
-        // session with the same slot, under the current revision, presenting the same exercise under
-        // another focus. The two coexist, and the older one is unchanged.
+        // A regenerated program is expressed the only way it can be here: a *different* stored session
+        // with the same slot, under the current revision, presenting the same exercise under another
+        // focus. The two coexist and the older one is unchanged.
         val regenerated = session(
             "regenerated",
             minutes = 60,
@@ -580,9 +543,8 @@ class AdaptiveHistoryContextTest {
 
     @Test
     fun equalStoredHistoryProducesEqualFocusFacts() = runBlocking {
-        // The snapshot-consistency claim at the source's own level: same stored history, two separate
-        // reads, one answer. There is no caching that could make this pass for the wrong reason — each
-        // call goes to the read again.
+        // Same stored history, two separate reads, one answer — and no cache that could make this pass
+        // for the wrong reason, since each call goes to the read again.
         val history = listOf(
             session(
                 "s1",
@@ -602,12 +564,10 @@ class AdaptiveHistoryContextTest {
         assertEquals("and the read really happened twice, so the equality is not a cache", 2, read.calls)
     }
 
-    // ------------------------------------------------------------------ scope: Program and revision
-
     @Test
     fun twoProgramsNeverSeeEachOthersFocusHistory() = runBlocking {
-        // Both Programs performed real work under *different* focuses, so a leak would produce a
-        // plausible wrong map rather than an obviously wrong one.
+        // Both Programs performed real work under *different* focuses, so a leak produces a plausible
+        // wrong map rather than an obviously wrong one.
         val read = FocusRecordingHistory(
             mapOf(
                 PROGRAM to listOf(
@@ -647,15 +607,11 @@ class AdaptiveHistoryContextTest {
         )
     }
 
-    // ------------------------------------------------------------------ the signals that stay neutral
-
     @Test
     fun adaptivePreferenceRemainsNeutralAndIsNeverReadFromFamilyState() = runBlocking {
-        // P29 filled two of §8's six signals. The temptation a stage faces after filling two is to go
-        // looking for the remaining four, and `FamilyProgressionState.currentExerciseId` is sitting right
-        // there — persisted, revision-scoped, and plausible. It means *"the exercise this family is
-        // currently on"*, which is family progression state and not an exercise-selection preference
-        // for generation. Promoting it would fabricate the field's meaning.
+        // `FamilyProgressionState.currentExerciseId` sits right there — persisted, revision-scoped and
+        // plausible — but it means "the exercise this family is currently on", which is progression state
+        // and not an exercise-selection preference for generation. Promoting it fabricates its meaning.
         val read = FocusRecordingHistory(
             mapOf(
                 PROGRAM to listOf(
@@ -686,11 +642,10 @@ class AdaptiveHistoryContextTest {
 
     @Test
     fun recoveryRemainsUnknownEvenWithACompleteHistory() = runBlocking {
-        // The same temptation, the other remaining field. `RecoveryContext` is produced by the adaptive
-        // stage's own judgement rule for **one decision window of one family**, and that rule itself
-        // receives `UNKNOWN` as its documented absence. There is no generation-scoped recovery contract
-        // to read, and elapsed time, time since the last workout or `currentExerciseId` would each be a
-        // substitute measurement rather than the fact.
+        // `RecoveryContext` is produced by the adaptive judgement rule for **one decision window of one
+        // family**, and that rule itself receives `UNKNOWN` as its documented absence. There is no
+        // generation-scoped recovery contract: elapsed time, time since the last workout or
+        // `currentExerciseId` would each be a substitute measurement rather than the fact.
         val read = FocusRecordingHistory(
             mapOf(
                 PROGRAM to listOf(
@@ -715,8 +670,8 @@ class AdaptiveHistoryContextTest {
 
     @Test
     fun aNewProgramStillStatesTheNeutralContextAndIsNeverRead() = runBlocking {
-        // P27's invariant, re-pinned: a draft that will CREATE a Program has no Program to scope a read
-        // to, so the read is not issued at all — including for the two signals P29 filled.
+        // A draft that will CREATE a Program has no Program to scope a read to, so no read is issued at
+        // all — including for the two signals that now have owners.
         val read = FocusRecordingHistory(
             mapOf(PROGRAM to listOf(session("s1", exercises = listOf(performed("squats", focus = Focus.LEGS)))))
         )
@@ -766,9 +721,9 @@ class AdaptiveHistoryContextTest {
 
     @Test
     fun theSnapshotElementIsTheOnlySourceOfTheHistoricalFocus() = runBlocking {
-        // Stated as a value claim rather than only a behavioural one: the focus the context reads is the
-        // `EffectiveExercise.focus` of the session's own snapshot, which is what §19 freezes. A session
-        // whose snapshot states nothing therefore states nothing here, whatever its occurrences contain.
+        // A value claim, not only behavioural: the focus read is the `EffectiveExercise.focus` of the
+        // session's own snapshot. A session whose snapshot states nothing states nothing here, whatever its
+        // occurrences contain.
         val snapshotOnly = session(
             "s1",
             exercises = listOf(performed("bench-press", sets = 2, focus = Focus.PUSH))
@@ -779,12 +734,9 @@ class AdaptiveHistoryContextTest {
             listOf(Focus.PUSH),
             snapshotOnly.snapshot.workout.exercises.map { it.focus }
         )
-        // The occurrence carries no focus field at all, so the context cannot have read one from there.
-        // Asserted as a shape claim on the *declared fields* rather than a fixture statement, which is
-        // stronger: it says no future fixture could put a focus on an occurrence and have the tests
-        // above quietly mean something else. `completedSetCount` is absent because it is a computed
-        // property, not a stored field — which is the point: it is derived from `results`, and so is a
-        // set count.
+        // Asserted on the *declared fields*, not on a fixture: no future fixture could put a focus on an
+        // occurrence and leave the tests above meaning something else. `completedSetCount` is absent
+        // because it is computed from `results`, which is also where a set count comes from.
         assertEquals(
             "a `SessionExercise` stores no focus: the focus is a property of what was PRESENTED, frozen " +
                 "at start, and not of what was performed. Its own fields are the occurrence's identity, " +
@@ -797,8 +749,6 @@ class AdaptiveHistoryContextTest {
                 .sorted()
         )
     }
-
-    // ------------------------------------------------------------------ fixtures
 
     private companion object {
 
@@ -816,11 +766,9 @@ class AdaptiveHistoryContextTest {
         )
 
         /**
-         * A complete, legal stored session.
-         *
-         * The snapshot element carries [focus] and the occurrence deliberately does **not** — which is
-         * the production shape and the point of the stage: the focus is a property of what was
-         * *presented*, frozen at start, and the occurrence records only what was performed.
+         * A complete, legal stored session. The snapshot element carries [focus] and the occurrence
+         * deliberately does **not**: the focus is a property of what was *presented*, frozen at start, and
+         * the occurrence records only what was performed.
          */
         fun session(
             key: String,
@@ -866,11 +814,9 @@ class AdaptiveHistoryContextTest {
         }
 
         /**
-         * The focus each snapshot element states, keyed by plan element identity.
-         *
-         * A fixture-wide map rather than a field on the occurrence, because that is exactly the production
-         * shape: the focus lives on the presentation, and the occurrence knows nothing about it. It also
-         * means a fixture cannot accidentally put a focus where the domain forbids one.
+         * The focus each snapshot element states, keyed by plan element identity — a fixture-wide map
+         * rather than a field on the occurrence, which is the production shape and means a fixture cannot
+         * accidentally put a focus where the domain forbids one.
          */
         val FOCUSES: MutableMap<String, Focus?> = mutableMapOf()
 
@@ -958,10 +904,10 @@ class AdaptiveHistoryContextTest {
 /**
  * A [GenerationSessionHistory] that answers from a stated map and records what it was asked for.
  *
- * P29's own copy rather than a shared one, because P27's `ProgramGenerationContextTest` declares a
- * private class of the same name in the same package — two `private` top-level declarations collide in
- * Kotlin, and a shared fixture would also couple two suites that measure different things: P27's
- * measures scoping and recency, this one's measures focus attribution.
+ * Its own copy rather than a shared one: `ProgramGenerationContextTest` declares a private class of the
+ * same name in the same package, and two `private` top-level declarations collide in Kotlin. Sharing
+ * would also couple two suites measuring different things — scoping and recency there, focus attribution
+ * here.
  */
 private class FocusRecordingHistory(
     private val byProgram: Map<ProgramId, List<WorkoutSession>>

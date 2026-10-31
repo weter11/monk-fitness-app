@@ -8,91 +8,63 @@ import java.util.Locale
 import kotlin.math.*
 
 /**
- * Fourth (final) reach-band cleanup batch — `CouchStretchPose`, `QuadrupedThoracicRotationsPose`,
- * `GluteBridgePose`, `PelvicTiltPose` and `ThoracicExtensionPose` (production geometry), plus the
- * verdicts for the candidates this batch measured and deliberately did NOT change
- * (`SupermanPose`, `DeadBugPose`) and the corpus census that closes the class.
+ * Reach-band cleanup batch: `CouchStretchPose`, `QuadrupedThoracicRotationsPose`, `GluteBridgePose`,
+ * `PelvicTiltPose` and `ThoracicExtensionPose` (production geometry), plus the verdicts for the
+ * candidates this batch measured and deliberately did NOT change (`SupermanPose`, `DeadBugPose`) and
+ * the corpus census that closes the class.
  *
- * ## Instrument
- *
- * Every authored limb target was measured through the production entry point
- * `SkeletonPipeline.produceFrame(pose, ctx)` — `15` phases
- * (`0.00, 0.05, 0.10, 0.20, 0.25, 0.30, 0.40, 0.50, 0.60, 0.70, 0.75, 0.80, 0.90, 0.95, 1.00`) × the
+ * Every authored limb target was measured through `SkeletonPipeline.produceFrame` at 15 phases × the
  * pose's declared limb chains × both frame conditions (a fresh pipeline's cold first frame, then an
- * advancing pipeline), against each chain's own `[SkeletonMath.minReach, SkeletonMath.maxReach]`
- * (`112/98` legs → `[56.0090, 205.8000]`; `80/66` arms → `[40.1344, 143.0800]`). The whole `51`-class
- * corpus was swept with the same instrument.
+ * advancing pipeline) against each chain's own `[minReach, maxReach]` (`112/98` legs →
+ * `[56.0090, 205.8000]`; `80/66` arms → `[40.1344, 143.0800]`). The whole `51`-class corpus was
+ * swept with the same instrument.
  *
- * ## What the batch measured on the base tree (`origin/main` @ `ca011ad`)
- *
- * | pose | chain | authored root→target | band | relocation | realized interior |
- * |---|---|---|---|---|---|
- * | `QuadrupedThoracicRotationsPose` | support hand (P, the floor pillar) | `111.2617 … 175.5976` | `≤ 143.0800` | **`0.000 … 32.5176`** (`8`/`15` phases) | `156.9356°` (the `0.98` cap) |
- * | `QuadrupedThoracicRotationsPose` | reaching hand (A) | `22.9198 … 164.4045` | `[40.1344, 143.0800]` | **`21.3245` max** (`4`/`15`: min side at p = 0.40/0.50, max side at p = 0.95/1.00) | `30.0000°` / `156.9356°` |
- * | `QuadrupedThoracicRotationsPose` | both ankles | `148.8220` | in band | `0.000` | — |
- * | `CouchStretchPose` | both hands | `142.0487 … 156.6795` | `≤ 143.0800` | **`0.3610 … 13.5995`** (`13`/`15`) | `156.9356°` |
- * | `CouchStretchPose` | front ankle | `100.8197 … 121.3899` | in band | `0.000` | — |
- * | `GluteBridgePose` | both ankles | `45.0111 … 59.5483` | `≥ 56.0090` | **`10.9979 … 1.3647`** (`12`/`15`) | `30.0000°` (the stop) |
- * | `GluteBridgePose` | both hands | `77.8899 … 85.1704` | in band | `≤ 0.0409` | in band, no stamp |
- * | `PelvicTiltPose` | both ankles | `45.0111` (EVERY phase) | `≥ 56.0090` | **`10.9979`** (`15`/`15`) | `30.0000°` |
- * | `PelvicTiltPose` | both hands | `85.1704 … 85.8596` | in band | `0.000` | — |
- * | `ThoracicExtensionPose` | both hands | `34.6182 … 37.3581` | `≥ 40.1344` | **`5.5162 … 2.7763`** (`15`/`15`) | `30.0000°` |
- *
- * ## Verdict per SITE (measured, not assumed)
- *
- * The discriminators the earlier batches established:
- *
- *  1. a request LONGER than `L1 + L2` is impossible for ANY chain geometry — no author could have
- *     meant it (batch 2's `JumpSquatPose` flight `107 %`, batch 3's half-kneeling hands `106.7 %`);
- *  2. a request tighter than the constraint's own `minimumFlexionAngle` is past the model's fold
- *     stop (batch 2's `DeepSquatHoldPose` `24.80°`, batch 3's `HamstringStretchPose` tuck `18.89°`
- *     and `ProneCobraStretchPose` start `14.39°`, the M13 pass's hamstring start hand `2.9237` u);
- *  3. a REALIZABLE request that only the `0.98` extension cap trims is the deliberate model limit —
- *     leave it, and PIN it (batch 2's `CossackSquatPose` `207.000` → `1.200`).
+ * The discriminators: a request LONGER than `L1 + L2` is impossible for ANY chain geometry — no
+ * author could have meant it; a request tighter than the constraint's own `minimumFlexionAngle` is
+ * past the model's fold stop; a REALIZABLE request that only the `0.98` extension cap trims is the
+ * deliberate model limit — leave it, and pin it.
  *
  *  * **Unintended authoring error → FIXED (5 poses, 7 sites).**
- *    * `QuadrupedThoracicRotationsPose`: the support arm's request reaches `120.3 %` of its own limb
- *      (rule 1) while the pose's own intent is BPS §6's "Supporting (down) arm: extended, shoulder
- *      stable" — an extended pillar, not a request past the limb; and the reaching arm asks for a
- *      hand AT its own shoulder at mid-sweep (`22.9198`, rule 2 — the collar-side stop) although the
- *      drill's choreography threads the hand UNDER the torso and then overhead (BPS §6/§9).
- *    * `CouchStretchPose`: the composed hand target passes the arm cap at the end of the rep (rule
- *      1's class — `106.7 %` at p = 1) while the family's own sibling needed the identical
- *      correction; BPS §6 allows "arms rest on the front thigh".
- *    * `GluteBridgePose` / `PelvicTiltPose`: the authored stance folds the knee to an interior
- *      `23.52°` against the `30°` stop (rule 2) although both poses' BPS (§7/§9 and §3/§7) specify
- *      "knees bent ~90°, feet flat" — an in-band configuration (a 90° interior is a `148.81` u
- *      chord), so nothing in these exercises requires the fold stop.
- *    * `ThoracicExtensionPose`: the hands-behind-the-head clasp asks for an interior elbow angle of
- *      `25.17° … 27.60°` against the same `30°` stop (rule 2) at EVERY phase.
- *  * **Deliberate model limit → NOT changed, PINNED (2 poses).**
- *    * `SupermanPose`: BPS §7/§9 specify "knees are extended, not bent" / "Knee: extended (~0°)" and
- *      "Shoulder flexion (arms forward): ~150–180°", and the pose authors exactly that — the legs at
- *      `210.0000` u and the arms at `≤ 146.0788` u, i.e. `L1 + L2` BY CONSTRUCTION (`hip + legLen`
- *      along the lift direction), not a number past the limb. The `0.98` cap answers with a `4.2000`
- *      u / `2.9988` u trim. Projecting would only hide the cap.
- *    * `DeadBugPose`: BPS §6/§9 specify the stationary arm "vertical toward the ceiling, shoulders at
- *      ~90° flexion", authored as `shoulder.y + (L1 + L2)` = `146.0000` u — again `L1 + L2` by
- *      construction; the cap trims `2.9200` u.
+ *    * `QuadrupedThoracicRotationsPose`: the support arm's request reaches `175.5976` = `120.3 %` of
+ *      its own limb while the spec's intent is "Supporting (down) arm: extended, shoulder stable" —
+ *      an extended pillar, not a request past the limb; the reaching arm asks for a hand AT its own
+ *      shoulder at mid-sweep (`22.9198`, the collar-side stop) although the drill's choreography
+ *      threads the hand UNDER the torso and then overhead. Relocation `32.5176` / `21.3245`, realized
+ *      interior `156.9356°` (the `0.98` cap) / `30.0000°` (the stop).
+ *    * `CouchStretchPose`: the composed hand target passes the arm cap at the end of the rep
+ *      (`142.0487 … 156.6795`, `106.7 %` at p = 1, `13.5995` u relocation, interior `156.9356°`) while
+ *      the spec allows "arms rest on the front thigh".
+ *    * `GluteBridgePose` / `PelvicTiltPose`: the authored stance (`45.0111 … 59.5483`, relocation
+ *      `10.9979`) folds the knee to an interior `23.52°` against the `30°` stop although both poses'
+ *      specs specify "knees bent ~90°, feet flat" — an in-band configuration (a 90° interior is a
+ *      `148.81` u chord), so nothing in these exercises requires the fold stop.
+ *    * `ThoracicExtensionPose`: the hands-behind-the-head clasp asks an interior elbow angle of
+ *      `25.17° … 27.60°` against the same `30°` stop at EVERY phase (`34.6182 … 37.3581`,
+ *      `5.5162` u relocation).
+ *  * **Deliberate model limit → NOT changed, PINNED (2 poses).** `SupermanPose`'s spec is "knees are
+ *    extended, not bent" / "Shoulder flexion (arms forward): ~150–180°", and the pose authors exactly
+ *    that — legs at `210.0000` u and arms at `≤ 146.0788` u, i.e. `L1 + L2` BY CONSTRUCTION
+ *    (`hip + legLen` along the lift direction), not a number past the limb; the `0.98` cap answers
+ *    with a `4.2000` u / `2.9988` u trim. `DeadBugPose`'s stationary arm "vertical toward the
+ *    ceiling" is authored as `shoulder.y + (L1 + L2)` = `146.0000` u — again `L1 + L2` by
+ *    construction; the cap trims `2.9200` u. Projecting would only hide the cap.
  *  * **Not a reach-band site at all (measured, explained, left byte-identical):** the five poses that
  *    author in their own pre-solve frame (`ArmCirclesPose`, `FacePullPose`, `HipCarsPose`,
  *    `ScapularRetractionPose`, `WallSlidesPose`) carry a `235.0` u apparent relocation that IS the
  *    solver's own root transport (`effector = declared + (0, rootTranslation, 0)` component-wise,
  *    stamp `0.0470`), and `DynamicWorldsGreatestStretchPose`'s `21.6410` u support-hand site is
- *    reported but out of this batch's candidate set (it is a DECLARED support contact
- *    — `RIGHT_HAND` in `metadata.support` — so its correction is a support-surface decision).
+ *    reported but out of this batch's candidate set (it is a DECLARED support contact — `RIGHT_HAND`
+ *    in `metadata.support` — so its correction is a support-surface decision).
  *
- * ## The fix (pose-side only)
- *
- * The R2/R4 convention the first three batches established: project the authored target onto its own
- * chain's annulus ALONG ITS OWN RAY (`SkeletonMath.clampTargetToReach`, `REACH_MARGIN = 1e-4` of the
- * chain's span), so the declared target IS the published position and the reachability stamp stays an
- * honest signal. No solver, engine, carrier or stamp semantics change. `BaseThoracicPose` gains the
- * same `protected open fun projectArmTargetToReach` hook batch 3 installed in `BaseHipFlexorPose`,
- * called inside `bakeThoracicArm` between composition and the bake, with a no-op default that keeps
- * the family's third variant (`DynamicWorldsGreatestStretchPose`) byte-identical;
- * `CouchStretchPose` overrides batch 3's hook in `BaseHipFlexorPose`; the two supine poses project
- * their own stance literal with their own `REACH_MARGIN` companion constant.
+ * The fix is pose-side only: project the authored target onto its own chain's annulus ALONG ITS OWN
+ * RAY (`SkeletonMath.clampTargetToReach`, `REACH_MARGIN = 1e-4` of the chain's span), so the declared
+ * target IS the published position and the reachability stamp stays an honest signal. No solver,
+ * engine, carrier or stamp semantics change. `BaseThoracicPose` gains the same `protected open fun
+ * projectArmTargetToReach` hook, called inside `bakeThoracicArm` between composition and the bake,
+ * with a no-op default that keeps the family's third variant
+ * (`DynamicWorldsGreatestStretchPose`) byte-identical; `CouchStretchPose` overrides the hook in
+ * `BaseHipFlexorPose`; the two supine poses project their own stance literal with their own
+ * `REACH_MARGIN` companion constant.
  */
 class ReachBandBatch4AuthoringTest {
 
@@ -247,10 +219,6 @@ class ReachBandBatch4AuthoringTest {
     private fun onRay(root: Vector3, declared: Vector3, target: Vector3): Float =
         cosine(sub(declared, root), sub(target, root))
 
-    // ----------------------------------------------------------------------------------------------
-    // 1 — every authored target of the fixed poses is inside its own chain's reachable band
-    // ----------------------------------------------------------------------------------------------
-
     @Test
     fun everyFixedTargetSitsInsideItsChainsOwnReachBand() {
         val all = fixedReadings()
@@ -265,10 +233,6 @@ class ReachBandBatch4AuthoringTest {
             violations.isEmpty()
         )
     }
-
-    // ----------------------------------------------------------------------------------------------
-    // 2 — the published effector IS the authored target (no relocation)
-    // ----------------------------------------------------------------------------------------------
 
     @Test
     fun thePublishedEffectorFollowsTheAuthoredTargetWithoutRelocation() {
@@ -285,10 +249,6 @@ class ReachBandBatch4AuthoringTest {
         )
     }
 
-    // ----------------------------------------------------------------------------------------------
-    // 3 — the pose records no reach-relocation stamp (the honest IK_TARGET_UNREACHABLE signal)
-    // ----------------------------------------------------------------------------------------------
-
     @Test
     fun thePublishedFrameRecordsNoReachRelocationStamp() {
         val bad = fixedReadings().filter { it.clampStamp > relocationTolerance }
@@ -299,11 +259,6 @@ class ReachBandBatch4AuthoringTest {
             bad.isEmpty()
         )
     }
-
-    // ----------------------------------------------------------------------------------------------
-    // 4 — the fix is target-side per pose: the authored exercise motion and the declaration surface
-    //     are untouched
-    // ----------------------------------------------------------------------------------------------
 
     @Test
     fun theCouchStretchKeepsItsAuthoredStanceAndAimsAtTheFrontKnee() {
@@ -353,7 +308,6 @@ class ReachBandBatch4AuthoringTest {
                 bad.joinToString("\n"),
             bad.isEmpty()
         )
-        // (d) anti-collateral: the declaration surface is untouched by a reach-authoring fix.
         for (r in rs) {
             assertEquals("${where(r)}: the declared support model must be unchanged", "LEFT_FOOT", r.support)
             assertEquals("${where(r)}: the declared ground level must be unchanged", 0f, r.groundLevel, 0f)
@@ -396,7 +350,7 @@ class ReachBandBatch4AuthoringTest {
         )
         // (c) the reaching arm still lives in the twist's own plane (the chest twist is about world
         //     X, so both the shoulder and its target stay in the chest's x = 100 plane) and still
-        //     sweeps low → high across the rep (BPS §6/§9: threading, then overhead).
+        //     sweeps low → high across the rep (threading, then overhead).
         val reach = playing.filter { it.chain == Joint.HAND_A }
         assertTrue(
             "the reaching hand must stay in the thorax's own sweep plane (declared x = 100): " +
@@ -410,13 +364,13 @@ class ReachBandBatch4AuthoringTest {
         )
         assertTrue("the sweep must still rise overhead at the end", ys.max() >= 200f)
         // (d) the thorax twist is the driver and is untouched (chest world rotation swings through
-        //     more than a radian of twist), and the declaration surface is unchanged.
+        //     more than a radian of twist).
         //
         //     NOTE — this pose publishes a joint BELOW its declared ground level
         //     (`FINGERTIPS_P` `y = −21.3196` at p = 0.40; `−15.7438` on the cold frame), and this
         //     batch is NOT the cause and does not touch it: the reading is byte-identical on the base
-        //     tree (`origin/main` @ `ca011ad`) and on this tree, and it is the undeclared
-        //     hand-chain class `PublishedBelowGroundInvariantTest` (T2) owns. Gate 6 below proves the
+        //     tree and on this tree, and it belongs to the undeclared hand-chain class
+        //     `PublishedBelowGroundInvariantTest` owns. The pre-batch comparison below proves the
         //     whole published frame stays within `0.05` u of the pre-batch declaration.
         for (r in rs) {
             assertEquals("${where(r)}: the declared support model must be unchanged", "", r.support)
@@ -467,7 +421,6 @@ class ReachBandBatch4AuthoringTest {
                 abs(r.elbowA.z) > abs(r.handA.z) && abs(r.elbowP.z) > abs(r.handP.z)
             )
         }
-        // (d) the arms and the declaration surface are untouched.
         assertTrue(
             "the hands' authored target (−35, 12, ±51) must be untouched",
             rs.filter { it.chain == Joint.HAND_A || it.chain == Joint.HAND_P }
@@ -554,7 +507,7 @@ class ReachBandBatch4AuthoringTest {
         val playing = rs.filter { it.frame == "playing" }
         // (a) the hands still aim at the authored hands-behind-the-head point: the declared target
         //     lies on the ray from its shoulder to (headBase − 12, +6, ±0.55 · shoulderWidth), where
-        //     headBase is the B-8b projection (authored gaze × neck length inside the chest frame).
+        //     headBase is the head-base projection (authored gaze × neck length inside the chest frame).
         val bad = mutableListOf<String>()
         for (r in playing) {
             if (r.chain != Joint.HAND_A && r.chain != Joint.HAND_P) continue
@@ -614,18 +567,13 @@ class ReachBandBatch4AuthoringTest {
         }
     }
 
-    // ----------------------------------------------------------------------------------------------
-    // 5 — THE INTENTIONAL-LIMIT PINS: the deliberate `0.98` caps are preserved, not projected away
-    // ----------------------------------------------------------------------------------------------
-
     /**
      * `SupermanPose` and `DeadBugPose` were measured by this batch and deliberately left
-     * byte-identical: both author a FULLY EXTENDED limb (`L1 + L2` by construction — the BPS's own
+     * byte-identical: both author a FULLY EXTENDED limb (`L1 + L2` by construction — the spec's own
      * "knees are extended, not bent" / "arms vertical toward the ceiling"), and the `0.98` extension
      * cap answers with a `4.2000` / `2.9988` / `2.9200` u trim. Projecting the declaration would only
-     * hide a real, deliberate model limit (the same verdict the second batch pinned for
-     * `CossackSquatPose`). This test fails if the site disappears (i.e. if someone "cleans" it) or if
-     * the request ever grows past the limb.
+     * hide a real, deliberate model limit. This test fails if the site disappears (i.e. if someone
+     * "cleans" it) or if the request ever grows past the limb.
      */
     @Test
     fun theDeliberateStraightLimbCapsArePreservedNotProjected() {
@@ -678,11 +626,6 @@ class ReachBandBatch4AuthoringTest {
 
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
     }
-
-    // ----------------------------------------------------------------------------------------------
-    // 6 — NON-VACUITY: the same measurement still rejects the PRE-BATCH authoring, and the fixed
-    //     poses publish the SAME geometry the pre-batch declaration did
-    // ----------------------------------------------------------------------------------------------
 
     /**
      * The sensitivity control. Every fixed pose is a FINAL class, so the pre-batch authoring is
@@ -756,7 +699,7 @@ class ReachBandBatch4AuthoringTest {
 
     @Test
     fun theSameMeasurementStillRejectsThePreBatchAuthoring() {
-        // The pre-batch relocation each pose's authoring read on `origin/main` @ `ca011ad`.
+        // The pre-batch relocation each pose's authoring read.
         val preBatch = mapOf(
             "CouchStretchPose" to 13.5995f,
             "QuadrupedThoracicRotationsPose" to 32.5176f,
@@ -815,10 +758,6 @@ class ReachBandBatch4AuthoringTest {
         )
     }
 
-    // ----------------------------------------------------------------------------------------------
-    // 7 — the complete remaining reach-band census (the class this batch closes)
-    // ----------------------------------------------------------------------------------------------
-
     /**
      * Every pose of the corpus whose published frame still carries a non-zero reach signal after this
      * batch, with the value measured on THIS tree, and the verdict that keeps it.
@@ -826,8 +765,8 @@ class ReachBandBatch4AuthoringTest {
      *  * `SupermanPose` / `DeadBugPose` — the deliberate `0.98` straight-limb caps (pinned above).
      *  * `CossackSquatPose` + the three alternating lunge variants + `MountainClimberPose` — REALIZABLE
      *    requests (`207.000` / `207.0263` / `206.3640` against a `210` u limb) that the `0.98` cap
-     *    trims; batch 2 recorded the lunge family's site as inherited from `BaseLungePose`'s standing
-     *    convention and left it to a base-scoped batch.
+     *    trims; the lunge family's site is inherited from `BaseLungePose`'s standing convention and is
+     *    left to a base-scoped batch.
      *  * the five pre-solve-frame poses — their `235.0` u apparent relocation IS the solver's root
      *    transport (`effector = declared + (0, rootTranslation, 0)`, no clamp: the stamp reads
      *    `0.0470`), i.e. NOT a reach-band site; their real residual is the `0.0470` u boundary-exact
@@ -895,11 +834,6 @@ class ReachBandBatch4AuthoringTest {
         assertTrue("anti-vacuity: the artifact census must have produced readings", artifactReadings >= 20)
     }
 
-    // ----------------------------------------------------------------------------------------------
-    // helpers
-    // ----------------------------------------------------------------------------------------------
-
-    /** The interior angle at the middle joint of a realized (published) chain. */
     private fun interiorAngleDegrees(a: Vector3, b: Vector3, c: Vector3): Float {
         val ux = a.x - b.x; val uy = a.y - b.y; val uz = a.z - b.z
         val vx = c.x - b.x; val vy = c.y - b.y; val vz = c.z - b.z
@@ -920,7 +854,7 @@ class ReachBandBatch4AuthoringTest {
     private fun copyRot(r: JointRotation) = JointRotation(Vector3(r.axis.x, r.axis.y, r.axis.z), r.angle)
 
     /**
-     * The B-8b head-base projection of a published frame: the pose's own authored gaze × the
+     * The head-base projection of a published frame: the pose's own authored gaze × the
      * definition's neck length, rotated into world by the frame the chest node publishes (the same
      * composition `chestLocalToWorld` + `buildGaze` perform at authoring time).
      */

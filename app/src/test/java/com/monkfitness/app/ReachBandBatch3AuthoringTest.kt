@@ -8,65 +8,38 @@ import java.util.Locale
 import kotlin.math.*
 
 /**
- * Third reach-band cleanup batch — `HalfKneelingStretchPose`, `HamstringStretchPose` and
+ * Reach-band cleanup batch: `HalfKneelingStretchPose`, `HamstringStretchPose` and
  * `ProneCobraStretchPose` (production geometry), plus the `CouchStretchPose` family-scope control
- * (test-only; its authoring is unchanged) and a corpus-wide blast-radius census.
+ * (test-only) and a corpus-wide blast-radius census.
  *
- * ## What this batch measured (base `origin/main` @ `cf8a14f`, the #254 merge)
- *
- * Every authored limb target of every pose was measured through the production entry point
- * `SkeletonPipeline.produceFrame(pose, ctx)` — `15` phases
- * (`0.00, 0.05, 0.10, 0.20, 0.25, 0.30, 0.40, 0.50, 0.60, 0.70, 0.75, 0.80, 0.90, 0.95, 1.00`) × the
+ * Every authored limb target was measured through `SkeletonPipeline.produceFrame` at 15 phases × the
  * pose's declared limb chains × both frame conditions (a fresh pipeline's cold first frame, then an
- * advancing pipeline) — against each chain's own `[SkeletonMath.minReach, SkeletonMath.maxReach]`.
+ * advancing pipeline) against each chain's own `[minReach, maxReach]`:
+ *  * `HalfKneelingStretchPose`'s hands ask `155.160` (p=0) … `166.868` (p=1) from a `80 + 66 = 146` u
+ *    limb — LONGER than the limb itself, impossible for ANY chain geometry — while the pose's own
+ *    intent (`BaseHipFlexorPose.solveArmsOnKnee`: "Both arms rest on the front knee") is a reachable
+ *    one; the solver published them on the `0.98` cap with the elbow reading `156.94°` interior (a
+ *    straight arm, not a hand resting on a knee). Its front ankle (`100.835 … 119.436`) is in band.
+ *  * `HamstringStretchPose`'s tucked ankle asks a `36.688` chord — an interior knee angle of `18.89°`
+ *    against the `IKConstraint`'s own `30°` stop (`161°` of knee flexion, past the spec's "knee
+ *    flexed, foot tucked in" model). Its extended ankle (`205.000`) and hands (`40.937 … 115.179`)
+ *    are in band.
+ *  * `ProneCobraStretchPose`'s hand sweep leaves the band at BOTH ends: the start asks an interior
+ *    elbow angle of `14.39°` (past the `30°` stop), the end `154.027` from the same `146` u limb
+ *    (`105.5 %` of it). Its ankles (`195.000`) are in band.
+ *  * `CouchStretchPose` (sibling, NOT fixed here) composes its hands through the SAME shared helper
+ *    and carries the same class of site (`142.049 … 156.679`, `13.600` u relocation): the family's
+ *    shared choreography is not re-scoped, so the projection is opted into per variant and this file
+ *    pins the sibling's site. The corpus's other measured out-of-band sites (`GluteBridgePose` /
+ *    `PelvicTiltPose` legs `10.998`, `SupermanPose` `4.200` / `2.999`, `ThoracicExtensionPose`
+ *    `5.516`, the lunge-family `1.226`, `CossackSquatPose` `1.200`) are likewise unchanged and
+ *    pinned.
  *
- * | pose | chain | authored root→target | band | relocation |
- * |---|---|---|---|---|
- * | `HalfKneelingStretchPose` | both hands | `155.160` (p=0) … `166.868` (p=1) | `≤ 143.080` | **`12.080 … 23.788`** |
- * | `HalfKneelingStretchPose` | front ankle | `100.835 … 119.436` | in band | `0.000` |
- * | `HamstringStretchPose` | tucked (back) ankle | `36.688` (every frame) | `≥ 56.009` | **`19.321`** |
- * | `HamstringStretchPose` | extended (front) ankle | `205.000` | in band | `0.000` |
- * | `HamstringStretchPose` | both hands | `40.937 … 115.179` (the M13 projection) | in band | `0.000` |
- * | `ProneCobraStretchPose` | both hands | `23.000` (p=0) … `154.027` (p=1) | `[40.134, 143.080]` | **`17.134` (p=0) … `10.947` (p=1)** |
- * | `ProneCobraStretchPose` | both ankles | `195.000` | in band | `0.000` |
- * | `CouchStretchPose` (sibling, NOT fixed) | both hands | `142.049 … 156.679` | `≤ 143.080` | **`13.600`** |
- *
- * ## Classification — measured, per SITE
- *
- * The discriminator (unchanged since the first two batches) is whether an IDEAL (`L1 + L2`) chain
- * could honour the request at all, and whether the request contradicts the pose's own stated intent:
- *
- *  * **Unintended authoring error → fixed.**
- *    * `HalfKneelingStretchPose`'s hands ask for `155.160 … 166.868` from a `80 + 66 = 146` u limb —
- *      LONGER than the limb itself, i.e. impossible for ANY chain geometry, while the pose's own
- *      intent (`BaseHipFlexorPose.solveArmsOnKnee`: "Both arms rest on the front knee") is a
- *      reachable one. The solver published them exactly on the `0.98` cap with the elbow reading
- *      `156.94°` interior (a straight arm, not a hand resting on a knee).
- *    * `HamstringStretchPose`'s tucked leg asks for a `36.688` chord — an interior knee angle of
- *      `18.89°` against the `IKConstraint`'s own `30°` stop (`161°` of knee flexion, past the BPS's
- *      "knee flexed, foot tucked in" model). Same class as the second batch's `DeepSquatHoldPose`
- *      site (`24.80°` against the same stop, fixed there).
- *    * `ProneCobraStretchPose`'s hand sweep leaves the band at BOTH ends: its start asks for an
- *      interior elbow angle of `14.39°` (past the `30°` stop) and its end asks `154.027` from the
- *      same `146` u limb (`105.5 %` of it).
- *  * **Deliberate model limit / sibling site → left unchanged, pinned.** `CouchStretchPose` (the other
- *    `BaseHipFlexorPose` variant) composes its hands through the SAME shared helper and carries the
- *    same class of site (`142.049 … 156.679`, `13.600` u relocation). It is NOT in this batch, so the
- *    family's shared choreography is not re-scoped: the projection is opted into in
- *    `HalfKneelingStretchPose` alone, and this file pins the sibling's site so a base-scoped change
- *    has to come as its own decision. The corpus's other measured out-of-band sites
- *    (`GluteBridgePose` / `PelvicTiltPose` legs `10.998`, `SupermanPose` `4.200` / `2.999`,
- *    `ThoracicExtensionPose` `5.516`, the lunge-family `1.226`, `CossackSquatPose` `1.200`) are
- *    likewise unchanged and pinned.
- *
- * ## The fix (pose-side only)
- *
- * The assembly `BaseSquatPose`/`BaseLungePose` precedent — project the authored target onto its own
- * chain's annulus along its own ray (`SkeletonMath.clampTargetToReach`, `REACH_MARGIN = 1e-4` of the
- * chain's span). No solver, engine, carrier or stamp semantics change; the projection's own margin
- * keeps the published geometry (the solver's relocation WAS that boundary projection) and takes the
- * reachability stamp to exactly `0`. The poses keep their authored roots, depths, stance and
- * choreography — only the declaration moves.
+ * The fix is pose-side only: project the authored target onto its own chain's annulus along its own
+ * ray (`SkeletonMath.clampTargetToReach`, `REACH_MARGIN = 1e-4` of the chain's span). No solver,
+ * engine, carrier or stamp semantics change; the margin keeps the published geometry (the solver's
+ * relocation WAS that boundary projection) and takes the reachability stamp to exactly `0`. The
+ * poses keep their authored roots, depths, stance and choreography — only the declaration moves.
  */
 class ReachBandBatch3AuthoringTest {
 
@@ -180,10 +153,6 @@ class ReachBandBatch3AuthoringTest {
         else -> 0f
     }
 
-    // ----------------------------------------------------------------------------------------------
-    // 1 — every authored target of the fixed poses is inside its own chain's reachable band
-    // ----------------------------------------------------------------------------------------------
-
     @Test
     fun everyFixedTargetSitsInsideItsChainsOwnReachBand() {
         val all = fixedReadings()
@@ -198,10 +167,6 @@ class ReachBandBatch3AuthoringTest {
             violations.isEmpty()
         )
     }
-
-    // ----------------------------------------------------------------------------------------------
-    // 2 — the published effector IS the authored target (no relocation)
-    // ----------------------------------------------------------------------------------------------
 
     @Test
     fun thePublishedEffectorFollowsTheAuthoredTargetWithoutRelocation() {
@@ -218,10 +183,6 @@ class ReachBandBatch3AuthoringTest {
         )
     }
 
-    // ----------------------------------------------------------------------------------------------
-    // 3 — the pose records no reach-relocation stamp (the honest IK_TARGET_UNREACHABLE signal)
-    // ----------------------------------------------------------------------------------------------
-
     @Test
     fun thePublishedFrameRecordsNoReachRelocationStamp() {
         val bad = fixedReadings().filter { it.clampStamp > relocationTolerance }
@@ -232,11 +193,6 @@ class ReachBandBatch3AuthoringTest {
             bad.isEmpty()
         )
     }
-
-    // ----------------------------------------------------------------------------------------------
-    // 4 — the fix is target-side per pose: the authored exercise motion and the declaration surface
-    //     are untouched
-    // ----------------------------------------------------------------------------------------------
 
     @Test
     fun theHalfKneelingStretchKeepsItsAuthoredStanceAndAimsAtTheSameKnee() {
@@ -358,7 +314,6 @@ class ReachBandBatch3AuthoringTest {
                 legs.map { f(it.declaredDistance) }.distinct().joinToString(),
             legs.all { abs(it.declaredDistance - 195f) < 1e-4f }
         )
-        // (c) anti-collateral: the declaration surface is untouched by a reach-authoring fix.
         for (r in rs) {
             assertEquals(
                 "${where(r)}: the declared support model must be unchanged",
@@ -373,21 +328,10 @@ class ReachBandBatch3AuthoringTest {
         }
     }
 
-    // ----------------------------------------------------------------------------------------------
-    // 5 — THE FAMILY-SCOPE PIN: the sibling that shares the site's authoring is NOT re-scoped
-    // ----------------------------------------------------------------------------------------------
-
     /**
      * `CouchStretchPose` composes its hands through the SAME `BaseHipFlexorPose.solveArmsOnKnee`
-     * choreography and carried the same class of site (`13.5995` u) when this batch landed: this
-     * batch opts the projection in per variant, so the shared base is NOT re-scoped and the sibling
-     * keeps its authoring. (The FOURTH, final reach-band batch then measured the sibling and fixed it
-     * — again at the variant level, through the hook this batch installed; see
-     * `ReachBandBatch4AuthoringTest`.)
-     *
-     * The sibling's site was then measured and corrected by the FOURTH (final) reach-band batch with
-     * its own record (`ReachBandBatch4AuthoringTest`) — again at the VARIANT level, through the hook
-     * this batch installed. What this test guards after that correction is therefore:
+     * choreography: the projection is opted in per variant, so the shared base is NOT re-scoped.
+     * What this test guards:
      *
      *  * the shared composition is still the declaration channel (the sibling's declared arm target
      *    still lies on the ray from its own shoulder to the knee-composed point), and
@@ -413,10 +357,8 @@ class ReachBandBatch3AuthoringTest {
                 "(worst declared ${f(arms.maxOf { it.declaredDistance })} of the ${f(arms.first().maxReach)} cap)",
             arms.maxOf { it.declaredDistance } <= arms.first().maxReach
         )
-        // (b) THE BASE-DEFAULT PIN: the composed target declared verbatim, no projection. (The ray
-        //     check for the sibling's own composition lives in the fourth batch's record,
-        //     `ReachBandBatch4AuthoringTest.theCouchStretchKeepsItsAuthoredStanceAndAimsAtTheFrontKnee`,
-        //     where the variant's own front-leg literal is known.)
+        // (b) THE BASE-DEFAULT PIN: a probe variant that does not override the hook must declare the
+        //     composed target verbatim — a base-wide change is its own decision.
         val measured = SkeletonPipeline(def).produceFrame(BaseChoreographyProbe(), context(1.0f)).pose
         val handTarget = measured.limbTargets.first { it.joint == Joint.HAND_A }
         val shoulder = measured.getJoint(Joint.SHOULDER_A)
@@ -448,11 +390,6 @@ class ReachBandBatch3AuthoringTest {
             sibling.filter { it.chain == Joint.ANKLE_F }.all { bandExcess(it) <= bandTolerance }
         )
     }
-
-    // ----------------------------------------------------------------------------------------------
-    // 6 — NON-VACUITY: the same measurement still rejects the PRE-BATCH authoring, and the fixed
-    //     poses publish the SAME geometry the pre-batch declaration did
-    // ----------------------------------------------------------------------------------------------
 
     /**
      * The sensitivity control. All three poses are FINAL classes, so the pre-batch authoring is
@@ -498,7 +435,7 @@ class ReachBandBatch3AuthoringTest {
 
     @Test
     fun theSameMeasurementStillRejectsThePreBatchAuthoring() {
-        // The pre-batch relocation each pose's authoring read on `origin/main` @ `cf8a14f`.
+        // The pre-batch relocation each pose's authoring read.
         val preBatch = mapOf(
             "HalfKneelingStretchPose" to 23.788f,
             "HamstringStretchPose" to 19.321f,
@@ -556,18 +493,8 @@ class ReachBandBatch3AuthoringTest {
         )
     }
 
-    // ----------------------------------------------------------------------------------------------
-    // 7 — the corpus's other measured out-of-band sites are untouched (blast radius, reach dimension)
-    // ----------------------------------------------------------------------------------------------
-
     /**
      * pose → the worst relocation its published frame carries on the tree this test runs against.
-     *
-     * The five poses the FOURTH (final) reach-band batch corrected — `CouchStretchPose`,
-     * `QuadrupedThoracicRotationsPose`, `GluteBridgePose`, `PelvicTiltPose` and
-     * `ThoracicExtensionPose` — read `0` here now: their sites were measured and fixed with their own
-     * record (`ReachBandBatch4AuthoringTest`), at the VARIANT level, so this census keeps its meaning
-     * ("this batch is confined to its own poses and every other pose reads exactly as measured").
      *
      * `GluteBridgePose`'s `0.0409` is its ARM chain's own pre-existing residual: that declaration is
      * IN band (no clamp — the pose's stamp reads `0`), so the reach convention does not touch it; it
@@ -608,7 +535,6 @@ class ReachBandBatch3AuthoringTest {
         )
     }
 
-    /** The interior angle at the middle joint of a realized (published) chain. */
     private fun interiorAngleDegrees(a: Vector3, b: Vector3, c: Vector3): Float {
         val ux = a.x - b.x; val uy = a.y - b.y; val uz = a.z - b.z
         val vx = c.x - b.x; val vy = c.y - b.y; val vz = c.z - b.z
@@ -653,10 +579,9 @@ private fun planFrontKneeFromHip(hip: Vector3, def: SkeletonDefinition): Vector3
  * composes both hands and they are declared verbatim (the hook's default body is empty).
  *
  * Built at `CouchStretchPose`'s own end-of-rep root (pelvis `(−15, 124.1742)`, torso lean `−0.05`,
- * front-leg target `(55, 25, −22)`) — the exact frame whose composition reads the sibling's pre-batch
- * site — so
+ * front-leg target `(55, 25, −22)`) — the exact frame whose composition reads the sibling's site — so
  * [ReachBandBatch3AuthoringTest.theSharedFamilyChoreographyIsNotReScopedByThisBatch] can prove the
- * base default is still inert after the fourth batch's variant-level correction.
+ * base default is still inert.
  */
 private class BaseChoreographyProbe : BaseHipFlexorPose() {
     override val metadata = PoseMetadata(

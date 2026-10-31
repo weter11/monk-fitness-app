@@ -20,13 +20,11 @@ import com.monkfitness.app.ui.language.ResourceTables.untranslatableKeys
 /**
  * The app's localization, checked mechanically instead of by eye.
  *
- * The stage this suite belongs to replaced a three-button language selector with Android's own
- * application-locale mechanism and grew the shipped set from three languages to seven. Two things can go
- * wrong in that kind of change and neither is visible in a code review:
+ * Two things can go wrong here and neither is visible in a code review:
  *
  *  * **the app says it supports a language it does not.** A `values-xx` directory, a `localeConfig` entry,
  *    a picker row and a supported-language list are four physical statements of one policy; this suite fails
- *    when any of them disagrees with [AppLanguage], which is the single statement the app itself reads.
+ *    when any of them disagrees with [AppLanguage], the single statement the app itself reads.
  *  * **a translation is missing, empty, or a placeholder was dropped.** A key that exists only in English
  *    is not a missing key at runtime — Android silently shows English to a Bulgarian user — so it has to be
  *    a failing test instead.
@@ -37,8 +35,6 @@ import com.monkfitness.app.ui.language.ResourceTables.untranslatableKeys
 class AppLocalizationTest {
 
     private val defaultTable = stringsOf(ResourceTables.DEFAULT_LOCALE)
-
-    // ---- the policy -------------------------------------------------------------------------------
 
     @Test
     fun theSystemDefaultIsAModeAndNotALanguage() {
@@ -168,8 +164,6 @@ class AppLocalizationTest {
         )
     }
 
-    // ---- completeness -----------------------------------------------------------------------------
-
     @Test
     fun everyUserVisibleStringExistsInEveryLanguage() {
         val missing = allLocales().drop(1).flatMap { tag ->
@@ -224,8 +218,7 @@ class AppLocalizationTest {
 
     @Test
     fun everyPlaceholderShapeEnglishUsesIsCoveredByThisSuite() {
-        // The rule above is only as good as the shapes the app actually uses, so the shapes are stated:
-        // %d, %s, %1$d, %1$s, several arguments, and the escaped percent that a literal "%" needs.
+        // The rule above is only as good as the shapes the app actually uses, so they are stated here.
         val english = defaultTable.values.joinToString(" ")
         listOf("%d", "%1\$d", "%1\$s", "%1\$02d").forEach { shape ->
             assertTrue("expected the app to use $shape somewhere", english.contains(shape))
@@ -280,15 +273,12 @@ class AppLocalizationTest {
         )
     }
 
-    // ---- quality ----------------------------------------------------------------------------------
-
     @Test
     fun noLanguageIsASilentCopyOfEnglish() {
         // Deliberately *not* "every value must differ": a brand ("Monk Fitness"), a unit ("%1$d kcal"),
-        // an internationally used exercise name ("Bird Dog") and a format-only string legitimately read the
-        // same everywhere. What may not pass is a *block* of English pasted into a locale file, which is what
-        // a rushed translation looks like, so the suite bounds both how much and how consecutively a locale
-        // may agree with English.
+        // an internationally used exercise name ("Bird Dog") and a format-only string legitimately read
+        // the same everywhere. What may not pass is a *block* of English pasted into a locale file, so the
+        // suite bounds both how much and how consecutively a locale may agree with English.
         val allowedFraction = 0.05
         val allowedRun = 8
 
@@ -319,8 +309,8 @@ class AppLocalizationTest {
 
     @Test
     fun theDefaultResourceLocaleIsEnglish() {
-        // The system-fallback scenario the brief calls out — a device whose language the app does not ship —
-        // ends in `values/`, so the locale of that table is a fact worth asserting rather than assuming.
+        // A device whose language the app does not ship ends in `values/`, so the locale of that table is
+        // a fact worth asserting rather than assuming.
         listOf("settings" to "Settings", "language" to "Language", "reps" to "Reps").forEach { (key, english) ->
             assertEquals(
                 "values/ is the app's ultimate fallback and must be the English table",
@@ -335,8 +325,8 @@ class AppLocalizationTest {
 
     @Test
     fun theStringsThisStageAddedAreActuallyShown() {
-        // The stage added the language setting and moved Settings' and the nutrition preview's literal copy
-        // into resources. A resource nothing reads is a second sentence to keep in step for no reader.
+        // Settings' and the nutrition preview's literal copy was moved into resources; a resource nothing
+        // reads is a second sentence to keep in step for no reader.
         val referenced = referencesIn(ResourceTables.mainSources())
         val required = listOf(
             "language_system_default",

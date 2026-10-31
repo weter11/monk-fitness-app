@@ -10,69 +10,51 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * B-8b — the thoracic-extension arm target is authored from geometry the POSE owns.
+ * The thoracic-extension arm target is authored from geometry the POSE owns.
  *
- * **Defect (measured on `origin/main` @ `691c6a7`, the tree this class was written RED on).**
- * `ThoracicExtensionPose` derived both arm targets from `neck!!.worldPosition`:
+ * The defect: `ThoracicExtensionPose` derived both arm targets from `neck!!.worldPosition`
+ * (`target = neckW + (-12, +6, ±shoulderWidth·0.55)`). The neck's local offsets are written by the
+ * engine — `SkeletonPoseFinalizer.resolveHeadTarget` is the sole writer — and that write lands at the
+ * END of a frame, so the pose can only ever read the PREVIOUS frame's neck. On a builder's FIRST
+ * build the template still carries a zero neck offset, so the cold frame anchored its arms to the
+ * CHEST and realized a target the pose never sees again. Measured, cold first frame vs the same
+ * instance once settled (progress 0): declared target `(-12.000000, 253.000000, ∓25.300000)` vs
+ * `(-14.144614, 270.871796, ∓25.300000)` = delta 17.8718u; published `ELBOW_A`/`HAND_A` delta
+ * 29.9277 / 17.9135u; published `maxIkClampAmount` 15.4668 on the cold frame against 5.5162 in the
+ * rep. Steady state only looked right because the reused node tree carried the engine's previous
+ * write — correctness by cross-build buffer reuse, not by the frame.
  *
- *     val neckW = neck!!.worldPosition
- *     targetP/ targetA = neckW + (-12, +6, ±shoulderWidth·0.55)
- *
- * The neck's local offsets are written by the engine — `SkeletonPoseFinalizer.resolveHeadTarget`
- * is the sole writer (Phase 7, `ARCHITECTURE_V2` §3 PHASE 7) — and that write lands at the END of a
- * frame, so the pose can only ever read the PREVIOUS frame's neck. On a builder's FIRST build the
- * template still carries a zero neck offset, so the cold frame anchored its arms to the CHEST
- * (the neck sat *at* the chest) and realized a target the pose never sees again. Measured, cold
- * first frame vs the same instance once settled (progress 0): declared arm target
- * `(-12.000000, 253.000000, ∓25.300000)` vs `(-14.144614, 270.871796, ∓25.300000)` = delta
- * **17.8718u**; published `ELBOW_A`/`HAND_A` delta **29.9277 / 17.9135u**; the published
- * `maxIkClampAmount` read **15.4668** on the cold frame against **5.5162** in the rep. Steady
- * state only looked right because the reused node tree carried the engine's previous write —
- * correctness by cross-build buffer reuse, not by the frame.
- *
- * **Fix (pose-side only; no engine file, no phase order, no head/neck ownership change).** The
- * engine places the neck along the gaze the pose declares (`buildGaze`, the pose's own `headDir`
- * and `def.neckLength`) inside the chest frame the pose declares, so the same point is expressible
- * from authored intent: `headDir · def.neckLength`, rotated to world by the declared chest frame
- * through the family's existing helper `BaseThoracicPose.chestLocalToWorld` (the one the thoracic
- * reaches already use). The authored `(-12, +6, ±0.55·shoulderWidth)` hand offset is untouched, so
+ * The fix (pose-side only; no engine file, no phase order, no head/neck ownership change): the engine
+ * places the neck along the gaze the pose declares (`buildGaze`, the pose's own `headDir` and
+ * `def.neckLength`) inside the declared chest frame, so the same point is expressible from authored
+ * intent — `headDir · def.neckLength` rotated to world by the declared chest frame through the
+ * family's existing `BaseThoracicPose.chestLocalToWorld`. The authored hand offset is untouched, so
  * every settled frame is byte-identical (whole-corpus dump: 490 rows, the other 48 registry poses
- * byte-identical at 1e-6 everywhere, and `thoracic_extension_reps` byte-identical on every settled
- * frame — only its 5 COLD frames change).
+ * byte-identical at 1e-6, `thoracic_extension_reps` byte-identical on every settled frame — only its
+ * 5 COLD frames change).
  *
- * **What these tests prove, and how (each is RED on `origin/main` where noted).**
- *  1. The declared arm target in the published `limbTargets` carrier is frame-invariant: cold first
- *     frame == frame 1 == the settled rep, at every progress sample. RED pre-fix (17.87u at p=0).
- *  2. The published arm chain is frame-invariant at the same tolerance the sibling cold-frame suite
- *     uses, and the cold frame publishes the rep's chain. RED pre-fix (29.93/17.91u at p=0).
- *  3. The authored base sits ON the neck base the ENGINE realizes (the published `NECK_END`) at
- *     every progress — the target is anchored to the head the engine produces, not to an arbitrary
- *     chest offset, and not to the stale node read. RED pre-fix on the cold frame (2.14u).
- *  4. The authored target is provably NOT the old expression: recomputed from the pose's own build
- *     (`neck` world + the same offsets), it must differ by > 5u. RED pre-fix by construction (0u).
- *  5. The regression is also structurally impossible to reintroduce silently: the pose source may
- *     not read the neck node's world position (source scan).
- *  6. The published carriers stay honest: `limbTargets` reports the authored target with its
- *     declared realization context, `boneLengthsVerified` stays true, and no NEW clamp appears —
- *     the cold frame's `maxIkClampAmount` must equal the rep's, which must not exceed the
- *     pre-fix steady-state value per progress recorded below.
+ * Asserted: the declared target in the published `limbTargets` carrier is frame-invariant (cold first
+ * frame == frame 1 == the settled rep at every progress); the published arm chain is frame-invariant
+ * at the sibling cold-frame suite's tolerance; the authored base sits ON the `NECK_END` the engine
+ * realizes, not on an arbitrary chest offset and not on the stale node read; the authored target
+ * provably differs from the old expression (recomputed from the pose's own build, > 5u); the pose
+ * source may not read the neck node's world position (source scan); and the carriers stay honest —
+ * `limbTargets` reports the authored target with its realization context, `boneLengthsVerified` stays
+ * true, and no NEW clamp appears.
  *
- * **Tolerance.** [TARGET_TOLERANCE] = 1e-4u is used for declared-value identity: the projection is
- * the same expression from the same declared chest frame, measured **0.000000**; the margin is for
- * float re-projection (the engine's `dir` is normalized from `gazeDir·100`, the pose's from
- * `gazeDir`) and is still 4 orders of magnitude below the pre-fix defect. [CHAIN_TOLERANCE] =
- * 0.25u is exactly `ColdFrameLimbRealizationTest`'s cold-frame limb tolerance — not a new one.
+ * Tolerance: [TARGET_TOLERANCE] = 1e-4u for declared-value identity — the projection is the same
+ * expression from the same declared chest frame, measured 0.000000; the margin is float
+ * re-projection (the engine's `dir` is normalized from `gazeDir·100`, the pose's from `gazeDir`), and
+ * it is still 4 orders of magnitude below the pre-fix defect. [CHAIN_TOLERANCE] = 0.25u is exactly
+ * `ColdFrameLimbRealizationTest`'s cold-frame limb tolerance — not a new one.
  *
- * Residual (now RESOLVED by the fourth, final reach-band batch; the pin below keeps its guard): this
- * pose authored its hands INSIDE the arm's minimum-reach annulus (the `ArmConstraint` minimum flexion
+ * Residual: this pose authored its hands INSIDE the arm's minimum-reach annulus (the minimum flexion
  * of 30° fixes the closest reachable end-effector distance at 40.134u, while the authored target sits
  * 34.618u from the shoulder at p=0), so the solver honestly reported `maxIkClampAmount` 5.5162 and
- * placed the hand on the target's own ray at 40.134u. The fourth (final) reach-band batch projected
- * that declaration onto the annulus along the authored ray
- * (`ThoracicExtensionPose.projectArmTargetToReach`, `REACH_MARGIN = 1e-4`): the realized hand is
- * unchanged (`≤ 0.0038` u), the declaration now IS the published position and the clamp reads `0`.
- * The values below stay as an upper bound so a future change cannot hide a WORSE clamp behind this
- * record; the batch's own gate is `ReachBandBatch4AuthoringTest`.
+ * placed the hand on the target's own ray. The declaration is now projected onto the annulus along
+ * that ray (`projectArmTargetToReach`, `REACH_MARGIN = 1e-4`): the realized hand is unchanged
+ * (`≤ 0.0038` u), the declaration IS the published position and the clamp reads `0`. The clamp values
+ * below stay as an upper bound so a future change cannot hide a WORSE clamp behind this record.
  */
 class ThoracicExtensionArmTargetTest {
 
@@ -103,15 +85,13 @@ class ThoracicExtensionArmTargetTest {
     private val CHAIN_TOLERANCE = 0.25f
 
     /**
-     * Published `maxIkClampAmount` of the settled rep per progress, measured PRE-FIX on
-     * `origin/main` @ `691c6a7` (unchanged by this fix): the honest min-flexion residual of the
-     * authored placement. The fix may not exceed these.
+     * Published `maxIkClampAmount` of the settled rep per progress, measured PRE-FIX (unchanged by
+     * this fix): the honest min-flexion residual of the authored placement. The fix may not exceed
+     * these.
      */
     private val preFixSteadyStateClamp = mapOf(
         0f to 5.516174f, 0.25f to 4.573788f, 0.5f to 3.795033f, 0.75f to 3.192696f, 1f to 2.776337f
     )
-
-    // ---- harness -----------------------------------------------------------------------------
 
     /** By-value snapshot: `produceFrame(...).pose` is the Finalizer's reused output buffer. */
     private class Frame(
@@ -153,8 +133,6 @@ class ThoracicExtensionArmTargetTest {
 
     private fun xyz(v: Vector3) = "(${f(v.x)},${f(v.y)},${f(v.z)})"
 
-    // ---- 1. the declared target is frame-invariant -------------------------------------------
-
     @Test
     fun declaredArmTargetIsFrameInvariant() {
         for (p in progresses) {
@@ -185,8 +163,6 @@ class ThoracicExtensionArmTargetTest {
         }
     }
 
-    // ---- 2. the published arm chain is frame-invariant ---------------------------------------
-
     @Test
     fun coldFrameRealizesTheSameArmChainAsTheRep() {
         for (p in progresses) {
@@ -208,16 +184,13 @@ class ThoracicExtensionArmTargetTest {
         }
     }
 
-    // ---- 3. the base is the head base the ENGINE realizes -------------------------------------
-
     /**
-     * The B-8b property: both arm targets are anchored to the head base the ENGINE resolves
-     * (`NECK_END`) — not to an arbitrary chest offset, and not to the stale node read.
+     * Both arm targets are anchored to the head base the ENGINE resolves (`NECK_END`) — not to an
+     * arbitrary chest offset, and not to the stale node read.
      *
-     * The fourth (final) reach-band batch then projected that declared target ALONG its own authored
-     * ray onto the arm chain's annulus: this pose authors a hands-behind-the-head clasp
-     * `34.6182 … 37.3581` u from its own shoulder (BPS §6's "clasped behind the head with elbows
-     * wide") against the chain's `40.1344` minimum-flexion reach, so the solver had been relocating
+     * The declared target was then projected ALONG its own authored ray onto the arm chain's
+     * annulus: this pose authors a hands-behind-the-head clasp `34.6182 … 37.3581` u from its own
+     * shoulder against the chain's `40.1344` minimum-flexion reach, so the solver had been relocating
      * the declaration `5.5162 … 2.7763` u. The anchor pinned here is therefore the RAY:
      * `declared − shoulder` must stay parallel to `authored − shoulder`, where `authored` is the
      * engine-resolved neck base + the pose's own `(−12, +6, ±0.55 · shoulderWidth)`.
@@ -261,8 +234,6 @@ class ThoracicExtensionArmTargetTest {
         return ((a.x * b.x + a.y * b.y + a.z * b.z) / (am * bm)).coerceIn(-1f, 1f)
     }
 
-    // ---- 4. non-vacuity: it is provably not the old expression --------------------------------
-
     @Test
     fun authoredTargetIsNotAnchoredToTheEngineMutatedNeckNode() {
         for (p in progresses) {
@@ -284,8 +255,6 @@ class ThoracicExtensionArmTargetTest {
             }
         }
     }
-
-    // ---- 5. structural guard: the pose must not read the neck node's world position -----------
 
     @Test
     fun poseDoesNotReadTheEngineOwnedNeckNodePosition() {
@@ -313,8 +282,6 @@ class ThoracicExtensionArmTargetTest {
             offenders.isEmpty()
         )
     }
-
-    // ---- 6. published carriers stay honest ----------------------------------------------------
 
     @Test
     fun publishedCarriersStayHonestAndNoNewClampAppears() {

@@ -39,38 +39,17 @@ import java.time.Instant
 import java.time.LocalDate
 
 /**
- * §30 step 20 on a real SQLite engine: the first production consumer of the target contour, driven
- * the way production will drive it, with every collaborator the composition root hands it.
- *
- * ```text
- * a Program saved with an explicit target source
- *         ↓  TargetScheduleProductionConsumer.run(programId, context)
- * current revision → explicit source → stored occurrences → input → adapter → orchestrator
- *         ↓
- * a target occurrence and a target slot, on disk
- * ```
+ * The first production consumer of the target contour on a real SQLite engine, driven the way
+ * production will drive it, with every collaborator the composition root hands it: a Program saved
+ * with an explicit target source, then `run(programId, context)` walking the current revision through
+ * the stored source, the stored occurrences, the input, the adapter and the orchestrator to a target
+ * occurrence and a target slot on disk.
  *
  * Nothing here is mocked. The Program, its revision, its plan, the authored target source, the target
  * occurrence, the target slot, the workout session and its confirmed sets are all written through the
  * production write paths and read back through the production read paths, so a claim such as "the
  * stored source is what the pass planned from" is a statement about rows rather than about a
  * hand-built value handed to a stub.
- *
- * The claims, in the order the stage states them:
- *
- * ```text
- *  1. a complete run: source read → input assembled → adapter → orchestrator → occurrence + slot
- *  2. exact source fidelity: ruleId / workoutId / cadence / anchorDate / binding all crossed
- *  3. existing occurrences arrive through the execution bridge, and its policy stays authoritative
- *  4. a repeated identical request creates nothing the second time
- *  5. a revision with no target source is a typed absence, and writes no target row
- *  6. a malformed stored source is reported, not defaulted
- *  7. the five caller-owned values are forwarded unchanged, and each one visibly reaches the stage
- *     that owns it
- *  8. the run belongs to the *current* revision, and an earlier revision's source is untouched
- *  9. two Programs may hold identical rule identities without reading or writing each other
- * 10. the legacy planning path is untouched and uncalled by the consumer
- * ```
  */
 class TargetScheduleProductionConsumerIntegrationTest {
 
@@ -81,8 +60,6 @@ class TargetScheduleProductionConsumerIntegrationTest {
     fun close() {
         rig.close()
     }
-
-    // ---- 1. a complete target run from persisted authoring ----------------------------------------
 
     @Test
     fun aPersistedAuthoringBecomesAStoredTargetOccurrenceAndTargetSlot() = runBlocking {
@@ -131,8 +108,6 @@ class TargetScheduleProductionConsumerIntegrationTest {
                 .count { it.targetOccurrenceKey == null }
         )
     }
-
-    // ---- 2. exact source fidelity -------------------------------------------------------------------
 
     @Test
     fun everyFieldOfTheRuntimeComesFromTheStoredSourceAndNotFromLegacyProgramData() = runBlocking {
@@ -203,8 +178,6 @@ class TargetScheduleProductionConsumerIntegrationTest {
         )
     }
 
-    // ---- 3. existing occurrence execution -----------------------------------------------------------
-
     @Test
     fun aStoredOccurrenceIsSuppliedByTheExecutionBridgeAndItsStoredHistoryStaysAuthoritative() =
         runBlocking {
@@ -250,8 +223,6 @@ class TargetScheduleProductionConsumerIntegrationTest {
             )
         }
 
-    // ---- 4. idempotent repeated run -----------------------------------------------------------------
-
     @Test
     fun runningTheSameRequestTwiceCreatesNoDuplicateOccurrenceOrSlot() = runBlocking {
         rig.createGraph()
@@ -291,8 +262,6 @@ class TargetScheduleProductionConsumerIntegrationTest {
             first.result.applicationResult.persistenceResult.created.size
         )
     }
-
-    // ---- 5./6. the stored-source refusals -----------------------------------------------------------
 
     @Test
     fun aLegacyCreatedRevisionWithNoTargetSourceIsATypedAbsenceAndWritesNoTargetRow() = runBlocking {
@@ -343,8 +312,6 @@ class TargetScheduleProductionConsumerIntegrationTest {
         assertEquals(0, occurrenceRows())
         assertEquals(0, targetSlotRows())
     }
-
-    // ---- 7. context fidelity -----------------------------------------------------------------------
 
     @Test
     fun theCallerOwnedContextIsForwardedUnchangedAndEachValueReachesTheStageThatOwnsIt() = runBlocking {
@@ -453,8 +420,6 @@ class TargetScheduleProductionConsumerIntegrationTest {
         assertEquals("and nothing was written", 0, occurrenceRows())
     }
 
-    // ---- 8. revision ownership ----------------------------------------------------------------------
-
     @Test
     fun theRunBelongsToTheCurrentRevisionAndAnEarlierRevisionsSourceIsUntouched() = runBlocking {
         rig.createGraph()
@@ -502,8 +467,6 @@ class TargetScheduleProductionConsumerIntegrationTest {
                 .count { it.occurrence.components.any { component -> component.ruleId == "rule-alpha" } }
         )
     }
-
-    // ---- 9. cross-Program isolation -----------------------------------------------------------------
 
     @Test
     fun twoProgramsMayHoldIdenticalRuleIdentitiesWithoutReadingOrWritingEachOther() = runBlocking {
@@ -553,8 +516,6 @@ class TargetScheduleProductionConsumerIntegrationTest {
         )
     }
 
-    // ---- 10. legacy isolation -----------------------------------------------------------------------
-
     @Test
     fun theConsumerRunsNoLegacySchedulingPassAndLeavesTheLegacySlotsAlone() = runBlocking {
         rig.createGraph()
@@ -586,8 +547,6 @@ class TargetScheduleProductionConsumerIntegrationTest {
                 }
         )
     }
-
-    // ---- fixtures ----------------------------------------------------------------------------------
 
     private suspend fun run(programId: ProgramId, context: TargetScheduleRunContext = defaultContext()) =
         consumer().run(programId, context)

@@ -16,16 +16,13 @@ import kotlin.math.sqrt
 /**
  * Horse Stance (`horse_stance_hold`) — the exercise's own biomechanics on the published frame.
  *
- * Stated intent (the only in-repo specification — there is no BPS for this exercise):
- * `ex_horse_stance_steps` "Stand with feet double shoulder-width apart, toes pointed slightly
- * outward. Sink your hips down until thighs are parallel to the floor. Keep your back straight and
- * hands in front or on your hips. Hold."  `ex_horse_stance_tech` "Tuck your pelvis slightly to avoid
- * overarching the lower back. Distribute weight evenly across the entire foot."
- * `ex_horse_stance_mistakes` "Letting the knees collapse inward, rounding the back, and not sinking
- * deep enough."
+ * The copy is the only in-repo specification (no BPS): feet double shoulder-width apart with the toes
+ * pointed slightly outward, hips sunk until the thighs are parallel to the floor, back straight,
+ * hands in front or on the hips, held — pelvis tucked to avoid overarching the lower back, weight
+ * even across the whole foot, knees never collapsing inward.
  *
- * Every assertion below is measured through [PoseFrameSweep] (the production pipeline's PUBLISHED
- * frames), never on a raw `build()` result.
+ * Every assertion is measured through [PoseFrameSweep] (the production pipeline's PUBLISHED frames),
+ * never on a raw `build()` result.
  */
 class HorseStancePoseTest {
 

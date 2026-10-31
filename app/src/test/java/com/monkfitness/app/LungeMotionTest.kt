@@ -4,9 +4,9 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * Motion-range contract for the LUNGE family (PDP §5 [7], PAC §3/§4).
- * Each lunge steps/drops through a real range of motion; a static lunge would pass the validator
- * yet animate nothing.
+ * Motion-range contract for the LUNGE family.
+ * Each lunge steps/drops through a real range of motion; a static lunge would pass the validator yet
+ * animate nothing.
  */
 class LungeMotionTest {
 

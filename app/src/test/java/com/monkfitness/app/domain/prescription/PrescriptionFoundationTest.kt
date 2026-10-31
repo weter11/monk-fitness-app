@@ -6,24 +6,19 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The prescription foundation.
- *
- * Two things are pinned here. First, that a prescription is **per set**: `12 / 10 / 8 / 6` and
+ * Two things are pinned. First, that a prescription is **per set**: `12 / 10 / 8 / 6` and
  * `30s / 30s / 45s` must survive the round trip through the model, because a uniform prescription
  * expanded from a `sets + target` pair would lose exactly the information the plan carries.
  *
  * Second, the *room* left for the dimensions that are not implemented yet: the five dimension names
- * exist, and only two of them have a subtype — so a later stage adds `SetBased`, `DifficultyBased` or
- * `RestBased` as an additive change, and no algorithm, coefficient or unit for them can be smuggled in
- * today.
+ * exist, only two have a subtype, so `SetBased`/`DifficultyBased`/`RestBased` can be added as an
+ * additive change and no algorithm, coefficient or unit for them can be smuggled in today.
  */
 class PrescriptionFoundationTest {
 
     private val packageDir = File("src/main/java/com/monkfitness/app/domain/prescription").let { dir ->
         if (dir.isDirectory) dir else File("app/$dir")
     }
-
-    // ------------------------------------------------------------------ the two implemented dimensions
 
     @Test
     fun aRepetitionPrescriptionKeepsEverySetAtItsOwnValue() {
@@ -58,8 +53,6 @@ class PrescriptionFoundationTest {
         )
         assertEquals(3, RepPrescription.uniform(sets = 3, reps = 10).setCount)
     }
-
-    // ------------------------------------------------------------------ what a prescription may not say
 
     @Test
     fun aPrescriptionWithoutSetsIsNotRepresentable() {
@@ -99,8 +92,6 @@ class PrescriptionFoundationTest {
         assertTrue(rep is RepPrescription)
         assertTrue(timed is TimePrescription)
     }
-
-    // ------------------------------------------------------------------ the room left for the rest
 
     @Test
     fun theFiveDimensionsAreNamedAndOnlyTwoAreImplemented() {

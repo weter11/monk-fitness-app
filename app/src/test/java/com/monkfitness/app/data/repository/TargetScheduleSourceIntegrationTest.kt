@@ -24,30 +24,18 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 
 /**
- * The whole Stage 18 chain, end to end, on a real SQLite engine and **without the legacy scheduler**.
+ * The whole chain end to end, on a real SQLite engine and **without the legacy scheduler**: persist an
+ * explicit revision-owned source, read it through the bridge, build `TargetScheduleInput` from what was
+ * read, and let the existing `TargetScheduleInputAdapter` produce a `TargetScheduleOrchestrationRequest`.
  *
- * ```text
- * persist an explicit, revision-owned target source
- *         ↓
- * read it back through the bridge
- *         ↓
- * build TargetScheduleInput from what was read
- *         ↓
- * the existing TargetScheduleInputAdapter
- *         ↓
- * TargetScheduleOrchestrationRequest
- * ```
+ * The claim is that a production caller can obtain an honest `TargetScheduleInput` from persisted,
+ * explicitly stated target semantics. That nothing invented a fact is proved by the request's schedules
+ * being *field-for-field* the stored values; that the legacy contour was not involved, by this suite
+ * never constructing `ProgramScheduler`, `SlotPlanner` or a legacy slot, and by the stored source being
+ * unchanged when the revision's legacy schedule is.
  *
- * This is the claim the phase exists to make: a future production caller can obtain an honest
- * `TargetScheduleInput` from persisted, explicitly stated target semantics. The proof that nothing in
- * the chain invented a fact is that the request's schedules are *field-for-field* the values that were
- * stored — and the proof that the legacy contour was not involved is that this suite never constructs
- * `ProgramScheduler`, `SlotPlanner` or a legacy slot, and that the stored source is unchanged when the
- * revision's legacy schedule is.
- *
- * The pass is **not** run. Producing a `TargetScheduleOrchestrationRequest` is the last step here, and
- * the orchestrator stays a separately callable contour: cutover is a later phase, and wiring this
- * suite to one would perform it.
+ * The pass is **not** run: the orchestrator stays separately callable, and wiring this suite to one
+ * would perform the cutover.
  */
 class TargetScheduleSourceIntegrationTest {
 
@@ -80,13 +68,11 @@ class TargetScheduleSourceIntegrationTest {
         )
         rig.targetScheduleSourceRepository.store(source)
 
-        // read it back
         val bridge = TargetScheduleSourceBridge(rig.targetScheduleSourceRepository)
         val read = bridge.definitionsAndBindingsOf(revisionId)
         assertTrue("the source reads back as stored", read is TargetScheduleSourceRead.Source)
         val stored = (read as TargetScheduleSourceRead.Source).source
 
-        // build the input from what was read, and let the *existing* adapter do its job unchanged
         val input = input(
             definitions = stored.rules,
             bindings = stored.programDayBindings
@@ -115,10 +101,9 @@ class TargetScheduleSourceIntegrationTest {
     @Test
     fun theRequestRunsTheStoredCadenceTheStoredWay() = runBlocking {
         rig.createGraph()
-        // The request's schedules are what the resolver would read. Pinning the resolved dates here is
-        // what proves the cadence survived storage as a *semantic* and not merely as text: a
-        // `SessionsPerWeek(3)` that had been normalized to a weekday set or to an interval would
-        // resolve to different dates.
+        // The request's schedules are what the resolver reads. Pinning the resolved dates proves the
+        // cadence survived storage as a *semantic* and not merely as text: a `SessionsPerWeek(3)`
+        // normalised to a weekday set or an interval would resolve to different dates.
         val source = TargetScheduleSource(
             revisionId = revisionId,
             rules = listOf(
@@ -181,9 +166,9 @@ class TargetScheduleSourceIntegrationTest {
                 programDayBindings = listOf(TargetProgramDayBinding("workout-a", dayId(1)))
             )
         )
-        // A cadence token outside the vocabulary. The entity's own guard defers an unknown token to
-        // the mapper, which owns the vocabulary — so the row *is* storable, and the read is what has
-        // to notice, which is exactly the claim under test.
+        // A cadence token outside the vocabulary. The entity's guard defers an unknown token to the
+        // mapper, which owns the vocabulary — so the row *is* storable and the read is what has to
+        // notice, which is the claim under test.
         rig.database.exec(
             "UPDATE `program_target_schedule_rule` SET `cadenceType` = 'TWICE_A_FORTNIGHT' " +
                 "WHERE `revisionId` = '${revisionId.value}'"
@@ -215,7 +200,6 @@ class TargetScheduleSourceIntegrationTest {
         val stored = (bridge.definitionsAndBindingsOf(revisionId)
             as TargetScheduleSourceRead.Source).source
 
-        // Change the revision's legacy schedule after the fact.
         rig.database.exec(
             "UPDATE `program_revision` SET `scheduleType` = 'FIXED_WEEKDAYS', " +
                 "`scheduleWeekdays` = 'SATURDAY,SUNDAY', `scheduleSessionsPerWeek` = NULL " +
@@ -238,15 +222,14 @@ class TargetScheduleSourceIntegrationTest {
         )
     }
 
-    // ------------------------------------------------------------------ helpers
 
     private fun dayId(position: Int) =
         ProgramDayId(ProgramGraphFixture.dayId("target-source-integration", position))
 
     /**
-     * The caller's half of [TargetScheduleInput]: the eight values this phase explicitly does **not**
-     * decide. They are stated here because a caller owns them, and because a bridge that decided any
-     * of them would be making a scheduling decision.
+     * The caller's half of [TargetScheduleInput]: the values this layer explicitly does **not** decide.
+     * Stated here because a caller owns them, and because a bridge that decided any of them would be
+     * making a scheduling decision.
      */
     private fun input(
         definitions: List<com.monkfitness.app.domain.usecase.TargetScheduleDefinition>,

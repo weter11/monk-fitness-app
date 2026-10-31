@@ -33,7 +33,6 @@ class StandardPushUpPoseTest {
         )
         val validator = ExerciseValidator(config)
 
-        // Sample progress from 0 to 1 in 60 steps (finer than 10 frames)
         val frameCount = 60
         val dt = 0.0166f // ~16.6ms frame time at 60fps
         val poses = ArrayList<SkeletonPose>()
@@ -79,7 +78,6 @@ class StandardPushUpPoseTest {
             previousPose = currentPose
         }
 
-        // Print summary of issues
         println("=== VALIDATION ISSUE SUMMARY ===")
         println("Total issues collected: ${collectedIssues.size}")
         val uniqueRuleIds = collectedIssues.map { it.ruleId }.distinct()
@@ -88,7 +86,6 @@ class StandardPushUpPoseTest {
             println("- Rule $rule: $count issues")
         }
 
-        // We assert there are no error-level issues to satisfy biomechanical correctness
         val errors = collectedIssues.filter { it.severity == ValidationSeverity.ERROR }
         assertTrue("Push-up pose has ${errors.size} validation errors!", errors.isEmpty())
     }
@@ -135,13 +132,11 @@ class StandardPushUpPoseTest {
             println(String.format("Progress %.2f:", progress))
             println(String.format("  devF: %.6f, devB: %.6f", devF, devB))
 
-            // Assert they have the same sign
             assertTrue(
                 "Knees bend in opposite directions at progress $progress! devF=$devF, devB=$devB",
                 devF * devB >= 0f || (kotlin.math.abs(devF) < 1e-3f && kotlin.math.abs(devB) < 1e-3f)
             )
 
-            // Assert they are practically equal in magnitude (allow delta of 0.05 units)
             assertEquals(
                 "Knee deviations differ in magnitude at progress $progress!",
                 kotlin.math.abs(devF),

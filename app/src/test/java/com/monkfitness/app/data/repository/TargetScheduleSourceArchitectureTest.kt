@@ -15,29 +15,12 @@ import java.time.DayOfWeek
 /**
  * The mechanical boundaries of the persisted, revision-owned target schedule source.
  *
- * The phase's whole claim is a set of prohibitions — do not read the legacy schedule, do not derive a
- * target identity from a plan day, a position, a name or an id's text, do not touch execution state,
- * do not mutate a saved revision, do not turn a missing source into an empty one — and a prohibition
- * that lives only in a KDoc erodes the first time a convenient import appears. So each one is asserted
- * here as a **token or a shape in real code**, with comments stripped first, which is what lets this
- * file's own explanations say "never reads ProgramSchedule" without tripping the rule about reading it.
- *
- * The twelve gates, in the order the phase states them:
- *
- * ```text
- * 1.  the source's persistence names no ProgramScheduler and no legacy schedule vocabulary
- * 2.  the cadence round-trips form-first: no payload sniffing, no normalization between forms
- * 3.  no ProgramDay position / name / id-text / date becomes a target identity
- * 4.  the source depends on no ExistingOccurrence and no ActualResult
- * 5.  the source depends on no session, runtime or performance state
- * 6.  the source's domain value holds no repository, DAO, entity, clock or UI state
- * 7.  input construction consumes the explicit persisted source
- * 8.  a missing source is a typed absence, never an empty valid source
- * 9.  a saved revision's source gains no update and no delete path
- * 10. every target identity stays explicit, opaque and stored in its own column
- * 11. the closed production-reference lists stay closed
- * 12. the target contour stays a separately callable contour — no cutover happened here
- * ```
+ * The whole claim is a set of prohibitions — do not read the legacy schedule, do not derive a target
+ * identity from a plan day, a position, a name or an id's text, do not touch execution state, do not
+ * mutate a saved revision, do not turn a missing source into an empty one — and a prohibition that lives
+ * only in a KDoc erodes the first time a convenient import appears. So each is asserted as a **token or
+ * a shape in real code**, with comments stripped first, which is what lets this file's own explanations
+ * say "never reads ProgramSchedule" without tripping the rule about reading it.
  */
 class TargetScheduleSourceArchitectureTest {
 
@@ -55,7 +38,7 @@ class TargetScheduleSourceArchitectureTest {
     private val ruleEntity = File(dataDir, "model/ProgramTargetScheduleRuleEntity.kt")
     private val bindingEntity = File(dataDir, "model/ProgramTargetProgramDayBindingEntity.kt")
 
-    /** Every file this phase adds, in the order the layer sits between them. */
+    /** Every file the source adds, in the order the layer sits between them. */
     private val phaseSources: List<File> = listOf(
         valueFile,
         bridgeFile,
@@ -88,7 +71,6 @@ class TargetScheduleSourceArchitectureTest {
         )
     }
 
-    // ---- 1. no legacy scheduling vocabulary ---------------------------------------------------------
 
     @Test
     fun targetSourcePersistenceNamesNoSchedulerAndNoLegacyScheduleVocabulary() {
@@ -97,7 +79,7 @@ class TargetScheduleSourceArchitectureTest {
             "SlotPlanner",
             "ScheduleCalendar",
             "ProgramScheduleRepository",
-            // `ProgramSchedule` itself, and the *columns* a legacy schedule is stored in. A mapper could
+            // `ProgramSchedule` itself, and the *columns* a legacy schedule is stored in: a mapper could
             // read the columns without naming the type, so both halves are banned.
             "ProgramSchedule",
             "scheduleType",
@@ -115,9 +97,9 @@ class TargetScheduleSourceArchitectureTest {
 
     @Test
     fun noProductionSourceMapsALegacyScheduleOntoATargetSchedule() {
-        // The same absence claim the Phase 13 adapter gate makes, restated over the whole production
-        // tree now that a second place could have grown the mapping: a file that names a legacy
-        // schedule *and* constructs a target rule is a `ProgramSchedule -> TargetSchedule` inference.
+        // A file that names a legacy schedule *and* constructs a target rule is a
+        // `ProgramSchedule -> TargetSchedule` inference, so the absence is checked over the whole
+        // production tree rather than in one adapter.
         val offenders = mainDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .mapNotNull { source ->
@@ -136,7 +118,6 @@ class TargetScheduleSourceArchitectureTest {
         assertTrue("no implicit ProgramSchedule -> TargetSchedule mapping may exist: $offenders", offenders.isEmpty())
     }
 
-    // ---- 2. the cadence round-trips form-first -------------------------------------------------------
 
     @Test
     fun theCadenceIsReadFormFirstWithNoPayloadSniffingAndNoNormalization() {
@@ -150,12 +131,9 @@ class TargetScheduleSourceArchitectureTest {
             listOf("DAILY", "EVERY_N_DAYS", "SESSIONS_PER_WEEK", "FIXED_WEEKDAYS", "DERIVED_EXCLUDING"),
             branches
         )
-        // The `when` subject must be the stored discriminator and nothing else. A mapper that switched
-        // on, say, the payload column would be reading cadence by shape — which is exactly how
-        // `SessionsPerWeek(3)` becomes a three-day weekday set on the way through.
-        // Two dispatchers, and each switches on its own value: the **read** on the stored
-        // discriminator and the **write** on the domain cadence. Neither inspects a payload to decide
-        // a form, which is what keeps `SessionsPerWeek(3)` from becoming a three-day weekday set.
+        // Two dispatchers, each switching on its own value: the **read** on the stored discriminator and
+        // the **write** on the domain cadence. Neither inspects a payload to decide a form, which is what
+        // keeps `SessionsPerWeek(3)` from becoming a three-day weekday set on the way through.
         assertEquals(
             "the read dispatches on the stored discriminator and the write on the domain value, and " +
                 "nothing else dispatches on this file",
@@ -204,18 +182,17 @@ class TargetScheduleSourceArchitectureTest {
         )
     }
 
-    // ---- 3./10. identities are explicit and opaque ---------------------------------------------------
 
     @Test
     fun noTargetIdentityIsDerivedFromAPlanDayAPositionANameOrAnIdText() {
         // `\b`-anchored where the token is a substring of a name this layer legitimately uses:
         // `TargetProgramDayBinding` contains `ProgramDay`, and `programDayId` is a *stored column* the
-        // binding table has to name. The claim is narrower: nothing on this path may *construct* an
-        // identity out of a plan day, a position, a name, a date or a string.
-        // Half (a): every identity is a **copy of its own stored column**. This is the positive form
-        // of the claim, and it is checked on the assignment itself rather than on the absence of a
-        // token — a mapper that copied `ruleId` correctly but derived `workoutId` from a plan day
-        // would slip past a pure ban list, and would not slip past this.
+        // binding table must name. The claim is narrower: nothing here may *construct* an identity out of
+        // a plan day, a position, a name, a date or a string.
+        //
+        // Half (a): every identity is a **copy of its own stored column**, checked on the assignment
+        // rather than on the absence of a token — a mapper that copied `ruleId` correctly but derived
+        // `workoutId` from a plan day would slip past a pure ban list and not past this.
         val mapper = code(mapperFile)
         assertTrue(
             "the rule identity is copied from the rule identity column",
@@ -235,10 +212,9 @@ class TargetScheduleSourceArchitectureTest {
             mapper.contains("storedDate(\"program_target_schedule_rule.anchorDate\", anchorDate)")
         )
 
-        // Half (b): nothing on the identity path parses or derives. The claim is scoped to *identity
-        // and cadence-form* fields, so the one legitimate tokenizer on this path — the stored weekday
-        // payload column, whose split is exactly what makes `FixedWeekdays` round-trip — is stated as
-        // the single exception rather than banned wholesale.
+        // Half (b): nothing on the identity path parses or derives. Scoped to *identity and cadence-form*
+        // fields, so the one legitimate tokenizer — the stored weekday payload column, whose split is
+        // what makes `FixedWeekdays` round-trip — is the single stated exception.
         val identityAndForm = listOf(
             "ruleId", "workoutId", "anchorDate", "cadenceType", "cadenceSourceRuleId"
         )
@@ -306,14 +282,13 @@ class TargetScheduleSourceArchitectureTest {
                 .filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }
                 .map { it.name }
         )
-        // The one index this stage declares, and the reason it is needed: `programDayId` is a foreign
-        // key that is *not* part of the primary key, so without it SQLite full-scans the binding table
-        // on every `program_day` modification — which the cascade performs. `revisionId` needs none: it
-        // is the primary key's leading column on both tables.
+        // The one index declared, and why: `programDayId` is a foreign key that is *not* part of the
+        // primary key, so without it SQLite full-scans the binding table on every `program_day`
+        // modification — which the cascade performs. `revisionId` needs none: it is the primary key's
+        // leading column on both tables.
         //
-        // Read from the **source**, not through reflection: Room's `@Entity` is a Kotlin annotation
-        // with default (BINARY) retention, so it is absent from a runtime `getAnnotation` and every
-        // attempt to read it there reports a null rather than the index list.
+        // Read from the **source**, not through reflection: Room's `@Entity` has default (BINARY)
+        // retention, so a runtime `getAnnotation` reports null rather than the index list.
         assertTrue(
             "the binding's non-key foreign key column is indexed, and nothing else is",
             code(bindingEntity).contains("indices = [Index(\"programDayId\")]")
@@ -337,7 +312,6 @@ class TargetScheduleSourceArchitectureTest {
         }
     }
 
-    // ---- 4./5. no execution, session or performance state -------------------------------------------
 
     @Test
     fun theSourceDependsOnNoExecutionSessionOrPerformanceState() {
@@ -368,7 +342,6 @@ class TargetScheduleSourceArchitectureTest {
         )
     }
 
-    // ---- 6. the domain value's own boundary ----------------------------------------------------------
 
     @Test
     fun theDomainValueHoldsNoCollaboratorAndNoAmbientState() {
@@ -390,11 +363,10 @@ class TargetScheduleSourceArchitectureTest {
                 value.contains(forbidden)
             )
         }
-        // The **declared properties** are what a collaborator would have to appear on, and reading
-        // them rather than the constructor's parameters is deliberate: `RevisionId` is a value class
-        // over `String`, so the constructor erases it to `java.lang.String` and a parameter-based
-        // check would either pass a `java.lang.String` through by accident or be forced to allow
-        // `java.*` and stop meaning anything.
+        // The **declared properties**, not the constructor's parameters: `RevisionId` is a value class
+        // over `String`, so the constructor erases it to `java.lang.String` and a parameter-based check
+        // would either pass a `java.lang.String` by accident or have to allow `java.*` and stop meaning
+        // anything.
         assertEquals(
             "the value holds exactly three properties — a revision and two explicitly stated lists",
             listOf("revisionId", "rules", "programDayBindings"),
@@ -402,13 +374,10 @@ class TargetScheduleSourceArchitectureTest {
                 .filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }
                 .map { it.name }
         )
-        // Read as a **banned-package** check rather than an expected-type check, and that is the
-        // whole reason: `RevisionId` is an inline value class, so reflection reports its backing field
-        // as a plain `java.lang.String` and its getter under a name-mangled form. Pinning the exact
-        // type list would therefore have been pinning an erasure artefact — it would fail on a correct
-        // value and pass on a wrong one that happened to erase the same way. The claim being made is
-        // "no collaborator", so it is stated that way: nothing this value holds can be a repository, a
-        // DAO, a Room entity, an id generator, a clock or anything from the platform or UI layers.
+        // A **banned-package** check rather than an expected-type one: `RevisionId` is an inline value
+        // class, so reflection reports its backing field as a plain `java.lang.String`. Pinning the exact
+        // type list would pin an erasure artefact — failing on a correct value and passing on a wrong one
+        // that erased the same way. The claim is "no collaborator", so it is stated that way.
         val collaboratorPackages = listOf(
             "com.monkfitness.app.data.",
             "com.monkfitness.app.domain.usecase.TargetScheduleSourceRepository",
@@ -460,7 +429,6 @@ class TargetScheduleSourceArchitectureTest {
         )
     }
 
-    // ---- 7./8. the bridge consumes the explicit source, and refuses an absent one ----------------------
 
     @Test
     fun theBridgeReadsTheExplicitSourceAndDecidesNothing() {
@@ -514,8 +482,8 @@ class TargetScheduleSourceArchitectureTest {
             "and no branch constructs a source out of an empty read",
             Regex("Source\\(\\s*TargetScheduleSource\\([^)]*emptyList").containsMatchIn(repository)
         )
-        // The `when` over the three outcomes must be exhaustive, so a new outcome cannot be added
-        // without deciding what an unwritten read means here.
+        // The `when` over the three outcomes must be exhaustive, so a new outcome cannot be added without
+        // deciding what an unwritten read means here.
         val outcomes = Regex("TargetScheduleSourceRead\\.(Source|Missing|Malformed)")
             .findAll(repository).map { it.groupValues[1] }.toSet()
         assertEquals(
@@ -525,7 +493,6 @@ class TargetScheduleSourceArchitectureTest {
         )
     }
 
-    // ---- 9. immutability ----------------------------------------------------------------------------
 
     @Test
     fun aSavedRevisionsSourceGainsNoUpdateAndNoDeletePath() {
@@ -573,9 +540,8 @@ class TargetScheduleSourceArchitectureTest {
 
     @Test
     fun theSourceIsOwnedByTheRevisionAndDiesWithIt() {
-        // Each table is named by its own entity, and each states the revision it belongs to. The
-        // assertion reads the physical table names rather than a camel-cased approximation of them,
-        // because the table name is what the migration and every SQL statement actually use.
+        // The physical table names, not a camel-cased approximation: the table name is what the migration
+        // and every SQL statement use.
         assertTrue(
             "the rule table is declared by the rule entity",
             code(ruleEntity).contains("tableName = \"program_target_schedule_rule\"")
@@ -604,11 +570,10 @@ class TargetScheduleSourceArchitectureTest {
         )
     }
 
-    // ---- 11./12. the closed lists stay closed, and no cutover happened -------------------------------
 
     @Test
     fun theProductionReferenceListsThisPhaseTouchesStayClosedAndUnbroadened() {
-        // The data-layer gate's closed lists grew by exactly the DAO, mapper and repository this phase
+        // The data-layer gate's closed lists grew by exactly the DAO, mapper and repository the source
         // adds — one name each, no wildcard and no second owner.
         val architecture = File("src/test/java/com/monkfitness/app/data/repository")
             .let { dir -> if (dir.isDirectory) dir else File("app/$dir") }
@@ -660,13 +625,11 @@ class TargetScheduleSourceArchitectureTest {
             legacyConstruction.contains("TargetScheduleSource") || legacyConstruction.contains("targetScheduleSource")
         )
 
-        // And exactly one production source consumes the bridge — the Stage 20 consumer — which is
-        // what "the target contour is a separately callable production path" now means. The scan is
-        // over *naming* the type rather than over constructing it, because Stage 20 revised this
-        // claim rather than relaxing it: a construction-site scan would have read empty and gone on
-        // claiming the bridge was unconsumed while a production consumer held it. The legacy half is
-        // untouched: nothing in the legacy contour names it, so the bridge is still not on the path
-        // the UI trains from.
+        // Exactly one production source consumes the bridge, which is what "the target contour is a
+        // separately callable production path" means. The scan is over *naming* the type rather than
+        // constructing it: a construction-site scan would read empty while a production consumer held the
+        // bridge. The legacy half is untouched — nothing in the legacy contour names it, so the bridge is
+        // still not on the path the UI trains from.
         val consumers = mainDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .filterNot { it.name == "AppContainer.kt" }
@@ -684,12 +647,12 @@ class TargetScheduleSourceArchitectureTest {
 
     @Test
     fun aFixedWeekdaySetIsStoredCanonicallySoTwoEqualSetsCompareEqual() {
-        // A `Set<DayOfWeek>` has no order of its own, so the stored form has to be canonical or two
-        // equal cadences would write different bytes and the immutability comparison would be a
-        // coin flip. The order is the schema's existing `scheduleWeekdays` convention.
+        // A `Set<DayOfWeek>` has no order of its own, so the stored form has to be canonical or two equal
+        // cadences would write different bytes and the immutability comparison would be a coin flip. The
+        // order is the schema's existing `scheduleWeekdays` convention.
         val mapper = code(mapperFile)
-        // Whitespace-collapsed, because the `FixedWeekdays(` call spans two lines and a gate that only
-        // matched the single-line spelling would pass on nothing.
+        // Whitespace-collapsed, because the `FixedWeekdays(` call spans two lines and a gate matching only
+        // the single-line spelling would pass on nothing.
         val flattened = mapper.replace(Regex("\\s+"), " ")
         assertTrue(
             "the stored weekday order is ascending ISO, and the round trip rebuilds a set from it",

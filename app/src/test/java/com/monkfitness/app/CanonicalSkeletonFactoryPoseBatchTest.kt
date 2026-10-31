@@ -15,47 +15,32 @@ import java.io.File
 import kotlin.math.sqrt
 
 /**
- * **The canonical-`SkeletonFactory` migration of the ten remaining hand-rolled pose trees** (the M11
- * residue class of `docs/STABILIZATION_AUDIT.md` §4: *"the pose still builds its own hand-rolled node
- * tree (`PELVIS → CHEST`, `CHEST → SHOULDER_*`), so five canonical joints are never authored and
- * publish at the WORLD ORIGIN"*).
- *
- * ## The batch and what each pose's `ensureHierarchy` now does
+ * The canonical-`SkeletonFactory` migration of the ten remaining hand-rolled pose trees: each pose
+ * built its own node tree (`PELVIS → CHEST`, `CHEST → SHOULDER_*`), so five canonical joints were
+ * never authored and published at the WORLD ORIGIN.
  *
  * `ArmCirclesPose`, `BurpeePose`, `FacePullPose`, `GluteBridgePose`, `HipCarsPose`,
  * `KettlebellSwingPose`, `MountainClimberPose`, `PelvicTiltPose`, `ScapularRetractionPose`,
  * `WallSlidesPose` each built a 26-node tree by hand (`PELVIS → CHEST → SHOULDER_*`, no lower-spine
  * segment, no shoulder girdle). They now adopt the canonical tree,
- * `SkeletonFactory.createStandardSkeleton()`, exactly as the already-migrated families do
- * (`SupermanPose`, `DeadBugPose`, `LatStretchPose`, `CatCowPose`, the `Base*Pose` families,
- * `BaseValidationPose`) — 31 nodes, adding `LUMBAR` between `PELVIS` and `CHEST` and
- * `CLAVICLE_*`/`SCAPULA_*` between `CHEST` and `SHOULDER_*`.
+ * `SkeletonFactory.createStandardSkeleton()`, exactly as the already-migrated families do — 31 nodes,
+ * adding `LUMBAR` between `PELVIS` and `CHEST` and `CLAVICLE_*`/`SCAPULA_*` between `CHEST` and
+ * `SHOULDER_*`.
  *
  * The factory's added nodes are **pass-throughs** — `LUMBAR` coincident with the `PELVIS` with an
  * identity rotation, `CLAVICLE_*`/`SCAPULA_*` coincident with the `CHEST` — so every transform each
  * pose already authored resolves exactly as before. The published delta is therefore confined to the
  * five canonical joints, which stop publishing at the world origin.
  *
- * ## The A/B evidence this coverage sits on (measured, not asserted here)
- *
- * Whole-corpus A/B through the production pipeline (`SkeletonPipeline.produceFrame`): `51`
- * production pose classes × `16` frames — one fresh pipeline's cold first frame plus `15` advancing
- * phases of a long-lived pipeline — × every `Joint.entries` position AND rotation as FULL FLOAT
- * BITS, plus the published state/stamps, the declared limb targets, the support declaration, the
- * built authoring intents and the environment metadata (`32,403` rows). Measured on the pristine
- * base (this branch's `origin/main`, `4a32d84`) and on the migrated tree, the two dumps differ in
- * **exactly `800` rows**: `80` in each of the ten poses — the five canonical joints
- * (`LUMBAR`, `CLAVICLE_A/P`, `SCAPULA_A/P`) × `16` frames — and **nothing else**:
- *
- *  * every other joint position AND rotation of every pose is byte-identical;
- *  * every declared limb target (`WorldTarget.world` / `.pole` / `.straight` / `.length1` /
- *    `.length2`) is byte-identical, i.e. the migration is authoring-neutral;
- *  * every published stamp (`maxIkClampAmount`, `rootTranslationDelta`, `rootRotationDelta`,
- *    `isTransformsUpdated`, `boneLengthsVerified`, `straightIntentDropped`) and every
- *    `supportedPoints` set is byte-identical;
- *  * every `jointIntents`/`spineIntent` carrier count and value is byte-identical;
- *  * every `EnvironmentDefinition` row (ground level/visible, prop count) and every `PoseMetadata`
- *    row (camera, duration, loop mode, motion curve, support pivot/contacts) is byte-identical.
+ * Whole-corpus A/B through the production pipeline (`51` production pose classes × `16` frames — one
+ * fresh pipeline's cold first frame plus `15` advancing phases of a long-lived pipeline — × every
+ * `Joint.entries` position AND rotation as FULL FLOAT BITS, plus the published state/stamps, the
+ * declared limb targets, the support declaration, the built authoring intents and the environment
+ * metadata, `32,403` rows): the base and the migrated dumps differ in **exactly `800` rows** — `80`
+ * in each of the ten poses (the five canonical joints `LUMBAR`, `CLAVICLE_A/P`, `SCAPULA_A/P` × `16`
+ * frames) — and **nothing else**: every other joint position and rotation, every declared limb
+ * target, every published stamp and `supportedPoints` set, every carrier count and every
+ * environment/metadata row is byte-identical.
  *
  * Pre-migration the ten poses published `|LUMBAR − PELVIS|` equal to the pelvis's own distance from
  * the origin (`14.0000` … `235.0532`, against the canonical pass-through's `0.0000`) and
@@ -77,12 +62,11 @@ class CanonicalSkeletonFactoryPoseBatchTest {
      * The batch members that AUTHOR the lower-spine segment (so their `LUMBAR` deliberately does not
      * publish the factory's pass-through identity).
      *
-     * Issue E's whole purpose is that "authoring a lumbar rotation gives the lower spine independent
-     * DOF", and the animation-logic correction batch 1 (`PelvicTiltPose`'s tilt split between the
-     * pelvis and the low back — `PelvicTiltSpineArticulationTest`) is the first member of this batch
-     * to use it. The pass-through assertion below is therefore scoped to the members that leave the
-     * node to the factory, and the pose(s) listed here get their own anti-vacuity witness: their
-     * divergence from the pelvis's rotation must BE the authored articulation, not a drift.
+     * Authoring a lumbar rotation gives the lower spine independent DOF, and `PelvicTiltPose` splits
+     * its tilt between the pelvis and the low back (`PelvicTiltSpineArticulationTest`). The
+     * pass-through assertion below is therefore scoped to the members that leave the node to the
+     * factory, and the pose(s) listed here get their own anti-vacuity witness: their divergence from
+     * the pelvis's rotation must BE the authored articulation, not a drift.
      */
     private val authorsItsLumbar = setOf("PelvicTiltPose")
 
@@ -109,14 +93,10 @@ class CanonicalSkeletonFactoryPoseBatchTest {
         return sqrt(dx * dx + dy * dy + dz * dz)
     }
 
-    // =========================================================================================
-    // The witness — the canonical hierarchy is what each migrated pose publishes
-    // =========================================================================================
-
     /**
      * Every migrated pose publishes the canonical two-segment spine and shoulder girdle: `LUMBAR` is
-     * the `PELVIS` pass-through (Issue E), `CLAVICLE_*`/`SCAPULA_*` lie on the `CHEST → SHOULDER_*`
-     * segment carrying the chest's own rotation, and none of the five publishes at the world origin.
+     * the `PELVIS` pass-through, `CLAVICLE_*`/`SCAPULA_*` lie on the `CHEST → SHOULDER_*` segment
+     * carrying the chest's own rotation, and none of the five publishes at the world origin.
      *
      * Held under BOTH frame conditions: the failure this guards is authoring-frame/hierarchy state,
      * so a cold frame and a mid-playback frame must agree.
@@ -265,10 +245,6 @@ class CanonicalSkeletonFactoryPoseBatchTest {
         )
     }
 
-    // =========================================================================================
-    // The batch's own scope digest — its authored geometry plus the five canonical joints
-    // =========================================================================================
-
     /** The app module root, located by walking up from the test JVM's working directory. */
     private fun moduleRoot(): File {
         var dir = File(System.getProperty("user.dir") ?: error("user.dir is not set"))
@@ -318,9 +294,9 @@ class CanonicalSkeletonFactoryPoseBatchTest {
      * means either an authored transform of a migrated pose moved — which the A/B says it must not —
      * or the canonical hierarchy drifted.
      *
-     * Proved non-vacuous by the counterfactual: this whole class is RED on the base tree
-     * (`4a32d84`, the ten poses' hand-rolled trees), the witness quoting
-     * `|LUMBAR-PELVIS| = 235.0000` and `|CLAVICLE_A| = 0.0000`.
+     * Proved non-vacuous by the counterfactual: this whole class is RED on the base tree (the ten
+     * poses' hand-rolled trees), the witness quoting `|LUMBAR-PELVIS| = 235.0000` and
+     * `|CLAVICLE_A| = 0.0000`.
      */
     @Test
     fun migratedPosesPublishTheBatchScopeDigest() {
@@ -342,17 +318,12 @@ class CanonicalSkeletonFactoryPoseBatchTest {
          * The authored half of this digest is provenance-checked, not assumed: the whole-corpus A/B
          * described in the class KDoc differs from the base tree in exactly the five canonical joints
          * of the ten poses and in nothing else, so this digest pins the pre-migration authored
-         * geometry byte-for-byte alongside the newly owned canonical transforms.
-         *
-         * **Re-baselined by the animation-logic correction batch 1**
-         * (`fix/animation-logic-b1-spine-articulation`, off the #262 merge `9cf4c32`):
-         * this guard pins the batch's own ten migrated poses AND their rotations, one of which
-         * (`PelvicTiltPose`) now authors its lower-spine segment, so the newly owned canonical
-         * transforms move with the pose's own declaration. Attribution measured, not inferred: the
-         * batch's whole-corpus A/B (every production pose class × `5` progress samples × every joint
-         * XYZ = `11,220` rows, a pristine `origin/main` worktree (`9cf4c32`) vs this branch) differs
-         * in exactly `183` rows, ALL of them inside the two corrected poses (`155` in `CatCowPose` —
-         * the authored spinal wave, worst `14.3655` u — and `28` in `PelvicTiltPose` — its leg chain,
+         * geometry byte-for-byte alongside the newly owned canonical transforms. `PelvicTiltPose`
+         * authors its lower-spine segment, so the newly owned canonical transforms move with the
+         * pose's own declaration; the attribution was measured, not inferred — the A/B (every
+         * production pose class × `5` progress samples × every joint XYZ = `11,220` rows) differs in
+         * exactly `183` rows, ALL of them inside the two corrected poses (`155` in `CatCowPose` — the
+         * authored spinal wave, worst `14.3655` u — and `28` in `PelvicTiltPose` — its leg chain,
          * worst `1.526e-05` u), with the other `66` pose classes byte-identical.
          * Pre-rebaseline measurement: `5967077127684194150`.
 */

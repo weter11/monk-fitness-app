@@ -38,27 +38,23 @@ import org.junit.Test
 /**
  * The composition root, driven the way the application drives it.
  *
- * `AppContainer` is only wiring, so nearly everything that could go wrong is a question about *what
- * it wired to what* — and every one of those questions has a measurable answer on a real database:
+ * `AppContainer` is only wiring, so what could go wrong is a question about *what it wired to what* —
+ * and each of those questions has a measurable answer on a real database:
  *
- *  * the whole graph is constructed and nothing else is (§26: the seven repositories of §30 step 3,
- *    plus both adaptive generations), and the container exposes no DAO to anyone;
- *  * every repository in it reads and writes the one database the container was given — measured by a
- *    Program created through one repository being readable through another, by a foreign key that
- *    only resolves if both wrote to the same store, and by a second database of the same schema
- *    staying empty;
- *  * each DAO is taken from the database exactly once and shared, because "how many things in this
- *    graph read `program`" should be a number rather than a reading of the source;
- *  * an atomic operation of the graph really runs in one transaction: a planted failure part-way
- *    leaves nothing, decided by SQLite rather than by this test's bookkeeping;
- *  * the clock and the id generator the container was given are the ones the graph uses — a moved
- *    clock changes the next stamp, and every id in storage is one the test minted;
+ *  * the whole graph is constructed and nothing else is, and the container exposes no DAO to anyone;
+ *  * every repository reads and writes the one database the container was given — measured by a
+ *    Program written through one repository and read through another, by a foreign key that only
+ *    resolves if both wrote to the same store, and by a second database of the same schema staying
+ *    empty;
+ *  * each DAO is taken from the database exactly once and shared;
+ *  * an atomic operation really runs in one transaction: a planted failure part-way leaves nothing,
+ *    decided by SQLite rather than by this test's bookkeeping;
+ *  * the injected clock and id generator are the ones the graph uses;
  *  * the target and the shipped adaptive generations are wired to their own tables on the same
  *    database, and neither can see the other's rows.
  *
- * Nothing here asserts behaviour of its own: no lifecycle, no scheduling, no generation, no policy
- * and no progress calculation, because §30 step 4 has none. Every row below is written and read by
- * the repository §30 step 3 landed, through the collaborators this stage wires.
+ * Nothing here asserts behaviour of its own: no lifecycle, no scheduling, no generation, no policy and
+ * no progress calculation, because the composition root has none.
  */
 class AppContainerTest {
 
@@ -86,8 +82,6 @@ class AppContainerTest {
         "program_adaptive_decision_record", "adaptive_adjustment"
     )
 
-    // ---- the graph the container constructs -------------------------------------------------------
-
     @Test
     fun everyRepositoryOfTheProgramSystemIsConstructedByTheContainer() {
         val rig = newRig()
@@ -114,23 +108,22 @@ class AppContainerTest {
                     "programRepository" to "ProgramRepository",
                     "programPlanRepository" to "ProgramPlanRepository",
                     "programScheduleRepository" to "ProgramScheduleRepository",
-                    // §30 step 14: the target occurrence's semantic payload, a node of its own rather
-                    // than part of the schedule repository — a slot row has no component columns, so a
-                    // repository owning both would be one whose read-back sometimes has to invent.
+                    // The target occurrence's semantic payload, a node of its own rather than part of
+                    // the schedule repository — a slot row has no component columns, so a repository
+                    // owning both would be one whose read-back sometimes has to invent.
                     "targetScheduleOccurrenceRepository" to "TargetScheduleOccurrenceRepository",
-                    // Stage 18: the persisted, revision-owned explicit target schedule source. A
-                    // second target-stage repository, and deliberately not folded into the occurrence
-                    // one: that one stores a slot's resolved occurrence, this one stores the revision's
-                    // stated *configuration*, and they are written and read on different occasions.
+                    // The persisted, revision-owned explicit target schedule source, deliberately not
+                    // folded into the occurrence one: that stores a slot's resolved occurrence, this
+                    // stores the revision's stated *configuration*, written and read on different
+                    // occasions.
                     "targetScheduleSourceRepository" to "TargetScheduleSourceRepository",
                     "workoutSessionRepository" to "WorkoutSessionRepository",
                     "programProgressRepository" to "ProgramProgressRepository",
                     "appStateRepository" to "AppStateRepository",
                     "programAdaptiveRepository" to "ProgramAdaptiveRepository",
-                    // P32: the app-owned progression relation catalogue. A separate repository rather
-                    // than a method on `programAdaptiveRepository`, because a ladder is a global
-                    // definition and adaptive history is per-revision state — P31 owns that separation
-                    // and P32 only starts using it.
+                    // The app-owned progression relation catalogue. A separate repository rather than a
+                    // method on `programAdaptiveRepository`, because a ladder is a global definition and
+                    // adaptive history is per-revision state.
                     "progressionRelationRepository" to "ProgressionRelationRepository",
                     "maintenanceRepository" to "MaintenanceRepository"
                 ),
@@ -189,8 +182,6 @@ class AppContainerTest {
         }
     }
 
-    // ---- one database, shared --------------------------------------------------------------------
-
     @Test
     fun everyRepositoryOfTheGraphReadsAndWritesTheOneDatabaseTheContainerWasGiven() = runBlocking {
         val rig = newRig("shared")
@@ -237,7 +228,7 @@ class AppContainerTest {
                 state!!.selectedProgramId
             )
 
-            // The session path: start, confirm a set, finish. Three repositories, one store.
+            // Three repositories, one store.
             val session: WorkoutSession = ProgramGraphFixture.session("shared", graph.slotFor(1))
             rig.container.workoutSessionRepository.startSession(session)
             rig.container.workoutSessionRepository.appendSet(
@@ -301,21 +292,20 @@ class AppContainerTest {
             val expected = listOf(
                 "programDao", "appStateDao", "programRevisionDao", "programDayDao", "programExerciseDao",
                 "programWorkoutSlotDao", "programTargetOccurrenceDao",
-                // Stage 18: a revision's explicit target schedule source is its own node, because a
-                // caller has to be able to ask "what target semantics does this revision state?" and
-                // get an answer that is frequently "none" — which no other node can report.
+                // A revision's explicit target schedule source is its own node, because a caller has to
+                // be able to ask "what target semantics does this revision state?" and get an answer
+                // that is frequently "none" — which no other node can report.
                 "programTargetScheduleSourceDao",
                 "workoutSessionDao",
                 "sessionSnapshotDao",
                 "sessionSnapshotExerciseDao", "sessionExerciseDao", "programSetLogDao", "programPauseDao",
                 "programFamilyProgressionStateDao", "programAdaptiveDecisionDao", "adaptiveAdjustmentDao",
-                // §30 step 15: the two Stage-1 handles are gone and §16's one global maintenance
-                // operation takes its own. It is a graph node because the reset's transaction runner
-                // belongs to the composition root (§26), not because a Program path reaches it.
+                // The two Stage-1 handles are gone and the one global maintenance operation takes its
+                // own. It is a graph node because the reset's transaction runner belongs to the
+                // composition root, not because a Program path reaches it.
                 "maintenanceDao",
-                // P32: the progression relation catalogue's own DAO. It is taken here because the
-                // catalogue is now live in production — P31 created the table and wired nothing, so the
-                // accessor existed without a graph node reading it.
+                // The progression relation catalogue's own DAO, taken here because the catalogue is now
+                // live in production — the table existed earlier with no graph node reading it.
                 "progressionRelationVariantDao"
             )
 
@@ -331,8 +321,8 @@ class AppContainerTest {
                 expected.associateWith { 1 },
                 rig.database.accessorCalls.toMap()
             )
-            // §30 step 15 strengthened this half: the retired accessors are not merely unasked, they
-            // are no longer *declared* on the database, so there is nothing for a future caller to ask.
+            // The retired accessors are not merely unasked, they are no longer *declared* on the
+            // database, so there is nothing for a future caller to ask.
             for (retired in listOf("progressDao", "familyProgressionStateDao", "adaptiveDecisionHistoryDao")) {
                 assertTrue(
                     "the retired accessor $retired is gone from the database",
@@ -343,8 +333,6 @@ class AppContainerTest {
             rig.close()
         }
     }
-
-    // ---- the transaction is the database's -------------------------------------------------------
 
     @Test
     fun anAtomicOperationThroughTheContainerRollsBackAsAWhole() = runBlocking {
@@ -387,8 +375,6 @@ class AppContainerTest {
             rig.close()
         }
     }
-
-    // ---- the injected collaborators --------------------------------------------------------------
 
     @Test
     fun theInjectedClockIsWhatTheAdaptiveRepositoryStampsItsRowsWith() = runBlocking {
@@ -463,7 +449,7 @@ class AppContainerTest {
             )
 
             // A whole graph whose identity comes from the generator, because that is what the creation
-            // path of §30 step 5 will do: it wraps the body in the typed id it is creating.
+            // path does: it wraps the body in the typed id it is creating.
             val programId = ProgramId(rig.container.idGenerator.newId())
             val revisionId = RevisionId(rig.container.idGenerator.newId())
             val program = ProgramGraphFixture.program("ids").copy(

@@ -21,27 +21,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §30 step 13's boundaries, pinned mechanically instead of by convention.
+ * The transfer boundaries, pinned mechanically instead of by convention.
  *
- * The transfer boundary is the first layer of the Program System that handles **untrusted text** and the
- * first that speaks to the **platform**, so the ways it can go wrong are new ones: a Room entity creeping
- * into the file format, an Android `Uri` reaching the parser, a `var` appearing in a reader, a slot being
- * built by the importer instead of by the Scheduler, a second Exercise Library, a ViewModel writing a DAO,
- * a Program's identity leaking into a share. Each of those is asserted against the sources and against the
- * compiled shape:
- *
- * ```text
- * the transfer model      pure: no platform, no data layer, no UI, no Room annotation, and no field any
- *                         identity, timestamp, source or lifecycle fact could occupy
- * the JSON codec          pure: the purity scan reads `program/transfer`, so the foundation's rules about
- *                         `var`, mutable collections, floating point and random sources cover it
- * the use cases           collaborators are exactly the owners §8, §9 and §27 name — and the absences
- *                         (no session, adaptive, progress or library *metadata* anywhere near them) are
- *                         what makes the prohibitions structural
- * the platform            the only place an `Intent`, a `Uri` or a `ContentResolver` appears in the app
- * the wiring              two nodes, constructed once, in the composition root, and reached by the Program
- *                         UI only as arguments the container hands it (§30 step 14)
- * ```
+ * This is the first layer of the Program System that handles **untrusted text** and the first that
+ * speaks to the **platform**, so the ways it can go wrong are new ones: a Room entity creeping into the
+ * file format, an Android `Uri` reaching the parser, a `var` appearing in a reader, a slot built by the
+ * importer instead of by the Scheduler, a second Exercise Library, a ViewModel writing a DAO, a
+ * Program's identity leaking into a share. Each is asserted against the sources and the compiled shape:
+ * the transfer model and codec stay pure (no platform, data layer, UI or Room annotation), the use
+ * cases' collaborators are exactly the named owners and their absences are what makes the prohibitions
+ * structural, the platform types appear in one place only, and the wiring is two nodes constructed
+ * once in the composition root and handed to the Program UI as arguments.
  */
 class ProgramTransferArchitectureTest {
 
@@ -76,8 +66,6 @@ class ProgramTransferArchitectureTest {
 
     private val allSources = transferSources + useCaseSources + platformSources
 
-    // ------------------------------------------------------------------ the scan sees the stage
-
     @Test
     fun theScanSeesEverySourceThisStageAdds() {
         allSources.forEach { source ->
@@ -98,8 +86,6 @@ class ProgramTransferArchitectureTest {
             transferPackage
         )
     }
-
-    // ------------------------------------------------------------------ the transfer layer is pure
 
     @Test
     fun theTransferLayerReachesNoPlatformNoDataLayerAndNoUi() {
@@ -163,12 +149,12 @@ class ProgramTransferArchitectureTest {
             "SessionExerciseId", "SetLogId", "PauseId", "AdjustmentId", "DecisionId", "Instant",
             "LocalDate", "ProgramSource", "LifecycleStatus", "SlotStatus"
         )
-        // The identities §2 names, listed rather than matched by shape — because the allowlist *has*
-        // exactly one `…Id`-shaped field and it is not an identity: `exerciseId` is the Exercise Library
-        // key, which flows through the domain as an opaque string (§10) and is part of what a transfer
-        // carries. A pattern would have swept it up with `programId`, and a rule that cannot tell "which
-        // exercise this plans" from "which Program this was" is a rule that would have to be relaxed the
-        // first time it mattered.
+        // The identities are listed rather than matched by shape — because the allowlist *has* exactly
+        // one `…Id`-shaped field and it is not an identity: `exerciseId` is the Exercise Library key,
+        // an opaque string that flows through the domain and is part of what a transfer carries. A
+        // pattern would have swept it up with `programId`, and a rule that cannot tell "which exercise
+        // this plans" from "which Program this was" would have to be relaxed the first time it
+        // mattered.
         val forbiddenNames = listOf(
             "programId", "revisionId", "programDayId", "programExerciseId", "slotId", "sessionId",
             "sessionExerciseId", "setLogId", "pauseId", "adjustmentId", "decisionId",
@@ -213,8 +199,6 @@ class ProgramTransferArchitectureTest {
             purity.readText().contains("\"program/transfer\"")
         )
     }
-
-    // ------------------------------------------------------------------ the use cases' collaborators
 
     @Test
     fun theExportServiceHoldsTheProgramAggregateAndNothingElse() {
@@ -316,8 +300,6 @@ class ProgramTransferArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ the exercise library boundary
-
     @Test
     fun thereIsOneProductionExerciseLibraryAndItReadsTheCatalogueOnce() {
         val implementations = allMainSources()
@@ -366,8 +348,6 @@ class ProgramTransferArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ the platform boundary
-
     @Test
     fun theOnlyPlaceAnIntentAUriOrAContentResolverAppearsIsThePlatformPackage() {
         val platformTokens = listOf("Intent", "Uri", "contentResolver", "FileProvider", "ACTION_SEND")
@@ -403,21 +383,11 @@ class ProgramTransferArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ the UI's reach into the stage
-
     /**
-     * Revised, not relaxed, by §30 step 14.
-     *
-     * §30 step 13 landed the transfer mechanism without an affordance, and this suite pinned that by
-     * asserting that **no** UI or view-model source named the stage at all. §30 step 14 is the stage that
-     * wires it: `ProgramImportScreen` hands the picked document's bytes to the import service,
-     * `MyProgramsScreen` and `ProgramDetailScreen` ask for a share, and `MainViewModel` hands both services
-     * to the state holder from the composition root.
-     *
-     * The claim the rule always meant is therefore stated instead: the UI **uses** those two nodes (so the
-     * rule is not vacuous) and **constructs neither them nor anything below them** — no import service, no
-     * export service, no second exercise library, no codec. A screen that built its own would be a second
-     * owner of §5's pipeline, which is exactly what the original assertion was protecting.
+     * The claim the rule means: the UI **uses** the two transfer nodes (so the rule is not vacuous) and
+     * **constructs neither them nor anything below them** — no import service, no export service, no
+     * second exercise library, no codec. A screen that built its own would be a second owner of the
+     * import/export pipeline, which is what the rule protects.
      */
     @Test
     fun theUiReachesTheTransferStageOnlyThroughTheServicesItIsHanded() {
@@ -473,8 +443,6 @@ class ProgramTransferArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ the wiring
-
     @Test
     fun theCompositionRootWiresBothHalvesOnceAndNothingElseDoes() {
         val container = codeOf("di/AppContainer.kt")
@@ -510,8 +478,6 @@ class ProgramTransferArchitectureTest {
                 .filterNot { it == "domain/usecase/ProgramImportService.kt" }
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun allMainSources(): List<File> = mainDir.walkTopDown()
         .filter { it.isFile && it.extension == "kt" }

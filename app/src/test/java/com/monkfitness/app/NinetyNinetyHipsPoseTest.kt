@@ -15,21 +15,17 @@ import kotlin.math.atan2
 /**
  * 90/90 Hips (`ninety_ninety_hips`) — the exercise's own biomechanics on the PUBLISHED frame.
  *
- * ## Stated intent (the exercise's own copy — the only in-repo specification; no BPS exists)
+ * The copy is the only in-repo specification (no BPS): sit with both knees bent to 90°, one leg in
+ * front and one to the side, sit tall and lean slightly over the front shin, then rotate through the
+ * hips to switch both knees to the other side — slowly and controlled, sit bones grounded, moving
+ * from the hips rather than throwing the knees around, without rounding the back or forcing the
+ * knees down.
  *
- * `steps` §1 *"Sit on the floor with both knees bent to 90 degrees, one leg in front and one to the
- * side"*, §2 *"Sit tall and lean slightly over the front shin"*, §3 *"Rotate through the hips to switch
- * both knees to the other side"*, §4 *"Repeat slowly, staying controlled throughout"*; `desc` *"trains
- * both internal and external rotation"*; `tech` *"Keep the sit bones grounded … move from the hips
- * rather than throwing the knees around"*; `mistakes` *"Rounding the back heavily, forcing the knees
- * down, and rushing the side-to-side transition."*
- *
- * The assertions below therefore measure the **configuration** as much as the movement: the two thighs
- * are exactly `90°` apart in azimuth ("90/90", one hip internally and one externally rotated), both
- * knees are exactly `90°` at every phase (§1's "both knees bent to 90 degrees"), the shins rest in the
- * floor plane at the two named configurations, the switch rotates the pair rigidly (§3), and the seat
- * never lifts or twists (`tech`/`mistakes`). Every reading is taken through [PoseFrameSweep] (the
- * pipeline entered exactly as `SkeletonRenderer` enters it), never on a raw `build()` result.
+ * The assertions measure the configuration as much as the movement: the two thighs exactly `90°`
+ * apart in azimuth (one hip internally and one externally rotated), both knees exactly `90°` at every
+ * phase, the shins in the floor plane at the two named configurations, the switch rotating the pair
+ * rigidly, and the seat never lifting or twisting. Every reading is taken through [PoseFrameSweep]
+ * (the pipeline entered exactly as `SkeletonRenderer` enters it), never on a raw `build()` result.
  */
 class NinetyNinetyHipsPoseTest {
 
@@ -252,7 +248,7 @@ class NinetyNinetyHipsPoseTest {
     }
 
     /**
-     * The published frame realizes the pose's OWN declared geometry (B-1's oracle): the knee the engine
+     * The published frame realizes the pose's OWN declared geometry: the knee the engine
      * publishes is the knee the pose authored, at every phase and for both legs — not merely “a leg
      * moved somewhere”.
      */

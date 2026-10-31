@@ -9,13 +9,9 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The identity vocabulary, pinned as a contract rather than as a convention.
- *
- * The invariant worth having a test for is **non-interchangeability**: every id in the architecture is
- * its own type, so a revision id cannot be passed where a slot id is expected, even though both are
- * strings underneath. That is asserted here over every pair of id types by reflection rather than by
- * reading the source, and the *set* of id types is asserted against the source so that adding a
- * twelfth id without deciding what it identifies fails the suite.
+ * Identity is a contract, not a convention: every id is its own type, so a revision id cannot be
+ * passed where a slot id is expected even though both are strings underneath. The set of id types
+ * is asserted against the source, so adding an id without deciding what it identifies fails here.
  */
 class TypedIdTest {
 
@@ -37,8 +33,6 @@ class TypedIdTest {
         // Unit-test JVM cwd is app/, but fall back to the repo root layout for safety.
         if (dir.isDirectory) dir else File("app/$dir")
     }
-
-    // ------------------------------------------------------------------ identity is not a string
 
     @Test
     fun everyIdIsItsOwnTypeAndNoneIsAssignableToAnother() {
@@ -84,7 +78,6 @@ class TypedIdTest {
         assertEquals("adjustment-1", AdjustmentId("adjustment-1").value)
         assertEquals("decision-1", DecisionId("decision-1").value)
 
-        // Value semantics: equal text is the same id, and a set of ids de-duplicates by value.
         assertEquals(ProgramId("x"), ProgramId("x"))
         assertEquals(setOf(ProgramId("x"), ProgramId("x")), setOf(ProgramId("x")))
     }
@@ -118,8 +111,6 @@ class TypedIdTest {
             notValueClasses.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ the set is exactly the set
 
     @Test
     fun theIdVocabularyIsExactlyTheTypesTheArchitectureNames() {

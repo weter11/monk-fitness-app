@@ -16,22 +16,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §30 step 14's product decision: **the imported Program's planned start date is the user's choice**, made
- * in the review step and carried by the import request into the one transaction that creates the Program.
+ * The product decision: **the imported Program's planned start date is the user's choice**, made in the
+ * review step and carried by the import request into the one transaction that creates the Program.
  *
- * The rules this suite measures, each through the Program UI's own state holder:
+ * The rules this suite measures, each through the Program UI's own state holder: the default is today in
+ * the composition root's calendar; the user's choice is held until the confirmation and does not touch
+ * the reviewed draft; the Program's `plannedStartDate` is the chosen date; the initial opportunities are
+ * anchored to the chosen date, not to the import day; selection is unchanged when the checkbox is OFF and
+ * moved through the lifecycle service when ON; a failed import leaves no Program, no revision, no
+ * opportunity and no selection; the format carries no date, so nothing about the choice is serialized.
  *
- * ```text
- * default            today, in the composition root's calendar
- * user's choice      held until the confirmation, and it does not touch the reviewed draft
- * the Program        `plannedStartDate` is the chosen date
- * the schedule       the initial opportunities are anchored to the chosen date, not to the import day
- * selection          unchanged when the checkbox is OFF, moved through the lifecycle service when ON
- * atomicity          a failed import leaves no Program, no revision, no opportunity and no selection
- * the format         carries no date: nothing about the choice is serialized
- * ```
- *
- * Every claim is measured on the real engine through the production services (§27's unit is the
+ * Every claim is measured on the real engine through the production services (the creation unit is the
  * database's own), so *"the date choice affects the initial schedule created by Import"* is a statement
  * about rows rather than about a parameter being passed.
  */
@@ -49,8 +44,6 @@ class ProgramImportDateTest {
     fun tearDown() {
         rig.close()
     }
-
-    // ---------------------------------------------------------------- the review step
 
     @Test
     fun theReviewDefaultsToTodayAndLeavesTheCheckboxOff() = runBlocking {
@@ -115,8 +108,6 @@ class ProgramImportDateTest {
         assertNull(rig.state.importDraft)
         assertEquals(before, rig.tableCounts())
     }
-
-    // ---------------------------------------------------------------- the Program it creates
 
     @Test
     fun theImportedProgramIsPlannedToStartOnTheChosenDate() = runBlocking {
@@ -183,8 +174,6 @@ class ProgramImportDateTest {
         )
     }
 
-    // ---------------------------------------------------------------- the checkbox
-
     @Test
     fun theSelectionIsNotTouchedWhenTheCheckboxIsOff() = runBlocking {
         val existing = rig.createProgramThroughTheUi("Before the import")
@@ -225,8 +214,6 @@ class ProgramImportDateTest {
         )
     }
 
-    // ---------------------------------------------------------------- two imports
-
     @Test
     fun twoImportsOfOneFileAreTwoIndependentProgramsWithTheirOwnDates() = runBlocking {
         rig.controller.reviewImport(ProgramTransferFixture.VALID_BYTES)
@@ -249,8 +236,6 @@ class ProgramImportDateTest {
             imported.map { program -> program.programId.value }.toSet().size
         )
     }
-
-    // ---------------------------------------------------------------- refusals and failures
 
     @Test
     fun aFileThatIsNotAProgramIsRefusedAndNothingIsImported() = runBlocking {
@@ -312,14 +297,13 @@ class ProgramImportDateTest {
         )
     }
 
-    // ---------------------------------------------------------------- the format
-
     @Test
     fun theTransferFormatCarriesNoDateAndWasNotChangedByThisStage() = runBlocking {
-        // §30 step 28 DID bump the format's version — it added `revision.preferredExercises`. This stage's
-        // claim is narrower and is the one that matters: the bump did not carry a date with it. The version
-        // is asserted as a fact of the format rather than as "unchanged", because that is now false and a
-        // test pinning it would have failed for a change that did not touch anything this suite is about.
+        // A later stage DID bump the format's version — it added `revision.preferredExercises`. This
+        // stage's claim is narrower and is the one that matters: the bump did not carry a date with it.
+        // The version is asserted as a fact of the format rather than as "unchanged", because that is
+        // now false and a test pinning it would have failed for a change that did not touch anything
+        // this suite is about.
         assertEquals(
             "the format states no date, and its version moved only for §30 step 28's preference field",
             2,

@@ -12,23 +12,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P30's classification, measured against the **shipped catalogue itself** rather than a fixture.
+ * The classification, measured against the **shipped catalogue itself** rather than a fixture.
  *
- * Every expectation in this suite is derived by asking [WorkoutGenerator] what it holds. That is the
- * point: a table of expected families written out by hand would be a *second catalogue*, and it would
- * agree with this one only until the catalogue changed — at which point the suite would be asserting a
- * fiction while production kept working. Reading the same source production reads turns every claim into
- * a statement about agreement between two consumers of one fact, which is the only claim P30 makes.
+ * Every expectation is derived by asking [WorkoutGenerator] what it holds: a hand-written table of
+ * expected families would be a *second catalogue*, agreeing with this one only until the catalogue
+ * changed — at which point the suite would assert a fiction while production kept working. Reading the
+ * source production reads turns every claim into a statement about agreement between two consumers of
+ * one fact, which is the only claim being made.
  */
 class CatalogExerciseFamilyClassificationTest {
 
     private val classification: ExerciseFamilyClassification = CatalogExerciseFamilyClassification()
     private val catalogue = WorkoutGenerator().getExerciseLibrary()
 
-    /**
-     * A known exercise answers its **exact stored family** — not a family it happens to share, not a
-     * normalised form. Asserted against every catalogue entry, so a single mis-read fails the suite.
-     */
+    /** A known exercise answers its **exact stored family**, asserted over every catalogue entry. */
     @Test
     fun everyKnownExerciseAnswersItsExactStoredFamily() {
         assertTrue("the catalogue must not be empty for this to mean anything", catalogue.isNotEmpty())
@@ -43,9 +40,9 @@ class CatalogExerciseFamilyClassificationTest {
     }
 
     /**
-     * Several exercises in one family resolve to **one identical** string — the property that makes the
-     * classification a grouping rather than a relabelling. `pushups` is the largest family in the
-     * catalogue, so a per-exercise answer that leaked through would show up here first.
+     * Several exercises in one family resolve to **one identical** string — what makes this a grouping
+     * rather than a relabelling. `pushups` is the largest family, so a per-exercise answer leaking
+     * through shows up here first.
      */
     @Test
     fun severalExercisesInOneFamilyResolveIdentically() {
@@ -72,9 +69,9 @@ class CatalogExerciseFamilyClassificationTest {
     }
 
     /**
-     * Different families stay **distinct**. Without this, a source that answered one constant for every
-     * exercise would satisfy the previous test perfectly — the two assertions are what separate a
-     * grouping from a constant.
+     * Different families stay **distinct**: a source answering one constant for every exercise would
+     * satisfy the previous test perfectly, and the two assertions are what separate a grouping from a
+     * constant.
      */
     @Test
     fun differentFamilyIdsRemainDistinct() {
@@ -103,11 +100,9 @@ class CatalogExerciseFamilyClassificationTest {
     }
 
     /**
-     * An exercise id the app does not ship is answered **absence**, never a guess.
-     *
-     * Three shapes of unknown are used deliberately: an id that is not in the catalogue at all, an id
-     * that is a *different* exercise's id with a suffix, and the empty string. A source that fell back
-     * to a default family, or that parsed a family out of the id text, would answer all three wrongly.
+     * An exercise id the app does not ship is answered **absence**, never a guess. Three shapes of
+     * unknown: an id not in the catalogue, a *different* exercise's id with a suffix, and the empty
+     * string — all three answered wrongly by a source that defaulted or parsed the id text.
      */
     @Test
     fun anUnknownExerciseReturnsAbsence() {
@@ -125,9 +120,9 @@ class CatalogExerciseFamilyClassificationTest {
     }
 
     /**
-     * The classification is **deterministic**: repeated reads of the same id, and a second instance
-     * built independently, agree. Two passes over a shared mutable source would be the failure this
-     * catches, and the second instance is what rules out an answer that depends on construction order.
+     * The classification is **deterministic**: repeated reads of the same id, and a second independently
+     * built instance, agree. This catches a shared mutable source, and the second instance rules out an
+     * answer that depends on construction order.
      */
     @Test
     fun classificationIsDeterministicAcrossReadsAndAcrossInstances() {
@@ -150,14 +145,14 @@ class CatalogExerciseFamilyClassificationTest {
     }
 
     /**
-     * **Source fidelity with the generation candidate metadata.** §30 step 10's planner receives each
-     * exercise as a [GenerationCandidate], whose `familyId` is the *same stored field*; the adaptive
-     * classification must answer exactly what generation was handed, or the two halves of the app would
-     * disagree about what family an exercise is in.
+     * **Source fidelity with the generation candidate metadata.** The planner receives each exercise as
+     * a [GenerationCandidate], whose `familyId` is the *same stored field*; the adaptive classification
+     * must answer exactly what generation was handed, or the two halves of the app would disagree about
+     * what family an exercise is in.
      *
-     * This is the assertion P30 exists for, and it is why the source is legitimate: it is not a second
-     * opinion about families, it is the same fact read by a second consumer. The candidate is built
-     * rather than merely read, so the assertion runs through the value generation actually holds.
+     * This is the assertion the suite exists for, and why the source is legitimate: not a second opinion
+     * about families but the same fact read by a second consumer. The candidate is built rather than
+     * merely read, so the assertion runs through the value generation actually holds.
      */
     @Test
     fun classificationAgreesWithTheGenerationCandidateMetadataForEveryExercise() {
@@ -179,12 +174,12 @@ class CatalogExerciseFamilyClassificationTest {
     /**
      * **A later catalogue revision cannot retroactively alter historical meaning.** The classification is
      * a compile-time projection, so what an old stored session meant by an exercise's family is fixed by
-     * the catalogue entry itself and not re-derived per pass. What is asserted here is the property that
-     * makes that true: the answer for an id is the **stored field**, so it is whatever the entry says,
-     * with no per-call input that a revision, a date or a Program could vary.
+     * the catalogue entry and not re-derived per pass. The property that makes that true is asserted
+     * here: the answer for an id is the **stored field**, with no per-call input a revision, a date or a
+     * Program could vary.
      *
-     * A second classification holding a different answer for the same id is exactly what a per-revision or
-     * per-Program classification would produce, so the two are held to the same answer.
+     * A second classification holding a different answer for the same id is exactly what a per-revision
+     * or per-Program classification would produce, so the two are held to the same answer.
      */
     @Test
     fun theFamilyMeaningOfAnIdIsTheStoredFieldAndCarriesNoRevisionOrProgramInput() {
@@ -216,10 +211,9 @@ class CatalogExerciseFamilyClassificationTest {
     }
 
     /**
-     * **No cross-Program behaviour.** The classification is a pure function of an exercise id: it takes
-     * no Program, no revision and no session, so the same exercise means the same family to every
-     * Program in the app. Asserted as a property of the port's own signature rather than through a
-     * Program, because there is no Program for it to leak.
+     * **No cross-Program behaviour.** The classification is a pure function of an exercise id — no
+     * Program, no revision, no session — so the same exercise means the same family everywhere.
+     * Asserted on the port's signature, because there is no Program for it to leak.
      */
     @Test
     fun theAnswerDependsOnTheExerciseIdAloneAndCarriesNoProgramScope() {

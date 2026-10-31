@@ -23,34 +23,15 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 /**
- * P32's **production adaptive acceptance**: the stage's central claim, measured over the real wiring.
+ * Production adaptive acceptance over the real wiring: with stored relations behind the provider, a pass
+ * over an authorised family reaches the unchanged engine with a real declared relation and returns the
+ * engine's own pre-existing answer — never a new threshold or decision rule.
  *
- * ```text
- * classification  = CatalogExerciseFamilyClassification   (P30, shipped catalogue)
- * relations       = StoredProgressionRelationProvider     (P32, persisted catalogue)
- * engine          = ProgramAdaptiveEngine                 (unchanged since §30 step 11)
- * ```
+ * The negatives matter as much: no default rung for an undeclared family, no bypass of
+ * `availableExerciseIds`, no adaptation of user-authored content.
  *
- * ### What P32 changed, and what it deliberately did not
- *
- * P32 supplied the **missing relation data** and the **production wiring**. The engine, the policy, the
- * guard rules, the confirmation windows and the recovery semantics are exactly as §30 step 11 left them,
- * and nothing in this file asserts a new threshold or a new decision rule.
- *
- * The claim being made is narrow and testable: with real content behind the provider, a production pass
- * over an authorised family **reaches the engine with a real declared relation** and returns the engine's
- * own existing result — a progression when the policy's existing conditions are met, and its bounded
- * holds when they are not. Every assertion below is the *engine's* pre-existing behaviour, observed
- * through production wiring for the first time.
- *
- * The **negative** assertions matter as much as the positive one. A stage that activates a ladder is the
- * stage from which fabrication leaks: a default rung for an undeclared family, a bypass of
- * `availableExerciseIds`, an adaptation of user-authored content. Those are asserted here on the same
- * production wiring.
- *
- * The rig is [CatalogAdaptiveIntegrationRig] — P30's own, on real catalogue ids — **not a parallel
- * adaptive rig**. Its ladder source defaults to the production stored provider over a bootstrapped
- * database, so these tests and production agree by construction rather than by coincidence.
+ * The rig is [CatalogAdaptiveIntegrationRig] on real catalogue ids, not a parallel adaptive rig; its
+ * ladder source defaults to the production stored provider over a bootstrapped database.
  */
 class ProductionAdaptiveProgressionContentTest {
 
@@ -59,13 +40,10 @@ class ProductionAdaptiveProgressionContentTest {
     @After
     fun close() = rig.close()
 
-    // ================================================================ the four families reach the engine
-
     /**
-     * **The four authorised families are each reachable as a real declared relation in production.**
-     *
-     * Read through the rig's production provider, over the seeded database — the same object the
-     * integration receives — so this is a claim about production's answer and not about a fixture.
+     * The four authorised families are each reachable through the rig's production provider over the
+     * seeded database — the same object the integration receives, so this is production's answer and not
+     * a fixture's.
      */
     @Test
     fun everyAuthorisedFamilyIsReachableThroughTheProductionProvider() = runBlocking {
@@ -88,11 +66,8 @@ class ProductionAdaptiveProgressionContentTest {
     }
 
     /**
-     * **The provider reads through the repository, and holds nothing else.**
-     *
-     * The behavioural half: the provider's answer equals the repository's, and a **changed** stored
-     * ladder is what changes the answer. If the provider held a static definitions object, replacing the
-     * stored ladder would not move its answer — which is exactly the bug this asserts the absence of.
+     * The provider reads through the repository: a **changed** stored ladder changes its answer. A
+     * provider holding a static definitions object would not move, which is the bug asserted absent here.
      */
     @Test
     fun theProductionProvidersAnswerComesFromTheRepositoryAndNotFromAStaticSource() = runBlocking {
@@ -128,14 +103,10 @@ class ProductionAdaptiveProgressionContentTest {
         )
     }
 
-    // ================================================================ the two deliberate absences
-
     /**
-     * **A production pass over an undeclared family still stops honestly.**
-     *
-     * `plank` is a real catalogue family whose day the rig can present, and it has **no authored ladder**
-     * — a decision, not an omission. The pass must therefore report the same typed gap P30 established,
-     * which is what proves absence was preserved rather than papered over with a default rung.
+     * `plank` is a real catalogue family the rig can present and it has no authored ladder — a decision,
+     * not an omission. The pass must report the typed gap, proving absence was preserved rather than
+     * papered over with a default rung.
      */
     @Test
     fun anUndeclaredFamilyStillStopsAtNoDeclaredProgressionRelation() = runBlocking {
@@ -151,8 +122,7 @@ class ProductionAdaptiveProgressionContentTest {
             provider.relationOf("glute_bridge")
         )
 
-        // With the ladder source emptied — the shape of an undeclared family reaching the integration —
-        // the pass reports the typed gap rather than progressing on a fabricated rung.
+        // Emptied ladder source: the pass reports the typed gap rather than progressing on a fabricated rung.
         rig.relations = NoDeclaredProgression
         val trigger = rig.seedHistoryAndTrigger()
 
@@ -164,12 +134,9 @@ class ProductionAdaptiveProgressionContentTest {
     }
 
     /**
-     * **Absence is never converted into a default, a nearest family, or a one-rung ladder.**
-     *
-     * Measured on the production provider over the seeded database: every family outside the authorised
-     * four answers `null`, including real families with real exercises and near misses of the authorised
-     * ids. A fallback keyed on "some family exists" would answer a real relation for `rows` while still
-     * answering `null` for a wholly unknown id, so both cases are asserted.
+     * Absence is never converted into a default, a nearest family, or a one-rung ladder. A fallback keyed
+     * on "some family exists" would answer for `rows` while still answering `null` for an unknown id, so
+     * both cases are asserted.
      */
     @Test
     fun absenceIsNeverConvertedIntoAPlausibleDefaultLadder() = runBlocking {
@@ -187,20 +154,13 @@ class ProductionAdaptiveProgressionContentTest {
         assertNull("nor an empty id", provider.relationOf(""))
     }
 
-    // ================================================================ a real progression, unchanged engine
-
     /**
-     * **A production pass can now reach an actual declared next rung.**
+     * The rig's day presents real rungs of the authored `pushups` ladder, so with the policy conditions
+     * satisfied the engine's own existing algorithm moves the family up.
      *
-     * The central deliverable. The rig's day presents the catalogue's `pushups`, `pushups_wide` and
-     * `decline_pushups` — all three are real rungs of the authored `pushups` ladder — and with the policy
-     * conditions satisfied the engine's own existing algorithm moves the family up.
-     *
-     * Asserted against `ProgramAdaptiveReason.SUSTAINED_POSITIVE`, which is the **pre-existing** engine
-     * reason: this stage supplied the relation, not the rule that consumes it. If the engine had been
-     * rewritten to reach this outcome, this assertion would be satisfied by new code — so the gate that
-     * the engine file is unchanged lives in the architecture suite, and this test only claims the
-     * *pipeline is now connected*.
+     * The reason asserted is the pre-existing one: this stage supplied the relation, not the rule that
+     * consumes it. The gate that the engine file is unchanged lives in the architecture suite; this test
+     * only claims the pipeline is connected.
      */
     @Test
     fun aProductionPassOverAnAuthorisedFamilyReachesTheEngineRatherThanTheMissingRelationGap() =
@@ -216,16 +176,11 @@ class ProductionAdaptiveProgressionContentTest {
             outcome !is AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest
         )
 
-        // Every branch here is the **engine's own pre-existing** answer. P32 supplied the relation, not
-        // the rule that reads it, so this test asserts which of the engine's existing reasons production
-        // now reaches — and never asserts a new threshold to force a particular one.
-        //
-        // On the rig's own completion evidence the engine answers `RECENT_LOAD_ELEVATED`: the §18 load
-        // comparison blocks the increase, which is precisely the engine's unchanged guard doing its job.
-        // The **applied** progression is asserted separately against the stored relation in
-        // `theStoredRelationYieldsARealDeclaredProgressionThroughTheUnchangedEngine`; this test's claim
-        // is narrower and is about the wiring — that a production pass over an authorised family gets
-        // *past* the relation gap at all, which before P32 it could not.
+        // Every branch is the engine's own pre-existing answer — no new threshold is asserted to force
+        // one. On the rig's completion evidence the load comparison blocks the increase, so a bounded
+        // hold is the expected outcome, not a wiring failure. The applied progression is asserted
+        // separately against the stored relation in
+        // `theStoredRelationYieldsARealDeclaredProgressionThroughTheUnchangedEngine`.
         when (outcome) {
             is AdaptiveIntegrationOutcome.AdaptiveApplied -> assertEquals(
                 "a progression the engine's own sustained-positive rule earned, through production wiring",
@@ -251,30 +206,17 @@ class ProductionAdaptiveProgressionContentTest {
     }
 
     /**
-     * **The engine's own progression, driven by the STORED relation — a real declared next rung.**
+     * The relation handed to [com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveEngine] is read
+     * back from the seeded database through the production provider — not the definitions object, not a
+     * fixture ladder — and the engine decides from it with its own unchanged policy.
      *
-     * This is the sharpest form of the stage's central claim. The relation handed to
-     * [com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveEngine] is the one **read back from the
-     * seeded database through the production provider** — not the definitions object, and not a fixture
-     * ladder — and the engine is asked, with its own unchanged policy, to decide a progression from it.
+     * Driven directly rather than through a runtime pass because a full pass also depends on the rig's
+     * completion evidence clearing the confirmation window: a hold there would say nothing about whether
+     * the stored ladder is usable. Here the window is satisfied by the request's own facts, and the only
+     * value supplied by this stage is the relation read out of storage.
      *
-     * ### Why the engine is driven directly here, and the runtime pass above separately
-     *
-     * The two tests measure **different** things and neither substitutes for the other. The runtime test
-     * proves the *wiring* is connected: a production completion over an authorised family no longer
-     * stops at the missing-relation gap. This one proves the *content* is usable: a ladder persisted by
-     * this stage yields an actual declared next rung, with the authored prescription, through the
-     * engine's untouched algorithm.
-     *
-     * Driving the engine directly is what isolates the second claim. A full runtime pass would also
-     * depend on the rig's completion evidence clearing the policy's confirmation window, so a bounded
-     * hold there would say nothing about whether the stored ladder is any good. Here the confirmation
-     * window is satisfied by the request's own window facts — the engine's ordinary input — and the
-     * only P32-authored value in the request is the relation read out of storage.
-     *
-     * The engine's fixture ids (`pushups`, `pushups_knee`, `pushups_wide`) are, by construction, real
-     * catalogue ids of the `pushups` family, which is why the stored ladder's own `-1 / 0 / +1` rungs
-     * line up with what the engine is asked to do.
+     * The engine fixture ids are real catalogue ids of the `pushups` family, which is why the stored
+     * ladder's `-1 / 0 / +1` rungs line up with what the engine is asked to do.
      */
     @Test
     fun theStoredRelationYieldsARealDeclaredProgressionThroughTheUnchangedEngine() = runBlocking {
@@ -294,7 +236,7 @@ class ProductionAdaptiveProgressionContentTest {
             engineRig.request(
                 snapshot = engineRig.snapshot(exposures = engineRig.improvement()),
                 element = engineRig.element(exerciseId = "pushups", familyId = "pushups"),
-                // **The stored value**, in the engine's request, in place of the fixture ladder.
+                // The stored value, in place of the fixture ladder.
                 relation = stored,
                 window = engineRig.window(familyId = "pushups", level = 0),
                 availableExerciseIds = setOf("pushups_knee", "pushups", "pushups_wide", "decline_pushups")
@@ -325,11 +267,8 @@ class ProductionAdaptiveProgressionContentTest {
     }
 
     /**
-     **A disabled target is refused by the engine's existing availability rule, on the STORED relation.**
-     *
-     * The ladder's `+1` rung is `pushups_wide`. With a configuration that does not enable it, the engine
-     * must not move there — and must say so with its own bounded answer rather than substituting another
-     * declared rung.
+     * The ladder's `+1` rung is `pushups_wide`. Without it enabled the engine must not move there, and
+     * must say so with its own bounded answer rather than substituting another declared rung.
      */
     @Test
     fun aDisabledNextRungIsRefusedByTheEngineOnTheStoredRelation() = runBlocking {
@@ -365,9 +304,7 @@ class ProductionAdaptiveProgressionContentTest {
         )
     }
 
-    /**
-     **The ceiling holds on the STORED relation.** From the top rung there is nowhere up to go.
-     */
+    /** The ceiling holds on the STORED relation: from the top rung there is nowhere up to go. */
     @Test
     fun theCeilingOfTheStoredLadderHoldsThroughTheEngine() = runBlocking {
         rig.createSingleFamilyGraph()
@@ -393,9 +330,7 @@ class ProductionAdaptiveProgressionContentTest {
         assertNull("and no adjustment", result.adjustment)
     }
 
-    /**
-     **The floor holds on the STORED relation.** `pullups` is the only ladder with a `-2` floor.
-     */
+    /** The floor holds on the STORED relation; `pullups` is the only ladder with a `-2` floor. */
     @Test
     fun theFloorOfTheStoredLadderHoldsThroughTheEngine() = runBlocking {
         rig.createSingleFamilyGraph()
@@ -421,11 +356,8 @@ class ProductionAdaptiveProgressionContentTest {
     }
 
     /**
-     **User-authored content is protected on the STORED relation.**
-     *
-     * The engine refuses an element the user authored **before** the relation is consulted at all, so
-     * this is the sharpest possible statement that activating a ladder did not make user content
-     * adaptable: the ladder is real, reachable, and still not applied to a user-owned element.
+     * The engine refuses a user-authored element **before** the relation is consulted at all: the ladder
+     * is real and reachable, and still not applied to user-owned content.
      */
     @Test
     fun userAuthoredContentIsStillProtectedOnTheStoredRelation() = runBlocking {
@@ -465,17 +397,12 @@ class ProductionAdaptiveProgressionContentTest {
     }
 
     /**
-     **The plan element's ownership is derived from the plan's own two facts, in order.**
+     * Pins the ownership **derivation** itself: a mutation collapsing `USER_AUTHORED`/`PINNED` into
+     * `AUTOMATIC` makes user content adaptable and fails here, even though every engine-level ownership
+     * test still passes because the engine only reads the ownership it is given.
      *
-     * P32 activated a real ladder, and with a ladder reachable the question *"is this element the user's
-     * own?"* stops being academic: it is what decides whether the new relation is ever consulted for an
-     * element. This test pins the **derivation** itself, so a mutation that collapsed
-     * `USER_AUTHORED`/`PINNED` into `AUTOMATIC` — making user content adaptable — fails here even though
-     * every engine-level ownership test would still pass, because the engine reads the ownership it is
-     * given.
-     *
-     * `isPinned` outranks `origin`: a generated element the user pinned is `PINNED`, and only an
-     * unpinned user-authored element is `USER_AUTHORED`.
+     * `isPinned` outranks `origin`: a pinned generated element is `PINNED`, and only an unpinned
+     * user-authored element is `USER_AUTHORED`.
      */
     @Test
     fun theOwnershipDerivationStillReadsThePlansOwnTwoFacts() {
@@ -513,10 +440,8 @@ class ProductionAdaptiveProgressionContentTest {
     }
 
     /**
-     **The ceiling still holds.** A family at the top of its ladder does not step off the end.
-     *
-     * `decline_pushups` is the authored `pushups` ceiling (`+2`). The engine's existing bounded answer is
-     * asserted through production wiring — P32 supplied the ladder, not the ceiling rule.
+     * A family at the top of its ladder does not step off the end: `decline_pushups` is the authored
+     * `pushups` ceiling (`+2`), and the bounded answer is observed through production wiring.
      */
     @Test
     fun theCeilingOfAnAuthorisedLadderStillHolds() = runBlocking {
@@ -540,10 +465,8 @@ class ProductionAdaptiveProgressionContentTest {
     }
 
     /**
-     * **The floor still holds.** A family at the bottom of its ladder does not step below it.
-     *
-     * `pullups` is the only ladder authored with a `-2` floor, so it is the one that can be observed at a
-     * true bottom rung.
+     * A family at the bottom of its ladder does not step below it; `pullups` is the only ladder authored
+     * with a `-2` floor, so it is the one observable at a true bottom rung.
      */
     @Test
     fun theFloorOfAnAuthorisedLadderStillHolds() = runBlocking {
@@ -561,15 +484,10 @@ class ProductionAdaptiveProgressionContentTest {
         )
     }
 
-    // ================================================================ the engine's existing guards
-
     /**
-     * **A disabled or unavailable target is still refused, and `availableExerciseIds` is honoured.**
-     *
-     * The authored `pushups` ladder's `+1` rung is `pushups_wide`. If the user's own configuration does
-     * not enable it, the family must not be moved there. Asserted on the relation's own step resolution
-     * under an availability set that excludes the next rung, which is the mechanism the engine uses — so
-     * this pins the *data* the engine is handed, not a reimplementation of its guard.
+     * If the user's configuration does not enable `pushups_wide` the family must not be moved there.
+     * Asserted on the relation's own step resolution under an availability set excluding the next rung —
+     * the data the engine is handed, not a reimplementation of its guard.
      */
     @Test
     fun anUnavailableNextRungIsStillRefusedByAvailability() = runBlocking {
@@ -592,12 +510,8 @@ class ProductionAdaptiveProgressionContentTest {
     }
 
     /**
-     **User-authored and pinned elements remain protected.**
-     *
-     * The rig's day is built from `ProgramExerciseOrigin.GENERATED` elements, so this asserts the
-     * *mechanism* is still the engine's: the ladder now exists and is reachable, and an element the user
-     * authored is still not adapted. Asserted on the ownership the production wiring carries, because
-     * deciding adaptation is the engine's job and this stage must not pre-empt it.
+     * The rig's day is built from `GENERATED` elements, so the ladder's reachability is not what stands
+     * between this pass and a change; adaptation stays the engine's decision on the ownership it carries.
      */
     @Test
     fun userAuthoredContentRemainsProtectedByTheExistingOwnershipRule() = runBlocking {
@@ -612,16 +526,13 @@ class ProductionAdaptiveProgressionContentTest {
                 it.origin == ProgramExerciseOrigin.GENERATED && !it.isPinned
             }
         )
-        // The protection itself is the engine's pre-existing rule, asserted where it is owned rather
-        // than restated here: P32 supplied a relation, and a user-owned element is refused before the
-        // relation is ever consulted.
+        // The protection itself is the engine's pre-existing rule, asserted where it is owned: a
+        // user-owned element is refused before the relation is ever consulted.
     }
 
     /**
-     * **The exact per-set prescription survives the whole journey into the engine's own request.**
-     *
-     * definition → Room → repository → provider → the relation the engine resolves against. Asserted on
-     * the rung the engine would step to, because that is the value whose presentation the user would see.
+     * Asserted on the rung the engine would step to — definition through Room, repository and provider —
+     * because that is the value whose presentation the user would see.
      */
     @Test
     fun theExactPerSetPrescriptionSurvivesIntoTheRungTheEngineWouldPresent() = runBlocking {
@@ -640,9 +551,7 @@ class ProductionAdaptiveProgressionContentTest {
         assertEquals("and a total of 21, which is a volume and not a prescription", 21, step.prescription.totalTarget)
     }
 
-    /**
-     * **The pull-up ladder's TIME → REP transition survives into the engine's own relations.**
-     */
+    /** The pull-up ladder's TIME → REP transition survives into the engine's own relations. */
     @Test
     fun theTimeToRepetitionTransitionSurvivesIntoTheEngineRelations() = runBlocking {
         rig.createSingleFamilyGraph()
@@ -661,12 +570,8 @@ class ProductionAdaptiveProgressionContentTest {
     }
 
     /**
-     * **Production does not wire the empty ladder source.**
-     *
-     * The wiring claim, asserted on the rig's own provider type rather than on the container text: what
-     * production hands the integration is a `StoredProgressionRelationProvider`, and asking it about an
-     * authorised family returns content while the empty source returns `null` for the same family. The
-     * two are distinguished by behaviour, not by name.
+     * Production does not wire the empty ladder source: the two providers are distinguished by behaviour
+     * on the same family, not by name or container text.
      */
     @Test
     fun productionServesContentWhereTheEmptyLadderSourceServesNothing() = runBlocking {

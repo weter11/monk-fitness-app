@@ -10,15 +10,14 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * **The forearm plank's scapulae: the exercise's stated girdle, on the canonical channel.**
+ * The forearm plank's scapulae: the exercise's stated girdle, on the canonical channel.
  *
- * `StaticForearmPlankPose`'s own copy and BPS `Plank (Forearm)` both put the girdle inside the
+ * `StaticForearmPlankPose`'s own copy and the forearm-plank spec both put the girdle inside the
  * exercise — the pose's KDoc lists *"the shoulder girdle (scapular protraction)"* under MOVING joints
- * and states *"SCAPULAE: protracted ('push the mat away'), never winged/retracted"*; the BPS
- * §"Scapular strategy"/§5/§8/§11 state *"Scapulae protracted (serratus anterior) and depressed, flat
- * against the rib cage; the shoulder girdle is set, not collapsed or shrugged"* and *"Scapula:
- * Protracted (serratus), depressed, flat; no winging, no shrug"*. Measured on the pre-correction tree
- * through `SkeletonPipeline.produceFrame`, **both canonical `SCAPULA_A`/`SCAPULA_P` joints published
+ * and states *"SCAPULAE: protracted ('push the mat away'), never winged/retracted"*; the spec states
+ * *"Scapulae protracted (serratus anterior) and depressed, flat against the rib cage; the shoulder
+ * girdle is set, not collapsed or shrugged"*. Measured on the pre-correction tree through
+ * `SkeletonPipeline.produceFrame`, **both canonical `SCAPULA_A`/`SCAPULA_P` joints published
  * `0.0000` rad at every sampled phase** with zero glenoid travel off the chest: the stated protraction
  * was carried by the thorax's rounding alone. That is the animation-logic defect this file gates — a
  * pose can be biomechanically valid, fully engine-driven, and still animate the wrong thing.
@@ -26,23 +25,8 @@ import kotlin.math.sqrt
  * The authored correction is `driveScapula(-A·breath, +A·breath)` with
  * `A = 0.60` activation units (the pose's own authored amplitude — `BasePlankPose.GIRDLE_PROTRACTION`)
  * and `breath = sin(π·progress)` (the pose's own
- * zero-at-the-endpoints stabilization driver). What this file pins, everything measured on the
- * **published frame** and captured BY VALUE (`produceFrame` hands back a reused mutable buffer):
- *
- *  1. [theGirdleIsCarriedByTheCanonicalScapulaJoints] — each blade's own articulation equals the
- *     authored activation at every phase, rest at both authored endpoints (RED pre-fix: `0.0000`);
- *  2. [bothBladesProtractTowardTheirPlantedElbowsAndNeitherWings] — the anatomy, read off the chest's
- *     own anterior axis (the one quantity the girdle cannot move, because the thorax is authored):
- *     both glenoids gain the SAME anterior displacement, i.e. both blades wrap flat toward their
- *     planted elbows and neither wings;
- *  3. [theThoraxDoesNotAbsorbTheGirdle] — the audit's rule: an authored thorax keeps the girdle out of
- *     `SkeletonPoseFinalizer.reconstructChestFrame`, so the published thoracic articulation and the
- *     chest's world frame stay exactly the pose's own;
- *  4. [thePlantedForearmStaysFlatAndThePillarIsUntouched] — the plant contract the amplitude is
- *     DERIVED from: one flat forearm on the mat, the elbow directly under its shoulder at the braced
- *     endpoint, the declared targets realized, no solver relocation;
- *  5. [theGirdleCycleIsFrameConditionInvariantAndTheSamplesAreIndependent] — the B-8 cold-frame class
- *     and the T-7 aliasing class (anti-vacuity: independent copies whose content differs).
+ * zero-at-the-endpoints stabilization driver). Everything is measured on the **published frame** and
+ * captured BY VALUE (`produceFrame` hands back a reused mutable buffer).
  */
 class ForearmPlankScapularProtractionTest {
 
@@ -94,8 +78,6 @@ class ForearmPlankScapularProtractionTest {
     /** The pose's own authored thoracic articulation at [p]. */
     private fun authoredThoracic(p: Float) = 0.09f * p + breath(p) * 0.02f
 
-    // ---- harness ------------------------------------------------------------------------------
-
     /**
      * One published frame, read into primitives DURING the single pass — `produceFrame` publishes a
      * reused buffer and the node tree behind it is reused too, so a retained reference would alias
@@ -103,9 +85,7 @@ class ForearmPlankScapularProtractionTest {
      */
     private class Frame(
         val joints: Map<Joint, Vector3>,
-        /** World rotations of the watched joints. */
         val world: Map<Joint, JointRotation>,
-        /** Parent-relative rotations of the spine/girdle joints. */
         val local: Map<Joint, JointRotation>,
         val limbTargets: Map<Joint, Vector3>,
         val clamp: Float,
@@ -179,10 +159,6 @@ class ForearmPlankScapularProtractionTest {
     private fun dist(a: Vector3, b: Vector3) =
         sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z))
 
-    // ------------------------------------------------------------------------------------------
-    // 1. The defect itself — which joint carries the exercise's stated girdle
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theGirdleIsCarriedByTheCanonicalScapulaJoints() {
         val frames = playingFrames()
@@ -221,7 +197,7 @@ class ForearmPlankScapularProtractionTest {
                 "${deg(authoredAngle(peak.first))}° = ${f(authoredAngle(peak.first))} rad, comparison band ${f(angleBand)})",
             // The floor is the COMPARISON BAND itself (4.2× below the authored peak of `0.0210`
             // rad), not a multiple calibrated to the amplitude: a floor sitting within a few percent
-            // of a decided amplitude breaks the moment the amplitude is re-decided (batch 1's lesson).
+            // of a decided amplitude breaks the moment the amplitude is re-decided.
             authoredAngle(peak.first) > angleBand
         )
         for ((p, frame) in frames.filter { it.first < 1e-6f || it.first > 1f - 1e-6f }) {
@@ -234,10 +210,6 @@ class ForearmPlankScapularProtractionTest {
             }
         }
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 2. The anatomy — both blades protract, neither wings
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun bothBladesProtractTowardTheirPlantedElbowsAndNeitherWings() {
@@ -252,7 +224,7 @@ class ForearmPlankScapularProtractionTest {
             witnesses.add("p=$p glenoid anterior A=${f(a)} P=${f(b)}")
             // The glenoid travels ANTERIORLY — toward the mat and its own planted elbow in this prone
             // layout, which is the protracted / "flat against the rib cage" direction; the posterior
-            // direction is the winging both BPS files name as a fault.
+            // direction is the winging the spec names as a fault.
             for ((blade, v) in listOf("A" to a, "P" to b)) {
                 val want = def.shoulderWidth * sin(authoredAngle(p))
                 if (abs(v - want) > posBand) {
@@ -296,10 +268,6 @@ class ForearmPlankScapularProtractionTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 3. The thorax is the author's — never the reconstruction's
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theThoraxDoesNotAbsorbTheGirdle() {
         val wrongAngle = mutableListOf<String>()
@@ -338,10 +306,6 @@ class ForearmPlankScapularProtractionTest {
             wrongWorld.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 4. The plant — the contract the amplitude is derived from
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun thePlantedForearmStaysFlatAndThePillarIsUntouched() {
@@ -389,12 +353,10 @@ class ForearmPlankScapularProtractionTest {
         assertTrue("the realized hands must be the declared targets (no relocation):\n" + relocated.take(6).joinToString("\n"), relocated.isEmpty())
         // Anti-vacuity: the girdle must really load the plant. The floor sits above the pre-fix pose's
         // own residual (measured `0.3973` u on the untouched tree) and well below the authored value.
-        // Anti-vacuity: see the sibling plank's record — the floor sits above the pre-fix pose's own
-        // residual (`0.0000` u: its elbow is exactly on the mat) and well below the authored value.
         assertTrue("anti-vacuity: the stabilization must really load the plant (worst flatness ${f(worstFlat)} u)", worstFlat > 0.6f)
 
         // The endpoints are the pose's own authored frames, and the braced hold's pillar is exactly the
-        // BPS §6/§11 one — the invariant that makes the girdle's schedule what it is.
+        // spec's one — the invariant that makes the girdle's schedule what it is.
         for ((p, frame) in frames.filter { it.first < 1e-6f || it.first > 1f - 1e-6f }) {
             for (blade in blades) {
                 val shoulder = frame.joints.getValue(Joint.valueOf("SHOULDER_$blade"))
@@ -415,10 +377,6 @@ class ForearmPlankScapularProtractionTest {
             }
         }
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 5. Frame condition + the aliasing class
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theGirdleCycleIsFrameConditionInvariantAndTheSamplesAreIndependent() {

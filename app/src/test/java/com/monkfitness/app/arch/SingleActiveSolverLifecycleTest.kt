@@ -24,45 +24,34 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P12 §12.7 — **flag lifecycle** and the **activated single-active-solver ownership** invariant:
+ * **Flag lifecycle** and the **activated single-active-solver ownership** invariant:
  *
  * > For one build cycle and one configuration, exactly one Active Limb Solver may perform limb
  * > realization.
  *
- * The sibling suites cover the pieces of this contract that already had authoritative tests:
- * `SingleActiveSolverEnforcementTest` (per-implementation realization evidence, counterfactual
- * double execution within ONE implementation), `RuntimeSolverOwnershipAuditTest` (§12.7
- * configuration surface + static write confinement), `ActivationEquivalenceTest` (§12.9
- * cross-configuration corpus), `ValidationOwnershipReCertificationTest` (§12.5/§12.6 registration
- * under the active stage), `StraightIntentFallbackTest` (the flag's per-solve producers). This class
- * adds ONLY the four contract properties those suites cannot express, and it deliberately re-asserts
- * no claim they already own:
+ * Sibling suites own the rest of this contract (per-implementation realization evidence, the
+ * configuration surface and static write confinement, the cross-configuration corpus, registration
+ * under the active stage, the flag's per-solve producers). This class adds ONLY the four properties
+ * those suites cannot express, and re-asserts no claim they already own:
  *
  *  1. [declaredLimbsAreRealizedExactlyOncePerConfiguration] — the invariant stated on the DECLARED
- *     limb set instead of on one probe limb: for a multi-limb frame, the set of realized limbs must
- *     equal the declared [SkeletonPose.limbTargets] set in BOTH configurations, with exactly one
- *     solver window and zero duplicate executions. This is the "exactly one realization per declared
- *     limb" form of §12.7 that neither the 1-limb owner suites nor the corpus express.
- *  2. [bakeRealizationAndStageRealizationInOneCycleIsRejected] — the §12.7a **double-realization
- *     trap**: the authoring bake and the engine stage MUST NOT both realize the same build cycle.
- *     The trap is run through the registered production realization path (never a fabricated
- *     counter write) and it is proved that a geometry-only test could not detect it: the two
- *     single-realization frames are raw-bit identical.
- *  3. [registrationSurvivesTheGateWhileRealizationIsGated] — §12.5 acceptance at FIELD level: under
- *     the active stage every registration effect still runs (Limb Target with its declared target,
- *     pole, lengths, constraint and straight intent; the Contact Declaration), the realization
- *     effects do not (no window, no realized limb, no stamp folds, no node writes).
+ *     limb set instead of one probe limb: for a multi-limb frame the realized set must equal the
+ *     declared [SkeletonPose.limbTargets] set in BOTH configurations, with exactly one solver
+ *     window and zero duplicate executions.
+ *  2. [bakeRealizationAndStageRealizationInOneCycleIsRejected] — the **double-realization trap**:
+ *     the authoring bake and the engine stage MUST NOT both realize the same build cycle. The trap
+ *     runs through the registered production realization path (never a fabricated counter write)
+ *     and proves a geometry-only test could not detect it: the two single-realization frames are
+ *     raw-bit identical.
+ *  3. [registrationSurvivesTheGateWhileRealizationIsGated] — registration at FIELD level: under the
+ *     active stage every registration effect still runs (Limb Target with its declared target,
+ *     pole, lengths, constraint and straight intent; the Contact Declaration), while the
+ *     realization effects do not (no window, no realized limb, no stamp folds, no node writes).
  *  4. The flag-lifecycle group — [freshAndReusedBuildersReportTheCurrentBuildsReading],
  *     [multipleLimbsInOneBuildMergeTheReading], [droppedReadingIsReArmedByTheNextBuild] and
- *     [bentOnlyBuildDoesNotInheritAPreviousDrop] prove the flag is *current-build state*: it is
- *     re-armed by the build window in BOTH configurations, it merges across limbs of one build, and
- *     it never survives into a later build that did not drop a straight intent.
- *
- * Correction of the record: the counterfactual traps below were executed against the defective
- * shapes before being accepted as green — (a) with the §12.7a gate removed from the authoring bakes,
- * [bakeRealizationAndStageRealizationInOneCycleIsRejected] observes the double realization and the
- * pipeline rejects the frame; (b) with the F2 build-window re-arm moved below the gate (the WP-F
- * defect shape) the lifecycle group goes red — see the P12 §12.7 landing record.
+ *     [bentOnlyBuildDoesNotInheritAPreviousDrop] prove the flag is *current-build state*: re-armed
+ *     by the build window in BOTH configurations, merged across limbs of one build, and never
+ *     surviving into a later build that did not drop a straight intent.
  */
 class SingleActiveSolverLifecycleTest {
 
@@ -86,8 +75,6 @@ class SingleActiveSolverLifecycleTest {
         }
     }
 
-    // ------------------------------------------------------------------------------ fixtures
-
     /** One declared limb on a leg chain: the joint, its world target and the authored intent. */
     private data class Declaration(
         val joint: Joint,
@@ -97,10 +84,9 @@ class SingleActiveSolverLifecycleTest {
     )
 
     /**
-     * Test-only authoring probe: a [BasePose] that declares [declarations] on the front (`*_F`) /
-     * back (`*_B`) leg chains of the standard skeleton and then finalizes through the same
-     * `SkeletonPose.fromHierarchy` template every production pose uses. The declaration list is
-     * mutable so a REBUILT carrier (the reused-builder lifecycle case) can change its intent.
+     * Test-only authoring probe: declares [declarations] on the front/back leg chains of the
+     * standard skeleton, then finalizes through the same `SkeletonPose.fromHierarchy` template
+     * production poses use. The list is mutable so a REBUILT carrier can change its intent.
      */
     private class StraightLimbProbe(var declarations: List<Declaration>) : BasePose() {
         override fun onBuild(context: PoseContext): SkeletonPose {
@@ -156,8 +142,6 @@ class SingleActiveSolverLifecycleTest {
     private fun bent(joint: Joint, contact: ContactConstraint? = null) =
         Declaration(joint, ROOT_PLUS_HONOR, straight = false, contact = contact)
 
-    // ------------------------------------------------------------------------------ helpers
-
     private fun realizedJoints(pose: SkeletonPose): Set<Joint> =
         Joint.entries.filterTo(mutableSetOf()) { pose.limbRealizedLimbs and (1L shl it.index) != 0L }
 
@@ -188,8 +172,6 @@ class SingleActiveSolverLifecycleTest {
             violation is IllegalStateException && violation.message.orEmpty().contains("R5 violation")
         )
     }
-
-    // ------------------------------------------- 1 — one realization per DECLARED limb (§12.7)
 
     @Test
     fun declaredLimbsAreRealizedExactlyOncePerConfiguration() {
@@ -238,16 +220,13 @@ class SingleActiveSolverLifecycleTest {
         inConfiguration(true) { SkeletonPipeline(def).produceFrame(probe(*declarations.toTypedArray()), ctx) }
     }
 
-    // ------------------------------------ 2 — the double-realization trap (§12.7a violation mode)
-
     @Test
     fun bakeRealizationAndStageRealizationInOneCycleIsRejected() {
         val declarations = listOf(droppedStraight(Joint.ANKLE_F), honoredStraight(Joint.ANKLE_B))
 
-        // PREMISE 1 — output equivalence: a frame realized by the bake and a frame realized by the
-        // stage publish raw-bit identical geometry and identical solver stamps. A geometry-only or
-        // stamp-only test therefore CANNOT distinguish one realization from two; only execution
-        // evidence can.
+        // PREMISE 1 — output equivalence: a bake-realized frame and a stage-realized frame publish
+        // raw-bit identical geometry and stamps. A geometry-only or stamp-only test therefore
+        // CANNOT distinguish one realization from two; only execution evidence can.
         val authoringFrame = inConfiguration(false) {
             SkeletonPipeline(def).produceFrame(probe(*declarations.toTypedArray()), ctx).pose
         }
@@ -283,10 +262,10 @@ class SingleActiveSolverLifecycleTest {
             assertEquals("the stage window is the frame's one realization", 1, pose.limbSolverExecutions)
         }
 
-        // THE TRAP — both registered implementations realize the SAME build cycle. This is the
-        // pre-§12.7a shape (an ungated authoring bake co-executing with the engine stage) driven
-        // through the registered production path: the carrier is authored with the bake realizing,
-        // then handed to the pipeline, whose stage realizes the same declared limbs again.
+        // THE TRAP — both registered implementations realize the SAME build cycle (an ungated
+        // authoring bake co-executing with the engine stage), driven through the registered
+        // production path: the carrier is authored with the bake realizing, then handed to the
+        // pipeline, whose stage realizes the same declared limbs again.
         var carrier: SkeletonPose? = null
         val violation = try {
             IK_STAGE_ACTIVE = false
@@ -315,14 +294,12 @@ class SingleActiveSolverLifecycleTest {
             setOf(Joint.ANKLE_F, Joint.ANKLE_B), realizedJoints(carrier!!)
         )
 
-        // ANTI-VACUITY ANCHOR — the same declaration and the same code path is ACCEPTED when only
-        // one implementation realizes it (both ways). The trap above rejects a co-execution, not
-        // the declaration.
+        // ANTI-VACUITY ANCHOR — the same declaration and code path is ACCEPTED when only one
+        // implementation realizes it (both ways): the trap rejects a co-execution, not the
+        // declaration.
         inConfiguration(false) { SkeletonPipeline(def).produceFrame(probe(*declarations.toTypedArray()), ctx) }
         inConfiguration(true) { SkeletonPipeline(def).produceFrame(probe(*declarations.toTypedArray()), ctx) }
     }
-
-    // ------------------------------------------- 3 — registration preserved, realization gated
 
     @Test
     fun registrationSurvivesTheGateWhileRealizationIsGated() {
@@ -395,8 +372,6 @@ class SingleActiveSolverLifecycleTest {
             assertEquals("the declared intent is not consumed by the pipeline", 1, frame.limbTargets.size)
         }
     }
-
-    // ----------------------------------------------------------------- 4 — flag lifecycle (§12.7)
 
     @Test
     fun freshAndReusedBuildersReportTheCurrentBuildsReading() {
@@ -498,8 +473,6 @@ class SingleActiveSolverLifecycleTest {
             assertFalse("published state must be truthful for this build", bentOnly.straightIntentDropped)
         }
     }
-
-    // --------------------------------------------------------------------------------- constants
 
     private companion object {
         /** Fixture root: the pelvis sits away from the origin so a target distance is meaningful. */

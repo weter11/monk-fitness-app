@@ -8,43 +8,35 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
- * **B2 — the runner's-lunge back knee must not pass through the mat the pose itself declares.**
+ * The runner's-lunge back knee must not pass through the mat the pose itself declares.
  *
- * `DynamicWorldsGreatestStretchPose` authors a runner's lunge: the front foot flat forward, *"the back
- * leg extended with the toe on the floor"* (its own KDoc), the pelvis low, everything read against its
- * own plane (`metadata.environment.ground.level = 0`, `thoracicGround`).
+ * `DynamicWorldsGreatestStretchPose` authors a runner's lunge: the front foot flat forward, "the back
+ * leg extended with the toe on the floor" (its own KDoc), the pelvis low, everything read against its
+ * own plane (`metadata.environment.ground.level = 0`).
  *
- * **Measured on `origin/main` @ `2fb6079`, published path `SkeletonPipeline.produceFrame(pose, ctx)`:
- * `KNEE_B = (-55.2148, -46.1056, +38.6517)` at EVERY sampled phase of the rep** — i.e. the only
+ * Measured: `KNEE_B = (-55.2148, -46.1056, +38.6517)` at EVERY sampled phase of the rep — the only
  * IK-realised joint of the back leg sits `46.1056` units BELOW the pose's own mat, and `16.65` units
- * out of the leg's own sagittal plane (`z = +22`). The pair is pinned as an attributed open item by
- * `PublishedBelowGroundInvariantTest.knownBelowGround` (T2), whose exit criterion is exactly this
- * correction: that table's stale-pin guard fires on the fixing change, so the entry cannot outlive it.
+ * out of the leg's own sagittal plane (`z = +22`).
  *
- * **Why the geometry is forced, not tuned.** The authored back ankle (`pelvisX - 120`, `y = 15`) sits
+ * Why the geometry is forced, not tuned: the authored back ankle (`pelvisX - 120`, `y = 15`) sits
  * `126.4945` from the hip for a `112 / 98` chain (`minReach(112, 98, 30°) = 56.0090`,
  * `maxReach = 205.8000`), so the chain must fold. The locus of the knee is a circle of radius
- * `h = 83.2989` centred `74.87` along the hip→ankle chord: **both of its in-plane branches are
- * unusable** — the one the authored pole `(0.1, -1, 0.2)` selects realizes the knee `46.1056` under
- * the mat, its mirror puts the knee `55.4` ABOVE the hip (a chicken-wing back leg), and every
- * branch that keeps the knee near the mat requires splaying it `~78` units laterally out of the leg
- * plane. The authored stance stub, not the pole in isolation, is what makes a legal back leg
- * impossible, which is why the correction is the stance the KDoc declares (extended, toe on the
- * floor) with the pole derived from the leg's own chord.
+ * `h = 83.2989` centred `74.87` along the hip→ankle chord, and both of its in-plane branches are
+ * unusable — the one the authored pole `(0.1, -1, 0.2)` selects realizes the knee `46.1056` under the
+ * mat, its mirror puts the knee `55.4` ABOVE the hip (a chicken-wing back leg), and every branch that
+ * keeps the knee near the mat requires splaying it `~78` units laterally out of the leg plane. The
+ * authored stance stub, not the pole in isolation, is what makes a legal back leg impossible, which is
+ * why the correction is the stance the KDoc declares (extended, toe on the floor) with the pole
+ * derived from the leg's own chord.
  *
- * **What this file asserts (all on the PUBLISHED frame, captured by value — `produceFrame(...).pose`
- * is the Finalizer's reused output buffer, the T-7 trap):** the whole-body plane invariant over a
- * dense 51-sample sweep in both frame conditions ([noPublishedJointPassesBelowThePosesOwnDeclaredPlane]),
- * the back knee's clearance and bend side ([theBackKneeHoversJustAboveTheMat], its own sagittal
- * plane ([theBackKneeStaysInTheLegsOwnSagittalPlane]), the back leg's realized extension
- * ([theBackLegRealizesTheExtensionItsStanceDeclares]), the pose's own choreography and declaration
- * (the guards that must NOT move: [thePosesChoreographyAndDeclarationAreUnchanged]).
+ * Instruments blind to this pair: `ExerciseValidator`'s ground rule keys on the 6 foot joints; the
+ * declaration-keyed `EnvironmentPenetrationTest` can only see a pose's declared support family, and
+ * `KNEE_B` is outside it (`LEFT_FOOT`/`RIGHT_FOOT`/`RIGHT_HAND`); the motion tests assert travel only.
  *
- * **Instruments blind to this pair** (named, not implied): `ExerciseValidator`'s ground rule keys on
- * the 6 foot joints; the declaration-keyed `EnvironmentPenetrationTest` (B-6) can only see a pose's
- * declared support family, and `KNEE_B` is outside it (`LEFT_FOOT`/`RIGHT_FOOT`/`RIGHT_HAND`); the
- * motion tests assert travel only. T2's own 5-sample sweep sees the pair because the violation here
- * is phase-independent — this file keeps the 5-sample corpus honest with a dense sweep anyway.
+ * Asserted on the PUBLISHED frame, captured by value (`produceFrame(...).pose` is the Finalizer's
+ * reused output buffer): the whole-body plane invariant over a dense 51-sample sweep in both frame
+ * conditions, the back knee's clearance and bend side, its own sagittal plane, the back leg's realized
+ * extension, and the pose's own choreography and declaration as guards that must NOT move.
  */
 class WorldsGreatestStretchBackKneePlaneTest {
 
@@ -54,7 +46,7 @@ class WorldsGreatestStretchBackKneePlaneTest {
     /** A DENSE sweep: the violation holds at every phase, so 51 samples cannot step over it. */
     private val sweep = (0..50).map { it * 0.02f }
 
-    /** The T2 band: a joint DERIVED onto the plane reads `0.000000`, so this absorbs float noise only. */
+    /** The sibling invariant's band: a joint DERIVED onto the plane reads `0.000000`, so this absorbs float noise only. */
     private val planeBand = 0.05f
 
     /** A real floor for the back knee — two orders of magnitude above [planeBand]. */
@@ -71,7 +63,7 @@ class WorldsGreatestStretchBackKneePlaneTest {
     private fun snapshot(frame: SkeletonPose): SkeletonPose =
         SkeletonPose().apply { copyFrom(frame) }
 
-    /** A genuinely COLD frame: a fresh pose instance on a fresh pipeline (the T2 COLD leg). */
+    /** A genuinely COLD frame: a fresh pose instance on a fresh pipeline. */
     private fun coldFrame(p: Float): SkeletonPose =
         snapshot(SkeletonPipeline(def).produceFrame(MotionProbe.build(name), ctx(p)).pose)
 
@@ -92,13 +84,9 @@ class WorldsGreatestStretchBackKneePlaneTest {
 
     private fun f(v: Float) = String.format(java.util.Locale.US, "%.4f", v)
 
-    // ------------------------------------------------------------------------------------------
-    // 1. The invariant this fix exists for — the whole body against the pose's OWN declared plane
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun noPublishedJointPassesBelowThePosesOwnDeclaredPlane() {
-        // The plane is READ from the pose, never assumed to be zero (the T2 channel).
+        // The plane is READ from the pose, never assumed to be zero.
         val ground = MotionProbe.build(name).metadata.environment.ground.level
         val frames = allFrames()
         val below = mutableListOf<String>()
@@ -120,10 +108,6 @@ class WorldsGreatestStretchBackKneePlaneTest {
             below.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 2. The back knee's clearance and bend side (the physical shape the pose declares)
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theBackKneeHoversJustAboveTheMat() {
@@ -156,10 +140,6 @@ class WorldsGreatestStretchBackKneePlaneTest {
             off <= planeTolerance
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 3. The authored stance is the extension the pose declares (reachable by construction)
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theBackLegRealizesTheExtensionItsStanceDeclares() {
@@ -200,13 +180,9 @@ class WorldsGreatestStretchBackKneePlaneTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 4. Guards — the pose's choreography and declaration must NOT move
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun thePosesChoreographyAndDeclarationAreUnchanged() {
-        // The pose's support declaration is the canonical channel (B-2/B-3) and is not this fix's subject.
+        // The pose's support declaration is the canonical channel and is not this fix's subject.
         assertEquals(
             "the declared support model must be the pose's own (unchanged by this correction)",
             setOf(SupportPoint.LEFT_FOOT, SupportPoint.RIGHT_FOOT, SupportPoint.RIGHT_HAND),
@@ -218,8 +194,8 @@ class WorldsGreatestStretchBackKneePlaneTest {
         val travel = MotionProbe.maxTravel3D(MotionProbe.build(name))
         assertTrue("the pose's authored choreography must keep moving (travel=${f(travel)}, floor 70)", travel >= 70f)
 
-        // Anti-vacuity (T-7): the sweep must publish DISTINCT frames with a real spread of the
-        // reaching hand, so the assertions above cannot be satisfied by one aliased frame.
+        // Anti-vacuity: the sweep must publish DISTINCT frames with a real spread of the reaching hand,
+        // so the assertions above cannot be satisfied by one aliased frame.
         val frames = playingFrames()
         assertEquals(
             "every sampled frame must be an independent capture (the buffer-aliasing trap)",

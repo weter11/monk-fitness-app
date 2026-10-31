@@ -18,25 +18,13 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 
 /**
- * The Scheduler, driven through the production persistence path — §30 step 7, over the real DAOs.
+ * The Scheduler, driven through the production persistence path, over the real DAOs.
  *
  * Every claim below is measured on the migrated SQLite engine the device runs, through
  * [ProgramSchedulerRig]'s production repositories, clock and id generator, so "a pass created no
  * Session", "a pass wrote nothing at all" and "the whole pass rolled back" are decided by the engine
  * rather than by this suite's bookkeeping. The dates are written out in full: the fixture's anchor
  * `2026-09-14` is a Monday, and each expectation is a date a reader can check by hand.
- *
- * The suite is organised the way §20's rules are:
- *
- * ```text
- * generation     fixed weekdays, flexible frequency, the horizon, the first window
- * idempotence    the same pass twice, and one date holding one opportunity
- * missed         what a passed opportunity becomes, and what does not move because of it
- * pauses         frozen missed-detection, frozen active program time, and no destroyed opportunity
- * revisions      exactly which future opportunities a revision change supersedes, and which survive
- * boundaries     completed, archived, no anchor, unknown Program, missing revision
- * structure      no Session, no revision write, no lifecycle write, one unit per pass
- * ```
  */
 class ProgramSchedulerTest {
 
@@ -44,8 +32,6 @@ class ProgramSchedulerTest {
 
     @After
     fun tearDown() = rig.close()
-
-    // ================================================================ generation (§20)
 
     @Test
     fun theFirstPassPlansTheRevisionOnItsOwnDaysAndNamesItsOwnPlanDays() = runBlocking {
@@ -223,8 +209,6 @@ class ProgramSchedulerTest {
         )
     }
 
-    // ================================================================ idempotence (§20)
-
     @Test
     fun theSamePassAppliedTwiceAddsNothingAndRewritesNothing() = runBlocking {
         val graph = rig.create()
@@ -284,8 +268,6 @@ class ProgramSchedulerTest {
         assertEquals(22, rig.slots(graph.programId).count { it.status == SlotStatus.SUPERSEDED })
         assertEquals("and no row was ever deleted", 22, rig.slots(graph.programId).size)
     }
-
-    // ================================================================ missed opportunities (§12, §20)
 
     @Test
     fun anOpportunityThatPassedIsMissedAndNoWorkIsInventedForIt() = runBlocking {
@@ -388,8 +370,6 @@ class ProgramSchedulerTest {
             after.filter { it.plannedFor > LocalDate.parse("2026-10-12") }.map { it.programDayId.value }
         )
     }
-
-    // ================================================================ pauses (§3, §20)
 
     @Test
     fun aPausedDateIsNotAPlanningDateAndThePlanKeepsItsPlaceOnTheCalendar() = runBlocking {
@@ -528,8 +508,6 @@ class ProgramSchedulerTest {
         )
     }
 
-    // ================================================================ a pause renumbers nothing (audit)
-
     @Test
     fun aPauseAddedAfterTheScheduleWasPlannedDoesNotRenumberTheRemainingDates() = runBlocking {
         val graph = rig.create(duration = ProgramDuration.Indefinite)
@@ -609,15 +587,13 @@ class ProgramSchedulerTest {
         )
     }
 
-    // ================================================================ settled semantics (locked)
-
     /**
-     * **Settled semantics #3 — `FixedDays` is calendar duration, not active duration.**
+     * `FixedDays` is calendar duration, not active duration.
      *
      * End to end through the persistence path: a fourteen-calendar-day run from 2026-09-14 ends on
      * 2026-09-27 whether or not the program was paused inside it, so a pause neither extends the run nor
-     * gives it dates it does not have. (Counting *active* days instead would end this run on 2026-10-26
-     * and plan four more opportunities — the reading `docs/PROGRAM_SCHEDULER.md` §5 records as rejected.)
+     * gives it dates it does not have. Counting *active* days instead would end this run on 2026-10-26
+     * and plan four more opportunities.
      */
     @Test
     fun aFixedRunEndsOnItsCalendarEndAndNotOnTheDateAPauseWouldPushItTo() = runBlocking {
@@ -644,8 +620,6 @@ class ProgramSchedulerTest {
         )
         assertEquals(1, rig.slots(graph.programId).size)
     }
-
-    // ================================================================ revision changes (§20, §27)
 
     @Test
     fun aRevisionThatChangesOnlyThePlansContentSupersedesNothingAndCreatesNothing() = runBlocking {
@@ -866,8 +840,6 @@ class ProgramSchedulerTest {
         assertEquals(5, rig.slots(graph.programId).size)
     }
 
-    // ================================================================ boundaries (§3, §20, §29)
-
     @Test
     fun aCompletedProgramIsRefusedAndNothingIsWrittenAtAll() = runBlocking {
         val graph = rig.create()
@@ -1013,8 +985,6 @@ class ProgramSchedulerTest {
         )
     }
 
-    // ================================================================ structure (§6, §12, §19, §26, §27)
-
     @Test
     fun aPassCreatesNoSessionSnapshotOccurrenceOrSet() = runBlocking {
         val graph = rig.create()
@@ -1136,8 +1106,6 @@ class ProgramSchedulerTest {
         assertEquals(21, rig.slots(graph.programId).size)
         assertEquals(8, rig.slots(graph.programId).count { it.status == SlotStatus.PLANNED })
     }
-
-    // ================================================================ helpers
 
     /**
      * One Program's opportunities as a date-to-plan-day map, with each day named by its *position*.

@@ -6,13 +6,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * Phase 3 (F1) — `SkeletonPoseFinalizer.reconstructChestFrame` must be read-only on Solver-settled
- * contacts. The no-move guard (B5) snapshots every contact end-effector before the chest-frame
- * reconstruction and asserts it is unchanged afterwards; if the reconstruction would displace a
- * contact it is rolled back so the contact stays exactly where the solver pinned it.
+ * `SkeletonPoseFinalizer.reconstructChestFrame` must be read-only on Solver-settled contacts. The
+ * no-move guard snapshots every contact end-effector before the chest-frame reconstruction and asserts
+ * it is unchanged afterwards; if the reconstruction would displace a contact it is rolled back so the
+ * contact stays exactly where the solver pinned it.
  *
- * (Phase B flag collapse) FINALIZER_OWNS_CONVERSION was collapsed to its true branch and removed,
- * so the guard is now always active. Exercised through the full production path
+ * The guard is always active. Exercised through the full production path
  * (build -> SkeletonPipeline.produceFrame, which runs the ConstraintSolver then the Finalizer).
  */
 class ChestFrameNoMoveTest {
@@ -50,8 +49,8 @@ class ChestFrameNoMoveTest {
 
     @Test
     fun authoredChestNeverReachesGuard() {
-        // An explicitly authored chest rotation is preserved verbatim (Issue F early-return), so
-        // the no-move guard is never even consulted for it.
+        // An explicitly authored chest rotation is preserved verbatim (early return), so the no-move
+        // guard is never even consulted for it.
         val twist = 0.5f
         val nodes = SkeletonFactory.createStandardSkeleton()
         nodes.chest.localPosition.set(0f, def.torsoLength, 0f)

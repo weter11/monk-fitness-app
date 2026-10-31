@@ -28,29 +28,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * **The §30 step 15 acceptance scenario, over the real production services.**
+ * **The end-to-end acceptance scenario, over the real production services.**
  *
- * This is the stage's end-to-end claim, and it is deliberately *not* a Compose test — this project has no
- * Compose harness, and the brief allows service-level seams. What it exercises is the composition that
- * matters: the **same** repositories, the **same** Scheduler, the **same** `SessionRuntime`, the **same**
- * integration and the **same** progress layer the application wires, composed in the order a user's
- * actions compose them:
+ * Deliberately *not* a Compose test — this project has no Compose harness, and service-level seams are
+ * allowed. What it exercises is the composition that matters: the **same** repositories, the **same**
+ * Scheduler, the **same** `SessionRuntime`, the **same** integration and the **same** progress layer the
+ * application wires, composed in the order a user's actions compose them.
  *
- * ```text
- * Create Program → Save Revision 1 → Select → the Scheduler plans the Slot
- *   → Start Session → immutable Snapshot → Confirm Sets → the adaptive leg evaluated → Finish
- *   → Slot completed → Progress observes it
- *   → Edit (a real plan change) → Revision 2, and the old Session is unchanged
- *   → Export → Import as a new Program (its own identities) → delete it → the original is intact
- * ```
- *
- * ### The one thing it asserts an *absence* of
- *
- * The adaptive leg of a completion ends where production ends: with no persisted progression relation and
- * no exercise→family classification, the integration reports its honest boundary and nothing adaptive is
- * written. The test asserts **that**, rather than a fabricated adaptation that would need data the
- * catalogue does not carry (§10) — a test that made the engine adapt would be inventing the authoritative
- * dataset, which is exactly what this stage forbids.
+ * The one thing it asserts an *absence* of: the adaptive leg of a completion ends where production ends —
+ * with no persisted progression relation and no exercise→family classification, the integration reports
+ * its honest boundary and nothing adaptive is written. Asserting **that** rather than a fabricated
+ * adaptation is the point: making the engine adapt would mean inventing the authoritative dataset.
  */
 class ProgramTargetAcceptanceTest {
 
@@ -92,18 +80,15 @@ class ProgramTargetAcceptanceTest {
                 catalogue = { rig.catalogueOptions }
             )
 
-            // ---- 1. Create a Program — as §27's whole unit ------------------------------------------
             val createdId = rig.createProgramThroughTheUi("Acceptance Program")
             assertNotNull("the Save stored a Program", createdId)
             val id = ProgramId(createdId!!)
             assertEquals("a creation mints exactly one revision", 1, rig.revisionCount(id))
 
             // Revised with the creation remediation: the anchor and the initial opportunities are part
-            // of the creation unit itself. The previous version of this scenario asserted the *defect*
-            // here — a refused pass and a manual `setPlannedStartDate` before anything could be
-            // scheduled — and that manual stepping is exactly what no longer exists: the request named
-            // no exact date, so the anchor is today from the injected clock and calendar, and the
-            // Scheduler's initial opportunities were written in the same transaction.
+            // of the creation unit itself. The request named no exact date, so the anchor is today from
+            // the injected clock and calendar, and the Scheduler's initial opportunities were written in
+            // the same transaction.
             val createdProgram = rig.storedProgram(id)!!
             assertEquals(
                 "no exact date was chosen, so plannedStartDate is today from the injected clock",
@@ -120,7 +105,6 @@ class ProgramTargetAcceptanceTest {
                 rig.slotsOf(id).isNotEmpty()
             )
 
-            // ---- 2. Select it, and take the next startable opportunity -------------------------------
             rig.controller.select(createdId)
             assertEquals("the selection is the global one", id, rig.selectedProgramId())
 
@@ -134,7 +118,6 @@ class ProgramTargetAcceptanceTest {
             val slotId = next!!.slotId
             assertEquals(SlotStatus.PLANNED, next.status)
 
-            // ---- 3. Start the Session through the production state holder ---------------------------
             session.open(slotId.value)
             assertEquals("the screen presents the attempt", SessionStage.PRESENTING, session.state.value.stage)
             val sessionId = com.monkfitness.app.domain.common.SessionId(session.state.value.sessionId!!)
@@ -145,7 +128,6 @@ class ProgramTargetAcceptanceTest {
             val capturedBefore = runtimeRead(runtime, sessionId).snapshot
             assertTrue("the captured presentation is stored", capturedBefore.workout.exercises.isNotEmpty())
 
-            // ---- 4. Confirm every set of every occurrence, through the screen's own operations -------
             val firstOccurrence = session.state.value.currentExercise
             assertNotNull("a set is ready for confirmation", firstOccurrence)
             val invalidWasStored = session.confirmActualSet("-1")
@@ -208,7 +190,6 @@ class ProgramTargetAcceptanceTest {
             )
             session = reopened
 
-            // ---- 5. The adaptive leg is evaluated, and reports its honest boundary -------------------
             val adaptive = integration.adaptAfter(sessionId)
             assertTrue("the pass produced an outcome", adaptive is AdaptiveIntegrationResult.Success)
             val outcome = (adaptive as AdaptiveIntegrationResult.Success).outcome
@@ -224,7 +205,6 @@ class ProgramTargetAcceptanceTest {
                 database.count("program_adaptive_decision_record")
             )
 
-            // ---- 6. Finish through the screen: session + opportunity + adaptive, one transaction ---
             session.finish()
             assertEquals("the screen reports the completion", SessionStage.COMPLETED, session.state.value.stage)
             val completed = (runtime.restoreSession(sessionId) as SessionRuntimeResult.Success).value
@@ -236,7 +216,6 @@ class ProgramTargetAcceptanceTest {
                     ?: error("the slot vanished"))!!.status
             )
 
-            // ---- 7. Progress observes it ------------------------------------------------------------
             val scope = ProgressScope.OfProgram(id)
             assertEquals(
                 "the calendar counts the completed opportunity",
@@ -247,12 +226,11 @@ class ProgramTargetAcceptanceTest {
             assertEquals("and the history holds the attempt", 1, history.size)
             assertEquals(sessionId, history.single().sessionId)
 
-            // ---- 8. Edit → revision 2, and the old session is untouched -----------------------------
             rig.controller.openEditDraft(createdId)
             rig.controller.addDraftDay(ProgramDayType.TRAINING)
-            // A day with nothing in it is not a plan: the editor rejects it, which is §10's rule that a
-            // training day presents at least one element. The edit therefore adds a day *and* its work —
-            // which is also what makes it a real plan change rather than a no-op save.
+            // A day with nothing in it is not a plan: the editor rejects it — a training day presents at
+            // least one element. The edit therefore adds a day *and* its work, which is also what makes
+            // it a real plan change rather than a no-op save.
             val addedDayId = rig.state.draft?.days?.lastOrNull()?.programDayId
             assertNotNull("the draft gained a day", addedDayId)
             rig.controller.addDraftElement(addedDayId!!, ProgramsRig.FIRST_EXERCISE)
@@ -278,7 +256,6 @@ class ProgramTargetAcceptanceTest {
                 runtimeRead(runtime, sessionId).revisionId
             )
 
-            // ---- 9. Export, import as a new Program, and keep the two independent -------------------
             val file = (rig.transfer.exportService.export(id) as ProgramTransferResult.Success).value
             assertTrue("the export produced a file", file.bytes.isNotEmpty())
 

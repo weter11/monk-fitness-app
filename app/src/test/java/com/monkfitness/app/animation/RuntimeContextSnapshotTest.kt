@@ -6,15 +6,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Negative-path regression coverage for [RuntimeContextSnapshot] — the R8 enforcement
- * helper (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md, Phase 1 — Runtime Context Injection
- * single-point).
+ * Negative-path coverage for [RuntimeContextSnapshot], the enforcement helper: a snapshot captured from a
+ * pose must reject that pose once its context mutates.
  *
- * Closes the gap disclosed during the Phase-1 audit: the enforcement failure path was
- * previously validated only by out-of-band fault injection (ad-hoc audit evidence, not
- * committed regression coverage). Per review, this suite exercises the snapshot helper
- * DIRECTLY — no pipeline-level fault injection, no production-code changes:
- * a snapshot captured from a pose must reject that pose once its context mutates.
+ * The helper is exercised DIRECTLY — no pipeline-level fault injection, no production-code changes — which
+ * is what makes the failure path committed regression coverage rather than audit evidence.
  */
 class RuntimeContextSnapshotTest {
 

@@ -15,22 +15,12 @@ import kotlin.math.sqrt
 /**
  * Child's Pose (`child_pose_hold`) — the exercise's own biomechanics on the PUBLISHED frame.
  *
- * ## Stated intent (its own copy — the only specification in the repository; there is no BPS)
- *
- * `desc` *"A restorative stretch that gently lengthens the back and helps relax the hips and
- * shoulders."* — `steps` *"1. Kneel on the floor and sit the hips back toward the heels. 2. Fold the
- * torso forward and reach the arms long in front. 3. Let the forehead rest down and breathe into the
- * ribcage. 4. Hold the stretch, then slowly rise back up."* — `tech` *"Relax the shoulders and keep the
- * breath slow. Widen the knees if you need more space for the torso."* — `mistakes` *"Holding tension in
- * the neck, bouncing into the stretch, and forcing the hips to the heels when mobility is limited."*
- *
- * The assertions below walk the copy in its own order and measure each clause on the published frame:
- * the **kneel is pinned** (the knee and the ankle do not move while the hips travel on the circle of
- * radius `thighLength` about that knee — "sit the hips back toward the heels" is the femur rotating on
- * a planted knee), the **shins lie flat**, the **torso folds** `109°` at the root plus `26°` at the
- * thorax, the **arms reach long in front** onto the mat, the **forehead rests at the corpus's own mat
- * layer**, the **hold is flat**, the **rise closes the cycle**, nothing **bounces**, and the sit-back
- * **stops at the leg chain's own fold bound** (`mistakes`' "forcing the hips to the heels").
+ * The pose's own copy is the only specification here (there is no BPS). The assertions walk it in
+ * its own order: the kneel is pinned (the knee and ankle do not move while the hips travel on the
+ * circle of radius `thighLength` about that knee), the shins lie flat, the torso folds `109°` at the
+ * root plus `26°` at the thorax, the arms reach long in front onto the mat, the forehead rests at the
+ * corpus's own mat layer, the hold is flat, the rise closes the cycle, nothing bounces, and the
+ * sit-back stops at the leg chain's own fold bound.
  *
  * Every reading is taken through [PoseFrameSweep] (the pipeline entered exactly as `SkeletonRenderer`
  * enters it), never on a raw `build()` result.
@@ -427,7 +417,7 @@ class ChildPoseTest {
         }
     }
 
-    /** The declared base of support is the one the published frame carries (R8/B-5, the hero's model). */
+    /** The declared base of support must be the one the published frame carries. */
     @Test
     fun theDeclaredSupportReachesThePublishedFrame() {
         val f = frames()

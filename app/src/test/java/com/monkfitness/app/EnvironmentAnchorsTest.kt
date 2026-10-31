@@ -15,7 +15,6 @@ class EnvironmentAnchorsTest {
             anchors = listOf(anchor1, anchor2)
         )
 
-        // 1. Resolve by ID
         val resolvedBar = SupportMath.resolveAnchor(env, "bar1")
         assertNotNull(resolvedBar)
         assertEquals(EnvironmentAnchorType.BAR, resolvedBar!!.type)
@@ -24,7 +23,6 @@ class EnvironmentAnchorsTest {
         val resolvedNonExistent = SupportMath.resolveAnchor(env, "non_existent")
         assertNull(resolvedNonExistent)
 
-        // 2. Resolve Position
         val posBar = SupportMath.resolveAnchorPosition(env, "bar1", Vector3(0f, 0f, 0f))
         assertEquals(500f, posBar.y)
 
@@ -33,7 +31,6 @@ class EnvironmentAnchorsTest {
         assertEquals(34f, posFallback.y)
         assertEquals(56f, posFallback.z)
 
-        // 3. Resolve by Type
         val resolvedWallType = SupportMath.resolveAnchorByType(env, EnvironmentAnchorType.WALL)
         assertNotNull(resolvedWallType)
         assertEquals("wall1", resolvedWallType!!.id)

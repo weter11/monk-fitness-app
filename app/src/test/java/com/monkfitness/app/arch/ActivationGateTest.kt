@@ -22,44 +22,37 @@ import org.junit.Test
 import java.io.File
 
 /**
- * P12 WP-I — **the §12.10 activation gate**: the single authoritative, executable activation
- * contract.
+ * The activation gate: the single authoritative, executable activation contract.
  *
- * §12.10 requires that activation happen only when ALL SIX of its conditions hold, and the frozen
- * plan explicitly rejects "flip it after the byte-identity check is green" as under-conditioned.
- * This class is that contract. It is deliberately NOT a check of `IK_STAGE_ACTIVE == true`: a flag
- * value proves nothing about ownership. Each criterion below evaluates an ARCHITECTURAL FACT —
- * call-site inventories, declared-intent completeness, execution evidence, the §12.9 equivalence
- * result, validation ownership — and CRITERION tests delegate to the authoritative suites that
- * already own each fact, so a regression anywhere fails the gate with the failing evidence named
- * instead of silently diverging from a duplicated copy of the same check.
+ * Activation happens only when ALL SIX conditions hold; "flip it after the byte-identity check is
+ * green" is explicitly under-conditioned. This class is that contract, and it is deliberately NOT
+ * a check of `IK_STAGE_ACTIVE == true`: a flag value proves nothing about ownership. Each
+ * criterion evaluates an ARCHITECTURAL FACT — call-site inventories, declared-intent
+ * completeness, execution evidence, cross-configuration equivalence, validation ownership — and
+ * the criterion tests delegate to the authoritative suites that own each fact, so a regression
+ * anywhere fails the gate with the failing evidence named instead of diverging from a duplicated
+ * copy of the same check:
  *
- * ```text
- *  Criterion 1  B-1 consumers        -> hip-flexor family does not consume bake results;
- *                                       the one sanctioned planning solve is composition-only
- *  Criterion 2  direct bypass family -> solveIK inventory == the accepted classification;
- *                                       no isArm heuristic; no legacy reconstruction consumer
- *  Criterion 3  lossless authored data -> declared lengths/constraint decode; realized set ==
- *                                       declared set; the stage body recovers nothing from the
- *                                       definition (no length coincidence)
- *  Criterion 4  strengthened enforcement -> double realization rejected on EXECUTION evidence,
- *                                       even when both executions produce a byte-identical frame
- *  Criterion 5  §12.9 equivalence    -> the complete cross-configuration corpus (not a smoke test)
- *  Criterion 6  validation re-cert   -> the validation probes/readings are owned by the ACTIVE
- *                                       implementation and the validator writes no geometry
- * ```
+ *  1. Authoring consumers — the hip-flexor family does not consume bake results; the one sanctioned
+ *     planning solve is composition-only.
+ *  2. Direct bypass family — the `solveIK` inventory equals the accepted classification; no
+ *     `isArm` heuristic; no legacy reconstruction consumer.
+ *  3. Lossless authored data — declared lengths/constraint decode; realized set == declared set;
+ *     the stage body recovers nothing from the definition (no length coincidence).
+ *  4. Strengthened enforcement — double realization rejected on EXECUTION evidence, even when
+ *     both executions produce a byte-identical frame.
+ *  5. Equivalence — the complete cross-configuration corpus, not a smoke test.
+ *  6. Validation re-certification — the probes/readings are owned by the ACTIVE implementation and
+ *     the validator writes no geometry.
  *
- * `productionConfigurationIsStateThree` is the DEPLOYED-STATE check (the §12.0 state 2 → state 3
- * transition) and the only deliberately RED item before the flip: it is what the flag flip turns
- * green, and it is the single place the deployed default is asserted at runtime (the declaration's
+ * [productionConfigurationIsStateThree] asserts the deployed default at runtime; the declaration's
  * default is asserted statically by
- * `RuntimeSolverOwnershipAuditTest.ikStageFlagIsDeclarationOnlyAndReadOnlyAtRealizationDecisionSites`).
+ * `RuntimeSolverOwnershipAuditTest.ikStageFlagIsDeclarationOnlyAndReadOnlyAtRealizationDecisionSites`,
+ * so together they cover "one declaration, state-3 default, no writer".
  *
- * The §14 post-activation failure checks (`activatedProductionRejectsASecondRealizationOfTheSameLimb`,
- * `activatedProductionAcceptsAnOrdinaryActiveFrame`, `f1SnapshotFamilyCannotHideASecondRealization`)
- * drive the PRODUCTION path in the deployed configuration — injection goes through the registered
- * intent carrier and rejection happens at the production enforcement point, never by fabricating an
- * evidence value.
+ * The post-activation failure checks drive the PRODUCTION path in the deployed configuration —
+ * injection goes through the registered intent carrier and rejection happens at the production
+ * enforcement point, never by fabricating an evidence value.
  */
 class ActivationGateTest {
 
@@ -71,15 +64,11 @@ class ActivationGateTest {
         IK_STAGE_ACTIVE = originalFlag
     }
 
-    // =============================================================================================
-    // Criterion 1 — B-1 authoring consumers of solved results
-    // =============================================================================================
-
     @Test
     fun criterionOne_b1AuthoringConsumersAreResolved() {
         // (a) Every authoring-time consumer of a solved result is eliminated or routed through the
-        // sanctioned §12.4b planning solve. The three owners of these facts are the WP-B contract
-        // test, the planning-solve inventory lock and the WP-H composition-only audit.
+        // sanctioned planning solve. The three owners of these facts are the contract test, the
+        // planning-solve inventory lock and the composition-only audit.
         delegate("Criterion 1 — hip-flexor authoring consumers (WP-B)") {
             LimbSolverOwnershipActivationContractTest().hipFlexorFamilyDoesNotConsumeSolveResultsForAuthoring()
         }
@@ -115,16 +104,12 @@ class ActivationGateTest {
         return SkeletonPipeline(def).produceFrame(builder, ctx).pose
     }
 
-    // =============================================================================================
-    // Criterion 2 — the production direct-`solveIK` bypass family
-    // =============================================================================================
-
     @Test
     fun criterionTwo_directBypassFamilyIsResolved() {
         // Remaining production solver calls must be exactly the accepted classifications: canonical
         // engine-side (IkStage), canonical authoring implementation (the two bakes), sanctioned
-        // planning solve, R3 settlement re-solve (ConstraintSolver), and the solver math itself.
-        // These three audits own the inventory, the heuristic absence and the legacy-reconstruction
+        // planning solve, settlement re-solve (ConstraintSolver), and the solver math itself. These
+        // three audits own the inventory, the heuristic absence and the legacy-reconstruction
         // consumer count, each with per-file counts pinned.
         delegate("Criterion 2 — direct solveIK inventory (per-file counts)") {
             LimbSolverOwnershipActivationContractTest().noUnauthorizedDirectSolveInProductionPoses()
@@ -137,10 +122,6 @@ class ActivationGateTest {
                 .equivalenceHarnessIntroducesNoSolverPathNoEvidenceWriterAndNoLegacyReconstruction()
         }
     }
-
-    // =============================================================================================
-    // Criterion 3 — lossless authored limb-data recovery
-    // =============================================================================================
 
     @Test
     fun criterionThree_declaredLimbContextReachesTheEngineSolver() {
@@ -159,8 +140,8 @@ class ActivationGateTest {
         }
 
         // (c) No hidden recovery remains in the stage: the body of `IkStage.apply` may not read any
-        // solve input from the definition (that was the `isArm` + definition-length recovery of B-3)
-        // — every input comes from the Limb Target.
+        // solve input from the definition (the `isArm` + definition-length recovery) — every input
+        // comes from the Limb Target.
         val applyBody = bodyOf("IkStage.kt") { it.contains("fun apply(pose: SkeletonPose") }
         val definitionReads = applyBody.withIndex().filter { (_, raw) ->
             val line = stripComment(raw)
@@ -201,11 +182,10 @@ class ActivationGateTest {
                 )
             }
         }
-        // (e) §10.F — no production path can hand an UNDECLARED Limb Target to the stage: the
-        // shorthand declaration surface (`IntentBuilder.limbTarget`) carries no declared context by
-        // construction and therefore has no production consumer. Only the carrier-substrate
-        // component test uses it, and that test never produces a frame (it asserts carrier
-        // population).
+        // (e) No production path can hand an UNDECLARED Limb Target to the stage: the shorthand
+        // surface (`IntentBuilder.limbTarget`) carries no declared context by construction, so it
+        // has no production consumer — only the carrier-substrate test uses it, and that test never
+        // produces a frame.
         val shorthandConsumers = productionSources().filterValues { lines ->
             lines.any { stripComment(it).contains(".limbTarget(") }
         }.keys.filterNot { it.endsWith("/PoseDefinition.kt") }
@@ -222,14 +202,10 @@ class ActivationGateTest {
         )
     }
 
-    // =============================================================================================
-    // Criterion 4 — strengthened single-active-solver enforcement
-    // =============================================================================================
-
     @Test
     fun criterionFour_strengthenedEnforcementRejectsASecondRealization() {
         // (a) A second realization of one limb in one build cycle is rejected on EXECUTION evidence
-        // even when both executions produce a byte-identical frame (WP-G counterfactual).
+        // even when both executions produce a byte-identical frame (counterfactual).
         delegate("Criterion 4 — double realization rejected despite identical output") {
             SingleActiveSolverEnforcementTest().doubleRealizationFailsEvenWithIdenticalPose()
         }
@@ -237,9 +213,8 @@ class ActivationGateTest {
             RuntimeSolverOwnershipAuditTest().counterfactualDoubleExecutionIsRejectedDeterministically()
         }
 
-        // (b) …and the rejection is execution-evidence based: the pipeline's enforcement block is a
-        // `check(...)` contract on the registered realization counters, never a comparison of
-        // produced geometry.
+        // (b) …and the rejection is execution-evidence based: a `check(...)` contract on the
+        // registered realization counters, never a comparison of produced geometry.
         val pipeline = sourcesOf("SkeletonPipeline.kt")
         val windowCheck = pipeline.indexOfFirst { stripComment(it).contains("limbSolverExecutions == 1") }
         assertTrue(
@@ -281,16 +256,12 @@ class ActivationGateTest {
         )
     }
 
-    // =============================================================================================
-    // Criterion 5 — the §12.9 equivalence harness
-    // =============================================================================================
-
     @Test
     fun criterionFive_section129EquivalenceCorpusIsGreen() {
-        // The accepted WP-H result, composed rather than replaced by a smaller smoke test: the FULL
+        // The accepted result, composed rather than replaced by a smaller smoke test: the FULL
         // corpus (39 representative entries × progress sweep, both configurations, raw-bit exact at
-        // the published boundary) is executed here through its own harness, and its report is parsed
-        // so the gate fails if the corpus shrank or an adjudication/relaxation appeared.
+        // the published boundary) runs through its own harness and its report is parsed, so the gate
+        // fails if the corpus shrank or an adjudication/relaxation appeared.
         val report = File(System.getProperty("java.io.tmpdir"), "p12-wph-equivalence-report.txt")
         delegate("Criterion 5 — §12.9 cross-configuration equivalence corpus") {
             ActivationEquivalenceTest().corpusIsEquivalentAcrossOwnershipConfigurations()
@@ -315,14 +286,10 @@ class ActivationGateTest {
         )
     }
 
-    // =============================================================================================
-    // Criterion 6 — validation re-certification
-    // =============================================================================================
-
     @Test
     fun criterionSix_validationProbesAreReCertified() {
         // The validation probes execute, observe and pass in BOTH configurations, and the reading
-        // they publish is produced by the ACTIVE implementation (the engine stage in state 3).
+        // they publish is produced by the ACTIVE implementation (the engine stage).
         delegate("Criterion 6 — probe reading produced by the active implementation") {
             ActivationEquivalenceTest().validationProbesAreReCertifiedInBothOwnershipConfigurations()
         }
@@ -337,15 +304,11 @@ class ActivationGateTest {
         }
     }
 
-    // =============================================================================================
-    // The deployed state — §12.0 state 2 → state 3
-    // =============================================================================================
-
     @Test
     fun productionConfigurationIsStateThree() {
-        // (1) The deployed runtime value. This is the ONE place the deployed default is asserted at
-        // runtime; the declaration's default is asserted statically by the §12.7 configuration
-        // surface audit, so the two together cover "one declaration, state-3 default, no writer".
+        // (1) The deployed runtime value — the ONE place the deployed default is asserted at
+        // runtime; the declaration's default is asserted statically by the configuration-surface
+        // audit, so together they cover "one declaration, state-3 default, no writer".
         assertTrue(
             "§12.10/§12.0: the production configuration must be state 3 (IK_STAGE_ACTIVE=true)",
             IK_STAGE_ACTIVE
@@ -417,16 +380,12 @@ class ActivationGateTest {
         )
     }
 
-    // =============================================================================================
-    // §14 — deliberate post-activation failure checks (production path, deployed configuration)
-    // =============================================================================================
-
     @Test
     fun activatedProductionRejectsASecondRealizationOfTheSameLimb() {
         // The production state must deterministically reject a REAL second realization of one limb
-        // in one build cycle. The injection is a duplicated declared Limb Target on the carrier — the
-        // stage then executes the same limb's solve twice inside one window — and the rejection comes
-        // from the production enforcement path, never from a fabricated evidence value.
+        // in one build cycle. The injection is a duplicated declared Limb Target on the carrier (the
+        // stage solves that limb twice inside one window); the rejection comes from the production
+        // enforcement path, never from a fabricated evidence value.
         IK_STAGE_ACTIVE = true
         val built = SquatPose().build(PoseContext(0f, Side.LEFT, def))
         val declared = built.limbTargets.firstOrNull { it.joint == Joint.ANKLE_F }
@@ -472,12 +431,10 @@ class ActivationGateTest {
     }
 
     /**
-     * FINDING F-1 — the snapshot-returning build template (`BaseThoracicPose.finalizeThoracicPose`)
-     * carries no authoring realization evidence on its returned carrier. WP-I codified that boundary
-     * as intentional (it is the P3 suppression pattern + evidence locality), and this test proves the
-     * boundary cannot hide a second realization in the deployed state: the same family that the
-     * flag-OFF disjunct admits IS rejected under the deployed configuration when it realizes a limb
-     * twice.
+     * The snapshot-returning build template (`BaseThoracicPose.finalizeThoracicPose`) carries no
+     * authoring realization evidence on its returned carrier — intentional (evidence locality). This
+     * proves that boundary cannot hide a second realization in the deployed state: the family the
+     * flag-OFF disjunct admits IS rejected when it realizes a limb twice.
      */
     @Test
     fun f1SnapshotFamilyCannotHideASecondRealization() {
@@ -521,10 +478,6 @@ class ActivationGateTest {
             )
         }
     }
-
-    // =============================================================================================
-    // helpers
-    // =============================================================================================
 
     /**
      * Runs a delegated authoritative check. Composition, not duplication: if the owning suite

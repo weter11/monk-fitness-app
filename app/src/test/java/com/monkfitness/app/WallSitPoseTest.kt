@@ -13,12 +13,10 @@ import kotlin.math.sqrt
 /**
  * Wall Sit (`wall_sit_hold`) — the exercise's own biomechanics on the published frame.
  *
- * Stated intent (the only in-repo specification; no BPS exists for this exercise):
- * `ex_wall_sit_steps` "Stand with your back against a wall. Slide down until the knees are about 90
- * degrees. Keep the feet flat and shins close to vertical. Press the low back gently into the wall.
- * Hold." `ex_wall_sit_tech` "Keep the knees tracking over the middle toes. Spread the weight across
- * the full foot." `ex_wall_sit_mistakes` "Feet set too close. Hands pushing on the thighs. Hips
- * sitting higher and higher as fatigue builds."
+ * The copy is the only in-repo specification (no BPS): back against the wall, slide down until the
+ * knees are about 90 degrees, feet flat and shins close to vertical, low back pressed gently into the
+ * wall — knees tracking over the middle toes, weight across the full foot, no hands pushing on the
+ * thighs, hips not drifting higher as fatigue builds.
  */
 class WallSitPoseTest {
 
@@ -42,7 +40,7 @@ class WallSitPoseTest {
         assertEquals(f.size, PoseFrameSweep.distinctFrameCount(f))
     }
 
-    /** "the wall" is part of the exercise: the environment must actually carry it (H1's lesson). */
+    /** "the wall" is part of the exercise: the environment must actually carry it. */
     @Test
     fun theWallExistsAndTheBackStaysOnIt() {
         val walls = pose().metadata.environment.props.filterIsInstance<WallProp>()

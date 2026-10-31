@@ -32,63 +32,31 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * **C2 — the exercise frame: every frame of a production pose is drawn at ONE frame for the whole
- * rep, the athlete (with its footing) stays whole on the surface, and the subject uses the surface
- * instead of the 70% a fixed anchor left it.**
+ * The exercise frame: every frame of a production pose is drawn at ONE frame for the whole rep, the
+ * athlete (with its footing) stays whole on the surface, and the subject uses the surface instead of
+ * the 70% a fixed anchor left it.
  *
- * ## The behaviour this pins (measured, on the production path)
+ * The behaviour this pins: deriving the frame from the bounds of the frame being drawn closed the
+ * containment defect and made the subject's drawn size a function of its *current* pose. Measured over
+ * the rep (swept over both sides and the whole reachable yaw range) the frame *breathes*: a burpee
+ * `0.585 -> 1.300` (a `2.2x` push-in through one rep), a cossack squat `0.856 -> 1.300`, the lunges
+ * `0.856 -> 1.240`, an air squat `0.849 -> 1.200`, arm circles `0.644 -> 0.849` — `17` of the `51`
+ * production classes move by `5%` or more, `11` of them by `20%` or more. The composition was fixed
+ * too: the world origin was anchored at a hardcoded `centerY = 0.7`, so a standing pose's drawn
+ * height could never exceed `70%` of the surface.
  *
- * C1 derived the viewport frame from the bounds of the frame being drawn. That closed the containment
- * defect — and made the subject's drawn size a function of its *current* pose. Measured over the rep
- * (the per-frame fit of every drawn frame, swept over both sides and the whole reachable yaw range)
- * the frame *breathes*: a burpee `0.585 -> 1.300` (a `2.2x` push-in through one rep), a cossack squat
- * `0.856 -> 1.300`, the lunges `0.856 -> 1.240`, an air squat / squat / sumo squat `0.849 -> 1.200`,
- * a kettlebell swing `0.900 -> 1.233`, a jumping squat `0.766 -> 0.997`, arm circles
- * `0.644 -> 0.849`, a thoracic extension `1.063 -> 1.248` — `17` of the `51` production classes move
- * by `5%` or more, `11` of them by `20%` or more. The composition was fixed, too: the world origin was
- * anchored at a hardcoded `centerY = 0.7`, so a standing pose's drawn height could never exceed `70%`
- * of the surface.
+ * The rule under test: [CameraFraming.exerciseFrame] derives the frame ONCE per exercise — the
+ * largest zoom, not exceeding the pose's authored zoom, at which the athlete together with the drawn
+ * ground contact stays inside the surface for every frame of the rep, at every yaw the pose's
+ * declaration allows, centred on that content. The subject measured here is what the renderers
+ * actually stroke ([drawnContent]), so the invariants are checked against what is drawn, not against
+ * a model of it.
  *
- * ## The rule under test
- *
- * [CameraFraming.exerciseFrame] derives the frame **once per exercise**: the largest zoom, not
- * exceeding the pose's authored zoom, at which the athlete together with the drawn ground contact
- * stays inside the surface for every frame of the rep, at every yaw the pose's declaration allows,
- * centred on that content. The subject measured here is what the renderers actually stroke — see
- * [drawnContent] — so the invariants are checked against what is drawn, not against a model of it.
- *
- * ## What each test is for
- *
- *  * [everyFrameOfEveryPoseIsDrawnWholeAtEveryReachableViewpoint] — the gate: containment for the
- *    whole corpus on the hero canvas and two other realistic surfaces, at every phase of every side
- *    the play advances through and every yaw the drag gesture can reach.
- *  * [theFrameIsOneAndTheSameForEveryFrameOfTheRep] — no breathing: the frame the renderer draws with
- *    is bit-identical at every phase and every view angle, while the opt-in dynamic mode still varies
- *    (so the toggle is a real mode, not a no-op).
- *  * [standingPosesAreFramedLargerThanThePerFrameFit] — the size claim, pinned by name: the poses whose
- *    rep is a standing / overhead excursion are drawn larger than C1's per-frame fit, and the poses
- *    whose mid-rep frame is compact inside a much larger envelope are pinned as the exceptions.
- *  * [theGroundIsPlacedJustBelowTheFigureAndTheContentIsCentred] — the composition: the framed content
- *    is centred on the surface (so the anchor is derived, not the fixed `0.7`), the drawn ground
- *    contact is inside it and at or below the athlete's own lowest point, and the athlete fills the
- *    surface instead of the old budget.
- *  * [theAuthoredViewpointIsPreservedAndTheFrameIsPure] — the fit owns the scale and the anchor alone:
- *    yaw, pitch and focal length stay the pose's own, the frame is a function of the exercise and the
- *    surface (never of the camera's current state), it is idempotent, and it never exceeds the authored
- *    zoom.
- *  * [theDynamicModeIsUnchangedAndOptIn] — C1's per-frame rule is still exactly C1: pinned values, and
- *    the dynamic path is what the hero's toggle selects.
- *  * [propPosesKeepTheirFurniture] — no regression for the pose's furniture: a pose that authors an
- *    environment prop (bar, step, bench, wall) keeps at least as much of it on the surface as the
- *    pre-C2 presentation did.
- *
- * ## Deliberately NOT asserted
- *
- * The ground grid is laid out to a horizon that leaves the frame by construction and is not framed, and
- * a prop that already left the surface (the wall-slide's wall) is not required to come back — the rule
- * frames the athlete and its footing. How large a *short, wide* pose (a plank, a supine hold) should
- * read is bounded here only by the authored zoom it is capped at, which is the pose's own composition
- * intent.
+ * Deliberately NOT asserted: the ground grid is laid out to a horizon that leaves the frame by
+ * construction and is not framed, and a prop that already left the surface (the wall-slide's wall) is
+ * not required to come back — the rule frames the athlete and its footing. How large a *short, wide*
+ * pose (a plank, a supine hold) should read is bounded here only by the authored zoom it is capped
+ * at, which is the pose's own composition intent.
  */
 class ExerciseFramingInvariantTest {
 
@@ -102,10 +70,6 @@ class ExerciseFramingInvariantTest {
 
     /** Containment is a closed form over the measured box; the only slack is float noise. */
     private val pixelSlack = 0.01f
-
-    // ------------------------------------------------------------------------------------------
-    // The production view setup
-    // ------------------------------------------------------------------------------------------
 
     /** The frame the hero derives for [name] on a canvas — the app's own call, memoized by identity. */
     private fun frameOf(name: String, canvas: Pair<Float, Float>): CameraFrame =
@@ -144,20 +108,15 @@ class ExerciseFramingInvariantTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // The drawn content — the instrument
-    // ------------------------------------------------------------------------------------------
-
     /**
      * The bounds of everything the renderers actually stroke, read off the buffers they iterate:
      *
-     *  * **bones** — `SkeletonRenderer` draws `thickness + outline * 2` over
-     *    `thickness = b.thickness * scale.thicknessScale`, so the drawn half-width is
-     *    `thickness / 2 + outline`, `outline = style.outlineWidth * scale.outlineScale`;
-     *  * **indicator discs** — `drawCircle(..., item.radius + outline, …)`, `outline = 2f *
-     *    scale.outlineScale`;
+     *  * **bones** — the drawn half-width is `thickness / 2 + outline`, where
+     *    `thickness = b.thickness * scale.thicknessScale` and
+     *    `outline = style.outlineWidth * scale.outlineScale`;
+     *  * **indicator discs** — `radius + outline`, with `outline = 2f * scale.outlineScale`;
      *  * **torso faces** — a stroke of `style.outlineWidth` centred on the path edge;
-     *  * **the ground contact** ([withGround]) — the contact shadows, `style.shadowRadiusX/Y` x
+     *  * **the ground contact** ([withGround]) — the contact shadows, `style.shadowRadiusX/Y` ×
      *    `scale.shadowScale` around the athlete's own ground points: the footing the exercise frame
      *    includes, and the reason the floor reads just below the figure.
      */
@@ -227,10 +186,6 @@ class ExerciseFramingInvariantTest {
             "${canvas.first}x${canvas.second} canvas leaves the frame by " +
             "left=${out[0]} right=${out[1]} top=${out[2]} bottom=${out[3]} px"
 
-    // ------------------------------------------------------------------------------------------
-    // 1 — the gate
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun everyFrameOfEveryPoseIsDrawnWholeAtEveryReachableViewpoint() {
         assertTrue("the corpus is empty", productionPoseClasses().isNotEmpty())
@@ -261,10 +216,6 @@ class ExerciseFramingInvariantTest {
             PHASES.size * YAW_OFFSETS.size * realisticCanvases.size
         assertEquals("every corpus sample must be evaluated on every realistic canvas", expected, evaluations)
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 2 — no breathing
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theFrameIsOneAndTheSameForEveryFrameOfTheRep() {
@@ -318,10 +269,6 @@ class ExerciseFramingInvariantTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 3 — the size claim (and its measured exceptions)
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun standingPosesAreFramedLargerThanThePerFrameFit() {
         for (name in LARGER_THAN_PER_FRAME_FIT) {
@@ -345,8 +292,8 @@ class ExerciseFramingInvariantTest {
             )
         }
 
-        // the composition claim the mission makes: the athlete's tallest drawn frame uses most of the
-        // surface, where the old anchor capped every standing pose at 70% of it
+        // the composition claim: the athlete's tallest drawn frame uses most of the surface, where the
+        // old anchor capped every standing pose at 70% of it
         for (name in STANDING_INVENTORY) {
             val definition = cameraOf(name)
             val frame = frameOf(name, HERO)
@@ -371,7 +318,7 @@ class ExerciseFramingInvariantTest {
             )
         }
 
-        // pinned shares for the families the mission names, measured on the hero canvas
+        // pinned shares for the named families, measured on the hero canvas
         for (entry in ATHLETE_SHARE) {
             val name = entry.key
             val definition = cameraOf(name)
@@ -396,17 +343,13 @@ class ExerciseFramingInvariantTest {
         }
     }
 
-    /** C1's rule on the frame this pose is drawn with at the middle of its rep — what the user saw. */
+    /** The previous per-frame rule on the frame this pose is drawn with at mid-rep — what the user saw. */
     private fun perFrameFitAtMidRep(name: String): Float {
         val definition = cameraOf(name)
         val camera = Camera(definition)
         camera.yaw = definition.defaultYaw
         return framing.frameZoom(camera, publishedFrameOf(name, 0.5f, Side.RIGHT, SkeletonPipeline(DEF)), HERO.first, HERO.second)
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 4 — the composition
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theGroundIsPlacedJustBelowTheFigureAndTheContentIsCentred() {
@@ -463,10 +406,6 @@ class ExerciseFramingInvariantTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 5 — the viewpoint is the pose's own, and the frame is pure
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theAuthoredViewpointIsPreservedAndTheFrameIsPure() {
         for (name in productionPoseClasses()) {
@@ -506,10 +445,6 @@ class ExerciseFramingInvariantTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 6 — the dynamic mode is the C1 rule, unchanged
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theDynamicModeIsUnchangedAndOptIn() {
         for (entry in DYNAMIC_MODE_PINS) {
@@ -531,10 +466,6 @@ class ExerciseFramingInvariantTest {
             )
         }
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 7 — the pose's furniture survives the recomposition
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun propPosesKeepTheirFurniture() {
@@ -601,10 +532,6 @@ class ExerciseFramingInvariantTest {
         return point.x >= 0f && point.x <= HERO.first && point.y >= 0f && point.y <= HERO.second
     }
 
-    // ------------------------------------------------------------------------------------------
-    // Corpus, sweep and pins
-    // ------------------------------------------------------------------------------------------
-
     private fun cameraOf(name: String): CameraDefinition = MotionProbe.build(name).metadata.camera
 
     /** The sides the exercise plays: an alternating exercise plays both (`AnimationController`). */
@@ -644,13 +571,9 @@ class ExerciseFramingInvariantTest {
 
         /**
          * The poses whose rep is a standing / overhead excursion: measured on the hero canvas, the
-         * exercise frame is *larger* than C1's per-frame fit at the mid-rep frame — `StandardPullUp`
-         * `0.654 -> 0.873`, `Squat` `1.114 -> 1.136`, `AirSquat` `1.101 -> 1.129`, `StepUp`
-         * `0.784 -> 1.061`, `JumpSquat` `0.766 -> 1.030`, `WallSlides` `0.851 -> 1.036`, `FacePull`
-         * `0.815 -> 1.034`, the lunges `0.856 -> 1.105/1.151/1.127`, `CossackSquat` `0.856 -> 1.053`,
-         * `HipCars` `0.849 -> 1.156`, `KettlebellSwing` `0.900 -> 1.151`, `ScapularRetraction`
-         * `0.849 -> 1.144`, `SumoSquat` `1.102 -> 1.145`, `ThoracicExtension` `1.141 -> 1.350`,
-         * `CouchStretch` `1.210 -> 1.300`, `HalfKneelingStretch` `1.202 -> 1.300`.
+         * exercise frame is *larger* than the per-frame fit at the mid-rep frame (`StandardPullUp`
+         * `0.654 -> 0.873`, `StepUp` `0.784 -> 1.061`, `JumpSquat` `0.766 -> 1.030`, the lunges
+         * `0.856 -> 1.105/1.151/1.127`, `ThoracicExtension` `1.141 -> 1.350`).
          */
         val LARGER_THAN_PER_FRAME_FIT = setOf(
             "StandardPullUpPose", "UnderhandChinUpPose", "NeutralGripPullUpPose", "WideGripPullUpPose",
@@ -666,13 +589,8 @@ class ExerciseFramingInvariantTest {
          * their mid-rep frame is a compact configuration inside a much larger envelope (`BurpeePose`: a
          * crouch at mid-rep, a standing jump in the envelope — `1.300 -> 0.712`), because the envelope's
          * ground contact makes the whole motion box taller (`ArmCirclesPose` `0.849 -> 0.847`), because
-         * the envelope is wider than the drawn frame (`Standard/Wide/Military/Diamond/DeclinePushUp`
-         * `1.300 -> 1.251`), or because both rules are already capped at the pose's authored zoom
-         * (`ReverseSnowAngel`, `Superman`, `DeadBug`, `LegRaise`, `GluteBridge`, `PelvicTilt`, `BirdDog`,
-         * `StaticBirdDogHold`, `AlternatingBirdDog`, `CatCow`, `LatStretch`, `PikePushUp`,
-         * `ProneCobraStretch`, `QuadrupedThoracicRotations`, `DeepSquatHold`, `HamstringStretch`,
-         * `DynamicWorldsGreatestStretch`, `StaticForearmPlank`, `IsometricSidePlank`, `MountainClimber`,
-         * `KneePushUp`).
+         * the envelope is wider than the drawn frame (the push-up family `1.300 -> 1.251`), or because
+         * both rules are already capped at the pose's authored zoom (the supine/prone floor families).
          */
         val THE_EXCEPTIONS = setOf(
             "BurpeePose", "ArmCirclesPose", "StandardPushUpPose", "WidePushUpPose", "MilitaryPushUpPose",
@@ -685,9 +603,9 @@ class ExerciseFramingInvariantTest {
         )
 
         /**
-         * The standing / overhead inventory that used to clip (C1's `CLIPPED_AT_HERO`) whose rep the
-         * mission requires to read larger: these are the ones whose tallest drawn frame must now use
-         * more than the old `0.7` budget.
+         * The standing / overhead inventory that used to clip on the authored frame, whose rep must now
+         * read larger: these are the ones whose tallest drawn frame must use more than the old `0.7`
+         * budget.
          */
         val STANDING_INVENTORY = setOf(
             "AirSquatPose", "AlternatingForwardLungesPose", "AlternatingReverseLungesPose",
@@ -700,9 +618,8 @@ class ExerciseFramingInvariantTest {
         )
 
         /**
-         * The athlete's tallest drawn frame at the pose's own viewpoint, as a share of the hero canvas
-         * (this file's own measurement): the composition claim, per family. Before C2 the anchor
-         * (`centerY = 0.7`) capped every one of them at 70%.
+         * The athlete's tallest drawn frame at the pose's own viewpoint, as a share of the hero canvas:
+         * the composition claim, per family. The old `centerY = 0.7` anchor capped every one at 70%.
          */
         val ATHLETE_SHARE = mapOf(
             "StandardPullUpPose" to 0.9115f,
@@ -721,7 +638,7 @@ class ExerciseFramingInvariantTest {
         )
 
         /**
-         * C1's per-frame fit at the mid-rep frame on the hero canvas, measured on this tree — the
+         * The per-frame fit at the mid-rep frame on the hero canvas, measured on this tree — the
          * opt-in mode's own numbers, which the default-mode change must not have moved.
          */
         val DYNAMIC_MODE_PINS = mapOf(

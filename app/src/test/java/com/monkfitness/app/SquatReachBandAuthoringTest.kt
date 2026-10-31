@@ -8,15 +8,14 @@ import kotlin.math.acos
 import kotlin.math.sqrt
 
 /**
- * First reach-band cleanup batch — `AirSquatPose` + `SquatPose` (R2/R4 reach-target authoring).
+ * `AirSquatPose` + `SquatPose` reach-target authoring.
  *
  * Both poses inherit `BaseSquatPose`'s default authored geometry: the ankle target is the FLOOR-frame
  * rest position `(0, 25, ±1.5·hipWidth)` and the hand target is the counterbalance reach
  * (`x: 0 → armLeanEnd·40`, `y: the shoulder's own height − 10·p`, `z: ±1.2·shoulderWidth`).
- * Measured on `origin/main` @ `d6f4f7f` through the production entry point
- * `SkeletonPipeline.produceFrame(pose, ctx)`, four of those targets sit OUTSIDE their own chain's
- * reachable annulus `[SkeletonMath.minReach, maxReach]`, so the solver relocated the realized
- * end-effector along the authored ray:
+ * Measured pre-fix through `SkeletonPipeline.produceFrame(pose, ctx)`, four of those targets sit
+ * OUTSIDE their own chain's reachable annulus `[SkeletonMath.minReach, maxReach]`, so the solver
+ * relocated the realized end-effector along the authored ray:
  *
  * | target | phase | declared root→target | band | relocation |
  * |---|---|---|---|---|
@@ -25,30 +24,26 @@ import kotlin.math.sqrt
  * | `SquatPose` ankle | 0.90 … 1.00 | `49.244 … 31.953` | `≥ 56.009` | **`6.765 … 24.056`** |
  * | both, hands (the WHOLE rep) | 0.00 … 1.00 | `9.200 … 15.886` | `≥ 40.134` | **`24.248 … 30.934`** |
  *
- * Verdict (measured per site, see the batch record in `docs/STABILIZATION_AUDIT.md`): **unintended
- * authoring error**, not an intentional ROM limit. The authored numbers do not describe the pose's
- * own stated intent — a standing leg locked out past the engine's `0.98` extension cap, a squat
- * bottom folded past the chain's `30°` flexion stop, and a "`40`-unit counterbalance reach"
- * (`armLeanEnd = 1.0f`) authored at the shoulder's own height so the hand never leaves a `9 … 16`
- * unit radius. The published geometry is the projection, not the authoring.
+ * Verdict: **unintended authoring error**, not an intentional ROM limit — a standing leg locked out
+ * past the engine's `0.98` extension cap, a squat bottom folded past the chain's `30°` flexion stop,
+ * and a "`40`-unit counterbalance reach" (`armLeanEnd = 1.0f`) authored at the shoulder's own height
+ * so the hand never leaves a `9 … 16` unit radius. The published geometry is the projection, not the
+ * authoring.
  *
- * Fix: the family's own R2/R4 convention (`SumoSquatPose`'s wide track, `BaseVerticalPullPose`'s
- * pendulum legs) — the authored target is projected onto its own chain's annulus along its own ray.
- * The margin is a hundredth of a percent of the chain's span (`BaseSquatPose.REACH_MARGIN`), not the
- * helper's canonical `0.02` and not `0`: each of these targets *is* the intended end position (the
- * ankle's floor rest height, the authored reach direction) and the solver's own relocation is exactly
- * a boundary projection, so the realized geometry is preserved to `0.021` u — while the declaration
- * becomes the realized position and the relocation stamp returns to exactly `0`.
+ * Fix: project the authored target onto its own chain's annulus along its own ray. The margin is a
+ * hundredth of a percent of the chain's span (`BaseSquatPose.REACH_MARGIN`), not the helper's
+ * canonical `0.02` and not `0`: each of these targets *is* the intended end position, and the
+ * solver's own relocation is exactly a boundary projection, so the realized geometry is preserved to
+ * `0.021` u while the relocation stamp returns to exactly `0`.
  *
- * The guard is measured on the PUBLISHED frame, on both frame conditions (a fresh pipeline's cold
- * first frame and an advancing pipeline's frames — the engine's cold-frame class, B-8/B-8b), and
- * reads each joint's primitives during the single pass (`produceFrame(...).pose` is a reused buffer).
+ * The guard reads the PUBLISHED frame on both frame conditions (a cold first frame and an advancing
+ * pipeline's frames) during the single pass, since `produceFrame(...).pose` is a reused buffer.
  */
 class SquatReachBandAuthoringTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
 
-    /** The batch: the two variants that inherit the family's default authored geometry. */
+    /** The two variants that inherit the family's default authored geometry. */
     private fun batch(): Map<String, () -> PoseBuilder> = mapOf(
         "AirSquatPose" to { AirSquatPose() as PoseBuilder },
         "SquatPose" to { SquatPose() as PoseBuilder }
@@ -139,8 +134,8 @@ class SquatReachBandAuthoringTest {
     /** Every sampled frame of one builder: the cold first frame, then an advancing pipeline's rep. */
     private fun readings(builder: PoseBuilder): List<Reading> {
         val out = mutableListOf<Reading>()
-        // (a) the cold frame — a fresh pipeline's very first frame (B-8b: the first frame realizes
-        //     from a stale trunk frame, so the batch is measured on both frame conditions).
+        // (a) the cold frame — a fresh pipeline's very first frame realizes from a stale trunk
+        //     frame, so the batch is measured on both frame conditions.
         out += measure(builder, SkeletonPipeline(def), "cold", phases.first())
         // (b) the playing frames — an advancing pipeline, warmed exactly as MotionProbe warms it.
         val pipeline = SkeletonPipeline(def)
@@ -152,10 +147,6 @@ class SquatReachBandAuthoringTest {
     private fun allReadings(): List<Reading> = batch().values.flatMap { readings(it()) }
 
     private fun where(r: Reading) = "${r.pose}/${r.chain.name} @ p=${r.phase} (${r.frame})"
-
-    // ----------------------------------------------------------------------------------------------
-    // 1 — the authored target is inside its own chain's reachable band
-    // ----------------------------------------------------------------------------------------------
 
     @Test
     fun everyAuthoredLimbTargetSitsInsideItsChainsOwnReachBand() {
@@ -179,15 +170,11 @@ class SquatReachBandAuthoringTest {
         )
     }
 
-    // ----------------------------------------------------------------------------------------------
-    // 2 — the published effector IS the authored target (no relocation)
-    // ----------------------------------------------------------------------------------------------
-
     @Test
     fun thePublishedEffectorFollowsTheAuthoredTargetWithoutRelocation() {
         val bad = mutableListOf<String>()
         for (r in allReadings()) {
-            // 0.05 u: the R2 projection's own float noise. Pre-fix the same reading is 4.488 … 30.934.
+            // 0.05 u: the projection's own float noise. Pre-fix the same reading is 4.488 … 30.934.
             if (r.relocation > 0.05f) {
                 bad += "${where(r)}: |published − declared| = ${"%.4f".format(r.relocation)} " +
                     "(declared ${"%.4f".format(r.declaredDistance)} of the chain's band)"
@@ -199,10 +186,6 @@ class SquatReachBandAuthoringTest {
             bad.isEmpty()
         )
     }
-
-    // ----------------------------------------------------------------------------------------------
-    // 3 — the pose records no reach-relocation stamp (the honest IK_TARGET_UNREACHABLE signal)
-    // ----------------------------------------------------------------------------------------------
 
     @Test
     fun thePublishedFrameRecordsNoReachRelocationStamp() {
@@ -216,10 +199,6 @@ class SquatReachBandAuthoringTest {
             bad.isEmpty()
         )
     }
-
-    // ----------------------------------------------------------------------------------------------
-    // 4 — NON-VACUITY: the same measurement still rejects the pre-fix authoring
-    // ----------------------------------------------------------------------------------------------
 
     /**
      * The sensitivity control. `AirSquatPose`/`SquatPose` are FINAL classes, so the pre-fix authoring is
@@ -277,10 +256,6 @@ class SquatReachBandAuthoringTest {
             production.maxOf { it.relocation } < worstRelocation / 10f
         )
     }
-
-    // ----------------------------------------------------------------------------------------------
-    // 5 — NON-VACUITY of the sample set, and the anti-collateral guards
-    // ----------------------------------------------------------------------------------------------
 
     @Test
     fun theSampledFramesAreRealFramesAndTheEffectorsMove() {

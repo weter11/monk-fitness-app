@@ -39,24 +39,18 @@ import java.time.Instant
 import java.time.LocalDate
 
 /**
- * §30 step 15's read-back, measured on a real SQLite engine: what a target occurrence's **stored
+ * The target occurrence read-back, measured on a real SQLite engine: what a target occurrence's **stored
  * execution facts** are, and what happens when the stored graph is not what it claims to be.
  *
- * Everything here is read back through the three repositories the phase names, from rows written by
- * the production write paths — a real `TargetScheduleSlotPersister` pass for the slot and the semantic
- * occurrence, a real `WorkoutSessionRepository.startSession` / `finishSession` for each attempt, and
- * a real `appendSet` for every confirmed set. Nothing is planted by hand except where a test is
- * specifically about corrupting the store.
+ * Everything is read back through the three repositories, from rows written by the production write
+ * paths — a real `TargetScheduleSlotPersister` pass for the slot and the semantic occurrence, a real
+ * `startSession` / `finishSession` for each attempt, and a real `appendSet` for every confirmed set.
+ * Nothing is planted by hand except where a test is specifically about corrupting the store.
  *
- * The claims under test, in the order the phase states them:
- *
- * ```text
- *  1. the read model separates the four layers: occurrence / slot / attempt / performed work
- *  2. every stored attempt is preserved, in stored start order, never collapsed
- *  3. slot status and session status stay separate facts, with separate types
- *  4. the semantic occurrence is exactly Phase 14's read-back, and the slot exactly what was stored
- *  5. corrupted or mismatched stored data is a typed failure, never a partial or empty record
- * ```
+ * The claims: the read model separates occurrence / slot / attempt / performed work; every stored
+ * attempt is preserved in stored start order and never collapsed; slot status and session status stay
+ * separate facts with separate types; the semantic occurrence is exactly the stored one; and corrupted
+ * or mismatched stored data is a typed failure, never a partial or empty record.
  */
 class TargetOccurrenceExecutionReaderTest {
 
@@ -71,8 +65,6 @@ class TargetOccurrenceExecutionReaderTest {
     fun close() {
         rig.close()
     }
-
-    // ---- the four layers stay four ---------------------------------------------------------------
 
     @Test
     fun theRecordCarriesTheOccurrenceTheSlotAndTheAttemptsAsSeparateFacts() = runBlocking {
@@ -89,8 +81,8 @@ class TargetOccurrenceExecutionReaderTest {
             listOf(SessionId("session-a")),
             record.attemptIds
         )
-        // The record is not the semantic occurrence: adding the slot and the attempts is what makes it
-        // a read model, and the three parts stay separately addressable rather than being flattened.
+        // The record is not the semantic occurrence: adding the slot and the attempts is what makes it a
+        // read model, and the parts stay separately addressable rather than flattened.
         assertEquals(
             "the semantic payload is untouched by the read",
             OccurrenceComponent("rule-a", "workout-a"),
@@ -169,8 +161,6 @@ class TargetOccurrenceExecutionReaderTest {
         )
     }
 
-    // ---- several attempts, none collapsed ---------------------------------------------------------
-
     @Test
     fun everyStoredAttemptIsPreservedInStoredStartOrder() = runBlocking {
         val slot = persistTarget()
@@ -229,8 +219,8 @@ class TargetOccurrenceExecutionReaderTest {
             listOf(SessionStatus.CANCELLED, SessionStatus.COMPLETED),
             record.attemptStatuses
         )
-        // The pair is the case a single-enum `ExistingOccurrence` cannot hold without a policy. The
-        // counts describe it; nothing reduces it to one value.
+        // The case a single-enum `ExistingOccurrence` cannot hold without a policy: the counts describe
+        // it, and nothing reduces it to one value.
         val counts = TargetOccurrenceExecutionFacts.countsOf(record)
         assertEquals(2, counts.totalAttempts)
         assertEquals(1, counts.countOf(SessionStatus.CANCELLED))
@@ -261,8 +251,6 @@ class TargetOccurrenceExecutionReaderTest {
             TargetOccurrenceExecutionFacts.countsOf(record)
         )
     }
-
-    // ---- the opportunity is not the execution -----------------------------------------------------
 
     @Test
     fun aMissedSlotWithNoSessionReadsAsAMissedOpportunityAndNoAttempts() = runBlocking {
@@ -322,8 +310,8 @@ class TargetOccurrenceExecutionReaderTest {
         val slot = persistTarget()
         // A completed attempt establishes the taken opportunity, so the slot's outcome is writable.
         completeSession("a", slot)
-        // A *cancelled* attempt then lands at the same slot. It is legal (§19: a cancel does not take
-        // the opportunity) and it is exactly the case where the two vocabularies disagree.
+        // A *cancelled* attempt then lands at the same slot — legal, since a cancel does not take the
+        // opportunity, and exactly the case where the two vocabularies disagree.
         cancelSession("b", slot, startedAt = LATER_THAN_A)
 
         val record = reader().executionRecordOf(programId, occurrenceKey)
@@ -334,9 +322,9 @@ class TargetOccurrenceExecutionReaderTest {
             listOf(SessionStatus.COMPLETED, SessionStatus.CANCELLED),
             record.attemptStatuses
         )
-        // The mechanical half of the claim: the two are distinct enumerations, so a reader that
-        // swapped them would not compile at all. This asserts the *sets* are disjoint, which is the
-        // property that makes the two vocabularies independent rather than merely spelled apart.
+        // The mechanical half: the two are distinct enumerations, so a reader swapping them would not
+        // compile. The *sets* are asserted disjoint — the property that makes the vocabularies
+        // independent rather than merely spelled apart.
         assertEquals(
             "no member name is shared between the two vocabularies except the coincidental " +
                 "COMPLETED/CANCELLED pair, and even those are distinct types",
@@ -362,9 +350,8 @@ class TargetOccurrenceExecutionReaderTest {
     fun aCompletedSlotNeverManufacturesASessionStatusOfItsOwn() = runBlocking {
         val slot = persistTarget()
         completeSession("a", slot)
-        // The only attempt at this slot is the completed one, so the slot status and every attempt
-        // status happen to agree here. The claim is about the *source*: the attempt statuses below
-        // are read from stored session rows, and the slot's own token is not what produced them.
+        // The slot status and the attempt statuses happen to agree here; the claim is about the *source*
+        // — the attempt statuses are read from stored session rows, not from the slot's own token.
         val record = reader().executionRecordOf(programId, occurrenceKey)
 
         assertEquals(SlotStatus.COMPLETED, record.slotStatus)
@@ -385,10 +372,10 @@ class TargetOccurrenceExecutionReaderTest {
     fun removingAStoredAttemptMakesTheSlotReadBackRefuseRatherThanReadAsCompleted() = runBlocking {
         val slot = persistTarget()
         completeSession("a", slot)
-        // A COMPLETED slot is completed *by a session* (§19/§20), so a stored slot whose attempt has
-        // been deleted is invalid stored data. The refusal comes from the schedule repository's own
-        // slot assembly, which is the established contract — what matters here is that the reader
-        // propagates it instead of reading a completed opportunity as a completed workout.
+        // A COMPLETED slot is completed *by a session*, so a stored slot whose attempt was deleted is
+        // invalid data. The refusal comes from the schedule repository's own slot assembly — what matters
+        // is that the reader propagates it instead of reading a completed opportunity as a completed
+        // workout.
         rig.database.exec("DELETE FROM `workout_session` WHERE `sessionId` = 'session-a'")
 
         val failure = failureOf { reader().executionRecordOf(programId, occurrenceKey) }
@@ -402,8 +389,6 @@ class TargetOccurrenceExecutionReaderTest {
             failure.message!!.contains("completed by a session")
         )
     }
-
-    // ---- performed work stays performed work ------------------------------------------------------
 
     @Test
     fun severalConfirmedSetsArePreservedInConfirmationOrder() = runBlocking {
@@ -512,8 +497,6 @@ class TargetOccurrenceExecutionReaderTest {
         )
     }
 
-    // ---- Phase 14's read-back and the stored slot are unchanged -------------------------------------
-
     @Test
     fun theSemanticOccurrenceIsExactlyThePhaseFourteenReadBack() = runBlocking {
         persistTarget()
@@ -565,8 +548,6 @@ class TargetOccurrenceExecutionReaderTest {
         )
     }
 
-    // ---- two Programs, one key --------------------------------------------------------------------
-
     @Test
     fun theSameOccurrenceKeyInTwoProgramsStaysIndependent() = runBlocking {
         val mine = persistTarget()
@@ -574,8 +555,8 @@ class TargetOccurrenceExecutionReaderTest {
         val other = ProgramGraphFixture.graph(otherKey)
         rig.programRepository.createProgram(other.program, other.revision, other.slots)
         val otherProgramId = other.program.programId
-        // Stored under the *same* occurrence key, in the other Program — which is the case: the key
-        // is only unique within a Program, so independence is the property under test.
+        // The *same* occurrence key in the other Program: the key is only unique within a Program, so
+        // independence is the property under test.
         persistTarget(occurrenceKey, otherProgramId, RevisionId(ProgramGraphFixture.revisionId(otherKey)))
 
         // A completed attempt on my occurrence, and none at all on the other one.
@@ -608,8 +589,6 @@ class TargetOccurrenceExecutionReaderTest {
         assertNotEquals(otherSlot.slotId, mineRecord.slot.slotId)
     }
 
-    // ---- typed failures ---------------------------------------------------------------------------
-
     @Test
     fun aMissingSemanticRecordIsATypedFailure() = runBlocking {
         persistTarget()
@@ -627,8 +606,8 @@ class TargetOccurrenceExecutionReaderTest {
     @Test
     fun aMissingSlotForAStoredTargetOccurrenceIsATypedFailure() = runBlocking {
         val slot = persistTarget()
-        // Stage 14 writes the two in one transaction, so this is staged by removing the slot row
-        // directly — the shape a restore or a hand-edited database leaves behind.
+        // The two are written in one transaction, so this is staged by removing the slot row directly —
+        // the shape a restore or a hand-edited database leaves behind.
         rig.database.exec("DELETE FROM `program_workout_slot` WHERE `slotId` = '${slot.slotId.value}'")
 
         val failure = assertThrows(
@@ -649,9 +628,8 @@ class TargetOccurrenceExecutionReaderTest {
     fun aSlotWhoseStoredTargetKeyNoLongerMatchesIsNotFoundRatherThanReinterpreted() = runBlocking {
         val slot = persistTarget()
         // The stored slot now names a different target key. The lookup is keyed on the *pair*, so a
-        // re-pointed row is not "a slot for this key with a different name" — it is a slot for a
-        // different identity, and the pair that was asked about no longer has one. Reporting that as
-        // a mismatch would imply the reader had found a row and disagreed with it.
+        // re-pointed row is a slot for a different identity, and the pair asked about no longer has one —
+        // reporting a mismatch would imply the reader found a row and disagreed with it.
         rig.database.exec(
             "UPDATE `program_workout_slot` SET `targetOccurrenceKey` = 'other:2026-10-05' " +
                 "WHERE `slotId` = '${slot.slotId.value}'"
@@ -672,9 +650,9 @@ class TargetOccurrenceExecutionReaderTest {
 
     @Test
     fun aRecordRefusesASlotWhoseTargetKeyDiffersFromItsOccurrence() {
-        // The mismatch guard itself: a record that paired an occurrence with a slot answering for a
-        // different target identity is refused at construction, so the reader's check is a second
-        // line rather than the only one.
+        // The mismatch guard itself: a record pairing an occurrence with a slot answering for a different
+        // target identity is refused at construction, so the reader's check is a second line, not the
+        // only one.
         val slot = runBlocking { persistTarget() }
         val other = PersistedTargetOccurrence(programId, occurrence("other:2026-10-05"))
 
@@ -738,8 +716,8 @@ class TargetOccurrenceExecutionReaderTest {
                 TargetOccurrenceExecutionRecord(
                     occurrence = PersistedTargetOccurrence(other.program.programId, occurrence("other:2026-10-05")),
                     slot = theirs,
-                    // A session's own identity triple is fixed at construction, so the mismatch is
-                    // staged by pairing a foreign attempt with this Program's occurrence.
+                    // A session's identity triple is fixed at construction, so the mismatch is staged by
+                    // pairing a foreign attempt with this Program's occurrence.
                     attempts = listOf(session("b", mine).copy(programId = other.program.programId))
                 )
             }.isFailure
@@ -754,8 +732,8 @@ class TargetOccurrenceExecutionReaderTest {
         rig.programRepository.createProgram(other.program, other.revision, other.slots)
         val otherProgramId = other.program.programId
         persistTarget(otherKey, otherProgramId, RevisionId(ProgramGraphFixture.revisionId(otherKey)))
-        // The attempt really is at *my* slot, so the reader finds it; only its Program column
-        // disagrees, which is the case a lookup by Program cannot notice on its own.
+        // The attempt really is at *my* slot; only its Program column disagrees, which is the case a
+        // lookup by Program cannot notice on its own.
         rig.startSessionWithSets(session("a", slot))
         rig.database.exec(
             "UPDATE `workout_session` SET `programId` = '${otherProgramId.value}' " +
@@ -808,25 +786,24 @@ class TargetOccurrenceExecutionReaderTest {
             other.program.programId,
             RevisionId(ProgramGraphFixture.revisionId(otherKey))
         )
-        // An in-progress attempt on a still-PLANNED slot, so moving it does not leave behind a
-        // COMPLETED slot whose recorded attempt no longer exists — a different corruption entirely.
+        // An in-progress attempt on a still-PLANNED slot, so moving it does not leave a COMPLETED slot
+        // whose recorded attempt no longer exists — a different corruption entirely.
         rig.startSessionWithSets(session("a", mine))
 
-        // Move the attempt onto the other slot of the *same* Program's own other key: program and
-        // revision both still agree, and only the slot link is wrong.
+        // Moved onto the other slot of the *same* Program's other key: program and revision both agree,
+        // and only the slot link is wrong.
         rig.database.exec(
             "UPDATE `workout_session` SET `slotId` = '${otherSlot.slotId.value}' " +
                 "WHERE `sessionId` = 'session-a'"
         )
 
-        // The read is over the slot, so the moved row is no longer *found* — the honest outcome is
-        // that my record has no attempts while the slot row still claims one. Both facts are real,
-        // and the read reports the stored session graph rather than the slot's cached attempt list.
+        // The read is over the slot, so the moved row is no longer *found*: my record has no attempts
+        // while the slot row still claims one. Both facts are real, and the read reports the stored
+        // session graph rather than the slot's cached attempt list.
         //
-        // This is why the reader still checks `SessionReferencesAnotherSlot` without this case
-        // reaching it: `sessionsOfSlot` selects on `slotId`, so a row that names another slot is
-        // simply not returned. The check guards a repository that ever widened that query, and it
-        // is a second line behind the record's own invariant rather than the only one.
+        // That is why `SessionReferencesAnotherSlot` is not reached here: `sessionsOfSlot` selects on
+        // `slotId`, so a row naming another slot is simply not returned. The check guards a repository
+        // that ever widened that query — a second line behind the record's own invariant.
         val record = reader().executionRecordOf(programId, occurrenceKey)
         assertTrue(
             "the moved attempt is not attributed to my slot, because it no longer names it",
@@ -844,8 +821,8 @@ class TargetOccurrenceExecutionReaderTest {
         val slot = persistTarget()
         rig.startSessionWithSets(session("a", slot))
 
-        // Remove the session's snapshot. §19 requires a session to be assembled from the presentation
-        // it was started under, and the session repository refuses a graph that is not there.
+        // The session's snapshot is removed: a session must be assembled from the presentation it was
+        // started under, and the session repository refuses a graph that is not there.
         rig.database.exec("DELETE FROM `session_snapshot` WHERE `sessionId` = 'session-a'")
 
         val failure = failureOf { reader().executionRecordOf(programId, occurrenceKey) }
@@ -874,15 +851,13 @@ class TargetOccurrenceExecutionReaderTest {
         assertNull("so there is no record at all", record.getOrNull())
     }
 
-    // ---- the lookup path ---------------------------------------------------------------------------
-
     @Test
     fun noCurrentRevisionLookupOccursAndTheLookupIsKeyedOnTheProgram() = runBlocking {
         val slot = persistTarget()
         completeSession("a", slot)
 
-        // A different current revision is in place. Nothing about the read changes, because the
-        // reader asks for a stored target identity and never consults the current revision.
+        // A different current revision is in place; nothing about the read changes, because the reader
+        // asks for a stored target identity and never consults the current revision.
         val next = ProgramGraphFixture.nextRevision(key, revisionNumber = 2)
         rig.programPlanRepository.saveNewRevision(next, ProgramGraphFixture.UPDATED)
         rig.programRepository.updateProgram(
@@ -924,8 +899,6 @@ class TargetOccurrenceExecutionReaderTest {
         )
     }
 
-    // ---- the fixture ------------------------------------------------------------------------------
-
     private fun reader() = TargetOccurrenceExecutionReader(
         occurrenceRepository = rig.targetScheduleOccurrenceRepository,
         scheduleRepository = rig.programScheduleRepository,
@@ -944,7 +917,7 @@ class TargetOccurrenceExecutionReaderTest {
         revisionId: RevisionId = this.revisionId
     ): WorkoutSlot {
         if (programId.value != this.programId.value) {
-            // A second Program's graph is created by the caller; this one only needs its target state.
+            // A second Program's graph is created by the caller; this one needs only its target state.
             return persistOnly(programId, revisionId, occurrenceKey)
         }
         if (!graphPersisted) {
@@ -1000,8 +973,8 @@ class TargetOccurrenceExecutionReaderTest {
         sets: List<SetResult> = twoRepSets(tag, startedAt)
     ) {
         val started = session(tag, slot, startedAt = startedAt, sets = sets)
-        // `startSession` writes the session and its captured presentation only; a set is confirmed
-        // during the workout (§27), so the rig's helper is the write path that files the sets.
+        // `startSession` writes the session and its captured presentation only; a set is confirmed during
+        // the workout, so the rig's helper is the write path that files the sets.
         rig.startSessionWithSets(started)
         val finished = started.copy(
             status = SessionStatus.COMPLETED,
@@ -1020,7 +993,7 @@ class TargetOccurrenceExecutionReaderTest {
     private suspend fun cancelSession(tag: String, slot: WorkoutSlot, startedAt: Instant = EARLIEST) {
         val started = session(tag, slot, startedAt = startedAt)
         rig.workoutSessionRepository.startSession(started)
-        // A cancel ends the attempt *without* taking the opportunity (§19), so the slot is untouched.
+        // A cancel ends the attempt *without* taking the opportunity, so the slot is untouched.
         rig.workoutSessionRepository.recordSessionOutcome(
             started.copy(status = SessionStatus.CANCELLED, finishedAt = startedAt.plus(FORTY_MINUTES))
         )
@@ -1115,10 +1088,8 @@ class TargetOccurrenceExecutionReaderTest {
     }
 
     /**
-     * The suite's default performed work: two confirmed repetition sets, `12` then `10`.
-     *
-     * Deliberately unequal and deliberately not sorted-symmetric, so a read that reordered, summed or
-     * truncated the stored sets would produce a different list than the one that was written.
+     * Two confirmed repetition sets, `12` then `10` — deliberately unequal and not sorted-symmetric, so a
+     * read that reordered, summed or truncated the stored sets would produce a different list.
      */
     private fun twoRepSets(tag: String, startedAt: Instant) = listOf(
         SetResult(
@@ -1143,13 +1114,10 @@ class TargetOccurrenceExecutionReaderTest {
         val LATER_THAN_B: Instant = Instant.parse("2026-10-07T08:00:00Z")
 
         /**
-         * This suite's own clock arithmetic.
-         *
-         * The shared `ProgramGraphFixture` instants belong to a fixture whose sessions start in
-         * September, and borrowing them here would stamp a workout's finish and its sets *before* the
-         * session began — which §19's own `finishedAt >= startedAt` invariant rightly refuses. Every
-         * stamp in this suite is therefore derived from the session's own start, so the relative
-         * order the tests assert is stated in one place.
+         * This suite's own clock arithmetic. The shared fixture's instants belong to sessions starting in
+         * September, and borrowing them would stamp a workout's finish and its sets *before* the session
+         * began — which the `finishedAt >= startedAt` invariant rightly refuses. Every stamp is therefore
+         * derived from the session's own start, so the asserted order is stated in one place.
          */
         val TEN_MINUTES: Duration = Duration.ofMinutes(10)
         val TWENTY_MINUTES: Duration = Duration.ofMinutes(20)

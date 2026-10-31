@@ -9,11 +9,10 @@ import org.junit.Test
 import kotlin.math.abs
 
 /**
- * M4 (RFC_GAP_CLOSURE) — the Finalizer is the *exclusive* writer of local transforms, with the
- * F1/B5 read-only chest-frame guard always active.
+ * The Finalizer is the *exclusive* writer of local transforms, with the read-only chest-frame guard
+ * always active.
  *
- * (Phase B flag collapse) FINALIZER_OWNS_CONVERSION was collapsed to its true branch and removed,
- * so conversion ownership is now unconditional. This suite asserts the resulting behaviour:
+ * Conversion ownership is unconditional. This suite asserts the resulting behaviour:
  *  - production poses render finite and contact-less (the guard never runs for them);
  *  - validation instruments register contacts and finalize with every contact on its support plane.
  */
@@ -93,7 +92,7 @@ class FinalizerOwnsConversionM4Test {
     @Test
     fun guardActivatesOnlyForContacts() {
         // Sanity: a production pose with no engine contacts must have an empty contact list (so the
-        // F1/B5 guard never runs for it), whereas the validation instruments do register contacts.
+        // read-only guard never runs for it), whereas the validation instruments do register contacts.
         val squat = AirSquatPose().build(PoseContext(0.5f, Side.LEFT, def))
         assertEquals("production pose must have no engine contacts", 0, squat.contacts.size)
         val hang = DeadHangPose().build(PoseContext(0.5f, Side.LEFT, def))

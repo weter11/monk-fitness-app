@@ -7,16 +7,15 @@ import java.io.File
 import java.nio.file.Files
 
 /**
- * The other localizable resource types (§14): `<plurals>` and `<string-array>`.
+ * The other localizable resource types: `<plurals>` and `<string-array>`.
  *
- * A localization suite that *claims* to cover these types but can only ever run against content the app
- * does not have is not covering anything. So the rule has two halves, both of which execute:
+ * A suite that claims to cover these types but can only run against content the app does not have is not
+ * covering anything, so the rule has two halves, both of which execute:
  *
  *  * the reader is proven against a document this test writes — a synthetic file, not invented app
- *    content, and no app resource is added for the sake of a test;
- *  * the app's own tables are then asserted to ship none of them, which is the state the brief asks for
- *    ("do not add plural/array resources without need") and is worth failing on if it changes silently:
- *    a count-dependent phrase in this app is written as `%1$d-day …` against a value the app already
+ *    content; no app resource is added for the sake of a test;
+ *  * the app's own tables are then asserted to ship none of them, which is worth failing on if it changes
+ *    silently: a count-dependent phrase here is written as `%1$d-day …` against a value the app already
  *    localizes, and a new plural would have to exist in all seven locales and carry matching placeholders.
  */
 class ResourceTypesTest {

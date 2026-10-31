@@ -13,18 +13,16 @@ import kotlin.math.abs
 /**
  * Leg Swings (`leg_swings_hold`) — the exercise's own biomechanics on the PUBLISHED frame.
  *
- * ## Stated intent (there is no BPS and no copy for this exercise)
+ * There is no BPS and no copy: `WorkoutGenerator` passes `R.string.ex_leg_swings` as *every* field,
+ * so the catalog entry is the title and nothing else. The identity is derived from the localized name
+ * — `values-ru` *"Динамические махи ногами"*, `values-uk` *"Махи ногами"* = **dynamic leg swings** —
+ * and from the catalog's own separation of its two neighbours (`ex_hip_cars_desc`'s leg circle,
+ * *"not a swing"*, and `hip_circles`' pelvic circle).
  *
- * `WorkoutGenerator` passes `R.string.ex_leg_swings` as *every* field, so the catalog entry is the
- * title and nothing else. Its identity is derived (recorded in the pose's KDoc) from the localized
- * name — `values-ru` *"Динамические махи ногами"*, `values-uk` *"Махи ногами"* = **dynamic leg
- * swings** — and from the catalog's own separation of the two neighbours it could be confused with
- * (`ex_hip_cars_desc`: the leg circle, *"not a swing"*; `hip_circles`: the pelvic circle).
- *
- * The assertions therefore measure a **pendulum**: a constant-radius arc of the swinging leg through
- * its own hip, crossing the vertical into both a forward and a back extreme, under a still pelvis and
- * a planted stance foot. Every reading is taken through [PoseFrameSweep] (the pipeline entered exactly
- * as `SkeletonRenderer` enters it), never on a raw `build()` result.
+ * The assertions measure a pendulum: a constant-radius arc of the swinging leg through its own hip,
+ * crossing the vertical into both a forward and a back extreme, under a still pelvis and a planted
+ * stance foot. Every reading is taken through [PoseFrameSweep] (the pipeline entered exactly as
+ * `SkeletonRenderer` enters it), never on a raw `build()` result.
  */
 class LegSwingsPoseTest {
 
@@ -54,7 +52,7 @@ class LegSwingsPoseTest {
     }
 
     /**
-     * The sweep is not aliased (T-7), and the pendulum's own periodicity is stated exactly: the seam
+     * The sweep is not aliased, and the pendulum's own periodicity is stated exactly: the seam
      * `progress 0 ≡ 1` is the SAME point of the arc, while every other sample is a distinct frame.
      */
     @Test

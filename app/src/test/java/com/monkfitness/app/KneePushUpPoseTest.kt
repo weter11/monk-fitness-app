@@ -29,7 +29,6 @@ class KneePushUpPoseTest {
         )
         val validator = ExerciseValidator(config)
 
-        // Sample progress from 0 to 1 in 100 steps
         val frameCount = 100
         val dt = 0.0166f // ~16.6ms frame time at 60fps
         val poses = ArrayList<SkeletonPose>()
@@ -44,22 +43,19 @@ class KneePushUpPoseTest {
                 cycleDuration = 2500f
             )
             val rawPose = poseBuilder.build(context)
-            // T-7: `produceFrame` publishes a REUSED buffer (SkeletonPoseFinalizer.outputPose), so
+            // `produceFrame` publishes a REUSED buffer (SkeletonPoseFinalizer.outputPose), so
             // retaining `.pose` aliased all 100 entries of this list to the last produced frame: every
             // step compared a frame with itself (`previousPose === currentPose`), so HAND_SLIDING
-            // measured a zero horizontal slide and POSITION_/VELOCITY_DISCONTINUITY measured a zero
-            // displacement. Snapshot by value instead — the rule MotionProbe documents
-            // ("never store .pose references") and the same pattern the pipeline itself uses for its
-            // Frame History (SkeletonPipeline.commitFrameHistory: `SkeletonPose().apply { copyFrom(...) }`).
+            // measured a zero horizontal slide and POSITION_/VELOCITY_DISCONTINUITY a zero
+            // displacement. Snapshot by value instead.
             val snapshot = SkeletonPose().apply { copyFrom(pipeline.produceFrame(rawPose).pose) }
             poses.add(snapshot)
         }
 
-        // T-7 guard: the loops below are only a temporal check while the sweep actually holds
-        // independent frames. This is the invariant the aliasing silently destroyed — every inter-frame
-        // rule (HAND_SLIDING, POSITION_DISCONTINUITY, VELOCITY_DISCONTINUITY) degrades to a
-        // self-comparison when every entry is the same buffer, which is how this class stayed green
-        // while B-1 and B-7 shipped.
+        // Guard: the loops below are only a temporal check while the sweep actually holds independent
+        // frames. Every inter-frame rule (HAND_SLIDING, POSITION_DISCONTINUITY,
+        // VELOCITY_DISCONTINUITY) degrades to a self-comparison when every entry is the same buffer,
+        // which is how this class stayed green while the plank defects shipped.
         val distinctFrameObjects = poses.map { System.identityHashCode(it) }.distinct().size
         assertEquals(
             "The $frameCount sampled frames are not independent snapshots ($distinctFrameObjects distinct " +
@@ -106,7 +102,6 @@ class KneePushUpPoseTest {
             previousPose = currentPose
         }
 
-        // Print summary of issues
         println("=== VALIDATION ISSUE SUMMARY ===")
         println("Total issues collected: ${collectedIssues.size}")
         val uniqueRuleIds = collectedIssues.map { it.ruleId }.distinct()
@@ -208,7 +203,7 @@ class KneePushUpPoseTest {
             val devF = getSignedPerpendicularDeviation2D(hipF, ankleF, kneeF)
             val devB = getSignedPerpendicularDeviation2D(hipB, ankleB, kneeB)
 
-            // Let's check deviation of hipF from the kneeF-to-chest line
+            // Deviation of hipF from the kneeF-to-chest line.
             val devHipTorso = getSignedPerpendicularDeviation2D(kneeF, chest, hipF)
 
             val shoulderA = pose.getJoint(Joint.SHOULDER_A)

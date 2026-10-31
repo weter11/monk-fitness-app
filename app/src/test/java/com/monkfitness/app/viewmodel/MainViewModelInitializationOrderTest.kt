@@ -8,30 +8,18 @@ import java.io.File
 /**
  * **The initialisation order of `MainViewModel`, asserted mechanically.**
  *
- * ### Why this test exists
- *
  * A startup crash escaped the whole JVM suite: the `init` block that starts the nutrition sync sat *above*
  * the nutrition properties it reads, so the first `syncNutritionCycles()` — which `viewModelScope` runs
  * **synchronously** during construction, because it dispatches on `Dispatchers.Main.immediate` and the view
  * model is constructed on the main thread — read an uninitialised `val`. Kotlin compiles that happily: the
- * read happens inside a lambda, so the compiler's flow analysis never sees it, and the field is `null` at
- * runtime.
+ * read happens inside a lambda, so flow analysis never sees it and the field is `null` at runtime.
  *
- * The suite could not catch it because this project has no Robolectric harness: `MainViewModel` is an
- * `AndroidViewModel`, nothing in `src/test` can construct one, and every test in the tree works around it.
- * So the guard has to be a **source-level availability analysis** rather than an instantiation — and to be
- * worth anything it must model the real rule, not the shape of one incident:
- *
- * ```text
- * for every `init` block
- *   for every member it calls (transitively, through the class's own functions)
- *     every *property* that call path reads must be declared ABOVE the init block
- * ```
- *
- * That is exactly the rule Kotlin's top-to-bottom initialisation imposes, so a future `init` placed beside
- * the wiring at the top of the class fails here instead of on a device. It is a weaker guard than
- * constructing the object would be — it cannot see a read the analysis misses — and that weakness is
- * recorded rather than hidden: `docs/PROGRAM_LEGACY_REMOVAL.md` names the missing harness as the reason.
+ * Nothing in `src/test` can construct an `AndroidViewModel` (this project has no Robolectric harness), so
+ * the guard is a **source-level availability analysis**: for every `init` block, every property its call
+ * path reads (transitively, through the class's own functions) must be declared ABOVE the block — which is
+ * the rule Kotlin's top-to-bottom initialisation imposes. A future `init` placed beside the wiring at the
+ * top of the class fails here instead of on a device. It is a weaker guard than constructing the object
+ * would be — it cannot see a read the analysis misses.
  */
 class MainViewModelInitializationOrderTest {
 
@@ -122,8 +110,6 @@ class MainViewModelInitializationOrderTest {
         return seen
     }
 
-    // ---- the rule ---------------------------------------------------------------------------------
-
     @Test
     fun everyInitBlockIsDeclaredBelowEveryPropertyItsCallPathReads() {
         assertTrue("expected the class to declare properties", properties.size > 20)
@@ -146,8 +132,6 @@ class MainViewModelInitializationOrderTest {
             offenders
         )
     }
-
-    // ---- the incident this test was written for ---------------------------------------------------
 
     @Test
     fun theNutritionStartupTickRunsAfterTheNutritionStateItReads() {

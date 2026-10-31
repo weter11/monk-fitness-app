@@ -12,24 +12,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §30 step 28's **exercise preference over real storage** — the claims only SQLite can decide.
+ * **Exercise preference over real storage** — the claims only SQLite can decide.
  *
  * `ExercisePreferenceTest` states what the domain value is; this suite states that the user's stated
- * ordering actually survives the round trip through `program_revision`, and that the ownership rules hold
- * on real rows rather than in a comment.
+ * ordering survives the round trip through `program_revision`, and that the ownership rules hold on real
+ * rows rather than in a comment.
  *
- * ### Why raw SQL for the writes
+ * The writes are raw SQL against the **column** because the round trip is what is under test: going
+ * through `ProgramEditorService.save` would prove the whole save path works — which several suites
+ * already cover — while hiding the one thing this suite is for, whether the value comes back out **in
+ * the order it went in**. A mapper that sorted would pass a full save and be caught here. The reads, by
+ * contrast, go through the real repository and the real context source, so the two halves of the claim
+ * are measured on opposite sides of the boundary.
  *
- * The round trip is what is under test, so the test writes the **column** directly. Going through
- * `ProgramEditorService.save` would prove that the whole save path works, which several suites already
- * cover, while hiding the one thing this suite is for: whether the value comes back out **in the order it
- * went in**. A mapper that sorted would pass through a full save and be caught here.
- *
- * The reads, by contrast, go through the real repository and the real context source, so the two halves of
- * the claim are measured on opposite sides of the boundary.
- *
- * Two rigs share one database file, as the other storage suites do: the second does not migrate, so a value
- * that comes back was **stored**, not remembered.
+ * Two rigs share one database file: the second does not migrate, so a value that comes back was
+ * **stored**, not remembered.
  */
 class ProgramPreferenceStorageTest {
 
@@ -38,8 +35,6 @@ class ProgramPreferenceStorageTest {
 
     private val alpha = ProgramId("program-alpha")
     private val beta = ProgramId("program-beta")
-
-    // ------------------------------------------------------------------ the round trip
 
     /**
      * The user's exact order comes back out of storage, **in that order**.
@@ -96,8 +91,6 @@ class ProgramPreferenceStorageTest {
         )
     }
 
-    // ------------------------------------------------------------------ absence
-
     @Test
     fun aProgramThatNeverStatedOneReadsAsEmptyRatherThanARanking()  = runBlocking {
         storeGraph(rig, "alpha", preferred = null)
@@ -119,11 +112,12 @@ class ProgramPreferenceStorageTest {
     }
 
     /**
-     * A row written **before** the column existed reads as empty, because the migration adds the column
-     * with no default and SQLite backfills `NULL`.
+     * A row written **before** the column existed reads as empty: the migration adds the column with no
+     * default and SQLite backfills `NULL`.
      *
-     * This is the honest meaning of an old row: the user had no way to state a preference, so none exists —
-     * not "they preferred whatever the upgrade decided", and not "the catalogue in alphabetical order".
+     * That is the honest meaning of an old row — the user had no way to state a preference, so none
+     * exists, not "they preferred whatever the upgrade decided" and not "the catalogue in alphabetical
+     * order".
      */
     @Test
     fun aRowThatPredatesTheColumnReadsAsEmptyRatherThanARanking()  = runBlocking {
@@ -141,8 +135,6 @@ class ProgramPreferenceStorageTest {
             loadPreference("alpha")
         )
     }
-
-    // ------------------------------------------------------------------ Program isolation
 
     @Test
     fun twoProgramsInOneDatabaseNeverSeeEachOthersPreference()  = runBlocking {
@@ -207,8 +199,6 @@ class ProgramPreferenceStorageTest {
         )
     }
 
-    // ------------------------------------------------------------------ reaching the request
-
     /**
      * The persisted preference reaches `GenerationPreferences` **unchanged** — the whole point of the
      * stage, measured end to end: stored column → revision → draft → context source → request.
@@ -246,9 +236,9 @@ class ProgramPreferenceStorageTest {
 
     @Test
     fun theContextSourceStillIssuesExactlyOneReadPerPassWithAPreferenceInPlay() = runBlocking {
-        // P27's snapshot invariant, re-pinned with a preference present. Forwarding the draft's own value
-        // needs no I/O, so the read count must be unchanged — a second read for the preference would be the
-        // obvious way to break "one generation operation = one coherent context snapshot".
+        // The snapshot invariant, re-pinned with a preference present. Forwarding the draft's own value
+        // needs no I/O, so the read count must be unchanged — a second read for the preference would be
+        // the obvious way to break "one generation operation = one coherent context snapshot".
         var reads = 0
         storeGraph(rig, "alpha", preferred = "pull-ups")
 
@@ -268,8 +258,6 @@ class ProgramPreferenceStorageTest {
         )
     }
 
-    // ------------------------------------------------------------------ fixtures
-
     /** A draft editing [programId], so the history read is scoped rather than skipped. */
     private fun draftEditing(programId: ProgramId) = ProgramEditorDraft(
         programId = programId,
@@ -280,11 +268,10 @@ class ProgramPreferenceStorageTest {
      * The draft the **editor** would be holding for this Program: the stored revision's own plan and
      * configuration, carried onto a draft exactly as `ProgramEditorService.draftOf` carries it.
      *
-     * This is the honest fixture for a claim about a *persisted* preference reaching the request. A
-     * hand-built draft carrying a preference would prove only that a value someone typed into a test
-     * object arrives somewhere — it would not touch storage at all. Building the draft **from** the stored
-     * revision is what makes the round trip in this test real: column → revision → draft → request, with
-     * no step skipped and no value injected by the test itself.
+     * A hand-built draft carrying a preference would prove only that a value typed into a test object
+     * arrives somewhere, without touching storage. Building the draft **from** the stored revision is
+     * what makes the round trip real: column → revision → draft → request, no step skipped and no value
+     * injected by the test itself.
      */
     private suspend fun draftLoadedFromStorage(key: String): ProgramEditorDraft {
         val revision = (if (key == "alpha") rig.freshPlanRepository() else other.freshPlanRepository())

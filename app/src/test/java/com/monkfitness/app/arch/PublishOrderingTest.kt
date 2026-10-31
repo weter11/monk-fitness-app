@@ -14,40 +14,35 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Phase 8 (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md §P8) — publish-ordering
- * structuralization (RFC_RUNTIME_SKELETON_ARCHITECTURE §6 Phase 4 fixed internal order,
- * §3.3 Published Pose State immutability onset, §4.4 note on Finalizer stamp write phases).
+ * Publish-ordering structuralization.
  *
- * RFC §6 Phase 4 fixes the internal order: Flatten writes every published transform AND the
- * Finalizer completes every attributable Validation Stamp write, and ONLY THEN does Published
- * Pose State become immutable. The pre-P8 implementation already performed this order but only
- * implicitly (`derivation/flatten → applyValidationStamps → return outputPose` — no explicit
- * publish boundary, no enforcement against a later stamp write or a silent re-entry on the
- * reused `outputPose` buffer). P8 makes the boundary STRUCTURAL — an explicit `publish()` tail
- * with a debug-only publication marker — without changing any numerical behavior.
+ * The internal order is fixed: Flatten writes every published transform AND the Finalizer
+ * completes every attributable Validation Stamp write, and ONLY THEN does Published Pose State
+ * become immutable. The earlier implementation performed this order only implicitly
+ * (`derivation/flatten → applyValidationStamps → return outputPose` — no explicit publish
+ * boundary, no enforcement against a later stamp write or a silent re-entry on the reused
+ * `outputPose` buffer). This makes the boundary STRUCTURAL — an explicit `publish()` tail with a
+ * debug-only publication marker — without changing any numerical behavior.
  *
- * IMPLEMENTATION DECISION (plan §P8, not dictated by §6 Phase 4's literal text): the
- * single-shot publish guard. §6 fixes write ORDER and §3.3 the immutability ONSET; the guard is
- * the enforcement mechanism FOR §3.3's "immutable from the moment Phase 4 completes" — a second
- * publication of the same carrier through the same finalizer (silent re-entry would republish
- * the reused private `outputPose` buffer) throws in DEBUG. Release builds compile the checks
- * out; the marker is runtime enforcement state on the finalizer instance, never Published Pose
- * State contents.
+ * IMPLEMENTATION DECISION (not dictated by the fixed-order text): the single-shot publish guard.
+ * The order fixes write ORDER and the immutability ONSET; the guard enforces "immutable from the
+ * moment the tail completes" — a second publication of the same carrier through the same
+ * finalizer (silent re-entry would republish the reused private `outputPose` buffer) throws in
+ * DEBUG. Release builds compile the checks out; the marker is runtime enforcement state on the
+ * finalizer instance, never Published Pose State contents.
  *
  * The guard recognizes two legitimate re-arm evidences, both boundary events the architecture
- * already defines (§6 Phase 0.5 / §4.5 R11 ownership transfer; the per-build carrier-hygiene
- * reset):
+ * already defines:
  *  - the SkeletonPipeline starting a new execution window for a frame
  *    (`SkeletonPoseFinalizer.beginPublishWindow`, called from `runStages`),
  *  - a fresh authoring pass over the carrier (`IntentBuilder.reset` bumps
  *    `SkeletonPose.buildCycleToken` — the jointsBuffer instance is legitimately reused across
  *    builds, so a new build cycle is a new publish cycle).
  * Neither evidence exists for a silent re-entry: same carrier, same build, no new window — that
- * is the §3.3 violation and it must throw.
+ * is the violation and it must throw.
  *
- * This file compiles against the pre-P8 tree (public API + reflection + source-text audits
- * only), so the same bytes run as the counterfactual RED gate on `origin/main` — the P6/P7
- * pattern.
+ * Public API + reflection + source-text audits only, so these bytes also compile on a tree
+ * without the publish tail.
  */
 class PublishOrderingTest {
 
@@ -64,14 +59,10 @@ class PublishOrderingTest {
             .produceFrame(StandardPushUpPose(), ctx(progress))
             .pose
 
-    // ---------------------------------------------------------------------------------
-    // 1 — Single-pass finalization remains valid: a normal frame finalizes and publishes
-    //     with the complete Finalizer stamp set present on the returned pose.
-    // ---------------------------------------------------------------------------------
     @Test
     fun normalFrameFinalizesAndPublishesWithFullStampSet() {
         val published = pipelineFrame(0.5f)
-        // Finalizer-owned §4.4 stamps all present on the published carrier.
+        // Finalizer-owned stamps all present on the published carrier.
         assertEquals("hip ROM stamps for both hips", 2, published.hipRomStamps.size)
         assertTrue("published pose is transforms-updated", published.isTransformsUpdated)
         // A second pipeline frame on a fresh pipeline finalizes+publishes identically-shaped.
@@ -79,13 +70,9 @@ class PublishOrderingTest {
         assertEquals(2, second.hipRomStamps.size)
     }
 
-    // ---------------------------------------------------------------------------------
-    // 2 — happen-before: applyValidationStamps runs before the publication marker.
-    //     Runtime proof: a normal publish SUCCEEDS end-to-end while the stamp-entry guard
-    //     (test 3) rejects any post-marker stamp write — so within the successful publish
-    //     the stamps necessarily completed BEFORE the marker was set. Paired here with the
-    //     source-order audit inside the extracted publish() tail.
-    // ---------------------------------------------------------------------------------
+    // Happen-before: a normal publish SUCCEEDS end-to-end while the stamp-entry guard (below)
+    // rejects any post-marker stamp write — so the stamps necessarily completed BEFORE the
+    // marker. Paired with the source-order audit inside the extracted publish() tail.
     @Test
     fun validationStampsAreWrittenBeforeThePublicationMarker() {
         val finalizer = SkeletonPoseFinalizer(definition)
@@ -114,12 +101,9 @@ class PublishOrderingTest {
             flattenAt in 0..<stampAt)
     }
 
-    // ---------------------------------------------------------------------------------
-    // 3 — No stamp write after publication: the stamp-writing entry itself is guarded.
-    //     Reaching the private applyValidationStamps reflectively on an already-published
-    //     finalizer must throw the publish-order violation (the actual guard path, not a
-    //     source-text proxy).
-    // ---------------------------------------------------------------------------------
+    // The stamp-writing entry itself is guarded: reaching the private applyValidationStamps
+    // reflectively on an already-published finalizer must throw — the actual guard path, not a
+    // source-text proxy.
     @Test
     fun stampWriteAfterPublicationThrowsPublishOrderViolation() {
         val finalizer = SkeletonPoseFinalizer(definition)
@@ -146,13 +130,9 @@ class PublishOrderingTest {
         }
     }
 
-    // ---------------------------------------------------------------------------------
-    // 4 — Re-entering the same finalizer with the same carrier after publish fails in
-    //     DEBUG. This is THE §P8 minimum: "a second finalize(...) on an already-published
-    //     pose through the same SkeletonPoseFinalizer instance must fail in DEBUG."
-    //     No new build cycle and no new pipeline window occur between the two calls, so
-    //     the reused output buffer would be silently republished (§3.3 violation).
-    // ---------------------------------------------------------------------------------
+    // THE minimum: a second finalize(...) on an already-published pose through the same
+    // finalizer must fail in DEBUG. No new build cycle and no new pipeline window occur between
+    // the calls, so the reused output buffer would be silently republished.
     @Test
     fun secondFinalizeOnSameFinalizerAndCarrierThrowsPublishOrderViolation() {
         val finalizer = SkeletonPoseFinalizer(definition)
@@ -170,12 +150,9 @@ class PublishOrderingTest {
         }
     }
 
-    // ---------------------------------------------------------------------------------
-    // 5 — The marker is instance-local runtime state, not global: a fresh
-    //     SkeletonPoseFinalizer publishes normally after another instance published, and a
-    //     REUSED finalizer re-arms on the documented boundary evidences (new authoring
-    //     cycle / new pipeline window) instead of staying tripped forever.
-    // ---------------------------------------------------------------------------------
+    // The marker is instance-local runtime state, not global: a fresh finalizer publishes
+    // normally after another instance published, and a REUSED one re-arms on the documented
+    // boundary evidences instead of staying tripped forever.
     @Test
     fun publicationMarkerIsInstanceLocalNotGlobal() {
         val firstFinalizer = SkeletonPoseFinalizer(definition)
@@ -198,12 +175,8 @@ class PublishOrderingTest {
         }
     }
 
-    // ---------------------------------------------------------------------------------
-    // 6 — Pipeline integration: the REAL SkeletonPipeline keeps producing published frames
-    //     correctly on both entry-point shapes (sequential playback on ONE pipeline — the
-    //     renderer pattern — re-arms via the window evidence every frame), and the stamps
-    //     of the published pose are present on every frame.
-    // ---------------------------------------------------------------------------------
+    // Pipeline integration: both entry-point shapes keep publishing, and sequential playback on
+    // ONE pipeline (the renderer pattern) re-arms via the window evidence every frame.
     @Test
     fun pipelineKeepsPublishingFramesCorrectlyAcrossSequentialFrames() {
         val pipeline = SkeletonPipeline(definition)
@@ -223,18 +196,14 @@ class PublishOrderingTest {
         }
     }
 
-    // ---------------------------------------------------------------------------------
-    // 7 — Structural single-tail audit: exactly ONE publish tail owns the final
-    //     flatten-completion check, the stamp write, and the marker; finalize() has no
-    //     second hidden stamp/publish return path; the stamp entry stays private; the
-    //     marker assignment is debug-gated.
-    // ---------------------------------------------------------------------------------
+    // Structural single-tail audit: exactly ONE publish tail owns the final flatten-completion
+    // check, the stamp write, and the marker; finalize() has no second hidden publish path; the
+    // stamp entry stays private; the marker assignment is debug-gated.
     @Test
     fun publishBoundaryIsASingleExplicitTail() {
         val src = productionSource("SkeletonPoseFinalizer.kt")
 
-        // Exactly one publication-marker assignment (code lines; the assignment idiom is a
-        // line starting with `published = true`).
+        // Exactly one publication-marker assignment (`published = true`).
         val markerSites = src.withIndex()
             .filter { (_, l) -> l.trimStart().startsWith("published = true") }
             .map { it.index }
@@ -282,9 +251,7 @@ class PublishOrderingTest {
             visibility.trimStart().startsWith("private fun"))
     }
 
-    // ---------------------------------------------------------------------------------
-    // Helpers (P6/P7 idiom: walk-up per the Gradle user.dir pitfall; region + debug scans)
-    // ---------------------------------------------------------------------------------
+    // Helpers: walk-up per the Gradle user.dir pitfall; region + debug scans.
 
     /** Production animation sources keyed by file name (walk-up per the Gradle user.dir pitfall). */
     private fun productionAnimationSources(): Map<String, List<String>> {
@@ -311,8 +278,7 @@ class PublishOrderingTest {
 
     /**
      * Lines of a member-function region starting AFTER the declaration line at [headerIndex],
-     * ending at the next sibling member declaration (same idiom as the P7 funRegion, minus
-     * the header line).
+     * ending at the next sibling member declaration.
      */
     private fun memberRegion(lines: List<String>, headerIndex: Int): List<String> {
         val rest = lines.drop(headerIndex + 1)
@@ -326,8 +292,8 @@ class PublishOrderingTest {
     }
 
     /**
-     * Upward brace walk: does [idx] sit inside an `if (BuildConfig.DEBUG) { … }` block
-     * (directly or nested through other control-flow blocks)? (P7 idiom.)
+     * Upward brace walk: does [idx] sit inside an `if (BuildConfig.DEBUG) { … }` block,
+     * directly or nested through other control-flow blocks?
      */
     private fun enclosedByDebugGuard(lines: List<String>, idx: Int): Boolean {
         var depth = 0

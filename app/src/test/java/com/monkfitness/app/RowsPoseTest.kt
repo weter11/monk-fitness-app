@@ -13,15 +13,14 @@ import kotlin.math.sqrt
 /**
  * Inverted Bodyweight Row (`row_standard`) — the exercise's own biomechanics on the PUBLISHED frame.
  *
- * Stated intent (the only in-repo specification for this exercise; no BPS exists for it):
- * `ex_rows` title "Inverted Bodyweight Row" + `requiredEquipment = setOf(Equipment.BAR)` +
- * `imageRes = R.drawable.pull_up` (the catalog entry), `ex_rows_desc` "A pull exercise that builds
- * thickness in the upper and middle back", `ex_rows_steps` §2 "Pull the weight toward your lower ribs,
- * **squeezing shoulder blades together**". The `steps`/`tech` body describes a *bent-over weighted
- * row*; that contradiction is recorded in `rows`' KDoc and in `docs/ANIMATION_COVERAGE_PHASE.md` §2 as
- * stale copy, and the pose authors the bar-supported movement the id/title/equipment declare.
+ * The only in-repo specification: `ex_rows` title "Inverted Bodyweight Row" +
+ * `requiredEquipment = setOf(Equipment.BAR)` + `imageRes = R.drawable.pull_up`, `ex_rows_desc` "A
+ * pull exercise that builds thickness in the upper and middle back", `ex_rows_steps` §2 "Pull the
+ * weight toward your lower ribs, squeezing shoulder blades together". The `steps`/`tech` body
+ * describes a *bent-over weighted row* — stale copy; the pose authors the bar-supported movement the
+ * id/title/equipment declare.
  *
- * Every assertion below reads the **published frame** through [PoseFrameSweep] (the pipeline entered
+ * Every assertion reads the **published frame** through [PoseFrameSweep] (the pipeline entered
  * exactly as `SkeletonRenderer` enters it): a posed limb that is IK-baked late carries the previous
  * frame's world until the Finalizer re-runs FK, so a bare `build()` reading measures geometry the
  * athlete never sees.

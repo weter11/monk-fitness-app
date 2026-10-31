@@ -11,7 +11,7 @@ class MotionDriversTest {
 
     @Test
     fun testStatelessPureDrivers() {
-        // Test PositiveHalfSine and NegativeHalfSine
+
         assertEquals(0f, MotionDrivers.PositiveHalfSine(0f), epsilon)
         assertEquals(1f, MotionDrivers.PositiveHalfSine(0.25f), epsilon)
         assertEquals(0f, MotionDrivers.PositiveHalfSine(0.5f), epsilon)
@@ -26,11 +26,11 @@ class MotionDriversTest {
         assertEquals(MotionDrivers.PositiveHalfSine(0.25f), MotionDrivers.LeftPhase(0.25f), epsilon)
         assertEquals(MotionDrivers.NegativeHalfSine(0.75f), MotionDrivers.RightPhase(0.75f), epsilon)
 
-        // AlternatingLeftRight and AlternatingRightLeft
+
         assertEquals(MotionDrivers.PositiveHalfSine(0.25f), MotionDrivers.AlternatingLeftRight(0.25f), epsilon)
         assertEquals(MotionDrivers.NegativeHalfSine(0.75f), MotionDrivers.AlternatingRightLeft(0.75f), epsilon)
 
-        // FullSine and Cosine
+
         assertEquals(0f, MotionDrivers.FullSine(0f), epsilon)
         assertEquals(1f, MotionDrivers.FullSine(0.25f), epsilon)
         assertEquals(0f, MotionDrivers.FullSine(0.5f), epsilon)
@@ -41,18 +41,18 @@ class MotionDriversTest {
         assertEquals(-1f, MotionDrivers.Cosine(0.5f), epsilon)
         assertEquals(0f, MotionDrivers.Cosine(0.75f), epsilon)
 
-        // WeightShift
+
         assertEquals(0.5f, MotionDrivers.WeightShift(0f), epsilon)
         assertEquals(1.0f, MotionDrivers.WeightShift(0.25f), epsilon)
         assertEquals(0.5f, MotionDrivers.WeightShift(0.5f), epsilon)
         assertEquals(0.0f, MotionDrivers.WeightShift(0.75f), epsilon)
 
-        // ForwardBack
+
         assertEquals(1f, MotionDrivers.ForwardBack(0f), epsilon)
         assertEquals(0f, MotionDrivers.ForwardBack(0.25f), epsilon)
         assertEquals(-1f, MotionDrivers.ForwardBack(0.5f), epsilon)
 
-        // VerticalLift / PushPhase / PullPhase
+
         assertEquals(0f, MotionDrivers.VerticalLift(0f), epsilon)
         assertEquals(1f, MotionDrivers.VerticalLift(0.5f), epsilon)
         assertEquals(0f, MotionDrivers.VerticalLift(1f), epsilon)
@@ -63,7 +63,7 @@ class MotionDriversTest {
         assertEquals(1f, MotionDrivers.PullPhase(0f), epsilon)
         assertEquals(0f, MotionDrivers.PullPhase(0.5f), epsilon)
 
-        // Pulse and DoublePulse
+
         assertEquals(0f, MotionDrivers.Pulse(0f), epsilon)
         assertEquals(1f, MotionDrivers.Pulse(0.5f), epsilon)
 
@@ -73,12 +73,12 @@ class MotionDriversTest {
         assertTrue(MotionDrivers.DoublePulse(0.25f) > 0.9f)
         assertTrue(MotionDrivers.DoublePulse(0.75f) > 0.9f)
 
-        // ParabolicLift
+
         assertEquals(0f, MotionDrivers.ParabolicLift(0f), epsilon)
         assertEquals(1.0f, MotionDrivers.ParabolicLift(0.5f), epsilon)
         assertEquals(0f, MotionDrivers.ParabolicLift(1f), epsilon)
 
-        // EaseInOut
+
         assertEquals(0f, MotionDrivers.EaseInOut(0f), epsilon)
         assertEquals(0.5f, MotionDrivers.EaseInOut(0.5f), epsilon)
         assertEquals(1f, MotionDrivers.EaseInOut(1f), epsilon)
@@ -88,27 +88,27 @@ class MotionDriversTest {
 
     @Test
     fun testAlternatingMotionDrivers() {
-        // Test bounds and midpoint
+
         val start = MotionDrivers.alternating(0f)
         val mid = MotionDrivers.alternating(0.5f)
         val end = MotionDrivers.alternating(1f)
 
-        // Ensure phase matches input and is clamped
+
         assertEquals(0f, start.phase, epsilon)
         assertEquals(0.5f, mid.phase, epsilon)
         assertEquals(1f, end.phase, epsilon)
 
-        // Left should peak in first half and be zero in second half
+
         val firstHalfPeak = MotionDrivers.alternating(0.25f)
         assertEquals(1f, firstHalfPeak.left, epsilon)
         assertEquals(0f, firstHalfPeak.right, epsilon)
 
-        // Right should peak in second half and be zero in first half
+
         val secondHalfPeak = MotionDrivers.alternating(0.75f)
         assertEquals(0f, secondHalfPeak.left, epsilon)
         assertEquals(1f, secondHalfPeak.right, epsilon)
 
-        // Both should be 0 at start, mid, and end
+
         assertEquals(0f, start.left, epsilon)
         assertEquals(0f, start.right, epsilon)
         assertEquals(0f, mid.left, epsilon)
@@ -116,17 +116,17 @@ class MotionDriversTest {
         assertEquals(0f, end.left, epsilon)
         assertEquals(0f, end.right, epsilon)
 
-        // Test weightShift transitions smoothly: left (0) to right (1)
-        // start (p=0): weightShift = 0.5 (center)
-        // first half (p=0.25): weightShift = 1.0 (right/left peak)
-        // mid (p=0.5): weightShift = 0.5 (center)
-        // second half (p=0.75): weightShift = 0.0 (opposite peak)
+
+
+
+
+
         assertEquals(0.5f, start.weightShift, epsilon)
         assertEquals(1f, firstHalfPeak.weightShift, epsilon)
         assertEquals(0.5f, mid.weightShift, epsilon)
         assertEquals(0f, secondHalfPeak.weightShift, epsilon)
 
-        // Double frequency lifts and pelvis drops pulse twice
+        // lift and pelvisDrop run at double frequency, so they are zero at 0 / 0.5 / 1
         assertEquals(0f, start.lift, epsilon)
         assertEquals(0f, mid.lift, epsilon)
         assertEquals(0f, end.lift, epsilon)
@@ -140,12 +140,12 @@ class MotionDriversTest {
         val mid = MotionDrivers.bilateral(0.5f)
         val end = MotionDrivers.bilateral(1f)
 
-        // Test phase
+
         assertEquals(0f, start.phase, epsilon)
         assertEquals(0.5f, mid.phase, epsilon)
         assertEquals(1f, end.phase, epsilon)
 
-        // Symmetrical: left and right are equal to phase
+
         assertEquals(0f, start.left, epsilon)
         assertEquals(0f, start.right, epsilon)
         assertEquals(1f, mid.left, epsilon)
@@ -153,12 +153,12 @@ class MotionDriversTest {
         assertEquals(0f, end.left, epsilon)
         assertEquals(0f, end.right, epsilon)
 
-        // Weight shift should remain perfectly centered (0.5)
+
         assertEquals(0.5f, start.weightShift, epsilon)
         assertEquals(0.5f, mid.weightShift, epsilon)
         assertEquals(0.5f, end.weightShift, epsilon)
 
-        // Lift is high at extensions (0, 1) and low at midpoint
+
         assertEquals(1f, start.lift, epsilon)
         assertEquals(0f, mid.lift, epsilon)
         assertEquals(1f, end.lift, epsilon)
@@ -180,7 +180,7 @@ class MotionDriversTest {
         assertEquals(0f, landing.lift, epsilon)
         assertEquals(0f, end.lift, epsilon)
 
-        // Left and right tuck mirror lift
+
         assertEquals(0f, start.left, epsilon)
         assertEquals(1f, apex.left, epsilon)
         assertEquals(0f, end.left, epsilon)
@@ -192,7 +192,7 @@ class MotionDriversTest {
         assertEquals(1f, maxPrepCrouch.pelvisDrop, epsilon)
         assertEquals(1f, maxLandingCrouch.pelvisDrop, epsilon)
 
-        // Pelvis drop should be 0 during takeoff, apex, and landing points
+
         assertEquals(0f, takeoff.pelvisDrop, epsilon)
         assertEquals(0f, apex.pelvisDrop, epsilon)
         assertEquals(0f, landing.pelvisDrop, epsilon)
@@ -206,12 +206,12 @@ class MotionDriversTest {
         val mid = MotionDrivers.continuous(0.5f)
         val end = MotionDrivers.continuous(1f)
 
-        // Linear phase progress
+
         assertEquals(0f, start.phase, epsilon)
         assertEquals(0.5f, mid.phase, epsilon)
         assertEquals(1f, end.phase, epsilon)
 
-        // Left and right anti-phase oscillations
+        // left and right oscillate in anti-phase
         assertEquals(0.5f, start.left, epsilon)
         assertEquals(0.5f, start.right, epsilon)
 
@@ -226,7 +226,7 @@ class MotionDriversTest {
 
     @Test
     fun testClampingBehavior() {
-        // Progress out of [0, 1] range should clamp cleanly
+
         val negative = MotionDrivers.alternating(-0.5f)
         val positive = MotionDrivers.alternating(1.5f)
 
@@ -242,8 +242,7 @@ class MotionDriversTest {
 
     @Test
     fun testContinuityAndNoVelocitySpikes() {
-        // Assert that small progress changes result in small outputs (continuity test)
-        // and check derivative approximations to ensure no sudden velocity spikes.
+        // Small progress changes must yield small outputs: a velocity spike would be a popped animation.
         val steps = 1000
         val dt = 1f / steps
 
@@ -251,26 +250,26 @@ class MotionDriversTest {
             val p1 = i * dt
             val p2 = (i + 1) * dt
 
-            // Alternating
+
             val a1 = MotionDrivers.alternating(p1)
             val a2 = MotionDrivers.alternating(p2)
             assertTrue(abs(a2.left - a1.left) < 0.05f)
             assertTrue(abs(a2.right - a1.right) < 0.05f)
             assertTrue(abs(a2.pelvisDrop - a1.pelvisDrop) < 0.05f)
 
-            // Bilateral
+
             val b1 = MotionDrivers.bilateral(p1)
             val b2 = MotionDrivers.bilateral(p2)
             assertTrue(abs(b2.phase - b1.phase) < 0.05f)
             assertTrue(abs(b2.pelvisDrop - b1.pelvisDrop) < 0.05f)
 
-            // Jump
+
             val j1 = MotionDrivers.jump(p1)
             val j2 = MotionDrivers.jump(p2)
             assertTrue(abs(j2.lift - j1.lift) < 0.05f)
             assertTrue(abs(j2.pelvisDrop - j1.pelvisDrop) < 0.05f)
 
-            // Continuous
+
             val c1 = MotionDrivers.continuous(p1)
             val c2 = MotionDrivers.continuous(p2)
             assertTrue(abs(c2.left - c1.left) < 0.05f)

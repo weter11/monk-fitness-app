@@ -4,15 +4,11 @@ import com.monkfitness.app.language.AppLanguage
 import java.io.File
 
 /**
- * The localization suite's one reader for the app's resource tables.
+ * The localization suite's one reader for the app's resource tables: the default table, the per-locale
+ * tables and the sources that use them, read once here so tests state rules instead of parsing.
  *
- * Every localization rule in this package compares the same three things — the keys the default
- * (`values/`) table declares, the per-locale tables, and the source files that use them — so the reading
- * lives here once and the tests state rules instead of re-implementing parsing.
- *
- * It reads the files on disk rather than resolving resources through a `Context`, because this repository
- * has no Robolectric and no instrumentation source set: a source scan is the only way these invariants can
- * run in the JVM suite.
+ * It reads the files on disk rather than resolving through a `Context`, because there is no Robolectric
+ * and no instrumentation source set: a source scan is the only way these invariants run in the JVM suite.
  */
 internal object ResourceTables {
 
@@ -27,7 +23,6 @@ internal object ResourceTables {
         if (dir.isDirectory) dir else File("app/src/main/java/com/monkfitness/app")
     }
 
-    /** The directory holding [tag]'s resources: `values/` for the default locale, `values-<tag>` otherwise. */
     fun localeDir(tag: String): File =
         if (tag == DEFAULT_LOCALE) File(resRoot, "values") else File(resRoot, "values-$tag")
 
@@ -43,7 +38,6 @@ internal object ResourceTables {
             .map { it.name.removePrefix("values-") }
             .sorted()
 
-    /** Every XML file a locale directory declares, sorted by name. */
     fun filesIn(tag: String): List<File> =
         localeDir(tag).listFiles { file -> file.isFile && file.extension == "xml" }
             ?.sortedBy { it.name }
@@ -54,8 +48,8 @@ internal object ResourceTables {
     /**
      * The `<string>` entries of every file in a locale directory, in file order.
      *
-     * The raw (still XML-escaped) text is returned: comparing translations must not care how an apostrophe
-     * is escaped, but it must care that `%1$d` survived.
+     * Raw (still XML-escaped) text: comparing translations must not care how an apostrophe is escaped, but
+     * must care that `%1$d` survived.
      */
     fun stringsOf(tag: String): LinkedHashMap<String, String> {
         val table = LinkedHashMap<String, String>()
@@ -86,10 +80,9 @@ internal object ResourceTables {
     /**
      * Every `<plurals>`/`<string-array>` a file declares, as name -> element type.
      *
-     * It reads a *file*, not a locale, so the rule that covers these types can be exercised on a document
-     * the test writes itself — a check that can only ever run against content the app does not have is not
-     * a check. §14 of the brief asks for these types to be covered without inventing any: this suite ships
-     * none, so the reader is proven against a synthetic file and the app's own tables are asserted empty.
+     * It reads a *file*, not a locale, so the rule can be exercised on a document the test writes itself:
+     * a check that can only run against content the app does not have is not a check. The app ships no
+     * plurals or string-arrays, so the reader is proven on a synthetic file and the real tables asserted empty.
      */
     fun collectionsIn(file: File): Map<String, String> =
         Regex("""<(plurals|string-array)\s+name="([^"]+)"""")
@@ -97,15 +90,12 @@ internal object ResourceTables {
             .map { match -> match.groupValues[2] to match.groupValues[1] }
             .toMap()
 
-    /** Every `<plurals>`/`<string-array>` name a locale directory declares. */
     fun collectionsOf(tag: String): Map<String, String> =
         filesIn(tag).flatMap { file -> collectionsIn(file).entries }.associate { it.key to it.value }
 
-    /** The text of `res/xml/locale_config.xml`, or `null` when the app declares no locale config. */
     fun localeConfig(): String? =
         File(resRoot, "xml/locale_config.xml").takeIf { it.isFile }?.readText()
 
-    /** The app manifest, or `null` when it cannot be found. */
     fun manifest(): String? = File("src/main/AndroidManifest.xml").let { direct ->
         when {
             direct.isFile -> direct
@@ -113,11 +103,9 @@ internal object ResourceTables {
         }
     }?.readText()
 
-    /** The Kotlin sources under `main/`, as paths relative to the package root. */
     fun mainSources(): List<File> =
         mainSourceRoot.walkTopDown().filter { it.isFile && it.extension == "kt" }.sorted().toList()
 
-    /** A source file by its path relative to the package root, e.g. `ui/screens/SettingsScreen.kt`. */
     fun mainSource(path: String): File = File(mainSourceRoot, path)
 
     /** Strips comments and KDoc: a sentence about the code is not text the user reads. */
@@ -125,7 +113,6 @@ internal object ResourceTables {
         .replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), "")
         .replace(Regex("""//[^\n]*"""), "")
 
-    /** The `R.string.<key>` keys a set of sources references. */
     fun referencesIn(sources: List<File>): Set<String> {
         val pattern = Regex("""R\.string\.([A-Za-z0-9_]+)""")
         return sources
@@ -133,7 +120,6 @@ internal object ResourceTables {
             .toSet()
     }
 
-    /** The `R.string` *value* an id has, resolved through the generated `R` class. */
     fun resourceNameOf(id: Int): String? =
         Class.forName("com.monkfitness.app.R\$string").declaredFields
             .firstOrNull { field ->
@@ -141,10 +127,8 @@ internal object ResourceTables {
             }
             ?.name
 
-    /** All locales this suite checks: the default table plus every language the policy supports. */
     fun allLocales(): List<String> = listOf(DEFAULT_LOCALE) + AppLanguage.supportedTags.filter { it != DEFAULT_LOCALE }
 
-    /** Placeholders an Android string carries, as a sorted multiset (`%1$d`, `%s`, `%2$s`, …). */
     fun placeholders(value: String): List<String> =
         Regex("""%(?:\d+\$)?[a-zA-Z]""").findAll(value).map { it.value }.sorted().toList()
 

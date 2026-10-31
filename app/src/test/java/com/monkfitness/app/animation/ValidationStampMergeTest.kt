@@ -11,32 +11,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Phase 2 (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md — R4/R6 Validation Stamp merge
- * centralization; RFC_RUNTIME_SKELETON_ARCHITECTURE §4.4 merge rules, §5 R4/R6).
+ * [ValidationStampMerge] merge rules, and the V2 settlement defect.
  *
- * Coverage:
- *  - merge-rule truth tables for the three [ValidationStampMerge] operators;
- *  - the registered V2 defect, exercised through the REAL posture-driven settlement path
- *    (decision F7): [SquatPose] declares no Contact Declarations, so settlement is entered
- *    via the posture-driven branch by declaring `PostureIntent.Kind.STANDING` through the
- *    sole-mutator surface — the same pattern as the Phase-0 harness
- *    (`RuntimeArchitectureBaselineTest.postureDrivenFrame`). No solver state is manufactured.
+ * The defect is exercised through the REAL posture-driven settlement path: [SquatPose] declares no Contact
+ * Declarations, so settlement is entered via the posture-driven branch by declaring
+ * `PostureIntent.Kind.STANDING` through the sole-mutator surface. No solver state is manufactured.
  *
- * Counterfactual evidence (2026-08-25, independent review D1 correction): executed against
- * a detached worktree at `origin/main` (pre-Phase-2 sources carrying the unconditional
- * erase), [successfulSettlementKeepsFailedPrimaryVerificationFalseEndState] FAILS —
- * settlement erases the seeded `false` and publishes `true`. On the Phase-2 tree the same
- * test passes: the merge-once logic preserves the failed primary verification.
+ * Counterfactual: against sources that erase unconditionally,
+ * [successfulSettlementKeepsFailedPrimaryVerificationFalseEndState] FAILS — settlement erases the seeded
+ * `false` and publishes `true`; with merge-once logic the failed primary verification survives.
  *
- * Anti-vacuity guards: both settlement tests assert `rootTranslationDelta > 0f` after the
- * solve — the UNI-6 computation runs only when the solver body executes past its early
- * returns, so a future fixture drift that silently skips settlement fails the test instead
- * of passing it vacuously (the original PUSHUP-based version had exactly that flaw: its
- * fixture never reached `ConstraintSolver.solve` at all).
+ * Anti-vacuity: both settlement tests assert `rootTranslationDelta > 0f` after the solve, because the
+ * computation runs only when the solver body executes past its early returns — so fixture drift that skips
+ * settlement fails instead of passing vacuously (the original PUSHUP-based fixture never reached
+ * `ConstraintSolver.solve` at all).
  *
- * Sole-producer overwrite behavior of the Root Translation / Rotation Deltas (plan test
- * item d) is enforced byte-exactly by the Phase-0 golden fixtures
- * (`arch.RuntimeArchitectureBaselineTest`) and is intentionally not duplicated here.
+ * Sole-producer overwrite of the Root Translation / Rotation Deltas is enforced byte-exactly by the golden
+ * fixtures in `arch.RuntimeArchitectureBaselineTest` and is intentionally not duplicated here.
  */
 class ValidationStampMergeTest {
 
@@ -57,10 +48,6 @@ class ValidationStampMergeTest {
         SkeletonPose.IntentBuilder(pose).posture(PostureIntent.Kind.STANDING)
         return pose
     }
-
-    // ------------------------------------------------------------------
-    // Merge-rule truth tables (RFC §4.4 merge-rule column)
-    // ------------------------------------------------------------------
 
     @Test
     fun clampMergeIsMaxMonotonic() {
@@ -86,10 +73,6 @@ class ValidationStampMergeTest {
         assertTrue(ValidationStampMerge.dropped(true, true))
     }
 
-    // ------------------------------------------------------------------
-    // V2 defect regression (decision F7 — real posture-driven settlement path)
-    // ------------------------------------------------------------------
-
     /**
      * End state proven: a successful posture-driven settlement cannot restore a failed
      * primary verification (registered defect V2). The seeded `false` simulates an
@@ -103,8 +86,8 @@ class ValidationStampMergeTest {
 
         ConstraintSolver.solve(pose, definition)
 
-        // Settlement demonstrably executed (UNI-6 computed a non-zero displacement for this
-        // fixture); without this guard a skipped solve would make the test vacuously green.
+        // Settlement demonstrably executed (a non-zero displacement for this fixture); without this
+        // guard a skipped solve would make the test vacuously green.
         assertTrue(
             "fixture guard: solver did not execute (rootTranslationDelta=${pose.rootTranslationDelta})",
             pose.rootTranslationDelta > 0f

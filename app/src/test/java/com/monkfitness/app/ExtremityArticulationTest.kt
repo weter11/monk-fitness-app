@@ -10,31 +10,25 @@ import org.junit.Test
 import kotlin.math.abs
 
 /**
- * Branch C (RFC_BRANCH_C_EXTREMITY_ARTICULATION) — §1.3 Interaction / Articulation Intent.
+ * The extremity articulation intent: carrier → derived geometry must be the same geometry the
+ * legacy node read produces.
  *
- * This pins the RFC §11 acceptance tests:
- *  - (a) carrier -> derived geometry is byte-identical to the legacy node-read path: every
- *    migrated pose records `extremityArticulations`; clearing the carrier (leaving the node
- *    rotation, which the Finalizer falls back to) renders identically.
- *  - (b) the MANUAL_OVERRIDE opt-out is real: an extremity opted out preserves its authored
- *    endpoint geometry instead of being engine-derived.
- *  - (c) the 2-DOF wrist composer combines flexion + deviation exactly (the composed rotation is
- *    not a single dropped axis).
+ * Pinned here: (a) every migrated pose records `extremityArticulations`, and clearing the carrier
+ * (leaving the node rotation, which the Finalizer falls back to) renders identically; (b) the
+ * MANUAL_OVERRIDE opt-out is real — an extremity opted out preserves its authored endpoint geometry
+ * instead of being engine-derived; (c) the 2-DOF wrist composer combines flexion + deviation exactly
+ * (the composed rotation is not a single dropped axis).
  *
- * ## B-5 — why this suite compares two runs of the SAME production entry point
+ * Why this suite compares two runs of the SAME production entry point: the carrier/legacy-node
+ * equivalence is only a freeze guard if the two legs differ in EXACTLY ONE thing — the carrier. The
+ * previous form built the reference leg on a different overload and reconstructed the support
+ * declaration in test code, because that overload's Frame Context was caller-supplied and defaulted
+ * to empty. That made the reference leg a hand-assembled second path with a test-local copy of the
+ * pipeline's derivation, and an omitted default silently rendered pre-fix geometry (no support plane
+ * ⇒ no extremity orientation) — the "freeze guard whose reference leg never receives the new input"
+ * trap.
  *
- * The carrier/legacy-node equivalence is only a freeze guard if the two legs differ in EXACTLY ONE
- * thing: the carrier. The previous form built the reference leg on a different entry point
- * (`produceFrame(built, environment, supportedPoints)`) and reconstructed the support declaration
- * in test code, because that overload's Frame Context (§5 R8) was caller-supplied and defaulted to
- * empty (B-5). Three consequences made it a false freeze guard:
- *  1. the reference leg was a hand-assembled second path, not the production path;
- *  2. its runtime context was a test-local COPY of the pipeline's derivation — a parallel source of
- *     truth that a production change could silently desync;
- *  3. an omitted default silently rendered pre-B-3 geometry (no support plane ⇒ no extremity
- *     orientation) — the exact "freeze guard whose reference leg never receives the new input" trap.
- *
- * Both legs now run the production PoseBuilder entry point ([SkeletonPipeline.produceFrame]), on
+ * Both legs now run the production PoseBuilder entry point ([SkeletonPipeline.produceFrame]) on
  * independently constructed instances of the same pose, so the pipeline resolves the Frame Context
  * from the SAME declaration for both legs — that equality is ASSERTED below, not assumed. The only
  * difference is the carrier: the reference leg's builder clears it inside `build`, exactly where a
@@ -79,7 +73,7 @@ class ExtremityArticulationTest {
     private fun maxDeviation(a: SkeletonPose, b: SkeletonPose): Float = worstJoint(a, b).first
 
     /**
-     * The Frame Context (§5 R8) of a published frame, in a value-comparable form.
+     * The Frame Context of a published frame, in a value-comparable form.
      * `EnvironmentDefinition` embeds `Vector3` instances that carry no value equality, so a plain
      * data-class compare would call two structurally identical environments different; the rendered
      * form is the value projection of every field the Finalizer reads.
@@ -99,25 +93,8 @@ class ExtremityArticulationTest {
 
     @Test
     fun migratedCorpusIsExactlyTheCarrierPopulatedProductionPoses() {
-        // Animation-coverage phase, batch 2 (`feat/animation-coverage-02`, off the #258 merge `6887738`):
-        // `DipsPose` authors its hanging feet through `buildAnkleArticulation` (the Branch-C carrier), so
-        // the registry-derived set gained exactly `dip_parallel_bar` (`11 → 12`); the batch's other three
-        // poses author no articulation and stay outside the corpus. The membership below is therefore
-        // re-measured against the derivation, not hand-extended.
-        //
-        // Animation-coverage phase, batch 3 (`feat/animation-coverage-03`, off the #259 merge `139daf9`):
-        // `PiriformisStretchPose` authors its crossed foot through `buildAnkleArticulation` (the copy's own
-        // "Flex the crossed foot to protect the knee"), so the registry-derived set gained exactly
-        // `piriformis_stretch_hold` (`12 -> 13`). The batch's other three poses author no articulation — the
-        // standing pelvic circle, the standing leg swing and the seated 90/90 have no foot articulation in
-        // their copy — and stay outside the corpus. Membership re-measured, not hand-extended.
-        //
-        // Animation-coverage phase, batch 5 (`feat/animation-coverage-05`, off the #261 merge `b0e4edd`,
-        // the phase's tail): `JumpingJacksPose` authors its feet through `buildAnkleArticulation` — the
-        // toes are pointed through each flight and flat on each landing — so the registry-derived set
-        // gained exactly `jumping_jack_standard` (`13 -> 14`). `ShoulderCarsPose` and `ChildPose` author
-        // no articulation (the CAR's hand is engine-derived and the kneel's foot heading is the intent
-        // channel's), so they stay outside the corpus. Membership re-measured, not hand-extended.
+        // The carrier-populated corpus, derived from the production registry — never hand-extended:
+        // a newly migrated pose joins it and must then satisfy the equivalence guard below.
         assertEquals(
             "the Branch-C equivalence guard must cover EVERY migrated production pose " +
                 "(carrier-authoring pose), derived from the production registry",
@@ -150,9 +127,6 @@ class ExtremityArticulationTest {
     @Test
     fun carrierReproducesTheLegacyNodePathForEveryMigratedPose() {
         val corpus = migratedCorpus()
-        // `11 → 12` in the animation-coverage phase's batch 2 (`DipsPose`), `12 → 13` in batch 3
-        // (`PiriformisStretchPose`) and `13 → 14` in batch 5 (`JumpingJacksPose`) — see
-        // [migratedCorpusIsExactlyTheCarrierPopulatedProductionPoses].
         assertEquals("corpus must not shrink silently", 14, corpus.size)
         for ((name, factory) in corpus) {
             for (p in progresses) {
@@ -165,8 +139,8 @@ class ExtremityArticulationTest {
                 val withoutCarrier = SkeletonPipeline(def).produceFrame(nodeLeg, ctx).pose
 
                 // The ONLY intended difference between the legs is the carrier: both ran the same
-                // production entry point over the same declaration, so §5 R8 resolved the same
-                // Frame Context for both. Asserted, not assumed.
+                // production entry point over the same declaration, so the Frame Context resolved the
+                // same for both. Asserted, not assumed.
                 assertEquals(
                     "$name @$p Frame Context (environment + support model)",
                     frameContextOf(withCarrier), frameContextOf(withoutCarrier)
@@ -199,11 +173,11 @@ class ExtremityArticulationTest {
     }
 
     /**
-     * (B) Sensitivity/NON-VACUITY control for the equivalence above: the SAME comparison, run
-     * against a reference leg that receives a DIFFERENT runtime context (the pre-B-5 renderer shape:
-     * the declaration is not supplied, so the pose finalizes against an empty support model),
-     * reports a real difference for every pose whose extremity derivation consumes its declaration.
-     * That proves the assertion above is capable of failing — it is not blind to a changed input.
+     * (B) Sensitivity control for the equivalence above: the SAME comparison, run against a reference
+     * leg that receives a DIFFERENT runtime context (the declaration is not supplied, so the pose
+     * finalizes against an empty support model), reports a real difference for every pose whose
+     * extremity derivation consumes its declaration. That proves the assertion above is capable of
+     * failing — it is not blind to a changed input.
      */
     @Test
     fun carrierComparisonDetectsADroppedSupportDeclaration() {
@@ -216,9 +190,9 @@ class ExtremityArticulationTest {
                 val declaration = factory().metadata.support
                 if (declaration.supportPoints.isEmpty()) continue
 
-                // Reference leg WITHOUT the declaration (the defect's shape): carrier cleared AND
-                // no support model supplied. A freshly authored pose carries none, so the pipeline
-                // injects the empty model — exactly what B-5 produced on the renderer path.
+                // Reference leg WITHOUT the declaration (the defect's shape): carrier cleared AND no
+                // support model supplied. A freshly authored pose carries none, so the pipeline
+                // injects the empty model.
                 val builder = CarrierCleared(factory())
                 val built = builder.build(ctx)
                 val withoutDeclaration = SkeletonPipeline(def)
@@ -241,13 +215,12 @@ class ExtremityArticulationTest {
         // DeadHang authors an overhand grip via the carrier; opting HAND_A into MANUAL_OVERRIDE
         // must leave the authored palm/fingertips geometry untouched (the derivation is skipped).
         //
-        // P12 WP-I: the "authored endpoint" reference is the FK value on the produced frame's node
-        // tree — `PALM_A` is a carrier-only extremity-derived joint, so the derivation writes the
-        // FLAT CARRIER and never the node. Reading it from the half-built carrier instead (as the
-        // pre-activation form did) is no longer the frame: under state 3 `build()` registers limb
-        // intent and the engine-owned stage realizes the limb (§12.7a). The claim — the opt-out
-        // preserves the authored endpoint verbatim — is unchanged and is now asserted on the
-        // published frame of the production path.
+        // The "authored endpoint" reference is the FK value on the produced frame's node tree —
+        // `PALM_A` is a carrier-only extremity-derived joint, so the derivation writes the FLAT
+        // CARRIER and never the node. Reading it from the half-built carrier instead (as an earlier
+        // form did) is not the frame: `build()` registers limb intent and the engine-owned stage
+        // realizes the limb. The claim — the opt-out preserves the authored endpoint verbatim — is
+        // asserted on the published frame of the production path.
         val ctx = PoseContext(0.5f, Side.LEFT, def)
         val built = DeadHangPose().build(ctx)
         built.overrideExtremityOrientation(Extremity.HAND_A)

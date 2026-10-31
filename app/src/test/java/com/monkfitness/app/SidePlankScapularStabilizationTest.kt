@@ -10,39 +10,20 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * **The side plank's support scapula: the exercise's stated active girdle stabilization.**
+ * The side plank's support scapula must carry the exercise's stated active girdle stabilization:
+ * the down-side blade protracted and depressed, the shoulder pushed away from the ear, never
+ * shrugged into the joint.
  *
- * `IsometricSidePlankPose`'s own copy and BPS `Plank (Side)` both make the down-side girdle part of
- * the exercise — the pose's KDoc lists *"the down-side shoulder girdle (must stay depressed +
- * protracted, not shrug to the ear)"* under MOVING joints and states *"SCAPULA (down side): actively
- * stabilized — the shoulder is pushed away from the ear (never collapsed into the joint)"*; the BPS
- * §"Scapular strategy"/§5/§8/§11 state *"On the supporting side, the scapula is protracted and
- * depressed, flat against the rib cage; the shoulder is set and stable"*, *"Supporting elbow under
- * shoulder; scapula flat/depressed, no winging/shrug"*. Measured on the pre-correction tree through
- * `SkeletonPipeline.produceFrame`, **both canonical `SCAPULA_A`/`SCAPULA_P` joints published
- * `0.0000` rad at every sampled phase** with zero glenoid travel off the chest: the pose's stated
- * active stabilization was carried by the propped plant's static geometry alone.
+ * Measured pre-fix through `SkeletonPipeline.produceFrame`: both canonical `SCAPULA_A`/`SCAPULA_P`
+ * joints published `0.0000` rad at every sampled phase, with zero glenoid travel off the chest —
+ * the stated stabilization was carried by the propped plant's static geometry alone.
  *
- * The authored correction is `driveScapula(a = 0, p = -A·breath)` with
- * `A = 0.60` activation units (the pose's own authored amplitude — `BasePlankPose.GIRDLE_PROTRACTION`)
- * and `breath = sin(π·progress)`: the SUPPORT blade only (the
- * copy's subject is the down-side girdle), on the hold's own zero-at-the-endpoints stabilization
- * driver, in this layout's protraction direction (measured: toward its own planted elbow).
+ * The correction is `driveScapula(a = 0, p = -A·breath)` with `A = 0.60` activation units
+ * (`BasePlankPose.GIRDLE_PROTRACTION`) and `breath = sin(π·progress)`: the SUPPORT blade only, on
+ * the hold's own zero-at-the-endpoints driver, in this layout's protraction direction (measured:
+ * toward its own planted elbow).
  *
- * What this file pins, all on the **published frame** captured BY VALUE:
- *
- *  1. [theSupportScapulaCarriesTheStatedStabilization] — the support blade's own articulation equals
- *     the authored activation at every phase and is at rest at both authored endpoints (RED pre-fix:
- *     `0.0000`), while the TOP blade is deliberately untouched (the scope pin);
- *  2. [theSupportGlenoidIsPushedTowardItsElbowAndNotUpToTheEar] — the anatomy: the glenoid travels
- *     along the chest's own support-side axis, toward the planted elbow (the copy's "pushed away from
- *     the ear"), and the rib cage keeps its authored line;
- *  3. [theThoraxDoesNotAbsorbTheGirdle] — the audit's rule on a pose that authors its thorax frame
- *     outright (the B-8 roll): the published chest articulation is the pose's own;
- *  4. [thePlantedSupportForearmAndThePlantedFootAreUntouched] — the plant contract the amplitude is
- *     derived from, plus the pose's own choreography (the hips' lift, the stacked foot);
- *  5. [theGirdleCycleIsFrameConditionInvariantAndTheSamplesAreIndependent] — the B-8 cold-frame class
- *     and the T-7 aliasing class.
+ * All assertions read the published frame captured BY VALUE.
  */
 class SidePlankScapularStabilizationTest {
 
@@ -71,11 +52,7 @@ class SidePlankScapularStabilizationTest {
     private fun f(v: Float) = String.format(Locale.US, "%.4f", v)
     private fun deg(v: Float) = String.format(Locale.US, "%.4f", Math.toDegrees(v.toDouble()))
 
-    /**
-     * The authored stabilization this file pins — the pose's declaration (`BasePlankPose.
-     * GIRDLE_PROTRACTION`), RESTATED here as the contract, exactly as the engine's other
-     * animation-logic gates restate the pose's own authored amplitudes.
-     */
+    /** The authored stabilization this file pins — the pose's declaration (`BasePlankPose.GIRDLE_PROTRACTION`), restated here as the contract. */
     private val authoredUnits = 0.60f
 
     /** The pose's own stabilization driver — the schedule the girdle is authored on. */
@@ -83,8 +60,6 @@ class SidePlankScapularStabilizationTest {
 
     /** The authored articulation (radians) at [p]. */
     private fun authoredAngle(p: Float) = authoredUnits * breath(p) * SkeletonMath.SCAPULA_RETRECTION_TO_RAD
-
-    // ---- harness ------------------------------------------------------------------------------
 
     private class Frame(
         val joints: Map<Joint, Vector3>,
@@ -164,10 +139,6 @@ class SidePlankScapularStabilizationTest {
     private fun dist(a: Vector3, b: Vector3) =
         sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z))
 
-    // ------------------------------------------------------------------------------------------
-    // 1. The defect itself — the support girdle's stabilization
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theSupportScapulaCarriesTheStatedStabilization() {
         val frames = playingFrames()
@@ -218,10 +189,6 @@ class SidePlankScapularStabilizationTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 2. The anatomy — toward the planted elbow, never up to the ear
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theSupportGlenoidIsPushedTowardItsElbowAndNotUpToTheEar() {
         val frames = playingFrames()
@@ -260,16 +227,12 @@ class SidePlankScapularStabilizationTest {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 3. The thorax is the author's — the audit's rule on an authored frame
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun theThoraxDoesNotAbsorbTheGirdle() {
         val wrong = mutableListOf<String>()
         for ((p, frame) in playingFrames()) {
             val local = frame.localOf(Joint.CHEST)
-            // The pose authors its thorax frame outright (the B-8 roll: `chest.localRotation = (Y, π/2)`),
+            // The pose authors its thorax frame outright (`chest.localRotation = (Y, π/2)`),
             // so the Finalizer's fallback never runs and the frame must be constant at every phase.
             if (abs(abs(local.angle) - (PI.toFloat() / 2f)) > 1e-4f) {
                 wrong.add("p=$p the chest's authored roll is ${f(local.angle)} rad against the authored ${f(PI.toFloat() / 2f)}")
@@ -285,10 +248,6 @@ class SidePlankScapularStabilizationTest {
             wrong.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 4. The plant — the contract the amplitude is derived from
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun thePlantedSupportForearmAndThePlantedFootAreUntouched() {
@@ -323,13 +282,11 @@ class SidePlankScapularStabilizationTest {
             wrongFlat.isEmpty()
         )
         assertTrue("the realized support hand must be the declared target (no relocation):\n" + relocated.take(6).joinToString("\n"), relocated.isEmpty())
-        // Anti-vacuity: the girdle must really load the plant. The floor sits above the pre-fix pose's
-        // own residual (measured `0.3973` u on the untouched tree) and well below the authored value.
-        // Anti-vacuity: see the sibling plank's record — the floor sits above the pre-fix pose's own
-        // residual (`0.0000` u: its elbow is exactly on the mat) and well below the authored value.
+        // Anti-vacuity: the floor sits above the pre-fix pose's own residual (measured `0.3973` u)
+        // and well below the authored value.
         assertTrue("anti-vacuity: the stabilization must really load the plant (worst flatness ${f(worstFlat)} u)", worstFlat > 0.6f)
 
-        // The braced endpoint keeps the BPS §11 "supporting elbow under shoulder" pillar exactly, which
+        // The braced endpoint keeps the "supporting elbow under shoulder" pillar exactly, which
         // is why the girdle is authored to vanish there.
         for ((p, frame) in frames.filter { it.first > 1f - 1e-6f }) {
             val shoulder = frame.joints.getValue(Joint.SHOULDER_P)
@@ -344,10 +301,6 @@ class SidePlankScapularStabilizationTest {
         val footYs = frames.map { it.second.joints.getValue(Joint.ANKLE_F).y }
         assertTrue("the top foot's authored settle must be preserved (spread ${f(footYs.max() - footYs.min())}, floor 10)", footYs.max() - footYs.min() >= 10f)
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 5. Frame condition + the aliasing class
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theGirdleCycleIsFrameConditionInvariantAndTheSamplesAreIndependent() {

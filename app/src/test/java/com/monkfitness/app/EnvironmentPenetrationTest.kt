@@ -8,105 +8,52 @@ import java.io.File
 import java.util.Locale
 
 /**
- * **B-6 — the universal support-contact surface invariant, evaluated for real.**
- *
- * Engine contract (`docs/ARCHITECTURE_V2.md` §4.1 support declaration, `docs/BIOMECHANICS.md`):
- * every body point a pose declares as resting on the environment must actually lie ON the surface
- * that declaration names — it must not pass THROUGH it. The Finalizer orients a declared
- * extremity against the plane derived from `metadata.environment` + `metadata.support.contacts`
+ * The universal support-contact surface invariant: every body point a pose declares as resting on
+ * the environment must actually lie ON the surface that declaration names — it must not pass THROUGH
+ * it. The Finalizer orients a declared extremity against the plane derived from
+ * `metadata.environment` + `metadata.support.contacts`
  * (`SkeletonPoseFinalizer.supportPlaneNormalFor`), so the declaration is the engine's own statement
  * of where the body touches the world, and the published frame is where that statement must hold.
  *
- * ## The B-6 defect this file replaces (active stabilization audit: "B-6 — `EnvironmentPenetrationTest`
- * vacuity"; P11 whole-system audit §4 T-1/T-2/T-6)
+ * The file this replaces claimed this invariant and asserted almost none of it. Its four holes, each
+ * closed by a test below: a silent `if (contacts.isEmpty()) continue` over a hand-picked 25 of the
+ * 51 production pose classes; a private copy of the `SupportPoint → Joint` mapping that fell through
+ * to `emptyList()` for `*_FOREARM`, `*_ELBOW`, `HIPS`/`BACK`/`PELVIS` and `CUSTOM`; a per-joint
+ * surface re-derivation that split one declared contact across unrelated surfaces (measured: a bar
+ * hang's `HAND_A` compared against the bar top at `500.000` while the same contact's
+ * `PALM_A`/`KNUCKLES_A`/`FINGERTIPS_A` were compared against the ground at `0.000`); and no count of
+ * what was evaluated, so the ∅ and skip paths cost nothing.
  *
- * The previous file *claimed* this invariant ("every body point a pose declares as resting on the
- * environment actually lies ON its support surface", "applied to EVERY pose and EVERY surface kind")
- * and simultaneously asserted nothing about most of it. Measured on the unmodified baseline
- * (`origin/main` @ `6e96275`, the B-5 merge), the old test evaluated **790** joint-observations over
- * the hand-picked 25-name `variants` list, and:
+ * What that hid: the two forearm planks declared the mat and authored their support elbow below it
+ * (`StaticForearmPlankPose` `ELBOW_A`/`ELBOW_P` down to `−44.752`, `IsometricSidePlankPose`
+ * `ELBOW_P` down to `−37.863`) — exactly the class the ∅ mapping could not see. That plant has since
+ * been re-authored, so the invariant below runs with no attribution table at all.
  *
- *  1. **Silent skip (`if (contacts.isEmpty()) continue`).** It enumerated 25 of the **51** concrete
- *     production pose classes; 7 of its own 25 variants declare no support at all
- *     (`GluteBridgePose`, `BirdDogPose`, `CatCowPose`, `DeadBugPose`, `SupermanPose`, `LegRaisePose`,
- *     `HipCarsPose`) and were skipped silently — and the remaining **26** production classes were
- *     never named at all. A pose that silently loses its declaration (the B-2 defect class) could
- *     therefore only *reduce* what the file asserted, never fail it.
- *  2. **A private copy of the canonical mapping that returns `emptyList()` for everything it did not
- *     enumerate.** `supportJoints()` re-derived `SupportPoint → Joint` for the third time (P11 §4
- *     T-6, the fourth copy of the side mapping B-4 established authority for) and fell through to
- *     `else -> emptyList()` for `*_FOREARM`, `*_ELBOW`, `HIPS`/`BACK`/`PELVIS` and `CUSTOM`. So every
- *     declared `*_FOREARM` contact the file DID name (`StaticForearmPlankPose`'s two, 20
- *     joint-observations) was resolved to ∅ and compared against nothing — and the side plank, which
- *     declares the same kind, was not enumerated at all.
- *  3. **A per-joint surface re-derivation** (`resolveSurfaceY(v.x, v.z, …)` inside the joint loop)
- *     instead of the engine's own rule (ONE plane per contact, from the contact's canonical joint
- *     centroid). One declared contact could therefore be split across two unrelated surfaces:
- *     measured `HangPose` at progress 0.5, the declared `LEFT_HAND` contact of a bar hang had
- *     `HAND_A` compared against the bar top (`y = 500.000`) while `PALM_A`/`KNUCKLES_A`/`FINGERTIPS_A`
- *     of the *same* contact were compared against the ground (`y = 0.000`, deltas +499.703/+499.406/+498.912).
- *  4. **Both halves of its own KDoc disclaimed or unimplemented.** The penetration check was
- *     one-sided, so the float half was invisible (that is how B-1's 69-unit floating knee passed it),
- *     and no assertion counted what was evaluated, so the ∅/skip paths above cost nothing.
- *
- * **What that vacuity hid (measured, and the reason this file exists):** with the canonical mapping
- * (`SupportMath.jointsFor`), the production pipeline's own surface rule and the whole corpus, the
- * unmodified baseline reports the two forearm planks' declared `*_FOREARM` contacts penetrating the
- * mat — `StaticForearmPlankPose` `ELBOW_A`/`ELBOW_P` down to **−44.752**, `IsometricSidePlankPose`
- * `ELBOW_P` down to **−37.863** (both poses name the mat as their support and author their forearm
- * below their own floor; every other declared-contact joint of every other production pose is inside
- * the engine's band). Exactly the class of defect the old file's ∅ mapping could not see — and the
- * same "author support elbow below their own floor" residual the B-3 record in
- * `docs/STABILIZATION_AUDIT.md` listed as the poses' own §7 debt. (B-7 has since re-authored that
- * plant, so the invariant below runs with **no attribution table at all**.)
- *
- * ## Fix shape (test-only — no production file is touched by B-6)
- *
- *  * The corpus is **every** concrete production pose class in `poses/`, and the classes that
- *    declare no support are a **pinned, exact census** ([undeclaringPoses]) instead of a `continue`:
- *    a pose that drops its declaration becomes a new census member and fails
- *    ([theDeclarationCensusDetectsASilentlyDroppedDeclaration] proves that sensitivity).
- *  * The contact's joint family comes from the ONE canonical mapping (`SupportMath.jointsFor`) and is
- *    asserted non-empty for every declared point
- *    ([everyDeclaredSupportContactResolvesThroughTheOneCanonicalMap]).
- *  * The surface is resolved ONCE per contact, by the engine's own rule
- *    ([contactSurfaceY]), and every joint of that contact is compared against that one surface
- *    ([everyJointsOfAContactIsComparedAgainstThatContactsOwnSurface] pins it).
- *  * Every observation is counted and reconciled against the count the declarations imply
- *    ([everyDeclaredContactJointIsActuallyEvaluated]) — a silent ∅/skip cannot cost nothing.
- *  * The invariant itself ([noDeclaredSupportContactPenetratesItsSupportSurface]) is the engine's
- *    unchanged 2-unit band applied to every observation. It carries **no attribution table** (B-6
- *    shipped the two plank forearms pinned there; B-7 fixed the geometry and the pins are gone).
- *
- * ## What is deliberately NOT asserted, and why (measured, not assumed)
- *
- *  * **An absolute rest HEIGHT ("no float").** The engine declares no per-contact rest height: the
- *    height a contact sits at is authored by each pose against the definition's contact-radius
- *    convention (`FootDefinition.ankleHeight = 15`, `PushUpPlank.BASE_KNEE_HEIGHT = 15`), which is
- *    why a planted push-up toe is legitimately at `y = 25.000` and a planted knee at `y = 15.000`
- *    while the contact is on the floor. Asserting a height band would mean inventing a threshold the
- *    architecture does not own; the audit's own note defers that half to its geometry follow-up.
- *  * **In-plane coplanarity of a contact's joints.** Measured per frame over the same corpus: 18
- *    pose/contact pairs are not coplanar within the band (spreads 2.1–59.8), most of them for
- *    legitimate reasons the engine models deliberately (a jump-squat foot rotating through toe-off:
- *    19.76; a pull-up hand rotating about the bar: 2.3–20.7; `PikePushUpPose`'s planted toe: 24.75).
- *    That is articulation, not a violated support; it is recorded here so a future reader does not
- *    re-derive it as a missing assertion.
+ * Deliberately NOT asserted, and why (measured, not assumed):
+ *  * An absolute rest HEIGHT ("no float"). The engine declares no per-contact rest height: each pose
+ *    authors it against the definition's contact-radius convention (`FootDefinition.ankleHeight =
+ *    15`, `PushUpPlank.BASE_KNEE_HEIGHT = 15`), which is why a planted push-up toe is legitimately at
+ *    `y = 25.000` and a planted knee at `y = 15.000`. A height band would invent a threshold the
+ *    architecture does not own.
+ *  * In-plane coplanarity of a contact's joints. Measured per frame over the same corpus: 18
+ *    pose/contact pairs are not coplanar within the band (spreads 2.1–59.8), most for legitimate
+ *    modelled reasons (a jump-squat foot rotating through toe-off: 19.76; a pull-up hand rotating
+ *    about the bar: 2.3–20.7; `PikePushUpPose`'s planted toe: 24.75). That is articulation, not a
+ *    violated support; recorded here so it is not re-derived as a missing assertion.
  */
 class EnvironmentPenetrationTest {
 
     private val def = SkeletonDefinition.DEFAULT_ADULT
 
-    /** Rep samples, unchanged from the file this replaces. */
+    /** The five rep samples the sibling corpus invariants use. */
     private val samples = listOf(0.0f, 0.25f, 0.5f, 0.75f, 1.0f)
 
-    /** The engine's penetration band (unchanged): a declared contact joint must not sit more than
-     *  this far below the surface its own declaration rests on. */
+    /** The engine's penetration band: a declared contact joint must not sit more than this far below
+     *  the surface its own declaration rests on. */
     private val penetrationBand = 2.0f
 
     /** The two frame conditions the invariant must hold under: the genuinely cold first frame of a
-     *  fresh pose on a fresh pipeline, and a frame produced mid-playback by an advancing pipeline
-     *  (the exact shape the file this replaces used). */
+     *  fresh pose on a fresh pipeline, and a frame produced mid-playback by an advancing pipeline. */
     private enum class FrameCondition { COLD, PLAYING }
 
     /**
@@ -126,10 +73,6 @@ class EnvironmentPenetrationTest {
         val delta: Float get() = y - surfaceY
         val key: Pair<String, SupportPoint> get() = pose to contact
     }
-
-    // ------------------------------------------------------------------------------------------
-    // Corpus + scan
-    // ------------------------------------------------------------------------------------------
 
     private fun context(p: Float) = PoseContext(
         progress = p, side = Side.RIGHT, definition = def,
@@ -159,8 +102,7 @@ class EnvironmentPenetrationTest {
             .sorted()
     }
 
-    /** The production corpus as (simple class name → a fresh builder); mirrors the sibling
-     *  corpus tests' enumeration (`SupportDeclarationChannelTest`, `SupportPointSideConsumptionTest`). */
+    /** The production corpus as (simple class name → a fresh builder). */
     private fun productionCorpus(): List<Pair<String, PoseBuilder>> =
         productionPoseClasses().map { it to MotionProbe.build(it) }
 
@@ -173,7 +115,7 @@ class EnvironmentPenetrationTest {
      * canonical joint centroid — the rule the engine itself uses
      * (`SkeletonPoseFinalizer.supportPlaneNormalFor`: a box/step/bench prop top when the contact's
      * centroid lies inside its footprint, otherwise the ground plane). Resolving per joint instead
-     * splits one contact across unrelated surfaces (see the class KDoc, defect 3).
+     * splits one contact across unrelated surfaces.
      */
     private fun contactSurfaceY(frame: SkeletonPose, point: SupportPoint): Float {
         val env = frame.environment
@@ -218,7 +160,7 @@ class EnvironmentPenetrationTest {
         if (builder.metadata.support.contacts.isEmpty()) return emptyList()
         val out = mutableListOf<Observation>()
 
-        // COLD — the genuinely cold first frame: a fresh pose instance on a fresh pipeline.
+        // COLD: the genuinely cold first frame, a fresh pose instance on a fresh pipeline.
         for (p in samples) {
             val cold = SkeletonPipeline(def).produceFrame(MotionProbe.build(name), context(p)).pose
             out.addAll(measure(snapshot(cold), name, FrameCondition.COLD, p))
@@ -248,48 +190,27 @@ class EnvironmentPenetrationTest {
     private fun undeclaringNames(corpus: List<Pair<String, PoseBuilder>>): List<String> =
         corpus.filter { (_, b) -> b.metadata.support.contacts.isEmpty() }.map { it.first }.sorted()
 
-    // ------------------------------------------------------------------------------------------
-    // Pinned declaration census — the classes that declare NO support on the one canonical channel
-    // ------------------------------------------------------------------------------------------
-
     /**
      * The production pose classes that declare NO `metadata.support.contacts`.
      *
      * This list is DATA, not a tolerance: it is the set the corpus census is asserted against, so a
      * pose that silently loses its declaration becomes a new member and fails.
      *
-     * **M8/M9/M10 declaration pass (17 poses landed).** The pass declared support for the 7
-     * upper/dynamic poses (M8), the stretch family (M9) and the core/hip poses (M10) on the one
-     * canonical channel, and those names are gone from this list: `ArmCirclesPose`, `BurpeePose`,
-     * `CouchStretchPose`, `DynamicWorldsGreatestStretchPose`, `FacePullPose`, `GluteBridgePose`,
-     * `HalfKneelingStretchPose`, `HipCarsPose`, `KettlebellSwingPose`, `LatStretchPose`,
-     * `MountainClimberPose`, `PelvicTiltPose`, `ProneCobraStretchPose`, `ReverseSnowAngelPose`,
-     * `ScapularRetractionPose`, `SupermanPose`, `WallSlidesPose`.
-     *
-     * The remaining members are NOT in the M8/M9/M10 group, and each has a measured reason:
-     *  - `HamstringStretchPose` (M9) — its only derivable floor contact is the foot, and both feet
-     *    are authored with an ankle articulation ("front foot points to sky"); a `*_FOOT`
-     *    declaration would drive the authored pointed foot through the floor (measured `TOE_F`
-     *    21.55 → −2.57 at p=0.5). It records a vocabulary gap (the seated pelvis/leg mat support has
-     *    no consumed point), not a missing declaration.
-     *  - `CatCowPose` — **DECLARED by the M11/M12 migration** (`fix/m11-m12-limb-realization-migration`):
-     *    its BPS §8 four-point base (both hands + both knees) is now on the canonical channel, so the
-     *    pose left this census and the invariant below evaluates its declarations for real.
+     * Each member has a measured reason, not an omission:
+     *  - `HamstringStretchPose` — its only derivable floor contact is the foot, and both feet are
+     *    authored with an ankle articulation ("front foot points to sky"); a `*_FOOT` declaration
+     *    would drive the authored pointed foot through the floor (measured `TOE_F` 21.55 → −2.57 at
+     *    p=0.5). It records a vocabulary gap (the seated pelvis/leg mat support has no consumed
+     *    point), not a missing declaration.
      *  - `AlternatingBirdDogPose` / `BirdDogPose` / `StaticBirdDogHoldPose` /
      *    `QuadrupedThoracicRotationsPose` / `ThoracicExtensionPose` / `DeadBugPose` / `LegRaisePose`
-     *    — no M-number in `docs/STABILIZATION_AUDIT.md` §3 assigns them a declaration, and their
-     *    floor contact is torso/hips (no derivation consumes `HIPS`/`PELVIS`/`BACK`) plus a planted
-     *    hand or hand-on-mat chain that a future pass owns. Flagged for the user to assign rather
-     *    than silently expanded into this one.
+     *    — no record assigns them a declaration, and their floor contact is torso/hips (no derivation
+     *    consumes `HIPS`/`PELVIS`/`BACK`) plus a planted hand or hand-on-mat chain a future pass owns.
      */
     private val undeclaringPoses = setOf(
         "AlternatingBirdDogPose", "BirdDogPose", "DeadBugPose", "HamstringStretchPose",
         "LegRaisePose", "QuadrupedThoracicRotationsPose", "StaticBirdDogHoldPose", "ThoracicExtensionPose"
     )
-
-    // ------------------------------------------------------------------------------------------
-    // The invariant — no attribution table: a declared contact either holds or it fails
-    // ------------------------------------------------------------------------------------------
 
     /** The worst (most negative) delta of every declared pose/contact pair. */
     private fun worstByContact(observations: List<Observation>): Map<Pair<String, SupportPoint>, Float> =
@@ -306,10 +227,10 @@ class EnvironmentPenetrationTest {
      * The invariant itself: no declared support contact may pass through the surface its own
      * declaration names.
      *
-     * This assertion is the whole check — there is **no attribution table**. Until B-7 the two
-     * forearm planks were pinned here as known, measured, *unfixed* violations (the poses declared
-     * the mat and authored their support elbow 38–45 units below it); B-7 re-authored that plant, so
-     * the pins are gone and a new forearm penetration fails the suite instead of being absorbed.
+     * This assertion is the whole check — there is no attribution table. The two forearm planks were
+     * once pinned here as known, measured, unfixed violations (the poses declared the mat and
+     * authored their support elbow 38–45 units below it); that plant is now re-authored, so a new
+     * forearm penetration fails the suite instead of being absorbed.
      */
     @Test
     fun noDeclaredSupportContactPenetratesItsSupportSurface() {
@@ -325,10 +246,6 @@ class EnvironmentPenetrationTest {
             violations.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 1. Declaration census (replaces the silent `continue`)
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun everyProductionPoseClassIsAccountedForByTheDeclarationCensus() {
@@ -351,8 +268,8 @@ class EnvironmentPenetrationTest {
                 "A missing member means a pose now declares support and this census must be updated.",
             pinned, actual
         )
-        // The two B-2 victims must be on the declaring side: their declaration reaching the runtime is
-        // exactly what the old file's skip could not require.
+        // The two poses whose declaration used to live on a dead channel must be on the declaring
+        // side: their declaration reaching the runtime is what the old file's skip could not require.
         assertTrue(
             "the two poses whose declaration used to live on a dead channel must declare support",
             declaring.map { it.first }.containsAll(listOf("StaticForearmPlankPose", "IsometricSidePlankPose"))
@@ -382,10 +299,6 @@ class EnvironmentPenetrationTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 2. Resolution census (replaces the private mapping that returned emptyList())
-    // ------------------------------------------------------------------------------------------
-
     @Test
     fun everyDeclaredSupportContactResolvesThroughTheOneCanonicalMap() {
         val corpus = productionCorpus()
@@ -395,13 +308,13 @@ class EnvironmentPenetrationTest {
             val declared = builder.metadata.support.contacts.map { it.point }.toSet()
             if (declared.isEmpty()) continue
             for (point in declared) {
-                // ONE canonical authority (B-4); an empty family means a declared contact that no
-                // consumer can resolve — the exact hole the private `supportJoints` copy created.
+                // ONE canonical authority; an empty family means a declared contact that no consumer
+                // can resolve — the exact hole the private `supportJoints` copy created.
                 if (SupportMath.jointsFor(point).isEmpty()) {
                     unresolved.add("$name declares $point but the canonical map resolves no joint")
                 }
             }
-            // The declaration must reach the published frame's carrier (B-2's contract).
+            // The declaration must reach the published frame's carrier.
             for (p in listOf(0.0f, 0.5f, 1.0f)) {
                 val published = SkeletonPipeline(def).produceFrame(builder, context(p)).pose.supportedPoints.toSet()
                 if (published != declared) {
@@ -412,10 +325,6 @@ class EnvironmentPenetrationTest {
         assertTrue("every declared support point must resolve to a joint family:\n" + unresolved.joinToString("\n"), unresolved.isEmpty())
         assertTrue("the declared support model must be the published one:\n" + publishedMismatch.joinToString("\n"), publishedMismatch.isEmpty())
     }
-
-    // ------------------------------------------------------------------------------------------
-    // 3. Observation census — a silent skip or a ∅ resolution can no longer cost nothing
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun everyDeclaredContactJointIsActuallyEvaluated() {
@@ -483,22 +392,18 @@ class EnvironmentPenetrationTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // 5. Frame-condition integrity — immutable snapshots, one surface per contact
-    // ------------------------------------------------------------------------------------------
-
     /**
-     * One surface per declared contact, and it is the contact's own. Measured on the baseline, the
-     * replaced file's per-joint rule split single contacts across unrelated surfaces: the hang's
-     * declared `LEFT_HAND` compared `HAND_A` against the bar top (`500.000`) while
-     * `PALM_A`/`KNUCKLES_A`/`FINGERTIPS_A` — same declaration — were compared against the ground
-     * (`0.000`). Resolving once per contact from the contact's own centroid is the engine's rule
-     * (`supportPlaneNormalFor`), and it is what makes a contact's verdict a single statement.
+     * One surface per declared contact, and it is the contact's own. The replaced file's per-joint
+     * rule split single contacts across unrelated surfaces: the hang's declared `LEFT_HAND` compared
+     * `HAND_A` against the bar top (`500.000`) while `PALM_A`/`KNUCKLES_A`/`FINGERTIPS_A` — same
+     * declaration — were compared against the ground (`0.000`). Resolving once per contact from the
+     * contact's own centroid is the engine's rule (`supportPlaneNormalFor`), and it is what makes a
+     * contact's verdict a single statement.
      *
-     * (Measured, for the record: under the engine's centroid rule a thin-bar grip's centroid falls
-     * outside the bar footprint, so the hand contact resolves to the ground reference — the bar's
-     * plane normal is +Y either way, so this is inert for the derivation, as the P11 audit notes.
-     * The rule's job here is ONE surface per contact; it is not asserted to be the bar top.)
+     * Under the centroid rule a thin-bar grip's centroid falls outside the bar footprint, so the hand
+     * contact resolves to the ground reference; the bar's plane normal is +Y either way, so this is
+     * inert for the derivation. The rule's job here is ONE surface per contact; it is not asserted to
+     * be the bar top.
      */
     @Test
     fun everyJointsOfAContactIsComparedAgainstThatContactsOwnSurface() {
@@ -578,14 +483,10 @@ class EnvironmentPenetrationTest {
         )
     }
 
-    // ------------------------------------------------------------------------------------------
-    // Sensitivity / control twins
-    // ------------------------------------------------------------------------------------------
-
     /** The production forearm plank, delegated so only the declaration varies. */
     private class StaticForearmPlankTwin : PoseBuilder by com.monkfitness.app.poses.StaticForearmPlankPose()
 
-    /** The same pose with its support declaration deliberately removed (the B-2 defect class). */
+    /** The same pose with its support declaration deliberately removed. */
     private class DroppedDeclarationPlank : PoseBuilder by com.monkfitness.app.poses.StaticForearmPlankPose() {
         override val metadata = com.monkfitness.app.poses.StaticForearmPlankPose().metadata.copy(
             support = SupportDefinition(pivot = PivotType.ELBOWS, contacts = emptySet())

@@ -4,10 +4,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * Motion-range contract for the SQUAT family (PDP §5 [7], PAC §3/§4).
- * A squat must descend and rise through the rep; a static squat would pass the ExerciseValidator
- * yet animate nothing. Floors are set well below the measured travel so the test passes today and
- * catches any regression to a near-static pose.
+ * Motion-range contract for the SQUAT family.
+ * A squat must descend and rise through the rep; a static squat would pass the ExerciseValidator yet
+ * animate nothing. Floors are set well below the measured travel so the test passes today and catches
+ * any regression to a near-static pose.
  */
 class SquatMotionTest {
 

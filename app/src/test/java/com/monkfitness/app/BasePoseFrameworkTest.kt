@@ -11,9 +11,9 @@ class BasePoseFrameworkTest {
     fun testPoseMetadataImmutableNewFields() {
         val metadata = PoseMetadata(
             name = "PushUp",
-            // B-2 — the single support declaration channel. The former `pivotType` /
-            // `supportContacts` duplicates are gone: a pose that declared support on that
-            // write-only channel (the two planks) silently published an EMPTY support model.
+            // The single support declaration channel. The former `pivotType` / `supportContacts`
+            // duplicates are gone: a pose that declared support on that write-only channel (the two
+            // planks) silently published an EMPTY support model.
             support = SupportDefinition(
                 pivot = PivotType.FEET,
                 contacts = setOf(SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND)
@@ -45,9 +45,8 @@ class BasePoseFrameworkTest {
         val context = PoseContext(0.5f, Side.LEFT, def)
 
         // Evaluate the PUBLISHED frames of the production pipeline at progress 0.5f (bottom of rep).
-        // P12 WP-I: `build()` alone registers limb intent (§12.7a) — the hands are realized by the
-        // engine-owned stage, so hand-alignment readings must come from the frame the engine
-        // produces. The claim below (the variants differ in hand placement) is unchanged.
+        // `build()` alone registers limb intent — the hands are realized by the engine-owned stage,
+        // so hand-alignment readings must come from the frame the engine produces.
         val sPose = SkeletonPipeline(def).produceFrame(standardPose, context).pose
         val wPose = SkeletonPipeline(def).produceFrame(widePose, context).pose
         val kPose = SkeletonPipeline(def).produceFrame(kneePose, context).pose
@@ -62,7 +61,6 @@ class BasePoseFrameworkTest {
         assertNotNull(dmPose)
         assertNotNull(mPose)
 
-        // Check hand alignments and standard values
         assertNotEquals(sPose.getJoint(Joint.HAND_A).z, wPose.getJoint(Joint.HAND_A).z, 1e-4f)
         assertNotEquals(sPose.getJoint(Joint.HAND_A).z, dmPose.getJoint(Joint.HAND_A).z, 1e-4f)
     }

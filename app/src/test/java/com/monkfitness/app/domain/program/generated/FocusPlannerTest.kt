@@ -10,23 +10,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §8's Focus Planner, pinned on the properties §8 states and on the arithmetic this stage chose.
+ * The Focus Planner, pinned on the properties the architecture states and on the arithmetic this stage
+ * chose.
  *
- * Two kinds of claim are asserted here, and they are deliberately different in strength:
+ * Two kinds of claim are asserted here, deliberately different in strength:
  *
- *  * **the properties §8 fixes** — one primary and 0–2 secondary focuses per slot, determinism, a
- *    horizon-wide decision, softness rather than a hard two-day rule. These may not be violated by any
- *    implementation, and they are asserted as properties.
+ *  * **the fixed properties** — one primary and 0–2 secondary focuses per slot, determinism, a
+ *    horizon-wide decision, softness rather than a hard two-day rule. No implementation may violate
+ *    these, so they are asserted as properties.
  *  * **this stage's own arithmetic** — the exact apportionment of a given configuration over a given
- *    horizon. §8 leaves the coefficients open, so these are pinned as *the numbers this policy
- *    produces*, written out by hand (computed outside the implementation, not re-derived by it), which
- *    is what makes a change in the arithmetic visible as a failure instead of as a drift.
+ *    horizon. The coefficients are open, so these are pinned as *the numbers this policy produces*,
+ *    written out by hand (computed outside the implementation, not re-derived by it), which is what
+ *    makes a change in the arithmetic visible as a failure instead of as a drift.
  */
 class FocusPlannerTest {
 
     private val vocabulary = Focus.entries.toList()
-
-    // ------------------------------------------------------------------ the shape §8 fixes
 
     @Test
     fun everySlotGetsOnePrimaryAndAtMostTwoSecondaryFocuses() {
@@ -104,8 +103,6 @@ class FocusPlannerTest {
             long.keys.sortedBy { it.ordinal }
         )
     }
-
-    // ------------------------------------------------------------------ the arithmetic, written out
 
     @Test
     fun aBalancedConfigurationSpreadsOverTheWholeVocabularyAndTheFirstCycleIsWrittenOut() {
@@ -204,8 +201,6 @@ class FocusPlannerTest {
         )
     }
 
-    // ------------------------------------------------------------------ the signals it considers
-
     @Test
     fun exposureTheUserAlreadyHadSuppressesFurtherAllocationOfThatFocus() {
         val withoutSignals = allocate(slots = 3)
@@ -254,7 +249,7 @@ class FocusPlannerTest {
             loaded.size
         )
 
-        // The soft half of the rule, and the reason it is not §14's forbidden hard 48-hour rule: when
+        // The soft half of the rule, and the reason it is not a forbidden hard 48-hour rule: when
         // nothing else owes exposure, the loaded focus is chosen anyway.
         val only = FocusPlan.focused(setOf(Focus.PUSH))
         val withLoad = FocusPlanner.allocate(
@@ -334,8 +329,6 @@ class FocusPlannerTest {
             FocusPlanner.allocate(FocusPlan.Balanced, 0, vocabulary)
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun allocate(
         slots: Int,

@@ -43,7 +43,7 @@ import java.time.Instant
 import java.time.LocalDate
 
 /**
- * The pure half of §30 step 12: §4's target rule, §10's element choice and §9/§12/§14's three
+ * The pure half of the adaptive integration: the target rule, the element choice and the three
  * judgements — the decisions the integration makes *before* any repository is read, and the ones the
  * rest of the stage is stated in terms of.
  *
@@ -55,8 +55,6 @@ import java.time.LocalDate
 class AdaptiveTargetSelectionTest {
 
     private val today: LocalDate = LocalDate.parse("2026-09-21")
-
-    // ------------------------------------------------------------------ §4: the target opportunity
 
     /** The next future opportunity, in the schedule's own order, with identity as the tiebreak. */
     @Test
@@ -80,7 +78,6 @@ class AdaptiveTargetSelectionTest {
         )
     }
 
-    /** The decision's own day is not strictly ahead of it, and neither is anything before it. */
     @Test
     fun anOpportunityPlannedForTheDecisionsOwnDayOrEarlierIsNotAFutureOpportunity() {
         val slots = listOf(
@@ -115,7 +112,6 @@ class AdaptiveTargetSelectionTest {
         )
     }
 
-    /** An opportunity the schedule withdrew, or one already taken, is not ahead of the user. */
     @Test
     fun anOpportunityThatIsNoLongerStartableIsNeverTheTarget() {
         val slots = listOf(
@@ -144,7 +140,6 @@ class AdaptiveTargetSelectionTest {
         )
     }
 
-    /** The opportunity the completion just took is never its own target, whatever the dates say. */
     @Test
     fun theCompletedOpportunityIsNeverTheTargetEvenWhenItsDayIsStillAhead() {
         val completing = slot("this-one", "2026-09-22", SlotStatus.PLANNED)
@@ -155,9 +150,6 @@ class AdaptiveTargetSelectionTest {
         )
     }
 
-    // ------------------------------------------------------------------ §10: the element choice
-
-    /** The element is the first of the day that the ladder can resolve for an exposed family. */
     @Test
     fun theElementIsTheFirstExposedFamilyTheLadderCanResolve() = runBlocking {
         val choice = adaptiveTargetElementOf(
@@ -198,7 +190,6 @@ class AdaptiveTargetSelectionTest {
         )
     }
 
-    /** A known family with no declared ladder is a different gap, and never a fabricated step. */
     @Test
     fun aKnownFamilyWithNoDeclaredLadderIsItsOwnGap() = runBlocking {
         assertEquals(
@@ -232,7 +223,6 @@ class AdaptiveTargetSelectionTest {
         )
     }
 
-    /** Ownership is read from the two facts the plan stores, and pinning outranks authorship. */
     @Test
     fun ownershipIsReadFromThePlansOwnTwoFactsAndPinningWins() {
         assertEquals(
@@ -255,9 +245,6 @@ class AdaptiveTargetSelectionTest {
         )
     }
 
-    // ------------------------------------------------------------------ §8: the window rule
-
-    /** The lookback is an interval from the capture, and it is stated rather than hidden. */
     @Test
     fun theWindowStartsExactlyTheLookbackBeforeTheCapture() {
         val capturedAt = Instant.parse("2026-09-21T08:20:00Z")
@@ -277,8 +264,6 @@ class AdaptiveTargetSelectionTest {
             refusal != null
         )
     }
-
-    // ------------------------------------------------------------------ §9/§12/§14: the judgements
 
     /**
      * The three judgements are three separate answers: the evidence buckets are the policy's own
@@ -333,7 +318,7 @@ class AdaptiveTargetSelectionTest {
         )
     }
 
-    /** An idle window is `UNKNOWN`: inactivity is not favour and it is not caution either (§14). */
+    /** An idle window is `UNKNOWN`: inactivity is not favour and it is not caution either. */
     @Test
     fun anIdleWindowIsUnknownAndNeverFavourable() {
         val judgement = AdaptiveJudgementRule.of(
@@ -352,7 +337,6 @@ class AdaptiveTargetSelectionTest {
         assertEquals(ConfidenceLevel.LOW, judgement.confidence)
     }
 
-    /** An exercise the classification does not know is its own family, as the signal layer reads it. */
     @Test
     fun anUnclassifiedExerciseIsItsOwnFamilyInTheWindow() {
         val judgement = AdaptiveJudgementRule.of(
@@ -372,8 +356,6 @@ class AdaptiveTargetSelectionTest {
             judgement.confidence
         )
     }
-
-    // ------------------------------------------------------------------ fixtures
 
     private fun slot(
         id: String,

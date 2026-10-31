@@ -8,7 +8,7 @@ import org.junit.Test
 import java.time.DayOfWeek
 import java.time.LocalDate
 
-/** Stage 1 executable contract matrix. Room and the current scheduler are deliberately absent. */
+/** The executable contract matrix. Room and the current scheduler are deliberately absent. */
 class SemanticContractsTest {
 
     @Test

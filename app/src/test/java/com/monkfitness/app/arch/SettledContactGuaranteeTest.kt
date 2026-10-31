@@ -24,49 +24,41 @@ import java.io.File
 import kotlin.math.abs
 
 /**
- * Phase 7 (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md §P7) — R3 Settled-Contact Guarantee
- * enforcement (RFC_RUNTIME_SKELETON_ARCHITECTURE §5 R3/R7, §3.2 Settlement Result, §6
- * re-entry rule).
+ * Settled-Contact Guarantee enforcement.
  *
- * The guarantee: once the ConstraintSolver settles a contact end-effector, no later
- * subsystem — including the SkeletonPoseFinalizer — may move it until the frame is
- * published. P7 instruments the PROTECTED WINDOW between solver completion (the Phase 2
- * exit where the Settlement Result becomes final) and the completion of Phase 3
- * finalization: the pipeline snapshots the WORLD POSITIONS of the settled-contact
- * end-effectors immediately after `ConstraintSolver.solve` and re-compares them exactly
- * after `finalizer.finalize` returns (debug builds; release builds compile the mechanism
- * out, same gating as the P6 R2 boundary assertions).
+ * The guarantee: once the ConstraintSolver settles a contact end-effector, no later subsystem —
+ * including the SkeletonPoseFinalizer — may move it until the frame is published. The PROTECTED
+ * WINDOW is instrumented between solver completion (the Phase 2 exit where the Settlement Result
+ * becomes final) and the completion of Phase 3 finalization: the pipeline snapshots the WORLD
+ * POSITIONS of the settled-contact end-effectors immediately after `ConstraintSolver.solve` and
+ * re-compares them exactly after `finalizer.finalize` returns (debug builds; release builds
+ * compile the mechanism out, same gating as the root-authority boundary assertions).
  *
- * The reference set is the Settlement Result (`pose.settlementResult.declaredContactJoints`
- * — the canonical Phase-3 producer output; per audit B2 the field name states exactly what
- * the solver records) — never reconstructed from `pose.contacts`, retained chains, solver
- * heuristics, Frame History, or pelvis/root state.
+ * The reference set is the Settlement Result (`pose.settlementResult.declaredContactJoints` — the
+ * field name states exactly what the solver records) — never reconstructed from `pose.contacts`,
+ * retained chains, solver heuristics, Frame History, or pelvis/root state.
  *
- * Fixture facts (probe-verified against the merged tree):
- *  - A planted hand/ankle contact end-effector is bit-stable through finalization: the
- *    Finalizer's extremity derivation writes only the CHILD endpoints (wrist/palm/knuckles/
- *    fingertips, heel/toe), never the settled HAND/ANKLE array entries themselves, and
- *    the chest-frame reconstruction is R3-bound (F1 guard). All four contact-bearing
- *    validation poses show EXACTLY zero settled-contact drift across the progress sweep.
- *  - A planted TOE_F contact is a REAL violation route: the Finalizer's automatic foot
- *    derivation recomputes the toe entry from the settled ankle + shank direction, silently
- *    displacing the settled contact inside the protected window (exactly what R3 forbids) —
- *    this powers the primary behavioral regression with production code on both sides of
- *    the mutation, no test-only injection seam needed.
- *  - `resolveHeadTarget` writes only NECK_END/HEAD_POS local offsets (R7's neck/head scope).
- *    On a hand-planted pose the declared gaze intent therefore moves the head while the
- *    settled hand stays put — the head-target / sanctioned-skip shape: SupportPoint has no
- *    head/neck member and the settled chain is outside the neck/head scope, so the intent
- *    is bounded away from the contact instead of displacing it (RFC §5 R3: where declared
- *    intent would move a settled contact, the contact wins; the skip is legitimate
- *    architecture, not data loss).
- *  - `applyIntentCarriers` skips carrier consumption entirely for contact poses (the
- *    pre-existing sanctioned skip) — a declared joint intent on a planted pose must neither
- *    re-FK the tree nor trip the new assertion.
+ * Fixture facts (probe-verified):
+ *  - A planted hand/ankle contact end-effector is bit-stable through finalization: the Finalizer's
+ *    extremity derivation writes only the CHILD endpoints (wrist/palm/knuckles/fingertips,
+ *    heel/toe), never the settled HAND/ANKLE array entries themselves, and the chest-frame
+ *    reconstruction is bound by the guarantee. All four contact-bearing validation poses show EXACTLY zero
+ *    settled-contact drift across the progress sweep.
+ *  - A planted TOE_F contact is a REAL violation route: the Finalizer's automatic foot derivation
+ *    recomputes the toe entry from the settled ankle + shank direction, silently displacing the
+ *    settled contact inside the protected window — which powers the primary behavioral regression
+ *    with production code on both sides of the mutation, no test-only injection seam.
+ *  - `resolveHeadTarget` writes only NECK_END/HEAD_POS local offsets (the neck/head scope). On a
+ *    hand-planted pose the declared gaze intent therefore moves the head while the settled hand
+ *    stays put: SupportPoint has no head/neck member and the settled chain is outside that scope,
+ *    so the intent is bounded away from the contact instead of displacing it (where declared
+ *    intent would move a settled contact, the contact wins — the skip is architecture, not data
+ *    loss).
+ *  - `applyIntentCarriers` skips carrier consumption entirely for contact poses — a declared joint
+ *    intent on a planted pose must neither re-FK the tree nor trip the assertion.
  *
- * This file compiles on the pre-P7 tree: the new utility surface is looked up reflectively
- * and the wiring assertions scan source text, so the same bytes run as the counterfactual
- * RED gate on `origin/main` without P7 instrumentation (the P6 pattern).
+ * The utility surface is looked up reflectively and the wiring assertions scan source text, so
+ * these bytes also compile on a tree without the instrumentation.
  */
 class SettledContactGuaranteeTest {
 
@@ -115,9 +107,6 @@ class SettledContactGuaranteeTest {
         return fixture
     }
 
-    // ---------------------------------------------------------------------------------
-    // 1 — Clean settled-contact frame passes (the whole-phase check is not over-broad).
-    // ---------------------------------------------------------------------------------
     @Test
     fun cleanSettledHandPlantSurvivesFinalizationBitIdentical() {
         val fixture = handPlant(FrameFixture())
@@ -128,24 +117,20 @@ class SettledContactGuaranteeTest {
         assertEquals("fixture guard: the Settlement Result references exactly the planted hand",
             listOf(Joint.HAND_A), sr!!.declaredContactJoints)
         // The settled world position (input-carrier arrays written by the solve's final
-        // FK+flatten) survives into the published frame bit-for-bit: the Finalizer did not
-        // move the settled end-effector.
+        // FK+flatten) survives bit-for-bit: the Finalizer did not move the end-effector.
         assertEquals("settled hand must be bit-identical across the protected window",
             0f, manhattan(fixture.pose.getJoint(Joint.HAND_A), published.getJoint(Joint.HAND_A)), 0f)
         assertEquals("anti-vacuity: the contact settled at its planted target",
             0f, fixture.pose.getJoint(Joint.HAND_A).x, 0f)
         assertEquals(60f, published.getJoint(Joint.HAND_A).y, 0f)
-        // Replays through fresh pipelines must not throw — a lawful finalization passes the
-        // R3 boundary assertion end-to-end.
+        // Replays through fresh pipelines must not throw — a lawful finalization passes.
         SkeletonPipeline(definition).produceFrame(handPlant(FrameFixture()).pose)
         SkeletonPipeline(definition).produceFrame(handPlant(FrameFixture()).pose)
     }
 
-    // ---------------------------------------------------------------------------------
-    // 2 — THE primary behavioral regression: a real settled-contact mutation executed
-    // by production Finalizer code inside the protected window must throw R3. Pre-P7 the
-    // displacement reaches the published frame silently (RED for exactly that reason).
-    // ---------------------------------------------------------------------------------
+    // THE primary behavioral regression: a real settled-contact mutation executed by production
+    // Finalizer code inside the protected window must throw; without the assertion the
+    // displacement reaches the published frame silently.
     @Test
     fun settledContactDisplacedDuringFinalizationThrowsR3Violation() {
         val pipeline = SkeletonPipeline(definition)
@@ -153,10 +138,9 @@ class SettledContactGuaranteeTest {
         val result = runCatching { pipeline.produceFrame(fixture.pose) }
 
         if (result.isSuccess) {
-            // PRE-P7 COUNTERFACTUAL BRANCH: no assertion exists, so the displacement is
-            // silent. Prove the violation is REAL (a settled contact actually moved into
-            // the published frame), then fail for the intended reason: the guarantee is
-            // not detected.
+            // Counterfactual branch (no assertion exists): prove the violation is REAL — a
+            // settled contact actually moved into the published frame — then fail for the
+            // intended reason.
             val published = result.getOrThrow().pose
             val settledToe = Vector3().also { it.set(fixture.pose.getJoint(Joint.TOE_F)) }
             assertNotEquals(
@@ -178,19 +162,16 @@ class SettledContactGuaranteeTest {
             thrown is IllegalStateException && thrown.message!!.contains("R3 violation")
         )
         val message = thrown!!.message!!
-        // The error text identifies the rule AND names the operation window (plan §P7) and
-        // the violated contact.
+        // The error text identifies the rule, the operation window, and the violated contact.
         assertTrue("error text must name the protected window (solve→finalize), got: $message",
             message.contains("finalize"))
         assertTrue("error text must identify the displaced joint, got: $message",
             message.contains("TOE_F"))
     }
 
-    // ---------------------------------------------------------------------------------
-    // 3 — Non-settled joints may still move: the Finalizer's R7-scoped Head-Target
-    // Resolution rewrites the neck/head offsets inside the window; the assertion must
-    // NOT treat non-contact motion as a violation (over-breadth guard).
-    // ---------------------------------------------------------------------------------
+    // Non-settled joints may still move: the Head-Target Resolution rewrites the neck/head
+    // offsets inside the window, and the assertion must NOT treat non-contact motion as a
+    // violation (over-breadth guard).
     @Test
     fun nonContactHeadMotionDuringFinalizationDoesNotThrowR3() {
         val pipeline = SkeletonPipeline(definition)
@@ -199,8 +180,7 @@ class SettledContactGuaranteeTest {
         val published = pipeline.produceFrame(fixture.pose).pose
 
         // Anti-vacuity: the head really moved inside the window (gaze resolution is the
-        // production non-contact mutation), while the settled hand stayed bit-identical —
-        // so this frame genuinely exercised the check against a live non-contact write.
+        // production non-contact mutation) while the settled hand stayed bit-identical.
         val headDrift = manhattan(
             fixture.pose.getJoint(Joint.HEAD_POS), published.getJoint(Joint.HEAD_POS)
         )
@@ -210,17 +190,13 @@ class SettledContactGuaranteeTest {
             0f, manhattan(fixture.pose.getJoint(Joint.HAND_A), published.getJoint(Joint.HAND_A)), 0f)
     }
 
-    // ---------------------------------------------------------------------------------
-    // 4 — Multiple settled contacts: ALL are checked. The planted-hand + toe fixture
-    // carries TWO settled contacts; only the SECOND (TOE_F, declared after HAND_A) is
-    // displaced by production code — an implementation that checked only the head of the
-    // reference set would miss the throw entirely. The clean MiddleSplit frame proves the
-    // multi-contact walk passes when lawful (both settled ankles bit-identical).
-    // ---------------------------------------------------------------------------------
+    // Multiple settled contacts: ALL are checked. The hand+toe fixture carries TWO settled
+    // contacts and only the SECOND (TOE_F, declared after HAND_A) is displaced by production
+    // code — an implementation checking only the head of the reference set would miss the throw.
     @Test
     fun multipleSettledContactsAreAllChecked() {
-        // Clean multi-contact pass: MiddleSplit settles ANKLE_F + ANKLE_B; both survive
-        // finalization bit-identical (probe-verified across the progress sweep).
+        // Clean multi-contact pass: MiddleSplit settles ANKLE_F + ANKLE_B, both surviving
+        // bit-identical.
         val splitFixture = MiddleSplitPose().build(ctx())
         val published = SkeletonPipeline(definition).produceFrame(splitFixture).pose
         val splitSr = splitFixture.settlementResult
@@ -257,14 +233,10 @@ class SettledContactGuaranteeTest {
                 thrown.message!!.contains("TOE_F"))
     }
 
-    // ---------------------------------------------------------------------------------
-    // 5 — No settled contacts ⇒ the assertion is a no-op. Three shapes: a posture-driven
-    // solve with ZERO contacts (Settlement Result present, empty reference set), a
-    // contact-less CUSTOM frame that skips the solve entirely, and the STALE-RESULT trap:
-    // a reused carrier whose previous-frame Settlement Result survives into a later frame
-    // that does not solve (or whose solve early-returns). The reference arms only from
-    // THIS frame's producing solve — never from a leftover carrier slot.
-    // ---------------------------------------------------------------------------------
+    // No settled contacts ⇒ the assertion is a no-op. Three shapes: a posture-driven solve with
+    // ZERO contacts, a contact-less CUSTOM frame that skips the solve, and the STALE-RESULT trap —
+    // a reused carrier whose previous-frame Settlement Result survives into a frame that does not
+    // solve. The reference arms only from THIS frame's producing solve, never a leftover slot.
     @Test
     fun noSettledContactsMakesTheAssertionANoOp() {
         val pipeline = SkeletonPipeline(definition)
@@ -282,11 +254,10 @@ class SettledContactGuaranteeTest {
         skip.nodes.pelvis.localPosition = Vector3(10f, 50f, 0f)
         pipeline.produceFrame(skip.pose)
 
-        // (c) stale-reference trap: solve a planted frame, then CLEAR the contacts on the
-        // SAME reused carrier and produce a CUSTOM contact-less frame. The previous frame's
-        // Settlement Result object is still sitting in the carrier slot; the skipped frame
-        // must not arm from it — and the finalizer's legitimate non-settled rewrites on the
-        // skip path must not false-fire an R3 throw.
+        // (c) stale-reference trap: solve a planted frame, then CLEAR the contacts on the SAME
+        // reused carrier and produce a CUSTOM contact-less frame. The previous Settlement Result
+        // object still sits in the carrier slot; the skipped frame must not arm from it, and the
+        // finalizer's legitimate non-settled rewrites must not false-fire.
         val stale = handPlant(FrameFixture())
         SkeletonPipeline(definition).produceFrame(stale.pose)
         stale.pose.contacts.clear()
@@ -296,12 +267,10 @@ class SettledContactGuaranteeTest {
         SkeletonPipeline(definition).produceFrame(stale.pose)
     }
 
-    // ---------------------------------------------------------------------------------
-    // 6 — Existing sanctioned-skip behavior remains intact at the new boundary: a contact
-    // pose declaring joint-intent carriers takes the Finalizer's `applyIntentCarriers`
-    // early-out (the carriers stay live but are NOT consumed — re-FK would displace the
-    // settled chain). The planted hand must stay bit-identical and no violation may fire.
-    // ---------------------------------------------------------------------------------
+    // Sanctioned-skip behavior intact at the new boundary: a contact pose declaring joint-intent
+    // carriers takes the Finalizer's `applyIntentCarriers` early-out (the carriers stay live but
+    // are NOT consumed — re-FK would displace the settled chain), so the planted hand stays
+    // bit-identical and no violation fires.
     @Test
     fun sanctionedIntentCarrierSkipKeepsSettledContacts() {
         val pipeline = SkeletonPipeline(definition)
@@ -318,16 +287,13 @@ class SettledContactGuaranteeTest {
             0f, manhattan(fixture.pose.getJoint(Joint.HAND_A), published.getJoint(Joint.HAND_A)), 0f)
     }
 
-    // ---------------------------------------------------------------------------------
-    // 7 — The Settlement Result is the SOLE reference source (structural + wiring audit):
-    // the capture reads it — not the Contact Declarations — and the pipeline arms the
-    // protected reference at exactly one site (inside the solve branch) with no Frame
-    // History involvement.
-    // ---------------------------------------------------------------------------------
+    // The Settlement Result is the SOLE reference source: the capture reads it — not the Contact
+    // Declarations — and the pipeline arms the reference at exactly one site (inside the solve
+    // branch) with no Frame History involvement.
     @Test
     fun settlementResultIsTheSoleReferenceSource() {
-        // (a) The capture region reads pose.settlementResult + its contact-joint list and
-        // never touches pose.contacts.
+        // (a) The capture reads pose.settlementResult and its contact-joint list, never
+        // pose.contacts.
         val util = productionSource("PhaseBoundaryAsserts.kt")
         val captureRegion = funRegion(util, "captureSettledContacts")
         assertTrue("the capture must exist and read pose.settlementResult (the canonical " +
@@ -360,12 +326,9 @@ class SettledContactGuaranteeTest {
             historyInference.isEmpty())
     }
 
-    // ---------------------------------------------------------------------------------
-    // 8 — Boundary-attachment audit: the assertion is wired into the REAL pipeline
-    // boundary (post-solve capture → post-finalize check on the FINALIZED pose) rather
-    // than living as an unused helper, and the R3 enforcement text stays centralized in
-    // the shared P6 utility.
-    // ---------------------------------------------------------------------------------
+    // Boundary-attachment audit: the assertion is wired into the REAL pipeline boundary
+    // (post-solve capture → post-finalize check on the FINALIZED pose) rather than living as an
+    // unused helper, and the enforcement text stays centralized in the shared utility.
     @Test
     fun assertionIsAttachedToThePipelineBoundary() {
         val util = try {
@@ -396,7 +359,7 @@ class SettledContactGuaranteeTest {
         }
         assertTrue("the post-window check must compare the FINALIZED pose", checkedOnFinalized)
 
-        // Centralization: the R3 enforcement text lives in the shared utility only.
+        // Centralization: the enforcement text lives in the shared utility only.
         val sources = productionAnimationSources()
         val r3Sites = sources.filter { (_, lines) ->
             lines.any { it.contains("\"R3 violation") }
@@ -405,11 +368,8 @@ class SettledContactGuaranteeTest {
             "only, found: $r3Sites", setOf("PhaseBoundaryAsserts.kt"), r3Sites)
     }
 
-    // ---------------------------------------------------------------------------------
-    // 9 — Debug-only by construction: both new boundary points sit inside
-    // `if (BuildConfig.DEBUG)` blocks (release builds pay nothing — plan §P7 "free in
-    // release"), mirroring the P6 gating.
-    // ---------------------------------------------------------------------------------
+    // Debug-only by construction: both boundary points sit inside `if (BuildConfig.DEBUG)`
+    // blocks, so release builds pay nothing.
     @Test
     fun r3InstrumentationIsDebugGated() {
         val pipeline = productionSource("SkeletonPipeline.kt")
@@ -425,10 +385,6 @@ class SettledContactGuaranteeTest {
         assertTrue("the R3 capture must sit inside a BuildConfig.DEBUG-guarded block",
             enclosedByDebugGuard(pipeline, armLine))
     }
-
-    // ---------------------------------------------------------------------------------
-    // Helpers
-    // ---------------------------------------------------------------------------------
 
     private fun manhattan(a: Vector3, b: Vector3): Float =
         abs(a.x - b.x) + abs(a.y - b.y) + abs(a.z - b.z)

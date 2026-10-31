@@ -89,7 +89,6 @@ class WorkoutGeneratorTest {
         )
 
         assertEquals(4, workout.exercises.size)
-        // We now have more subcategories, and selection rule handles priority/cycling
         assertTrue(workout.exercises.map { it.subCategory }.distinct().size >= 3)
     }
 
@@ -141,7 +140,6 @@ class WorkoutGeneratorTest {
 
     @Test
     fun testPerExerciseScalingUsesExerciseSpecificRanges() {
-        // Updated IDs to match new variant naming if necessary.
         // Some exercises are not generated every day, so we check a range.
         val pushupsPhase1 = findGeneratedExercise("pushups", 1..28)
         val lungesPhase1 = findGeneratedExercise("lunges", 1..28)

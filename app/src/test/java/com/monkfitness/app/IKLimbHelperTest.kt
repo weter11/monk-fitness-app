@@ -21,7 +21,6 @@ class IKLimbHelperTest {
             cycleDuration = 2500f
         )
 
-        // Verify Standard PushUp compiles, runs, and finalizes correctly with bakeIkLimb helper
         val pushupPose = StandardPushUpPose().build(context)
         val finalizedPushup = pipeline.produceFrame(pushupPose).pose
 
@@ -50,7 +49,6 @@ class IKLimbHelperTest {
             cycleDuration = 2500f
         )
 
-        // Verify AirSquat compiles, runs, and finalizes correctly with bakeIkLimb helper
         val squatPose = AirSquatPose().build(context)
         val finalizedSquat = pipeline.produceFrame(squatPose).pose
 
@@ -78,7 +76,6 @@ class IKLimbHelperTest {
             cycleDuration = 2500f
         )
 
-        // Verify Lunge compiles, runs, and finalizes correctly with bakeIkLimb helper
         val lungePose = AlternatingForwardLungesPose().build(context)
         val finalizedLunge = pipeline.produceFrame(lungePose).pose
 
@@ -104,7 +101,6 @@ class IKLimbHelperTest {
             cycleDuration = 2500f
         )
 
-        // Verify HangPose compiles, runs, and finalizes correctly with bakeIkLimb helper
         val hangPose = HangPose().build(context)
         val finalizedHang = pipeline.produceFrame(hangPose).pose
 
@@ -130,7 +126,6 @@ class IKLimbHelperTest {
             cycleDuration = 2500f
         )
 
-        // Verify StandardPullUpPose compiles, runs, and finalizes correctly with bakeIkLimb helper
         val pullupPose = StandardPullUpPose().build(context)
         val finalizedPullup = pipeline.produceFrame(pullupPose).pose
         assertNotNull(finalizedPullup)
@@ -228,9 +223,9 @@ class IKLimbHelperTest {
         val pipeline = SkeletonPipeline(def)
         val context = PoseContext(progress = 0.5f, side = Side.LEFT, definition = def)
         val pose = DeadHangPose()
-        // P12 WP-I: the bar plane is honored by the production path (the declared contacts reach the
-        // engine-owned stage and the Phase-2 settlement pass), so the frame is produced through the
-        // pipeline rather than read off a half-built carrier.
+        // The bar plane is honored by the production path (the declared contacts reach the engine-owned
+        // stage and the settlement pass), so the frame is produced through the pipeline rather than read
+        // off a half-built carrier.
         val skeleton = pipeline.produceFrame(pose, context).pose
 
         // Hands are fixed contacts on the bar (y = 500): the contact-aware clamp must keep the

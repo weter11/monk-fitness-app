@@ -59,15 +59,15 @@ import java.time.DayOfWeek
 import java.time.Instant
 
 /**
- * The target Program System schema, read from the three places that can disagree with each other:
- * the entities the database declares, the statements the version-7 → version-8 migration executes,
- * and the DDL Room generates for those entities.
+ * The target Program System schema, read from the three places that can disagree: the entities the
+ * database declares, the statements the migrations execute, and the DDL Room generates for those
+ * entities.
  *
- * The contract these tests assert lives in [ProgramSchemaFixture]; this class proves the shipped
- * schema *is* that contract, and that the architecture's prohibitions are structurally impossible
- * here — a Program that owns a mode or a plan, a slot that carries an amount of work, a snapshot that
- * follows the live revision, a session that may only be attempted once, an entity that leaks a domain
- * type, a prescription flattened into a scalar.
+ * The contract lives in [ProgramSchemaFixture]; this class proves the shipped schema *is* that
+ * contract, and that the architecture's prohibitions are structurally impossible here — a Program that
+ * owns a mode or a plan, a slot that carries an amount of work, a snapshot that follows the live
+ * revision, a session that may only be attempted once, an entity that leaks a domain type, a
+ * prescription flattened into a scalar.
  *
  * Where the schema is executed rather than read — the upgrade of a populated version-7 database,
  * cascade and `SET NULL` behaviour, multiplicity and uniqueness — a real SQLite engine does the work:
@@ -85,20 +85,18 @@ class ProgramSchemaTest {
 
     private val databaseSource: String by lazy { sourceFile("data/local/AppDatabase.kt") }
 
-    /**
-     * Every statement one migration executes, in order — the production migration object, driven through
-     * a proxy that records what a device's SQLite would be handed.
-     */
+    /** Every statement one migration executes — the production object, driven through a proxy that
+     * records what a device's SQLite would be handed. */
     private fun recordStatements(migration: androidx.room.migration.Migration): List<String> {
         val statements = mutableListOf<String>()
         val database = Proxy.newProxyInstance(
             SupportSQLiteDatabase::class.java.classLoader,
             arrayOf(SupportSQLiteDatabase::class.java)
         ) { _, method, args ->
-            // Trimmed because §30 step 14's first two statements are written across several lines:
-            // the leading newline and indentation would make every `startsWith("CREATE TABLE ...")`
-            // predicate below miss them, and a schema assertion that silently finds nothing is worse
-            // than one that fails. The text is otherwise exactly what SQLite is handed.
+            // Trimmed because some statements are written across several lines: the leading newline and
+            // indentation would make every `startsWith("CREATE TABLE ...")` predicate below miss them,
+            // and a schema assertion that silently finds nothing is worse than one that fails. The text
+            // is otherwise exactly what SQLite is handed.
             if (method.name == "execSQL") statements += (args!![0] as String).trim()
             null
         } as SupportSQLiteDatabase
@@ -107,57 +105,53 @@ class ProgramSchemaTest {
         return statements
     }
 
-    /** Every statement the version-7 → version-8 migration executes, in order. */
     private fun migrationStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_7_8)
 
-    /** Every statement the version-8 → version-9 additive migration executes, in order. */
     private fun additiveStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_8_9)
 
-    /** The statements of the second additive step — the Goal/Focus columns of §8. */
+    /** The statements of the second additive step — the Goal/Focus columns. */
     private fun focusStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_9_10)
 
-    /** Every additive statement the deployed chain executes, in chain order. */
-    /** Every statement the version-10 → version-11 step executes: §30 step 12's window bookkeeping. */
+    /** The statements of the window-bookkeeping step. */
     private fun windowStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_10_11)
 
     /**
-     * The two exact statements the **target slot identity** step (12 -> 13) executes, in order.
-     *
-     * The name is the historical one and it is kept: this is Stage 8's additive column plus its unique
-     * index, and §30 step 14's separate step is [semanticOccurrenceStatements].
+     * The two exact statements the **target slot identity** step (12 -> 13) executes: the additive
+     * column plus its unique index. The separately-named semantic payload step is
+     * [semanticOccurrenceStatements].
      */
     private fun targetOccurrenceStatements(): List<String> = recordStatements(AppDatabase.MIGRATION_12_13)
 
     /**
-     * The three exact statements §30 step 14's **semantic payload** step (13 -> 14) executes: the two
-     * target occurrence tables and the component table's lookup index.
+     * The three exact statements the **semantic payload** step (13 -> 14) executes: the two target
+     * occurrence tables and the component table's lookup index.
      */
     private fun semanticOccurrenceStatements(): List<String> =
         recordStatements(AppDatabase.MIGRATION_13_14)
 
     /**
-     * The two exact statements Stage 18's **explicit target schedule source** step (14 -> 15)
-     * executes: the rule table and the binding table, in that order.
+     * The two exact statements the **explicit target schedule source** step (14 -> 15) executes: the
+     * rule table and the binding table, in that order.
      */
     private fun targetScheduleSourceStatements(): List<String> =
         recordStatements(AppDatabase.MIGRATION_14_15)
 
     /**
-     * The one exact statement §30 step 28's **exercise preference** step (15 -> 16) executes: the single
-     * nullable column, with no default and no backfill.
+     * The one exact statement the **exercise preference** step (15 -> 16) executes: the single nullable
+     * column, with no default and no backfill.
      */
     private fun preferenceStatements(): List<String> =
         recordStatements(AppDatabase.MIGRATION_15_16)
 
     /**
-     * The two exact statements P29's **historical focus** step (16 -> 17) executes, in order: the plan
-     * element's own focus, and the copy the session snapshot freezes. Both nullable, no default.
+     * The two exact statements the **historical focus** step (16 -> 17) executes: the plan element's own
+     * focus, and the copy the session snapshot freezes. Both nullable, no default.
      */
     private fun historicalFocusStatements(): List<String> =
         recordStatements(AppDatabase.MIGRATION_16_17)
 
     /**
-     * The one exact statement P31's **progression relation catalogue** step (17 -> 18) executes: the
+     * The one exact statement the **progression relation catalogue** step (17 -> 18) executes: the
      * single ladder-variant table, with no seed and no backfill of any existing table.
      */
     private fun progressionRelationStatements(): List<String> =
@@ -193,11 +187,10 @@ class ProgramSchemaTest {
     /**
      * The one `CREATE TABLE` statement for [table] — matched by its own name, never as a substring.
      *
-     * It is looked up across every step that creates a table, because two of the target tables are
-     * created by `MIGRATION_13_14` and two more by Stage 18's `MIGRATION_14_15` rather than by the
-     * version-8 step. Each table is still created
-     * exactly once: `single` asserts that here, and each step's own statement list is asserted
-     * separately, so a table cannot quietly appear in both.
+     * Looked up across every step that creates a table, because several target tables are created by
+     * later steps rather than by the version-8 step. Each table is still created exactly once: `single`
+     * asserts that here, and each step's own statement list is asserted separately, so a table cannot
+     * quietly appear in both.
      */
     private fun statementFor(table: String): String =
         (
@@ -239,10 +232,10 @@ class ProgramSchemaTest {
     /**
      * The `FOREIGN KEY(...) REFERENCES ...(...) ON UPDATE NO ACTION ON DELETE ...` shape.
      *
-     * Matched against the **normalized** statement, because §30 step 14's DDL wraps the parent
-     * columns onto their own line and this pattern asks for a single space between the clauses. A
-     * statement the migration really executes must not read as "no foreign keys" merely because it is
-     * laid out across lines — that is a silently empty assertion, not a passing one.
+     * Matched against the **normalized** statement, because some DDL wraps the parent columns onto
+     * their own line while this pattern asks for a single space between clauses. A statement the
+     * migration really executes must not read as "no foreign keys" merely because it is laid out
+     * across lines — that is a silently empty assertion, not a passing one.
      */
     private val foreignKeyRegex = Regex(
         "FOREIGN KEY\\(([^)]*)\\) REFERENCES `(\\w+)`\\(([^)]*)\\) " +
@@ -270,7 +263,6 @@ class ProgramSchemaTest {
     private fun entityFiles(): List<String> =
         ProgramSchemaFixture.ENTITIES.map { (entity, _) -> "data/model/$entity.kt" }
 
-    // ---- the entity set ------------------------------------------------------------------------------
 
     @Test
     fun theTargetEntitySetIsExactlyTheOneTheArchitectureNames() {
@@ -285,14 +277,14 @@ class ProgramSchemaTest {
             ProgramWorkoutSlotEntity::class.java,
             ProgramTargetOccurrenceEntity::class.java,
             ProgramTargetOccurrenceComponentEntity::class.java,
-            // Stage 18: the revision-owned explicit target schedule source. Two entities because the
-            // rules and the explicit workout-to-plan-day bindings are two lists with two identities,
-            // not one row with a nullable half — and neither is a replacement for anything retired.
+            // The revision-owned explicit target schedule source. Two entities because the rules and
+            // the workout-to-plan-day bindings are two lists with two identities, not one row with a
+            // nullable half — and neither is a replacement for anything retired.
             ProgramTargetScheduleRuleEntity::class.java,
             ProgramTargetProgramDayBindingEntity::class.java,
-            // P31: the app-owned progression relation catalogue. One entity because one row IS one
-            // declared rung — a ladder is a set of rows, not a serialized blob — and it is declared
-            // here as a target table even though no Program or revision owns it.
+            // The app-owned progression relation catalogue. One entity because one row IS one declared
+            // rung — a ladder is a set of rows, not a serialized blob — and it is a target table even
+            // though no Program or revision owns it.
             ProgressionRelationVariantEntity::class.java,
             WorkoutSessionEntity::class.java,
             SessionSnapshotEntity::class.java,
@@ -437,20 +429,18 @@ class ProgramSchemaTest {
         )
     }
 
-    // ---- P29: the historical focus of an element, and of a session snapshot (§8, §19) ---------------
 
     /**
      * The step adds exactly **two** nullable columns — the plan element's focus and the snapshot's frozen
      * copy — with **no `DEFAULT`** on either.
      *
-     * The absence of a default is the whole claim, and it is asserted over the statement text rather than
-     * left implied: a default focus would make every pre-existing row claim that its element trains
-     * something, which is a claim the Focus Planner never made for a manual program, a user-authored
-     * element or an old workout. `null` is what an upgraded row gets, and `null` means *no focus was
-     * recorded* — which generation then reads as absence, never as a zero.
+     * The absence of a default is the whole claim, asserted over the statement text rather than left
+     * implied: a default focus would make every pre-existing row claim its element trains something,
+     * which the Focus Planner never said for a manual program, a user-authored element or an old
+     * workout. `null` means *no focus was recorded*, which generation reads as absence, never as zero.
      *
-     * The second column is the load-bearing one: it is why a later revision cannot re-label a session that
-     * already happened.
+     * The snapshot's copy is the load-bearing one: it is why a later revision cannot re-label a session
+     * that already happened.
      */
     @Test
     fun theHistoricalFocusMigrationAddsTwoNullableColumnsAndNoDefault() {
@@ -507,15 +497,13 @@ class ProgramSchemaTest {
         )
     }
 
-    // ---- the user's exercise preference (§30 step 28) --------------------------------------------
 
     /**
      * The step adds exactly one nullable column to `program_revision`, with **no `DEFAULT`**.
      *
-     * The absence of a default is the whole claim, so it is asserted over the statement text rather than
-     * left implied: a `DEFAULT ''` would make every existing row claim a preference, and a `DEFAULT` of
-     * any kind would write a ranking no user ever stated. `null` is what an upgraded row gets, and `null`
-     * means `ExercisePreference.NONE` — the user named nothing (§9).
+     * The absence of a default is the whole claim: a `DEFAULT ''` would make every existing row claim a
+     * preference, and a `DEFAULT` of any kind would write a ranking no user ever stated. `null` means
+     * `ExercisePreference.NONE` — the user named nothing.
      */
     @Test
     fun thePreferenceMigrationAddsOneNullableColumnAndNoDefault() {
@@ -536,7 +524,6 @@ class ProgramSchemaTest {
         )
     }
 
-    // ---- the target occurrence's semantic payload (§30 step 14) ---------------------------------------
 
     @Test
     fun theSemanticOccurrenceMigrationCreatesTheTwoTablesAndWritesNoRow() {
@@ -559,9 +546,9 @@ class ProgramSchemaTest {
     fun theSemanticOccurrenceMigrationInventsNoOccurrenceFromASlot() {
         val statements = semanticOccurrenceStatements()
 
-        // The delete actions of the two foreign keys are the only `DELETE` the clause `ON DELETE
-        // CASCADE` contains, so they are removed before the verbs are looked for: what the rule
-        // forbids is a statement that acts on an existing row.
+        // The delete actions of the two foreign keys are the only `DELETE` the statement text contains,
+        // so those clauses are removed before the verbs are looked for: what the rule forbids is a
+        // statement that acts on an existing row.
         val acting = statements.map { statement ->
             statement.replace(Regex("ON UPDATE NO ACTION ON DELETE CASCADE"), "")
         }
@@ -687,7 +674,6 @@ class ProgramSchemaTest {
         val onDelete: String
     )
 
-    // ---- the migration -------------------------------------------------------------------------------
 
     @Test
     fun theMigrationExecutesExactlyTheStatementsRoomGeneratesForTheTargetEntities() {
@@ -742,9 +728,9 @@ class ProgramSchemaTest {
 
     @Test
     fun theMigrationNeverDropsDeletesAltersUpdatesInsertsOrRenamesAnything() {
-        // The only `DELETE` the migration may contain is the delete action of a foreign key
-        // (`ON DELETE CASCADE`), so those clauses are removed before the verbs are looked for: what the
-        // rule forbids is a statement that acts on an existing table.
+        // The only `DELETE` the migration may contain is a foreign key's delete action, so those
+        // clauses are removed before the verbs are looked for: what the rule forbids is a statement
+        // that acts on an existing table.
         val statements = migrationStatements().map { statement ->
             statement.replace(
                 Regex("ON UPDATE NO ACTION ON DELETE (CASCADE|SET NULL|NO ACTION)"),
@@ -764,9 +750,7 @@ class ProgramSchemaTest {
         )
     }
 
-    // ---- what the schema must not be able to represent -------------------------------------------------
 
-    // ---- the additive correction ------------------------------------------------------------------
 
     @Test
     fun theAdditiveMigrationAddsExactlyTheDeclaredColumnsAndNothingElse() {
@@ -1031,8 +1015,8 @@ class ProgramSchemaTest {
         database.migrate(AppDatabase.MIGRATION_8_9)
         database.migrate(AppDatabase.MIGRATION_9_10)
 
-        // The version-10 row set a device holds: a Program, its revision, and the family state the
-        // adaptive stage had written before it could count anything.
+        // The version-10 row set a device holds: a Program, its revision, and the family state written
+        // before the adaptive stage could count anything.
         database.exec(
             "INSERT INTO `program` (`programId`, `name`, `description`, `source`, `lifecycleStatus`, " +
                 "`currentRevisionId`, `createdAt`, `updatedAt`, `plannedStartDate`, `actualStartDate`, " +
@@ -1188,8 +1172,8 @@ class ProgramSchemaTest {
                 "'' , 'USER', 'NOT_STARTED', 'revision-1', 1700000000000, 1700000000000, NULL, NULL, NULL)"
         )
 
-        // One row per configuration form, each written as raw SQL — what a device that upgraded
-        // holds, and what the mapper has to read.
+        // One row per configuration form, written as raw SQL — what an upgraded device holds and what
+        // the mapper has to read.
         val configurations = listOf(
             StoredConfiguration("revision-1", goal = null, targets = null, FocusPlan.Balanced),
             StoredConfiguration(
@@ -1261,8 +1245,8 @@ class ProgramSchemaTest {
     }
 
     /**
-     * A stored configuration the domain refuses: the bytes are written as raw SQL, so the refusal
-     * under test is the **load**'s, not a constructor's.
+     * A stored configuration the domain refuses: the bytes are written as raw SQL, so the refusal under
+     * test is the **load**'s, not a constructor's.
      */
     @Test
     fun aStoredGoalFocusConfigurationTheDomainRefusesIsRefusedOnLoad() {
@@ -1410,15 +1394,14 @@ class ProgramSchemaTest {
     @Test
     fun theMigratedRevisionTableIsTheTableTheContractDescribes() {
         // Room validates a migrated table against the DDL it generates for the entity on open, so the
-        // claim that matters is: the table a v9 device ends up with **is** the DDL the entity emits.
-        // `expectedCurrentTableDdl` is that DDL, derived from the same contract that
-        // `everyTargetEntityDeclaresItsColumnsInTheStoredOrder` compares the entity against — so
-        // "a fresh install and an upgrade agree" is pinned by the two sides being the same statement,
-        // not by executing the same chain twice.
-        // The whole chain, to the current version. This test's claim is that the table a device ends up
-        // with **is** the DDL the entity emits, so it may not stop partway: comparing a 9 -> 10 chain
-        // against the current contract would fail for the uninteresting reason that the later steps never
-        // ran, and would pass for the wrong reason if the contract were also truncated to match.
+        // claim is: the table a device ends up with **is** the DDL the entity emits.
+        // `expectedCurrentTableDdl` is that DDL, derived from the same contract the entity is compared
+        // against — so "a fresh install and an upgrade agree" is pinned by both sides being the same
+        // statement, not by executing the chain twice.
+        //
+        // It runs the whole chain because a comparison against the current contract may not stop
+        // partway: a truncated chain would fail for the uninteresting reason that later steps never ran,
+        // and would pass for the wrong reason if the contract were truncated to match.
         val upgraded = SqliteTestDatabase.inMemory()
         upgraded.execAll(LegacyV7Schema.TABLE_STATEMENTS)
         upgraded.migrate(AppDatabase.MIGRATION_7_8)
@@ -1430,10 +1413,9 @@ class ProgramSchemaTest {
         upgraded.migrate(AppDatabase.MIGRATION_13_14)
         upgraded.migrate(AppDatabase.MIGRATION_14_15)
         upgraded.migrate(AppDatabase.MIGRATION_15_16)
-        // P29: the historical focus columns, so the chain lands on the declared version and this
-        // comparison is against the current contract rather than a truncated one.
+        // The historical focus columns, so the chain lands on the declared version.
         upgraded.migrate(AppDatabase.MIGRATION_16_17)
-        // P31: the ladder catalogue's table, so the chain lands on the declared version.
+        // The ladder catalogue's table, so the chain lands on the declared version.
         upgraded.migrate(AppDatabase.MIGRATION_17_18)
 
         assertEquals(
@@ -1826,7 +1808,7 @@ class ProgramSchemaTest {
     fun theTargetAdaptiveTablesCoexistWithTheStageOneOnes() {
         // The Stage-1 pair is consumed by shipped DAO/repository code keyed by the legacy integer
         // revision, so it keeps its contract; the target pair is keyed by the typed identities the
-        // Program System uses, and the two coexist until §30 step 15 retires the old persistence.
+        // Program System uses.
         for (target in listOf(
             "program_family_progression_state",
             "program_adaptive_decision_record",
@@ -1867,7 +1849,6 @@ class ProgramSchemaTest {
         )
     }
 
-    // ---- ownership ------------------------------------------------------------------------------------
 
     @Test
     fun everyProgramOwnedChildPointsAtItsTrueOwnerWithCascade() {
@@ -1925,19 +1906,13 @@ class ProgramSchemaTest {
             table != "program" && table !in ProgramSchemaFixture.PROGRAM_OWNED_TABLES
         }
 
-        // **Revised, not relaxed, by P31.** The old claim was `exactly ["app_state"]`, and it held
-        // because every target table was somebody's child. P31 adds the one table that is deliberately
-        // nobody's child, so the claim becomes two *named* exceptions rather than one — which is a
-        // stronger statement about the new table, not a weaker one about the old rule: it still says
-        // every remaining target table is destroyed with the Program that owns it, and it now says
-        // exactly which two do not and why.
+        // Two *named* exceptions, so the rule still says every remaining target table is destroyed with
+        // the Program that owns it and says exactly which two are not.
         //
         // `progression_relation_variant` survives Program deletion because a ladder is a property of a
         // *family*, not of a plan. Cascading it would mean deleting every Program silently erased the
-        // app's declared progression ladders, and the next program to train that family would find
-        // them gone — which is the cross-plan coupling the domain's family-level scoping exists to
-        // prevent. A reviewer should read this exception as the schema stating P31's scope rule, not
-        // as a table that escaped the ownership model.
+        // app's declared ladders, and the next program to train that family would find them gone — the
+        // cross-plan coupling the domain's family-level scoping exists to prevent.
         assertEquals(
             "every target table is destroyed with the Program that owns it, except the Program itself, " +
                 "the global single-row AppState, and P31's family-level progression ladder catalogue — " +
@@ -1965,7 +1940,6 @@ class ProgramSchemaTest {
         )
     }
 
-    // ---- identity and metadata -------------------------------------------------------------------------
 
     @Test
     fun everyTargetEntityHasTheIdentityTheArchitectureGivesIt() {
@@ -2006,16 +1980,16 @@ class ProgramSchemaTest {
 
     @Test
     fun everyDeclaredColumnIsStoredInTheStatementThatIntroducesIt() {
-        // P29's step joins this list: the claim is that *every* column an entity declares is introduced
-        // by exactly one statement, and a step the list does not mention would let its columns escape
-        // the check entirely — the list is the set of steps being audited, not a sample of them.
+        // The claim is that *every* column an entity declares is introduced by exactly one statement,
+        // and a step the list does not mention would let its columns escape the check entirely — the
+        // list is the set of steps being audited, not a sample of them.
         val added = ProgramSchemaFixture.normalized(
             (allAdditiveStatements() + targetOccurrenceStatements() + preferenceStatements() +
                 historicalFocusStatements()).joinToString(" ")
         )
-        // §30 step 14 creates its two tables outright rather than appending columns, so their columns
-        // are checked against their own `CREATE TABLE` — which is what [statementFor] returns for them.
-        // No column of either new table is an *additive* one, so nothing joins `added` here.
+        // The two target-occurrence tables are created outright rather than appended to, so their columns
+        // are checked against their own `CREATE TABLE` — what [statementFor] returns for them. No column
+        // of either new table is an *additive* one, so nothing joins `added` here.
         for (table in ProgramSchemaFixture.TABLES) {
             val created = ProgramSchemaFixture.normalized(statementFor(table))
             for (column in ProgramSchemaFixture.COLUMNS.getValue(table)) {
@@ -2096,7 +2070,6 @@ class ProgramSchemaTest {
         }
     }
 
-    // ---- the data-layer rule ---------------------------------------------------------------------------
 
     @Test
     fun noTargetEntityImportsTheDomainOrHoldsADomainValueObject() {
@@ -2141,7 +2114,6 @@ class ProgramSchemaTest {
         }
     }
 
-    // ---- the entity-level representability guards -------------------------------------------------------
 
     @Test
     fun aSetLogCannotRecordWorkThatDidNotHappen() {
@@ -2376,7 +2348,6 @@ class ProgramSchemaTest {
         )
     }
 
-    // ---- the stored collections --------------------------------------------------------------------------
 
     @Test
     fun perSetTargetsSurviveStorageWithoutCollapsingIntoAScalar() {

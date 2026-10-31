@@ -23,8 +23,6 @@ import java.time.DayOfWeek
  */
 class ProgramDraftEditorTest {
 
-    // ------------------------------------------------------------------ identity and order
-
     @Test
     fun addingDaysAndElementsMintsTheDraftsOwnIdentities() {
         val ids = TestIds()
@@ -132,8 +130,6 @@ class ProgramDraftEditorTest {
         assertEquals("the rest day is untouched", plan.last(), reordered.days.last())
     }
 
-    // ------------------------------------------------------------------ repeats and prescriptions
-
     @Test
     fun oneOccurrenceCanBeRemovedWithoutTouchingItsTwin() {
         val plan = planWithTwoOccurrences()
@@ -226,8 +222,6 @@ class ProgramDraftEditorTest {
         )
     }
 
-    // ------------------------------------------------------------------ the rest-day rule
-
     @Test
     fun aRestDayCannotBeMadeOutOfADayThatStillPlansWork() {
         val plan = planWithTwoOccurrences()
@@ -286,8 +280,6 @@ class ProgramDraftEditorTest {
         )
     }
 
-    // ------------------------------------------------------------------ the Program's own facts
-
     @Test
     fun theProgramsOwnFactsAreEditedWithoutTouchingThePlan() {
         val plan = plan()
@@ -308,8 +300,6 @@ class ProgramDraftEditorTest {
         assertEquals(ProgramSchedule.FlexiblePerWeek(4), facts.schedule)
         assertEquals("and the plan is exactly what it was", plan, facts.days)
     }
-
-    // ------------------------------------------------------------------ loud failures
 
     @Test
     fun addressingADayOrElementTheDraftDoesNotHoldFailsLoudly() {
@@ -350,8 +340,6 @@ class ProgramDraftEditorTest {
         val appendedAtTheEnd = editor(draft, ids).addingDay(ProgramDayType.REST, at = 3).draft
         assertEquals("appending is expressed as position 3 of 2", 3, appendedAtTheEnd.days.size)
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private class TestIds(private val tag: String = "draft") : DraftIdSource {
 

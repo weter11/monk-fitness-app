@@ -16,24 +16,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §30 step 6 — the Manual Editor, against a real SQLite engine and the production DAOs.
+ * The Manual Editor, against a real SQLite engine and the production DAOs.
  *
  * The editor's claims are claims about *storage*: that a save creates exactly one revision or none,
  * that a superseded revision is still what it was, that a draft's identities never reach a row, and
- * that a failure leaves nothing behind. Each of them is therefore measured through the engine — row
- * counts of every table, revisions read back by identity, slots compared before and after — rather
- * than argued from the service's shape.
- *
- * The suite is organised the way the flow is: create, edit, copy, review, and the two guarantees that
- * cut across all of them (draft-first editing, immutable revisions).
+ * that a failure leaves nothing behind. Each is measured through the engine — row counts of every
+ * table, revisions read back by identity, slots compared before and after — rather than argued from
+ * the service's shape.
  */
 class ProgramEditorServiceTest {
 
     private val rig = ProgramEditorRig("a")
 
     private val programId: ProgramId get() = rig.graph.program.programId
-
-    // ============================================================ create
 
     @Test
     fun aManualProgramIsCreatedFromADraftAndItsPlanIsStoredWhole() = runBlocking {
@@ -174,8 +169,6 @@ class ProgramEditorServiceTest {
         )
         assertEquals(before, rig.tableCounts())
     }
-
-    // ============================================================ edit, and the revision rule
 
     @Test
     fun editingAUserProgramsPlanSavesExactlyOneNewRevision() = runBlocking {
@@ -526,8 +519,6 @@ class ProgramEditorServiceTest {
         )
     }
 
-    // ============================================================ copy
-
     @Test
     fun copyingCreatesANewProgramWhosePlanIsNewRowsWithTheSameStructure() = runBlocking {
         rig.createGraph()
@@ -660,7 +651,7 @@ class ProgramEditorServiceTest {
         val standard = rig.stored(rig.standardProgramId)
 
         // A draft that claims to edit the built-in Program, built by hand: the save must refuse it on
-        // its own, not only through the entry point that opened it (§4).
+        // its own, not only through the entry point that opened it.
         val forged = ProgramEditorDraft(
             programId = rig.standardProgramId,
             baseRevisionId = standardRevision.revisionId,
@@ -692,8 +683,6 @@ class ProgramEditorServiceTest {
         )
         assertEquals(1, rig.revisionCount(programId))
     }
-
-    // ============================================================ reload
 
     @Test
     fun aSavedStructureSurvivesAReloadExactly() = runBlocking {
@@ -746,8 +735,6 @@ class ProgramEditorServiceTest {
         )
     }
 
-    // ============================================================ draft-first
-
     @Test
     fun editingNeverTouchesAnythingThatIsStored() = runBlocking {
         rig.createGraph()
@@ -778,8 +765,6 @@ class ProgramEditorServiceTest {
         assertEquals("and its slots", slotsBefore, rig.slots(programId))
         assertEquals("and the whole database", countsBefore, rig.tableCounts())
     }
-
-    // ============================================================ review
 
     @Test
     fun theReviewSaysWhatSavingWouldDo() = runBlocking {
@@ -854,8 +839,6 @@ class ProgramEditorServiceTest {
         )
     }
 
-    // ============================================================ missing rows
-
     @Test
     fun editingOrCopyingAProgramThatIsNotStoredIsRefused() = runBlocking {
         val ghost = ProgramId("program-ghost")
@@ -890,8 +873,6 @@ class ProgramEditorServiceTest {
         assertEquals(1, rig.revisionCount(programId))
     }
 
-    // ============================================================ the exercise library
-
     @Test
     fun theEditorNeverMutatesExerciseLibraryData() = runBlocking {
         rig.createGraph()
@@ -923,8 +904,6 @@ class ProgramEditorServiceTest {
         assertEquals(1, rig.revisionCount(created.program.programId))
     }
 
-    // ============================================================ helpers
-
     /** The draft the editor produces for a new MANUAL Program, built through the editor's own API. */
     private fun draftOf(name: String, description: String = ""): ProgramEditorDraft {
         val days = plan()
@@ -935,15 +914,7 @@ class ProgramEditorServiceTest {
         ).also { draft -> assertTrue("the fixture draft is valid", draft.validation().isValid) }
     }
 
-    /**
-     * A three-day manual plan that exercises every per-set guarantee:
-     *
-     * ```text
-     * day 1  Push day     pushup 12/10/8/6, plank 30/30/45 (pinned)
-     * day 2  Rest         nothing — a rest day prescribes no exercises (§20)
-     * day 3  Repeat day   pushup 5, pushup 5 — the same exercise as two occurrences (§9)
-     * ```
-     */
+    /** A three-day manual plan that exercises every per-set guarantee: per-set reps, a rest day, a repeat. */
     private fun plan(): List<ProgramDay> = listOf(
         ProgramDay(
             programDayId = ProgramDayId("draft-day-1"),

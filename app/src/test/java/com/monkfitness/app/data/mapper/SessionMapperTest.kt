@@ -14,9 +14,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The session rows ⇄ `WorkoutSession`, pinned on the two things §19 turns on: the presentation a session
- * is loaded from (its own snapshot, never the live plan) and the sets a session has confirmed (rows in
- * set order, with no invented placeholders).
+ * The session rows ⇄ `WorkoutSession`, pinned on the two things a session turns on: the presentation it
+ * is loaded from (its own snapshot, never the live plan) and the sets it has confirmed (rows in set
+ * order, with no invented placeholders).
  */
 class SessionMapperTest {
 

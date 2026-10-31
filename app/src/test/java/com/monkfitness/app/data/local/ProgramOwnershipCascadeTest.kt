@@ -9,20 +9,19 @@ import org.junit.Test
  * The ownership graph, executed: two complete Programs in one real SQLite database, one of them
  * deleted, and the rows that are allowed to move.
  *
- * What is under test is the database's own behaviour under `PRAGMA foreign_keys = ON`, the pragma
- * Room opens a database with. A cascade that only exists in a DDL string is not a cascade, and a
- * `SET NULL` that is never seen to null is not a `SET NULL`. The `DELETE` here is the statement the
- * eventual repository's delete transaction will run (§27, §29); no repository is written in this PR.
+ * What is under test is the database's own behaviour under `PRAGMA foreign_keys = ON`, the pragma Room
+ * opens a database with. A cascade that only exists in a DDL string is not a cascade, and a `SET NULL`
+ * never seen to null is not a `SET NULL`. The `DELETE` here is the statement the repository's delete
+ * transaction runs.
  */
 class ProgramOwnershipCascadeTest {
 
-    /** A migrated version-8 database holding two independent programs and the AppState row. */
     private fun migratedDatabase(): SqliteTestDatabase {
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
         // The deployed chain, all the way to the version the app opens. A suite that stopped at
-        // version 8 would be exercising a database no device runs, and one that stopped at 13 would
-        // not have the target occurrence's semantic tables at all.
+        // version 8 would exercise a database no device runs, and one that stopped at 13 would not
+        // have the target occurrence's semantic tables at all.
         database.migrate(AppDatabase.MIGRATION_7_8)
         database.migrate(AppDatabase.MIGRATION_8_9)
         database.migrate(AppDatabase.MIGRATION_9_10)
@@ -31,11 +30,9 @@ class ProgramOwnershipCascadeTest {
         database.migrate(AppDatabase.MIGRATION_12_13)
         database.migrate(AppDatabase.MIGRATION_13_14)
         database.migrate(AppDatabase.MIGRATION_14_15)
-        // §30 step 28: the user's exercise preference column. Stopping short would leave every
-        // repository suite below exercising a database the app can no longer produce.
+        // The user's exercise preference column. Stopping short would leave every repository suite
+        // below exercising a database the app can no longer produce.
         database.migrate(AppDatabase.MIGRATION_15_16)
-        // P29: the element's historical focus and the snapshot's frozen copy. Stopping short
-        // would leave this suite exercising a database the app can no longer produce.
         database.migrate(AppDatabase.MIGRATION_16_17)
         database.migrate(AppDatabase.MIGRATION_17_18)
         ProgramGraphInserts.insertCompleteProgram(
@@ -55,16 +52,15 @@ class ProgramOwnershipCascadeTest {
         Triple("program_day", "programDayId", "day-1"),
         Triple("program_exercise", "programExerciseId", "plan-exercise-1"),
         Triple("program_workout_slot", "slotId", "slot-1"),
-        // §30 step 14: a target occurrence and its component, both owned through the Program. The
-        // component's identity column is `ruleId` because `position` is the same on every row of a
-        // one-component occurrence, so it could not tell the survivor apart from the deleted row.
+        // A target occurrence and its component, both owned through the Program. The component's
+        // identity column is `ruleId` because `position` is the same on every row of a one-component
+        // occurrence, so it could not tell the survivor apart from the deleted row.
         Triple("program_target_occurrence", "occurrenceKey", "strength:1"),
         Triple("program_target_occurrence_component", "ruleId", "rule-strength"),
-        // Stage 18: the explicitly stated target schedule source. Both rows are owned through the
-        // **revision**, and the binding additionally names a plan day — so this is the case that proves
-        // a source dies with its Program and not merely with its Program's slots. The survivor column
-        // is `ruleId`/`workoutId` because `revisionId` is identical on both graphs and so could not
-        // tell the two rows apart.
+        // The explicitly stated target schedule source. Both rows are owned through the **revision**,
+        // and the binding additionally names a plan day — so this proves a source dies with its Program
+        // and not merely with its Program's slots. The survivor column is `ruleId`/`workoutId` because
+        // `revisionId` is identical on both graphs and could not tell the two rows apart.
         Triple("program_target_schedule_rule", "ruleId", "rule-strength"),
         Triple("program_target_program_day_binding", "workoutId", "workout-strength"),
         Triple("workout_session", "sessionId", "session-1"),
@@ -89,10 +85,9 @@ class ProgramOwnershipCascadeTest {
 
         database.exec("DELETE FROM `program` WHERE `programId` = 'program-2'")
 
-        // **Revised, not relaxed, by P31.** The old arithmetic was `TABLES.size - 1` — one global
-        // survivor, `app_state`. The ladder catalogue is a *second* deliberate survivor: it is nobody's
-        // child, so deleting a Program must not touch it. Naming both exceptions here is what keeps
-        // the count honest — it would still fail if the delete started wiping a third table.
+        // Two deliberate survivors: the global `app_state` row and the family-level ladder catalogue,
+        // which is nobody's child. Naming both exceptions keeps the count honest — it would still fail
+        // if the delete started wiping a third table.
         assertEquals(
             "every table of the contract was exercised by the delete, except the global AppState row " +
                 "and P31's family-level ladder catalogue — neither is a child of any program",

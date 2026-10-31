@@ -46,39 +46,22 @@ import java.time.DayOfWeek
 /**
  * The target DAOs, implemented against a **real SQLite engine**.
  *
- * Room's DAOs cannot run on this repository's unit-test JVM — there is no Robolectric, no
- * instrumentation source set and no `androidx.room.testing`, so the generated implementations have
- * nowhere to execute. The repository suites therefore need DAO implementations that are the engine's,
- * not the test's, and this file is exactly that: every method below executes the statement its DAO
- * carries ([ProgramDaoSql]) on the same SQLite engine Room opens on a device, with bound parameters,
- * `PRAGMA foreign_keys = ON` and genuine `BEGIN`/`COMMIT`/`ROLLBACK` transactions.
+ * Room's DAOs cannot run on this unit-test JVM — no Robolectric, no instrumentation source set, no
+ * `androidx.room.testing` — so the generated implementations have nowhere to execute. Every method here
+ * therefore executes the statement its DAO carries ([ProgramDaoSql]) on the same SQLite engine Room
+ * opens on a device, with bound parameters, `PRAGMA foreign_keys = ON` and genuine
+ * `BEGIN`/`COMMIT`/`ROLLBACK`: a failed creation leaves nothing behind, a cascade is the schema's
+ * foreign keys rather than a hand-written child delete, and a `SET NULL` is the engine's.
  *
- * What that buys is the difference between "the repository composes reads correctly" and the claims
- * this stage actually has to make:
- *
- *  * a creation transaction that fails partway leaves **nothing** behind, because the rollback is
- *    SQLite's;
- *  * deleting a Program really destroys its owned graph, because the cascade is the schema's foreign
- *    keys rather than a hand-written child delete;
- *  * deleting the **selected** Program is really refused (`ON DELETE NO ACTION`) and the refusal really
- *    propagates, because the constraint is the engine's;
- *  * `app_state.nextProgramId` is really nulled while its row survives, because that is `SET NULL`;
- *  * a session really keeps its snapshot when the live plan changes underneath it, because the read
- *    touches only snapshot tables and the plan is mutated by SQL between the two loads.
- *
- * ### Where these implementations could drift, and why they cannot
- *
- * Queries are the DAOs' own SQL text ([ProgramDaoSql]); inserts and updates have no SQL literal to
- * copy (Room generates them from the entity), so they are written here and guarded instead:
- *
- *  * [insertRow] binds **every** field of the entity and refuses to run unless the entity's fields are
- *    exactly the table's columns in declaration order — a column the entity adds without this harness
- *    noticing is a test failure, not a silent omission;
- *  * `ProgramDataAccessArchitectureTest` reads the DAO sources and the statements here and asserts the
- *    correspondence in both directions, plus the shape of every hand-written write.
+ * Queries are the DAOs' own SQL text; inserts and updates have no literal to copy (Room generates them
+ * from the entity), so they are written here and guarded instead: [insertRow] binds **every** field of
+ * the entity and refuses to run unless the entity's fields are exactly the table's columns in
+ * declaration order, so a column the entity adds without this harness noticing is a test failure rather
+ * than a silent omission. `ProgramDataAccessArchitectureTest` asserts the correspondence in both
+ * directions, plus the shape of every hand-written write.
  */
 
-/** The physical table each target entity is stored in. Asserted against the schema contract. */
+/** The physical table each target entity is stored in, asserted against the schema contract. */
 internal val TARGET_ENTITY_TABLES: Map<Class<*>, String> = mapOf(
     ProgramEntity::class.java to "program",
     AppStateEntity::class.java to "app_state",
@@ -99,18 +82,17 @@ internal val TARGET_ENTITY_TABLES: Map<Class<*>, String> = mapOf(
     FamilyProgressionStateEntity::class.java to "program_family_progression_state",
     AdaptiveDecisionRecordEntity::class.java to "program_adaptive_decision_record",
     AdaptiveAdjustmentEntity::class.java to "adaptive_adjustment",
-    // P31: the ladder catalogue. Registered here because the harness asserts that this entity's declared
-    // fields are exactly the columns the table stores — which is what makes "the persisted row shape is
-    // the entity" a mechanical check on the new table too, rather than a claim.
+    // The ladder catalogue, registered because the harness asserts that this entity's declared fields
+    // are exactly the columns the table stores — which makes "the persisted row shape is the entity" a
+    // mechanical check on this table too.
     ProgressionRelationVariantEntity::class.java to "progression_relation_variant"
 )
 
 /**
  * Stores one entity, binding every declared field.
  *
- * @param replace whether the statement is `INSERT OR REPLACE` — the form the DAOs that upsert a single
- *   current row use (`AppStateDao.upsertState`, `ProgramFamilyProgressionStateDao.upsertState`). Every
- *   other writer is a plain insert, exactly as its `@Insert` declares.
+ * [replace] is `INSERT OR REPLACE`, the form the single-current-row upserts use; every other writer is a
+ * plain insert, exactly as its `@Insert` declares.
  */
 internal fun SqliteTestDatabase.insertRow(entity: Any, replace: Boolean = false) {
     val table = requireNotNull(TARGET_ENTITY_TABLES[entity.javaClass]) {
@@ -131,7 +113,7 @@ internal fun SqliteTestDatabase.insertRow(entity: Any, replace: Boolean = false)
     }.toTypedArray())
 }
 
-/** The stored form of one entity field: epoch millis and counters as they are, collections joined. */
+/** The stored form of one entity field: scalars as they are, collections joined. */
 private fun storedValue(value: Any?): Any? = when (value) {
     null -> null
     is Boolean -> if (value) 1 else 0
@@ -152,17 +134,13 @@ private fun Map<String, String?>.text(column: String): String = requireNotNull(t
 }
 
 /**
- * A **nullable** text column, read as absence rather than as a failure.
+ * A **nullable** text column, read as absence rather than as a failure. `text` refuses a missing column
+ * so a mapper that forgot one fails loudly; this one cannot tell a missing column from a null value in a
+ * row map, so the distinction stays the mapper's obligation.
  *
- * P29 adds the harness this needs, and it is deliberately stricter than `text` in the direction that
- * matters: `text` refuses a missing column (so a mapper that forgot one fails loudly), and this one
- * refuses only a *present but non-null* reading of a column that is declared nullable — it cannot tell
- * the two apart from a row map, which is why the distinction is in the KDoc and the mapper's own
- * obligation rather than in the engine.
- *
- * The failure this helper exists to prevent is the quiet one: a row mapper that omits a nullable column
- * does not fail, it defaults. That would make every storage suite report "no focus was ever recorded"
- * for a session that recorded one — the stage would look green while proving nothing at all.
+ * The failure it exists to prevent is the quiet one: a row mapper that omits a nullable column does not
+ * fail, it defaults — so every storage suite would report "no focus was ever recorded" for a session
+ * that recorded one, green while proving nothing.
  */
 private fun Map<String, String?>.nullableText(column: String): String? = this[column]
 
@@ -212,15 +190,12 @@ private fun Map<String, String?>.revisionEntity() = ProgramRevisionEntity(
     scheduleWeekdays = weekdays("scheduleWeekdays"),
     createdAt = millis("createdAt"),
     scheduleSessionsPerWeek = this["scheduleSessionsPerWeek"]?.toInt(),
-    // The Goals & Focus columns (§6, §8), read as the raw stored bytes: the discriminator and the
-    // tokens beside it. The *meaning* of the tokens belongs to the mapper, so the harness carries
-    // them through unchanged rather than interpreting them.
+    // The Goals & Focus columns, read as raw stored bytes: the *meaning* of the tokens belongs to the
+    // mapper, so the harness carries them through unchanged rather than interpreting them.
     focusGoal = this["focusGoal"],
     focusTargets = this["focusTargets"],
-    // §30 step 28's preference column, carried through as the raw stored bytes for the same reason:
-    // the token format and the ORDER belong to the mapper, so this harness neither parses nor sorts it.
-    // Reading it here is what lets a storage suite measure the round trip at all — a harness that left
-    // the column out would report an empty preference for a correctly stored one.
+    // The preference column, raw for the same reason: token format and ORDER belong to the mapper. A
+    // harness that left the column out would report an empty preference for a correctly stored one.
     preferredExerciseIds = this["preferredExerciseIds"]
 )
 
@@ -232,9 +207,7 @@ private fun Map<String, String?>.dayEntity() = ProgramDayEntity(
     name = this["name"]
 )
 
-// P29: `focus` is read as a nullable token, exactly as the column is stored — see the note on
-// `nullableText` for why omitting a nullable column here is the quietest possible way to make a stage
-// look green while proving nothing.
+// `focus` is read as a nullable token, exactly as stored — see `nullableText`.
 private fun Map<String, String?>.exerciseEntity() = ProgramExerciseEntity(
     programExerciseId = text("programExerciseId"),
     programDayId = text("programDayId"),
@@ -269,21 +242,20 @@ private fun Map<String, String?>.targetOccurrenceComponentEntity() =
         programId = text("programId"),
         occurrenceKey = text("occurrenceKey"),
         position = number("position"),
-        // Read exactly as stored: the rule and workout identities are the two columns that hold them,
-        // and a harness that derived either from the occurrence key or from a plan day would be
-        // measuring its own invention instead of the round trip.
+        // Read exactly as stored: a harness that derived either identity from the occurrence key or from
+        // a plan day would measure its own invention instead of the round trip.
         ruleId = text("ruleId"),
         workoutId = text("workoutId")
     )
 
 private fun Map<String, String?>.targetScheduleRuleEntity() = ProgramTargetScheduleRuleEntity(
     revisionId = text("revisionId"),
-    // The rule's own identity, read as stored: it is an opaque token, and nothing in this harness may
-    // derive it from a plan day, a date or the row's position.
+    // The rule's own identity, read as stored: an opaque token that nothing here may derive from a plan
+    // day, a date or the row's position.
     ruleId = text("ruleId"),
     workoutId = text("workoutId"),
-    // The cadence is carried through as its raw discriminator plus its raw payload columns. Interpreting
-    // them belongs to the mapper, so the harness measures the round trip rather than its own reading.
+    // The cadence is its raw discriminator plus raw payload columns: interpreting them belongs to the
+    // mapper, so the harness measures the round trip rather than its own reading.
     cadenceType = text("cadenceType"),
     cadenceDays = this["cadenceDays"]?.toInt(),
     cadenceSessionsPerWeek = this["cadenceSessionsPerWeek"]?.toInt(),
@@ -317,10 +289,7 @@ private fun Map<String, String?>.snapshotEntity() = SessionSnapshotEntity(
     appliedAdjustmentIds = identifiers("appliedAdjustmentIds")
 )
 
-// P29: `focus` is read as a nullable token, exactly as the column is stored. Omitting it here would not
-// fail loudly — it would silently default to `null`, so every storage suite would report "no focus was
-// ever recorded" for a session that recorded one, and the whole stage would look green while proving
-// nothing. That is why the harness binds and reads every declared field in `insertRow` too.
+// `focus` read as a nullable token, exactly as stored: omitting it would silently default to `null`.
 private fun Map<String, String?>.snapshotExerciseEntity() = SessionSnapshotExerciseEntity(
     sessionId = text("sessionId"),
     programExerciseId = text("programExerciseId"),
@@ -372,8 +341,8 @@ private fun Map<String, String?>.familyStateEntity() = FamilyProgressionStateEnt
     adaptationState = text("adaptationState"),
     currentExerciseId = this["currentExerciseId"],
     updatedAt = millis("updatedAt"),
-    // §30 step 12's window bookkeeping: read here exactly as the entity declares it, so a read that
-    // dropped a counter would fail a round trip rather than quietly zeroing one.
+    // The window bookkeeping, read as the entity declares it, so a read that dropped a counter would fail
+    // a round trip rather than quietly zeroing one.
     precedingProgressQualifyingWindows = this["precedingProgressQualifyingWindows"]?.toInt(),
     precedingRegressQualifyingWindows = this["precedingRegressQualifyingWindows"]?.toInt(),
     precedingRecoveryQualifyingWindows = this["precedingRecoveryQualifyingWindows"]?.toInt(),
@@ -384,10 +353,9 @@ private fun Map<String, String?>.familyStateEntity() = FamilyProgressionStateEnt
 /**
  * One stored ladder rung, read field for field as the entity declares it.
  *
- * `prescriptionDimension` is carried through as the raw stored token and `perSetTargets` as the raw
- * comma-joined targets, because interpreting them is the **mapper's** job — this harness must not
- * decide what a dimension token means or normalise a target list, or a mapper that dropped an element
- * would still round-trip through it.
+ * `prescriptionDimension` and `perSetTargets` are carried through raw because interpreting them is the
+ * **mapper's** job: a harness that normalised either would let a mapper that dropped an element still
+ * round-trip.
  */
 private fun Map<String, String?>.relationVariantEntity() = ProgressionRelationVariantEntity(
     familyId = text("familyId"),
@@ -410,8 +378,7 @@ private fun Map<String, String?>.decisionEntity() = AdaptiveDecisionRecordEntity
     confidence = text("confidence"),
     recovery = text("recovery"),
     decidedAt = millis("decidedAt"),
-    // §13's stored reason token: read as it was written, and `null` for a row written before the
-    // column existed — the absence is not guessed at here either.
+    // The reason token as written, `null` for a row predating the column: the absence is not guessed at.
     reason = this["reason"]
 )
 
@@ -441,10 +408,6 @@ private fun Map<String, String?>.attemptRow() = SessionAttemptRow(
 private fun SqliteTestDatabase.first(sql: String, vararg args: Any?): Int =
     strings(sql, *args).firstOrNull()?.toInt()
         ?: throw IllegalStateException("the query returned no row: $sql")
-
-// ---------------------------------------------------------------------------------------------
-// The DAOs
-// ---------------------------------------------------------------------------------------------
 
 internal class SqliteProgramDao(private val database: SqliteTestDatabase) : ProgramDao {
 
@@ -620,12 +583,11 @@ internal class SqliteProgramTargetScheduleSourceDao(private val database: Sqlite
 internal class SqliteWorkoutSessionDao(private val database: SqliteTestDatabase) : WorkoutSessionDao {
 
     /**
-     * Executes the DAO's conditional insert verbatim, binding the values it selects and the pair the
+     * Executes the DAO's conditional insert verbatim, binding the selected values and the pair the
      * predicate guards on.
      *
-     * The harness adds nothing to the rule: the *statement* carries it, and this method is only how the
-     * engine reaches it — which is the point of driving the DAOs' own SQL, since the occupancy rule is
-     * then exercised as SQLite evaluates it rather than as a test believes it does.
+     * The harness adds nothing to the rule: the *statement* carries it, so the occupancy rule is
+     * exercised as SQLite evaluates it rather than as a test believes it does.
      */
     override suspend fun insertSessionIfSlotIsNotOccupied(
         sessionId: String,
@@ -773,11 +735,10 @@ internal class SqliteProgramFamilyProgressionStateDao(private val database: Sqli
 }
 
 /**
- * P31's ladder catalogue DAO, on the real engine.
+ * The ladder catalogue DAO, on the real engine.
  *
- * The read delegates to [ProgramDaoSql] rather than restating a statement here, which is what keeps the
- * harness and the DAO's own `@Query` literals comparable token for token — the architecture test
- * asserts they are the same strings.
+ * Every statement delegates to [ProgramDaoSql] rather than being restated here, which keeps the harness
+ * and the DAO's own `@Query` literals comparable token for token.
  */
 internal class SqliteProgressionRelationVariantDao(private val database: SqliteTestDatabase) :
     ProgressionRelationVariantDao {

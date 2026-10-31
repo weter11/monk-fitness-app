@@ -17,17 +17,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * §7's *Goals & Focus*, measured through the **controller** on the real engine — the only place a claim
- * about what the editor shows or what Save does can be true or false.
+ * *Goals & Focus*, measured through the **controller** on the real engine — the only place a claim about
+ * what the editor shows or what Save does can be true or false.
  *
- * ```text
- * the section's value      the draft's own FocusPlan, presented unchanged by the controller
- * a change                goes through ProgramDraftEditor.withFocus and clears the review
- * BALANCED / FOCUSED / CUSTOM   all three forms round trip through the UI and back out of storage
- * a structural change     creates exactly one Revision; a no-op creates none
- * the stored Revision     is untouched by a change that was never saved
- * Generate                never persists the focus, and the draft keeps the user's configuration
- * ```
+ * What it measures: the section's value is the draft's own FocusPlan, presented unchanged by the
+ * controller; a change goes through `ProgramDraftEditor.withFocus` and clears the review; BALANCED,
+ * FOCUSED and CUSTOM all round trip through the UI and back out of storage; a structural change creates
+ * exactly one Revision while a no-op creates none; the stored Revision is untouched by a change that was
+ * never saved; Generate never persists the focus, and the draft keeps the user's configuration.
  */
 class ProgramsGoalsFocusTest {
 
@@ -37,8 +34,6 @@ class ProgramsGoalsFocusTest {
     fun tearDown() {
         rig.close()
     }
-
-    // ---------------------------------------------------------------- the draft's own value
 
     @Test
     fun theDraftsConfigurationIsWhatTheScreenRenders() = runBlocking {
@@ -93,8 +88,6 @@ class ProgramsGoalsFocusTest {
         )
     }
 
-    // ---------------------------------------------------------------- the three forms round trip
-
     @Test
     fun balancedRoundTripsThroughSaveAndReload() = runBlocking {
         val id = rig.createProgramThroughTheUi("Balanced")!!
@@ -143,8 +136,6 @@ class ProgramsGoalsFocusTest {
         assertEquals(Goal.CUSTOM, stored?.goal)
         assertEquals(70, (stored as FocusPlan.Custom).percentFor(Focus.PUSH))
     }
-
-    // ---------------------------------------------------------------- revision semantics (§6)
 
     @Test
     fun changingOnlyTheFocusCreatesARevision() = runBlocking {
@@ -210,8 +201,6 @@ class ProgramsGoalsFocusTest {
             rig.revisionCount(ProgramId(id))
         )
     }
-
-    // ---------------------------------------------------------------- generation integration
 
     @Test
     fun theUsersConfigurationIsWhatTheGenerationPassPlansFor() = runBlocking {

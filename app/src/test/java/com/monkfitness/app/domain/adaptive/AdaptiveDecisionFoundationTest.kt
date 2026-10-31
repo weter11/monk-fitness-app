@@ -32,8 +32,6 @@ class AdaptiveDecisionFoundationTest {
 
     private val decidedAt: Instant = Instant.parse("2026-09-18T09:00:00Z")
 
-    // ------------------------------------------------------------------ vocabularies
-
     @Test
     fun theActionSpaceIsTheFiveActionsTheArchitectureLocks() {
         assertEquals(
@@ -53,8 +51,6 @@ class AdaptiveDecisionFoundationTest {
         assertRejects("a family target with no family") { AdaptiveTarget.Family("") }
         assertRejects("a focus target with no focus") { AdaptiveTarget.Focus(" ") }
     }
-
-    // ------------------------------------------------------------------ the decision
 
     @Test
     fun anAppliedDecisionProducedExactlyOneAdjustmentAndARejectedOneProducedNone() {
@@ -107,8 +103,6 @@ class AdaptiveDecisionFoundationTest {
         assertEquals(AdaptiveTarget.Exercise("pushups"), decision.target)
     }
 
-    // ------------------------------------------------------------------ the adjustment
-
     @Test
     fun anAdjustmentChangesOneElementByOneStepAndKeepsBothSidesOfTheChange() {
         val adjustment = adjustment(reps = 8, newReps = 10)
@@ -155,7 +149,7 @@ class AdaptiveDecisionFoundationTest {
         val adjustment = adjustment(reps = 8, newReps = 10)
 
         // An adjustment carries no revision, no mode and no program structure: it is a delta that the
-        // snapshot consumes, not an edit to the plan (§16).
+        // snapshot consumes, not an edit to the plan.
         val fields = AdaptiveAdjustment::class.java.declaredFields
             .filterNot { it.isSynthetic || it.name.startsWith("$") }
             .map { it.name }
@@ -169,8 +163,6 @@ class AdaptiveDecisionFoundationTest {
         )
         assertTrue(fields.none { it.contains("revision", ignoreCase = true) })
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun decision(
         action: AdaptiveAction,

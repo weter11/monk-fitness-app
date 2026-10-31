@@ -9,24 +9,22 @@ import java.io.File
 import java.time.ZoneId
 
 /**
- * §30 step 7's boundaries, pinned mechanically instead of by convention.
+ * The Scheduler's boundaries, pinned mechanically instead of by convention.
  *
- * The Scheduler is the first layer of the Program System whose whole job is *deciding what happens
- * when*, and every temptation it has is one import away: a session repository "to keep the slot and the
- * workout in step", a generator to fill an opportunity, an adaptive port to make the plan smarter, a
- * lifecycle write to start the program it just planned, a DAO "just to check a row", a ViewModel to show
- * the next workout. §6, §19, §20, §25, §26 and §33 forbid every one of them, and §27/§30 assign each to
- * a later — or an earlier — stage, so the rules are asserted against the sources, the compiled shape and
- * the composition root:
+ * The Scheduler's whole job is *deciding what happens when*, and every temptation it has is one import
+ * away: a session repository "to keep the slot and the workout in step", a generator to fill an
+ * opportunity, an adaptive port to make the plan smarter, a lifecycle write to start the program it
+ * just planned, a DAO "just to check a row", a ViewModel to show the next workout. So the rules are
+ * asserted against the sources, the compiled shape and the composition root:
  *
  *  * the Scheduler reaches no DAO, no Room type, no Android type and no UI type;
- *  * its collaborators are exactly the three repositories it reads and writes plus the two §26 ports, the
- *    calendar and the transaction runner — no session repository, no generator, no adaptive port, no
- *    library, no progress reader;
+ *  * its collaborators are exactly the three repositories it reads and writes plus the two injected
+ *    ports, the calendar and the transaction runner — no session repository, no generator, no adaptive
+ *    port, no library, no progress reader;
  *  * the scheduling decision itself is pure: its compiled shape may only mention the domain, `kotlin.`
  *    and `java.`, and it may not declare mutable state;
- *  * it carries no session type, no performance value and no amount-like field: a slot is an opportunity
- *    and cannot be made into a measurement;
+ *  * it carries no session type, no performance value and no amount-like field: a slot is an
+ *    opportunity and cannot be made into a measurement;
  *  * and nothing in the UI layer reaches it yet — wiring a ViewModel is a later step, and this test is
  *    what says so.
  */
@@ -47,8 +45,6 @@ class ProgramSchedulerArchitectureTest {
     private val useCaseSource = "domain/usecase/ProgramScheduler.kt"
 
     private val allSources = domainSources + useCaseSource
-
-    // ------------------------------------------------------------------ layering
 
     @Test
     fun theSchedulerReachesNoDaoNoRoomAndNoUi() {
@@ -88,8 +84,6 @@ class ProgramSchedulerArchitectureTest {
             offenders.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ what the Scheduler may not have
 
     @Test
     fun theSchedulerIsWiredWithoutASessionARecorderAGeneratorOrALibrary() {
@@ -248,18 +242,10 @@ class ProgramSchedulerArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ the wiring
-
     /**
-     * Revised, not relaxed, by §30 step 14.
-     *
-     * §30 step 7 landed the Scheduler without an affordance and pinned that by asserting that no UI source
-     * named `ProgramScheduler` at all. §30 step 14's Program Detail shows §22's *next workout*, which is the
-     * Scheduler's own preview, so the UI must reach it — through the state holder, and without a second
-     * owner of §20's timing.
-     *
-     * The claim the rule always meant: the composition root constructs the Scheduler **once**, no UI source
-     * **constructs one**, and the UI does use the one it is handed (so the rule is not vacuous).
+     * The claim this rule always meant: the composition root constructs the Scheduler **once**, no UI
+     * source **constructs one**, and the UI does use the one it is handed — through the state holder,
+     * without becoming a second owner of the timing.
      */
     @Test
     fun theCompositionRootWiresTheSchedulerAndNothingAboveItConstructsOne() {
@@ -321,8 +307,6 @@ class ProgramSchedulerArchitectureTest {
             }
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     /** The code lines of each source, with comments removed: the rules above are rules about code. */
     private fun codeLines(sources: List<String>): List<Pair<String, String>> = sources.flatMap { source ->

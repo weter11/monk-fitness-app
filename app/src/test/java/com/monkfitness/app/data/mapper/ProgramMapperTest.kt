@@ -13,9 +13,9 @@ import org.junit.Test
 /**
  * The `program` row ⇄ `Program` mapper, pinned value by value.
  *
- * A round trip is asserted in both directions — domain → entity → domain and entity → domain → entity
- * — because the two are not the same claim: the first proves nothing is lost on the way to storage,
- * the second that a row written by an earlier build still reads back as the row it was.
+ * A round trip is asserted in both directions because the two are not the same claim: domain → entity →
+ * domain proves nothing is lost on the way to storage, entity → domain → entity that a row written by
+ * an earlier build still reads back as the row it was.
  */
 class ProgramMapperTest {
 

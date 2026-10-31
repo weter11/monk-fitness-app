@@ -17,16 +17,14 @@ class CossackSquatPoseTest {
         val camera = Camera()
         val pipeline = SkeletonPipeline(def)
 
-        // Use the ENGINEERING_VALIDATION biomechanical cluster on top of the product checks.
-        // This is the fix for the "broken validation" gap: the default config left these rules
-        // OFF, so an inverted-thigh / hyper-flexed pose passed with 0 errors. The cluster now
-        // enforces HIP_ROM_LIMIT, ANGULAR_JOINT_LIMIT, STRAIGHT_LIMB_INTENT, CONTACT_PRESERVED
-        // and PELVIS_INTENT for this pose (all pass on the corrected geometry).
+        // ENGINEERING_VALIDATION on top of the product checks: the default config left these rules
+        // OFF, so an inverted-thigh / hyper-flexed pose passed with 0 errors. The cluster enforces
+        // HIP_ROM_LIMIT, ANGULAR_JOINT_LIMIT, STRAIGHT_LIMB_INTENT, CONTACT_PRESERVED and
+        // PELVIS_INTENT for this pose (all pass on the corrected geometry).
         // NOTE: checkIkTargetReachability is deliberately left OFF here. The shared
         // BaseLungePose.assemble() counterbalance-hand target sits ~1.2u outside the arm IK
         // constraint band (a benign micro-clamp on a 146u-long arm, present in every lunge/step-up,
-        // not specific to Cossack). That is a pre-existing shared-lunge-arm authoring clamp and is
-        // tracked as a separate follow-up, not a Cossack defect.
+        // not specific to Cossack) and is tracked as a separate follow-up.
         val config = ValidatorConfig.ENGINEERING_VALIDATION.copy(
             checkIkTargetReachability = false,
             allowFootGroundPenetration = false,
@@ -102,8 +100,8 @@ class CossackSquatPoseTest {
         kotlin.math.sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z))
 
     /**
-     * BPS §7/§13: no working-knee VALGUS (medial collapse toward body center). The knee may
-     * track laterally (outboard) over the foot — that is correct tracking — but it must never
+     * No working-knee VALGUS (medial collapse toward body center). The knee may track laterally
+     * (outboard) over the foot — that is correct tracking — but it must never
      * cross to the medial side of the hip->ankle line (toward Z=0). This checks exactly that:
      * for a leg whose hip and foot are both on one side of center, the knee must not move
      * closer to center than both of them.
@@ -147,15 +145,10 @@ class CossackSquatPoseTest {
     }
 
     /**
-     * BPS §7: the STRAIGHT leg must stay extended (~0° knee flexion). Checked by confirming the
-     * straight leg's knee lies on the hip->ankle segment (sum of segment lengths ~= leg length,
-     * i.e. the knee adds < 12% slack vs a perfectly straight leg).
-     */
-    /**
-     * BPS §7/§13: in a Cossack squat the knee must stay BELOW the hip at every depth (the thigh
-     * hinges down from the hip; the knee never rises above the hip). The pre-fix pose fed Z-anchors
-     * into comX(), shifting the pelvis +102 in X and inverting the working thigh (knee ended up
-     * ABOVE the hip). This guards that exact regression.
+     * In a Cossack squat the knee must stay BELOW the hip at every depth (the thigh hinges down from
+     * the hip; the knee never rises above it). The pre-fix pose fed Z-anchors into comX(), shifting
+     * the pelvis +102 in X and inverting the working thigh (knee ended up ABOVE the hip). This guards
+     * that exact regression.
      */
     @Test
     fun testKneeStaysBelowHip() {

@@ -9,31 +9,22 @@ import org.junit.Test
 import java.io.File
 
 /**
- * **B-2 — one support declaration channel, and it reaches the published frame.**
+ * One support declaration channel, and it reaches the published frame.
  *
  * Contract: [`PoseMetadata.support`] (`SupportDefinition.pivot` + `.contacts`) is the SINGLE support
  * declaration channel. The engine derives `SkeletonPose.supportedPoints` from it on every production
- * path (`SkeletonPipeline.buildAndInject` for playback, `ExerciseAnimation` for the renderer path),
- * so the frame the engine PUBLISHES carries exactly the declared support model — and that published
- * carrier is what the Finalizer's support-plane derivation and every validator observe.
+ * path, so the frame the engine PUBLISHES carries exactly the declared support model — and that
+ * published carrier is what the Finalizer's support-plane derivation and every validator observe.
  *
- * ## What this guards (RED evidence on the pre-fix tree)
- *
- * `PoseMetadata` used to carry two further, write-only copies of the same fact
- * (`supportContacts: Set<SupportContact>`, `pivotType: PivotType`): 15 poses wrote them, nothing in
- * `app/src/main` ever read them (both the pipeline and the UI read `support.contacts`).
+ * What it guards: `PoseMetadata` used to carry two further, write-only copies of the same fact
+ * (`supportContacts`, `pivotType`); 15 poses wrote them and nothing in `app/src/main` ever read them.
  * `StaticForearmPlankPose` and `IsometricSidePlankPose` declared their support ONLY on that dead
- * channel, so the published frame's `supportedPoints` was **empty** for both poses and the
- * Finalizer's support-plane derivation was entirely off (measured pre-fix on `origin/main` `dc4cc27`:
- * `plank_standard` / `side_plank_standard` publish `supportedPoints = []` at every progress value).
+ * channel, so the published frame's `supportedPoints` was empty for both and the Finalizer's
+ * support-plane derivation was entirely off (`supportedPoints = []` at every progress value).
  *
- * ## Test shape
- *
- * The assertions are taken on the **published frame** of the production pipeline — not on a helper —
- * because the defect was precisely "the declaration is correct but production never consumes it".
- * The sensitivity guard ([removingTheDeclarationEmptiesThePublishedSupportModel]) proves the
- * assertions are driven by the declaration: remove it and the same observation collapses to the
- * empty model, i.e. the production assertions above go RED.
+ * The assertions read the published frame of the production pipeline, not a helper — the defect was
+ * precisely "the declaration is correct but production never consumes it". The sensitivity guard
+ * proves they are driven by the declaration: remove it and the same observation collapses.
  */
 class SupportDeclarationChannelTest {
 
@@ -51,10 +42,6 @@ class SupportDeclarationChannelTest {
     /** The support model the pipeline PUBLISHES for [builder] at [progress]. */
     private fun publishedPoints(builder: PoseBuilder, progress: Float): Set<SupportPoint> =
         SkeletonPipeline(def).produceFrame(builder, context(progress)).pose.supportedPoints.toSet()
-
-    // ------------------------------------------------------------------
-    // 1. Declaration -> canonical runtime representation, corpus-wide.
-    // ------------------------------------------------------------------
 
     @Test
     fun everyProductionPosePublishesExactlyItsDeclaredSupportModel() {
@@ -88,17 +75,13 @@ class SupportDeclarationChannelTest {
             "anti-vacuity: the corpus must contain declaring poses (found $declaring)",
             declaring.size >= 10
         )
-        // B-2's two victims are the reason this test exists — they must be in the declaring set,
-        // i.e. their declaration must reach the published frame (pre-fix both published an EMPTY set).
+        // The two poses whose declaration lived on the removed channel are the reason this test
+        // exists: their declaration must reach the published frame (pre-fix both published EMPTY).
         assertTrue(
             "the two poses whose declaration lived on the removed channel must declare AND publish: $declaring",
             declaring.containsAll(listOf("StaticForearmPlankPose", "IsometricSidePlankPose"))
         )
     }
-
-    // ------------------------------------------------------------------
-    // 2 + 3. The two B-2 poses no longer lose their declared support.
-    // ------------------------------------------------------------------
 
     @Test
     fun forearmPlankPublishesItsDeclaredSupportModel() {
@@ -134,14 +117,10 @@ class SupportDeclarationChannelTest {
         assertEquals("cold-frame published support model", expected, cold.supportedPoints.toSet())
     }
 
-    // ------------------------------------------------------------------
-    // 4. Sensitivity: break the declaration and the observation must collapse.
-    // ------------------------------------------------------------------
-
     /**
      * The forearm plank with its declaration deliberately removed. It delegates `build()` to the
      * production pose and varies ONLY the declaration, so the observation below isolates exactly
-     * what B-2 was about.
+     * what the defect was about.
      */
     private class DeclaredSupportRemovedPlank : PoseBuilder by StaticForearmPlankPose() {
         override val metadata = StaticForearmPlankPose().metadata.copy(
@@ -168,10 +147,6 @@ class SupportDeclarationChannelTest {
             publishedPoints(production, 0.5f).isNotEmpty()
         )
     }
-
-    // ------------------------------------------------------------------
-    // Corpus enumeration (mirrors RootAuthorityTest's walk-up idiom).
-    // ------------------------------------------------------------------
 
     /** Concrete production pose classes in `poses/` (base classes and the registry excluded). */
     private fun productionPoseClasses(): List<String> {

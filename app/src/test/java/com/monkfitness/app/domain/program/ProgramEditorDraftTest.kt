@@ -22,8 +22,6 @@ import org.junit.Test
  */
 class ProgramEditorDraftTest {
 
-    // ------------------------------------------------------------------ draft is not a revision
-
     @Test
     fun aDraftHasNoRevisionIdentityOfItsOwn() {
         val draftFields = ProgramEditorDraft::class.java.declaredFields
@@ -57,7 +55,7 @@ class ProgramEditorDraftTest {
         assertEquals("", emptyDraft.name)
 
         // The same emptiness is a refusal for a revision: draft-first editing is what makes an
-        // unfinished plan representable at all (§6, §7).
+        // unfinished plan representable at all.
         assertRejects("a saved revision with no plan") {
             ProgramRevision(
                 revisionId = RevisionId("rev-1"),
@@ -71,8 +69,6 @@ class ProgramEditorDraftTest {
             )
         }
     }
-
-    // ------------------------------------------------------------------ the four entry points
 
     @Test
     fun theDraftItselfSaysWhichEntryPointOpenedIt() {
@@ -99,8 +95,6 @@ class ProgramEditorDraftTest {
         assertNull(imported.baseRevisionId)
     }
 
-    // ------------------------------------------------------------------ manual and generated alike
-
     @Test
     fun aManualDraftAndAGeneratedDraftAreBothRepresentable() {
         val manual = ProgramEditorDraft(mode = ProgramMode.MANUAL, days = listOf(day()))
@@ -122,7 +116,7 @@ class ProgramEditorDraftTest {
 
         assertTrue(generated.isGenerated)
         // Reconciliation is representable on the draft: a generated element, a pinned one and one the
-        // user authored are all distinguishable before anything is saved (§7).
+        // user authored are all distinguishable before anything is saved.
         val elements = generated.days.single().exercises
         assertEquals(3, elements.size)
         assertTrue(elements.any { it.isPinned })
@@ -144,8 +138,6 @@ class ProgramEditorDraftTest {
         assertTrue(switched.isGenerated)
         assertEquals(opened.baseRevisionId, switched.baseRevisionId)
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun element(
         id: String,

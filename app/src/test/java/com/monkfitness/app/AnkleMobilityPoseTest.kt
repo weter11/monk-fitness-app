@@ -13,16 +13,13 @@ import kotlin.math.sqrt
 /**
  * Ankle Mobility (`ankle_mobility_standard`) — the knee-over-toe drill on the published frame.
  *
- * Stated intent (the only in-repo specification; no BPS exists for this exercise):
- * `ex_ankle_mobility_steps` "Face a wall in a split stance. Keep the front heel down and drive the
- * front knee toward the wall. Pause when you reach the end of your clean range. Ease back and repeat
- * smoothly. Switch sides after all reps."  `ex_ankle_mobility_tech` "Let the knee track over the
- * second toe. Start close enough to the wall to stay controlled. Use slow pulses, not bounces."
- * `ex_ankle_mobility_mistakes` "Heel lifting off the floor. Foot collapsing inward. Forcing range with
- * a hard bounce."
+ * The copy is the only in-repo specification (no BPS): face a wall in a split stance, keep the front
+ * heel down and drive the front knee toward the wall, pause at the end of the clean range, ease back
+ * smoothly — knee tracking over the second toe, slow pulses not bounces, no heel lifting off the
+ * floor, no foot collapsing inward.
  *
  * The authored side is the F (foreground) leg forward, the B leg back — the unilateral drill's one
- * side, like the other unilateral registry poses (Cossack, Hip CARs, Hip Flexor stretch).
+ * side, like the other unilateral registry poses.
  */
 class AnkleMobilityPoseTest {
 

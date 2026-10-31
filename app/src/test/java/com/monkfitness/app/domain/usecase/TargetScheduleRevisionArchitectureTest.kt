@@ -12,34 +12,21 @@ import java.io.File
 import java.lang.reflect.Modifier
 
 /**
- * §30 step 22 — **target schedule is revisioned Program behaviour**, asserted against the sources
- * themselves.
+ * Target schedule is revisioned Program behaviour, asserted against the sources themselves.
  *
- * The stage's claim is a set of prohibitions and one ownership rule, and a prohibition that lives only
- * in a KDoc erodes the first time a convenient shortcut appears. So each is checked here as a token, a
- * shape or a count in real code, with comments stripped first — which is what lets these files' own
- * explanations say *"never infers a binding from a position"* without tripping the rule about doing it.
+ * The claim is a set of prohibitions and one ownership rule, and a prohibition that lives only in a KDoc
+ * erodes the first time a convenient shortcut appears. So each is checked as a token, a shape or a count
+ * in real code with comments stripped first — which is what lets these files' own explanations say
+ * "never infers a binding from a position" without tripping the rule about doing it.
  *
- * ```text
- *  1. target authoring remains outside ProgramEditorDraft
- *  2. the target revision change is an explicit Keep / Replace / Clear
- *  3. a target-only change has its own explicit revision path
- *  4. revision minting still has exactly one owner
- *  5. an old target source is never updated or deleted
- *  6. a new source attaches only to the new revision
- *  7. bindings are re-identified through the editor's minted correspondence
- *  8. no binding is inferred from a ProgramDay position / name / date / weekday
- *  9. no workoutId is derived from a ProgramDayId
- * 10. no legacy-schedule mapping in either direction
- * 11. no UI layer reads the target source repository
- * 12. no DAO / Room access on the revision path
- * 13. no target scheduler is invoked
- * 14. a creation's omission still means Missing
- * 15. an existing revision's omission means Keep, not a silent Missing
- * 16. Clear is distinct from an empty authoring
- * 17. Copy does not guess target bindings
- * 18. Program identity is unchanged across a target-only revision
- * ```
+ * Covered: target authoring stays outside `ProgramEditorDraft`; the change is an explicit
+ * Keep/Replace/Clear; a target-only change has its own revision path; revision minting has one owner; an
+ * old target source is never updated or deleted; a new source attaches only to the new revision;
+ * bindings are re-identified through the editor's minted correspondence, never inferred from a day's
+ * position, name, date or weekday, and no workout id is derived from a day id; no legacy-schedule
+ * mapping either way; no UI or DAO access on the path; no target pass; omission means Missing on
+ * creation and Keep on an existing revision; Clear is distinct from an empty authoring; Copy guesses no
+ * bindings; Program identity survives a target-only revision.
  */
 class TargetScheduleRevisionArchitectureTest {
 
@@ -76,8 +63,6 @@ class TargetScheduleRevisionArchitectureTest {
     private fun occurrences(sources: List<File>, token: String): Int =
         sources.sumOf { source -> Regex(Regex.escape(token)).findAll(code(source)).count() }
 
-    // ---------------------------------------------------------------- the files exist
-
     @Test
     fun theRevisionPathAddsExactlyTheFilesItClaims() {
         assertTrue(
@@ -87,8 +72,6 @@ class TargetScheduleRevisionArchitectureTest {
             revisionPath.all { it.isFile }
         )
     }
-
-    // ---------------------------------------------------------------- 1./14./16. the values
 
     @Test
     fun targetAuthoringRemainsOutsideTheDraftAndTheRevisionChangeIsNotOnItEither() {
@@ -103,9 +86,9 @@ class TargetScheduleRevisionArchitectureTest {
                 "Draft fields: $draftFields",
             draftFields.any { it.contains("target", ignoreCase = true) }
         )
-        // The draft's own `schedule` field is the **legacy** `ProgramSchedule` and is §6 structure; the
-        // target vocabulary is what must not appear beside it, and the check above is on `target`
-        // precisely so the legacy field is not mistaken for a violation.
+        // The draft's `schedule` field is the **legacy** `ProgramSchedule` and is structure; the target
+        // vocabulary is what must not appear beside it, and the check above is on `target` so the legacy
+        // field is not mistaken for a violation.
         assertEquals(
             "the draft's fields are exactly §6's structure — the legacy `schedule` and §9's user " +
                 "preference among them, and no target field beside either",
@@ -126,9 +109,8 @@ class TargetScheduleRevisionArchitectureTest {
 
     @Test
     fun theRevisionChangeIsExactlyKeepReplaceAndClear() {
-        // Named from `declaredClasses`, not from a source scan: the point is that a *fourth* case
-        // cannot be added without deciding what an unstated claim means, which is the ambiguity this
-        // whole stage removes.
+        // Named from `declaredClasses`, not a source scan: a *fourth* case cannot be added without
+        // deciding what an unstated claim means, which is the ambiguity this stage removes.
         assertEquals(
             "a target revision change is Keep, Replace or Clear, and nothing else: an absent case " +
                 "with a fourth meaning would reintroduce the single null this stage replaced",
@@ -143,8 +125,8 @@ class TargetScheduleRevisionArchitectureTest {
             TargetScheduleRevisionChange::class.java.isInterface &&
                 Modifier.isAbstract(TargetScheduleRevisionChange::class.java.modifiers)
         )
-        // `Replace` carries the authoring; `Keep` and `Clear` carry nothing at all — so there is no
-        // default, and no `null` with more than one meaning.
+        // `Replace` carries the authoring; `Keep` and `Clear` carry nothing — so no default, and no
+        // `null` with more than one meaning.
         assertEquals(
             "Replace carries exactly the authoring",
             listOf("authoring"),
@@ -168,9 +150,9 @@ class TargetScheduleRevisionArchitectureTest {
 
     @Test
     fun clearIsDistinctFromAnEmptyAuthoring() {
-        // The two claims are different and only one of them is representable: a revision with no rules
-        // cannot produce an occurrence, so an authoring that states none is a statement that cannot be
-        // stored, and `Clear` is what "this revision states it has none" looks like.
+        // The two claims are different and only one is representable: a revision with no rules cannot
+        // produce an occurrence, so an authoring stating none cannot be stored, and `Clear` is what "this
+        // revision states it has none" looks like.
         val authoring = code(authoringFile)
         assertTrue(
             "an authoring that states no rule is still refused, so `Clear` can never be expressed as " +
@@ -188,13 +170,11 @@ class TargetScheduleRevisionArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- 2./3. the application API
-
     @Test
     fun theSaveBoundaryStatesBothAbsencesAndRefusesTheWrongLeg() {
         val save = code(saveServiceFile)
-        // Both absences are separate parameters, and each is documented on the leg it belongs to: a
-        // creation's absence means *never stated*, an edit's means *keep what is there*.
+        // Both absences are separate parameters on the leg they belong to: a creation's absence means
+        // *never stated*, an edit's means *keep what is there*.
         assertTrue(
             "a creation states its target source with an authoring or states none",
             Regex("targetSchedule:\\s*TargetScheduleAuthoring\\?\\s*=\\s*null").containsMatchIn(save)
@@ -204,8 +184,8 @@ class TargetScheduleRevisionArchitectureTest {
             Regex("targetChange:\\s*TargetScheduleRevisionChange\\?\\s*=\\s*null").containsMatchIn(save) &&
                 save.contains("targetChange ?: TargetScheduleRevisionChange.Keep")
         )
-        // …and the two are not interchangeable: each leg refuses the other's vocabulary, which is what
-        // makes "null" mean one thing per parameter rather than three things overall.
+        // The two are not interchangeable: each leg refuses the other's vocabulary, which makes `null`
+        // mean one thing per parameter rather than three things overall.
         for (refusal in listOf(
             "EditChangeOnACreation", "CreationAuthoringOnAnEdit"
         )) {
@@ -218,9 +198,8 @@ class TargetScheduleRevisionArchitectureTest {
 
     @Test
     fun aTargetOnlyChangeHasItsOwnExplicitRevisionPath() {
-        // The defect this stage fixes is that a target-only change is invisible to §6's structural
-        // comparison, so the path has to be its own operation rather than a draft save that happens
-        // to notice.
+        // A target-only change is invisible to the structural comparison, so the path has to be its own
+        // operation rather than a draft save that happens to notice.
         assertTrue(
             "the save boundary has a dedicated target-only operation",
             code(saveServiceFile).contains("suspend fun saveTargetScheduleChange(")
@@ -236,8 +215,8 @@ class TargetScheduleRevisionArchitectureTest {
             code(editorFile).contains("suspend fun prepareTargetScheduleRevision(") &&
                 code(editorFile).contains("suspend fun saveTargetScheduleRevision(")
         )
-        // …and the comparison that decides is a *semantic* one, made over plan-day handles, not an
-        // identity comparison of two stored sources.
+        // The comparison that decides is *semantic*, over plan-day handles, not an identity comparison of
+        // two stored sources.
         assertTrue(
             "an identical statement is recognised by comparing semantics, not identity",
             code(changeFile).contains("statesTheSameTargetSemanticsAs") &&
@@ -245,18 +224,13 @@ class TargetScheduleRevisionArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- 4. one owner of minting
-
     @Test
     fun revisionMintingStillHasExactlyOneOwner() {
-        // §6 gives revision minting to the editor. A second `RevisionId(idGenerator.newId())` in the
-        // save boundary would be a second minting rule, and a second rule is a second §6.
-        // Revised rather than over-claimed: a walk of the whole tree finds three minters, and two of
-        // them are §27's creation paths rather than a *second revision rule* — `ProgramImportService`'s
-        // creation unit and the standard Program's bootstrap each mint a Program's **first** revision,
-        // which no §6 comparison can replace. The claim this stage actually has to make is narrower
-        // and is now stated directly: the target-revision path mints nothing, and the save boundary
-        // holds no identity generator at all, so a second revision-minting rule cannot appear there.
+        // Revision minting belongs to the editor: a second `RevisionId(idGenerator.newId())` in the save
+        // boundary would be a second minting rule. A whole-tree walk finds three minters, two of them
+        // creation paths (import's unit and the standard Program's bootstrap) that mint a Program's
+        // **first** revision and which no comparison can replace — so the claim is stated narrowly: the
+        // target-revision path mints nothing and the save boundary holds no identity generator.
         assertFalse(
             "the save boundary holds no identity generator, so it cannot mint a revision itself",
             code(saveServiceFile).contains("IdGenerator") || code(saveServiceFile).contains("newId()")
@@ -265,17 +239,17 @@ class TargetScheduleRevisionArchitectureTest {
             "the change value mints nothing: it is a statement, not a mechanism",
             code(changeFile).contains("IdGenerator") || code(changeFile).contains("newId()")
         )
-        // …and every revision this stage mints goes through the editor's *one* minting method, which
-        // is declared exactly once and re-identifies every plan day on every revision (§6).
+        // Every revision this stage mints goes through the editor's *one* minting method, declared once,
+        // which re-identifies every plan day on every revision.
         val editorCode = code(editorFile)
         assertEquals(
             "the editor declares exactly one minting method — a second would be a second §6 rule",
             1,
             Regex("private fun mintRevision\\(").findAll(editorCode).count()
         )
-        // Four callers, all of them the editor's own: a creation (§27), the target-only entry this
-        // stage added, a structural edit, and the copy's creation. The claim is that they all go
-        // through the one method, not that there is only one of them.
+        // Four callers, all the editor's own: a creation, the target-only entry this stage added, a
+        // structural edit, and the copy's creation. The claim is that they all go through the one method,
+        // not that there is only one caller.
         assertEquals(
             "…and every caller of it is one of the editor's four revision-creating entries",
             4,
@@ -300,12 +274,10 @@ class TargetScheduleRevisionArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- 5./6. immutability and ownership
-
     @Test
     fun anOldTargetSourceIsNeverUpdatedOrDeleted() {
-        // There is no such path to take, which is the strongest form of the claim: the repository
-        // exposes no update and no delete, and the boundary calls nothing but `store`.
+        // There is no such path to take: the repository exposes no update and no delete, and the boundary
+        // calls nothing but `store`.
         val repository = code(sourceRepositoryFile)
         assertFalse(
             "the source repository exposes no update and no delete of a stored source",
@@ -326,9 +298,8 @@ class TargetScheduleRevisionArchitectureTest {
     @Test
     fun aNewSourceIsAttachedOnlyToTheNewRevision() {
         val save = code(saveServiceFile)
-        // Every `store(` on the revision path names the revision the operation just minted — the save
-        // outcome's, or the prepared mint's. There is no branch that writes against the revision the
-        // operation replaces.
+        // Every `store(` names the revision the operation just minted — the save outcome's or the prepared
+        // mint's. No branch writes against the revision the operation replaces.
         assertFalse(
             "no branch stores a source against a previously-read revision",
             Regex("store\\([^)]*currentRevisionId").containsMatchIn(save)
@@ -341,20 +312,18 @@ class TargetScheduleRevisionArchitectureTest {
                 save.contains("revisionId = $against")
             )
         }
-        // The `Keep` read is explicitly of the *pre-save* current revision, and it is read into a
-        // local that is only ever attached to the new one.
+        // The `Keep` read is of the *pre-save* current revision, into a local only ever attached to the
+        // new one.
         assertTrue(
             "`Keep` reads the current revision's source before the save moves the pointer",
             save.contains("currentRevisionId") && save.contains("asAuthoringOver(")
         )
     }
 
-    // ---------------------------------------------------------------- 7./8./9. re-identification
-
     @Test
     fun bindingsAreReIdentifiedThroughTheEditorMintedCorrespondenceAndNothingElse() {
-        // The one re-identification is `TargetScheduleAuthoring.asSourceOf`, and it is driven by the
-        // correspondence the editor reported. Nothing on this path re-derives a day.
+        // The one re-identification is `TargetScheduleAuthoring.asSourceOf`, driven by the correspondence
+        // the editor reported. Nothing on this path re-derives a day.
         assertTrue(
             "the authoring re-points each binding through the editor's correspondence",
             code(authoringFile).contains("val minted = mintedProgramDays[binding.draftedProgramDayId]")
@@ -368,8 +337,8 @@ class TargetScheduleRevisionArchitectureTest {
                 "carries, so a carried-forward source is never re-pointed at a substitute day",
             code(changeFile).contains("StoredProgramDayNotInTheDraft")
         )
-        // A plan-day heuristic would be *reading a ProgramDay* to decide a binding. No file on this
-        // path reads one for that purpose: the only `ProgramDay` a statement mentions is a handle.
+        // A plan-day heuristic would be *reading a ProgramDay* to decide a binding. No file here reads one
+        // for that purpose: the only `ProgramDay` a statement mentions is a handle.
         val dayHeuristics = listOf(
             ".position", ".name", "dayNumber", "weekday", "dayOfWeek", "indexOf(",
             "sortedBy", "zipWith", "getOrNull("
@@ -391,8 +360,6 @@ class TargetScheduleRevisionArchitectureTest {
             )
         }
     }
-
-    // ---------------------------------------------------------------- 10./13. legacy isolation
 
     @Test
     fun noLegacyScheduleMappingInEitherDirection() {
@@ -432,8 +399,8 @@ class TargetScheduleRevisionArchitectureTest {
 
     @Test
     fun theRevisionPathRunsNoTargetPass() {
-        // Making a target source *revisioned* must not make the target contour *reachable* from a
-        // save. The pass is invoked at one named lifecycle point (§30 step 21), and a save is not it.
+        // Making a target source *revisioned* must not make the contour *reachable* from a save. The pass
+        // is invoked at one named lifecycle point, and a save is not it.
         for (source in listOf(saveServiceFile, changeFile, editorFile)) {
             for (pass in listOf(
                 "TargetScheduleOrchestrator", "TargetPlanner", "TargetSchedulePolicy",
@@ -461,8 +428,6 @@ class TargetScheduleRevisionArchitectureTest {
             consumers
         )
     }
-
-    // ---------------------------------------------------------------- 11./12. layering
 
     @Test
     fun noUiLayerReachesTheTargetSourceAndTheRevisionPathTouchesNoRoom() {
@@ -502,13 +467,11 @@ class TargetScheduleRevisionArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- 15. the omission that was the defect
-
     @Test
     fun anExistingRevisionsOmissionMeansKeepAndNotASilentMissing() {
         val save = code(saveServiceFile)
-        // The defect in one line: a structural edit with a target source on the current revision and
-        // no statement from the caller must not land a new revision that states no source.
+        // The defect in one line: a structural edit with a source on the current revision and no
+        // statement from the caller must not land a new revision that states no source.
         assertTrue(
             "the edit's absent change is spelled `Keep`, not an absent source",
             save.contains("targetChange ?: TargetScheduleRevisionChange.Keep")
@@ -518,27 +481,24 @@ class TargetScheduleRevisionArchitectureTest {
             save.contains("is TargetScheduleRevisionChange.Keep ->") &&
                 save.contains("asAuthoringOver(")
         )
-        // The create path is *not* given the same treatment: a creation's absence is still Missing,
-        // because there is nothing to carry forward.
+        // The create path is *not* treated the same: a creation's absence is still Missing, because there
+        // is nothing to carry forward.
         assertTrue(
             "a creation's omission is still an early return that writes nothing",
             save.contains("if (targetSchedule == null) return")
         )
     }
 
-    // ---------------------------------------------------------------- 17./18. copy and identity
-
     @Test
     fun copyDoesNotGuessTargetBindingsAndATargetOnlyChangeKeepsTheProgram() {
         val editor = code(editorFile)
         val save = code(saveServiceFile)
-        // A copy mints fresh plan days and shares nothing with its source, so there is no
-        // correspondence from the source Program's bindings to the copy's days. The copy path is the
-        // creation path, and it reads no source at all.
-        // Scoped to the *creation* path: `ProgramSaveService` does read a stored source, on the edit
-        // leg, and that is `Keep` carrying the current revision's own source forward. What must be
-        // absent is a read on the creation leg — a copy is a creation, so a read there would be the
-        // copy inheriting its source Program's bindings.
+        // A copy mints fresh plan days and shares nothing with its source, so there is no correspondence
+        // from the source Program's bindings to the copy's days — and the copy path is the creation path.
+        //
+        // Scoped to the *creation* leg: the save service does read a stored source on the edit leg, which
+        // is `Keep` carrying the current revision's own source forward. A read on the creation leg would
+        // be the copy inheriting its source Program's bindings.
         val creationLeg = save.substringAfter("private suspend fun createProgram(")
             .substringBefore("private suspend fun saveRevisionWithReconciliation(")
         assertFalse(
@@ -550,9 +510,9 @@ class TargetScheduleRevisionArchitectureTest {
             creationLeg.contains("stateTargetSourceFor(") &&
                 creationLeg.contains("revisionId = creation.revision.revisionId")
         )
-        // Scoped to the two copy members themselves, not the whole file: `copyDraft` sits near the top
-        // and any generous window from there reaches the target-only entry added by this stage, which
-        // is exactly the false positive a wide window produces.
+        // Scoped to the two copy members, not the whole file: `copyDraft` sits near the top and any
+        // generous window reaches the target-only entry, which is the false positive a wide window
+        // produces.
         val copyDraftBody = editor.substringAfter("suspend fun copyDraft(")
             .substringBefore("suspend fun review(")
         val saveCopyOfBody = editor.substringAfter("private suspend fun saveCopyOf(")
@@ -564,7 +524,7 @@ class TargetScheduleRevisionArchitectureTest {
             )
         }
         // The target-only path mints a revision of the *same* Program: no `createProgram`, and the
-        // Program value it reports is a copy of the stored one with the pointer moved.
+        // reported Program is the stored one with the pointer moved.
         assertFalse(
             "a target-only change creates no Program and mints no ProgramId",
             Regex("saveTargetScheduleChange[\\s\\S]{0,4000}?ProgramId\\(idGenerator").containsMatchIn(save)
@@ -575,19 +535,15 @@ class TargetScheduleRevisionArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- 19. Malformed is its own fact
-
     @Test
     fun aMalformedStoredSourceIsNeverTreatedAsAMissingOne() {
-        // The defect this claim was added for: the save boundary collapsed `Malformed` into `null`
-        // beside `Missing`, and every caller then read unreadable persisted data as *"this revision
-        // states no target schedule"*. That is how an explicit `Clear` came to be answered as
-        // `NothingToChange` on the strength of rows nobody could parse, and how a structural `Keep`
-        // came to mint a new revision with no source at all.
+        // The collapse this guards against: the save boundary answering `Malformed` as `null` beside
+        // `Missing`, so every caller reads unreadable persisted rows as "this revision states no target
+        // schedule" — which answered an explicit `Clear` as `NothingToChange` and made a structural
+        // `Keep` mint a revision with no source at all.
         //
-        // The collapse is pinned on three forms, because it can come back in any of them: a helper
-        // that returns `null` for both, a `when` that lumps the two arms together, and a cast that
-        // treats "not a `Source`" as "no source".
+        // Pinned on three forms, because it can return in any of them: a helper returning `null` for
+        // both, a `when` lumping the two arms, and a cast treating "not a `Source`" as "no source".
         val save = code(saveServiceFile)
         for (collapsing in listOf("storedSourceOrNull", "asSourceOrNull", "sourceOrNull", "getOrNull")) {
             assertFalse(
@@ -615,10 +571,9 @@ class TargetScheduleRevisionArchitectureTest {
     @Test
     fun aMalformedStoredSourceIsNeverConvertedIntoAnEmptyOneOrCarriedAsNoSource() {
         val save = code(saveServiceFile)
-        // `Missing` means the revision states nothing; `Malformed` means it states something
-        // unreadable. The two are answered differently, and each answer is a named refusal rather than
-        // a default, so a caller can tell "there is nothing there" from "there is something I cannot
-        // read".
+        // `Missing` means the revision states nothing; `Malformed` means it states something unreadable.
+        // Each is answered by a named refusal rather than a default, so a caller can tell "nothing is
+        // there" from "there is something I cannot read".
         for (refusal in listOf(
             "KeepOverUnreadableStoredSource", "ClearOverUnreadableStoredSource"
         )) {
@@ -628,8 +583,8 @@ class TargetScheduleRevisionArchitectureTest {
                 code(changeFile).contains("data class $refusal") && save.contains(refusal)
             )
         }
-        // …and both refusals carry the reason, so the caller is told what could not be read rather
-        // than only that something could not.
+        // Both refusals carry the reason, so the caller is told what could not be read, not merely that
+        // something could not.
         for (refusal in listOf(
             "KeepOverUnreadableStoredSource", "ClearOverUnreadableStoredSource"
         )) {
@@ -639,9 +594,9 @@ class TargetScheduleRevisionArchitectureTest {
                 body.contains("revisionId: RevisionId") && body.contains("reason: String")
             )
         }
-        // An empty source is not the answer to either: a revision with no rules cannot produce an
-        // occurrence, so `TargetScheduleAuthoring(rules = emptyList(), …)` must appear nowhere on the
-        // revision path — that is what a `Malformed` → *empty* conversion would have to build.
+        // An empty source answers neither: a revision with no rules cannot produce an occurrence, so
+        // `TargetScheduleAuthoring(rules = emptyList(), …)` must appear nowhere on the revision path —
+        // which is what a `Malformed` → *empty* conversion would have to build.
         for (source in listOf(saveServiceFile, changeFile)) {
             assertFalse(
                 "${source.name} never constructs an authoring that states no rule",
@@ -650,13 +605,11 @@ class TargetScheduleRevisionArchitectureTest {
         }
     }
 
-    // ---------------------------------------------------------------- the composition root
-
     @Test
     fun theCompositionRootWiresNoNewTargetCollaboratorAndNoNewNode() {
-        // The target-only path needed no new dependency: the save boundary already holds the editor,
-        // the creation repository, the Scheduler and the source repository. A new node would also have
-        // to be placed outside every existing container slice, and nothing here needed one.
+        // The target-only path needed no new dependency: the save boundary already holds the editor, the
+        // creation repository, the scheduler and the source repository, and a new node would have to sit
+        // outside every existing container slice.
         val construction = code(containerFile)
             .substringAfter("val programSaveService: ProgramSaveService = ProgramSaveService(")
             .substringBefore(")")
@@ -681,12 +634,10 @@ class TargetScheduleRevisionArchitectureTest {
         )
     }
 
-    // ---------------------------------------------------------------- the previous stage's pins
-
     @Test
     fun theStageNineteenAndTwentyOnePinsStillHold() {
-        // Stated here so a future stage that revises one of them has to revise this as well, rather
-        // than finding the gate quietly amended somewhere else.
+        // Stated here so a later stage revising one of them must revise this too, rather than finding the
+        // gate quietly amended elsewhere.
         assertTrue(
             "the authoring value is still the one place a legacy-to-target mapper would have to live",
             File(usecaseDir, "TargetScheduleAuthoring.kt").isFile
@@ -699,10 +650,9 @@ class TargetScheduleRevisionArchitectureTest {
                 listOf("ProgramSchedule", "scheduleType", "scheduleWeekdays", "scheduleSessionsPerWeek")
             ).isEmpty()
         )
-        // Checked in the source rather than through reflection: a private top-level class is compiled
-        // into the file facade under a name that carries no relationship to the declaration, so
-        // `declaredClasses` finds nothing and the predicate would be testing the compiler's naming
-        // rather than the visibility. The `private` keyword on the declaration is the fact.
+        // Checked in the source rather than by reflection: a private top-level class is compiled into the
+        // file facade under an unrelated name, so `declaredClasses` finds nothing and the predicate would
+        // test the compiler's naming rather than the visibility.
         val editorCode = code(editorFile)
         assertTrue(
             "the structural `MintedRevision` stayed private: the target-only value is the one public " +

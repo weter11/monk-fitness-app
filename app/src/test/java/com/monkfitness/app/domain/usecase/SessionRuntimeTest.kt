@@ -44,18 +44,17 @@ import java.nio.file.Files
 import java.time.Instant
 
 /**
- * The session runtime — §30 step 8 — against a real SQLite engine.
+ * The session runtime, against a real SQLite engine.
  *
- * The suite is organized by the questions §19 asks of an attempt, and every claim is measured on the
- * rows rather than on a value a call returned: the session is re-read through **freshly built
- * repositories** after each operation, the snapshot is compared to the presentation the start captured,
- * the set rows are read from `program_set_log`, and "nothing was written" is a census of every table.
+ * Every claim is measured on the rows rather than on a value a call returned: the session is re-read
+ * through **freshly built repositories** after each operation, the snapshot is compared to the
+ * presentation the start captured, the set rows are read from `program_set_log`, and "nothing was
+ * written" is a census of every table.
  *
- * The two claims the brief singled out have their own sections. The **snapshot** section starts a
- * session, changes the live plan underneath it — a §6 Save with new identities, a rewrite of the plan's
- * own rows, and a superseding adjustment — and proves the restored presentation is the captured one.
- * The **occupancy** section proves §19's *"no more than one `IN_PROGRESS` attempt per slot"* at the
- * persistence boundary, including two starts that race for one opportunity across two connections.
+ * The **snapshot** section changes the live plan underneath a started session — a Save with new
+ * identities, a rewrite of the plan's own rows, and a superseding adjustment — and proves the restored
+ * presentation is the captured one. The **occupancy** section proves "no more than one `IN_PROGRESS`
+ * attempt per slot" at the persistence boundary, including two starts racing across two connections.
  */
 class SessionRuntimeTest {
 
@@ -77,8 +76,6 @@ class SessionRuntimeTest {
         SessionFixture.valueOf(rig.runtime.confirmSet(session.sessionId, occurrence, completedReps = 12))
         return session to occurrence
     }
-
-    // ================================================================ the identity triple (§19)
 
     @Test
     fun aStartedSessionIsBoundToOneProgramRevisionAndSlot() = runBlocking {
@@ -140,12 +137,9 @@ class SessionRuntimeTest {
         )
     }
 
-    // ================================================================ the immutable snapshot (§19)
-
     /**
-     * The critical case of §30 step 8, run in three shapes at once: the plan's own rows are rewritten,
-     * a whole new revision replaces it, and the restored session must be exactly what the start
-     * captured.
+     * Three shapes at once: the plan's own rows are rewritten, a whole new revision replaces it, and the
+     * restored session must be exactly what the start captured.
      */
     @Test
     fun theRestoredPresentationIsDomainEquivalentToTheCapturedSnapshotAfterANewRevision() = runBlocking {
@@ -251,12 +245,10 @@ class SessionRuntimeTest {
     }
 
     /**
-     * The stronger half of the same claim: a *new* attempt started **after** the §6 Save must present the
-     * plan day the opportunity names, not what the Program's current revision now says.
-     *
-     * This is where "the current Program revision is not consulted" is measured directly — the revision
-     * pointer has already moved, the revised day reorders the exercises and replaces one, and the start
-     * still presents the day of the revision its own `revisionId` names.
+     * A *new* attempt started **after** the Save must present the plan day the opportunity names, not what
+     * the Program's current revision says — the revision pointer has already moved, the revised day
+     * reorders the exercises and replaces one, and the start still presents the day of the revision its
+     * own `revisionId` names.
      */
     @Test
     fun aNewAttemptAfterASavePresentsThePlanDayTheOpportunityNames() = runBlocking {
@@ -293,8 +285,6 @@ class SessionRuntimeTest {
             session.snapshot.workout.exercises.map { it.programExerciseId.value }
         )
     }
-
-    // ================================================================ §16's composition
 
     @Test
     fun anAdjustmentStandingForTheOpportunityIsAppliedAndItsIdCaptured() = runBlocking {
@@ -370,11 +360,10 @@ class SessionRuntimeTest {
         )
         assertEquals(listOf(listOf(8), listOf(8, 8)), restored.snapshot.workout.exercises.map { it.prescription.perSetTargets })
 
-        // A *new* attempt at the same opportunity is a new capture, and there the superseding adjustment
-        // is the one in effect — which is what makes the older session's freeze a fact rather than an
-        // accident of the fixture. The first attempt is **cancelled** rather than completed, because a
-        // completed opportunity is not attempted again (§19): a cancellation ends the attempt and leaves
-        // the opportunity open.
+        // A *new* attempt is a new capture, and there the superseding adjustment is in effect — which makes
+        // the older session's freeze a fact rather than an accident of the fixture. The first attempt is
+        // **cancelled** rather than completed, because a completed opportunity is not attempted again: a
+        // cancellation ends the attempt and leaves the opportunity open.
         rig.clock.instant = SessionFixture.FINISHED
         SessionFixture.valueOf(rig.runtime.cancelSession(session.sessionId))
         rig.clock.instant = SessionFixture.FINISHED.plusSeconds(60)
@@ -423,8 +412,6 @@ class SessionRuntimeTest {
         assertEquals("and nothing was written", before, rig.tableCounts())
     }
 
-    // ================================================================ starting: the rules (§19, §20)
-
     @Test
     fun startingAnOpportunityThatIsNotStoredIsRefused() = runBlocking {
         rig.createProgram()
@@ -438,8 +425,8 @@ class SessionRuntimeTest {
     @Test
     fun anOpportunityWhoseRevisionBelongsToAnotherProgramIsRefused() = runBlocking {
         rig.createProgram()
-        // A second Program in the same database, with a revision of its own, and a slot of the first
-        // Program that names that revision.
+        // A second Program with a revision of its own, and a slot of the first Program naming that
+        // revision.
         rig.database.exec(
             "INSERT INTO `program` (`programId`, `name`, `description`, `source`, `lifecycleStatus`, " +
                 "`currentRevisionId`, `createdAt`, `updatedAt`, `plannedStartDate`, `actualStartDate`, " +
@@ -478,8 +465,7 @@ class SessionRuntimeTest {
     fun anOpportunityThatNamesAPlanDayTheRevisionLacksIsRefused() = runBlocking {
         rig.createProgram()
         // A day of a *later* revision: it exists, so the foreign key is satisfied, but the revision this
-        // opportunity names does not present it — the state a re-pointed slot would be in, and one no
-        // session may be started from.
+        // opportunity names does not present it — the state a re-pointed slot would be in.
         val revised = rig.saveRevisedPlan()
         rig.database.exec(
             "UPDATE `program_workout_slot` SET `programDayId` = ? WHERE `slotId` = 'slot-r-1'",
@@ -564,8 +550,6 @@ class SessionRuntimeTest {
         assertEquals(SessionFixture.FINISHED, completion.slot.completedAt)
     }
 
-    // ================================================================ one attempt in progress (§19)
-
     @Test
     fun aSecondInProgressAttemptIsRefusedAndNamesTheOneThatHoldsTheSlot() = runBlocking {
         val first = started()
@@ -633,13 +617,13 @@ class SessionRuntimeTest {
     }
 
     /**
-     * The brief's race, on the instrument that can actually run it: two connections over one file
-     * database, each with its own runtime, both starting the same opportunity at the same moment.
+     * Two connections over one file database, each with its own runtime, both starting the same
+     * opportunity at the same moment.
      *
      * Exactly one may succeed. The other is either refused by the statement's own predicate (it saw the
-     * committed row) or rejected by the engine's writer lock (it did not) — both are the same answer to
-     * the same question, and the test asserts the invariant rather than which of the two happened, since
-     * which one it is depends on real timing.
+     * committed row) or rejected by the engine's writer lock (it did not) — the same answer to the same
+     * question — so the test asserts the invariant rather than which one happened, since that depends on
+     * real timing.
      */
     @Test
     fun twoStartsRacingForOneOpportunityDoNotBothSucceed() = runBlocking {
@@ -699,8 +683,6 @@ class SessionRuntimeTest {
             }
         }.also { start.countDown() }.awaitAll()
     }
-
-    // ================================================================ confirming sets (§27)
 
     @Test
     fun aConfirmedSetIsAutosavedImmediatelyAsTheNextRow() = runBlocking {
@@ -870,8 +852,8 @@ class SessionRuntimeTest {
     @Test
     fun aSkippedOccurrenceTakesNoSet() = runBlocking {
         rig.createProgram()
-        // The runtime starts no skipped occurrence — skipping is not one of the five operations — so the
-        // case is planted through the persistence path to prove the rule is enforced where it can occur.
+        // The runtime never starts a skipped occurrence, so the case is planted through the persistence
+        // path to prove the rule is enforced where it can occur.
         val started = SessionFixture.valueOf(rig.runtime.startSession(slot))
         rig.database.exec(
             "UPDATE `session_exercise` SET `skipped` = 1 WHERE `sessionExerciseId` = ?",
@@ -906,8 +888,6 @@ class SessionRuntimeTest {
         )
     }
 
-    // ================================================================ Back (§19)
-
     @Test
     fun leavingTheWorkoutScreenWritesNothingAndTheAttemptSurvives() = runBlocking {
         val (session, occurrence) = startedWithOneSet()
@@ -935,8 +915,6 @@ class SessionRuntimeTest {
         val after = SessionFixture.valueOf(rig.runtime.confirmSet(session.sessionId, occurrence, completedReps = 10))
         assertEquals("and the attempt can simply be continued", 2, after.exercises.first().results.size)
     }
-
-    // ================================================================ Cancel (§19)
 
     @Test
     fun aCancelledAttemptKeepsItsHistoryAndDoesNotTakeTheOpportunity() = runBlocking {
@@ -997,8 +975,6 @@ class SessionRuntimeTest {
         assertEquals("a completed attempt is not rewritten as a cancelled one", afterFinish, rig.tableCounts())
     }
 
-    // ================================================================ Finish (§19, §27)
-
     @Test
     fun finishingCompletesTheAttemptAndTheOpportunityTogether() = runBlocking {
         val (session, _) = startedWithOneSet()
@@ -1048,8 +1024,6 @@ class SessionRuntimeTest {
         )
     }
 
-    // ================================================================ the adaptive half of a completion
-
     @Test
     fun aCompletionWithoutADecisionStoresNoAdaptiveRowAndSaysSo() = runBlocking {
         val session = started()
@@ -1074,7 +1048,7 @@ class SessionRuntimeTest {
             programId = session.programId,
             revisionId = session.revisionId,
             // The decision is about the opportunity the change will be consumed by — a future one, which
-            // is what §4 requires and what §30 step 12 produces (see the targeting suite below).
+            // is what the targeting rule requires.
             slotId = rig.slotId(2),
             target = AdaptiveTarget.Family("push-family"),
             action = AdaptiveAction.HOLD,
@@ -1134,8 +1108,8 @@ class SessionRuntimeTest {
             after = FixtureElements.PUSHUP.copy(prescription = RepPrescription(listOf(14, 12, 10, 8))),
             createdAt = SessionFixture.FINISHED
         )
-        // §27's *adaptive state* leg: an applied change travels with the family's state after the window
-        // it was decided in, and the runtime writes it inside the same unit of work.
+        // The *adaptive state* leg: an applied change travels with the family's state after the window it
+        // was decided in, written inside the same unit of work.
         val familyState = FamilyProgressionState(
             revisionId = session.revisionId,
             familyId = "push-family",
@@ -1183,11 +1157,9 @@ class SessionRuntimeTest {
         )
     }
 
-    // ================================================================ §4: the target is a FUTURE slot
-
     /**
-     * One decision about [target], with the shape §30 step 12 produces: the completion's Program and
-     * revision, and a slot that is still ahead of the user.
+     * One decision about [target] with the completion's Program and revision, and a slot that is still
+     * ahead of the user.
      */
     private fun decisionAbout(
         session: WorkoutSession,
@@ -1210,13 +1182,9 @@ class SessionRuntimeTest {
     )
 
     /**
-     * §4's corrected contract: an adaptive decision is about the opportunity the change will be
-     * *consumed by*, so it must name a future one.
-     *
-     * The P8-era check required the decision's slot to **equal** the session's, which was right only while
-     * nothing produced a real decision. This suite is its replacement and asserts both directions: the
-     * completed opportunity is now the case that cannot receive a decision, and a future opportunity of
-     * the same revision is accepted.
+     * An adaptive decision is about the opportunity the change will be *consumed by*, so it must name a
+     * future one. Both directions are asserted: the completed opportunity cannot receive a decision, and a
+     * future opportunity of the same revision is accepted.
      */
     @Test
     fun theCompletedOpportunityItselfCanNeverReceiveTheAdaptiveDecision() = runBlocking {
@@ -1350,13 +1318,13 @@ class SessionRuntimeTest {
     }
 
     /**
-     * A past opportunity is not ahead of the user by **time**, however startable it is.
+     * A past opportunity is not ahead of the user by **time**, however startable it is — the case status
+     * alone cannot decide: the opportunity is `MISSED`, it has no attempt, and the runtime would happily
+     * start a session for it.
      *
-     * This is the case status alone cannot decide: the opportunity is `MISSED` — its day has passed — it
-     * has no attempt on it, and the runtime would happily start a session for it. The refusal is the
-     * temporal clause of §4's rule, checked against the **decision's own moment** (no clock is read here),
-     * and both sides of the boundary are asserted: an opportunity planned for an earlier day and one
-     * planned for the decision's *own* day are both refused, because "strictly after" is the rule.
+     * The refusal is the temporal clause, checked against the **decision's own moment** (no clock is read
+     * here), and both sides of the boundary are asserted: an opportunity planned for an earlier day and
+     * one planned for the decision's *own* day are both refused, because "strictly after" is the rule.
      */
     @Test
     fun aDecisionAboutAPastOrSameDayOpportunityIsRefusedAndNothingIsCompleted() = runBlocking {
@@ -1445,8 +1413,6 @@ class SessionRuntimeTest {
         assertEquals("nothing was written", before, rig.tableCounts())
     }
 
-    // ================================================================ transactions (§27)
-
     @Test
     fun aStartThatFailsBeforeTheSnapshotLeavesNoSessionBehind() = runBlocking {
         rig.createProgram()
@@ -1524,19 +1490,19 @@ class SessionRuntimeTest {
     }
 
     /**
-     * §27's completion, at each point it can die: the session and the opportunity roll back together
-     * with the adaptive write, and what is left is exactly the state before the call.
+     * The completion at each point it can die: the session and the opportunity roll back together with
+     * the adaptive write, and what is left is exactly the state before the call.
      *
-     * With [failAdaptive] the completion is handed an `APPLIED` decision, so the failing statement is
-     * the adjustment insert that follows the decision insert — which is what makes the rollback of the
-     * *adaptive* half provable and not merely the rollback of the session's own rows.
+     * With [failAdaptive] the completion is handed an `APPLIED` decision, so the failing statement is the
+     * adjustment insert after the decision insert — which makes the rollback of the *adaptive* half
+     * provable and not merely the rollback of the session's own rows.
      */
     private suspend fun assertCompletionIsAtomic(failSlot: Boolean = false, failAdaptive: Boolean = false) {
         val (session, occurrence) = startedWithOneSet()
         val adjustmentId = AdjustmentId("adjustment-atomic")
-        // The decision is about the opportunity the change would be consumed by — a **future** one, per
-        // §4 — and the adaptive half carries all three legs §27 lists, so a rollback has to take the
-        // family's state with it and not only the decision and the adjustment.
+        // The decision is about the opportunity the change would be consumed by — a **future** one — and
+        // the adaptive half carries all three legs, so a rollback has to take the family's state with it
+        // and not only the decision and the adjustment.
         val target = rig.slotId(2)
         val decision = AdaptiveDecision(
             decisionId = DecisionId("decision-atomic"),
@@ -1637,11 +1603,9 @@ class SessionRuntimeTest {
         assertEquals(before, rig.tableCounts())
     }
 
-    // ================================================================ the process comes back (§19)
-
     /**
-     * A workout started in one process and read in another: a second connection over the same file,
-     * its own repositories and its own runtime, restoring the attempt from the rows the first one left.
+     * A workout started in one process and read in another: a second connection over the same file, its
+     * own repositories and runtime, restoring the attempt from the rows the first one left.
      */
     @Test
     fun aSessionIsRestoredFromItsOwnRowsAfterTheProcessIsRecreated() = runBlocking {
@@ -1703,8 +1667,6 @@ class SessionRuntimeTest {
             file.delete()
         }
     }
-
-    // ================================================================ restore's own rules
 
     @Test
     fun restoringASessionThatIsNotStoredIsRefused() = runBlocking {

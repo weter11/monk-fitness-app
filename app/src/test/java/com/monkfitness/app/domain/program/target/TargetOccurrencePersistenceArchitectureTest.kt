@@ -8,29 +8,15 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The mechanical boundaries of §30 step 14, checked against the sources themselves.
+ * The mechanical boundaries of target occurrence persistence, checked against the sources themselves.
  *
- * The phase's whole claim is a set of prohibitions — do not parse the key, do not derive an identity
- * from a plan day, do not reconstruct components from a slot, do not acquire ambient time, do not
- * touch the legacy scheduler, do not overwrite a stored payload, do not split the two writes — and a
- * prohibition that lives only in a KDoc erodes the first time a convenient import appears. So each
- * one is asserted here as a **token or a shape in real code**, with comments stripped first, which
- * is what lets this file's own explanations say "never split the occurrence key" without tripping the
- * rule about splitting it.
- *
- * The nine gates, in the order the phase states them:
- *
- * ```text
- * 1. target semantic persistence has no path into ProgramSchedule
- * 2. occurrence components are never reconstructed from targetOccurrenceKey
- * 3. no ProgramDayId / position / name / list-index inference becomes a target identity
- * 4. semantic read-back calls no planner, resolver, composer, policy, presenter, scheduler or runtime
- * 5. the target persistence boundary acquires no ambient time and no randomness
- * 6. legacy ProgramScheduler, SlotPlanner and ScheduleCalendar stay untouched
- * 7. (programId, occurrenceKey) is the only target occurrence membership identity
- * 8. a conflicting semantic payload is refused, not overwritten
- * 9. slot + semantic occurrence persistence is one atomic operation
- * ```
+ * The whole claim is a set of prohibitions — do not parse the key, do not derive an identity from a
+ * plan day, do not reconstruct components from a slot, do not acquire ambient time, do not touch the
+ * legacy scheduler, do not overwrite a stored payload, do not split the two writes — and a prohibition
+ * that lives only in a KDoc erodes the first time a convenient import appears. So each one is asserted
+ * here as a **token or a shape in real code**, with comments stripped first, which is what lets this
+ * file's own explanations say "never split the occurrence key" without tripping the rule about
+ * splitting it.
  */
 class TargetOccurrencePersistenceArchitectureTest {
 
@@ -67,14 +53,14 @@ class TargetOccurrencePersistenceArchitectureTest {
     )
 
     /**
-     * The **joining boundary**: the Stage 10 persister, which writes a slot and the occurrence it
-     * presents inside one transaction.
+     * The **joining boundary**: the persister, which writes a slot and the occurrence it presents
+     * inside one transaction.
      *
      * It is listed separately and deliberately *not* swept by the payload gates. It legitimately holds
-     * `ProgramScheduleRepository` — that is the Stage 10 dependency the phase is required to preserve
-     * rather than bypass — so treating its imports as a payload defect would either fail a correct
-     * boundary or tempt a future change into removing the dependency the brief says to keep. The one
-     * gate that does apply to it is the atomicity gate below, which is about the shape of its writes.
+     * `ProgramScheduleRepository` — the dependency this boundary is required to preserve rather than
+     * bypass — so treating its imports as a payload defect would either fail a correct boundary or
+     * tempt a future change into removing the dependency. The one gate that does apply to it is the
+     * atomicity gate below, which is about the shape of its writes.
      */
     private val boundaryPath: List<File> = listOf(persisterFile)
 
@@ -94,8 +80,6 @@ class TargetOccurrencePersistenceArchitectureTest {
                 .map { "${source.name}: $it" }
         }
 
-    // ---- 1. no path into ProgramSchedule ----------------------------------------------------------
-
     @Test
     fun targetSemanticPersistenceHasNoPathIntoProgramSchedule() {
         val forbidden = listOf(
@@ -113,8 +97,8 @@ class TargetOccurrencePersistenceArchitectureTest {
             found.isEmpty()
         )
         // The joining boundary is exempt from *this* gate by design and checked for the opposite
-        // property instead: it must still hold the Stage 10 slot repository. If a future change
-        // dropped that dependency to satisfy a payload rule, this assertion is what would notice.
+        // property instead: it must still hold the slot repository. If a future change dropped that
+        // dependency to satisfy a payload rule, this assertion is what would notice.
         assertTrue(
             "and the boundary still holds the Stage 10 slot repository this phase must not bypass",
             code(persisterFile).contains("scheduleRepository: ProgramScheduleRepository")
@@ -124,8 +108,6 @@ class TargetOccurrencePersistenceArchitectureTest {
         // files, so a newly created one is covered without a second list to keep in sync.
         assertTrue(valueFile.isFile && mapperFile.isFile && repositoryFile.isFile && daoFile.isFile)
     }
-
-    // ---- 2. components are never reconstructed from the key ---------------------------------------
 
     @Test
     fun occurrenceComponentsAreNeverReconstructedFromTheOccurrenceKey() {
@@ -147,8 +129,6 @@ class TargetOccurrencePersistenceArchitectureTest {
         )
     }
 
-    // ---- 3. no ProgramDay-derived identity --------------------------------------------------------
-
     @Test
     fun noProgramDayOrPositionInferenceBecomesATargetIdentity() {
         val forbidden = listOf(
@@ -163,8 +143,8 @@ class TargetOccurrencePersistenceArchitectureTest {
             "DayOfWeek"
         )
         // `programDayId` and `slotId` are legitimate *in the persister* — it materializes a slot, and
-        // Stage 9's own boundary is where a presented ProgramDayId legitimately enters. The claim here
-        // is narrower and sharper: nothing on the **semantic payload** path may read a plan day, a
+        // the presentation boundary is where a presented ProgramDayId legitimately enters. The claim
+        // here is narrower and sharper: nothing on the **semantic payload** path may read a plan day, a
         // position, a name or a slot id to produce a rule id, a workout id or an occurrence key.
         val found = offenders(
             listOf(valueFile, mapperFile, repositoryFile, daoFile, occurrenceEntity, componentEntity),
@@ -188,8 +168,6 @@ class TargetOccurrencePersistenceArchitectureTest {
             )
         }
     }
-
-    // ---- 4. read-back consults no engine stage ----------------------------------------------------
 
     @Test
     fun semanticReadBackCallsNoPlannerResolverComposerPolicyPresenterOrRuntime() {
@@ -221,8 +199,6 @@ class TargetOccurrencePersistenceArchitectureTest {
         )
     }
 
-    // ---- 5. no ambient time, no randomness ---------------------------------------------------------
-
     @Test
     fun theTargetPersistenceBoundaryAcquiresNoAmbientTimeOrRandomness() {
         val forbidden = listOf(
@@ -243,8 +219,6 @@ class TargetOccurrencePersistenceArchitectureTest {
             code(mapperFile).contains("occurrenceKey = occurrence.occurrenceKey")
         )
     }
-
-    // ---- 6. the legacy scheduler is untouched ------------------------------------------------------
 
     @Test
     fun theLegacySchedulerPlannerAndCalendarRemainUntouchedAndUnwired() {
@@ -279,8 +253,6 @@ class TargetOccurrencePersistenceArchitectureTest {
                 legacyConstruction.contains("targetOccurrence")
         )
     }
-
-    // ---- 7. (programId, occurrenceKey) is the only membership identity -----------------------------
 
     @Test
     fun theProgramAndTheOccurrenceKeyAreTheOnlyTargetOccurrenceMembershipIdentity() {
@@ -345,8 +317,6 @@ class TargetOccurrencePersistenceArchitectureTest {
         )
     }
 
-    // ---- 8. a conflicting payload is refused, not overwritten --------------------------------------
-
     @Test
     fun theSemanticStoreRefusesAConflictingPayloadAndDeclaresNoUpdate() {
         val dao = code(daoFile)
@@ -373,8 +343,6 @@ class TargetOccurrencePersistenceArchitectureTest {
                 repository.contains("requestedPayload = occurrence.occurrence")
         )
     }
-
-    // ---- 9. slot + occurrence is one atomic operation ---------------------------------------------
 
     @Test
     fun theSlotAndTheOccurrenceAreWrittenInsideOneTransaction() {
@@ -418,8 +386,6 @@ class TargetOccurrencePersistenceArchitectureTest {
                 code(persisterFile).contains("ProgramTargetOccurrenceDao")
         )
     }
-
-    // ---- the value type's own boundary -------------------------------------------------------------
 
     @Test
     fun thePersistedOccurrenceIsSemanticDataAndNotAnExistingOccurrence() {

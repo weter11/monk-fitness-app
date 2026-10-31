@@ -22,7 +22,6 @@ class GluteBridgePoseTest {
         val poses = ArrayList<SkeletonPose>()
 
         for (i in 0 until frameCount) {
-            // Smooth cosine wave to loop 0 -> 1 -> 0
             val t = i.toFloat() / (frameCount - 1)
             val progress = 0.5f * (1.0f - kotlin.math.cos(t * 2 * kotlin.math.PI.toFloat()))
 
@@ -31,7 +30,6 @@ class GluteBridgePoseTest {
             poses.add(finalizedPose)
         }
 
-        // Validate the full sequence frame-by-frame
         var previousPose: SkeletonPose? = null
         var prePreviousPose: SkeletonPose? = null
 
@@ -50,7 +48,6 @@ class GluteBridgePoseTest {
                 deltaTime = deltaTime
             )
 
-            // Let's run automated review to check the score as well!
             val snapshots = emptyList<ExerciseSnapshot>() // we don't need actual Bitmaps for the biomechanical review
             val sequence = ExerciseSnapshotSequence(snapshots) // Review handles empty sequence or we can mock it
 

@@ -11,44 +11,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The animation-coverage metric, kept honest: **`animated` means a real skeletal animation exists and
- * is USED by `ExerciseHero`** — not that an animated illustration exists.
+ * The animation-coverage metric, kept honest: `animated` means a real skeletal animation exists and is
+ * USED by `ExerciseHero` — not that an animated illustration exists.
  *
- * ## Why this test exists
+ * The app carries two animation systems: the engine poses (`PoseRegistry` → `AnimationRegistry` →
+ * `PoseBuilder` → `SkeletonPipeline` → `SkeletonRenderer`), keyed by `Exercise.animationId`; and a
+ * legacy keyframe illustration map (`exerciseSkeletonAnimation(animationId)`, surfaced as
+ * `Exercise.skeletonAnimation`). `ExerciseAnimationProfileTest` only asserts the second, and every
+ * catalog exercise has it — so it stayed green while 17 exercises rendered the illustration and never
+ * touched the engine. `ExerciseHero` renders the engine skeleton only when BOTH resolve: a
+ * `skeletonAnimation` is present AND `PoseRegistry.getPoseConfig(animationId) != null`; otherwise it
+ * falls back to the keyframe illustration (`animation.poseAt(progress).toCanvas(size)`).
  *
- * The app carries two animation systems:
- *
- *  1. the **engine** poses (`PoseRegistry` → `AnimationRegistry` → `PoseBuilder` → `SkeletonPipeline`
- *     → `SkeletonRenderer`), keyed by `Exercise.animationId`; and
- *  2. a **legacy keyframe illustration** map (`ui/components/animation/ExerciseSkeletonData.kt`,
- *     `exerciseSkeletonAnimation(animationId)`, surfaced as `Exercise.skeletonAnimation`).
- *
- * `ExerciseAnimationProfileTest` only asserts system 2 (`hasAnimatedVariant()`), and every one of the
- * 66 catalog exercises has it — so it stayed green while 17 exercises rendered the illustration and
- * never touched the engine. `ExerciseHero`'s own branch (`ui/components/CommonComponents.kt`,
- * `ExerciseVisualContent`) is:
- *
- * ```kotlin
- * val skeletonAnimation = exercise.skeletonAnimation        // system 2 present?
- * if (skeletonAnimation != null) ExerciseAnimatedVisual(...) // then the engine decides:
- * //   PoseRegistry.getPoseConfig(animationId) != null -> SkeletonRenderer on the real skeleton
- * //   else                                            -> animation.poseAt(progress).toCanvas(size)
- * ```
- *
- * so an exercise is REALLY animated exactly when **both** resolve. That is the assertion below, and
- * the coverage count is pinned against the app's own metric (`LibraryStats.animatedExercisesCount`).
- *
- * ## Coverage (this phase)
- *
- * `49/66` at the phase's start (measured on `origin/main` @ `4a32d84` with `ZzCoverageProbeTest`'s
- * census: `REAL-ANIMATED=49 UNCOVERED=17`) → `53/66` after batch 1 → `57/66` after batch 2 → `61/66`
- * after batch 3 → `63/66` after batch 4 → **`66/66` after batch 5** (the phase's tail: the three
- * exercises no family grouping carried). Every step was re-measured on its branch and recorded in
- * `docs/ANIMATION_COVERAGE_PHASE.md`. [REQUIRED_SKELETAL_ANIMATION_IDS] grew with each batch and is
- * asserted as a **superset** so the batches stayed independently mergeable, while
- * [REQUIRED_COVERAGE_MILESTONE] pins the count each batch actually reached — the phase's completion
- * PR pins the total, and the third assertion below is what makes `66/66` mean *every* catalog
- * exercise rather than the phase's own list.
+ * That conjunction is the assertion below, and the coverage count is pinned against the app's own
+ * metric (`LibraryStats.animatedExercisesCount`), recomputed from the registry rather than trusted.
+ * [REQUIRED_SKELETAL_ANIMATION_IDS] is asserted as a superset so coverage batches stay independently
+ * mergeable, while [REQUIRED_COVERAGE_MILESTONE] pins the count actually reached — and the structural
+ * assertion makes the total mean *every* catalog exercise, not the pinned list.
  */
 class AnimationCoverageTest {
 
@@ -63,40 +42,32 @@ class AnimationCoverageTest {
 
     companion object {
         /**
-         * The animation ids the phase has converted from the illustration to a real skeletal
-         * animation. Must stay in sync with `PoseRegistry.configRegistry` and
-         * `AnimationRegistry.registry`.
+         * The animation ids converted from the illustration to a real skeletal animation. Must stay in
+         * sync with `PoseRegistry.configRegistry` and `AnimationRegistry.registry`.
          */
         val REQUIRED_SKELETAL_ANIMATION_IDS = setOf(
-            // Batch 1 — the standing lower-body family: foot-planted stance holds and drills.
             "horse_stance_hold",
             "wall_sit_hold",
             "ankle_mobility_standard",
             "calf_stretch_hold",
-            // Batch 2 — the upper-body pull / bar-support family.
             "row_standard",
             "dip_parallel_bar",
             "band_pull_aparts_standard",
             "yt_raises_standard",
-            // Batch 3 — the hip-mobility / hip-rotation family.
             "hip_circles_hold",
             "leg_swings_hold",
             "ninety_ninety_hips",
             "piriformis_stretch_hold",
-            // Batch 4 — the cervical-mobility family.
             "chin_tuck_standard",
             "neck_circles_hold",
-            // Batch 5 — the phase's tail: the three exercises no family grouping carried
-            // (a standing one-arm shoulder CAR, the ballistic jack, the kneeling fold).
             "shoulder_cars_standard",
             "jumping_jack_standard",
             "child_pose_hold"
         )
 
         /**
-         * The coverage the phase has reached so far — **`66` of the catalog's `66`** after batch 5, the
-         * phase's tail. Pinned so a batch cannot quietly add an id to the set above without the phase
-         * doc's measured before → after being updated with it: the count is the app's own metric
+         * The coverage reached so far. Pinned so an id cannot be added to the set above without this
+         * count moving with it: the number is the app's own metric
          * (`LibraryStats.animatedExercisesCount`), recomputed from the registry rather than trusted.
          */
         const val REQUIRED_COVERAGE_MILESTONE = 66
@@ -149,11 +120,11 @@ class AnimationCoverageTest {
     }
 
     /**
-     * The phase's own completion criterion, stated independently of its own list: **no catalog
-     * exercise is left on the legacy illustration path.** [REQUIRED_COVERAGE_MILESTONE] pinned at the
-     * catalog's total says the same thing arithmetically, but this assertion says it structurally —
-     * every exercise the app can show resolves to the engine, and the metric's denominator is checked
-     * against the catalog rather than assumed.
+     * The completion criterion, stated independently of its own list: no catalog exercise is left on
+     * the legacy illustration path. [REQUIRED_COVERAGE_MILESTONE] pinned at the catalog's total says the
+     * same thing arithmetically, but this assertion says it structurally — every exercise the app can
+     * show resolves to the engine, and the metric's denominator is checked against the catalog rather
+     * than assumed.
      */
     @Test
     fun noCatalogExerciseIsLeftOnTheLegacyIllustrationPath() {

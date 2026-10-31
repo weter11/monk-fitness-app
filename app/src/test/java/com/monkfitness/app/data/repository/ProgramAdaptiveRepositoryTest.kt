@@ -70,17 +70,13 @@ class ProgramAdaptiveRepositoryTest {
         supersedesAdjustmentId = supersedes?.let { AdjustmentId("adjustment-$it") }
     )
 
-    // ---- the target repository is the only adaptive persistence -------------------------------------
 
     @Test
     fun theTargetRepositoryReadsAndWritesOnlyTheTargetTables() = runBlocking {
         rig.createGraph()
 
-        // §30 step 15 inverted this test's second half. It used to stage rows in the two Stage-1 tables
-        // and prove every target write left them byte-identical — the point being that two generations
-        // shared one database without touching each other. There is one generation now and those tables
-        // are dropped, so there is nothing left to be left alone; what the test still measures is the half
-        // that can regress: a target write lands in the target tables, and the *retained* tables stay empty.
+        // The half that can regress: a target write lands in the target tables, and the *retained* tables
+        // stay empty.
 
         val state = FamilyProgressionState(
             revisionId = revisionId,
@@ -124,7 +120,6 @@ class ProgramAdaptiveRepositoryTest {
         )
     }
 
-    // ---- append-only history ---------------------------------------------------------------------
 
     @Test
     fun decisionsAndAdjustmentsAccumulateAndNothingRewritesThem() = runBlocking {
@@ -196,7 +191,6 @@ class ProgramAdaptiveRepositoryTest {
         )
     }
 
-    // ---- transactions ----------------------------------------------------------------------------
 
     @Test
     fun aDecisionAndItsAdjustmentLandTogetherOrNotAtAll() = runBlocking {
@@ -241,7 +235,6 @@ class ProgramAdaptiveRepositoryTest {
         assertEquals("nothing was written", "0", rig.database.scalar("SELECT COUNT(*) FROM `program_adaptive_decision_record`"))
     }
 
-    // ---- state -----------------------------------------------------------------------------------
 
     @Test
     fun familyStateIsScopedByRevisionAndStampedByTheInjectedClock() = runBlocking {

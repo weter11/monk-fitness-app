@@ -7,26 +7,13 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The mechanical boundary of §30 step 21 — the **first controlled production invocation** of the
- * target scheduling contour.
+ * The mechanical boundary of the **first controlled production invocation** of the target scheduling
+ * contour.
  *
- * This stage's subject is a *wiring* claim, and a wiring claim that lives only in a KDoc erodes the
- * first time a convenient import appears. So each is asserted here as a token or a shape in real
- * code, with comments stripped first — which is what lets the production files say "never reads the
- * legacy schedule" and "no default was invented" without tripping the rules about doing either.
- *
- * ```text
- *  1. exactly one production caller of the target consumer, and it is this stage's node
- *  2. that caller is an application boundary with exactly the four collaborators it needs
- *  3. no screen, no view model and no screen-adjacent file builds any target run context
- *  4. the five caller-owned values are stated, not derived: the window is its own policy
- *  5. the as-of date is the started Program's own fact, and no ambient time is read anywhere
- *  6. the composed-source map is empty, and a derived rule is never answered with a fabricated source
- *  7. the pause adapter is target-owned, takes its zone explicitly, and invents no last date
- *  8. no legacy planning vocabulary, no second scheduler and no slot write reaches this boundary
- *  9. lifecycle policy stays in its own file, and target policy never enters it
- * 10. a target refusal is carried, not caught and not converted into a success
- * ```
+ * The subject is a *wiring* claim, and a wiring claim that lives only in a KDoc erodes the first time
+ * a convenient import appears. So each is asserted here as a token or a shape in real code, with
+ * comments stripped first — which is what lets the production files say "never reads the legacy
+ * schedule" and "no default was invented" without tripping the rules about doing either.
  */
 class TargetScheduleControlledInvocationArchitectureTest {
 
@@ -40,8 +27,6 @@ class TargetScheduleControlledInvocationArchitectureTest {
     private val containerFile = File(mainDir, "di/AppContainer.kt")
     private val policyFile = File(mainDir, "domain/program/ProgramLifecyclePolicy.kt")
     private val lifecycleFile = File(usecaseDir, "ProgramLifecycleService.kt")
-
-    // ---- 1/2. the single caller ---------------------------------------------------------------------
 
     @Test
     fun exactlyOneProductionCallerOfTheTargetConsumerAndItIsThisStagesNode() {
@@ -101,8 +86,6 @@ class TargetScheduleControlledInvocationArchitectureTest {
         )
     }
 
-    // ---- 3. the UI sees one operation ----------------------------------------------------------------
-
     @Test
     fun noScreenOrViewModelBuildsAnyPartOfATargetRunContext() {
         val uiAndViewModel = productionSources().filter { (path, _) ->
@@ -134,8 +117,6 @@ class TargetScheduleControlledInvocationArchitectureTest {
             contextVocabulary.any { token -> careless.contains(token) }
         )
     }
-
-    // ---- 4/5. the five stated values ----------------------------------------------------------------
 
     @Test
     fun theRunContextIsStatedFieldForFieldAndTheWindowIsThisStagesOwnPolicy() {
@@ -188,8 +169,6 @@ class TargetScheduleControlledInvocationArchitectureTest {
         }
     }
 
-    // ---- 6. the composed sources -------------------------------------------------------------------
-
     @Test
     fun noResolvedSourceIsEverSynthesisedAndADerivedRuleIsLeftToTheResolver() {
         val body = code(startFile.readText())
@@ -208,8 +187,6 @@ class TargetScheduleControlledInvocationArchitectureTest {
             body.contains("sources = emptyMap()")
         )
     }
-
-    // ---- 7. the pause adapter ----------------------------------------------------------------------
 
     @Test
     fun thePauseAdapterIsTargetOwnedTakesItsZoneAndInventsNoLastDate() {
@@ -246,8 +223,6 @@ class TargetScheduleControlledInvocationArchitectureTest {
             occurrences(body, "require(endedAt != null)")
         )
     }
-
-    // ---- 8. legacy isolation -----------------------------------------------------------------------
 
     @Test
     fun theBoundaryNamesNoLegacyPlanningVocabularyAndWritesNoSlot() {
@@ -307,8 +282,6 @@ class TargetScheduleControlledInvocationArchitectureTest {
         }
     }
 
-    // ---- 9. ownership ------------------------------------------------------------------------------
-
     @Test
     fun lifecyclePolicyStaysInItsOwnFileAndTargetPolicyNeverEntersIt() {
         val policy = code(policyFile.readText())
@@ -330,8 +303,6 @@ class TargetScheduleControlledInvocationArchitectureTest {
             startCode.contains("ProgramLifecyclePolicy") || startCode.contains("ProgramTransition")
         )
     }
-
-    // ---- 10. failure semantics ---------------------------------------------------------------------
 
     @Test
     fun everyTargetRefusalIsCarriedAndNoneIsCaughtIntoASuccess() {
@@ -425,8 +396,6 @@ class TargetScheduleControlledInvocationArchitectureTest {
         )
     }
 
-    // ---- the composition root ----------------------------------------------------------------------
-
     @Test
     fun theCompositionRootWiresTheNodeOnceAndHandsItTheGraphsOwnZone() {
         val container = code(containerFile.readText())
@@ -487,8 +456,6 @@ class TargetScheduleControlledInvocationArchitectureTest {
             sources
         )
     }
-
-    // ---- helpers -----------------------------------------------------------------------------------
 
     private fun productionSources(): List<Pair<String, String>> = File(mainDir.path)
         .walkTopDown()

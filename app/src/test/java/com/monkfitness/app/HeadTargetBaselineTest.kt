@@ -8,14 +8,14 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
- * Phase 7 (Gap 7 / F8 / W17) regression guard for gaze-as-`headTarget`.
+ * Regression guard for gaze-as-`headTarget`.
  *
  * The Finalizer's `resolveHeadTarget` is the sole writer of the neck/head chain (the legacy
- * direction-based `buildHead` fallback was removed once byte-identity was proven — the removal
- * commit's message records the measured maxDeviation ~6e-5). This guard keeps the resolver
- * honest going forward: for every gaze-declaring pose family across the whole rep, the resolved
- * head must NOT collapse onto the neck (the failure mode the resolver's subtree re-propagation
- * fixes — `BONE_LENGTH NECK_END->HEAD_POS`), i.e. the neck→head bone stays at its ~18-unit length.
+ * direction-based `buildHead` fallback was removed once byte-identity was proven, at a measured
+ * maxDeviation ~6e-5). This guard keeps the resolver honest: for every gaze-declaring pose family
+ * across the whole rep, the resolved head must NOT collapse onto the neck (the failure mode the
+ * resolver's subtree re-propagation fixes — `BONE_LENGTH NECK_END->HEAD_POS`), i.e. the neck→head bone
+ * stays at its ~18-unit length.
  */
 class HeadTargetBaselineTest {
 

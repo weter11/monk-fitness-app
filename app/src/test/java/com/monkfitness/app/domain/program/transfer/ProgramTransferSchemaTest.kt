@@ -12,17 +12,15 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 /**
- * §5's *parse*, *formatVersion* and *schema validation* steps, over the reader itself.
+ * The *parse*, *formatVersion* and *schema validation* steps, over the reader itself.
  *
- * Every test here states **one** thing a file can get wrong and asserts the answer is a finding that names
- * it — never an exception with no place, never a value read from a document that is not the format. The
- * last group is the interesting one for this stage: a document that carries an identity, a timestamp, a
- * source or a lifecycle token is not "a document with extra fields ignored" but a `UnknownField` finding,
- * which is what makes §2's allowlist a property of the reader rather than a habit of the writer.
+ * Every test here states **one** thing a file can get wrong and asserts the answer is a finding that
+ * names it — never an exception with no place, never a value read from a document that is not the
+ * format. The interesting group is the allowlist: a document that carries an identity, a timestamp, a
+ * source or a lifecycle token is not "a document with extra fields ignored" but a `UnknownField`
+ * finding, which is what makes the allowlist a property of the reader rather than a habit of the writer.
  */
 class ProgramTransferSchemaTest {
-
-    // ------------------------------------------------------------------ the happy path
 
     @Test
     fun aValidDocumentIsReadIntoTheTransferModel() {
@@ -80,8 +78,6 @@ class ProgramTransferSchemaTest {
         )
     }
 
-    // ------------------------------------------------------------------ the document's own identity
-
     @Test
     fun aDocumentThatIsNotThisFormatIsRefusedAsNotAProgramFile() {
         val failure = malformed(
@@ -135,8 +131,6 @@ class ProgramTransferSchemaTest {
                 .reason.contains("whole")
         )
     }
-
-    // ------------------------------------------------------------------ the allowlist
 
     @Test
     fun aFieldTheFormatDoesNotDefineIsRefusedWhereverItAppears() {
@@ -276,8 +270,6 @@ class ProgramTransferSchemaTest {
             failure.reason.contains(ProgramTransferFormat.MAXIMUM_DOCUMENT_BYTES.toString())
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun schemaIssues(text: String): List<ProgramTransferIssue> = try {
         ProgramTransferReader.read(text)

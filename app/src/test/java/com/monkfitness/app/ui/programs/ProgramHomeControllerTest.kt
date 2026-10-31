@@ -13,24 +13,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Home's Program card, over the production controllers — the P1 half of the creation remediation.
+ * Home's Program card, over the production controllers — the read-path half of the creation
+ * remediation.
  *
  * The defect this suite exists for: `ProgramHomeController.load()` was complete and correct, and
- * **nothing in production called it** — Home rendered the state holder's initial value (no Program,
- * no next workout, no Start) no matter what had been created, selected and scheduled. The read path
- * itself is what is measured here:
- *
- * ```text
- * a created Program + the user's selection → Home loads the Program, its lifecycle and the
- * Scheduler's own next opportunity → Start becomes available
- * no selection                            → Home says so, inventing nothing
- * a schedule that cannot be read           → that is a failure, not an absence (§15, §33)
- * ```
+ * **nothing in production called it** — Home rendered the state holder's initial value (no Program, no
+ * next workout, no Start) no matter what had been created, selected and scheduled. So what is measured
+ * here is the read path itself: a created Program plus the user's selection → Home loads the Program,
+ * its lifecycle and the Scheduler's own next opportunity → Start becomes available; no selection →
+ * Home says so, inventing nothing; a schedule that cannot be read → that is a failure, not an absence.
  *
  * That *the screen invokes this path* is a source-level claim, pinned in
- * `ProgramsArchitectureTest.homeIsLoadedByALifecycleAwareEffectWhenTheScreenOpens` — this project
- * has no Compose harness, so the controller's behaviour and the screen's call site are the two
- * halves, each measured by the layer that can be measured.
+ * `ProgramsArchitectureTest.homeIsLoadedByALifecycleAwareEffectWhenTheScreenOpens` — this project has no
+ * Compose harness, so the controller's behaviour and the screen's call site are the two halves, each
+ * measured by the layer that can be measured.
  */
 class ProgramHomeControllerTest {
 

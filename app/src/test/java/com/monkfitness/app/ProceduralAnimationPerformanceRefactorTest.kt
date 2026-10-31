@@ -42,7 +42,6 @@ class ProceduralAnimationPerformanceRefactorTest {
     @Test
     fun testSkeletonProjectorContiguousArrayExecution() {
         val pose = SkeletonPose()
-        // Put some random non-zero positions
         for (joint in Joint.values()) {
             pose.setJoint(joint, Vector3(joint.index * 2f, 5f, -3f))
         }
@@ -54,7 +53,6 @@ class ProceduralAnimationPerformanceRefactorTest {
         val projector = SkeletonProjector()
         val projected = ProjectedSkeleton()
 
-        // Execute project
         projector.project(pose, camera, engine, 1000f, 1000f, projected)
 
         // Verify that values in projected.joints corresponding to HEAD_POS match the projected HEAD_POS
@@ -75,7 +73,6 @@ class ProceduralAnimationPerformanceRefactorTest {
         val scales = Array(5) { ScreenSpaceScale() }
         val compensator = ScreenSpaceCompensation()
 
-        // Run batch indexed array method
         compensator.computeScales(joints, scales)
 
         // Verify that they are correctly updated in-place without any map lookup/allocations
@@ -164,7 +161,6 @@ class ProceduralAnimationPerformanceRefactorTest {
             cycleDuration = 4000f
         )
 
-        // Verify primary values are accessible via PoseContext
         assertEquals(state, context.state)
         assertEquals(0.5f, context.progress, 1e-4f)
         assertEquals(Side.LEFT, context.side)
@@ -175,7 +171,6 @@ class ProceduralAnimationPerformanceRefactorTest {
         assertTrue(context.mirrored)
         assertEquals(4000f, context.cycleDuration, 1e-4f)
 
-        // Verify compatibility constructor creates matching state
         val compatContext = PoseContext(
             progress = 0.5f,
             side = Side.LEFT,

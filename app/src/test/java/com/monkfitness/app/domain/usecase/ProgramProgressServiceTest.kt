@@ -24,30 +24,23 @@ import org.junit.Test
 
 /**
  * `ProgramProgressService` over the real data-access rig: rows written through the Program System's own
- * repositories, read back as §21's aggregations.
+ * repositories, read back as the progress aggregations.
  *
- * The calculator's own suite proves the arithmetic over hand-built facts. This one proves the other half of
- * the contract, and it is the half that only a database can settle:
- *
- *  * the facts are the ones that were **stored** — the numbers here come from rows written through
- *    `ProgramRepository`, `WorkoutSessionRepository` and the schedule repository, exactly as §27's
- *    transactions write them;
- *  * a Program scope cannot see another Program's history, even when both are in the same database and the
- *    other Program demonstrably has rows;
- *  * "All Programs" is the aggregate: it is a sum, it keeps every entry's own program identity, and it is
- *    not an entity — there is no id, no row and nothing to select;
- *  * "today" comes from the injected clock, and the calendar a workout is counted on comes from the
- *    service's own zone, so a window is a decision rather than an accident;
- *  * and the session's status semantics of §19 survive into progress: a cancelled attempt is not a workout,
- *    an attempt still running is not one either, and both keep the exposure they recorded.
+ * The calculator's own suite proves the arithmetic over hand-built facts; this one proves the half
+ * only a database can settle — that the facts are the ones that were **stored**, written through the
+ * repositories exactly as the production transactions write them. A Program scope cannot see another
+ * Program's history even in the same database, "All Programs" is a sum that keeps each entry's own
+ * program identity and is not an entity, "today" comes from the injected clock and the counting
+ * calendar from the service's own zone (so a window is a decision, not an accident), and a cancelled
+ * or still-running attempt is not a workout while both keep the exposure they recorded.
  */
 class ProgramProgressServiceTest {
 
     private val utc = ZoneId.of("UTC")
 
     /**
-     * A clock that is not the test's "now" by accident: the completed workouts of the fixture happen on
-     * 2026-09-21, and this reads 2026-09-25, so the default 28-date window (`2026-08-29 .. 2026-09-25`)
+     * A clock that is not the test's "now" by accident: the fixture's completed workouts happen on
+     * 2026-09-21 and this reads 2026-09-25, so the default 28-date window (`2026-08-29 .. 2026-09-25`)
      * contains them and a shifted clock does not.
      */
     private val clock = Clock { Instant.parse("2026-09-25T10:00:00Z") }
@@ -65,16 +58,12 @@ class ProgramProgressServiceTest {
     private val programB = ProgramId(ProgramGraphFixture.programId("b"))
 
     /**
-     * Two Programs in one database, with everything a Program System can record between them:
+     * Two Programs in one database, with everything a Program System can record between them.
      *
-     * ```text
-     * Program a  slot 1  COMPLETED  attempt session-a  (12 and 10 repetitions, two sets, 50 minutes)
-     *            slot 2  MISSED     attempt session-a2 (5 repetitions, then cancelled)
-     *            slot 3  PLANNED    untouched
-     * Program b  slot 1  PLANNED    attempt session-b  (12 and 10 repetitions, still running)
-     *            slot 2  MISSED     nothing
-     *            slot 3  PLANNED    untouched
-     * ```
+     * Program a: slot 1 COMPLETED (session-a, 12 and 10 repetitions, two sets, 50 minutes), slot 2
+     * MISSED (session-a2, 5 repetitions then cancelled), slot 3 PLANNED and untouched. Program b:
+     * slot 1 PLANNED with session-b still running (12 and 10 repetitions), slot 2 MISSED with
+     * nothing, slot 3 PLANNED and untouched.
      */
     private suspend fun twoProgramsWithHistory(rig: ProgramDataAccessRig) {
         rig.createGraph()
@@ -116,8 +105,6 @@ class ProgramProgressServiceTest {
         // The slots the fixture did not touch are still open; nothing here closes them.
         assertEquals(SlotStatus.PLANNED, rig.programScheduleRepository.slotById(slotThree.slotId)!!.status)
     }
-
-    // ------------------------------------------------------------------ isolation
 
     @Test
     fun aProgramScopeReadsThatProgramsHistoryAlone() = runBlocking {
@@ -167,8 +154,6 @@ class ProgramProgressServiceTest {
         }
     }
 
-    // ------------------------------------------------------------------ the aggregate
-
     @Test
     fun allProgramsIsTheSumOfBothProgramsAndAnEntityOfItsOwn() = runBlocking {
         val rig = ProgramDataAccessRig("a")
@@ -216,8 +201,6 @@ class ProgramProgressServiceTest {
             rig.close()
         }
     }
-
-    // ------------------------------------------------------------------ the measured numbers
 
     @Test
     fun theNumbersComeFromTheStoredRows() = runBlocking {
@@ -314,8 +297,6 @@ class ProgramProgressServiceTest {
         }
     }
 
-    // ------------------------------------------------------------------ today, and the calendar
-
     @Test
     fun theDefaultWindowIsTodaysAndTheClockAndTheZoneDecideWhatTodayMeans() = runBlocking {
         val rig = ProgramDataAccessRig("a")
@@ -368,8 +349,6 @@ class ProgramProgressServiceTest {
         }
     }
 
-    // ------------------------------------------------------------------ history reading
-
     @Test
     fun historyIsNewestFirstAndLimitedToWhatWasAskedFor() = runBlocking {
         val rig = ProgramDataAccessRig("a")
@@ -409,8 +388,6 @@ class ProgramProgressServiceTest {
         }
     }
 
-    // ------------------------------------------------------------------ empty
-
     @Test
     fun aProgramWithNoHistoryAtAllAnswersWithZeroesAndEmptyValues() = runBlocking {
         val rig = ProgramDataAccessRig("a")
@@ -447,8 +424,6 @@ class ProgramProgressServiceTest {
             rig.close()
         }
     }
-
-    // ------------------------------------------------------------------ a stored attempt that never ran a set
 
     @Test
     fun anAttemptThatConfirmedNothingProducesNoObservationAndNoVolume() = runBlocking {

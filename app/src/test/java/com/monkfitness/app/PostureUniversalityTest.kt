@@ -6,16 +6,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * Branch B — B3 (Posture universality).
+ * Posture universality: the [ConstraintSolver] owns the coarse pelvis height for **every** pose that
+ * names a non-[PostureIntent.Kind.CUSTOM] intent, not just contact instruments. Every production pose
+ * declares a [PostureIntent]; for the static STANDING shapes the solver pins `pelvis.y` to the STANDING
+ * seed (== the value the pose used to hand-write as `standH`), so the root is engine-derived and
+ * byte-identical to the previously-authored pose.
  *
- * B3 makes the [ConstraintSolver] the owner of the coarse pelvis height for **every** pose that
- * names a non-[PostureIntent.Kind.CUSTOM] intent, not just contact instruments (M3). Every
- * production pose now declares a [PostureIntent]; for the static STANDING shapes the solver pins
- * `pelvis.y` to the STANDING seed (== the value the pose used to hand-write as `standH`), so the
- * root is engine-derived and byte-identical to the previously-authored pose.
- *
- * (Phase B flag collapse) SOLVER_OWNS_POSTURE was collapsed to its true branch and removed, so
- * the solver unconditionally owns the root for non-CUSTOM intents.
+ * The solver unconditionally owns the root for non-CUSTOM intents.
  */
 class PostureUniversalityTest {
 

@@ -29,19 +29,11 @@ import java.time.ZoneId
  * The Save suite's rig: the data-access rig's real SQLite engine and production DAOs, with the editor,
  * the Scheduler and [ProgramSaveService] built over them exactly as `AppContainer` builds the graph.
  *
- * Everything a Save test needs to state is reachable from here:
- *
- *  * [service] — the behaviour under test, wired with the same six collaborators the composition root
- *    passes, over a [MovableClock] and a [SequentialIds] generator so every date and identity in a
- *    test is a value the test chose;
- *  * [editor] and [scheduler] — the two answers the orchestration composes, also reachable directly,
- *    which is how *"the stored slots are the Scheduler's own decision"* is measured by recomputing it
- *    rather than by trusting a second copy of the expectation;
- *  * [createGraph] and [storedProgram] — the fixture Program (a running, anchored, M/W/F plan with
- *    three stored opportunities) an edit reconciles, and fresh reads of whatever a save wrote;
- *  * [tableCounts] and [faults] — the whole-table census and the planted engine failures, which is
- *    how *"a failure at any leg leaves no partially created Program"* is decided by the transaction
- *    rather than argued from the code's shape.
+ * [editor] and [scheduler] are reachable directly as well as through the service, which is how *"the
+ * stored slots are the Scheduler's own decision"* is measured by recomputing it rather than by
+ * trusting a second copy of the expectation. [tableCounts] and [faults] are the whole-table census and
+ * the planted engine failures, which is how *"a failure at any leg leaves no partially created
+ * Program"* is decided by the transaction rather than argued from the code's shape.
  */
 internal class ProgramSaveRig(private val key: String = "s") {
 
@@ -62,7 +54,7 @@ internal class ProgramSaveRig(private val key: String = "s") {
     /** Deterministic identity, so every minted id is readable in a failure message. */
     val ids: SequentialIds = SequentialIds("save")
 
-    /** §7's editor, wired as the composition root wires it. */
+    /** The editor, wired as the composition root wires it. */
     val editor: ProgramEditorService = ProgramEditorService(
         programRepository = data.programRepository,
         planRepository = data.programPlanRepository,
@@ -71,7 +63,7 @@ internal class ProgramSaveRig(private val key: String = "s") {
         inTransaction = data.transaction
     )
 
-    /** §20's Scheduler, wired as the composition root wires it. */
+    /** The Scheduler, wired as the composition root wires it. */
     val scheduler: ProgramScheduler = ProgramScheduler(
         programRepository = data.programRepository,
         planRepository = data.programPlanRepository,
@@ -120,11 +112,10 @@ internal class ProgramSaveRig(private val key: String = "s") {
 
     /**
      * Leaves the fixture graph's first opportunity as **finished history**: a real session with
-     * confirmed sets on it (the way attempts are actually recorded — §23 keeps the link on the
-     * session rows, and `WorkoutSlot` refuses a COMPLETED status with no attempt), and the slot's
-     * status recorded as COMPLETED with the fixture's own finish stamp.
-     *
-     * @return the slot, read back — the value reconciliation is asserted against.
+     * confirmed sets on it (the way attempts are actually recorded — the link lives on the session rows,
+     * and `WorkoutSlot` refuses a COMPLETED status with no attempt), and the slot's status recorded as
+     * COMPLETED with the fixture's own finish stamp. Returns the slot read back — the value
+     * reconciliation is asserted against.
      */
     suspend fun completeFirstOpportunity(): WorkoutSlot {
         val slot = data.graph.slotFor(1)
@@ -140,8 +131,6 @@ internal class ProgramSaveRig(private val key: String = "s") {
 
     /** *Today*, exactly as this rig's clock and calendar read it — the creation default. */
     fun today(): LocalDate = clock.now().atZone(zone).toLocalDate()
-
-    // ---------------------------------------------------------------- the drafts a test saves
 
     /**
      * A savable **create** draft: a name, one training day, one exercise — and whatever schedule the
@@ -173,15 +162,11 @@ internal class ProgramSaveRig(private val key: String = "s") {
         )
     )
 
-    // ---------------------------------------------------------------- what the tests start from
-
     /** Creates the fixture's whole graph — a RUNNING Program, its plan and its three opportunities. */
     suspend fun createGraph() = data.createGraph()
 
     /** The fixture graph: its Program, its first revision, its stored slots. */
     val graph: ProgramGraph get() = data.graph
-
-    // ---------------------------------------------------------------- what the tests read back
 
     /** The Program as stored, read through a fresh repository so nothing is a cache. */
     suspend fun storedProgram(programId: ProgramId): Program =

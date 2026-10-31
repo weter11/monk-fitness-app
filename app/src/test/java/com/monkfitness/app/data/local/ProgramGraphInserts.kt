@@ -3,47 +3,43 @@ package com.monkfitness.app.data.local
 /**
  * Inserts one complete, consistent Program System graph into a real SQLite database.
  *
- * The target schema has no DAO yet (§30 step 3), so the storage tests write rows with SQL — which is
- * the right instrument anyway: the tables are being tested, not a repository. Each graph is suffixed
- * with a key so two independent programs can coexist in one database, which is what makes "deleting
- * one program removed its own rows and nothing else" measurable rather than asserted.
+ * Rows are written with SQL because the tables are being tested, not a repository. Each graph is
+ * suffixed with a key so two independent programs can coexist in one database, which is what makes
+ * "deleting one program removed its own rows and nothing else" measurable rather than asserted.
  *
  * The rows are a legal graph, not arbitrary values: one program, its revision, its day and plan
- * element, a slot for that day, the target occurrence that slot presents with its one
- * component (§30 step 14), a session started for the slot with its frozen snapshot, the exercise
- * occurrence as it ran, one confirmed set, the pause interval, the revision's family progression
- * state, one applied decision and the adjustment it produced.
+ * element, a slot for that day, the target occurrence that slot presents with its one component, a
+ * session started for the slot with its frozen snapshot, the exercise occurrence as it ran, one
+ * confirmed set, the pause interval, the revision's family progression state, one applied decision and
+ * the adjustment it produced.
  *
  * The revision's schedule is a deterministic frequency, so the graph states its frequency
- * (`scheduleSessionsPerWeek`): the two facts are one schedule, and a flexible-frequency revision without
- * one is not a legal row of the current schema (§20).
+ * (`scheduleSessionsPerWeek`): the two facts are one schedule, and a flexible-frequency revision
+ * without one is not a legal row of the current schema.
  */
 internal object ProgramGraphInserts {
 
-    /** One row in every target table, all keyed by [key]. */
     fun insertCompleteProgram(
         database: SqliteTestDatabase,
         key: String,
         targetOccurrenceKey: String? = null,
         /**
-         * Whether the graph also carries §30 step 14's target-occurrence semantic rows.
+         * Whether the graph also carries the target-occurrence semantic rows.
          *
-         * It is a parameter because the fixture is also used to populate databases that have **not**
-         * reached version 14 yet — `ProgramMigrationPreservationTest` writes a complete graph at
-         * version 12 precisely so the 12 -> 13 -> 14 steps have real rows to preserve, and inserting a
-         * row into a table that step has not created yet would fail for the wrong reason. Callers
-         * exercising a current database pass `true`; a pre-14 caller leaves it `false` and gets a graph
+         * A parameter because the fixture also populates databases that have **not** reached version 14
+         * yet — `ProgramMigrationPreservationTest` writes a complete graph at version 12 so the
+         * 12 -> 13 -> 14 steps have real rows to preserve, and inserting into a table that step has not
+         * created would fail for the wrong reason. A pre-14 caller leaves it `false` and gets a graph
          * that is complete *for its own version*.
          */
         targetOccurrenceRows: Boolean = false,
         /**
-         * Whether the graph also carries Stage 18's explicitly stated target schedule source.
+         * Whether the graph also carries the explicitly stated target schedule source.
          *
-         * The same reason as [targetOccurrenceRows]: the fixture populates databases that have not
-         * reached version 15 yet, and inserting into a table that step has not created would fail for
-         * the wrong reason. It is a *separate* switch rather than a version bump of the first one,
-         * because the two steps are independent — a suite may want the occurrence rows without the
-         * source, or the source without the occurrence.
+         * The same reason as [targetOccurrenceRows]: databases that have not reached version 15 yet
+         * cannot take a row for a table that step has not created. A *separate* switch rather than a
+         * version bump of the first, because the two steps are independent — a suite may want the
+         * occurrence rows without the source, or the source without the occurrence.
          */
         targetScheduleSourceRows: Boolean = false
     ) {
@@ -84,10 +80,10 @@ internal object ProgramGraphInserts {
                 "$slotColumns) VALUES ('$slot', '$program', '$revision', '$day', $slotValues)"
         )
         if (targetOccurrenceRows) {
-            // §30 step 14: the target occurrence's semantic payload. `occurrenceKey` is deliberately
-            // shaped like the real composer's (`<rule>:<date>`) so that a suite would notice if
-            // anything ever parsed it — and the component's `ruleId`/`workoutId` are real identities
-            // that appear nowhere in the key, so a key-derived reconstruction would visibly disagree.
+            // The target occurrence's semantic payload. `occurrenceKey` is deliberately shaped like the
+            // real composer's (`<rule>:<date>`) so a suite would notice if anything ever parsed it — and
+            // the component's `ruleId`/`workoutId` are real identities that appear nowhere in the key,
+            // so a key-derived reconstruction would visibly disagree.
             database.exec(
                 "INSERT INTO `program_target_occurrence` (`programId`, `occurrenceKey`, `plannedFor`) " +
                     "VALUES ('$program', 'strength:1', '2026-09-18')"
@@ -99,15 +95,15 @@ internal object ProgramGraphInserts {
             )
         }
         if (targetScheduleSourceRows) {
-            // Stage 18: the revision's explicitly stated target schedule source. Both halves are
-            // inserted here so the ownership graph is exercised end to end: the rule and the binding
-            // are owned by the **revision**, and the binding additionally names a plan day, so this
-            // graph proves a target source dies with its Program exactly as a slot does.
+            // The revision's explicitly stated target schedule source. Both halves are inserted so the
+            // ownership graph is exercised end to end: the rule and the binding are owned by the
+            // **revision**, and the binding additionally names a plan day, so this graph proves a target
+            // source dies with its Program exactly as a slot does.
             //
-            // The cadence is `EVERY_N_DAYS` with an interval, because it is the one form that puts a
-            // payload column next to the discriminator — a graph holding only `DAILY` would not prove
-            // the payload is carried, let alone cascaded. The binding names this revision's own day,
-            // which is what the repository's membership check requires.
+            // The cadence is `EVERY_N_DAYS` with an interval, the one form that puts a payload column
+            // next to the discriminator — a graph holding only `DAILY` would not prove the payload is
+            // carried, let alone cascaded. The binding names this revision's own day, which the
+            // repository's membership check requires.
             database.exec(
                 "INSERT INTO `program_target_schedule_rule` (`revisionId`, `ruleId`, `workoutId`, " +
                     "`cadenceType`, `cadenceDays`, `cadenceSessionsPerWeek`, `cadenceWeekdays`, " +

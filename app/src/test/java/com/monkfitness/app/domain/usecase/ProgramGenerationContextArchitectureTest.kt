@@ -8,29 +8,27 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P27's production context, pinned mechanically.
+ * The production context, pinned mechanically.
  *
- * The behavioural suite (`ProgramGenerationContextTest`) measures what the source decides. This one
- * measures the three properties that are **invisible from behaviour alone** — or rather, that a
- * behaviour-only suite would let through:
+ * The behavioural suite (`ProgramGenerationContextTest`) measures what the source decides; this one
+ * measures the properties **invisible from behaviour alone**:
  *
  *  * **the context source reaches no storage and no clock.** A source that quietly grew a `Clock` to
- *    decide recovery would still pass every behavioural test in the suite *provided* it returned
- *    `UNKNOWN` — the fabrication this stage forbids is exactly the kind that can be implemented
- *    without changing any current answer. So the claim is structural: the type names no collaborator
- *    that could tell it the time.
+ *    decide recovery would still pass every behavioural test *provided* it returned `UNKNOWN` — the
+ *    fabrication forbidden here is exactly the kind that can be implemented without changing any
+ *    current answer. So the claim is structural: the type names no collaborator that could tell it the
+ *    time.
  *  * **the context source reads no adaptive state.** `FamilyProgressionState.currentExerciseId` and
  *    `AdaptiveDecision` are both persisted and both would produce a *plausible* preference. The
- *    behavioural suite asserts the empty list; this asserts that no such type is even named, so a
- *    future edit cannot add the read and leave the existing assertion passing on a fixture that happens
- *    to have no adaptive rows.
- *  * **the pure generated package is untouched.** P27's own brief requires it, and §30 step 10's
- *    boundary requires it independently: the domain gained no file and imports nothing from the
+ *    behavioural suite asserts the empty list; this asserts that no such type is even named, so a future
+ *    edit cannot add the read and leave the existing assertion passing on a fixture that happens to have
+ *    no adaptive rows.
+ *  * **the pure generated package is untouched.** The domain gained no file and imports nothing from the
  *    application layer, the data layer or DI.
  *
  * The fourth property is the wiring itself: **one** construction of the production source, in the
- * composition root. A second construction would be a second set of context semantics, which is the same
- * failure shape P23 pinned for the catalogue and P24 for the service.
+ * composition root. A second construction would be a second set of context semantics — the same failure
+ * shape pinned for the catalogue and for the service.
  */
 class ProgramGenerationContextArchitectureTest {
 
@@ -56,8 +54,6 @@ class ProgramGenerationContextArchitectureTest {
     private fun List<String>.namesAny(token: String): List<String> = filter { line ->
         Regex("(?<![A-Za-z0-9_])" + Regex.escape(token) + "(?![A-Za-z0-9_])").containsMatchIn(line)
     }
-
-    // ------------------------------------------------------------------ the source is a reader and nothing else
 
     @Test
     fun theContextSourceReachesNoRepositoryNoDaoAndNoClock() {
@@ -114,15 +110,13 @@ class ProgramGenerationContextArchitectureTest {
 
     @Test
     fun theContextSourceStatesNoRecoveryAndNoFocusDerivedSignal() {
-        // REVISED by P29, narrowed rather than dropped. P27 banned the token `Focus` outright, because
-        // at that stage a focus-keyed map was precisely what could not be filled honestly. P29 gave
-        // those two maps a real owner, so `Focus` is now legitimately named here — and the ban that
-        // actually protected them is kept in full, in its stronger form: the source may **read** a
-        // focus the snapshot recorded, and may do nothing else with it.
+        // A focus-keyed map now has a real owner, so `Focus` is legitimately named here — and the ban
+        // that actually protects it is kept in its stronger form: the source may **read** a focus the
+        // snapshot recorded, and may do nothing else with it.
         //
-        // What survives unchanged:
-        //  * recovery stays `UNKNOWN` — §14's `FAVORABLE` and `CAUTIOUS` are decisions of the adaptive
-        //    stage's own judgement rule, not facts a generation context may manufacture;
+        // What must hold:
+        //  * recovery stays `UNKNOWN` — `FAVORABLE` and `CAUTIOUS` are decisions of the adaptive stage's
+        //    own judgement rule, not facts a generation context may manufacture;
         //  * no cross-dimension number is built — repetitions and seconds are never summed into a count
         //    of sets, and no scalar load score is computed.
         val forbidden = listOf(
@@ -137,9 +131,9 @@ class ProgramGenerationContextArchitectureTest {
                 "derivation this stage must not invent: $offenders",
             offenders.isEmpty()
         )
-        // The *reconstruction* ban, which is the claim P29 exists to make permanent. P29 made historical
-        // focus readable, which is exactly the circumstance in which a future edit might reach for the
-        // catalogue instead of the snapshot — and that would produce a plausible, wrong answer.
+        // The *reconstruction* ban. Historical focus is readable, which is exactly the circumstance in
+        // which a future edit might reach for the catalogue instead of the snapshot — and that would
+        // produce a plausible, wrong answer.
         val reconstructors = listOf(
             "ProductionFocusClassification", "ExerciseMetadata", "exerciseMetadata", "catalog",
             "catalogue", "trains(", "eligibleFocuses", "focusOf(", "classify", "Classif"
@@ -227,18 +221,12 @@ class ProgramGenerationContextArchitectureTest {
                 "a zero one. Every `?:` in this file must be a neutral value, never a number: $invented",
             invented.isEmpty()
         )
-        // **Revised by P29, not relaxed.** P28 could assert a literal `return GenerationPreferences.NONE`
-        // at both exits because §9's top level was the one signal nothing could fill, so "neutral" and
-        // "all-defaults" were the same value. P28 gave that signal an owner, so an exit now carries the
-        // user's stated preference. P29 then removed the *second* exit entirely: the "no performed
-        // exercise" branch existed only because `recentExerciseIds` needed an empty-list answer, and an
-        // empty map is already the honest answer for two more signals — so a branch that returned
-        // all-defaults was a branch that had to be re-argued every time a signal gained an owner.
+        // The file constructs `GenerationPreferences` exactly **twice** — the no-Program exit and the
+        // single full one. Both state the draft's own preference and the full one states all four read
+        // signals. An all-defaults branch would have to be re-argued every time a signal gained an
+        // owner, so it is not kept.
         //
-        // The claim is therefore restated and made *stronger*, not weaker: the file constructs
-        // `GenerationPreferences` exactly **twice** — the no-Program exit and the single full one — both
-        // state the draft's own preference, and the full one states all four read signals. An
-        // implementation that dropped the preference fails; one that fabricated a ranking trips the
+        // An implementation that dropped the preference fails; one that fabricated a ranking trips the
         // reconstruction ban above; one that added a fifth construction, or a second request-assembly
         // path, fails here.
         val code = code(contextFile.readText())
@@ -276,8 +264,6 @@ class ProgramGenerationContextArchitectureTest {
         }
     }
 
-    // ------------------------------------------------------------------ one read, one pass, one path
-
     @Test
     fun theServiceReadsTheContextExactlyOnceInsideTheSharedPass() {
         val code = code(serviceFile.readText())
@@ -302,7 +288,7 @@ class ProgramGenerationContextArchitectureTest {
 
     @Test
     fun theServiceStillSpeaksOnlyTheDomainsOwnRequestValues() {
-        // The request assembly stays P23's. P27 added a *value* to it and no new path into it.
+        // The request assembly is unchanged: a *value* was added to it and no new path into it.
         val code = code(serviceFile.readText())
         assertTrue(
             "the request is still assembled by the boundary, so there is exactly one assembly of §30 " +
@@ -353,11 +339,9 @@ class ProgramGenerationContextArchitectureTest {
 
     @Test
     fun theServiceDeclaresTheContextAndNothingElseNew() {
-        // REVISED by P27, not relaxed. The old claim was "five things, of which preferences and policy
-        // are optional". P27 replaced the optional `preferences` value with a **required** context
-        // collaborator: the count is unchanged at five, and the change is that one of the five can no
-        // longer be omitted — which is the whole point, since a defaulted value here was the quiet
-        // neutrality this stage removed.
+        // Five things, of which one can no longer be omitted: `preferences` is a **required** context
+        // collaborator rather than an optional value, because a defaulted value here was the quiet
+        // neutrality this stage removes.
         val constructor = ProgramGenerationService::class.java.declaredConstructors
             .first { !it.isSynthetic }
         val declaration = code(serviceFile.readText())
@@ -382,9 +366,9 @@ class ProgramGenerationContextArchitectureTest {
 
     @Test
     fun theServiceHoldsNoRepositoryAndNoStorageStill() {
-        // Unchanged by P27 and re-asserted because the stage's most tempting shortcut was to hand the
-        // service the session repository directly. The read belongs to the context source; the service
-        // must still hold nothing that could write.
+        // Re-asserted because the most tempting shortcut is to hand the service the session repository
+        // directly. The read belongs to the context source; the service must still hold nothing that
+        // could write.
         val forbidden = listOf(
             "ProgramRepository", "ProgramPlanRepository", "ProgramScheduleRepository",
             "ProgramExerciseDao", "ProgramDao", "AppDatabase", "Dao", "Room", "@Entity",
@@ -404,8 +388,6 @@ class ProgramGenerationContextArchitectureTest {
             offenders.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ the wiring, and the pure package
 
     @Test
     fun theCompositionRootBuildsTheProductionContextFromTheRepositorysOwnRead() {
@@ -491,8 +473,8 @@ class ProgramGenerationContextArchitectureTest {
 
     @Test
     fun theGeneratedPreferencesTypeIsUnchanged() {
-        // The signal's own vocabulary: P27 filled one field and changed no definition, so the field list
-        // and the neutral companion are what Stage 10 declared.
+        // The signal's own vocabulary: one field was filled and no definition changed, so the field list
+        // and the neutral companion are what the declaration states.
         assertEquals(
             "§8's six plain signals, in Stage 10's order — no field added, renamed or removed",
             listOf(

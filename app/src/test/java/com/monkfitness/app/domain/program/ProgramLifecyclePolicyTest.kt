@@ -15,21 +15,19 @@ import org.junit.Test
  * The transition table itself, as a pure decision — no database, no service, no clock.
  *
  * [ProgramLifecyclePolicy] is the one place the lifecycle's rules live, so this suite drives every
- * status pair through it. A mutation of the table fails one of the two exhaustive tests by name, and
- * the rule-specific tests below pin the blueprint's own wording (§3) to the decision: a planned start
- * date is not a start, `PAUSED` is an interval, `COMPLETED` is terminal, and archive is not a state.
+ * status pair through it: a mutation of the table fails one of the two exhaustive tests by name, and
+ * the rule-specific tests pin the wording to the decision — a planned start date is not a start,
+ * `PAUSED` is an interval, `COMPLETED` is terminal, and archive is not a state.
  *
  * Pairing this with [ProgramLifecycleTest] is deliberate: the policy decides, the service applies, and
  * a rule that only one of the two tests could not be said to hold.
  */
 class ProgramLifecyclePolicyTest {
 
-    // ------------------------------------------------------------------ the legal table
-
     @Test
     fun theLegalTransitionsAreExactlyThese() {
         // The legal pairs, as (operation, from) — keyed on the operation because START and RESUME
-        // both reach RUNNING and only the operation distinguishes their guards (§3).
+        // both reach RUNNING and only the operation distinguishes their guards.
         val legal = listOf(
             ProgramTransition.START to LifecycleStatus.NOT_STARTED,
             ProgramTransition.PAUSE to LifecycleStatus.RUNNING,
@@ -65,8 +63,6 @@ class ProgramLifecyclePolicyTest {
             ProgramTransition.ARCHIVE.toStatus
         )
     }
-
-    // ------------------------------------------------------------------ the decisions
 
     @Test
     fun startIsAllowedOnlyFromNotStarted() {
@@ -135,7 +131,7 @@ class ProgramLifecyclePolicyTest {
 
     @Test
     fun anArchivedProgramStillTransitionsLifecycles() {
-        // The archive stamp is not consulted by the transition table (§3).
+        // The archive stamp is not consulted by the transition table.
         allowed(ProgramTransition.COMPLETE, from = LifecycleStatus.RUNNING, archived = true)
         allowed(ProgramTransition.PAUSE, from = LifecycleStatus.RUNNING, archived = true)
         allowed(ProgramTransition.RESUME, from = LifecycleStatus.PAUSED, archived = true, openPause = true)
@@ -152,8 +148,6 @@ class ProgramLifecyclePolicyTest {
             already is ProgramTransitionResult.AlreadyThere
         )
     }
-
-    // ------------------------------------------------------------------ the value edit
 
     @Test
     fun applyingATransitionChangesOnlyTheLifecycleAndItsStamps() {
@@ -207,8 +201,8 @@ class ProgramLifecyclePolicyTest {
 
     @Test
     fun aPlannedStartDateIsNeverReadByThePolicy() {
-        // The decision functions take no date at all, which is the whole of the rule (§3): there is
-        // no parameter through which a LocalDate could start a Program.
+        // The decision functions take no date at all, which is the whole of the rule: there is no
+        // parameter through which a LocalDate could start a Program.
         val decision = ProgramLifecyclePolicy.decision(
             LifecycleStatus.NOT_STARTED,
             ProgramTransition.START,
@@ -219,8 +213,6 @@ class ProgramLifecyclePolicyTest {
         // And the NOT_STARTED status a planned date would leave the Program in requires no start.
         assertFalse(LifecycleStatus.NOT_STARTED.isTerminal)
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun allowed(
         transition: ProgramTransition,

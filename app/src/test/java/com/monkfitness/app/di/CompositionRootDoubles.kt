@@ -54,27 +54,19 @@ import java.time.Instant
 /**
  * The composition root's test doubles.
  *
- * `AppContainer` is the one object in the app whose whole job is *construction*, so the claims that
- * matter about it are claims about what it constructs and what it hands over: that it takes the
- * database's DAOs once, that every repository it builds reads and writes the same store, that the
- * clock it was given is the clock a row is stamped with, and that nothing but the container
- * constructs any of it. Measurable versions of those claims need two things this repository's unit
- * tests do not otherwise have: a database the composition root accepts, and the two adaptive
- * generations on one engine.
+ * `AppContainer`'s whole job is *construction*, so the claims that matter are about what it constructs
+ * and hands over: the database's DAOs taken once, every repository on the same store, the given clock
+ * stamping rows, nothing but the container constructing any of it.
  *
- * ### Why a database double rather than an in-memory stand-in
+ * A Room database cannot be opened on this JVM (no Robolectric, no instrumentation source set), but
+ * `AppDatabase` is an abstract class whose accessors are abstract and the DAO types are interfaces.
+ * [SqliteAppDatabase] is therefore the real `AppDatabase` type — an `AbstractMethodError`-free
+ * subclass answering with the DAO implementations over a **real SQLite engine** — so the container
+ * under test is the production container, constructed with the production constructor, running the
+ * SQL the device runs.
  *
- * A Room database cannot be opened on this JVM (no Robolectric, no instrumentation source set), so
- * `AppContainer` would be untestable if it could only be built over an opened one. It does not need
- * one, though: the DAO accessors it calls and the `RoomDatabase` it is handed are both types, and
- * `AppDatabase` is an abstract class whose accessors are abstract. [SqliteAppDatabase] is therefore
- * the real `AppDatabase` type — an `AbstractMethodError`-free subclass answering with PR 3's DAO
- * implementations over a **real SQLite engine** — so the container under test is the production
- * container, constructed with the production constructor, running the DAO SQL the device runs.
- * Nothing about the wiring is re-implemented for the test.
- *
- * Every accessor call is counted, which is what turns "each DAO is taken from the database once" into
- * a number rather than a reading of the source.
+ * Every accessor call is counted, which turns "each DAO is taken from the database once" into a number
+ * rather than a reading of the source.
  */
 internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDatabase() {
 
@@ -83,7 +75,7 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
      *
      * `Room`'s accessors are memoized, so a second call is not a correctness bug — it is a *wiring*
      * fact, and the one that decides whether "exactly one DAO per table, shared by every repository"
-     * is true. The container asserts the map is one call per accessor with no other key.
+     * holds.
      */
     val accessorCalls: MutableMap<String, Int> = LinkedHashMap()
 
@@ -96,8 +88,6 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
 
     /** The number of rows in one table of this database, as the engine reports it. */
     fun rowCount(table: String): Int = engine.count(table)
-
-    // --- the target DAOs (§30 step 3), on the engine -------------------------------------------
 
     private val program by lazy { SqliteProgramDao(engine) }
     private val appState by lazy { SqliteAppStateDao(engine) }
@@ -116,12 +106,10 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
     private val familyState by lazy { SqliteProgramFamilyProgressionStateDao(engine) }
     private val decision by lazy { SqliteProgramAdaptiveDecisionDao(engine) }
     private val adjustment by lazy { SqliteAdaptiveAdjustmentDao(engine) }
-    // P31's ladder catalogue. The accessor must be implemented whatever the container does with it —
-    // `AppDatabase`'s accessors are abstract — and it is answered over the same real engine so a suite
-    // that reaches it is reading a real table rather than a stub.
+    // The accessor must be implemented whatever the container does with it — `AppDatabase`'s
+    // accessors are abstract — and it is answered over the same real engine so a suite that reaches
+    // it reads a real table rather than a stub.
     private val relationVariant by lazy { SqliteProgressionRelationVariantDao(engine) }
-
-    // --- the shipped Stage-1 tables, on the same engine (§30 step 15 retires them) ----------
 
     private val maintenance by lazy { SqliteMaintenanceDao(engine) }
 
@@ -179,9 +167,9 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
      * The retained global stores — nutrition and the posture / mobility track — which the Program
      * System's graph must never ask for.
      *
-     * Asking here is a **failure** rather than a stub: §30 step 15's whole point is that no Program
-     * path reaches an unrelated global store, so an accidental reach has to be loud. A test that wants
-     * those tables uses the DAO's own suite over `SqliteTestDatabase`, not the container.
+     * Asking here is a **failure** rather than a stub: no Program path may reach an unrelated global
+     * store, so an accidental reach has to be loud. A test that wants those tables uses the DAO's own
+     * suite over `SqliteTestDatabase`, not the container.
      */
     override fun nutritionDao(): NutritionDao =
         throw UnsupportedOperationException(
@@ -193,22 +181,17 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
             "the Program System composition root has no business reading the posture track"
         )
 
-    // --- what a JVM database cannot do ------------------------------------------------------
-
     /**
      * The database's transaction runner, on the engine: the same all-or-nothing unit Room's
-     * `withTransaction` provides on a device (the container's own default, which is the database's
-     * `withTransaction`, needs a database Room has opened and is replaced by this in the tests).
+     * `withTransaction` provides on a device (the container's default needs a database Room has opened,
+     * so the tests replace it with this).
      *
      * `SqliteTestDatabase.transaction` performs a real `COMMIT`/`ROLLBACK`, so an atomicity claim made
      * through the container is decided by SQLite rather than by the container's bookkeeping.
      */
     val transaction: suspend (suspend () -> Unit) -> Unit = { block -> engine.transaction { block() } }
 
-    /**
-     * Room's own invalidation tracker is never used on this JVM: no DAO here is Room-generated, no
-     * query goes through the tracker the container's graph does not otherwise need.
-     */
+    /** Room's invalidation tracker is never used on this JVM: no DAO here is Room-generated. */
     override fun createInvalidationTracker(): InvalidationTracker = InvalidationTracker(this)
 
     override fun createOpenHelper(configuration: DatabaseConfiguration): SupportSQLiteOpenHelper =
@@ -219,8 +202,6 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
     override fun clearAllTables(): Unit =
         throw UnsupportedOperationException("this database holds no Room-managed tables")
 }
-
-// ---------------------------------------------------------------------------------------------
 
 /**
  * The failure points a suite can plant in the database's DAO layer.
@@ -252,17 +233,13 @@ internal class ProgramExerciseDaoFence(
         delegate.exercisesOfRevision(revisionId)
 }
 
-// ---------------------------------------------------------------------------------------------
-// The rig
-// ---------------------------------------------------------------------------------------------
-
 /**
  * A composition root built the way the application builds one — the production constructor, a
- * migrated database, PR 3's DAO implementations — with the two things a device supplies and a test
+ * migrated database, the DAO implementations — with the two things a device supplies and a test
  * chooses: the clock and the id generator.
  *
- * The engine runs the **deployed** migration chain (version 7 → 8 → 9), so the graph sits on the
- * schema a device opening this build has, and the Stage-1 tables are present beside the target ones.
+ * The engine runs the **deployed** migration chain, so the graph sits on the schema a device opening
+ * this build has, and the Stage-1 tables are present beside the target ones.
  */
 internal class CompositionRootRig(
     key: String = "container",
@@ -280,11 +257,11 @@ internal class CompositionRootRig(
         database.migrate(AppDatabase.MIGRATION_12_13)
         database.migrate(AppDatabase.MIGRATION_13_14)
         database.migrate(AppDatabase.MIGRATION_14_15)
-        // §30 step 28: the user's exercise preference column. Stopping short would leave every
-        // repository suite below exercising a database the app can no longer produce.
+        // The user's exercise preference column. Stopping short would leave every repository suite
+        // below exercising a database the app can no longer produce.
         database.migrate(AppDatabase.MIGRATION_15_16)
-        // P29: the element's historical focus and the snapshot's frozen copy. Stopping short
-        // would leave this suite exercising a database the app can no longer produce.
+        // The element's historical focus and the snapshot's frozen copy. Stopping short would leave
+        // this suite exercising a database the app can no longer produce.
         database.migrate(AppDatabase.MIGRATION_16_17)
         database.migrate(AppDatabase.MIGRATION_17_18)
     }
@@ -311,10 +288,6 @@ internal class CompositionRootRig(
     fun close() = engine.close()
 }
 
-// ---------------------------------------------------------------------------------------------
-// The injected collaborators
-// ---------------------------------------------------------------------------------------------
-
 /**
  * A clock a test moves: the instant it returns is a value the test sets, so "the repository stamped
  * this row with the clock the container was given" is measured against an instant the test chose
@@ -339,10 +312,6 @@ internal class SequentialIds(private val tag: String = "container-id") : IdGener
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// Row → entity
-// ---------------------------------------------------------------------------------------------
-
 private fun Map<String, String?>.text(column: String): String =
     requireNotNull(this[column]) { "the row has no '$column': $this" }
 
@@ -354,10 +323,9 @@ private fun Map<String, String?>.millis(column: String): Long = text(column).toL
  * [MaintenanceDao] — Settings → Full reset's statements — executed on SQLite through
  * [SqliteTestDatabase].
  *
- * The statements are [MaintenanceDao]'s own, spelled out here for the same reason every other stub in
- * this file spells its SQL out: nothing is Room-generated on the JVM, so a reset test measures the
- * schema's real behaviour (including the `app_state` foreign key that decides the order) rather than a
- * mock's bookkeeping.
+ * The statements are [MaintenanceDao]'s own, spelled out here because nothing is Room-generated on the
+ * JVM: a reset test then measures the schema's real behaviour (including the `app_state` foreign key
+ * that decides the order) rather than a mock's bookkeeping.
  */
 internal class SqliteMaintenanceDao(private val engine: SqliteTestDatabase) : MaintenanceDao {
 

@@ -18,12 +18,10 @@ class SkeletonFactoryTest {
     fun testStandardSkeletonTopologyAndCount() {
         val nodes = SkeletonFactory.createStandardSkeleton()
 
-        // 1. Root verify
         assertEquals(1, nodes.roots.size)
         assertEquals(Joint.PELVIS, nodes.roots[0].joint)
         assertNull(nodes.pelvis.parent)
 
-        // 2. Parent checks
         assertEquals(nodes.pelvis, nodes.lumbar.parent)
         assertEquals(nodes.lumbar, nodes.chest.parent)
         assertEquals(nodes.chest, nodes.neck.parent)
@@ -59,7 +57,6 @@ class SkeletonFactoryTest {
         assertEquals(nodes.ankleB, nodes.heelB.parent)
         assertEquals(nodes.ankleB, nodes.toeB.parent)
 
-        // 3. Node count check
         val joints = mutableListOf<Joint>()
         collectTraversalOrder(nodes.roots[0], joints)
         assertEquals(31, joints.size)
@@ -69,12 +66,10 @@ class SkeletonFactoryTest {
     fun testPushUpSkeletonTopologyAndCount() {
         val nodes = SkeletonFactory.createPushUpSkeleton()
 
-        // 1. Root verify
         assertEquals(1, nodes.roots.size)
         assertEquals(Joint.ANKLE_F, nodes.roots[0].joint)
         assertNull(nodes.ankleF.parent)
 
-        // 2. Parent checks
         assertEquals(nodes.ankleF, nodes.heelF.parent)
         assertEquals(nodes.ankleF, nodes.toeF.parent)
         assertEquals(nodes.ankleF, nodes.kneeF.parent)
@@ -109,7 +104,6 @@ class SkeletonFactoryTest {
         assertEquals(nodes.ankleB, nodes.heelB.parent)
         assertEquals(nodes.ankleB, nodes.toeB.parent)
 
-        // 3. Node count check
         val joints = mutableListOf<Joint>()
         collectTraversalOrder(nodes.roots[0], joints)
         assertEquals(31, joints.size)
@@ -214,7 +208,6 @@ class SkeletonFactoryTest {
             cycleDuration = 2500f
         )
 
-        // 1. Verify StandardPushUpPose
         val pushupPose = StandardPushUpPose().build(context)
         assertNotNull(pushupPose.roots)
         assertTrue(pushupPose.roots.isNotEmpty())
@@ -224,7 +217,6 @@ class SkeletonFactoryTest {
         assertNotNull(pushupFinalized)
         assertTrue(pushupFinalized.isTransformsUpdated)
 
-        // 2. Verify AirSquatPose
         val squatPose = AirSquatPose().build(context)
         assertNotNull(squatPose.roots)
         assertTrue(squatPose.roots.isNotEmpty())
@@ -234,7 +226,6 @@ class SkeletonFactoryTest {
         assertNotNull(squatFinalized)
         assertTrue(squatFinalized.isTransformsUpdated)
 
-        // 3. Verify AlternatingForwardLungesPose
         val lungePose = AlternatingForwardLungesPose().build(context)
         assertNotNull(lungePose.roots)
         assertTrue(lungePose.roots.isNotEmpty())

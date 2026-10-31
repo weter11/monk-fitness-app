@@ -10,17 +10,11 @@ import org.junit.Test
 import java.io.File
 
 /**
- * §30 step 12's dependency direction, pinned mechanically instead of by convention.
+ * The integration's dependency direction, pinned mechanically instead of by convention.
  *
- * The stage's brief is explicit about which way the arrows may point, and both directions are asserted
- * here against the sources themselves:
- *
- * ```text
- * ProgramAdaptiveIntegration  →  target repositories, the pure engine, Clock, IdGenerator   allowed
- * the engine                  →  any of those collaborators                                  forbidden
- * ProgramAdaptiveIntegration  →  the Stage-1 adaptive implementation                         forbidden
- * the Stage-1 implementation  →  anything this stage adds                                    forbidden
- * ```
+ * Both arrows are asserted against the sources themselves: the integration may reach the target
+ * repositories, the pure engine, `Clock` and `IdGenerator`; the engine may reach none of them, must not
+ * know its caller, and must not name the retired Stage-1 implementation in either direction.
  *
  * It also pins what the stage may **not** do at all, because each of those is a rule the architecture
  * states about the adaptive layer and a rule that only exists in prose erodes on the first convenient
@@ -32,7 +26,7 @@ class ProgramAdaptiveIntegrationArchitectureTest {
     private val mainDir = File("src/main/java/com/monkfitness/app")
         .let { if (it.isDirectory) it else File("app/$it") }
 
-    /** §30 step 12's integration layer: the use case and the pure package it is stated in. */
+    /** The integration layer: the use case and the pure package it is stated in. */
     private val integrationSources = listOf(
         "domain/usecase/ProgramAdaptiveIntegration.kt",
         "domain/adaptive/integration/AdaptiveInputGap.kt",
@@ -44,7 +38,7 @@ class ProgramAdaptiveIntegrationArchitectureTest {
         "domain/adaptive/integration/ProgressionRelationProvider.kt"
     )
 
-    /** §30 step 11's engine package: the pure component this stage consumes and must not change. */
+    /** The engine package: the pure component this stage consumes and must not change. */
     private val engineSources = listOf(
         "domain/adaptive/engine/ProgramAdaptiveElement.kt",
         "domain/adaptive/engine/ProgramProgressionRelation.kt",
@@ -56,7 +50,7 @@ class ProgramAdaptiveIntegrationArchitectureTest {
         "domain/adaptive/engine/ProgramAdaptiveEngine.kt"
     )
 
-    /** The shipped Stage-1 adaptive implementation §30 step 15 retires, untouched by this stage. */
+    /** The shipped Stage-1 adaptive implementation, retired and untouched by this stage. */
     private val legacySources = listOf(
         "domain/adaptive/AdaptivePolicy.kt",
         "domain/adaptive/AdaptiveProgramEngine.kt",
@@ -69,12 +63,9 @@ class ProgramAdaptiveIntegrationArchitectureTest {
         "data/repository/AdaptiveRepository.kt"
     )
 
-    // ------------------------------------------------------------------ the engine stays pure
-
     /**
-     * The engine is a *pure domain component* (§11): it reaches no DAO, no Room type, no repository, no
-     * Android type, no composition root, no clock and no random source. §30 step 12 consumes it and
-     * changes nothing about that.
+     * The engine is a *pure domain component*: it reaches no DAO, no Room type, no repository, no Android
+     * type, no composition root, no clock and no random source. Consuming it changes nothing about that.
      */
     @Test
     fun theEngineStillReachesNoCollaboratorAtAll() {
@@ -120,10 +111,8 @@ class ProgramAdaptiveIntegrationArchitectureTest {
             "AdaptiveJudgement", "AdaptiveTargetSlot", "AdaptiveWindowRule", "PresentedElement",
             "ProgressionRelationProvider", "ExerciseFamilyClassification", "ProgramAdaptiveIntegration"
         )
-        // §30 step 15 removed the second half of this scan: `legacySources` used to be swept for the
-        // integration's vocabulary to prove the Stage-1 generation was unaware of its successor. That
-        // generation is gone, so there is nothing left to be unaware — and the half that still means
-        // something is kept: the *engine* must not know its caller.
+        // The half that still means something: the *engine* must not know its caller. The retired
+        // Stage-1 generation is gone, so there is nothing left to prove unaware of its successor.
         val offenders = legacyAndEngineNames(engineSources, integrationNames)
 
         assertTrue(
@@ -132,8 +121,6 @@ class ProgramAdaptiveIntegrationArchitectureTest {
             offenders.isEmpty()
         )
     }
-
-    // ------------------------------------------------------------------ the integration's own reach
 
     /** The integration may reach the target repositories, the clock and the id source — and that is all. */
     @Test
@@ -157,7 +144,7 @@ class ProgramAdaptiveIntegrationArchitectureTest {
     /**
      * It writes nothing, creates nothing and moves nothing: no revision is saved, no slot is created,
      * renumbered or superseded, no session is started, and no generator, planner or progress layer is
-     * consulted (§6, §20, §25, §26).
+     * consulted.
      */
     @Test
     fun theIntegrationCreatesNoRevisionNoSlotAndNoSession() {
@@ -195,9 +182,7 @@ class ProgramAdaptiveIntegrationArchitectureTest {
         )
     }
 
-    // ------------------------------------------------------------------ the legacy boundary
-
-    /** §30 step 12 does not reach the Stage-1 adaptive generation, in either direction. */
+    /** The integration does not reach the Stage-1 adaptive generation, in either direction. */
     @Test
     fun neitherDirectionOfTheStageOneBoundaryIsCrossed() {
         val legacyNames = listOf(
@@ -219,10 +204,8 @@ class ProgramAdaptiveIntegrationArchitectureTest {
             offenders.isEmpty()
         )
 
-        // §30 step 15 inverted the inverse half. It used to read each Stage-1 file and check it named
-        // none of this stage's types — "a file that has been deleted cannot name anything, so the two
-        // assertions are one claim". The files are deleted now, so the claim is stated on its stronger
-        // footing directly: there is no Stage-1 source to name anything at all.
+        // The files are deleted, so there is no Stage-1 source left that could name anything — the
+        // inverse half of the claim is now stated on its strongest footing directly.
         legacySources.forEach { source ->
             assertFalse(
                 "$source must be gone: §30 step 15 retires the Stage-1 generation",
@@ -238,10 +221,8 @@ class ProgramAdaptiveIntegrationArchitectureTest {
     }
 
     /** The Stage-1 adaptive *tables* are not named by the integration either: the two are disjoint. */
-    // ------------------------------------------------------------------ no UI, and the shapes
-
     /**
-     * §4's target rule has two halves — the producer *chooses* the opportunity against the decision's own
+     * The target rule has two halves — the producer *chooses* the opportunity against the decision's own
      * day, and the runtime *checks* that choice against the decision's own moment — and they are the same
      * rule only if they read the same calendar. The composition root owns that one value and hands it to
      * both, which is the mechanical form of *"the producer and the consumer have the same semantics"*.
@@ -286,14 +267,13 @@ class ProgramAdaptiveIntegrationArchitectureTest {
         )
     }
 
-    /** No ViewModel and no screen reaches the integration or the engine yet (§23 of the brief). */
+    /** The UI reaches the **integration** and nothing below it. */
     @Test
     fun theUiReachesTheIntegrationAndNeverTheEngineOrThePolicy() {
-        // §30 step 15 inverted this claim. It used to be an *absence* — "the UI integration is a later
-        // step" — and the later step is this one: the session screen's completion asks the integration
-        // for the adaptive half of §27's transaction, and the view model hands the node over. What must
-        // still hold is the part that can regress: the UI reaches the **integration** and nothing below
-        // it. An engine or a policy named above the integration would be a screen deciding what to adapt.
+        // The session screen's completion asks the integration for the adaptive half of the transaction,
+        // and the view model hands the node over. What can regress is the depth: the UI reaches the
+        // **integration** and nothing below it — an engine or a policy named above the integration would
+        // be a screen deciding what to adapt.
         val above = listOf(File(mainDir, "ui"), File(mainDir, "viewmodel"))
             .filter { it.isDirectory }
             .flatMap { root -> root.walkTopDown().filter { it.isFile && it.extension == "kt" } }
@@ -325,7 +305,7 @@ class ProgramAdaptiveIntegrationArchitectureTest {
         )
     }
 
-    /** §20's four outcomes and §28's three classes are exactly the shapes the stage reports. */
+    /** The four outcomes and the three failure classes are exactly the shapes the stage reports. */
     @Test
     fun theOutcomeAndResultVocabulariesAreTheOnesTheStageStates() {
         assertEquals(
@@ -371,8 +351,6 @@ class ProgramAdaptiveIntegrationArchitectureTest {
             adjustFields.none { it == "reason" }
         )
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private fun integrationNamesOfThisStage(): List<String> = listOf(
         "AdaptiveInputGap", "AdaptiveIntegrationOutcome", "AdaptiveIntegrationResult",
